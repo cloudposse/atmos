@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/go-github/v59/github"
-	"golang.org/x/oauth2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
@@ -49,6 +48,18 @@ const (
 // may be a different, GHES, host): IsHost normalizes case, a trailing dot, and the default
 // port, so this also matches "GitHub.com", "github.com.", and "github.com:443".
 var publicGitHubEndpoints = newEndpoints(defaultGitHubServerURL, defaultGitHubAPIURL)
+
+// IsPublicGitHubHost reports whether host (case-insensitive, with port and trailing dot
+// normalized) is public github.com, independent of whatever RepoEndpoints resolves to. Callers
+// that must still recognize an explicit public github.com URL even when GITHUB_SERVER_URL
+// points at a GitHub Enterprise Server host (e.g. converting a public github.com blob URL to
+// raw content for an !include, regardless of the caller's own GHES configuration) should check
+// this in addition to RepoEndpoints().IsHost.
+func IsPublicGitHubHost(host string) bool {
+	defer perf.Track(nil, "github.IsPublicGitHubHost")()
+
+	return publicGitHubEndpoints.IsHost(host)
+}
 
 // newGitHubClient creates a new GitHub client. If a token is provided, it returns an authenticated client;
 // otherwise, it returns an unauthenticated client.
@@ -120,33 +131,19 @@ func tokenForToolchainHost(token string, toolchainEndpoints Endpoints) string {
 }
 
 // newGitHubClientForEndpoints builds an authenticated (or, if token is empty, unauthenticated)
-// *github.Client with an HTTP timeout, pointed at endpoints. The token is withheld (regardless
-// of what the caller passed) when endpoints is not https -- see Endpoints.AllowsToken --
-// because sending a bearer/OAuth token over plain HTTP would put it on the wire in cleartext.
-func newGitHubClientForEndpoints(ctx context.Context, token string, endpoints Endpoints) *github.Client {
+// *github.Client with an HTTP timeout, pointed at endpoints. The token is attached via the
+// scoped-token transport (see NewScopedTokenHTTPClient) rather than golang.org/x/oauth2's
+// static token source: oauth2's Transport re-adds Authorization unconditionally on every
+// RoundTrip call, including one net/http built to follow a redirect -- covering neither a
+// cross-host redirect nor a same-host https-to-http downgrade, both of which would otherwise
+// forward the token beyond the endpoint it was scoped to. The scoped-token transport instead
+// re-validates the actual request URL (host and scheme) on every call, which also subsumes the
+// plain-HTTP check Endpoints.AllowsToken performs (a request never reaches an http:// URL with
+// a token attached, whether or not it is a redirect).
+func newGitHubClientForEndpoints(_ context.Context, token string, endpoints Endpoints) *github.Client {
 	defer perf.Track(nil, "github.newGitHubClientForEndpoints")()
 
-	token = TokenForEndpoints(endpoints, token)
-
-	// Create HTTP client with timeout to prevent hangs in CI environments
-	// when network is unavailable or DNS resolution fails.
-	baseClient := &http.Client{
-		Timeout: defaultHTTPTimeout,
-	}
-
-	var httpClient *http.Client
-	if token == "" {
-		httpClient = baseClient
-	} else {
-		// Token found, create an authenticated client with timeout.
-		ts := oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: token},
-		)
-		// Create oauth2 client with our timeout-configured base transport.
-		tc := oauth2.NewClient(ctx, ts)
-		tc.Timeout = defaultHTTPTimeout
-		httpClient = tc
-	}
+	httpClient := NewScopedTokenHTTPClient(token, endpoints, defaultHTTPTimeout)
 
 	return newScopedClient(httpClient, endpoints)
 }

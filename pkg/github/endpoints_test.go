@@ -297,6 +297,11 @@ func TestNormalizeHost(t *testing.T) {
 		{name: "default https port stripped", host: "github.com:443", want: "github.com"},
 		{name: "default http port stripped", host: "github.com:80", want: "github.com"},
 		{name: "non-default port preserved", host: "github.com:8443", want: "github.com:8443"},
+		{name: "trailing dot with non-default port stripped", host: "ghes.example.com.:8443", want: "ghes.example.com:8443"},
+		{name: "trailing dot with default https port stripped", host: "GHES.example.com.:443", want: "ghes.example.com"},
+		{name: "bare trailing dot stripped", host: "github.com.", want: "github.com"},
+		{name: "IPv6 with non-default port preserved", host: "[::1]:8443", want: "[::1]:8443"},
+		{name: "IPv6 with default https port stripped", host: "[::1]:443", want: "::1"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -308,4 +313,22 @@ func TestNormalizeHost(t *testing.T) {
 func TestHostOf_InvalidURL(t *testing.T) {
 	// A control character makes url.Parse fail outright, exercising the error branch.
 	require.Empty(t, hostOf("http://\x7f"))
+}
+
+// TestRepoEndpoints_NonDefaultPortPreserved verifies that a GITHUB_SERVER_URL on a non-default
+// port (e.g. a corporate GHES mirror behind a custom port, or a test's httptest.NewServer) keeps
+// that port in Endpoints.Host, so the endpoint can recognize its own URLs via IsHost. Before
+// this, hostOf built Endpoints.Host from url.URL.Hostname() (which always drops the port), while
+// IsHost/normalizeHost preserve a non-default port on the candidate side -- so an Endpoints value
+// for a host on a non-default port could never match even its own configured URL.
+func TestRepoEndpoints_NonDefaultPortPreserved(t *testing.T) {
+	clearGitHubEndpointEnv(t)
+	t.Setenv("GITHUB_SERVER_URL", "http://127.0.0.1:19199")
+	t.Setenv("GITHUB_API_URL", "http://127.0.0.1:19199/api/v3")
+
+	e := RepoEndpoints()
+
+	assert.Equal(t, "127.0.0.1:19199", e.Host)
+	assert.True(t, e.IsHost("127.0.0.1:19199"))
+	assert.False(t, e.IsHost("127.0.0.1"))
 }

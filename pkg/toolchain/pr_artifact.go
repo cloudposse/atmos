@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -277,6 +278,16 @@ func downloadAndInstallArtifact(
 	return downloadAndInstallArtifactToDir(ctx, token, versionDir, info, showProgress)
 }
 
+// allowsPRArtifactToken reports whether it is safe to attach the GitHub token to a request
+// whose destination is u: only when its scheme is https and its host is an approved GitHub
+// host (github.IsApprovedGitHubDownloadHost -- RepoEndpoints/ToolchainEndpoints server, API, or
+// upload host). Applied both to downloadPRArtifact's initial request and, via its
+// CheckRedirect, to every hop of a redirect, since GitHub's archive download URL redirects to
+// a pre-signed, unauthenticated S3-style blob URL that must never receive the token.
+func allowsPRArtifactToken(u *url.URL) bool {
+	return strings.EqualFold(u.Scheme, "https") && github.IsApprovedGitHubDownloadHost(u.Host)
+}
+
 // downloadPRArtifact downloads the artifact ZIP to a temporary file.
 func downloadPRArtifact(ctx context.Context, token string, info *github.PRArtifactInfo) (string, error) {
 	defer perf.Track(nil, "toolchain.downloadPRArtifact")()
@@ -297,18 +308,23 @@ func downloadPRArtifact(ctx context.Context, token string, info *github.PRArtifa
 		return "", fmt.Errorf("%w: failed to create request: %w", ErrPRArtifactDownloadFailed, err)
 	}
 
-	// Only set Authorization header when a token is available.
-	if token != "" {
+	// Only attach the token when the request's own URL is https and an approved GitHub host
+	// (RepoEndpoints/ToolchainEndpoints server, API, or upload host) -- validated by
+	// allowsPRArtifactToken before the initial request is sent, and again, via CheckRedirect
+	// below, for every redirect hop. GitHub's archive download URL redirects to a pre-signed,
+	// unauthenticated S3-style blob URL that must never receive it.
+	if token != "" && allowsPRArtifactToken(req.URL) {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	client := &http.Client{
 		Timeout: prArtifactDownloadTimeout,
-		// Follow redirects but preserve auth header for GitHub domain only.
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// Don't add auth header when redirected to S3 (pre-signed URL).
-			if !strings.Contains(req.URL.Host, "github") {
+		// Follow redirects, but strip Authorization on any hop whose URL is no longer https
+		// or no longer an approved GitHub host -- e.g. the pre-signed S3 redirect target, or
+		// an unrelated host a compromised/misconfigured endpoint redirected to.
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			if !allowsPRArtifactToken(req.URL) {
 				req.Header.Del("Authorization")
 			}
 			return nil

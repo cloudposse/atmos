@@ -42,6 +42,14 @@ func TestNewAquaRegistry(t *testing.T) {
 // domain than ATMOS_TOOLCHAIN_GITHUB_URL) still receives the GitHub token on requests to
 // ar.client, which is built from the API host (githubBaseURL).
 func TestToolchainHostMatcher_DifferentAPIHost(t *testing.T) {
+	// Isolate from the ambient environment: toolchainHostMatcher's "matcher should still
+	// authenticate the default public GitHub API host" assertion below only holds when
+	// RepoEndpoints() itself resolves to public github.com. A real GITHUB_ACTIONS runner (or a
+	// developer shell with GHES configured) exports GITHUB_SERVER_URL/GITHUB_API_URL pointing
+	// elsewhere, which would otherwise make that assertion fail depending on where the test runs.
+	t.Setenv("GITHUB_SERVER_URL", "")
+	t.Setenv("GITHUB_API_URL", "")
+
 	endpoints := github.Endpoints{
 		ServerURL: "https://mirror.example.com",
 		APIURL:    "https://api-mirror.example.com",

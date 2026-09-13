@@ -215,7 +215,7 @@ func isKnownHostFileURL(uri, lowerURI string) bool {
 	if err != nil {
 		return false
 	}
-	return repoEndpoints.IsHost(parsed.Hostname()) && strings.Contains(strings.ToLower(parsed.EscapedPath()), "/raw/")
+	return repoEndpoints.IsHost(parsed.Host) && strings.Contains(strings.ToLower(parsed.EscapedPath()), "/raw/")
 }
 
 // IsGitURI checks if the URI appears to be a Git repository URL.

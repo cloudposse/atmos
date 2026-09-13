@@ -15,8 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/oauth2"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	ghtoken "github.com/cloudposse/atmos/pkg/github"
@@ -223,17 +221,13 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 
 	// RepoEndpoints resolves GITHUB_API_URL (defaulting to api.github.com), so artifact
 	// list/download work against a GitHub Enterprise Server instance the same way they do
-	// against github.com. TokenForEndpoints withholds the token when that API URL is not
-	// https (ResolveEndpointURL accepts http:// so tests can point it at a local server),
-	// since sending it there would put it on the wire in cleartext.
+	// against github.com. NewScopedTokenHTTPClient withholds the token when that API URL is
+	// not https (ResolveEndpointURL accepts http:// so tests can point it at a local server) --
+	// since sending it there would put it on the wire in cleartext -- and, unlike a plain
+	// oauth2 client, re-validates every actual request (including each hop of a redirect) so a
+	// cross-host or https-to-http-downgrade redirect never carries the token along either.
 	repoEndpoints := ghtoken.RepoEndpoints()
-	httpClient := &http.Client{Timeout: httpTimeout}
-	if apiToken := ghtoken.TokenForEndpoints(repoEndpoints, token); apiToken != "" {
-		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: apiToken})
-		oauthClient := oauth2.NewClient(context.Background(), ts)
-		oauthClient.Timeout = httpTimeout
-		httpClient = oauthClient
-	}
+	httpClient := ghtoken.NewScopedTokenHTTPClient(token, repoEndpoints, httpTimeout)
 
 	return &Store{
 		httpClient:    httpClient,
@@ -513,7 +507,9 @@ func (s *Store) downloadArtifactURL(ctx context.Context, artifactID int64) (stri
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	// Use a client that does not follow redirects to capture the Location header.
-	// Reuse the oauth2 transport so the token is still injected automatically.
+	// Reuse s.httpClient's scoped-token transport so the token is still injected
+	// automatically, but only when the request itself (not just the original API URL)
+	// remains within the allowed host/scheme.
 	noRedirectClient := &http.Client{
 		Transport: s.httpClient.Transport,
 		Timeout:   httpTimeout,

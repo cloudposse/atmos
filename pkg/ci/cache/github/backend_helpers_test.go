@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ci/cache"
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 )
 
 func TestParseNextPage(t *testing.T) {
@@ -131,13 +132,20 @@ func TestResolveOwnerRepo(t *testing.T) {
 }
 
 func TestNewRESTClient(t *testing.T) {
-	// Empty token returns a plain client.
-	plain := newRESTClient("")
+	endpoints := ghtoken.Endpoints{
+		ServerURL: "https://github.example.com",
+		APIURL:    "https://github.example.com",
+		Host:      "github.example.com",
+	}
+
+	// Empty token still returns a usable client, scoped to endpoints.
+	plain := newRESTClient("", endpoints)
 	require.NotNil(t, plain)
 	assert.Equal(t, httpTimeout, plain.Timeout)
+	assert.NotNil(t, plain.Transport)
 
-	// A token returns an oauth2-wrapped client (non-nil transport).
-	withToken := newRESTClient("tok")
+	// A token returns a scoped-token client (non-nil transport).
+	withToken := newRESTClient("tok", endpoints)
 	require.NotNil(t, withToken)
 	assert.Equal(t, httpTimeout, withToken.Timeout)
 	assert.NotNil(t, withToken.Transport)

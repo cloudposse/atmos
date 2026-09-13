@@ -449,7 +449,7 @@ func makeGitHubRequest(apiURL string) (*http.Response, error) {
 	}
 	client := &http.Client{
 		Timeout:       defaultHTTPTimeout,
-		CheckRedirect: stripAuthOnNonHTTPSRedirect,
+		CheckRedirect: stripAuthOnUnapprovedRedirect,
 	}
 
 	var lastErr error
@@ -458,11 +458,15 @@ func makeGitHubRequest(apiURL string) (*http.Response, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToCreateRequest, err)
 		}
-		// Only send the token over https: ATMOS_TOOLCHAIN_GITHUB_API_URL can resolve to a
-		// non-https scheme (resolveEndpointURL accepts it as a fallback-safe default), and
-		// sending "Authorization: Bearer <token>" to a plain-http endpoint would leak it in
-		// cleartext.
-		if token != "" && strings.EqualFold(req.URL.Scheme, "https") {
+		// Only send the token when the request's actual destination (not just the
+		// ToolchainEndpoints URL it was built from) is https and belongs to the host the
+		// token is scoped to (RepoEndpoints -- see the comment above). ATMOS_TOOLCHAIN_GITHUB_API_URL
+		// can resolve to a non-https scheme (resolveEndpointURL accepts it as a
+		// fallback-safe default) or, independently, to a host that only coincidentally
+		// matched RepoEndpoints at the check above; re-validating req.URL here (rather than
+		// trusting apiURL) is what stripAuthOnUnapprovedRedirect also relies on for every
+		// redirect hop.
+		if token != "" && requestAllowsToken(req) {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
 
@@ -498,14 +502,32 @@ func makeGitHubRequest(apiURL string) (*http.Response, error) {
 	return nil, lastErr
 }
 
-// stripAuthOnNonHTTPSRedirect removes the Authorization header from req when its (redirect
-// target) URL scheme is not https. Installed as makeGitHubRequest's http.Client.CheckRedirect
-// so an HTTPS-to-HTTP downgrade during a redirect (e.g. a compromised or misconfigured
-// ATMOS_TOOLCHAIN_GITHUB_API_URL endpoint) never forwards the token in cleartext: net/http's
-// default redirect policy otherwise preserves Authorization across same-host redirects
-// regardless of scheme change.
-func stripAuthOnNonHTTPSRedirect(req *http.Request, _ []*http.Request) error {
+// requestAllowsToken reports whether it is safe to attach the repo-scoped GitHub token
+// (viper's "github-token", resolved without regard to host) to a request whose actual
+// destination is req.URL: only when its scheme is https and its host matches RepoEndpoints'
+// own server or API host -- the host the token is scoped to. Re-evaluated against req.URL
+// (not the ToolchainEndpoints URL the request was originally built from) both for the initial
+// request and, via stripAuthOnUnapprovedRedirect, every hop of an automatic redirect, since
+// ATMOS_TOOLCHAIN_GITHUB_API_URL can point at a different host than ATMOS_TOOLCHAIN_GITHUB_URL,
+// and net/http's default redirect policy otherwise keeps forwarding Authorization across a
+// same-host scheme downgrade and does not consider host at all for the initial request.
+func requestAllowsToken(req *http.Request) bool {
 	if !strings.EqualFold(req.URL.Scheme, "https") {
+		return false
+	}
+	repo := github.RepoEndpoints()
+	return repo.IsHost(req.URL.Host) || repo.IsAPIHost(req.URL.Host)
+}
+
+// stripAuthOnUnapprovedRedirect removes the Authorization header from req (the request that
+// will be sent for a redirect hop) unless requestAllowsToken(req) still holds for its new,
+// possibly cross-host or scheme-downgraded, URL. Installed as makeGitHubRequest's
+// http.Client.CheckRedirect: net/http's default redirect policy preserves Authorization across
+// a same-host scheme downgrade (https to http) and never considers host at all for a same- or
+// cross-scheme redirect to a different host, either of which would otherwise leak the token to
+// an endpoint it was never scoped to.
+func stripAuthOnUnapprovedRedirect(req *http.Request, _ []*http.Request) error {
+	if !requestAllowsToken(req) {
 		req.Header.Del("Authorization")
 	}
 	return nil

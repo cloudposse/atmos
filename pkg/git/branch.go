@@ -135,7 +135,7 @@ func githubRepositoryPath(remoteURL string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	host := strings.ToLower(parsed.Hostname())
+	host := strings.ToLower(parsed.Host)
 	if host != "github.com" && !ghtoken.RepoEndpoints().IsHost(host) {
 		return "", false
 	}
