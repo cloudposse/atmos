@@ -77,8 +77,12 @@ system, unlike native Helm.
 ## CloudFormation-Specific Sections
 
 <dl>
-  <dt>`template` <em>(required)</em></dt>
-  <dd>Path to the CloudFormation template, relative to the component's base path.</dd>
+  <dt>`template`</dt>
+  <dd>
+    Path to the CloudFormation template, relative to the component's base
+    path. Required unless `source.uri` resolves to exactly one file, in which
+    case Atmos uses that file directly and `template` may be omitted.
+  </dd>
 
   <dt>`stack_name`</dt>
   <dd>The explicit CloudFormation stack name. There is no legacy name-pattern interpolation — set the name you want directly (Go templates are supported, like any other stack field).</dd>
