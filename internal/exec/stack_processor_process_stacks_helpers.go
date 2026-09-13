@@ -86,7 +86,12 @@ type ComponentProcessorResult struct {
 	// ComponentHelm holds native Helm chart and release-lifecycle fields as a single bag.
 	ComponentHelm map[string]any
 	// ComponentOverridesHelm holds native Helm fields from the component overrides block.
-	ComponentOverridesHelm     map[string]any
+	ComponentOverridesHelm map[string]any
+	// ComponentCloudFormation holds native aws/cloudformation component fields
+	// (template, parameters, capabilities, tags, stack_policy, role_arn,
+	// notification_arns, disable_rollback, termination_protection,
+	// timeout_in_minutes, stack_name) as a single bag.
+	ComponentCloudFormation    map[string]any
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any
 	ComponentOverridesSettings map[string]any
@@ -110,9 +115,12 @@ type ComponentProcessorResult struct {
 	BaseComponentPlugins any
 	BaseComponentRender  map[string]any
 	// BaseComponentHelm holds the inherited native Helm fields from base components.
-	BaseComponentHelm         map[string]any
-	ComponentInheritanceChain []string
-	BaseComponents            []string
+	BaseComponentHelm map[string]any
+	// BaseComponentCloudFormation holds the inherited native aws/cloudformation
+	// fields from base components.
+	BaseComponentCloudFormation map[string]any
+	ComponentInheritanceChain   []string
+	BaseComponents              []string
 
 	// Terraform-specific fields.
 	ComponentProviders         map[string]any

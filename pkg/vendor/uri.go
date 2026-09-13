@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/go-getter"
@@ -96,6 +97,124 @@ func IsOCIURI(uri string) bool {
 // Go-getter supports both explicit s3:: prefix and auto-detected .amazonaws.com URLs.
 func IsS3URI(uri string) bool {
 	return strings.HasPrefix(uri, "s3::") || strings.Contains(uri, ".amazonaws.com/")
+}
+
+// directoryArchiveExtensions lists the go-getter decompressor extensions that
+// unpack to a directory of files (possibly just one), as opposed to the
+// single-compressed-file formats (.gz, .bz2, .xz, .zst alone) that unpack to
+// exactly one file. Longer extensions are listed before their suffixes (e.g.
+// "tar.gz" before "gz" would matter if this were used for prefix matching;
+// HasSuffix below doesn't require that ordering, but it documents intent).
+var directoryArchiveExtensions = []string{
+	".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz",
+	".tar.zst", ".tzst", ".tar", ".zip",
+}
+
+// archiveQueryParam is go-getter's query parameter that explicitly overrides
+// extension-based archive detection. Its own client.go resolves it with a
+// plain `c.Decompressors[archiveV]` map lookup after this rewrite:
+// any value strconv.ParseBool parses as false ("false", "0", "f", "F",
+// "FALSE", "False", etc.) is rewritten to the sentinel "-" before the lookup
+// (`if b, err := strconv.ParseBool(archiveV); err == nil && !b { archiveV =
+// "-" }`), while a ParseBool-true value ("true", "1", "t", etc.) is left as
+// that literal string. Neither "-" nor "true"/"1"/"t" is ever a key in
+// Decompressors, so both boolean spellings resolve to no decompressor and
+// go-getter downloads the source as a plain file. Only a value ParseBool
+// can't parse at all -- an explicit archive type like "zip" -- reaches the
+// map lookup as-is, and only forces unarchiving if it names one of
+// go-getter's *directory* archive types (see directoryArchiveExtensions);
+// the single-file codec keys ("bz2", "gz", "xz", "zst") and any unrecognized
+// value also resolve to no decompressor. An empty value (`?archive=`, as
+// opposed to the parameter being entirely absent) is treated the same as
+// absent -- go-getter falls through to extension-based detection rather than
+// forcing unarchiving. See
+// https://pkg.go.dev/github.com/hashicorp/go-getter#hdr-Archiving.
+const archiveQueryParam = "archive"
+
+// IsArchiveURI checks whether go-getter will unpack this source into a
+// directory tree (a tarball or zip), rather than staging it as a single file.
+// It honors go-getter's explicit `archive` query parameter override before
+// falling back to extension-based detection on the path suffix, and strips
+// both any go-getter subdirectory (`//...`) suffix and the query string
+// first: a URI like `https://example.com/archive.zip//nested/dir` must still
+// be recognized as an archive by its source extension, not misclassified by
+// its subdirectory path, and `?archive=zip`/`?archive=false` must override
+// extension detection either direction (forcing unarchiving even with no
+// recognized extension, or disabling it for a recognized one) rather than
+// being silently dropped along with the rest of the query string.
+func IsArchiveURI(uri string) bool {
+	source, _ := getter.SourceDirSubdir(uri)
+
+	path := source
+	var rawQuery string
+	if idx := strings.IndexByte(path, '?'); idx != -1 {
+		rawQuery = path[idx+1:]
+		path = path[:idx]
+	}
+
+	if archive, ok := archiveQueryOverride(rawQuery); ok {
+		return archive
+	}
+
+	lowerPath := strings.ToLower(path)
+	for _, ext := range directoryArchiveExtensions {
+		if strings.HasSuffix(lowerPath, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+// archiveQueryOverride parses go-getter's explicit `archive` query parameter
+// override out of rawQuery. It returns ok == false whenever there is no
+// override to apply -- rawQuery is empty or unparseable, the archive
+// parameter is absent, or its value is empty (`?archive=`, which go-getter
+// treats the same as absent: see client.go's `archiveV != ""` check
+// upstream) -- signaling the caller to fall back to extension-based
+// detection instead.
+func archiveQueryOverride(rawQuery string) (archive bool, ok bool) {
+	if rawQuery == "" {
+		return false, false
+	}
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return false, false
+	}
+	raw, present := values[archiveQueryParam]
+	if !present || len(raw) == 0 || raw[0] == "" {
+		return false, false
+	}
+	// Parse with strconv.ParseBool, exactly like go-getter itself does. A
+	// value ParseBool recognizes -- whether a false spelling ("0", "f") or a
+	// true spelling ("1", "t") -- never resolves to a real Decompressors key
+	// in go-getter's client.go (a false value is rewritten to the sentinel
+	// "-"; a true value is left as the literal string "true"/"1"/"t"), so
+	// go-getter downloads the source as a plain file either way.
+	if _, err := strconv.ParseBool(raw[0]); err == nil {
+		return false, true
+	}
+	// A value ParseBool can't parse at all (e.g. an explicit archive type
+	// like "zip") reaches go-getter's Decompressors map lookup unchanged, so
+	// it only forces unarchiving when it names one of go-getter's directory
+	// archive types -- not a single-file codec key ("bz2", "gz", "xz",
+	// "zst") or an unrecognized value, both of which also miss the lookup
+	// and download as a plain file.
+	return isDirectoryArchiveType(raw[0]), true
+}
+
+// isDirectoryArchiveType reports whether typ (without a leading dot, e.g.
+// "zip" or "tar.gz") is one of go-getter's directory-archive Decompressors
+// keys (github.com/hashicorp/go-getter@v1.8.6 decompress.go), as opposed to
+// a single-file codec key ("bz2", "gz", "xz", "zst") or a value that isn't a
+// Decompressors key at all. Matching is exact-case, mirroring go-getter's
+// own `c.Decompressors[archiveV]` map lookup -- no case normalization.
+func isDirectoryArchiveType(typ string) bool {
+	for _, ext := range directoryArchiveExtensions {
+		if strings.TrimPrefix(ext, ".") == typ {
+			return true
+		}
+	}
+	return false
 }
 
 // HasLocalPathPrefix checks if the URI starts with local path prefixes.

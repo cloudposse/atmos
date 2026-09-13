@@ -552,6 +552,23 @@ func processStackContextPrefix(
 	return nil
 }
 
+// resolvePathArgForExistenceCheck converts pathArg to an absolute path suitable for an
+// existence check, using the same "." -> cwd and relative -> cwd-joined semantics as
+// normalizePathForResolution in pkg/utils, without requiring the path to actually exist.
+func resolvePathArgForExistenceCheck(pathArg string) (string, error) {
+	if pathArg == "." {
+		return os.Getwd()
+	}
+	if filepath.IsAbs(pathArg) {
+		return pathArg, nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cwd, pathArg), nil
+}
+
 // findComponentInStacks searches for a component across all stacks and returns matching stacks.
 // Returns the count of found stacks, list of stack names, config info for the found component,
 // and a map of filename->canonicalName for stacks where the canonical name differs from the filename.
@@ -827,6 +844,21 @@ func processStacks(
 			strings.HasPrefix(pathArg, ".."+string(filepath.Separator))
 		shouldAttemptPathResolution := foundStackCount == 0 && (hasForwardSlash || hasPlatformSep || isDotPath)
 
+		// The forward-slash/dot-path heuristic above can't distinguish a real filesystem path
+		// ("components/terraform/vpc") from a plain component name that merely contains a
+		// namespace-style slash ("infra/vpc", "test/test-component"). Only trust
+		// ErrPathNotInComponentDir as the authoritative failure reason -- and surface its detailed
+		// message instead of the generic "component not found" one -- when pathArg actually
+		// resolves to something on disk. A namespaced component name essentially never does,
+		// since it's evaluated relative to the current working directory, not any component base
+		// path.
+		pathArgExistsOnDisk := false
+		if resolvedPathArg, resolveErr := resolvePathArgForExistenceCheck(pathArg); resolveErr == nil {
+			if _, statErr := os.Stat(resolvedPathArg); statErr == nil {
+				pathArgExistsOnDisk = true
+			}
+		}
+
 		if shouldAttemptPathResolution {
 			// Component not found - try fallback to path resolution.
 			// If the component argument looks like it could be a path (e.g., "components/terraform/vpc"),
@@ -861,9 +893,11 @@ func processStacks(
 					deferredContexts,
 					authManager,
 				)
-			} else if errors.Is(pathErr, errUtils.ErrPathNotInComponentDir) {
-				// Path resolution failed because path is not in component directories.
-				// Return the detailed path error instead of generic "component not found".
+			} else if pathArgExistsOnDisk && errors.Is(pathErr, errUtils.ErrPathNotInComponentDir) {
+				// Path resolution failed because path is not in component directories, and
+				// pathArg is a real, existing filesystem path -- not just a namespaced component
+				// name that happens to contain a slash. Return the detailed path error instead of
+				// the generic "component not found" one.
 				return configAndStacksInfo, pathErr
 			}
 		}
