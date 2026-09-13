@@ -71,8 +71,9 @@ atmos aws cloudformation delete --affected --labels cost-center=platform
     Disable termination protection before deleting. If the component's
     `termination_protection` is `true`, `delete` fails with an actionable hint
     instead of silently disabling protection — pass this flag as an explicit
-    escape hatch, or set `termination_protection: false` in the stack
-    configuration and re-apply first.
+    escape hatch. Setting `termination_protection: false` in the stack
+    configuration and re-applying does not disable protection: apply only
+    ever turns protection on, never off.
   </dd>
 
   <dt>`--all` <em>(optional)</em></dt>
