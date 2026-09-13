@@ -438,6 +438,15 @@ func githubBackoffDelay(attempt int) time.Duration {
 // "no available versions" on failure.
 func makeGitHubRequest(apiURL string) (*http.Response, error) {
 	token := viper.GetString("github-token")
+	// "github-token" is resolved without regard to host, so it is treated as scoped to
+	// RepoEndpoints() (the user's own repository host). It is only forwarded to
+	// ATMOS_TOOLCHAIN_GITHUB_API_URL (apiURL, above) when ToolchainEndpoints resolves to that
+	// same host -- otherwise (e.g. a GHES-scoped token while toolchain assets stay on public
+	// github.com, the default) it would leak a host-scoped credential to the wrong host. The
+	// https-only check below applies independently of this rule.
+	if token != "" && !github.RepoEndpoints().IsHost(github.ToolchainEndpoints().Host) {
+		token = ""
+	}
 	client := &http.Client{
 		Timeout:       defaultHTTPTimeout,
 		CheckRedirect: stripAuthOnNonHTTPSRedirect,

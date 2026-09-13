@@ -119,6 +119,13 @@ func newEndpoints(serverURL, apiURL string) Endpoints {
 // Exported because it is shared by the toolchain registries (e.g. the aqua package's
 // RegistryBaseURL) in addition to RepoEndpoints and ToolchainEndpoints above.
 //
+// http:// is accepted here on purpose: the acceptance and unit test suites point these
+// endpoints at local httptest/httpmock servers over plain HTTP, and resolution must keep
+// working for them. Accepting http here is not itself a credential leak -- the leak would be
+// attaching a token to a request built against a non-https endpoint, which is prevented
+// centrally by TokenForEndpoints (and newGitHubClientForEndpoints, which calls it), not by
+// rejecting http endpoints here.
+//
 //nolint:forbidigo // Direct env lookup required to resolve GitHub/GHES/toolchain endpoints; mirrors pkg/http/client.go's justification for the same variables.
 func ResolveEndpointURL(envVar, fallback string) string {
 	defer perf.Track(nil, "github.ResolveEndpointURL")()
@@ -192,14 +199,68 @@ func (e Endpoints) isDefaultGitHubCom() bool {
 	return e.Host == defaultGitHubServerHost
 }
 
+// AllowsToken reports whether it is safe to attach a bearer/OAuth token to a request against
+// this Endpoints value's API host: only when APIURL resolves to an https URL. Sending a token
+// over plain HTTP would put it on the wire in cleartext. ResolveEndpointURL intentionally
+// accepts http:// (the acceptance/unit test suites point endpoints at local httptest/httpmock
+// servers over plain HTTP), so those endpoints must still resolve -- they simply must never be
+// paired with a token.
+func (e Endpoints) AllowsToken() bool {
+	defer perf.Track(nil, "github.Endpoints.AllowsToken")()
+
+	parsed, err := url.Parse(e.APIURL)
+	return err == nil && strings.EqualFold(parsed.Scheme, "https")
+}
+
+// TokenForEndpoints returns token unchanged when endpoints.AllowsToken() (its API host is
+// https), or "" otherwise, logging at debug level so a non-https endpoint that withholds a
+// configured token is diagnosable rather than silently degrading to anonymous access. This
+// centralizes the "never send a token over http" rule for every caller that builds an
+// authenticated GitHub request or client from RepoEndpoints()/ToolchainEndpoints().
+func TokenForEndpoints(endpoints Endpoints, token string) string {
+	defer perf.Track(nil, "github.TokenForEndpoints")()
+
+	if token == "" || endpoints.AllowsToken() {
+		return token
+	}
+
+	log.Debug("GitHub API endpoint is not https; sending unauthenticated requests",
+		"apiURL", endpoints.APIURL)
+	return ""
+}
+
+// escapePathSegments percent-encodes each "/"-separated segment of path independently and
+// rejoins them with "/", so a reserved character (e.g. "#", "?") supplied within one logical
+// path segment is escaped as data rather than truncating or reinterpreting the URL, while a
+// genuine multi-segment path (e.g. "dir/file.yaml") still produces one URL segment per
+// directory component as intended.
+func escapePathSegments(path string) string {
+	if path == "" {
+		return ""
+	}
+	segments := strings.Split(path, "/")
+	for i, seg := range segments {
+		segments[i] = url.PathEscape(seg)
+	}
+	return strings.Join(segments, "/")
+}
+
 // RawURL builds the URL for fetching a file's raw content at ref from owner/repo.
 // On github.com this is raw.githubusercontent.com; on GitHub Enterprise Server, raw
 // content is served from the same host under /raw/ instead of a separate subdomain.
 // Path may be empty (returns the ref root) and any leading slash is stripped.
+//
+// Owner, repo, and ref are percent-encoded as single opaque path segments -- a "/" occurring
+// within one of them (e.g. a malicious or malformed ref) is escaped as data ("%2F") rather
+// than reinterpreted as an additional path separator. Path is a genuine multi-segment file
+// path, so each "/"-separated segment is escaped independently instead.
 func (e Endpoints) RawURL(owner, repo, ref, path string) string {
 	defer perf.Track(nil, "github.Endpoints.RawURL")()
 
-	path = strings.TrimPrefix(path, "/")
+	owner = url.PathEscape(owner)
+	repo = url.PathEscape(repo)
+	ref = url.PathEscape(ref)
+	path = escapePathSegments(strings.TrimPrefix(path, "/"))
 
 	if e.isDefaultGitHubCom() {
 		if path == "" {
@@ -216,16 +277,20 @@ func (e Endpoints) RawURL(owner, repo, ref, path string) string {
 
 // ReleaseAssetURL builds the URL for downloading a release asset. The path shape
 // (`/<owner>/<repo>/releases/download/<tag>/<asset>`) is identical on github.com and GHES.
+// Each component is percent-encoded as a single opaque path segment.
 func (e Endpoints) ReleaseAssetURL(owner, repo, tag, asset string) string {
 	defer perf.Track(nil, "github.Endpoints.ReleaseAssetURL")()
 
-	return fmt.Sprintf("%s/%s/%s/releases/download/%s/%s", e.ServerURL, owner, repo, tag, asset)
+	return fmt.Sprintf("%s/%s/%s/releases/download/%s/%s",
+		e.ServerURL, url.PathEscape(owner), url.PathEscape(repo), url.PathEscape(tag), url.PathEscape(asset))
 }
 
 // ArchiveURL builds the URL for downloading a tag's source archive
-// (`/<owner>/<repo>/archive/refs/tags/<tag>.tar.gz`), identical on github.com and GHES.
+// (`/<owner>/<repo>/archive/refs/tags/<tag>.tar.gz`), identical on github.com and GHES. Each
+// component is percent-encoded as a single opaque path segment.
 func (e Endpoints) ArchiveURL(owner, repo, tag string) string {
 	defer perf.Track(nil, "github.Endpoints.ArchiveURL")()
 
-	return fmt.Sprintf("%s/%s/%s/archive/refs/tags/%s.tar.gz", e.ServerURL, owner, repo, tag)
+	return fmt.Sprintf("%s/%s/%s/archive/refs/tags/%s.tar.gz",
+		e.ServerURL, url.PathEscape(owner), url.PathEscape(repo), url.PathEscape(tag))
 }

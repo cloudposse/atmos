@@ -51,6 +51,10 @@ const (
 	// Upstream aqua-registry raw content base URL, used as the default when
 	// ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL is unset. See RegistryBaseURL.
 	defaultAquaRegistryBaseURL = "https://raw.githubusercontent.com/aquaproj/aqua-registry/main"
+
+	// DefaultGitHubServerHost is public GitHub.com's web/clone host, used by
+	// toolchainHostMatcher to recognize the default (non-GHES) GitHub host.
+	defaultGitHubServerHost = "github.com"
 )
 
 // init registers the Aqua registry as the default registry.
@@ -100,19 +104,34 @@ type scoredTool struct {
 type RegistryOption func(*AquaRegistry)
 
 // toolchainHostMatcher builds a GitHub host-authentication predicate covering the default
-// public GitHub hosts (api.github.com, raw.githubusercontent.com, uploads.github.com) plus
-// the resolved toolchain endpoints' web/clone host (endpoints.Host, from
-// ATMOS_TOOLCHAIN_GITHUB_URL) and its API host (endpoints.APIURL, from
+// public GitHub hosts (github.com, api.github.com, raw.githubusercontent.com,
+// uploads.github.com) plus the resolved toolchain endpoints' web/clone host (endpoints.Host,
+// from ATMOS_TOOLCHAIN_GITHUB_URL) and its API host (endpoints.APIURL, from
 // ATMOS_TOOLCHAIN_GITHUB_API_URL) so a GitHub token is attached both to standard
 // aqua-registry/release traffic and to a configured corporate mirror -- including one where the
 // web and API hosts differ. The ar.client field (which handles githubBaseURL requests, built
 // from APIURL) needs the latter; without it, an API host that differs from the web host would
 // never receive the token. Installing any host matcher replaces pkg/http's own default
 // allowlist entirely, so those defaults are reproduced here.
+//
+// The token (github.GetGitHubToken(), passed to NewAquaRegistry as githubToken) is resolved
+// without regard to host, so it is treated as scoped to RepoEndpoints() (the user's own
+// repository host). The public GitHub.com hosts above are therefore only trusted with it when
+// RepoEndpoints itself also resolves to public github.com -- a GHES-scoped token must never be
+// forwarded to public GitHub just because ATMOS_TOOLCHAIN_GITHUB_URL/API_URL were left at their
+// (public github.com) default. A host explicitly configured via those toolchain env vars
+// (endpoints.IsHost/IsAPIHost, for a genuine corporate mirror) is unaffected: that is the
+// user's own informed opt-in to send the token there, independent of RepoEndpoints.
 func toolchainHostMatcher(endpoints github.Endpoints) func(string) bool {
+	tokenBelongsToPublicGitHub := github.RepoEndpoints().IsHost(defaultGitHubServerHost)
+
 	return func(host string) bool {
-		return host == "api.github.com" || host == "raw.githubusercontent.com" || host == "uploads.github.com" ||
-			endpoints.IsHost(host) || endpoints.IsAPIHost(host)
+		switch host {
+		case defaultGitHubServerHost, "api.github.com", "raw.githubusercontent.com", "uploads.github.com":
+			return tokenBelongsToPublicGitHub
+		default:
+			return endpoints.IsHost(host) || endpoints.IsAPIHost(host)
+		}
 	}
 }
 

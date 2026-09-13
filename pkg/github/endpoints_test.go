@@ -216,6 +216,76 @@ func TestEndpoints_ArchiveURL(t *testing.T) {
 		e.ArchiveURL("aquaproj", "aqua-registry", "v4.0.0"))
 }
 
+// TestEndpoints_RawURL_EscapesReservedCharacters pins that RawURL percent-encodes owner,
+// repo, and ref as opaque single path segments (a "/" inside one of them becomes "%2F" data,
+// not an extra path separator), while a genuine multi-segment file path has each of its own
+// "/"-separated segments escaped independently.
+func TestEndpoints_RawURL_EscapesReservedCharacters(t *testing.T) {
+	e := Endpoints{ServerURL: "https://github.com", Host: "github.com"}
+
+	assert.Equal(t,
+		"https://raw.githubusercontent.com/cloudposse/atmos/main/dir%20with%20space/file%23name.tf",
+		e.RawURL("cloudposse", "atmos", "main", "dir with space/file#name.tf"))
+
+	// A "/" embedded in ref is escaped as data, not reinterpreted as a path separator.
+	assert.Equal(t,
+		"https://raw.githubusercontent.com/cloudposse/atmos/feature%2Ffoo/README.md",
+		e.RawURL("cloudposse", "atmos", "feature/foo", "README.md"))
+
+	ghes := Endpoints{ServerURL: "https://ghes.example.com", Host: "ghes.example.com"}
+	assert.Equal(t,
+		"https://ghes.example.com/raw/cloudposse/atmos/main/dir/file%3Fname.tf",
+		ghes.RawURL("cloudposse", "atmos", "main", "dir/file?name.tf"))
+}
+
+// TestEndpoints_ReleaseAssetURL_EscapesReservedCharacters pins that ReleaseAssetURL
+// percent-encodes every component as an opaque path segment.
+func TestEndpoints_ReleaseAssetURL_EscapesReservedCharacters(t *testing.T) {
+	e := Endpoints{ServerURL: "https://ghes.example.com", Host: "ghes.example.com"}
+
+	assert.Equal(t,
+		"https://ghes.example.com/cloudposse/atmos/releases/download/v1.0.0%23beta/atmos%3F.tar.gz",
+		e.ReleaseAssetURL("cloudposse", "atmos", "v1.0.0#beta", "atmos?.tar.gz"))
+}
+
+// TestEndpoints_ArchiveURL_EscapesReservedCharacters pins that ArchiveURL percent-encodes
+// every component as an opaque path segment.
+func TestEndpoints_ArchiveURL_EscapesReservedCharacters(t *testing.T) {
+	e := Endpoints{ServerURL: "https://github.com", Host: "github.com"}
+
+	assert.Equal(t,
+		"https://github.com/aquaproj/aqua-registry/archive/refs/tags/v4.0.0%23rc1.tar.gz",
+		e.ArchiveURL("aquaproj", "aqua-registry", "v4.0.0#rc1"))
+}
+
+func TestEndpoints_AllowsToken(t *testing.T) {
+	tests := []struct {
+		name string
+		e    Endpoints
+		want bool
+	}{
+		{name: "https API URL allows token", e: Endpoints{APIURL: "https://api.github.com"}, want: true},
+		{name: "http API URL withholds token", e: Endpoints{APIURL: "http://127.0.0.1:8080"}, want: false},
+		{name: "GHES https API URL allows token", e: Endpoints{APIURL: "https://ghes.example.com/api/v3"}, want: true},
+		{name: "invalid API URL withholds token", e: Endpoints{APIURL: "://not-a-url"}, want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.e.AllowsToken())
+		})
+	}
+}
+
+func TestTokenForEndpoints(t *testing.T) {
+	httpsEndpoints := Endpoints{APIURL: "https://api.github.com"}
+	httpEndpoints := Endpoints{APIURL: "http://127.0.0.1:8080"}
+
+	assert.Equal(t, "secret-token", TokenForEndpoints(httpsEndpoints, "secret-token"), "https endpoint keeps the token")
+	assert.Equal(t, "", TokenForEndpoints(httpEndpoints, "secret-token"), "http endpoint withholds the token")
+	assert.Equal(t, "", TokenForEndpoints(httpsEndpoints, ""), "empty token stays empty")
+	assert.Equal(t, "", TokenForEndpoints(httpEndpoints, ""), "empty token stays empty even over http")
+}
+
 func TestNormalizeHost(t *testing.T) {
 	tests := []struct {
 		name string

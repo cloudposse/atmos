@@ -221,16 +221,23 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 		downloader = runtime
 	}
 
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	httpClient := oauth2.NewClient(context.Background(), ts)
-	httpClient.Timeout = httpTimeout
+	// RepoEndpoints resolves GITHUB_API_URL (defaulting to api.github.com), so artifact
+	// list/download work against a GitHub Enterprise Server instance the same way they do
+	// against github.com. TokenForEndpoints withholds the token when that API URL is not
+	// https (ResolveEndpointURL accepts http:// so tests can point it at a local server),
+	// since sending it there would put it on the wire in cleartext.
+	repoEndpoints := ghtoken.RepoEndpoints()
+	httpClient := &http.Client{Timeout: httpTimeout}
+	if apiToken := ghtoken.TokenForEndpoints(repoEndpoints, token); apiToken != "" {
+		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: apiToken})
+		oauthClient := oauth2.NewClient(context.Background(), ts)
+		oauthClient.Timeout = httpTimeout
+		httpClient = oauthClient
+	}
 
 	return &Store{
-		httpClient: httpClient,
-		// RepoEndpoints resolves GITHUB_API_URL (defaulting to api.github.com), so artifact
-		// list/download work against a GitHub Enterprise Server instance the same way they
-		// do against github.com.
-		baseURL:       ghtoken.RepoEndpoints().APIURL,
+		httpClient:    httpClient,
+		baseURL:       repoEndpoints.APIURL,
 		uploader:      uploader,
 		downloader:    downloader,
 		owner:         owner,

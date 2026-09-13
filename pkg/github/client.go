@@ -44,6 +44,12 @@ const (
 	logFieldRepo  = "repo"
 )
 
+// publicGitHubEndpoints is the fixed, non-configurable Endpoints value for public github.com.
+// It recognizes an explicit github.com URL regardless of what RepoEndpoints resolves to (which
+// may be a different, GHES, host): IsHost normalizes case, a trailing dot, and the default
+// port, so this also matches "GitHub.com", "github.com.", and "github.com:443".
+var publicGitHubEndpoints = newEndpoints(defaultGitHubServerURL, defaultGitHubAPIURL)
+
 // newGitHubClient creates a new GitHub client. If a token is provided, it returns an authenticated client;
 // otherwise, it returns an unauthenticated client.
 func newGitHubClient(ctx context.Context) *github.Client {
@@ -75,16 +81,52 @@ func newGitHubClientWithToken(ctx context.Context, token string) *github.Client 
 // used for self-install, or an arbitrary tool's release versions) live on public github.com by
 // default even for GHES users, which is a separate concern from where the user's own
 // repositories live -- see ToolchainEndpoints' doc comment.
+//
+// GetGitHubToken() resolves a single token without regard to host, so it is treated as scoped
+// to RepoEndpoints() (the user's own repository host: GITHUB_SERVER_URL/GITHUB_API_URL) and is
+// only forwarded here -- to ToolchainEndpoints -- when tokenForToolchainHost determines
+// ToolchainEndpoints resolves to that same host. Otherwise a GHES-scoped token would leak to a
+// different host (public github.com by default, or a differently hosted toolchain mirror).
+// Separately, newGitHubClientForEndpoints withholds the token when ToolchainEndpoints is not
+// https, so both rules apply regardless of call order.
 func newToolchainGitHubClient(ctx context.Context) *github.Client {
 	defer perf.Track(nil, "github.newToolchainGitHubClient")()
 
-	return newGitHubClientForEndpoints(ctx, GetGitHubToken(), ToolchainEndpoints())
+	toolchainEndpoints := ToolchainEndpoints()
+	token := tokenForToolchainHost(GetGitHubToken(), toolchainEndpoints)
+	return newGitHubClientForEndpoints(ctx, token, toolchainEndpoints)
+}
+
+// tokenForToolchainHost returns token when it is safe to attach to requests against
+// toolchainEndpoints, or "" otherwise. A repo-scoped token (from GetGitHubToken(), which
+// resolves without regard to host) belongs to RepoEndpoints() -- it is only forwarded to
+// toolchainEndpoints when they resolve to that same host; e.g. a GHES-scoped token must never
+// reach the public github.com toolchain endpoints (or any other differently hosted toolchain
+// mirror).
+func tokenForToolchainHost(token string, toolchainEndpoints Endpoints) string {
+	defer perf.Track(nil, "github.tokenForToolchainHost")()
+
+	if token == "" {
+		return ""
+	}
+
+	repo := RepoEndpoints()
+	if !repo.IsHost(toolchainEndpoints.Host) {
+		log.Debug("Toolchain endpoints host differs from repo endpoints host; withholding repo-scoped GitHub token",
+			"repoHost", repo.Host, "toolchainHost", toolchainEndpoints.Host)
+		return ""
+	}
+	return token
 }
 
 // newGitHubClientForEndpoints builds an authenticated (or, if token is empty, unauthenticated)
-// *github.Client with an HTTP timeout, pointed at endpoints.
+// *github.Client with an HTTP timeout, pointed at endpoints. The token is withheld (regardless
+// of what the caller passed) when endpoints is not https -- see Endpoints.AllowsToken --
+// because sending a bearer/OAuth token over plain HTTP would put it on the wire in cleartext.
 func newGitHubClientForEndpoints(ctx context.Context, token string, endpoints Endpoints) *github.Client {
 	defer perf.Track(nil, "github.newGitHubClientForEndpoints")()
+
+	token = TokenForEndpoints(endpoints, token)
 
 	// Create HTTP client with timeout to prevent hangs in CI environments
 	// when network is unavailable or DNS resolution fails.
@@ -221,8 +263,8 @@ func ConvertToRawURL(githubURL string) (string, error) {
 	// rewritten to "<GHES>/raw/..." instead of raw.githubusercontent.com. Only URLs on the
 	// configured GHES host use RepoEndpoints.
 	switch {
-	case u.Host == defaultGitHubServerHost:
-		return parseGitHubDotComURL(newEndpoints(defaultGitHubServerURL, defaultGitHubAPIURL), u.Path)
+	case publicGitHubEndpoints.IsHost(u.Host):
+		return parseGitHubDotComURL(publicGitHubEndpoints, u.Path)
 	case endpoints.IsHost(u.Host):
 		return parseGitHubDotComURL(endpoints, u.Path)
 	default:

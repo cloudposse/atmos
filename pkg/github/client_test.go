@@ -3,6 +3,7 @@ package github
 import (
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -185,4 +186,91 @@ func TestNewScopedClient_PublicDefaults(t *testing.T) {
 
 	require.NotNil(t, client)
 	assert.Equal(t, "https://api.github.com/", client.BaseURL.String())
+}
+
+// TestTokenForToolchainHost documents the cross-host rule newToolchainGitHubClient relies on:
+// GetGitHubToken() resolves a token without regard to host, so it is treated as scoped to
+// RepoEndpoints() and is only forwarded to toolchainEndpoints when they resolve to that same
+// host.
+func TestTokenForToolchainHost(t *testing.T) {
+	tests := []struct {
+		name              string
+		repoServerURL     string // empty means unset (defaults to public github.com).
+		toolchainEndpoint Endpoints
+		token             string
+		want              string
+	}{
+		{
+			name:              "both github.com: token sent",
+			toolchainEndpoint: Endpoints{Host: "github.com"},
+			token:             "tok",
+			want:              "tok",
+		},
+		{
+			name:              "repo GHES, toolchain github.com: no token",
+			repoServerURL:     "https://ghes.example.com",
+			toolchainEndpoint: Endpoints{Host: "github.com"},
+			token:             "tok",
+			want:              "",
+		},
+		{
+			name:              "repo GHES, toolchain same GHES: token sent",
+			repoServerURL:     "https://ghes.example.com",
+			toolchainEndpoint: Endpoints{Host: "ghes.example.com"},
+			token:             "tok",
+			want:              "tok",
+		},
+		{
+			name:              "repo GHES, toolchain a different GHES: no token",
+			repoServerURL:     "https://ghes.example.com",
+			toolchainEndpoint: Endpoints{Host: "other-ghes.example.com"},
+			token:             "tok",
+			want:              "",
+		},
+		{
+			name:              "empty token stays empty",
+			toolchainEndpoint: Endpoints{Host: "github.com"},
+			token:             "",
+			want:              "",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clearGitHubEndpointEnv(t)
+			if tc.repoServerURL != "" {
+				t.Setenv("GITHUB_SERVER_URL", tc.repoServerURL)
+			}
+
+			got := tokenForToolchainHost(tc.token, tc.toolchainEndpoint)
+
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestNewGitHubClientForEndpoints_WithholdsTokenOverHTTP pins that newGitHubClientForEndpoints
+// never sends a token to a non-https endpoint (ResolveEndpointURL accepts http:// so tests can
+// point endpoints at a local server): the request must reach the server with no Authorization
+// header at all.
+func TestNewGitHubClientForEndpoints_WithholdsTokenOverHTTP(t *testing.T) {
+	var gotAuth string
+	var gotAuthSet bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth, gotAuthSet = r.Header.Get("Authorization"), r.Header.Get("Authorization") != ""
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	endpoints := Endpoints{ServerURL: server.URL, APIURL: server.URL, Host: "127.0.0.1"}
+	client := newGitHubClientForEndpoints(t.Context(), "leaked-token", endpoints)
+	require.NotNil(t, client)
+
+	req, err := client.NewRequest(http.MethodGet, "repos/owner/repo", nil)
+	require.NoError(t, err)
+	_, err = client.Do(t.Context(), req, nil)
+	require.NoError(t, err)
+
+	assert.False(t, gotAuthSet, "expected no Authorization header sent to a plain-http endpoint")
+	assert.Empty(t, gotAuth)
 }
