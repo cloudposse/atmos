@@ -2077,6 +2077,18 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "bucket": {
+                    "type": "string",
+                    "description": "For kind 'aws/s3': destination S3 bucket for packaged template/asset uploads."
+                  },
+                  "prefix": {
+                    "type": "string",
+                    "description": "For kind 'aws/s3': destination key prefix within bucket."
+                  },
+                  "region": {
+                    "type": "string",
+                    "description": "For kind 'aws/s3': the bucket's region."
                   }
                 },
                 "required": [
