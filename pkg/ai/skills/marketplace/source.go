@@ -71,8 +71,10 @@ func ParseSource(source string) (*SourceInfo, error) {
 		return parseGitHubHTTPS(source, ref, host)
 	}
 
-	// Format 3: SSH URL (git@github.com:user/repo.git).
-	if host, ok := matchGitHubSourceHost(source, ghesHost, "git@%s:"); ok {
+	// Format 3: SSH URL (git@github.com:user/repo.git). SCP-style syntax cannot carry a port
+	// (the colon introduces the path), so the configured GHES host is matched by hostname only;
+	// the HTTPS clone URL built later still uses ServerURL and keeps the configured port.
+	if host, ok := matchGitHubSourceHost(source, ghtoken.RepoEndpoints().Hostname(), "git@%s:"); ok {
 		return parseGitHubSSH(source, ref, host)
 	}
 
