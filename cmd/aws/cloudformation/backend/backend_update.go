@@ -1,8 +1,6 @@
 package backend
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -23,7 +21,7 @@ encryption, and public access blocking to match secure defaults.`,
 	Example: `  atmos aws cloudformation backend update vpc --stack dev`,
 	// Args validator is auto-set by parser via SetPositionalArgs with prompt-aware validation.
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
+		ctx := cmd.Context()
 		v := viper.GetViper()
 		if err := updateParser.BindFlagsToViper(cmd, v); err != nil {
 			return err

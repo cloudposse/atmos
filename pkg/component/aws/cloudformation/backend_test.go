@@ -63,22 +63,52 @@ func TestResolveS3BackendTarget(t *testing.T) {
 	}
 }
 
+// TestResolveS3BackendTarget_MissingRegionIsReachable verifies a bucket-only
+// target (no explicit `region`) resolves successfully via ResolveS3BackendTarget
+// — the empty region is expected to be filled in later by
+// BuildSyntheticBackendConfig's fallback chain (settings.aws_cloudformation.region,
+// then the active identity's AWS region), not rejected up front the way the
+// packaging path's s3ConfigFromTarget rejects it. Regression test for the
+// backend command group failing to resolve a target that relies on the
+// fallback chain for its region.
+func TestResolveS3BackendTarget_MissingRegionIsReachable(t *testing.T) {
+	provision := map[string]any{
+		"targets": map[string]any{
+			"artifacts": map[string]any{"kind": kindAwsS3, "bucket": "my-bucket"},
+		},
+	}
+
+	got, err := ResolveS3BackendTarget(provision, "")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "my-bucket", got.Bucket)
+	assert.Empty(t, got.Region)
+}
+
 func TestFindS3BackendTargets(t *testing.T) {
 	provision := map[string]any{
 		"targets": map[string]any{
 			"good":          map[string]any{"kind": kindAwsS3, "bucket": "good-bucket", "prefix": "templates", "region": "us-east-1"},
 			"missingBucket": map[string]any{"kind": kindAwsS3, "region": "us-east-1"},
+			// missingRegion has no `region` set — it must still be listed, since
+			// BuildSyntheticBackendConfig's fallback chain (settings.aws_cloudformation.region,
+			// then the active identity's region) may still resolve one. Only a
+			// missing `bucket` is fatal here.
 			"missingRegion": map[string]any{"kind": kindAwsS3, "bucket": "no-region-bucket"},
 			"other":         map[string]any{"kind": "git"},
 		},
 	}
 
 	got := FindS3BackendTargets(provision)
-	require.Len(t, got, 1)
+	require.Len(t, got, 2)
 	require.Contains(t, got, "good")
 	assert.Equal(t, "good-bucket", got["good"].Bucket)
 	assert.Equal(t, "templates", got["good"].Prefix)
 	assert.Equal(t, "us-east-1", got["good"].Region)
+
+	require.Contains(t, got, "missingRegion")
+	assert.Equal(t, "no-region-bucket", got["missingRegion"].Bucket)
+	assert.Empty(t, got["missingRegion"].Region)
 }
 
 func TestFindS3BackendTargets_Empty(t *testing.T) {

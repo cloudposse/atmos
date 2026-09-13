@@ -126,8 +126,15 @@ func TestBackendSubcommands_StackFromViperWhenNotSetOnCLI(t *testing.T) {
 	for _, tt := range backendSubcommandCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			mockConfigInit := setupTestWithMocks(t)
+			// "viper-stack" is deliberately distinct from any value a prior
+			// subtest may have left on the flag (e.g. "dev" from
+			// TestBackendSubcommands_BindStackFlagFromCommand). If the RunE
+			// closure incorrectly reads the stale CLI flag value instead of
+			// truly falling back to Viper, the mock expectation below (which
+			// only matches "viper-stack") fails the test instead of silently
+			// passing on a coincidental match.
 			setupViperForTest(t, map[string]any{
-				"stack":    "dev",
+				"stack":    "viper-stack",
 				"identity": "",
 				"force":    true,
 				"target":   "",
@@ -135,17 +142,19 @@ func TestBackendSubcommands_StackFromViperWhenNotSetOnCLI(t *testing.T) {
 			})
 
 			// These are package-level singleton *cobra.Command values shared across test
-			// functions; clear any Changed state a prior subtest may have left set so this
-			// test reliably exercises the "value came from Viper, not the CLI" fallback.
+			// functions; reset both Changed and the underlying Value (to each flag's
+			// registered default) so a prior subtest's CLI-set value can't leak in and
+			// mask a bug that reads the stale flag Value instead of falling back to Viper.
 			for _, name := range []string{"stack", "identity", "force", "target", "format"} {
 				if f := tt.cmd.Flags().Lookup(name); f != nil {
+					require.NoError(t, f.Value.Set(f.DefValue))
 					f.Changed = false
 				}
 			}
 
 			expectedErr := errors.New("stop after stack parse")
 			mockConfigInit.EXPECT().
-				InitConfigAndAuth(tt.component, "dev", "").
+				InitConfigAndAuth(tt.component, "viper-stack", "").
 				Return(nil, nil, expectedErr)
 
 			err := tt.cmd.RunE(tt.cmd, tt.args)

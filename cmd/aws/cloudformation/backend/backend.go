@@ -27,6 +27,11 @@ var backendCmd = &cobra.Command{
 	Long: `Create, list, describe, update, and delete the S3 bucket used by an
 aws/cloudformation component's template-packaging flow (a "kind: aws/s3"
 provision target).`,
+	Example: `  atmos aws cloudformation backend create vpc --stack dev
+  atmos aws cloudformation backend list vpc --stack dev
+  atmos aws cloudformation backend describe vpc --stack dev
+  atmos aws cloudformation backend update vpc --stack dev
+  atmos aws cloudformation backend delete vpc --stack dev --force`,
 }
 
 func init() {

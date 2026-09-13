@@ -42,7 +42,7 @@ func ResolveS3BackendTarget(provisionSection map[string]any, flagTarget string) 
 		if !ok {
 			return nil, fmt.Errorf("%w: %q is not a `kind: aws/s3` provision target", errUtils.ErrInvalidAwsCloudFormationSettings, flagTarget)
 		}
-		return s3ConfigFromTarget(flagTarget, block)
+		return s3ConfigFromTargetAllowEmptyRegion(flagTarget, block)
 	}
 
 	switch len(s3Targets) {
@@ -53,7 +53,7 @@ func ResolveS3BackendTarget(provisionSection map[string]any, flagTarget string) 
 			Err()
 	case 1:
 		for name, block := range s3Targets {
-			return s3ConfigFromTarget(name, block)
+			return s3ConfigFromTargetAllowEmptyRegion(name, block)
 		}
 	}
 
@@ -74,7 +74,7 @@ func FindS3BackendTargets(provisionSection map[string]any) map[string]*targetS3C
 	raw := findS3Targets(provisionSection)
 	result := make(map[string]*targetS3Config, len(raw))
 	for name, block := range raw {
-		s3cfg, err := s3ConfigFromTarget(name, block)
+		s3cfg, err := s3ConfigFromTargetAllowEmptyRegion(name, block)
 		if err != nil {
 			continue
 		}
@@ -204,6 +204,7 @@ func autoProvisionBackendIfEnabled(ctx context.Context, args autoProvisionArgs) 
 		Stack:             args.Stack,
 		DescribeComponent: describeFunc,
 		AuthContext:       args.AuthContext,
+		Context:           ctx,
 	}); err != nil {
 		return errUtils.Build(errUtils.ErrInvalidAwsCloudFormationSettings).
 			WithCause(err).

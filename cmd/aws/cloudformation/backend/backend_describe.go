@@ -21,7 +21,7 @@ provision target currently exists, along with its resolved bucket/region.`,
   atmos aws cloudformation backend describe vpc --stack dev --format json`,
 	// Args validator is auto-set by parser via SetPositionalArgs with prompt-aware validation.
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
+		ctx := cmd.Context()
 		v := viper.GetViper()
 		if err := describeParser.BindFlagsToViper(cmd, v); err != nil {
 			return err

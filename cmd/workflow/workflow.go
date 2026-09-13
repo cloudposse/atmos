@@ -64,6 +64,7 @@ func init() {
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("from-step", "ATMOS_WORKFLOW_FROM_STEP"),
 		flags.WithEnvVars("identity", "ATMOS_IDENTITY"),
+		flags.WithEnvVars("labels", "ATMOS_WORKFLOW_LABELS"),
 	)
 
 	// Register flags on command.
