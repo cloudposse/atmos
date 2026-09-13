@@ -2388,6 +2388,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentPlugins any
 	var baseComponentRender map[string]any
 	var baseComponentHelm map[string]any
+	var baseComponentCloudFormation map[string]any
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[string]any
 	var baseComponentRemoteStateBackendType string
@@ -2637,6 +2638,9 @@ func processBaseComponentConfigInternal(
 
 		// Base component native Helm fields (chart, values, etc.).
 		baseComponentHelm = extractHelmComponentSection(baseComponentMap)
+
+		// Base component native aws/cloudformation fields (template, parameters, etc.).
+		baseComponentCloudFormation = extractCloudFormationComponentSection(baseComponentMap)
 
 		// Base component backend
 		if i, ok2 := baseComponentMap[cfg.BackendTypeSectionName]; ok2 {
@@ -2895,6 +2899,13 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentHelm = merged
+
+		// Base component native aws/cloudformation fields.
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentCloudFormation, baseComponentCloudFormation})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentCloudFormation = merged
 
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand

@@ -58,6 +58,42 @@ func TestDeepCopyBaseComponentConfigMaps_RetryNil(t *testing.T) {
 	assert.Nil(t, dst.BaseComponentRetry, "nil source must produce nil destination")
 }
 
+// TestDeepCopyBaseComponentConfigMaps_CloudFormation verifies that
+// BaseComponentCloudFormation (inherited native aws/cloudformation fields:
+// template, parameters, capabilities, etc.) is deep-copied, not aliased,
+// mirroring BaseComponentHelm's existing guarantee for the same failure mode.
+func TestDeepCopyBaseComponentConfigMaps_CloudFormation(t *testing.T) {
+	src := &schema.BaseComponentConfig{
+		BaseComponentCloudFormation: map[string]any{
+			"stack_name": "vpc-prod",
+			"tags":       map[string]any{"team": "platform"},
+		},
+	}
+	dst := &schema.BaseComponentConfig{}
+	require.NoError(t, deepCopyBaseComponentConfigMaps(dst, src))
+
+	require.NotNil(t, dst.BaseComponentCloudFormation)
+	assert.Equal(t, "vpc-prod", dst.BaseComponentCloudFormation["stack_name"])
+
+	// result→src isolation: mutating dst must not leak back into src.
+	dst.BaseComponentCloudFormation["stack_name"] = "vpc-staging"
+	dstTags := dst.BaseComponentCloudFormation["tags"].(map[string]any)
+	dstTags["team"] = "platform-mutated"
+	assert.Equal(t, "vpc-prod", src.BaseComponentCloudFormation["stack_name"], "mutating dst must not leak into src")
+	assert.Equal(t, "platform", src.BaseComponentCloudFormation["tags"].(map[string]any)["team"], "nested map inside cloudformation bag must be deep-copied")
+
+	// src→result isolation: mutating src after the copy must not affect dst.
+	src.BaseComponentCloudFormation["stack_name"] = "vpc-mutated-after-copy"
+	assert.Equal(t, "vpc-staging", dst.BaseComponentCloudFormation["stack_name"], "mutating src must not leak into dst")
+}
+
+func TestDeepCopyBaseComponentConfigMaps_CloudFormationNil(t *testing.T) {
+	src := &schema.BaseComponentConfig{}
+	dst := &schema.BaseComponentConfig{}
+	require.NoError(t, deepCopyBaseComponentConfigMaps(dst, src))
+	assert.Nil(t, dst.BaseComponentCloudFormation, "nil source must produce nil destination")
+}
+
 // TestDeepCopyBaseComponentConfigMaps_Flags verifies that BaseComponentFlags
 // (terraform CLI execution flag defaults inherited via metadata.inherits /
 // top-level `component`) is deep-copied, not aliased — nested values are
