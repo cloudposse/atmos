@@ -7,7 +7,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/say"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Print policies for the say step.
@@ -48,7 +47,7 @@ func (h *SayHandler) Execute(ctx context.Context, step *schema.WorkflowStep, var
 
 	printQuote := func(text string) error {
 		for _, line := range strings.Split(text, "\n") {
-			ui.Info(line)
+			vars.UI().Info(line)
 		}
 		return nil
 	}
