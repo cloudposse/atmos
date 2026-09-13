@@ -34,6 +34,10 @@ steps:
 
 The example above expands into four generated runs (`linux`/`darwin` × `1.22`/`1.23`), each scheduled like a [`parallel`](/workflows/steps/type/parallel) child.
 
+Inside a [`test` step](/workflows/steps/type/test), this group can also run
+noninteractive registered checks such as `http` and `require`. Its expanded
+checks share the test report and failure-only output policy.
+
 ## Fields
 
 `matrix` accepts the [`steps`](/workflows/steps/type/parallel#fields), [`max_concurrency`](/workflows/steps/type/parallel#fields), [`fail`](/workflows/steps/type/parallel#failure-behavior), and [`output`](/workflows/steps/type/parallel#output) fields exactly as `parallel` does, plus the `matrix` axes:
