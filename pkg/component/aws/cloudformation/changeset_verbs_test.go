@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -160,10 +161,17 @@ func TestRunChangesetCreate_Error(t *testing.T) {
 }
 
 // runChangesetExecute's happy path: describe the named changeset, execute it,
-// stream events to a terminal success status.
+// stream events to a terminal success status. The poll sequence must observe
+// an *_IN_PROGRESS status before its terminal one -- streamStackEvents'
+// seenInProgress guard (events.go) refuses to accept a terminal status on the
+// very first poll, to rule out reading a stale, pre-execution terminal status
+// left over from an earlier, unrelated operation.
 func TestRunChangesetExecute_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
 
 	gomock.InOrder(
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
@@ -171,6 +179,10 @@ func TestRunChangesetExecute_Success(t *testing.T) {
 			Status:      cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateInProgress}},
+		}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
@@ -235,12 +247,19 @@ func TestRunChangesetExecute_StreamEventsError(t *testing.T) {
 func TestRunChangesetExecute_FailedStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
 
 	gomock.InOrder(
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateRollbackInProgress}},
+		}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateRollbackComplete}},
