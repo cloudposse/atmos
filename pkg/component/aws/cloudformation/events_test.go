@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -79,18 +80,20 @@ func TestPollStackEvents_DeduplicatesAcrossCalls(t *testing.T) {
 	}, nil).Times(2)
 
 	seen := make(map[string]bool)
-	events, status, err := pollStackEvents(context.Background(), client, "vpc", seen)
+	events, poll, err := pollStackEvents(context.Background(), client, "vpc", seen)
 	require.NoError(t, err)
 	assert.Len(t, events, 1)
-	assert.Equal(t, cfntypes.StackStatusCreateInProgress, status)
+	assert.Equal(t, cfntypes.StackStatusCreateInProgress, poll.Status)
+	assert.False(t, poll.Gone)
 	assert.True(t, seen["event-1"])
 
 	// Second poll with the same client and seen map: event-1 was already
 	// recorded, so it must not be reported as fresh again.
-	events, status, err = pollStackEvents(context.Background(), client, "vpc", seen)
+	events, poll, err = pollStackEvents(context.Background(), client, "vpc", seen)
 	require.NoError(t, err)
 	assert.Empty(t, events, "an event already recorded in seen must not be reported as fresh on a subsequent poll")
-	assert.Equal(t, cfntypes.StackStatusCreateInProgress, status)
+	assert.Equal(t, cfntypes.StackStatusCreateInProgress, poll.Status)
+	assert.False(t, poll.Gone)
 }
 
 // printStackEvent must render a plain transition line via ui.Writeln for a
@@ -155,9 +158,10 @@ func TestPollStackEvents_DescribeStacksErrorNonNotFound(t *testing.T) {
 	}, nil)
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
 
-	events, status, err := pollStackEvents(context.Background(), client, "vpc", map[string]bool{})
+	events, poll, err := pollStackEvents(context.Background(), client, "vpc", map[string]bool{})
 	require.Error(t, err)
-	assert.Empty(t, status)
+	assert.Empty(t, poll.Status)
+	assert.False(t, poll.Gone)
 	assert.Len(t, events, 1, "events fetched before the DescribeStacks failure must still be returned")
 }
 
@@ -192,6 +196,65 @@ func TestStreamStackEvents_ContextCancelled(t *testing.T) {
 	assert.Equal(t, cfntypes.StackStatusCreateInProgress, status, "the last-observed (non-terminal) status must still be returned")
 }
 
+// streamStackEvents must not treat a terminal status observed on its very
+// first poll as completion when that status was never preceded by an
+// observed `*_IN_PROGRESS` status: ExecuteChangeSet/DeleteStack return before
+// CloudFormation applies the change, so the first DescribeStacks call can
+// still return a leftover terminal status from a previous, unrelated
+// operation. Accepting it immediately would misreport "done" before the
+// requested operation even started (the CodeRabbit-flagged race). This test
+// pre-cancels the context so that once the loop correctly declines to return
+// on the stale terminal status, the next select() picks the ctx.Done()
+// branch instead of sleeping a real eventPollInterval.
+func TestStreamStackEvents_IgnoresStaleTerminalStatusWithoutInProgress(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	// A single poll returning a terminal status left over from a previous
+	// operation, with no `*_IN_PROGRESS` status ever observed.
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Already cancelled: if the loop wrongly returns success, we'd never reach the select.
+
+	status, err := streamStackEvents(ctx, client, "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled,
+		"a stale terminal status with no observed IN_PROGRESS must not be accepted as completion")
+	assert.Equal(t, cfntypes.StackStatusUpdateComplete, status)
+}
+
+// streamStackEvents must accept a terminal status once an `*_IN_PROGRESS`
+// status has been observed for this operation — the normal, non-racy path.
+func TestStreamStackEvents_AcceptsTerminalStatusAfterObservedInProgress(t *testing.T) {
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
+
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	gomock.InOrder(
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateInProgress}},
+		}, nil),
+	)
+	gomock.InOrder(
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
+		}, nil),
+	)
+
+	status, err := streamStackEvents(context.Background(), client, "vpc")
+	require.NoError(t, err)
+	assert.Equal(t, cfntypes.StackStatusUpdateComplete, status)
+}
+
 func TestPollStackEvents_StackDeleted(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
@@ -199,7 +262,8 @@ func TestPollStackEvents_StackDeleted(t *testing.T) {
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
 
-	_, status, err := pollStackEvents(context.Background(), client, "vpc", map[string]bool{})
+	_, poll, err := pollStackEvents(context.Background(), client, "vpc", map[string]bool{})
 	require.NoError(t, err)
-	assert.Equal(t, cfntypes.StackStatusDeleteComplete, status)
+	assert.Equal(t, cfntypes.StackStatusDeleteComplete, poll.Status)
+	assert.True(t, poll.Gone, "an empty Stacks list from DescribeStacks is a positive, unambiguous completion signal")
 }

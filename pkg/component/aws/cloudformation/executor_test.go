@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -127,15 +128,31 @@ func TestRunDelete(t *testing.T) {
 	assert.Equal(t, string(cfntypes.StackStatusDeleteComplete), summary["final_status"])
 }
 
+// TestRunDelete_FailedStatus exercises the normal, non-racy path to
+// DELETE_FAILED: a DELETE_IN_PROGRESS status must be observed before
+// streamStackEvents will accept the DELETE_FAILED terminal status (see
+// streamStackEvents), so the mock sequence includes that intermediate poll.
 func TestRunDelete_FailedStatus(t *testing.T) {
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
+
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 
 	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
-	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusDeleteFailed}},
-	}, nil)
+	gomock.InOrder(
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusDeleteInProgress}},
+		}, nil),
+	)
+	gomock.InOrder(
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusDeleteFailed}},
+		}, nil),
+	)
 
 	spec := &stackSpec{StackName: "vpc"}
 	_, err := runDelete(context.Background(), client, map[string]any{}, spec, map[string]any{})
@@ -242,7 +259,12 @@ func TestRenderDiffSummary_ListsResourceChanges(t *testing.T) {
 // TestRunApply_RenderOutputsError so the two don't hand-roll the same
 // eight-call sequence (the render step is the only place their behavior
 // under test diverges).
-func expectRunApplySuccessfulDeployFlow(client *MockCloudFormationClient, outputKey, outputVal *string) {
+func expectRunApplySuccessfulDeployFlow(t *testing.T, client *MockCloudFormationClient, outputKey, outputVal *string) {
+	t.Helper()
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
+
 	gomock.InOrder(
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
 		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
@@ -250,6 +272,10 @@ func expectRunApplySuccessfulDeployFlow(client *MockCloudFormationClient, output
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateInProgress}},
+		}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
@@ -271,7 +297,7 @@ func TestRunApply_Success(t *testing.T) {
 
 	outputKey := "VpcId"
 	outputVal := "vpc-123"
-	expectRunApplySuccessfulDeployFlow(client, &outputKey, &outputVal)
+	expectRunApplySuccessfulDeployFlow(t, client, &outputKey, &outputVal)
 
 	octx := &opContext{
 		Ctx:         context.Background(),
@@ -296,7 +322,7 @@ func TestRunApply_RenderOutputsError(t *testing.T) {
 
 	outputKey := "VpcId"
 	outputVal := "vpc-123"
-	expectRunApplySuccessfulDeployFlow(client, &outputKey, &outputVal)
+	expectRunApplySuccessfulDeployFlow(t, client, &outputKey, &outputVal)
 
 	octx := &opContext{
 		Ctx:         context.Background(),
@@ -314,6 +340,10 @@ func TestRunApply_RenderOutputsError(t *testing.T) {
 // runApply must apply the stack policy after a successful deploy when
 // spec.StackPolicyBody is set.
 func TestRunApply_SetsStackPolicy(t *testing.T) {
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
+
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 
@@ -324,6 +354,10 @@ func TestRunApply_SetsStackPolicy(t *testing.T) {
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateInProgress}},
+		}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
@@ -374,7 +408,12 @@ func TestRunApply_DeliverError(t *testing.T) {
 // caller supplies the final, differing expectation (e.g. SetStackPolicy or
 // UpdateTerminationProtection) so the common deploy sequence isn't repeated
 // per test (dupl).
-func expectDeployThenFinalCall(client *MockCloudFormationClient, final *gomock.Call) {
+func expectDeployThenFinalCall(t *testing.T, client *MockCloudFormationClient, final *gomock.Call) {
+	t.Helper()
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
+
 	gomock.InOrder(
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
 		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
@@ -382,6 +421,10 @@ func expectDeployThenFinalCall(client *MockCloudFormationClient, final *gomock.C
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateInProgress}},
+		}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
@@ -396,7 +439,7 @@ func TestRunApply_SetStackPolicyError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	sentinel := errors.New("set stack policy failed")
 
-	expectDeployThenFinalCall(client, client.EXPECT().SetStackPolicy(gomock.Any(), gomock.Any()).Return(nil, sentinel))
+	expectDeployThenFinalCall(t, client, client.EXPECT().SetStackPolicy(gomock.Any(), gomock.Any()).Return(nil, sentinel))
 
 	octx := &opContext{
 		Ctx:         context.Background(),
@@ -421,7 +464,7 @@ func TestRunApply_TerminationProtectionError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	sentinel := errors.New("update termination protection failed")
 
-	expectDeployThenFinalCall(client, client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(nil, sentinel))
+	expectDeployThenFinalCall(t, client, client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(nil, sentinel))
 
 	octx := &opContext{
 		Ctx:         context.Background(),
@@ -439,6 +482,10 @@ func TestRunApply_TerminationProtectionError(t *testing.T) {
 // runApply must propagate a describeStackOutputs failure at the very end of a
 // successful deploy (after stack policy and termination protection succeed).
 func TestRunApply_DescribeOutputsError(t *testing.T) {
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
+
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 	sentinel := errors.New("describe stacks failed")
@@ -450,6 +497,10 @@ func TestRunApply_DescribeOutputsError(t *testing.T) {
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateInProgress}},
+		}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
@@ -607,7 +658,7 @@ func TestResolveSpecAndTemplate_DeleteSkipsTemplateLoad(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{
 		ComponentSection: map[string]any{"stack_name": "vpc", "template": "template.yaml"},
 	}
-	spec, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationDelete)
+	spec, err := resolveSpecAndTemplate(context.Background(), &schema.AtmosConfiguration{}, info, OperationDelete)
 	require.NoError(t, err)
 	assert.Empty(t, spec.TemplateBody, "delete must never load the template body")
 	assert.Equal(t, "vpc", spec.StackName)
@@ -623,7 +674,7 @@ func TestResolveSpecAndTemplate_OutputSkipsProvisioning(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{
 		ComponentSection: map[string]any{"stack_name": "vpc", "template": "template.yaml"},
 	}
-	spec, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationOutput)
+	spec, err := resolveSpecAndTemplate(context.Background(), &schema.AtmosConfiguration{}, info, OperationOutput)
 	require.NoError(t, err)
 	assert.Empty(t, spec.TemplateBody, "output must never load the template body")
 	assert.Equal(t, "vpc", spec.StackName)
@@ -647,7 +698,7 @@ func TestResolveSpecAndTemplate_LoadsTemplateAndPolicy(t *testing.T) {
 			"parameters":   map[string]any{"DbPassword": "supersecret"},
 		},
 	}
-	spec, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationApply)
+	spec, err := resolveSpecAndTemplate(context.Background(), &schema.AtmosConfiguration{}, info, OperationApply)
 	require.NoError(t, err)
 	assert.Equal(t, templateBody, spec.TemplateBody)
 	assert.Equal(t, policyBody, spec.StackPolicyBody)
@@ -659,7 +710,7 @@ func TestResolveSpecAndTemplate_ProvisionError(t *testing.T) {
 	stubProvisionAndResolveComponentPath(t, "", sentinel)
 
 	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"stack_name": "vpc", "template": "template.yaml"}}
-	_, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationApply)
+	_, err := resolveSpecAndTemplate(context.Background(), &schema.AtmosConfiguration{}, info, OperationApply)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, sentinel)
 }
@@ -670,7 +721,7 @@ func TestResolveSpecAndTemplate_BuildSpecError(t *testing.T) {
 	stubProvisionAndResolveComponentPath(t, t.TempDir(), nil)
 
 	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"template": "template.yaml"}}
-	_, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationApply)
+	_, err := resolveSpecAndTemplate(context.Background(), &schema.AtmosConfiguration{}, info, OperationApply)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMissingAwsCloudFormationStackName)
 }
@@ -681,7 +732,7 @@ func TestResolveSpecAndTemplate_MissingTemplateFile(t *testing.T) {
 	stubProvisionAndResolveComponentPath(t, t.TempDir(), nil)
 
 	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"stack_name": "vpc", "template": "missing.yaml"}}
-	_, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationApply)
+	_, err := resolveSpecAndTemplate(context.Background(), &schema.AtmosConfiguration{}, info, OperationApply)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMissingAwsCloudFormationTemplate)
 }
@@ -699,7 +750,7 @@ func TestResolveSpecAndTemplate_MissingStackPolicyFile(t *testing.T) {
 			"stack_policy": map[string]any{"file": "missing-policy.json"},
 		},
 	}
-	_, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationApply)
+	_, err := resolveSpecAndTemplate(context.Background(), &schema.AtmosConfiguration{}, info, OperationApply)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "missing-policy.json")
 }
