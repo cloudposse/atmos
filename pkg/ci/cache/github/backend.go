@@ -530,11 +530,26 @@ func ownerRepoFromLocalGit() (string, string) {
 		log.Debug("CI cache: could not read local git remote for owner/repo resolution", "error", err)
 		return "", ""
 	}
-	if info.RepoHost != "github.com" && !ghtoken.RepoEndpoints().IsHost(info.RepoHost) {
+	if info.RepoHost != "github.com" && !repoHostMatchesConfiguredGitHub(&info) {
 		log.Debug("CI cache: local git remote is not hosted on github.com or the configured GHES host", "host", info.RepoHost)
 		return "", ""
 	}
 	return info.RepoOwner, info.RepoName
+}
+
+// repoHostMatchesConfiguredGitHub reports whether info's remote host matches the GHES host
+// configured via GITHUB_SERVER_URL. SCP-style remotes ("[user@]host:path", no "://") can never
+// carry a port, so info.RepoHost is always portless for them; comparing that against
+// RepoEndpoints().Host (which keeps a configured non-default port, e.g. "ghe.example.com:8443")
+// via IsHost would always fail. Match SCP-style remotes against the portless
+// RepoEndpoints().Hostname() instead, and keep the port-aware IsHost check for URL-style remotes
+// (http(s):// or ssh://), which do preserve a non-default port in RepoHost.
+func repoHostMatchesConfiguredGitHub(info *git.RepoInfo) bool {
+	endpoints := ghtoken.RepoEndpoints()
+	if strings.Contains(info.RepoUrl, "://") {
+		return endpoints.IsHost(info.RepoHost)
+	}
+	return strings.EqualFold(info.RepoHost, endpoints.Hostname())
 }
 
 // repoFromEnv resolves owner/repo from options or GITHUB_REPOSITORY.

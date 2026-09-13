@@ -62,6 +62,9 @@ func TestIsGitHubURL_GHESWithPort(t *testing.T) {
 	assert.True(t, isGitHubURL("https://ghe.example.com:8443/owner/repo/blob/main/file.yaml"))
 	assert.False(t, isGitHubURL("https://example.com/file.yaml"))
 	assert.False(t, isGitHubURL("https://attacker.example.com/x?next=ghe.example.com:8443/file.yaml"))
+	// Same host, different (default) port: RepoEndpoints().Host keeps the configured "8443",
+	// so an explicit ":443" must not be treated as equivalent to it.
+	assert.False(t, isGitHubURL("https://ghe.example.com:443/owner/repo/blob/main/file.yaml"))
 }
 
 // TestIsGitHubURL_GHESConfiguredPublicGitHubStillMatches pins that when GHES is configured

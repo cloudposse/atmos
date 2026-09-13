@@ -56,12 +56,19 @@ func (t *scopedTokenTransport) RoundTrip(req *http.Request) (*http.Response, err
 // scheme is https and its host matches one of allowed's server, API, or upload hosts. A token
 // scoped to one host must never ride along to another host, or over plain http, even when the
 // second request is a redirect the underlying transport followed automatically.
+//
+// Host matching uses the scheme-aware IsHostForScheme/IsAPIHostForScheme/IsUploadHostForScheme
+// (not IsHost/IsAPIHost/IsUploadHost): those strip both port 80 and port 443 unconditionally,
+// so "https://host:80" would normalize identically to "https://host" and could wrongly receive
+// a token scoped to the bare host on its default (443) port. The scheme-aware forms only strip
+// a port when it is the *actual* default for req's own scheme.
 func requestAllowsToken(req *http.Request, allowed Endpoints) bool {
 	if !strings.EqualFold(req.URL.Scheme, "https") {
 		return false
 	}
 	host := req.URL.Host
-	return allowed.IsHost(host) || allowed.IsAPIHost(host) || allowed.IsUploadHost(host)
+	scheme := req.URL.Scheme
+	return allowed.IsHostForScheme(host, scheme) || allowed.IsAPIHostForScheme(host, scheme) || allowed.IsUploadHostForScheme(host, scheme)
 }
 
 // IsApprovedGitHubDownloadHost reports whether host (case-insensitive, with port and trailing

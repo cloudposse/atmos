@@ -89,7 +89,9 @@
 //  3. Built-in allowlist — api.github.com, raw.githubusercontent.com, uploads.github.com.
 //
 // If you need GHES support together with a custom matcher, include the GHES host
-// in your custom predicate; [WithGitHubHostMatcher] bypasses the GITHUB_API_URL lookup:
+// in your custom predicate; [WithGitHubHostMatcher] bypasses the GITHUB_API_URL lookup
+// AND the GITHUB_SERVER_URL lookup -- both are skipped entirely once a custom matcher is
+// supplied, not just the one this example happens to name:
 //
 //	ghesHost := "github.mycorp.example.com"
 //	client := http.NewDefaultClient(
