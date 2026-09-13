@@ -170,6 +170,10 @@ func githubCanaryEnv(t *testing.T, base []string, authenticated bool) []string {
 	// an authenticating extraHeader; disable it too so the canary's isolation contract does not
 	// depend on the host's system config being empty.
 	env = setEnvVar(env, "GIT_CONFIG_NOSYSTEM", "true")
+	// GIT_CONFIG_PARAMETERS is a separate command-scope config channel git reads independently of
+	// GIT_CONFIG_COUNT/KEY_n/VALUE_n; an inherited value could restore a filtered insteadOf
+	// rewrite, extraheader, or credential helper, so blank it too.
+	env = setEnvVar(env, "GIT_CONFIG_PARAMETERS", "")
 
 	gitEntries := []gitconfigenv.GitConfigEntry{
 		// Disable credential helper (prevents osxkeychain hangs/popups), mirroring
