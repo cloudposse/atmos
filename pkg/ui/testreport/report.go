@@ -296,9 +296,9 @@ func (r *Reporter) symbol(status, spin string) string {
 		return theme.GetCurrentStyles().Error.Render("●")
 	case Running:
 		if spin != "" {
-			return strings.TrimSpace(spin)
+			return theme.GetCurrentStyles().Spinner.Render(strings.TrimSpace(spin))
 		}
-		return "◌"
+		return theme.GetCurrentStyles().Spinner.Render("◌")
 	default:
 		return theme.GetCurrentStyles().Muted.Render("○")
 	}

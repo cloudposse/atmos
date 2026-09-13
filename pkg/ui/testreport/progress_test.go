@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 func TestReporterProgressRespectsColorProfile(t *testing.T) {
@@ -45,5 +46,29 @@ func TestReporterProgressRespectsColorProfile(t *testing.T) {
 				assert.Contains(t, bar, tc.color)
 			}
 		})
+	}
+}
+
+func TestReporterSpinnerRespectsThemeAndColorProfile(t *testing.T) {
+	original := ui.GetColorProfile()
+	t.Cleanup(func() { ui.SetColorProfile(original) })
+	for _, profile := range []termenv.Profile{termenv.TrueColor, termenv.ANSI256, termenv.Ascii} {
+		ui.SetColorProfile(profile)
+		reporter := New("Checks", []*Node{{ID: "running", Name: "Health", Status: Running}}, io.Discard)
+		for _, frame := range []string{"⣽ ", ""} {
+			glyph := strings.TrimSpace(frame)
+			if glyph == "" {
+				glyph = "◌"
+			}
+			expected := theme.GetCurrentStyles().Spinner.Render(glyph)
+			if profile != termenv.Ascii {
+				require.Contains(t, expected, "\x1b[", "the shared spinner style must emit color")
+			}
+			view := reporter.View(100, frame, false)
+			assert.Contains(t, view, expected+"  ", "running markers must use the shared spinner color")
+			if profile == termenv.Ascii {
+				assert.NotContains(t, view, "\x1b")
+			}
+		}
 	}
 }
