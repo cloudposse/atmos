@@ -828,6 +828,18 @@ func TestIsLocalSourceGHESSCPStyle(t *testing.T) {
 		"SCP-style URI naming an unconfigured host should not be treated as the GHES host")
 }
 
+// TestIsLocalSourceGHESSCPStyleSingleLabelHost pins CodeRabbit thread PRRT_kwDOEW4XoM6h6mmo: a
+// single-label GHES host (e.g. GITHUB_SERVER_URL=https://ghe) must still be recognized via its
+// SCP-style remote, even though scpStyleHostPattern no longer requires a dot in the host.
+func TestIsLocalSourceGHESSCPStyleSingleLabelHost(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe")
+
+	assert.False(t, isLocalSource("git@ghe:org/repo.git"),
+		"SCP-style URI naming the configured single-label GHES host should be classified as remote")
+	assert.True(t, isLocalSource("git@other:org/repo.git"),
+		"SCP-style URI naming an unrelated single-label host should remain local/unchanged")
+}
+
 // Tests for checkMetadataChanges with various version scenarios.
 
 func TestCheckMetadataChanges(t *testing.T) {

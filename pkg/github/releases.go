@@ -8,7 +8,6 @@ import (
 	"github.com/google/go-github/v59/github"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	httpClient "github.com/cloudposse/atmos/pkg/http"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -31,7 +30,7 @@ func GetLatestRelease(owner string, repo string) (string, error) {
 
 	// Create a new GitHub client with authentication if available.
 	ctx := context.Background()
-	client := newGitHubClient(ctx)
+	client, _ := newGitHubClient(ctx)
 
 	// Get the latest release.
 	release, resp, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
@@ -51,13 +50,16 @@ func GetLatestRelease(owner string, repo string) (string, error) {
 func GetReleases(opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 	defer perf.Track(nil, "github.GetReleases")()
 
-	return getReleasesWithClient(newGitHubClient(context.Background()), opts)
+	client, authenticated := newGitHubClient(context.Background())
+	return getReleasesWithClient(client, authenticated, opts)
 }
 
 // getReleasesWithClient is the client-injectable core of GetReleases, so callers needing a
 // different Endpoints scope (e.g. GetReleaseVersions) can reuse the same pagination/filtering
-// logic against a differently-scoped client.
-func getReleasesWithClient(client *github.Client, opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
+// logic against a differently-scoped client. Authenticated reflects client's actual effective
+// auth state (see newGitHubClientForEndpoints) and drives which hints
+// checkRateLimitBeforeFetch selects.
+func getReleasesWithClient(client *github.Client, authenticated bool, opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 	defer perf.Track(nil, "github.getReleasesWithClient")()
 
 	log.Debug(
@@ -71,7 +73,7 @@ func getReleasesWithClient(client *github.Client, opts ReleasesOptions) ([]*gith
 
 	ctx := context.Background()
 
-	if err := checkRateLimitBeforeFetch(ctx, client); err != nil {
+	if err := checkRateLimitBeforeFetch(ctx, client, authenticated); err != nil {
 		return nil, err
 	}
 
@@ -93,8 +95,13 @@ func getReleasesWithClient(client *github.Client, opts ReleasesOptions) ([]*gith
 // checkRateLimitBeforeFetch queries the current rate limit and returns a user-friendly error
 // when remaining requests are below githubAPIMinRateLimitThreshold. A rate-limit lookup
 // failure is not itself an error here: the caller's actual fetch will surface any real API
-// problem, so this check is best-effort and silently skipped on error.
-func checkRateLimitBeforeFetch(ctx context.Context, client *github.Client) error {
+// problem, so this check is best-effort and silently skipped on error. Authenticated reflects
+// the client's actual effective auth state (see newGitHubClientForEndpoints), not merely
+// whether some token happens to be present in the environment: a token can be resolved by
+// GetGitHubTokenFromEnv/GetGitHubToken yet still be withheld from this client, e.g. by the `gh
+// auth token` fallback being unavailable, or a repo-scoped token being withheld from a
+// cross-host toolchain client (see tokenForToolchainHost).
+func checkRateLimitBeforeFetch(ctx context.Context, client *github.Client, authenticated bool) error {
 	rateLimits, _, err := client.RateLimit.Get(ctx)
 	if err != nil || rateLimits == nil || rateLimits.Core == nil {
 		return nil //nolint:nilerr // Best-effort rate-limit check: a lookup failure isn't fatal, the actual fetch call surfaces any real API problem.
@@ -123,7 +130,7 @@ func checkRateLimitBeforeFetch(ctx context.Context, client *github.Client) error
 			resetTime.Format(time.RFC3339),
 			waitDuration.Round(time.Second)))
 
-	if httpClient.GetGitHubTokenFromEnv() != "" {
+	if authenticated {
 		builder.
 			WithHint("Your GitHub token may be invalid or expired").
 			WithHint("Verify your token: `gh auth status`").
@@ -247,7 +254,7 @@ func GetReleaseByTag(owner, repo, tag string) (*github.RepositoryRelease, error)
 	log.Debug("Fetching release by tag from GitHub API", logFieldOwner, owner, logFieldRepo, repo, "tag", tag)
 
 	ctx := context.Background()
-	client := newGitHubClient(ctx)
+	client, _ := newGitHubClient(ctx)
 
 	release, resp, err := client.Repositories.GetReleaseByTag(ctx, owner, repo, tag)
 	if err != nil {
@@ -264,7 +271,7 @@ func GetLatestReleaseInfo(owner, repo string) (*github.RepositoryRelease, error)
 	log.Debug("Fetching latest release from GitHub API", logFieldOwner, owner, logFieldRepo, repo)
 
 	ctx := context.Background()
-	client := newGitHubClient(ctx)
+	client, _ := newGitHubClient(ctx)
 
 	release, resp, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
 	if err != nil {
@@ -283,7 +290,8 @@ func GetReleaseVersions(owner, repo string, limit int) ([]string, error) {
 
 	log.Debug("Fetching release versions from GitHub API", logFieldOwner, owner, logFieldRepo, repo, "limit", limit)
 
-	releases, err := getReleasesWithClient(newToolchainGitHubClient(context.Background()), ReleasesOptions{
+	client, authenticated := newToolchainGitHubClient(context.Background())
+	releases, err := getReleasesWithClient(client, authenticated, ReleasesOptions{
 		Owner:              owner,
 		Repo:               repo,
 		Limit:              limit,

@@ -199,6 +199,21 @@ func (e Endpoints) IsHost(host string) bool {
 	return normalizeHost(host) == e.Host
 }
 
+// Hostname returns e.Host with any port stripped, e.g. "ghes.example.com:8443" becomes
+// "ghes.example.com". Host deliberately keeps a non-default port (see its doc comment) so
+// IsHost can match a GHES instance reachable only on a non-default port; callers that need to
+// compare against a portless value instead -- e.g. the host captured from an SCP-style Git
+// remote (git@host:org/repo.git), which carries no port of its own -- use this instead of
+// comparing against Host directly.
+func (e Endpoints) Hostname() string {
+	defer perf.Track(nil, "github.Endpoints.Hostname")()
+
+	if h, _, err := net.SplitHostPort(e.Host); err == nil {
+		return h
+	}
+	return e.Host
+}
+
 // IsAPIHost reports whether host (case-insensitive, with port and trailing dot normalized)
 // matches this Endpoints value's API host (derived from APIURL). This can differ from IsHost
 // (ServerURL's host) for a corporate mirror that fronts the web/clone host and the API host
