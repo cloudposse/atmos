@@ -9,7 +9,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/container"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
@@ -47,7 +46,7 @@ func (h *ContainerHandler) executeBuild(ctx context.Context, step *schema.Workfl
 	runtimeName := strings.TrimSpace(build.Provider)
 	if step.DryRun {
 		preview := container.BuildImageBuildPreview(runtimeName, buildConfig)
-		ui.Writeln(preview)
+		vars.UI().Writeln(preview)
 		return NewStepResult(firstString(buildConfig.Tags)).
 			WithMetadata(exitCodeMetadata, 0).
 			WithMetadata("image", firstString(buildConfig.Tags)), nil
@@ -62,11 +61,13 @@ func (h *ContainerHandler) executeBuild(ctx context.Context, step *schema.Workfl
 	image := firstString(buildConfig.Tags)
 	// Show a spinner while the runtime builds the image (it streams nothing on
 	// success), mirroring the devcontainer build UX. Degrades to a ✓ line off-TTY.
-	buildErr := spinner.ExecWithSpinner(
-		buildSpinnerMessage("Building image", image),
-		buildSpinnerMessage("Built image", image),
-		func() error { return runtime.Build(ctx, buildConfig) },
-	)
+	var buildErr error
+	if OutputSuppressed(ctx) {
+		buildErr = runtime.Build(ctx, buildConfig)
+	} else {
+		buildErr = spinner.ExecWithSpinner(buildSpinnerMessage("Building image", image), buildSpinnerMessage("Built image", image), func() error { return runtime.Build(ctx, buildConfig) })
+	}
+
 	if buildErr != nil {
 		return NewStepResult(image).
 			WithMetadata(exitCodeMetadata, 1).

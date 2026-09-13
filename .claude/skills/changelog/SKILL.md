@@ -135,9 +135,9 @@ import CastEmbed from '@site/src/components/CastEmbed'
 - Always carry the `chrome controls scrubber` flags.
 - Multiple `<CastEmbed>` tags are fine in one post if there are multiple relevant recordings.
 - `CastEmbed` wraps `CastPlayer` and adds Download (rendered GIF/MP4/SVG/WEBM via Atmos Pro) and Share controls,
-  on by default against `cloudposse/atmos` @ `main`. If the `.cast` file isn't committed to `main` yet (e.g. it
-  ships in the same PR as the post), pass `download={false}` and/or `share={false}` to suppress the controls
-  until it lands.
+  on by default against `cloudposse/atmos` at the site build's Git commit (`GITHUB_SHA` in CI,
+  `main` for local builds). This lets PR previews download recordings introduced by the same PR.
+  Use `gitRef` to override the source revision explicitly; do not hide controls just because a cast is unmerged.
 - Follow it with a plain link to the full example when one exists: `[View the full example](/examples/<name>)`.
 - Don't use `EmbedExample` in blog posts — that component's README/file-listing duplicates content the post's
   own prose already covers; it's for docs pages that need the "browse the full example" callout instead.
