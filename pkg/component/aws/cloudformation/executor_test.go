@@ -1628,10 +1628,20 @@ func TestOperationHandlers_Logs_ThreadsChartFlag(t *testing.T) {
 func TestOperationHandlers_Watch_Dispatch(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
-	}, nil)
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
+
+	gomock.InOrder(
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateInProgress}},
+		}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
+		}, nil),
+	)
 
 	spec := &stackSpec{StackName: "vpc"}
 	octx := &opContext{Ctx: context.Background(), Flags: map[string]any{}}
