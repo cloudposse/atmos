@@ -26,7 +26,7 @@ func IsArchived(ctx context.Context, owner, repo string) (bool, error) {
 
 	log.Debug("Checking repository archived status via GitHub API", logFieldOwner, owner, logFieldRepo, repo)
 
-	client := newGitHubClient(ctx)
+	client, _ := newGitHubClient(ctx)
 	return getArchivedStatus(ctx, client, owner, repo)
 }
 

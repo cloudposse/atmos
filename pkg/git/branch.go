@@ -127,16 +127,23 @@ func githubRepositoryPath(remoteURL string) (string, bool) {
 	if strings.HasPrefix(remoteURL, "git@github.com:") {
 		return strings.TrimPrefix(remoteURL, "git@github.com:"), true
 	}
-	repoHost := ghtoken.RepoEndpoints().Host
-	if scpPrefix := "git@" + repoHost + ":"; repoHost != "github.com" && strings.HasPrefix(remoteURL, scpPrefix) {
+	endpoints := ghtoken.RepoEndpoints()
+	// SCP-style remotes (git@host:org/repo.git) carry no port of their own, so the comparison
+	// here must use the portless hostname rather than endpoints.Host, which keeps a
+	// non-default port (e.g. "ghe.example.com:8443") -- otherwise this prefix could never
+	// match a GHES remote configured on a non-default port.
+	repoHostname := endpoints.Hostname()
+	if scpPrefix := "git@" + repoHostname + ":"; repoHostname != "github.com" && strings.HasPrefix(remoteURL, scpPrefix) {
 		return strings.TrimPrefix(remoteURL, scpPrefix), true
 	}
 	parsed, err := url.Parse(remoteURL)
 	if err != nil {
 		return "", false
 	}
+	// URL-style remotes do carry their own port (parsed.Host), so the full authority is
+	// compared against endpoints.Host (via IsHost) rather than the portless hostname.
 	host := strings.ToLower(parsed.Host)
-	if host != "github.com" && !ghtoken.RepoEndpoints().IsHost(host) {
+	if host != "github.com" && !endpoints.IsHost(host) {
 		return "", false
 	}
 	return strings.TrimPrefix(parsed.Path, "/"), true

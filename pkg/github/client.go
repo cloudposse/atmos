@@ -61,9 +61,13 @@ func IsPublicGitHubHost(host string) bool {
 	return publicGitHubEndpoints.IsHost(host)
 }
 
-// newGitHubClient creates a new GitHub client. If a token is provided, it returns an authenticated client;
-// otherwise, it returns an unauthenticated client.
-func newGitHubClient(ctx context.Context) *github.Client {
+// newGitHubClient creates a new GitHub client. If a token is provided, it returns an
+// authenticated client; otherwise, it returns an unauthenticated client. The second return
+// value reports whether the client is effectively authenticated -- i.e. whether a token will
+// actually be attached to requests against its endpoints (see newGitHubClientForEndpoints) --
+// so callers whose behavior depends on auth state (e.g. rate-limit error hints) don't need to
+// re-derive it from a raw token lookup that ignores host/scheme scoping.
+func newGitHubClient(ctx context.Context) (*github.Client, bool) {
 	defer perf.Track(nil, "github.newGitHubClient")()
 
 	// Get GitHub token using the full resolution chain:
@@ -80,8 +84,9 @@ func newGitHubClient(ctx context.Context) *github.Client {
 // RepoEndpoints (the user's own repositories: GITHUB_SERVER_URL/GITHUB_API_URL). If token is
 // empty, it returns an unauthenticated client. When RepoEndpoints resolves to a GitHub
 // Enterprise Server host, the client is pointed at that instance via go-github's
-// WithEnterpriseURLs instead of public github.com.
-func newGitHubClientWithToken(ctx context.Context, token string) *github.Client {
+// WithEnterpriseURLs instead of public github.com. See newGitHubClient for the meaning of the
+// second return value.
+func newGitHubClientWithToken(ctx context.Context, token string) (*github.Client, bool) {
 	defer perf.Track(nil, "github.newGitHubClientWithToken")()
 
 	return newGitHubClientForEndpoints(ctx, token, RepoEndpoints())
@@ -100,7 +105,7 @@ func newGitHubClientWithToken(ctx context.Context, token string) *github.Client 
 // different host (public github.com by default, or a differently hosted toolchain mirror).
 // Separately, newGitHubClientForEndpoints withholds the token when ToolchainEndpoints is not
 // https, so both rules apply regardless of call order.
-func newToolchainGitHubClient(ctx context.Context) *github.Client {
+func newToolchainGitHubClient(ctx context.Context) (*github.Client, bool) {
 	defer perf.Track(nil, "github.newToolchainGitHubClient")()
 
 	toolchainEndpoints := ToolchainEndpoints()
@@ -140,12 +145,18 @@ func tokenForToolchainHost(token string, toolchainEndpoints Endpoints) string {
 // re-validates the actual request URL (host and scheme) on every call, which also subsumes the
 // plain-HTTP check Endpoints.AllowsToken performs (a request never reaches an http:// URL with
 // a token attached, whether or not it is a redirect).
-func newGitHubClientForEndpoints(_ context.Context, token string, endpoints Endpoints) *github.Client {
+//
+// The second return value reports whether the resulting client is effectively authenticated:
+// TokenForEndpoints applies the same host/scheme scoping NewScopedTokenHTTPClient uses
+// internally, so this reflects whether a token will actually be attached to requests -- not
+// merely whether the caller happened to resolve a non-empty token from the environment.
+func newGitHubClientForEndpoints(_ context.Context, token string, endpoints Endpoints) (*github.Client, bool) {
 	defer perf.Track(nil, "github.newGitHubClientForEndpoints")()
 
 	httpClient := NewScopedTokenHTTPClient(token, endpoints, defaultHTTPTimeout)
+	authenticated := TokenForEndpoints(endpoints, token) != ""
 
-	return newScopedClient(httpClient, endpoints)
+	return newScopedClient(httpClient, endpoints), authenticated
 }
 
 // newScopedClient builds a *github.Client from httpClient, pointed at GitHub.com by default or

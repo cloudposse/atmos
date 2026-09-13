@@ -106,17 +106,17 @@ func TestNormalizePath(t *testing.T) {
 
 func TestGetDefaultUsername(t *testing.T) {
 	detector := CustomGitDetector{atmosConfig: &schema.AtmosConfiguration{}}
-	if un := detector.getDefaultUsername(hostGitHub); un != "x-access-token" {
+	if un := detector.getDefaultUsername(hostGitHub, hostGitHub); un != "x-access-token" {
 		t.Errorf("Expected x-access-token for GitHub, got %s", un)
 	}
-	if un := detector.getDefaultUsername(hostGitLab); un != "oauth2" {
+	if un := detector.getDefaultUsername(hostGitLab, hostGitLab); un != "oauth2" {
 		t.Errorf("Expected oauth2 for GitLab, got %s", un)
 	}
 	detector.atmosConfig.Settings.BitbucketUsername = "bbUser"
-	if un := detector.getDefaultUsername(hostBitbucket); un != "bbUser" {
+	if un := detector.getDefaultUsername(hostBitbucket, hostBitbucket); un != "bbUser" {
 		t.Errorf("Expected bbUser for Bitbucket, got %s", un)
 	}
-	if un := detector.getDefaultUsername("unknown.com"); un != "x-access-token" {
+	if un := detector.getDefaultUsername("unknown.com", "unknown.com"); un != "x-access-token" {
 		t.Errorf("Expected default x-access-token for unknown host, got %s", un)
 	}
 }
@@ -221,10 +221,10 @@ func TestDetect_HTTPSchemeSkipsTokenInjection(t *testing.T) {
 func TestIsGitHubHost_RespectsGHESServerURL(t *testing.T) {
 	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
 
-	if !isSupportedHost("ghe.example.com") {
+	if !isSupportedHost("ghe.example.com", "ghe.example.com") {
 		t.Error("Expected the GITHUB_SERVER_URL host to be a supported host")
 	}
-	if isSupportedHost("some-other-host.example.com") {
+	if isSupportedHost("some-other-host.example.com", "some-other-host.example.com") {
 		t.Error("Expected an unrelated host to remain unsupported")
 	}
 }
@@ -233,8 +233,65 @@ func TestGetDefaultUsername_GHESHost(t *testing.T) {
 	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
 
 	detector := CustomGitDetector{atmosConfig: &schema.AtmosConfiguration{}}
-	if un := detector.getDefaultUsername("ghe.example.com"); un != "x-access-token" {
+	if un := detector.getDefaultUsername("ghe.example.com", "ghe.example.com"); un != "x-access-token" {
 		t.Errorf("Expected x-access-token for the GHES host, got %s", un)
+	}
+}
+
+// TestIsSupportedHost_GHESPort pins CodeRabbit thread PRRT_kwDOEW4XoM6h6mmh: Detect must pass
+// the full authority (with port) into the configured-GHES check, not the portless hostname,
+// or a GHES host reachable only on a non-default port is rejected before token injection ever
+// runs.
+func TestIsSupportedHost_GHESPort(t *testing.T) {
+	t.Run("matching port is recognized", func(t *testing.T) {
+		t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com:8443")
+
+		if !isSupportedHost("ghe.example.com", "ghe.example.com:8443") {
+			t.Error("Expected a GHES host on its configured non-default port to be supported")
+		}
+	})
+
+	t.Run("different port is rejected", func(t *testing.T) {
+		t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com:8443")
+
+		if isSupportedHost("ghe.example.com", "ghe.example.com:9999") {
+			t.Error("Expected a GHES host on an unconfigured port not to be supported")
+		}
+	})
+
+	t.Run("no port is unchanged", func(t *testing.T) {
+		t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+
+		if !isSupportedHost("ghe.example.com", "ghe.example.com") {
+			t.Error("Expected a GHES host without a port to remain supported")
+		}
+	})
+}
+
+// TestDetect_GHESHostWithPortInjectsToken exercises Detect end-to-end (not just the isSupportedHost
+// helper) for a GHES host configured with a non-default port, matching PRRT_kwDOEW4XoM6h6mmh's
+// scenario.
+func TestDetect_GHESHostWithPortInjectsToken(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com:8443")
+	t.Setenv("GITHUB_TOKEN", "ghes-token")
+
+	config := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			InjectGithubToken: true,
+			GithubToken:       "ghes-token",
+		},
+	}
+	detector := &CustomGitDetector{atmosConfig: &config, source: "repo.git"}
+
+	result, ok, err := detector.Detect("https://ghe.example.com:8443/org/repo.git", "")
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if !ok {
+		t.Fatalf("Expected ok to be true for a GITHUB_SERVER_URL-configured GHES host with a port")
+	}
+	if !strings.Contains(result, "x-access-token:ghes-token@ghe.example.com:8443") {
+		t.Errorf("Expected token to be injected for the GHES host on its configured port, got: %s", result)
 	}
 }
 

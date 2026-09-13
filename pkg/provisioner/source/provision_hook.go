@@ -432,10 +432,25 @@ func isZeroTTL(ttl string) bool {
 }
 
 // scpStyleHostPattern extracts the host from an SCP-style Git URI (e.g.
-// "git@ghe.example.com:org/repo.git"). Unlike a bare hostname, the "user@host:" prefix already
+// "git@ghe.example.com:org/repo.git", or, for a single-label GHES host,
+// "git@ghe:org/repo.git"). Unlike a bare hostname, the "user@host:" prefix already
 // disambiguates this from a local path, so (unlike the deliberately github.com-only shorthand
-// detection below) it's safe to also recognize the configured GitHub Enterprise Server host here.
-var scpStyleHostPattern = regexp.MustCompile(`^[\w.-]+@([\w.-]+\.[\w.-]+):`)
+// detection below) it's safe to also recognize the configured GitHub Enterprise Server host
+// here -- including a single-label host, which a pattern requiring a dot in the host would
+// otherwise misclassify as local (see isLocalSource, which still validates the captured host
+// against the configured GHES host before treating it as remote, so this does not loosen
+// classification for an arbitrary single-label host).
+var scpStyleHostPattern = regexp.MustCompile(`^[\w.-]+@([\w.-]+):`)
+
+// isConfiguredGHESHost reports whether host matches the GitHub Enterprise Server host
+// configured via RepoEndpoints (GITHUB_SERVER_URL). SCP-style Git URIs carry no port of their
+// own -- the colon already separates host from path -- so this compares against the portless
+// hostname (Endpoints.Hostname()) rather than IsHost, which would otherwise reject a match
+// against a GHES host configured with a non-default port (RepoEndpoints().Host keeps that
+// port; see its doc comment).
+func isConfiguredGHESHost(host string) bool {
+	return strings.EqualFold(host, github.RepoEndpoints().Hostname())
+}
 
 // isLocalSource determines if a source URI refers to a local path.
 // Local sources start with ".", absolute paths (OS-specific), or are relative paths without remote indicators.
@@ -455,7 +470,7 @@ func isLocalSource(uri string) bool {
 	// SCP-style Git URI (git@host:org/repo.git) naming the configured GitHub Enterprise
 	// Server host. Checked before the remoteIndicators loop below because SCP syntax has no
 	// "://" separator, and the GHES host itself isn't in that literal list.
-	if m := scpStyleHostPattern.FindStringSubmatch(uri); m != nil && github.RepoEndpoints().IsHost(m[1]) {
+	if m := scpStyleHostPattern.FindStringSubmatch(uri); m != nil && isConfiguredGHESHost(m[1]) {
 		return false
 	}
 	// Remote indicators - if any of these are present, it's remote. Deliberately

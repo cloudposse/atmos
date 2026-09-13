@@ -142,15 +142,17 @@ func TestHandleGitHubAPIError_RateLimitHintBranches(t *testing.T) {
 // TestNewGitHubClientWithToken tests the internal client creation with explicit tokens.
 func TestNewGitHubClientWithToken(t *testing.T) {
 	t.Run("creates unauthenticated client with empty token", func(t *testing.T) {
-		client := newGitHubClientWithToken(t.Context(), "")
+		client, authenticated := newGitHubClientWithToken(t.Context(), "")
 		assert.NotNil(t, client)
 		assert.NotNil(t, client.Repositories)
+		assert.False(t, authenticated)
 	})
 
 	t.Run("creates authenticated client with token", func(t *testing.T) {
-		client := newGitHubClientWithToken(t.Context(), "ghp_test_token")
+		client, authenticated := newGitHubClientWithToken(t.Context(), "ghp_test_token")
 		assert.NotNil(t, client)
 		assert.NotNil(t, client.Repositories)
+		assert.True(t, authenticated)
 	})
 }
 
@@ -263,8 +265,9 @@ func TestNewGitHubClientForEndpoints_WithholdsTokenOverHTTP(t *testing.T) {
 	defer server.Close()
 
 	endpoints := Endpoints{ServerURL: server.URL, APIURL: server.URL, Host: "127.0.0.1"}
-	client := newGitHubClientForEndpoints(t.Context(), "leaked-token", endpoints)
+	client, authenticated := newGitHubClientForEndpoints(t.Context(), "leaked-token", endpoints)
 	require.NotNil(t, client)
+	assert.False(t, authenticated, "a plain-http endpoint must never be reported as authenticated")
 
 	req, err := client.NewRequest(http.MethodGet, "repos/owner/repo", nil)
 	require.NoError(t, err)
