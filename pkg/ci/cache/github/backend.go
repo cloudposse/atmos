@@ -150,7 +150,14 @@ func NewBackend(opts cache.Options) (cache.Backend, error) {
 	// ATMOS_GITHUB_TOKEN > GITHUB_TOKEN > `gh auth token`. Note that save/restore
 	// of content do not use this token — they authenticate with the Actions
 	// runtime token (ACTIONS_RUNTIME_TOKEN).
-	restClient := newRESTClient(ghtoken.GetGitHubToken())
+	//
+	// RepoEndpoints resolves GITHUB_API_URL (defaulting to api.github.com), so cache
+	// list/delete work against a GitHub Enterprise Server instance the same way they
+	// do against github.com. TokenForEndpoints withholds the token when that API URL is not
+	// https (ResolveEndpointURL accepts http:// so tests can point it at a local server),
+	// since sending it there would put it on the wire in cleartext.
+	repoEndpoints := ghtoken.RepoEndpoints()
+	restClient := newRESTClient(ghtoken.TokenForEndpoints(repoEndpoints, ghtoken.GetGitHubToken()))
 
 	sum := sha256.Sum256([]byte(cacheVersionSalt))
 	version := hex.EncodeToString(sum[:])
@@ -158,13 +165,10 @@ func NewBackend(opts cache.Options) (cache.Backend, error) {
 	b := &Backend{
 		blobClient: &http.Client{Timeout: blobTimeout},
 		restClient: restClient,
-		// RepoEndpoints resolves GITHUB_API_URL (defaulting to api.github.com), so cache
-		// list/delete work against a GitHub Enterprise Server instance the same way they
-		// do against github.com.
-		baseURL: ghtoken.RepoEndpoints().APIURL,
-		owner:   owner,
-		repo:    repo,
-		version: version,
+		baseURL:    repoEndpoints.APIURL,
+		owner:      owner,
+		repo:       repo,
+		version:    version,
 	}
 
 	// The runtime client (used only by save/restore) is available solely inside a

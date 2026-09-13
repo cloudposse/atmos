@@ -125,7 +125,12 @@ func newGitHubAPIRequest(ctx context.Context, method, token, url string, body io
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+token)
+	// Never send the token over a non-https endpoint (ResolveEndpointURL accepts http:// so
+	// tests can point RepoEndpoints at a local httptest server) -- doing so would put it on
+	// the wire in cleartext.
+	if authToken := ghtoken.TokenForEndpoints(ghtoken.RepoEndpoints(), token); authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

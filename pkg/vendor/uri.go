@@ -171,7 +171,7 @@ func IsNonGitHTTPURI(uri string) bool {
 	// Detect known-host file download and raw content URLs.
 	// These are HTTP URLs on known Git hosts that point to downloadable files,
 	// not Git repositories, and should not have //. appended.
-	return isKnownHostFileURL(lowerURI)
+	return isKnownHostFileURL(uri, lowerURI)
 }
 
 // knownHostFilePattern defines a pattern pair for detecting file download URLs on known Git hosts.
@@ -192,8 +192,9 @@ var knownHostFilePatterns = []knownHostFilePattern{
 }
 
 // isKnownHostFileURL checks if the URL matches known file download or raw content
-// patterns on popular Git hosting platforms.
-func isKnownHostFileURL(lowerURI string) bool {
+// patterns on popular Git hosting platforms. Uri is the original (case-preserved) URI, used
+// for host parsing; lowerURI is its lowercased form, used for the substring path patterns.
+func isKnownHostFileURL(uri, lowerURI string) bool {
 	for _, p := range knownHostFilePatterns {
 		hostMatch := p.host == "" || strings.Contains(lowerURI, p.host)
 		pathMatch := p.path == "" || strings.Contains(lowerURI, p.path)
@@ -204,12 +205,17 @@ func isKnownHostFileURL(lowerURI string) bool {
 
 	// GitHub raw content via path also matches on a GitHub Enterprise Server host configured
 	// via GITHUB_SERVER_URL, not just literal "github.com" (see knownHostFilePatterns above).
-	if repoHost := ghtoken.RepoEndpoints().Host; repoHost != "github.com" &&
-		strings.Contains(lowerURI, repoHost) && strings.Contains(lowerURI, "/raw/") {
-		return true
+	// The host is parsed and compared exactly (not by substring) so a URL that merely contains
+	// the configured host string in its path or query is never misclassified.
+	repoEndpoints := ghtoken.RepoEndpoints()
+	if repoEndpoints.Host == "github.com" {
+		return false
 	}
-
-	return false
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return false
+	}
+	return repoEndpoints.IsHost(parsed.Hostname()) && strings.Contains(strings.ToLower(parsed.EscapedPath()), "/raw/")
 }
 
 // IsGitURI checks if the URI appears to be a Git repository URL.

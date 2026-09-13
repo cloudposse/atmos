@@ -440,6 +440,18 @@ func TestIsNonGitHTTPURI(t *testing.T) {
 	}
 }
 
+// TestIsNonGitHTTPURI_GHESHostSubstring pins that the GHES raw-content check parses and
+// compares the URL's actual host, instead of matching the configured host as a substring
+// anywhere in the URL (regression: a host that merely appears in an unrelated URL's own
+// hostname, path, or query must not be misclassified as the configured GHES instance).
+func TestIsNonGitHTTPURI_GHESHostSubstring(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	assert.False(t, IsNonGitHTTPURI("https://not-ghe.example.com/raw/file"), "unrelated host must not match")
+	assert.False(t, IsNonGitHTTPURI("https://attacker.example.com/x?next=ghes.example.com/raw/file"), "host in query must not match")
+	assert.True(t, IsNonGitHTTPURI("https://ghes.example.com/owner/repo/raw/main/file.tf"), "the configured GHES host must still match")
+}
+
 func TestSanitizeFileName(t *testing.T) {
 	tests := []struct {
 		name     string

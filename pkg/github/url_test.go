@@ -150,6 +150,31 @@ func TestConvertToRawURL_ExplicitGitHubComWithGHESConfigured(t *testing.T) {
 	assert.Equal(t, "https://raw.githubusercontent.com/owner/repo/main/path/to/file.yaml", result)
 }
 
+// TestConvertToRawURL_ExplicitGitHubComVariants pins that the explicit-public-URL branch
+// matches github.com case-insensitively, with a trailing dot, and with the default https port
+// -- not just a byte-exact "github.com" -- since it now goes through publicGitHubEndpoints.IsHost
+// instead of a literal string comparison.
+func TestConvertToRawURL_ExplicitGitHubComVariants(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+	t.Setenv("GITHUB_API_URL", "https://ghes.example.com/api/v3")
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{name: "uppercase host", input: "https://GitHub.Com/owner/repo/blob/main/file.yaml"},
+		{name: "trailing dot", input: "https://github.com./owner/repo/blob/main/file.yaml"},
+		{name: "default https port", input: "https://github.com:443/owner/repo/blob/main/file.yaml"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ConvertToRawURL(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, "https://raw.githubusercontent.com/owner/repo/main/file.yaml", result)
+		})
+	}
+}
+
 // TestConvertToRawURL_ConfiguredGHESHost verifies that a URL on the configured GitHub
 // Enterprise Server host converts to that host's own "/raw/" path.
 func TestConvertToRawURL_ConfiguredGHESHost(t *testing.T) {

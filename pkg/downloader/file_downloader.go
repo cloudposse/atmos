@@ -3,6 +3,7 @@ package downloader
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,21 +28,30 @@ const (
 // isGitHubHTTPURL checks if the given URL is a GitHub HTTP URL that uses rate-limited APIs.
 // This includes raw.githubusercontent.com for file downloads, github.com archive/release URLs,
 // and the equivalent hosts for a configured GitHub Enterprise Server (GITHUB_SERVER_URL).
+//
+// Src is parsed and compared by hostname/path rather than by substring, so an unrelated URL
+// that merely contains "github.com" (or the configured GHES host) somewhere in its path or
+// query string is never misclassified as a GitHub URL.
 func isGitHubHTTPURL(src string) bool {
-	src = strings.ToLower(src)
+	parsed, err := url.Parse(src)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	hostname := strings.ToLower(parsed.Hostname())
+
 	// Raw GitHub content (used for mixins, imports, templates).
-	if strings.Contains(src, "raw.githubusercontent.com") {
+	if hostname == "raw.githubusercontent.com" {
 		return true
 	}
 
 	// GitHub (or GHES) archive/release downloads (tarballs, zipballs, release assets), and GHES
 	// raw content served under /raw/ on the server host instead of a raw.githubusercontent.com subdomain.
-	host := github.RepoEndpoints().Host
-	if (strings.Contains(src, "github.com") || strings.Contains(src, host)) &&
-		(strings.Contains(src, "/archive/") || strings.Contains(src, "/releases/") || strings.Contains(src, "/raw/")) {
-		return true
+	if hostname != "github.com" && !github.RepoEndpoints().IsHost(hostname) {
+		return false
 	}
-	return false
+
+	path := strings.ToLower(parsed.EscapedPath())
+	return strings.Contains(path, "/archive/") || strings.Contains(path, "/releases/") || strings.Contains(path, "/raw/")
 }
 
 // fileDownloader handles downloading files and directories from various sources

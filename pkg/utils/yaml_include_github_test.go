@@ -51,3 +51,15 @@ func TestIsGitHubURL(t *testing.T) {
 		})
 	}
 }
+
+// TestIsGitHubURL_GHESWithPort pins that a GITHUB_SERVER_URL carrying a non-default port
+// (e.g. "https://ghe.example.com:8443") is still recognized: RepoEndpoints().Host never
+// carries a port (it is derived from url.URL.Hostname()), so a literal string-prefix match
+// against the raw URL (which does carry the port) would always miss it.
+func TestIsGitHubURL_GHESWithPort(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com:8443")
+
+	assert.True(t, isGitHubURL("https://ghe.example.com:8443/owner/repo/blob/main/file.yaml"))
+	assert.False(t, isGitHubURL("https://example.com/file.yaml"))
+	assert.False(t, isGitHubURL("https://attacker.example.com/x?next=ghe.example.com:8443/file.yaml"))
+}
