@@ -119,6 +119,7 @@ func TestToolchainCustomCommands_InstallJQViaMock(t *testing.T) {
 	for k, v := range mock.EnvForSubprocess() {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
+	cmd.Env = append(cmd.Env, httpmock.IsolatedCacheEnv(t)...)
 	output, err := cmd.CombinedOutput()
 	t.Logf("Install output for %s/%s@%s:\n%s", owner, repo, version, string(output))
 	require.NoError(t, err, "toolchain install %s/%s@%s should succeed against the mock", owner, repo, version)
