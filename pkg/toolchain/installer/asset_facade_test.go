@@ -25,12 +25,13 @@ import (
 // package's paralleltest lint enforcement covers asset_test.go by name.
 func TestBuildAssetURL_ServedByFacadeAcrossPlatforms(t *testing.T) {
 	cases := []struct {
-		goos   string
-		goarch string
+		goos      string
+		goarch    string
+		wantAsset string // Expected asset name, asserted against the derived name before registration.
 	}{
-		{"windows", "amd64"},
-		{"darwin", "arm64"},
-		{"linux", "amd64"},
+		{"windows", "amd64", "jq-windows-amd64.exe"},
+		{"darwin", "arm64", "jq-darwin-arm64"},
+		{"linux", "amd64", "jq-linux-amd64"},
 	}
 
 	for _, tc := range cases {
@@ -49,7 +50,11 @@ func TestBuildAssetURL_ServedByFacadeAcrossPlatforms(t *testing.T) {
 			assetURL, err := inst.buildAssetURLForPlatform(tool, "1.7.1", tc.goos, tc.goarch)
 			require.NoError(t, err)
 
+			// Assert the derived asset name matches the expected name (e.g. catching a missing
+			// Windows .exe suffix) BEFORE registering it: registering the wrong name would
+			// otherwise still make the mock request succeed, masking the bug.
 			assetName := path.Base(assetURL)
+			require.Equal(t, tc.wantAsset, assetName)
 			mock.RegisterReleaseAsset("jqlang", "jq", "1.7.1", assetName, []byte("fake-jq"))
 
 			resp, err := http.Get(assetURL)

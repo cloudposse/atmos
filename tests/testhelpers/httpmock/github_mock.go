@@ -5,6 +5,7 @@ package httpmock
 
 import (
 	"errors"
+	"fmt"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -283,7 +284,15 @@ func (m *GitHubMockServer) FailWith(pathPrefix string, status int) {
 // FailWithTimes makes the first `times` requests whose path starts with pathPrefix fail with
 // status; subsequent requests are routed normally. Useful for testing a retry-without-auth
 // path: the first hit returns 403, the retry (a fresh, unauthenticated request) succeeds.
+//
+// times must be non-negative: matchFailure treats a negative `remaining` as the -1 sentinel
+// reserved for FailWith/FailWithHeaders (an unlimited failure), so a negative times here would
+// otherwise silently become an unlimited failure instead of erroring loudly. This is a test
+// helper with no *testing.T to fail through, so a caller mistake panics instead.
 func (m *GitHubMockServer) FailWithTimes(pathPrefix string, status, times int) {
+	if times < 0 {
+		panic(fmt.Errorf("%w: got %d", atmosErrors.ErrMockFailWithTimesNegative, times))
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.failures = append(m.failures, &failureRule{prefix: pathPrefix, status: status, remaining: times})

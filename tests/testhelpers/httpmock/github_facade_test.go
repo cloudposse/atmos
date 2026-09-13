@@ -160,6 +160,52 @@ func TestGitHubMockServer_ArchiveDownload(t *testing.T) {
 	assert.Equal(t, archive, body)
 }
 
+// TestGitHubMockServer_RegisterReleaseAsset_CopiesData verifies that RegisterReleaseAsset
+// copies the caller's byte slice, so mutating it after registration does not change what the
+// mock server serves.
+func TestGitHubMockServer_RegisterReleaseAsset_CopiesData(t *testing.T) {
+	mock := NewGitHubMockServer(t)
+	data := []byte("fake-binary")
+	mock.RegisterReleaseAsset("jqlang", "jq", "jq-1.7.1", "jq-linux-amd64", data)
+
+	// Mutate the caller's slice after registration.
+	for i := range data {
+		data[i] = 'x'
+	}
+
+	resp, err := http.Get(mock.URL() + "/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "fake-binary", string(body))
+}
+
+// TestGitHubMockServer_RegisterArchive_CopiesData verifies that RegisterArchive copies the
+// caller's byte slice, so mutating it after registration does not change what the mock server
+// serves.
+func TestGitHubMockServer_RegisterArchive_CopiesData(t *testing.T) {
+	mock := NewGitHubMockServer(t)
+	archive, err := BuildTarGz(map[string]string{"tool-1.0.0/tool": "#!/bin/sh\necho fake\n"})
+	require.NoError(t, err)
+	original := append([]byte(nil), archive...)
+	mock.RegisterArchive("owner", "repo", "v1.0.0", archive)
+
+	// Mutate the caller's slice after registration.
+	for i := range archive {
+		archive[i] = 0
+	}
+
+	resp, err := http.Get(mock.URL() + "/owner/repo/archive/refs/tags/v1.0.0.tar.gz")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, original, body)
+}
+
 func TestGitHubMockServer_RawGHESShape(t *testing.T) {
 	mock := NewGitHubMockServer(t)
 	mock.RegisterRawFile("cloudposse", "atmos", "main", "tests/fixtures/scenarios/foo/bar.yaml", "settings:\n  key: value\n")
@@ -369,6 +415,16 @@ func TestGitHubMockServer_FailWithTimes_RecoversAfterN(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, second.StatusCode)
 	second.Body.Close()
+}
+
+// TestGitHubMockServer_FailWithTimes_NegativeTimesPanics verifies that FailWithTimes rejects a
+// negative times value instead of silently behaving like an unlimited failure: matchFailure
+// treats any negative remaining as the -1 sentinel reserved for FailWith/FailWithHeaders.
+func TestGitHubMockServer_FailWithTimes_NegativeTimesPanics(t *testing.T) {
+	mock := NewGitHubMockServer(t)
+	require.Panics(t, func() {
+		mock.FailWithTimes("/api/v3/repos/owner/repo/releases", http.StatusForbidden, -1)
+	})
 }
 
 func TestGitHubMockServer_RequestLog(t *testing.T) {

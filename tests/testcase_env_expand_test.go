@@ -35,6 +35,8 @@ func TestExpandTestCaseEnv(t *testing.T) {
 	assert.Empty(t, env["UNSET_VAR"], "an unset variable reference expands to empty, matching os.ExpandEnv")
 }
 
+// TestExpandTestCaseEnv_EmptyMap verifies that expandTestCaseEnv is a no-op on an empty map,
+// neither panicking nor populating it with entries.
 func TestExpandTestCaseEnv_EmptyMap(t *testing.T) {
 	env := map[string]string{}
 	expandTestCaseEnv(env)
