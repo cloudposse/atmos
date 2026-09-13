@@ -72,6 +72,51 @@ func TestAppend(t *testing.T) {
 			expectedKeys:  []string{"credential.helper"},
 			expectedVals:  []string{""},
 		},
+		{
+			// Windows environment variable names are case-insensitive, so
+			// os.Environ() (and tc.Env in the test harness) can surface
+			// lower-case GIT_CONFIG_* names. These must still be read.
+			name: "lower-case existing entries are read and preserved",
+			base: []string{
+				"git_config_count=1",
+				"git_config_key_0=url.file:///mirror/cloudposse/.insteadOf",
+				"git_config_value_0=https://github.com/cloudposse/",
+			},
+			entries: []GitConfigEntry{
+				{Key: "credential.helper", Value: ""},
+			},
+			expectedCount: "2",
+			expectedKeys: []string{
+				"url.file:///mirror/cloudposse/.insteadOf",
+				"credential.helper",
+			},
+			expectedVals: []string{
+				"https://github.com/cloudposse/",
+				"",
+			},
+		},
+		{
+			// Mixed-case variants must also match, exercising the same
+			// case-insensitive lookup as the all-lower-case scenario above.
+			name: "mixed-case existing entries are read and preserved",
+			base: []string{
+				"Git_Config_Count=1",
+				"Git_Config_Key_0=url.file:///mirror/cloudposse/.insteadOf",
+				"Git_Config_Value_0=ssh://git@github.com/cloudposse/",
+			},
+			entries: []GitConfigEntry{
+				{Key: "credential.helper", Value: ""},
+			},
+			expectedCount: "2",
+			expectedKeys: []string{
+				"url.file:///mirror/cloudposse/.insteadOf",
+				"credential.helper",
+			},
+			expectedVals: []string{
+				"ssh://git@github.com/cloudposse/",
+				"",
+			},
+		},
 	}
 
 	for _, tt := range tests {

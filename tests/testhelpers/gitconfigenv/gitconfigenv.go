@@ -42,6 +42,12 @@ func Append(target map[string]string, base []string, entries ...GitConfigEntry) 
 
 // readEntries extracts any existing GIT_CONFIG_COUNT/KEY_n/VALUE_n entries
 // from an environment slice of "KEY=VALUE" pairs (e.g. os.Environ()).
+//
+// Environment variable names are case-insensitive on Windows, so os.Environ()
+// (and tc.Env in the test harness) can surface lower- or mixed-case
+// GIT_CONFIG_* names. The lookup keys are normalized to uppercase before
+// matching so those entries are still found; the values themselves are left
+// untouched.
 func readEntries(env []string) []GitConfigEntry {
 	lookup := make(map[string]string, len(env))
 	for _, kv := range env {
@@ -49,7 +55,7 @@ func readEntries(env []string) []GitConfigEntry {
 		if !ok {
 			continue
 		}
-		lookup[key] = value
+		lookup[strings.ToUpper(key)] = value
 	}
 
 	count, err := strconv.Atoi(lookup["GIT_CONFIG_COUNT"])
