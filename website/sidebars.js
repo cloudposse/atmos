@@ -409,6 +409,7 @@ module.exports = {
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/workdir', label: 'workdir'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/cast', label: 'cast'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/parallel', label: 'parallel'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/test', label: 'test'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/matrix', label: 'matrix'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/wait', label: 'wait / wait-all'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/cancel', label: 'cancel'},
