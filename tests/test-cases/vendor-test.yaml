@@ -86,6 +86,17 @@ tests:
       - "vendor"
       - "pull"
       - "--tags=git"
+    # Egress guard: if an insteadOf rule stopped matching the local git mirror, git would
+    # silently fall through to a live GitHub clone and the assertions below would still pass.
+    # Point all proxy variables at a closed port (9) so any non-loopback fetch fails fast, while
+    # NO_PROXY exempts 127.0.0.1/localhost so the mirror keeps working.
+    env:
+      HTTPS_PROXY: "http://127.0.0.1:9"
+      https_proxy: "http://127.0.0.1:9"
+      HTTP_PROXY: "http://127.0.0.1:9"
+      http_proxy: "http://127.0.0.1:9"
+      NO_PROXY: "127.0.0.1,localhost"
+      no_proxy: "127.0.0.1,localhost"
     expect:
       timeout: "5m"
       # atmos vendor pull only prints these per-component "✓ <component> (<ref>)" lines, and the
@@ -124,8 +135,18 @@ tests:
       - "vendor"
       - "pull"
       - "--tags=git"
+    # Egress guard: if an insteadOf rule stopped matching the local git mirror, git would
+    # silently fall through to a live GitHub clone and the assertions below would still pass.
+    # Point all proxy variables at a closed port (9) so any non-loopback fetch fails fast, while
+    # NO_PROXY exempts 127.0.0.1/localhost so the mirror keeps working.
     env:
       GITHUB_TOKEN: "fixture-token-not-a-real-credential"
+      HTTPS_PROXY: "http://127.0.0.1:9"
+      https_proxy: "http://127.0.0.1:9"
+      HTTP_PROXY: "http://127.0.0.1:9"
+      http_proxy: "http://127.0.0.1:9"
+      NO_PROXY: "127.0.0.1,localhost"
+      no_proxy: "127.0.0.1,localhost"
     expect:
       timeout: "5m"
       stderr:

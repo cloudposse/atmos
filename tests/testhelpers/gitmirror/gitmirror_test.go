@@ -84,7 +84,11 @@ func TestBuild_RelativeRoot(t *testing.T) {
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
 	relRoot, err := filepath.Rel(cwd, target)
-	require.NoError(t, err)
+	if err != nil {
+		// filepath.Rel fails when cwd and target live on different Windows volumes; there's no
+		// relative path to build in that case, so skip rather than fail the test.
+		t.Skipf("cannot build a relative fixture path (cross-volume temp dir?): %v", err)
+	}
 
 	require.NoError(t, Build(relRoot))
 
