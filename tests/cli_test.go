@@ -1148,6 +1148,11 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if !envHasKey(tc.Env, "GIT_CONFIG_GLOBAL") {
 		ensureGitMirrorCoversFixtureTokens(t, &tc)
 	}
+	// Whatever proxy the host exports, the loopback mirror must be exempt from it so the
+	// Basic-Auth header on mirrored clones never leaves the machine (see ensureNoProxyForMirror).
+	if gitMirrorServer != nil {
+		ensureNoProxyForMirror(tc.Env, os.Getenv, gitMirrorServer.URL())
+	}
 
 	// Configure git for non-interactive use via GIT_CONFIG_* env vars (Git 2.31+).
 	// macOS ships with credential.helper=osxkeychain in the system-level git config
