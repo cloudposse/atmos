@@ -46,7 +46,7 @@ func isGitHubHTTPURL(src string) bool {
 
 	// GitHub (or GHES) archive/release downloads (tarballs, zipballs, release assets), and GHES
 	// raw content served under /raw/ on the server host instead of a raw.githubusercontent.com subdomain.
-	if hostname != "github.com" && !github.RepoEndpoints().IsHost(hostname) {
+	if hostname != "github.com" && !github.RepoEndpoints().IsHost(parsed.Host) {
 		return false
 	}
 

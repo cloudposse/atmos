@@ -44,7 +44,10 @@ type Endpoints struct {
 	// UploadURL is the API host used for release asset uploads, e.g. "https://uploads.github.com"
 	// on github.com, or "<ServerURL>/api/uploads" on GHES.
 	UploadURL string
-	// Host is the normalized hostname of ServerURL (lowercased, no trailing dot, no default port).
+	// Host is the normalized host of ServerURL (lowercased, no trailing dot, no default port).
+	// It may still carry a non-default port (e.g. "ghes.example.com:8443") -- normalizeHost
+	// only strips the default 80/443 ports, so a GHES host (or test mock) reachable only on a
+	// non-default port keeps that port here and can still match its own URLs via IsHost.
 	Host string
 }
 
@@ -146,29 +149,43 @@ func ResolveEndpointURL(envVar, fallback string) string {
 	return trimmed
 }
 
-// hostOf returns the normalized hostname of rawURL, or "" if rawURL cannot be parsed.
+// hostOf returns the normalized host (hostname, plus a non-default port when present) of
+// rawURL, or "" if rawURL cannot be parsed. Uses parsed.Host (not Hostname()) so a non-default
+// port configured on GITHUB_SERVER_URL/ATMOS_TOOLCHAIN_GITHUB_URL etc. survives into the
+// resulting Endpoints.Host: otherwise a GHES host (or test mock) reachable only on a
+// non-default port could never match its own URLs via IsHost/IsAPIHost, since normalizeHost
+// only strips the default 80/443 ports.
 func hostOf(rawURL string) string {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return ""
 	}
-	return normalizeHost(parsed.Hostname())
+	return normalizeHost(parsed.Host)
 }
 
 // normalizeHost canonicalizes a hostname for allowlist/equality comparison: it lower-cases
 // the string, strips a trailing dot (FQDN form), and removes default HTTP/HTTPS ports so
 // that "ghes.example.com:443" is treated identically to "ghes.example.com".
 //
+// The host/port split happens before the trailing dot is trimmed so that a dotted FQDN with
+// an explicit port (e.g. "ghes.example.com.:8443") is normalized correctly instead of leaving
+// the dot embedded ahead of the port.
+//
 // This mirrors pkg/http/client.go's normalizeHost. It is duplicated rather than imported
 // because pkg/github already imports pkg/http (for GetGitHubTokenFromEnv), and pkg/http
 // importing pkg/github back would create an import cycle.
 func normalizeHost(host string) string {
 	host = strings.ToLower(host)
-	host = strings.TrimSuffix(host, ".")
-	if h, port, err := net.SplitHostPort(host); err == nil && (port == "443" || port == "80") {
-		host = strings.TrimSuffix(h, ".")
+
+	if h, port, err := net.SplitHostPort(host); err == nil {
+		h = strings.TrimSuffix(h, ".")
+		if port == "443" || port == "80" {
+			return h
+		}
+		return net.JoinHostPort(h, port)
 	}
-	return host
+
+	return strings.TrimSuffix(host, ".")
 }
 
 // IsHost reports whether host (case-insensitive, with port and trailing dot normalized)
@@ -192,6 +209,17 @@ func (e Endpoints) IsAPIHost(host string) bool {
 	defer perf.Track(nil, "github.Endpoints.IsAPIHost")()
 
 	return normalizeHost(host) == hostOf(e.APIURL)
+}
+
+// IsUploadHost reports whether host (case-insensitive, with port and trailing dot normalized)
+// matches this Endpoints value's upload host (derived from UploadURL). This can differ from
+// both IsHost and IsAPIHost, e.g. on public github.com uploads go to the separate
+// uploads.github.com host. Callers that authenticate requests sent for release-asset uploads
+// should check this in addition to IsHost/IsAPIHost.
+func (e Endpoints) IsUploadHost(host string) bool {
+	defer perf.Track(nil, "github.Endpoints.IsUploadHost")()
+
+	return normalizeHost(host) == hostOf(e.UploadURL)
 }
 
 // isDefaultGitHubCom reports whether these endpoints point at public GitHub.com.

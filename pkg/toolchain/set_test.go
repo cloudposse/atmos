@@ -1029,33 +1029,72 @@ func TestMakeGitHubRequestOmitsTokenOverHTTP(t *testing.T) {
 	assert.Empty(t, gotAuth, "expected no Authorization header sent to a plain-http endpoint")
 }
 
-// TestStripAuthOnNonHTTPSRedirect pins the CheckRedirect callback installed on
+// TestStripAuthOnUnapprovedRedirect pins the CheckRedirect callback installed on
 // makeGitHubRequest's http.Client: net/http's default redirect policy preserves the
 // Authorization header across same-host redirects even when the scheme downgrades from
-// https to http, which would leak the token in cleartext. The callback must strip it whenever
-// the (redirect target) request is not https, and leave it alone otherwise.
-func TestStripAuthOnNonHTTPSRedirect(t *testing.T) {
+// https to http, and never considers host at all, which would leak the token in cleartext or
+// to an unrelated host. The callback must strip it whenever the (redirect target) request is
+// not https, or its host does not match RepoEndpoints (the host the token is scoped to), and
+// leave it alone otherwise.
+func TestStripAuthOnUnapprovedRedirect(t *testing.T) {
 	t.Run("removes Authorization when redirect target is not https", func(t *testing.T) {
+		clearGitHubEndpointEnvToolchain(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
 		req, err := http.NewRequest(http.MethodGet, "http://ghes.example.com/api/v3/repos/owner/repo/releases", nil)
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer leaked-token")
 
-		err = stripAuthOnNonHTTPSRedirect(req, nil)
+		err = stripAuthOnUnapprovedRedirect(req, nil)
 
 		require.NoError(t, err)
 		assert.Empty(t, req.Header.Get("Authorization"))
 	})
 
-	t.Run("preserves Authorization when redirect target is https", func(t *testing.T) {
+	t.Run("preserves Authorization when redirect target is https and matches RepoEndpoints", func(t *testing.T) {
+		clearGitHubEndpointEnvToolchain(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
 		req, err := http.NewRequest(http.MethodGet, "https://ghes.example.com/api/v3/repos/owner/repo/releases", nil)
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer valid-token")
 
-		err = stripAuthOnNonHTTPSRedirect(req, nil)
+		err = stripAuthOnUnapprovedRedirect(req, nil)
 
 		require.NoError(t, err)
 		assert.Equal(t, "Bearer valid-token", req.Header.Get("Authorization"))
 	})
+
+	t.Run("removes Authorization when redirect target is https but a different host", func(t *testing.T) {
+		clearGitHubEndpointEnvToolchain(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+		req, err := http.NewRequest(http.MethodGet, "https://attacker.example.com/repos/owner/repo/releases", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer leaked-token")
+
+		err = stripAuthOnUnapprovedRedirect(req, nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, req.Header.Get("Authorization"))
+	})
+}
+
+// clearGitHubEndpointEnvToolchain unsets every environment variable RepoEndpoints/
+// ToolchainEndpoints read, so a test starts from a known (unset) baseline regardless of the
+// ambient environment (e.g. a real GITHUB_ACTIONS runner exports GITHUB_SERVER_URL/
+// GITHUB_API_URL).
+func clearGitHubEndpointEnvToolchain(t *testing.T) {
+	t.Helper()
+
+	for _, envVar := range []string{
+		"GITHUB_SERVER_URL",
+		"GITHUB_API_URL",
+		"ATMOS_TOOLCHAIN_GITHUB_URL",
+		"ATMOS_TOOLCHAIN_GITHUB_API_URL",
+	} {
+		t.Setenv(envVar, "")
+	}
 }
 
 // TestMakeGitHubRequestRetry covers the retry behavior added to recover from
