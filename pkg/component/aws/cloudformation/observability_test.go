@@ -500,10 +500,20 @@ func TestRenderEventChart_GroupsAndPreservesOrder(t *testing.T) {
 func TestRunWatch_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
-	}, nil)
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
+
+	gomock.InOrder(
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateInProgress}},
+		}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
+		}, nil),
+	)
 
 	summary, err := runWatch(context.Background(), client, "root", map[string]any{})
 	require.NoError(t, err)
@@ -515,10 +525,20 @@ func TestRunWatch_Success(t *testing.T) {
 func TestRunWatch_FailedStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateRollbackComplete}},
-	}, nil)
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
+
+	gomock.InOrder(
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateRollbackInProgress}},
+		}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateRollbackComplete}},
+		}, nil),
+	)
 
 	_, err := runWatch(context.Background(), client, "root", map[string]any{})
 	require.Error(t, err)
