@@ -132,6 +132,33 @@ func TestDeleteStack_RetainResourcesRequiresDeleteFailed(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
 }
 
+// TestDeleteStack_RetainResourcesRejectionLeavesTerminationProtectionUntouched
+// guards the guard ordering in deleteStack: when both
+// --disable-termination-protection and --retain-resources are passed together
+// against a stack that is NOT in DELETE_FAILED status, guardRetainResources
+// must reject the request before guardTerminationProtection gets a chance to
+// disable termination protection. If the guards ran in the opposite order,
+// termination protection would already be disabled with no DeleteStack call
+// to trigger the restore path in handleDeleteStackError, silently leaving a
+// previously-protected stack unprotected.
+func TestDeleteStack_RetainResourcesRejectionLeavesTerminationProtectionUntouched(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	// UpdateTerminationProtection and DeleteStack must never be called.
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
+	}, nil)
+
+	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
+	err := deleteStack(context.Background(), client, spec, deleteOptions{
+		RetainResources:              []string{"MyBucket"},
+		DisableTerminationProtection: true,
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+}
+
 func TestDeleteStack_RetainResourcesAllowedWhenDeleteFailed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)

@@ -544,10 +544,17 @@ func copySingleFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
 
-	_, err = io.Copy(dstFile, srcFile)
-	return err
+	// Close explicitly (no defer) so a delayed write failure surfaced only on
+	// Close (e.g. disk full) is not silently discarded -- a deferred
+	// dstFile.Close() would let VendorSource report success for an incomplete
+	// target file.
+	_, copyErr := io.Copy(dstFile, srcFile)
+	closeErr := dstFile.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
 }
 
 func prepareVendorTarget(targetDir string, vendorOpts vendorSourceOptions) error {

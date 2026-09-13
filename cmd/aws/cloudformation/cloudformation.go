@@ -3,7 +3,6 @@
 package cloudformation
 
 import (
-	"context"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -27,6 +26,19 @@ const (
 	valueTrue = "true"
 )
 
+// Operation subcommand names, named so they're not repeated as raw string
+// literals across command registration, flag gating, and example text.
+const (
+	opRender   = "render"
+	opPlan     = "plan"
+	opDiff     = "diff"
+	opApply    = "apply"
+	opDeploy   = "deploy"
+	opDelete   = "delete"
+	opValidate = "validate"
+	opOutput   = "output"
+)
+
 var cloudFormationParser *flags.StandardParser
 
 var (
@@ -45,6 +57,11 @@ var CloudFormationCmd = &cobra.Command{
 	Aliases: []string{"cfn"},
 	Short:   "Manage native aws/cloudformation components",
 	Long:    "Deploy, inspect, and delete native aws/cloudformation stacks using the AWS SDK for Go v2. No external binary dependency.",
+	Example: `  atmos aws cloudformation apply vpc --stack=dev
+  atmos aws cloudformation deploy vpc --stack=dev
+  atmos aws cloudformation diff vpc --stack=dev
+  atmos aws cloudformation delete vpc --stack=dev
+  atmos aws cloudformation output vpc --stack=dev --format=json`,
 	Annotations: map[string]string{
 		"experimental": "true",
 	},
@@ -61,14 +78,14 @@ func init() {
 		panic(err)
 	}
 
-	CloudFormationCmd.AddCommand(newOperationCommand("render", "Render the local template client-side (no API calls)"))
-	CloudFormationCmd.AddCommand(newOperationCommand("plan", "Preview changes an apply would make"))
-	CloudFormationCmd.AddCommand(newOperationCommand("diff", "Show changes an apply would make"))
-	CloudFormationCmd.AddCommand(newOperationCommand("apply", "Create or update the stack"))
-	CloudFormationCmd.AddCommand(newOperationCommand("deploy", "Apply with --auto-approve"))
-	CloudFormationCmd.AddCommand(newOperationCommand("delete", "Delete the stack"))
-	CloudFormationCmd.AddCommand(newOperationCommand("validate", "Validate the template server-side"))
-	outputCmd := newOperationCommand("output", "Show the deployed stack's Outputs")
+	CloudFormationCmd.AddCommand(newOperationCommand(opRender, "Render the local template client-side (no API calls)"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opPlan, "Preview changes an apply would make"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opDiff, "Show changes an apply would make"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opApply, "Create or update the stack"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opDeploy, "Apply with --auto-approve"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opDelete, "Delete the stack"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opValidate, "Validate the template server-side"))
+	outputCmd := newOperationCommand(opOutput, "Show the deployed stack's Outputs")
 	outputCmd.Aliases = []string{"outputs"}
 	CloudFormationCmd.AddCommand(outputCmd)
 }
@@ -76,10 +93,11 @@ func init() {
 func newOperationCommand(name, short string) *cobra.Command {
 	var parser *flags.StandardParser
 	cmd := &cobra.Command{
-		Use:   name + " [component]",
-		Short: short,
+		Use:     name + " [component]",
+		Short:   short,
+		Example: operationExample(name),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			parsed, err := parser.Parse(context.Background(), args)
+			parsed, err := parser.Parse(cmd.Context(), args)
 			if err != nil {
 				return err
 			}
@@ -112,6 +130,23 @@ func newOperationCommand(name, short string) *cobra.Command {
 	return cmd
 }
 
+// operationExample returns representative --help usage text for a
+// aws/cloudformation operation subcommand, tailored to the flags
+// operationFlagOptions registers for that operation.
+func operationExample(name string) string {
+	examples := map[string]string{
+		opRender:   "  atmos aws cloudformation render vpc --stack=dev",
+		opPlan:     "  atmos aws cloudformation plan vpc --stack=dev",
+		opDiff:     "  atmos aws cloudformation diff vpc --stack=dev",
+		opApply:    "  atmos aws cloudformation apply vpc --stack=dev\n  atmos aws cloudformation apply vpc --stack=dev --target=artifacts",
+		opDeploy:   "  atmos aws cloudformation deploy vpc --stack=dev\n  atmos aws cloudformation deploy --affected",
+		opDelete:   "  atmos aws cloudformation delete vpc --stack=dev\n  atmos aws cloudformation delete vpc --stack=dev --retain-resources=MyBucket",
+		opValidate: "  atmos aws cloudformation validate vpc --stack=dev",
+		opOutput:   "  atmos aws cloudformation output vpc --stack=dev --format=json\n  atmos aws cloudformation output vpc --stack=dev --flatten --uppercase",
+	}
+	return examples[name]
+}
+
 // operationFlagOptions returns the standard-parser options for an
 // aws/cloudformation operation command: the shared selection/affected flags
 // plus operation-specific flags.
@@ -131,20 +166,20 @@ func operationFlagOptions(name string) []flags.Option {
 		flags.WithStringFlag(flagLabels, "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
 	}
 
-	if name == "apply" || name == "deploy" || name == "delete" {
-		options = append(options, flags.WithBoolFlag("auto-approve", "", name == "deploy", "Skip interactive confirmation."))
+	if name == opApply || name == opDeploy || name == opDelete {
+		options = append(options, flags.WithBoolFlag("auto-approve", "", name == opDeploy, "Skip interactive confirmation."))
 	}
-	if name == "apply" || name == "deploy" {
+	if name == opApply || name == opDeploy {
 		options = append(options, flags.WithStringFlag("target", "", "", "Provision target to deliver to. Defaults to provision.default, otherwise the implicit direct-deploy target."))
 	}
-	if name == "delete" {
+	if name == opDelete {
 		options = append(
 			options,
 			flags.WithStringSliceFlag("retain-resources", "", nil, "Logical IDs of resources to retain (only valid for a DELETE_FAILED stack)."),
 			flags.WithBoolFlag("disable-termination-protection", "", false, "Disable termination protection before deleting (never done silently)."),
 		)
 	}
-	if name == "output" {
+	if name == opOutput {
 		options = append(
 			options,
 			flags.WithStringFlag("format", "", "table", "Output format: json|yaml|hcl|env|dotenv|bash|csv|tsv|table|github."),
@@ -210,7 +245,7 @@ func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]stri
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	components, err := cfnListAllComponents(context.Background(), cfg.CloudFormationComponentType, stacksMap)
+	components, err := cfnListAllComponents(cmd.Context(), cfg.CloudFormationComponentType, stacksMap)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

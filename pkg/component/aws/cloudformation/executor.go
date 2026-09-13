@@ -87,7 +87,7 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 		propagateAuth(info, authManager)
 	}
 
-	spec, err := resolveSpecAndTemplate(atmosConfig, info, operation)
+	spec, err := resolveSpecAndTemplate(ctx.GoContext(), atmosConfig, info, operation)
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 // buildStackSpec) and output only needs the deployed stack's name, so both
 // return immediately: a source checkout or provisioning failure must not
 // block deleting a stack or reading its outputs.
-func resolveSpecAndTemplate(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) (*stackSpec, error) {
+func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) (*stackSpec, error) {
 	spec, err := buildStackSpec(info.ComponentSection)
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func resolveSpecAndTemplate(atmosConfig *schema.AtmosConfiguration, info *schema
 	if err != nil {
 		return nil, err
 	}
-	componentPath, _, err = provisionAndResolveComponentPath(context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.CloudFormationComponentType, componentPath)
+	componentPath, _, err = provisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.CloudFormationComponentType, componentPath)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 		return err
 	}
 
-	octx := &opContext{Ctx: context.Background(), AtmosConfig: atmosConfig, Info: info, Flags: ctx.Flags}
+	octx := &opContext{Ctx: ctx.GoContext(), AtmosConfig: atmosConfig, Info: info, Flags: ctx.Flags}
 	_, opErr := runOperation(octx, operation, spec)
 	if opErr != nil {
 		return opErr
