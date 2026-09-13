@@ -94,14 +94,29 @@
   font-family:
     SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
     monospace;
-  /* Integer-pixel metrics so terminal rows tile exactly: 1.125rem = 18px at
-     the default root size, and line-height: 1 keeps each row the height of
-     the glyph em box. Fractional row heights (the previous 1.12rem × 1.04)
-     round differently per row and leave 1-2px horizontal seams through ANSI
-     block art (█). */
   font-size: 1.125rem;
-  line-height: 1;
+  line-height: 1.2;
+  font-variant-ligatures: none;
   white-space: pre-wrap;
+}
+
+.terminalCell {
+  display: inline-block;
+  position: relative;
+  width: 1ch;
+  text-align: center;
+}
+
+.drawnGlyph {
+  color: transparent;
+}
+
+.terminalCell svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 .noPreWrap {
@@ -302,10 +317,7 @@
 .thumbnail .screen {
   padding: 1.1rem 0.95rem 0.8rem;
   overflow: hidden;
-  /* 0.4375rem = 7px at the default root size; see .screen for why terminal
-     rows need integer-pixel heights with line-height: 1. */
   font-size: 0.4375rem;
-  line-height: 1;
 }
 
 .thumbnail .cursor {
