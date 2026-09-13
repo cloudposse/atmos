@@ -83,8 +83,10 @@ components:
 ```
 
 `mode` controls whether init runs at all: `auto` skips it when nothing relevant changed, `always`
-restores the previous behavior, `never` disables it entirely (the same effect as `--skip-init` on
-every invocation). `reconfigure` and `upgrade` control the two flags the same way, independently.
+restores the previous behavior, `never` disables the ordinary implicit init — but `terraform
+workspace select/new` still forces a reconfigured init regardless, since it always needs one;
+`--skip-init` is the flag that suppresses init unconditionally, including for `workspace`.
+`reconfigure` and `upgrade` control the two flags the same way, independently.
 
 `mode` and `upgrade` are [edition](/cli/configuration/edition)-protected: pin `edition:
 "2026-09-11"` or earlier and both roll back to their pre-this-PR behavior (`always` and `never`

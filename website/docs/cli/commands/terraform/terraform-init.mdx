@@ -126,14 +126,16 @@ Atmos also decides `-reconfigure` and `-upgrade` per invocation instead of addin
 
 - `init.reconfigure: auto` (default) adds `-reconfigure` only when the backend configuration changed, on the
   first init, after a JIT working directory is re-provisioned, or for `atmos terraform workspace`.
-- `init.upgrade: never` (default) never adds `-upgrade` — Atmos never passed this flag automatically before
-  the setting existed, so the default preserves that. Set `init.upgrade: auto` to have Atmos add `-upgrade`
-  automatically when Terraform/OpenTofu reports that one is required — for example, after a provider version
-  constraint was raised beyond the locked version.
+- `init.upgrade: auto` (default) adds `-upgrade` automatically when Terraform/OpenTofu reports that one is
+  required — for example, after a provider version constraint was raised beyond the locked version. Set
+  `init.upgrade: never` to opt back out of automatic upgrades.
 
-Set `init.mode` or `init.reconfigure` to `always` to force Atmos to add the corresponding behavior to every
-automatic init (the previous default), or to `never` to disable it entirely. `init.upgrade` follows the same
-`auto`/`always`/`never` pattern, just with a `never` default instead of `auto`. See
+Set `init.mode`, `init.reconfigure`, or `init.upgrade` to `always` to force Atmos to add the corresponding
+behavior to every automatic init (the previous default), or to `never` to disable it entirely — for
+`init.mode: never`, unlike `--skip-init`, `atmos terraform workspace select`/`new` still forces a
+reconfigured init regardless, since it always needs one. Pinning a [config edition](/cli/configuration/edition)
+from before September 12, 2026 restores the pre-this-feature `always`/`never` defaults for `init.mode`/
+`init.upgrade` with no config changes. See
 [Terraform Configuration](/cli/configuration/components/terraform#configuration-reference) for the full
 setting reference, environment variables, and flags.
 
@@ -230,7 +232,7 @@ Atmos will:
 
     <dt>`--init-upgrade` <em>(optional)</em></dt>
     <dd>
-        Override [`init.upgrade`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `never` (default), `auto` (add `-upgrade` only when Terraform/OpenTofu reports it's required), or `always`.
+        Override [`init.upgrade`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default, add `-upgrade` only when Terraform/OpenTofu reports it's required), `always`, or `never`.
 
         ```shell
         atmos terraform plan vpc -s dev --init-upgrade=always
@@ -489,7 +491,7 @@ components:
       # Add -reconfigure only when the backend changed (auto | always | never)
       reconfigure: auto
       # Add -upgrade only when required (auto | always | never)
-      upgrade: never
+      upgrade: auto
       # Pass varfile to init (OpenTofu feature)
       pass_vars: true
 

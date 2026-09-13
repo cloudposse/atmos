@@ -127,8 +127,11 @@ mechanism.
   <dd>
     <code>auto</code> skips <code>terraform init</code> when nothing that affects init has changed since the
     last successful init for this component/workspace. <code>always</code> restores the previous
-    unconditional behavior (the behavior a pre-2026-09-12 edition pin restores). <code>never</code> never
-    runs init implicitly — the same effect as passing <code>--skip-init</code> on every invocation.<br/>
+    unconditional behavior (the behavior a pre-2026-09-12 edition pin restores). <code>never</code> disables
+    the ordinary implicit init before plan/apply/etc — but unlike <code>--skip-init</code>, it does not
+    suppress the always-forced reconfigure init that <code>terraform workspace select/new</code> needs;
+    <code>--skip-init</code> is the control that suppresses init unconditionally, including for
+    <code>workspace</code>.<br/>
     <strong>Environment variable:</strong> <code>ATMOS_COMPONENTS_TERRAFORM_INIT_MODE</code><br/>
     <strong>Command-line flag:</strong> <code>--init-mode</code>
   </dd>
