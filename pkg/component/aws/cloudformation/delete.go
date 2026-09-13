@@ -28,10 +28,17 @@ type deleteOptions struct {
 func deleteStack(ctx context.Context, client CloudFormationClient, spec *stackSpec, opts deleteOptions) error {
 	defer perf.Track(nil, "cloudformation.deleteStack")()
 
-	if err := guardTerminationProtection(ctx, client, spec, opts); err != nil {
+	// guardRetainResources MUST run before guardTerminationProtection: the
+	// termination-protection guard can call UpdateTerminationProtection(false)
+	// as a side effect of --disable-termination-protection, and that call has
+	// no automatic rollback unless the subsequent DeleteStack call itself
+	// fails (see handleDeleteStackError). If guardRetainResources ran second
+	// and rejected the request (e.g. stack not in DELETE_FAILED), termination
+	// protection would already be disabled with nothing to restore it.
+	if err := guardRetainResources(ctx, client, spec, opts); err != nil {
 		return err
 	}
-	if err := guardRetainResources(ctx, client, spec, opts); err != nil {
+	if err := guardTerminationProtection(ctx, client, spec, opts); err != nil {
 		return err
 	}
 

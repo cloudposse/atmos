@@ -37,14 +37,18 @@ const (
 	FormatGitHub = sharedoutput.FormatGitHub
 )
 
-// SupportedFormats lists all supported output formats.
-var SupportedFormats = sharedoutput.SupportedFormats
+// SupportedFormats lists all supported output formats. Cloned (not aliased)
+// from sharedoutput.SupportedFormats: sharing the backing array would let a
+// mutation through this package's slice corrupt sharedoutput's own format
+// validation and error hints.
+var SupportedFormats = append([]string(nil), sharedoutput.SupportedFormats...)
 
 // DefaultFileMode is the file mode for output files.
 const DefaultFileMode = sharedoutput.DefaultFileMode
 
-// ScalarOnlyFormats are formats that only support scalar values (not maps/lists).
-var ScalarOnlyFormats = sharedoutput.ScalarOnlyFormats
+// ScalarOnlyFormats are formats that only support scalar values (not
+// maps/lists). Cloned for the same reason as SupportedFormats above.
+var ScalarOnlyFormats = append([]Format(nil), sharedoutput.ScalarOnlyFormats...)
 
 // FormatOptions provides options for output formatting.
 type FormatOptions = sharedoutput.FormatOptions
