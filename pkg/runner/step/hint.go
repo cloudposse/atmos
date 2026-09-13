@@ -5,7 +5,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // HintHandler displays a muted hint message with the Atmos hint UI style.
@@ -35,7 +34,7 @@ func (h *HintHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 		return nil, err
 	}
 
-	ui.Hint(content)
+	vars.UI().Hint(content)
 
 	return NewStepResult(content), nil
 }
