@@ -8,7 +8,7 @@ cast: "/casts/examples/tests/tests.cast"
 castTitle: "Post-deployment tests"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 A successful deployment still needs checks that the application is healthy.
 Running those checks as ordinary commands can bury failures in successful logs
@@ -17,7 +17,7 @@ collects the results, keeps passing output quiet, and reveals each failed check'
 
 <!--truncate-->
 
-<CastPlayer src="/casts/examples/tests/tests.cast" title="Post-deployment tests" chrome controls scrubber />
+<CastEmbed src="/casts/examples/tests/tests.cast" title="Post-deployment tests" chrome controls scrubber />
 
 [View the full example](/examples/tests)
 
