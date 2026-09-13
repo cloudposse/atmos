@@ -1173,14 +1173,14 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// Disable credential helper (prevents osxkeychain hangs/popups).
 		{Key: "credential.helper", Value: ""},
 	}
-	// Resolve the same effective GITHUB_TOKEN a fixture could inject (tc.Env first, falling back
-	// to the ambient process value) so the extraheader below always matches what atmos actually
-	// sends, not just what the developer/CI process happened to export.
-	githubToken := tc.Env["GITHUB_TOKEN"]
-	if githubToken == "" {
-		githubToken = os.Getenv("GITHUB_TOKEN")
-	}
-	if githubToken != "" {
+	// Only the ambient process token goes into the extraheader: it authenticates git's fetches
+	// from LIVE github.com (e.g. OpenTofu/Terraform module sources such as terraform-null-label)
+	// and is real on a developer machine or CI runner. A fixture-defined GITHUB_TOKEN is a fake
+	// (e.g. "test-token-for-ci"); sending it as basic auth makes GitHub answer 401 and git then
+	// fails with "could not read Username". Fixture tokens only matter for atmos's own
+	// x-access-token URL injection, which ensureGitMirrorCoversFixtureTokens above routes to the
+	// local mirror instead.
+	if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
 		// Inject token directly instead of relying on a credential helper.
 		gitBasicAuthCredential := "x-access-token:" + githubToken
 		basicAuth := base64.StdEncoding.EncodeToString([]byte(gitBasicAuthCredential))
