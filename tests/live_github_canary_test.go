@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -83,10 +84,23 @@ func classifyLiveGitHubFailure(stderr string) (transient bool, matchedPattern st
 	return false, ""
 }
 
+// classifyCanaryFailure classifies a canary's failure using both the driving context's error and
+// its captured stderr. Killing a hung subprocess via exec.CommandContext the instant canaryTimeout
+// fires often leaves stderr empty (or mid-write); classifying on stderr alone would then treat a
+// plain network timeout as a real failure instead of a transient one. Checking ctxErr first catches
+// that case even when stderr has nothing to say.
+func classifyCanaryFailure(ctxErr error, stderr string) (transient bool, reason string) {
+	if errors.Is(ctxErr, context.DeadlineExceeded) {
+		return true, "context deadline exceeded"
+	}
+	return classifyLiveGitHubFailure(stderr)
+}
+
 // skipOrFailLiveGitHubCanary classifies a canary's subprocess failure: skip on a transient
-// network/service condition, fail the test otherwise. Call sites pass the *exec.Cmd error and its
-// captured stderr.
-func skipOrFailLiveGitHubCanary(t *testing.T, action string, err error, stderr string) {
+// network/service condition, fail the test otherwise. Call sites pass the context.Context that
+// bounded the subprocess (so a canaryTimeout kill is recognized even when it left stderr empty),
+// the *exec.Cmd error, and its captured stderr.
+func skipOrFailLiveGitHubCanary(t *testing.T, ctx context.Context, action string, err error, stderr string) {
 	t.Helper()
 
 	if err == nil {
@@ -97,8 +111,8 @@ func skipOrFailLiveGitHubCanary(t *testing.T, action string, err error, stderr s
 	// global masker via iolib.RegisterSecret, so this redacts it from both the skip and failure
 	// messages below before they hit classification or t.Log/t.Fatal output.
 	stderr = iolib.MaskString(stderr)
-	if transient, pattern := classifyLiveGitHubFailure(stderr); transient {
-		t.Skipf("skipping %s: transient condition reaching live GitHub (matched %q): %v\nstderr:\n%s", action, pattern, err, stderr)
+	if transient, reason := classifyCanaryFailure(ctx.Err(), stderr); transient {
+		t.Skipf("skipping %s: transient condition reaching live GitHub (matched %q): %v\nstderr:\n%s", action, reason, err, stderr)
 	}
 	t.Fatalf("%s failed: %v\nstderr:\n%s", action, err, stderr)
 }
@@ -269,7 +283,7 @@ func TestLiveGitHubCanary_UnauthenticatedVendorPull(t *testing.T) {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	skipOrFailLiveGitHubCanary(t, "unauthenticated vendor pull", err, stderr.String())
+	skipOrFailLiveGitHubCanary(t, ctx, "unauthenticated vendor pull", err, stderr.String())
 
 	vendored := filepath.Join(fixtureDir, "components", "terraform", "live-github-canary", "exports", "context.tf")
 	content, readErr := os.ReadFile(vendored)
@@ -298,7 +312,7 @@ func TestLiveGitHubCanary_AuthenticatedVendorPull(t *testing.T) {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	skipOrFailLiveGitHubCanary(t, "authenticated vendor pull", err, stderr.String())
+	skipOrFailLiveGitHubCanary(t, ctx, "authenticated vendor pull", err, stderr.String())
 
 	vendored := filepath.Join(fixtureDir, "components", "terraform", "live-github-canary", "exports", "context.tf")
 	content, readErr := os.ReadFile(vendored)
@@ -329,7 +343,7 @@ func TestLiveGitHubCanary_ToolchainInstall(t *testing.T) {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	skipOrFailLiveGitHubCanary(t, "unauthenticated toolchain install", err, stderr.String())
+	skipOrFailLiveGitHubCanary(t, ctx, "unauthenticated toolchain install", err, stderr.String())
 
 	binaryName := installer.EnsureWindowsExeExtension("tree")
 	binaryPath := findFileNamed(cacheDir, binaryName)
@@ -349,7 +363,7 @@ func TestLiveGitHubCanary_ToolchainInstall(t *testing.T) {
 	var versionStderr bytes.Buffer
 	versionCmd.Stderr = &versionStderr
 	versionErr := versionCmd.Run()
-	skipOrFailLiveGitHubCanary(t, "installed tree --version", versionErr, versionStderr.String())
+	skipOrFailLiveGitHubCanary(t, versionCtx, "installed tree --version", versionErr, versionStderr.String())
 }
 
 // TestLiveGitHubCanary_UnauthenticatedRawInclude resolves a `!include.raw` YAML function against
@@ -373,7 +387,7 @@ func TestLiveGitHubCanary_UnauthenticatedRawInclude(t *testing.T) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	skipOrFailLiveGitHubCanary(t, "unauthenticated raw include", err, stderr.String())
+	skipOrFailLiveGitHubCanary(t, ctx, "unauthenticated raw include", err, stderr.String())
 
 	var described map[string]any
 	require.NoError(t, json.Unmarshal(stdout.Bytes(), &described), "describe component output: %s", stdout.String())
