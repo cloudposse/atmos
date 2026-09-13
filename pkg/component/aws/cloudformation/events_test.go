@@ -392,7 +392,7 @@ func TestFollowLogs_PollError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
 
-	_, err := followLogs(context.Background(), client, []string{"vpc"}, map[string]any{})
+	_, err := followLogs(context.Background(), client, "vpc", []string{"vpc"}, map[string]any{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "access denied")
 }
@@ -417,7 +417,7 @@ func TestFollowLogs_ContextCancelledReturnsNilAfterOnePoll(t *testing.T) {
 	cancel() // Already cancelled: one poll round happens, then the select must take ctx.Done().
 
 	out := captureStdout(t, func() {
-		summary, err := followLogs(ctx, client, []string{"vpc"}, map[string]any{})
+		summary, err := followLogs(ctx, client, "vpc", []string{"vpc"}, map[string]any{})
 		require.NoError(t, err)
 		assert.Equal(t, 1, summary["event_count"])
 	})
@@ -453,7 +453,7 @@ func TestFollowLogs_PollsEveryStackIndependently(t *testing.T) {
 	cancel()
 
 	out := captureStdout(t, func() {
-		summary, err := followLogs(ctx, client, []string{"root", "child"}, map[string]any{})
+		summary, err := followLogs(ctx, client, "root", []string{"root", "child"}, map[string]any{})
 		require.NoError(t, err)
 		assert.Equal(t, 2, summary["event_count"])
 	})
