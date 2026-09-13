@@ -28,6 +28,10 @@ const (
 
 	flagAutoApprove = "auto-approve"
 
+	// The msgSkipConfirmation const is the shared --auto-approve flag description
+	// across every mutating operation.
+	msgSkipConfirmation = "Skip interactive confirmation."
+
 	// The subCommandApply/subCommandDelete consts are the Operation-dispatch
 	// identifiers shared by the top-level apply/deploy and delete verbs, and by
 	// verb-group entries that reuse the same literal (e.g. `changeset delete`'s
@@ -101,7 +105,11 @@ func init() {
 	CloudFormationCmd.AddCommand(newChangesetCmd())
 	CloudFormationCmd.AddCommand(newDriftCmd())
 	CloudFormationCmd.AddCommand(newGetCmd())
+	CloudFormationCmd.AddCommand(newStackSetCmd())
 	CloudFormationCmd.AddCommand(newOperationCommand("fmt", "fmt", "Format the local template in place (or check formatting with --check)"))
+	CloudFormationCmd.AddCommand(newOperationCommand("tree", "tree", "Render the nested-stack dependency tree"))
+	CloudFormationCmd.AddCommand(newOperationCommand("logs", "logs", "Show the combined event log across a stack and its nested stacks"))
+	CloudFormationCmd.AddCommand(newOperationCommand("watch", "watch", "Attach to a stack's in-progress (or already-terminal) operation and stream events"))
 	CloudFormationCmd.AddCommand(newListCmd())
 	CloudFormationCmd.AddCommand(source.GetSourceCommand())
 }
@@ -145,13 +153,6 @@ func newGetCmd() *cobra.Command {
 	return cmd
 }
 
-// newOperationCommand builds an `atmos aws cloudformation <use> [component]`
-// command (optionally nested under a verb group, e.g. `changeset create`).
-// Use is the cobra command name (what the user types); subCommand is the
-// internal Operation-dispatch identifier passed to provider.Execute (e.g.
-// "changeset-create") and to operationFlagOptions/getOperationFlags — they
-// differ for grouped verbs, where the same subCommand can be reached under a
-// friendlier use (e.g. "plan" and "diff" both dispatch as "diff").
 // An operationHelpEntry holds a command's Long help text and Example block,
 // mirroring the corresponding website/docs/cli/commands/aws/cloudformation/*.mdx
 // page so `--help` output and the docs stay consistent.
@@ -165,6 +166,70 @@ type operationHelpEntry struct {
 // have one use; "apply" (apply/deploy) and "diff" (diff/plan) are aliased and
 // get a use-specific override in operationHelpText.
 var operationHelpBySubCommand = map[string]operationHelpEntry{
+	"stackset-create": {
+		long: "Create a CloudFormation StackSet (CreateStackSet) from the resolved\n" +
+			"kind: aws/stackset provision target's accounts/regions/permission_model/role\n" +
+			"settings, plus the component's own template/parameters/capabilities/tags.\n" +
+			"When the target declares both accounts and regions, stackset create also\n" +
+			"creates the initial stack instances (CreateStackInstances) across that\n" +
+			"account/region matrix and waits for the operation to finish -- the only\n" +
+			"verb that creates instances.",
+		example: "  atmos aws cloudformation stackset create vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation stackset create vpc --stack plat-ue2-dev --auto-approve\n" +
+			"  atmos aws cloudformation stackset create vpc --stack plat-ue2-dev --target multi-account",
+	},
+	"stackset-update": {
+		long: "Update a CloudFormation StackSet's template, parameters, and capabilities\n" +
+			"(UpdateStackSet) from the component's current configuration, and wait for\n" +
+			"the update to propagate to every existing stack instance. stackset update\n" +
+			"never changes which accounts/regions have instances -- that set is fixed at\n" +
+			"stackset create time.",
+		example: "  atmos aws cloudformation stackset update vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation stackset update vpc --stack plat-ue2-dev --auto-approve\n" +
+			"  atmos aws cloudformation stackset update vpc --stack plat-ue2-dev --target multi-account",
+	},
+	"stackset-delete": {
+		long: "Delete a CloudFormation StackSet. CloudFormation requires every stack\n" +
+			"instance to be removed before the StackSet itself can be deleted, so\n" +
+			"stackset delete lists the StackSet's current instances, deletes them all\n" +
+			"(DeleteStackInstances, retaining no resources) if any exist, waits for that\n" +
+			"operation to finish, and only then deletes the StackSet (DeleteStackSet).",
+		example: "  atmos aws cloudformation stackset delete vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation stackset delete vpc --stack plat-ue2-dev --auto-approve\n" +
+			"  atmos aws cloudformation stackset delete --all --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation stackset delete --affected --base origin/main",
+	},
+	"stackset-instances": {
+		long: "List a CloudFormation StackSet's stack instances (ListStackInstances) --\n" +
+			"each instance's account, region, status, and stack ID.",
+		example: "  atmos aws cloudformation stackset instances vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation stackset instances --all --stack plat-ue2-dev",
+	},
+	"tree": {
+		long: "Render the deployed stack's nested-stack dependency tree: walk the stack's\n" +
+			"resources, recursing into every AWS::CloudFormation::Stack resource, up to\n" +
+			"10 levels deep.",
+		example: "  atmos aws cloudformation tree vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation tree --all --stack plat-ue2-dev",
+	},
+	"logs": {
+		long: "Show the combined CloudFormation event log across a stack and every nested\n" +
+			"stack beneath it (up to 10 levels deep), merged into a single chronological\n" +
+			"timeline -- instead of having to check each nested stack's events\n" +
+			"separately.",
+		example: "  atmos aws cloudformation logs vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation logs vpc --stack plat-ue2-dev --chart",
+	},
+	"watch": {
+		long: "Attach to a stack's operation and stream its events until the stack reaches\n" +
+			"a terminal status -- whether that operation is currently in progress,\n" +
+			"already finished, or was started outside Atmos entirely (the AWS Console, a\n" +
+			"CI pipeline running raw aws cloudformation, another teammate's terminal).\n" +
+			"This is distinct from apply/deploy/delete's automatic inline streaming,\n" +
+			"which only covers the operation that command itself just started.",
+		example: "  atmos aws cloudformation watch vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation watch --all --stack plat-ue2-dev",
+	},
 	"render": {
 		long: "Render the component's local template -- resolved from `template:` and, when\n" +
 			"`source:` is set, JIT-provisioned first -- without calling any AWS API.\n" +
@@ -304,6 +369,13 @@ func operationHelpText(use, subCommand string) (string, string) {
 	}
 }
 
+// newOperationCommand builds an `atmos aws cloudformation <use> [component]`
+// command (optionally nested under a verb group, e.g. `changeset create`).
+// Use is the cobra command name (what the user types); subCommand is the
+// internal Operation-dispatch identifier passed to provider.Execute (e.g.
+// "changeset-create") and to operationFlagOptions/getOperationFlags — they
+// differ for grouped verbs, where the same subCommand can be reached under a
+// friendlier use (e.g. "plan" and "diff" both dispatch as "diff").
 func newOperationCommand(use, subCommand, short string) *cobra.Command {
 	var parser *flags.StandardParser
 	long, example := operationHelpText(use, subCommand)
@@ -378,12 +450,12 @@ func operationSpecificFlagOptions(use, subCommand string) []flags.Option {
 	switch subCommand {
 	case subCommandApply:
 		return []flags.Option{
-			flags.WithBoolFlag(flagAutoApprove, "", use == opDeploy, "Skip interactive confirmation."),
+			flags.WithBoolFlag(flagAutoApprove, "", use == opDeploy, msgSkipConfirmation),
 			flags.WithStringFlag("target", "", "", "Provision target to deliver to. Defaults to provision.default, otherwise the implicit direct-deploy target."),
 		}
 	case subCommandDelete:
 		return []flags.Option{
-			flags.WithBoolFlag(flagAutoApprove, "", false, "Skip interactive confirmation."),
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
 			flags.WithStringSliceFlag("retain-resources", "", nil, "Logical IDs of resources to retain (only valid for a DELETE_FAILED stack)."),
 			flags.WithBoolFlag("disable-termination-protection", "", false, "Disable termination protection before deleting (never done silently)."),
 		}
@@ -396,7 +468,7 @@ func operationSpecificFlagOptions(use, subCommand string) []flags.Option {
 	case "changeset-execute":
 		return []flags.Option{
 			flags.WithRequiredStringFlag("changeset-name", "", "Name of the changeset to execute."),
-			flags.WithBoolFlag(flagAutoApprove, "", false, "Skip interactive confirmation."),
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
 		}
 	case "changeset-delete":
 		return []flags.Option{
@@ -413,6 +485,29 @@ func operationSpecificFlagOptions(use, subCommand string) []flags.Option {
 	case "fmt":
 		return []flags.Option{
 			flags.WithBoolFlag("check", "", false, "Report whether the template is formatted without writing changes (non-zero exit if not)."),
+		}
+	default:
+		return phase3FlagOptions(subCommand)
+	}
+}
+
+// phase3FlagOptions returns flags specific to stackset/observability
+// operations, split out of operationSpecificFlagOptions to keep its
+// cyclomatic complexity low.
+func phase3FlagOptions(subCommand string) []flags.Option {
+	switch subCommand {
+	case "stackset-create", "stackset-update":
+		return []flags.Option{
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
+			flags.WithStringFlag("target", "", "", "The `kind: aws/stackset` provision target to use. Required when more than one is declared."),
+		}
+	case "stackset-delete":
+		return []flags.Option{
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
+		}
+	case "logs":
+		return []flags.Option{
+			flags.WithBoolFlag("chart", "", false, "Render a per-resource timeline instead of a flat chronological event list."),
 		}
 	default:
 		return nil
@@ -498,7 +593,7 @@ func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 
 func getOperationFlags(cmd *cobra.Command) map[string]any {
 	result := make(map[string]any)
-	for _, name := range []string{flagAll, flagAffected, "include-dependents", "clone-target-ref", flagAutoApprove, "disable-termination-protection", "flatten", "uppercase", "fail-on-drift", "original", "check"} {
+	for _, name := range []string{flagAll, flagAffected, "include-dependents", "clone-target-ref", flagAutoApprove, "disable-termination-protection", "flatten", "uppercase", "fail-on-drift", "original", "check", "chart"} {
 		if flag := cmd.Flag(name); flag != nil {
 			result[name] = flag.Value.String() == valueTrue
 		}
