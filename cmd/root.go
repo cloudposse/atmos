@@ -680,11 +680,9 @@ var RootCmd = &cobra.Command{
 		}
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration.
-		checkAtmosConfig()
-
-		err := e.ExecuteAtmosCmd()
-		return err
+		// Request help explicitly so the shared renderer does not report missing usage.
+		cmd.HelpFunc()(cmd, []string{helpFlagLong})
+		return nil
 	},
 }
 
