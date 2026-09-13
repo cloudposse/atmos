@@ -40,18 +40,22 @@ that pattern rather than migrating the whole (pre-unified-flag-parsing) command.
   reader picks it up — only when the flag wasn't set on the CLI (CLI wins) and the resolved value
   differs from the flag's current value. It compares the resolved value against
   `flag.Value.String()` rather than using `viper.IsSet` (which reports true for `SetDefault`
-  values, so it can't tell "env set" from "default in effect"). The env vars are bound to Viper
-  once in `init()`; the resolver reads from Viper and is a plain (non-erroring) function — the one
-  impossible-to-fail `Flags().Set` uses the accepted `_ = ...Set(...)` idiom from `pkg/flags`.
+  values, so it can't tell "env set" from "default in effect"). A non-empty, non-boolean env value
+  (e.g. `ATMOS_PROCESS_FUNCTIONS=yes`) is rejected with a wrapped `ErrInvalidFlagValue` instead of
+  being silently coerced to `false` by `viper.GetBool`; an empty/unset value (including a Viper
+  with no binding/default, e.g. after `viper.Reset()`) is treated as unset and keeps the default.
+  The env vars are bound to Viper once in `init()`; the impossible-to-fail `Flags().Set` uses the
+  accepted `_ = ...Set(...)` idiom from `pkg/flags`.
 - `cmd/describe_affected.go`: removed the two raw `PersistentFlags().Bool(...)` registrations for
   these flags (now owned by the parser), added the parser var + its `RegisterPersistentFlags` /
   `BindToViper` wiring in `init()`, and called `resolveDescribeAffectedProcessFlags` in `RunE`
   right after the error-mode resolve and before the args are parsed.
 - `cmd/describe_affected_process_flags_test.go` (new): table-driven unit tests for the resolver
-  (no-op default, each env var independently, CLI-wins-over-env precedence, direct Viper key, the
-  unregistered-flag defensive no-op) plus an end-to-end regression test asserting
-  `ATMOS_PROCESS_FUNCTIONS=false` reaches `DescribeAffectedCmdArgs.ProcessYamlFunctions` through
-  `exec.SetDescribeAffectedFlagValueInCliArgs`.
+  (no-op default, each env var independently, CLI-wins-over-env precedence, direct Viper key, empty
+  value falls back to default, unbound-Viper no-op, invalid value errors, and the unregistered-flag
+  defensive no-op), an end-to-end test asserting `ATMOS_PROCESS_FUNCTIONS=false` reaches
+  `DescribeAffectedCmdArgs.ProcessYamlFunctions` through `exec.SetDescribeAffectedFlagValueInCliArgs`,
+  and a RunE-path test asserting an invalid value surfaces as a command error.
 
 ## Validation
 
@@ -60,10 +64,10 @@ that pattern rather than migrating the whole (pre-unified-flag-parsing) command.
   error-mode / skip-auth suites, which the change leaves green).
 - `go vet ./cmd/` — clean.
 - New-file coverage: both `newDescribeAffectedProcessFlagsParser` and
-  `resolveDescribeAffectedProcessFlags` are 100%. The only uncovered line the patch adds is the
-  `init()` `BindToViper` error handler (`errUtils.CheckErrorPrintAndExit`, which calls `os.Exit`) —
-  standard, untestable init error handling that mirrors the error-mode parser's identical block
-  directly above it.
+  `resolveDescribeAffectedProcessFlags` are 100%, and the `RunE` wiring in `describe_affected.go` is
+  covered too. The only uncovered line the patch adds is the `init()` `BindToViper` error handler
+  (`errUtils.CheckErrorPrintAndExit`, which calls `os.Exit`) — standard, untestable init error
+  handling that mirrors the error-mode parser's identical block directly above it.
 - `./custom-gcl run --new-from-rev=origin/main --config=.golangci.yml ./cmd/` — 0 issues
   (forbidigo included: no direct `viper.BindEnv`/`BindPFlag`; all binding goes through `pkg/flags`).
 

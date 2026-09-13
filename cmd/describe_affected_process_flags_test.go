@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -35,6 +36,12 @@ func newProcessFlagsTestCmd(t *testing.T, cliArgs ...string) (*cobra.Command, *v
 	return cmd, v
 }
 
+// mustResolveProcessFlags runs the resolver and fails the test on any (unexpected) error.
+func mustResolveProcessFlags(t *testing.T, cmd *cobra.Command, v *viper.Viper) {
+	t.Helper()
+	require.NoError(t, resolveDescribeAffectedProcessFlags(cmd, v))
+}
+
 // TestNewDescribeAffectedProcessFlagsParser verifies both flags register with the expected
 // name, default (true), and description.
 func TestNewDescribeAffectedProcessFlagsParser(t *testing.T) {
@@ -57,7 +64,7 @@ func TestNewDescribeAffectedProcessFlagsParser(t *testing.T) {
 func TestResolveDescribeAffectedProcessFlags_NoOverride(t *testing.T) {
 	cmd, v := newProcessFlagsTestCmd(t)
 
-	resolveDescribeAffectedProcessFlags(cmd, v)
+	mustResolveProcessFlags(t, cmd, v)
 
 	for _, name := range []string{processTemplatesFlagName, processFunctionsFlagName} {
 		assert.Falsef(t, cmd.Flags().Changed(name), "flag %q must not be marked changed when nothing set it", name)
@@ -95,7 +102,7 @@ func TestResolveDescribeAffectedProcessFlags_EnvVarTakesEffect(t *testing.T) {
 			cmd, v := newProcessFlagsTestCmd(t)
 			t.Setenv(tt.envVar, "false")
 
-			resolveDescribeAffectedProcessFlags(cmd, v)
+			mustResolveProcessFlags(t, cmd, v)
 
 			target, err := cmd.Flags().GetBool(tt.targetFlag)
 			require.NoError(t, err)
@@ -118,7 +125,7 @@ func TestResolveDescribeAffectedProcessFlags_EnvVarTrue(t *testing.T) {
 	cmd, v := newProcessFlagsTestCmd(t)
 	t.Setenv("ATMOS_PROCESS_FUNCTIONS", "true")
 
-	resolveDescribeAffectedProcessFlags(cmd, v)
+	mustResolveProcessFlags(t, cmd, v)
 
 	val, err := cmd.Flags().GetBool(processFunctionsFlagName)
 	require.NoError(t, err)
@@ -135,7 +142,7 @@ func TestResolveDescribeAffectedProcessFlags_CLIWinsOverEnv(t *testing.T) {
 	// A conflicting env var must NOT override the explicit CLI value.
 	t.Setenv("ATMOS_PROCESS_FUNCTIONS", "false")
 
-	resolveDescribeAffectedProcessFlags(cmd, v)
+	mustResolveProcessFlags(t, cmd, v)
 
 	val, err := cmd.Flags().GetBool(processFunctionsFlagName)
 	require.NoError(t, err)
@@ -148,12 +155,96 @@ func TestResolveDescribeAffectedProcessFlags_ViperKeyTakesEffect(t *testing.T) {
 	cmd, v := newProcessFlagsTestCmd(t)
 	v.Set(processFunctionsViperKey, false)
 
-	resolveDescribeAffectedProcessFlags(cmd, v)
+	mustResolveProcessFlags(t, cmd, v)
 
 	val, err := cmd.Flags().GetBool(processFunctionsFlagName)
 	require.NoError(t, err)
 	assert.False(t, val)
 	assert.True(t, cmd.Flags().Changed(processFunctionsFlagName))
+}
+
+// TestResolveDescribeAffectedProcessFlags_UnsetOnUnboundViperNoOp verifies that when Viper has
+// no binding or default for the keys (e.g. after viper.Reset(), which the real command's tests
+// do), the resolver treats the empty value as unset — leaving the flag at its default and
+// returning no error, rather than failing to parse "".
+func TestResolveDescribeAffectedProcessFlags_UnsetOnUnboundViperNoOp(t *testing.T) {
+	parser := newDescribeAffectedProcessFlagsParser()
+	cmd := &cobra.Command{Use: "affected"}
+	parser.RegisterPersistentFlags(cmd)
+	require.NoError(t, cmd.ParseFlags(nil))
+
+	// Deliberately NOT bound: no env binding and no SetDefault, so GetString returns "".
+	v := viper.New()
+
+	require.NoError(t, resolveDescribeAffectedProcessFlags(cmd, v))
+
+	assert.False(t, cmd.Flags().Changed(processFunctionsFlagName))
+	val, err := cmd.Flags().GetBool(processFunctionsFlagName)
+	require.NoError(t, err)
+	assert.True(t, val, "flag must keep its default when Viper has no value for it")
+}
+
+// TestResolveDescribeAffectedProcessFlags_InvalidEnvValueErrors verifies a non-empty invalid
+// boolean env value is rejected with a wrapped ErrInvalidFlagValue rather than silently coerced
+// to false (which viper's GetBool would do), and that the flag is left untouched.
+func TestResolveDescribeAffectedProcessFlags_InvalidEnvValueErrors(t *testing.T) {
+	cmd, v := newProcessFlagsTestCmd(t)
+	t.Setenv("ATMOS_PROCESS_FUNCTIONS", "yes")
+
+	err := resolveDescribeAffectedProcessFlags(cmd, v)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.Contains(t, err.Error(), "ATMOS_PROCESS_FUNCTIONS", "error must name the offending env var")
+	assert.False(t, cmd.Flags().Changed(processFunctionsFlagName), "an invalid value must not flip the flag")
+}
+
+// TestResolveDescribeAffectedProcessFlags_EmptyEnvValueFallsBackToDefault verifies an empty env
+// value is treated as unset (viper's AllowEmptyEnv is off by default), so the flag keeps its
+// default and no error is returned — it must not take the invalid-to-false path.
+func TestResolveDescribeAffectedProcessFlags_EmptyEnvValueFallsBackToDefault(t *testing.T) {
+	cmd, v := newProcessFlagsTestCmd(t)
+	t.Setenv("ATMOS_PROCESS_FUNCTIONS", "")
+
+	mustResolveProcessFlags(t, cmd, v)
+
+	val, err := cmd.Flags().GetBool(processFunctionsFlagName)
+	require.NoError(t, err)
+	assert.True(t, val, "empty env value must fall back to the default (true)")
+	assert.False(t, cmd.Flags().Changed(processFunctionsFlagName))
+}
+
+// TestDescribeAffected_InvalidProcessEnvVarReturnsError verifies an invalid ATMOS_PROCESS_*
+// value surfaces as a command error through the real RunE path (getRunnableDescribeAffectedCmd),
+// not just the resolver in isolation.
+func TestDescribeAffected_InvalidProcessEnvVarReturnsError(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// getRunnableDescribeAffectedCmd resolves against the global Viper; bind the env vars there
+	// (idempotent with init()) so the binding survives any viper.Reset() from other tests.
+	require.NoError(t, newDescribeAffectedProcessFlagsParser().BindToViper(viper.GetViper()))
+
+	testCmd := &cobra.Command{Use: "affected"}
+	newDescribeAffectedProcessFlagsParser().RegisterPersistentFlags(testCmd)
+	require.NoError(t, testCmd.ParseFlags(nil))
+
+	t.Setenv("ATMOS_PROCESS_FUNCTIONS", "garbage")
+
+	run := getRunnableDescribeAffectedCmd(
+		func(_ ...AtmosValidateOption) {},
+		func(_ *cobra.Command, _ []string) (exec.DescribeAffectedCmdArgs, error) {
+			t.Fatal("parse must not be reached when the env var is invalid")
+			return exec.DescribeAffectedCmdArgs{}, nil
+		},
+		func(_ *schema.AtmosConfiguration) exec.DescribeAffectedExec {
+			t.Fatal("exec must not be reached when the env var is invalid")
+			return nil
+		},
+	)
+
+	err := run(testCmd, []string{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
 }
 
 // TestResolveDescribeAffectedProcessFlags_UnregisteredFlagsNoOp verifies the resolver is a
@@ -165,7 +256,7 @@ func TestResolveDescribeAffectedProcessFlags_UnregisteredFlagsNoOp(t *testing.T)
 	t.Setenv("ATMOS_PROCESS_FUNCTIONS", "false")
 
 	// Must not panic or create a flag when the command never registered these flags.
-	resolveDescribeAffectedProcessFlags(cmd, v)
+	mustResolveProcessFlags(t, cmd, v)
 
 	assert.Nil(t, cmd.Flags().Lookup(processFunctionsFlagName), "no flag should be created by the resolver")
 }
@@ -178,7 +269,7 @@ func TestResolveDescribeAffectedProcessFlags_EnvReachesCliArgs(t *testing.T) {
 	cmd, v := newProcessFlagsTestCmd(t)
 	t.Setenv("ATMOS_PROCESS_FUNCTIONS", "false")
 
-	resolveDescribeAffectedProcessFlags(cmd, v)
+	mustResolveProcessFlags(t, cmd, v)
 
 	describe := exec.DescribeAffectedCmdArgs{CLIConfig: &schema.AtmosConfiguration{}}
 	exec.SetDescribeAffectedFlagValueInCliArgs(cmd.Flags(), &describe)

@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -67,22 +69,28 @@ func newDescribeAffectedProcessFlagsParser() *flags.StandardParser {
 // the flag's current (default) value.
 //
 // The ATMOS_PROCESS_* env vars must already be bound to v — done once in init() via the parser's
-// BindToViper, and by the tests via the same call. Reading v.GetBool returns the env-var value
-// when set, otherwise the SetDefault value (equal to the flag default). It deliberately does NOT
-// use v.IsSet to detect whether the env var was provided: BindToViper calls v.SetDefault, and
-// viper's IsSet reports true for keys that only have a default, so it can't distinguish "env var
-// set" from "default in effect". Comparing the resolved value against the flag's current value
-// avoids that ambiguity — when the env var is unset, v.GetBool falls back to the SetDefault value,
-// so the values match and the flag is correctly left untouched.
-func resolveDescribeAffectedProcessFlags(cmd *cobra.Command, v *viper.Viper) {
+// BindToViper, and by the tests via the same call. Reading v.GetString returns the raw env-var
+// value when set, otherwise the SetDefault value (equal to the flag default). An invalid non-empty
+// value (e.g. `ATMOS_PROCESS_FUNCTIONS=yes`) is rejected with an error rather than silently coerced
+// to false (which viper's GetBool would do), so a typo can't quietly flip processing off. An empty
+// value is treated as unset by viper (AllowEmptyEnv is off by default), so it falls back to the
+// default instead of the invalid path.
+//
+// It deliberately does NOT use v.IsSet to detect whether the env var was provided: BindToViper
+// calls v.SetDefault, and viper's IsSet reports true for keys that only have a default, so it can't
+// distinguish "env var set" from "default in effect". Comparing the resolved value against the
+// flag's current value avoids that ambiguity — when the env var is unset, v.GetString falls back to
+// the SetDefault value, so the values match and the flag is correctly left untouched.
+func resolveDescribeAffectedProcessFlags(cmd *cobra.Command, v *viper.Viper) error {
 	defer perf.Track(nil, "cmd.resolveDescribeAffectedProcessFlags")()
 
 	for _, f := range []struct {
 		flagName string
 		viperKey string
+		envVar   string
 	}{
-		{processTemplatesFlagName, processTemplatesViperKey},
-		{processFunctionsFlagName, processFunctionsViperKey},
+		{processTemplatesFlagName, processTemplatesViperKey, "ATMOS_PROCESS_TEMPLATES"},
+		{processFunctionsFlagName, processFunctionsViperKey, "ATMOS_PROCESS_FUNCTIONS"},
 	} {
 		flag := cmd.Flags().Lookup(f.flagName)
 		// Skip when the flag isn't registered (defensive: the real describeAffectedCmd always
@@ -92,13 +100,27 @@ func resolveDescribeAffectedProcessFlags(cmd *cobra.Command, v *viper.Viper) {
 			continue
 		}
 
-		resolved := strconv.FormatBool(v.GetBool(f.viperKey))
-		if resolved == flag.Value.String() {
+		// An empty value means unset — viper returns "" when neither the env var (empty env is
+		// treated as unset by default) nor a SetDefault is present (e.g. after viper.Reset). Keep
+		// the flag's current value rather than erroring; only a non-empty, non-boolean value is an
+		// error.
+		raw := v.GetString(f.viperKey)
+		if raw == "" {
 			continue
 		}
-		// Set can't fail here: `resolved` is always the literal "true"/"false" and the flag was
-		// confirmed registered above. Ignoring the error mirrors the `_ = ...Set(...)` idiom in
-		// pkg/flags (e.g. pkg/flags/standard.go). Set marks the flag Changed for the legacy reader.
-		_ = cmd.Flags().Set(f.flagName, resolved)
+		resolved, err := strconv.ParseBool(raw)
+		if err != nil {
+			return fmt.Errorf("%w: %s must be a boolean (e.g. `true` or `false`)", errUtils.ErrInvalidFlagValue, f.envVar)
+		}
+		if strconv.FormatBool(resolved) == flag.Value.String() {
+			continue
+		}
+		// Set can't fail here: `resolved` is a valid bool and the flag was confirmed registered
+		// above, so strconv.FormatBool yields a value the bool flag always accepts. Ignoring the
+		// error mirrors the `_ = ...Set(...)` idiom in pkg/flags (e.g. pkg/flags/standard.go). Set
+		// marks the flag Changed for the legacy reader.
+		_ = cmd.Flags().Set(f.flagName, strconv.FormatBool(resolved))
 	}
+
+	return nil
 }
