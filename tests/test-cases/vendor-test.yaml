@@ -110,6 +110,41 @@ tests:
         - "./components/terraform/weather/main/versions.tf"
       exit_code: 0
 
+  # Regression test: a fixture-defined GITHUB_TOKEN (as opposed to the ambient process token
+  # TestMain registers with the mirror) must still be served by the local git mirror, not fall
+  # through to a live GitHub clone -- see ensureGitMirrorCoversFixtureTokens in tests/cli_test.go.
+  - name: atmos_vendor_pull_git_with_fixture_token
+    short: false
+    enabled: true
+    description: "Ensure a fixture-defined GITHUB_TOKEN (distinct from the ambient process token) still resolves through the local git mirror instead of silently going live to GitHub."
+    workdir: "fixtures/scenarios/vendor"
+    clean: true
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--tags=git"
+    env:
+      GITHUB_TOKEN: "fixture-token-not-a-real-credential"
+    expect:
+      timeout: "5m"
+      stderr:
+        - "✓ github/stargazers \\(main\\)"
+        - "✓ weather \\(main\\)"
+        - "✓ Vendored components \\(success: 2\\)"
+      file_exists:
+        - "./components/terraform/github/stargazers/main/main.tf"
+        - "./components/terraform/github/stargazers/main/outputs.tf"
+        - "./components/terraform/github/stargazers/main/providers.tf"
+        - "./components/terraform/github/stargazers/main/variables.tf"
+        - "./components/terraform/github/stargazers/main/versions.tf"
+        - "./components/terraform/weather/main/main.tf"
+        - "./components/terraform/weather/main/outputs.tf"
+        - "./components/terraform/weather/main/providers.tf"
+        - "./components/terraform/weather/main/variables.tf"
+        - "./components/terraform/weather/main/versions.tf"
+      exit_code: 0
+
   # Tests for simple filename exclusions (without **/ prefix) - regression test for bug fix
   - name: atmos_vendor_simple_exclude
     short: false

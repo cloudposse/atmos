@@ -55,7 +55,18 @@ func AllowAnonymous() Option {
 // git's smart-HTTP protocol, fetches only. Callers register acceptable Basic-Auth tokens with
 // RegisterToken before pointing a git client at Server.URL(); the caller must Close the server
 // when done.
+//
+// Root is resolved to an absolute path before use: it becomes both cgi.Handler's working
+// directory and the GIT_PROJECT_ROOT git-http-backend resolves request paths against, so a
+// relative root would be interpreted relative to whatever directory the CGI subprocess happens
+// to start in rather than the caller's intended location.
 func Serve(root string, opts ...Option) (*Server, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return nil, fmt.Errorf("gitmirror: resolve absolute mirror root %q: %w", root, err)
+	}
+	root = absRoot
+
 	backend, err := gitHTTPBackendPath()
 	if err != nil {
 		return nil, err

@@ -50,6 +50,32 @@ func basicAuthGet(t *testing.T, rawURL, user, pass string) basicAuthResponse {
 	return basicAuthResponse{StatusCode: resp.StatusCode, Header: resp.Header.Clone()}
 }
 
+// TestServe_RelativeRoot verifies Serve resolves a relative root against the caller's current
+// working directory before handing it to git-http-backend as GIT_PROJECT_ROOT, so a request
+// against the running server actually finds the mirror built at that relative path rather than
+// git-http-backend resolving it relative to whatever directory the CGI subprocess starts in.
+// Deliberately does not chdir the process: the relative path is built with enough ".."
+// components (via filepath.Rel) to reach a t.TempDir() location from the current working
+// directory, so a wrong resolution base is easy to detect (the server would 404/500 instead of
+// finding the mirror).
+func TestServe_RelativeRoot(t *testing.T) {
+	target := t.TempDir()
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	relRoot, err := filepath.Rel(cwd, target)
+	require.NoError(t, err)
+
+	require.NoError(t, Build(relRoot))
+
+	server, err := Serve(relRoot, AllowAnonymous())
+	require.NoError(t, err)
+	t.Cleanup(server.Close)
+
+	resp := basicAuthGet(t, refsDiscoveryURL(server), "", "")
+	require.Equal(t, http.StatusOK, resp.StatusCode, "expected the relative mirror root to be served successfully")
+}
+
 // TestServer_TokenAuth verifies a registered token is accepted (200) and an unregistered one is
 // rejected (401) against the smart-HTTP discovery endpoint.
 func TestServer_TokenAuth(t *testing.T) {

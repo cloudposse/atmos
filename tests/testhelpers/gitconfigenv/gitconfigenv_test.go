@@ -166,3 +166,34 @@ func TestAppend_SourceIsolation(t *testing.T) {
 
 	require.Equal(t, "", target["GIT_CONFIG_VALUE_0"], "target must not observe post-call mutation of caller's entries slice")
 }
+
+// TestAppend_ScrubsCaseVariantKeys verifies Append removes pre-existing lower- and mixed-case
+// GIT_CONFIG_COUNT/KEY_n/VALUE_n entries already present in target before writing the canonical
+// uppercase set. On Windows, environment variable names are case-insensitive, so t.Setenv would
+// otherwise export both the stale case-variant entry and the canonical one Append just wrote for
+// the same underlying variable, and whichever is applied last wins -- silently resurrecting
+// entries Append's caller never intended to still be active.
+func TestAppend_ScrubsCaseVariantKeys(t *testing.T) {
+	target := map[string]string{
+		"git_config_count":   "1",
+		"git_config_key_0":   "stale.lower.key",
+		"git_config_value_0": "stale-lower-value",
+		"Git_Config_Key_1":   "stale.mixed.key",
+		"Git_Config_Value_1": "stale-mixed-value",
+		// A key Append does not own must survive untouched.
+		"OTHER_ENV": "keep-me",
+	}
+
+	Append(target, nil, GitConfigEntry{Key: "credential.helper", Value: ""})
+
+	require.Equal(t, "1", target["GIT_CONFIG_COUNT"])
+	require.Equal(t, "credential.helper", target["GIT_CONFIG_KEY_0"])
+	require.Equal(t, "", target["GIT_CONFIG_VALUE_0"])
+	require.Equal(t, "keep-me", target["OTHER_ENV"])
+
+	// The stale case-variant entries must be gone entirely, not just shadowed.
+	for _, staleKey := range []string{"git_config_count", "git_config_key_0", "git_config_value_0", "Git_Config_Key_1", "Git_Config_Value_1"} {
+		_, exists := target[staleKey]
+		require.Falsef(t, exists, "stale case-variant key %q must be removed by Append", staleKey)
+	}
+}

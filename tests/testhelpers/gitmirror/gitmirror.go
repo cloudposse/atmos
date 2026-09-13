@@ -53,7 +53,17 @@ const gitConfig = "config"
 // <root>/cloudposse/atmos.git, on branch main. Only examples/ is copied (the
 // only subtree any test-case fixture vendors from cloudposse/atmos), so the
 // mirror stays small and fast to build.
+//
+// Root is resolved to an absolute path before use: the push into the bare mirror below runs with
+// cmd.Dir set to a scratch directory, so a relative root would otherwise be interpreted relative
+// to that scratch directory instead of the caller's intended location.
 func Build(root string) error {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("gitmirror: resolve absolute mirror root %q: %w", root, err)
+	}
+	root = absRoot
+
 	repoRoot, err := testhelpers.FindRepoRoot()
 	if err != nil {
 		return fmt.Errorf("gitmirror: locate atmos repo root: %w", err)
@@ -65,6 +75,21 @@ func Build(root string) error {
 	}
 	defer os.RemoveAll(work)
 
+	if err := prepareWorkingRepo(repoRoot, work); err != nil {
+		return err
+	}
+
+	if err := publishBareMirror(root, work); err != nil {
+		return err
+	}
+	return nil
+}
+
+// prepareWorkingRepo copies repoRoot's examples/ subtree into work and turns it into a
+// single-commit git repository on branch "main" (see commitWorkingRepo), verifying the commit
+// actually landed before returning -- a later push would otherwise only report a confusing
+// "nonexistent object" for refs/heads/main.
+func prepareWorkingRepo(repoRoot, work string) error {
 	examplesDest := filepath.Join(work, "examples")
 	// Skip nested .git directories AND .git files (gitlinks): either would turn part of the copy
 	// into a submodule entry pointing at a commit this repository does not contain.
@@ -79,22 +104,25 @@ func Build(root string) error {
 		return err
 	}
 
-	// Fail early, and loudly, if the commit did not land: a later push would only report a
-	// confusing "nonexistent object" for refs/heads/main.
+	// Fail early, and loudly, if the commit did not land.
 	if err := runGit(work, "rev-parse", "--verify", gitQuiet, "HEAD"); err != nil {
 		return fmt.Errorf("gitmirror: scratch repo has no commit on HEAD (%s): %w", gitStatus(work), err)
 	}
+	return nil
+}
 
+// publishBareMirror creates <root>/<Owner>/<Repo>.git and publishes work's single commit into it
+// with a push rather than `git clone --bare <path>`. A local clone copies (or hardlinks) the
+// scratch repo's object files directly and then writes refs pointing at them; a push moves the
+// objects through the pack protocol, which does not depend on the on-disk layout of the scratch
+// object store. On the macOS runners the local clone failed with "trying to write ref
+// 'refs/heads/main' with nonexistent object".
+func publishBareMirror(root, work string) error {
 	ownerDir := filepath.Join(root, Owner)
 	if err := os.MkdirAll(ownerDir, dirPerm); err != nil {
 		return fmt.Errorf("gitmirror: create owner dir: %w", err)
 	}
 	bareDir := filepath.Join(ownerDir, Repo+".git")
-	// Publish into a fresh bare repository with a push rather than `git clone --bare <path>`. A
-	// local clone copies (or hardlinks) the scratch repo's object files directly and then writes
-	// refs pointing at them; a push moves the objects through the pack protocol, which does not
-	// depend on the on-disk layout of the scratch object store. On the macOS runners the local
-	// clone failed with "trying to write ref 'refs/heads/main' with nonexistent object".
 	if err := runGit("", "init", gitQuiet, "--bare", bareDir); err != nil {
 		return fmt.Errorf("gitmirror: init bare mirror: %w", err)
 	}

@@ -32,11 +32,30 @@ type GitConfigEntry struct {
 func Append(target map[string]string, base []string, entries ...GitConfigEntry) {
 	all := append(readEntries(base), entries...)
 
+	scrubGitConfigKeys(target)
+
 	target["GIT_CONFIG_COUNT"] = strconv.Itoa(len(all))
 	for i, entry := range all {
 		idx := strconv.Itoa(i)
 		target["GIT_CONFIG_KEY_"+idx] = entry.Key
 		target["GIT_CONFIG_VALUE_"+idx] = entry.Value
+	}
+}
+
+// scrubGitConfigKeys deletes every pre-existing GIT_CONFIG_COUNT/KEY_n/VALUE_n entry already in
+// target, matched case-insensitively. Append always (re)writes the canonical uppercase spelling
+// below; environment variable names are case-insensitive on Windows, so a stale lower- or
+// mixed-case variant left behind in target (e.g. a fixture's own git_config_count, or a prior
+// Append call in a case-mismatched form) would otherwise still be exported alongside the
+// canonical keys this call just wrote -- via t.Setenv, both names resolve to the same underlying
+// variable on Windows, so whichever value was set last wins, silently reintroducing the very
+// clobbering bug Append exists to prevent.
+func scrubGitConfigKeys(target map[string]string) {
+	for key := range target {
+		upper := strings.ToUpper(key)
+		if upper == "GIT_CONFIG_COUNT" || strings.HasPrefix(upper, "GIT_CONFIG_KEY_") || strings.HasPrefix(upper, "GIT_CONFIG_VALUE_") {
+			delete(target, key)
+		}
 	}
 }
 

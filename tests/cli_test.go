@@ -63,6 +63,7 @@ var (
 	gitMirrorRoot       string            // Root of the local git mirror built in TestMain (see gitmirror).
 	gitMirrorServer     *gitmirror.Server // HTTP server serving the mirror over git's smart-HTTP protocol (see gitmirror.Serve).
 	gitMirrorConfigPath string            // Temp file holding the GIT_CONFIG_GLOBAL insteadOf rules for the mirror (see gitmirror.WriteGitConfig).
+	gitMirrorTokens     []string          // Every token already registered with gitMirrorServer and covered by gitMirrorConfigPath (see TestMain); runCLICommandTest diffs a test case's effective tokens against this to detect a fixture-defined token the process-wide config doesn't cover.
 	sandboxRegistry     = make(map[string]*testhelpers.SandboxEnvironment)
 	sandboxMutex        sync.RWMutex
 )
@@ -870,16 +871,15 @@ func TestMain(m *testing.M) {
 	// nothing and git matches the anonymous rule instead, which the mirror accepts (see
 	// AllowAnonymous() above) -- the same "no credentials" path an anonymous clone of this public
 	// repo takes in production.
-	var mirrorTokens []string
 	for _, envVar := range []string{"GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "ATMOS_PRO_GITHUB_TOKEN"} {
 		if token := os.Getenv(envVar); token != "" {
-			mirrorTokens = append(mirrorTokens, token)
+			gitMirrorTokens = append(gitMirrorTokens, token)
 		}
 	}
 	if token := github.GetGitHubTokenFromCLI(); token != "" {
-		mirrorTokens = append(mirrorTokens, token)
+		gitMirrorTokens = append(gitMirrorTokens, token)
 	}
-	for _, token := range mirrorTokens {
+	for _, token := range gitMirrorTokens {
 		gitMirrorServer.RegisterToken(token)
 		// Mask the same base64("x-access-token:"+token) byte sequence a git-over-HTTP request via
 		// the CustomGitDetector-injected URL carries as a Basic-Auth header -- a different byte
@@ -895,7 +895,7 @@ func TestMain(m *testing.M) {
 	}
 	gitMirrorConfigPath = gitConfigFile.Name()
 	gitConfigFile.Close()
-	if mirrorErr = gitmirror.WriteGitConfig(gitMirrorConfigPath, gitMirrorServer.URL(), mirrorTokens); mirrorErr != nil {
+	if mirrorErr = gitmirror.WriteGitConfig(gitMirrorConfigPath, gitMirrorServer.URL(), gitMirrorTokens); mirrorErr != nil {
 		logger.Fatal("failed to write git mirror gitconfig", mirrorErr)
 	}
 	// GIT_CONFIG_GLOBAL replaces git's normal global config lookup (~/.gitconfig or
@@ -1024,6 +1024,53 @@ func ensureAtmosRunner(t *testing.T) {
 	}
 }
 
+// ensureGitMirrorCoversFixtureTokens extends the process-wide git mirror config (see
+// gitMirrorConfigPath, written once in TestMain) with a test-scoped one when tc's effective
+// GitHub tokens (see effectiveGitHubTokens) include one the mirror doesn't already have an
+// insteadOf rule for -- typically a fixture that sets GITHUB_TOKEN/ATMOS_GITHUB_TOKEN/
+// ATMOS_PRO_GITHUB_TOKEN in its own tc.Env to a literal test string rather than the ambient
+// process's real token. Registers the new token(s) with gitMirrorServer, writes a fresh mirror
+// config covering every effective token for this test, and points tc.Env["GIT_CONFIG_GLOBAL"] at
+// it -- leaving the TestMain-wide file (and every other, unaffected test case) untouched.
+func ensureGitMirrorCoversFixtureTokens(t *testing.T, tc *TestCase) {
+	t.Helper()
+
+	effectiveTokens := effectiveGitHubTokens(tc.Env, os.Getenv)
+
+	known := make(map[string]struct{}, len(gitMirrorTokens))
+	for _, tok := range gitMirrorTokens {
+		known[tok] = struct{}{}
+	}
+
+	var hasNewToken bool
+	for _, tok := range effectiveTokens {
+		if _, ok := known[tok]; !ok {
+			hasNewToken = true
+			break
+		}
+	}
+	if !hasNewToken {
+		return
+	}
+
+	for _, tok := range effectiveTokens {
+		if _, ok := known[tok]; ok {
+			continue
+		}
+		gitMirrorServer.RegisterToken(tok)
+		// Mirrors the same base64("x-access-token:"+token) registration TestMain does for every
+		// ambient token it registers, for the same reason: this is a different byte sequence than
+		// plain GITHUB_TOKEN or base64(GITHUB_TOKEN), which pkg/io's masker already auto-registers.
+		iolib.RegisterSecret("x-access-token:" + tok)
+	}
+
+	mirrorConfigPath := filepath.Join(t.TempDir(), "gitconfig")
+	if err := gitmirror.WriteGitConfig(mirrorConfigPath, gitMirrorServer.URL(), effectiveTokens); err != nil {
+		t.Fatalf("failed to write test-scoped git mirror config: %v", err)
+	}
+	tc.Env["GIT_CONFIG_GLOBAL"] = mirrorConfigPath
+}
+
 func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Skip long tests in short mode
 	if testing.Short() && tc.Short != nil && !*tc.Short {
@@ -1091,6 +1138,17 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["GIT_TERMINAL_PROMPT"] = "0"
 	}
 
+	// A test case's own tc.Env can define GITHUB_TOKEN/ATMOS_GITHUB_TOKEN/ATMOS_PRO_GITHUB_TOKEN
+	// (e.g. a fixture asserting on the CustomGitDetector code path with a literal test string).
+	// The mirror config TestMain wrote only has insteadOf rules for the ambient process's own
+	// tokens, so atmos injecting a fixture-only token into a GitHub URL would match neither those
+	// rules nor the anonymous rule and silently fall through to a live GitHub clone. Extend the
+	// mirror config for this test only when that gap exists; skip entirely if the test case
+	// already sets its own GIT_CONFIG_GLOBAL (it wants an unmirrored config on purpose).
+	if _, setsOwnMirrorConfig := tc.Env["GIT_CONFIG_GLOBAL"]; !setsOwnMirrorConfig {
+		ensureGitMirrorCoversFixtureTokens(t, &tc)
+	}
+
 	// Configure git for non-interactive use via GIT_CONFIG_* env vars (Git 2.31+).
 	// macOS ships with credential.helper=osxkeychain in the system-level git config
 	// (/Library/Developer/CommandLineTools/.../gitconfig). This is NOT in ~/.gitconfig,
@@ -1115,7 +1173,14 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// Disable credential helper (prevents osxkeychain hangs/popups).
 		{Key: "credential.helper", Value: ""},
 	}
-	if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
+	// Resolve the same effective GITHUB_TOKEN a fixture could inject (tc.Env first, falling back
+	// to the ambient process value) so the extraheader below always matches what atmos actually
+	// sends, not just what the developer/CI process happened to export.
+	githubToken := tc.Env["GITHUB_TOKEN"]
+	if githubToken == "" {
+		githubToken = os.Getenv("GITHUB_TOKEN")
+	}
+	if githubToken != "" {
 		// Inject token directly instead of relying on a credential helper.
 		gitBasicAuthCredential := "x-access-token:" + githubToken
 		basicAuth := base64.StdEncoding.EncodeToString([]byte(gitBasicAuthCredential))

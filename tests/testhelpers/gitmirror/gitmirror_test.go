@@ -69,6 +69,30 @@ func TestBuild(t *testing.T) {
 	}))
 }
 
+// TestBuild_RelativeRoot verifies Build resolves a relative root against the caller's current
+// working directory, not against whatever directory a later step happens to run in -- the push
+// into the bare mirror runs with cmd.Dir set to a scratch directory, so passing the relative root
+// straight through to that push (rather than resolving it to absolute first) would silently
+// create the bare repo under the scratch directory instead of the caller's intended location.
+// Deliberately does not chdir the process: the relative path is built with enough ".."
+// components (via filepath.Rel) to reach a t.TempDir() location from the current working
+// directory, so a wrong resolution base is easy to detect (the mirror simply won't exist at the
+// intended absolute location).
+func TestBuild_RelativeRoot(t *testing.T) {
+	target := t.TempDir()
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	relRoot, err := filepath.Rel(cwd, target)
+	require.NoError(t, err)
+
+	require.NoError(t, Build(relRoot))
+
+	bareDir := filepath.Join(target, Owner, Repo+".git")
+	_, err = os.Stat(filepath.Join(bareDir, "HEAD"))
+	require.NoError(t, err, "expected the mirror to be built at the resolved absolute location %s, not elsewhere", target)
+}
+
 // TestFilterGitDirEnvCaseInsensitive verifies filterGitDirEnv drops GIT_DIR-family variables
 // regardless of the casing the environment happens to carry them in. Windows resolves
 // environment variable names case-insensitively, so a lower/mixed-case entry (e.g. from a
