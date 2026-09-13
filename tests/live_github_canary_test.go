@@ -365,8 +365,10 @@ func TestLiveGitHubCanary_ToolchainInstall(t *testing.T) {
 	versionCmd := exec.CommandContext(versionCtx, binaryPath, "--version")
 	var versionStderr bytes.Buffer
 	versionCmd.Stderr = &versionStderr
-	versionErr := versionCmd.Run()
-	skipOrFailLiveGitHubCanary(t, versionCtx, "installed tree --version", versionErr, versionStderr.String())
+	// This runs a LOCAL binary the canary just installed: a timeout or non-zero exit here is a
+	// real failure (corrupt or non-executable asset, or a wedged binary), never a transient
+	// network condition, so it must not go through the transient classifier and skip.
+	require.NoError(t, versionCmd.Run(), "installed tree --version must succeed; stderr: %s", versionStderr.String())
 }
 
 // TestLiveGitHubCanary_UnauthenticatedRawInclude resolves a `!include.raw` YAML function against
