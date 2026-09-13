@@ -66,6 +66,22 @@ func TestParseSource_SSH(t *testing.T) {
 // TestParseSource_GHESHost verifies that shorthand/HTTPS/SSH source formats also recognize a
 // GitHub Enterprise Server host configured via GITHUB_SERVER_URL, and that the resulting clone
 // URL and FullPath target that host rather than github.com.
+// TestParseSource_GHESHost_NonDefaultPortSSH verifies an SCP-style source for a GHES server
+// configured with a non-default port still matches (SCP syntax cannot carry the port).
+func TestParseSource_GHESHost_NonDefaultPortSSH(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com:8443")
+
+	ssh, err := ParseSource("git@ghes.example.com:cloudposse/atmos.git")
+	require.NoError(t, err)
+	assert.Equal(t, "cloudposse", ssh.Owner)
+	assert.Equal(t, "atmos", ssh.Repo)
+
+	https, err := ParseSource("https://ghes.example.com:8443/cloudposse/atmos.git")
+	require.NoError(t, err)
+	assert.Equal(t, "cloudposse", https.Owner)
+	assert.Equal(t, "atmos", https.Repo)
+}
+
 func TestParseSource_GHESHost(t *testing.T) {
 	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
 
