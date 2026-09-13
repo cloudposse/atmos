@@ -19,6 +19,12 @@ import (
 // doesn't migrate to flags.NewStandardParser wholesale.
 var describeAffectedErrorModeParser *flags.StandardParser
 
+// describeAffectedProcessFlagsParser is the minimal StandardParser wired to the
+// --process-templates and --process-functions flags so they honor the
+// ATMOS_PROCESS_TEMPLATES / ATMOS_PROCESS_FUNCTIONS environment variables; see
+// cmd/describe_affected_process_flags.go.
+var describeAffectedProcessFlagsParser *flags.StandardParser
+
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits.
 var describeAffectedCmd = &cobra.Command{
 	Use:                "affected",
@@ -54,8 +60,10 @@ func init() {
 		"If set to `false` (default), the target reference will be checked out instead\n"+
 		"This requires that the target reference is already cloned by Git, and the information about it exists in the `.git` directory")
 
-	describeAffectedCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
-	describeAffectedCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
+	// --process-templates and --process-functions are registered via
+	// describeAffectedProcessFlagsParser below (not raw PersistentFlags), so they gain
+	// ATMOS_PROCESS_TEMPLATES / ATMOS_PROCESS_FUNCTIONS environment variable bindings
+	// like the `list` and `terraform` command families. See describe_affected_process_flags.go.
 	describeAffectedCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
 	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Deprecated. Alias for `--logs-level=Debug`")
 	describeAffectedCmd.PersistentFlags().Bool("exclude-locked", false, "Exclude the locked components (`metadata.locked: true`) from the output")
@@ -63,6 +71,12 @@ func init() {
 	describeAffectedErrorModeParser = newDescribeErrorModeParser()
 	describeAffectedErrorModeParser.RegisterPersistentFlags(describeAffectedCmd)
 	if err := describeAffectedErrorModeParser.BindToViper(viper.GetViper()); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	describeAffectedProcessFlagsParser = newDescribeAffectedProcessFlagsParser()
+	describeAffectedProcessFlagsParser.RegisterPersistentFlags(describeAffectedCmd)
+	if err := describeAffectedProcessFlagsParser.BindToViper(viper.GetViper()); err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
@@ -83,6 +97,13 @@ func getRunnableDescribeAffectedCmd(
 		// before parseDescribeAffectedCliArgs reads it, so the legacy cmd.Flags()-based
 		// parsing in internal/exec picks it up.
 		if err := resolveDescribeErrorModeFlag(cmd, viper.GetViper(), describeAffectedErrorModeParser); err != nil {
+			return err
+		}
+
+		// Resolve ATMOS_PROCESS_TEMPLATES / ATMOS_PROCESS_FUNCTIONS (via Viper) onto the
+		// --process-templates / --process-functions Cobra flags before parseDescribeAffectedCliArgs
+		// reads them, so the legacy cmd.Flags()-based parsing picks up env-sourced values.
+		if err := resolveDescribeAffectedProcessFlags(cmd, viper.GetViper(), describeAffectedProcessFlagsParser); err != nil {
 			return err
 		}
 
