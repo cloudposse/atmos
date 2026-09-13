@@ -1,5 +1,10 @@
 package tests
 
+import (
+	"runtime"
+	"strings"
+)
+
 // gitHubTokenEnvVars lists every environment variable atmos's own token resolution
 // (pkg/downloader/custom_git_detector.go's resolveToken) checks for a GitHub credential to
 // inject into a git URL; effectiveGitHubTokens walks exactly this list so it stays in lockstep
@@ -44,4 +49,24 @@ func effectiveGitHubTokens(tcEnv map[string]string, lookup func(string) string) 
 	}
 
 	return tokens
+}
+
+// envHasKey reports whether env contains name as a key. Environment variable names are
+// case-sensitive on Unix but case-insensitive on Windows (os/exec keeps the last
+// case-insensitive duplicate), so a fixture that spells GIT_CONFIG_GLOBAL in a different case
+// must still count as setting it there; otherwise the harness would add the canonical spelling
+// too and leave which one wins to map iteration order.
+func envHasKey(env map[string]string, name string) bool {
+	if _, ok := env[name]; ok {
+		return true
+	}
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	for key := range env {
+		if strings.EqualFold(key, name) {
+			return true
+		}
+	}
+	return false
 }

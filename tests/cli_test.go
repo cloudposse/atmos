@@ -1145,7 +1145,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// rules nor the anonymous rule and silently fall through to a live GitHub clone. Extend the
 	// mirror config for this test only when that gap exists; skip entirely if the test case
 	// already sets its own GIT_CONFIG_GLOBAL (it wants an unmirrored config on purpose).
-	if _, setsOwnMirrorConfig := tc.Env["GIT_CONFIG_GLOBAL"]; !setsOwnMirrorConfig {
+	if !envHasKey(tc.Env, "GIT_CONFIG_GLOBAL") {
 		ensureGitMirrorCoversFixtureTokens(t, &tc)
 	}
 

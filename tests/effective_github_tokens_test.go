@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -71,5 +72,19 @@ func TestEffectiveGitHubTokens(t *testing.T) {
 			got := effectiveGitHubTokens(tt.tcEnv, lookup)
 			require.Equal(t, tt.expected, got)
 		})
+	}
+}
+
+// TestEnvHasKey verifies the exact match on every OS and the case-insensitive match that only
+// applies on Windows, where os/exec resolves environment names case-insensitively.
+func TestEnvHasKey(t *testing.T) {
+	env := map[string]string{"git_config_global": "/tmp/x", "OTHER": "1"}
+
+	require.True(t, envHasKey(env, "git_config_global"))
+	require.False(t, envHasKey(env, "MISSING"))
+	if runtime.GOOS == "windows" {
+		require.True(t, envHasKey(env, "GIT_CONFIG_GLOBAL"))
+	} else {
+		require.False(t, envHasKey(env, "GIT_CONFIG_GLOBAL"))
 	}
 }
