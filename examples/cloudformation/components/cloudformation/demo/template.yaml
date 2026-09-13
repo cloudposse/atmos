@@ -1,0 +1,27 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Minimal aws/cloudformation example stack: a single SSM parameter. Mirrors the
+  resource examples/emulator-aws deploys via Terraform, so the two examples
+  demonstrate the same "hello from <stage>" marker through two different
+  component types against the same Floci AWS emulator.
+
+Parameters:
+  Stage:
+    Type: String
+    Description: Stage/environment name.
+
+Resources:
+  Marker:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/atmos/demo/${Stage}/marker"
+      Type: String
+      Value: !Sub "hello from ${Stage}"
+
+Outputs:
+  ParameterName:
+    Description: Name of the SSM parameter created in the local AWS emulator.
+    Value: !Ref Marker
+  Stage:
+    Description: Stage of deployment.
+    Value: !Ref Stage
