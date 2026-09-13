@@ -219,7 +219,10 @@ func filterGitDirEnv(env []string) []string {
 			// repository, and GIT_NAMESPACE would make the receive-pack store main under
 			// refs/namespaces/<ns>/, where the HTTP backend (which does not inherit it) cannot see it.
 			"GIT_COMMON_DIR",
-			"GIT_NAMESPACE":
+			"GIT_NAMESPACE",
+			// GIT_TEMPLATE_DIR would seed the throwaway repositories with the host's template,
+			// including any executable hooks that could fail or hang the mirror's own commit.
+			"GIT_TEMPLATE_DIR":
 			continue
 		}
 		kept = append(kept, kv)
