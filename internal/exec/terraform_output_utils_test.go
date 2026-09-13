@@ -36,6 +36,54 @@ func TestNewAuthContextWrapper_WithContext(t *testing.T) {
 	assert.Equal(t, authContext, wrapper.stackInfo.AuthContext)
 }
 
+// TestPropagateAuthDisabledManager covers the shared decision logic used by !terraform.output,
+// !terraform.state, and !aws.cloudformation.output to preserve an enclosing component's
+// AuthDisabled opt-out when no AuthManager was created: only a nil authManager combined with
+// AuthDisabled gets wrapped; a non-nil authManager and/or AuthDisabled=false pass through
+// unchanged so the target component's own auth section can still be resolved normally.
+func TestPropagateAuthDisabledManager(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil authManager and AuthDisabled wraps stackInfo", func(t *testing.T) {
+		t.Parallel()
+		stackInfo := &schema.ConfigAndStacksInfo{AuthDisabled: true}
+
+		got := propagateAuthDisabledManager(nil, stackInfo)
+
+		wrapper, ok := got.(*authContextWrapper)
+		require.True(t, ok, "nil authManager with AuthDisabled must be wrapped")
+		assert.Same(t, stackInfo, wrapper.stackInfo)
+		assert.True(t, wrapper.GetStackInfo().AuthDisabled)
+	})
+
+	t.Run("nil authManager with AuthDisabled false stays nil", func(t *testing.T) {
+		t.Parallel()
+		stackInfo := &schema.ConfigAndStacksInfo{AuthDisabled: false}
+
+		got := propagateAuthDisabledManager(nil, stackInfo)
+
+		assert.Nil(t, got, "with auth enabled, nil must be passed through so the target's own auth resolves")
+	})
+
+	t.Run("non-nil authManager passes through even when AuthDisabled", func(t *testing.T) {
+		t.Parallel()
+		stackInfo := &schema.ConfigAndStacksInfo{AuthDisabled: true}
+		existing := &authContextWrapper{stackInfo: &schema.ConfigAndStacksInfo{}}
+
+		got := propagateAuthDisabledManager(existing, stackInfo)
+
+		assert.Same(t, existing, got, "an already-populated AuthManager must never be overwritten")
+	})
+
+	t.Run("nil stackInfo is a no-op", func(t *testing.T) {
+		t.Parallel()
+
+		got := propagateAuthDisabledManager(nil, nil)
+
+		assert.Nil(t, got)
+	})
+}
+
 func TestAuthContextWrapper_GetStackInfo(t *testing.T) {
 	t.Parallel()
 
