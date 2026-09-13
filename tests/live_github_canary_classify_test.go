@@ -48,6 +48,11 @@ func TestClassifyLiveGitHubFailure(t *testing.T) {
 			wantTransient: false,
 		},
 		{
+			name:          "x509 as an identifier is not transient",
+			stderr:        `Error: component "x509" not found`,
+			wantTransient: false,
+		},
+		{
 			name:          "real 403 forbidden is not transient",
 			stderr:        "Error: GET https://api.github.com/repos/x/y: 403 Forbidden: token has insufficient scope",
 			wantTransient: false,
