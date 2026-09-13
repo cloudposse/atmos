@@ -375,6 +375,8 @@ func getResolvedAbsPath(atmosConfig *schema.AtmosConfiguration, componentType st
 		return atmosConfig.KubernetesDirAbsolutePath
 	case "helm":
 		return atmosConfig.HelmDirAbsolutePath
+	case "aws/cloudformation":
+		return atmosConfig.CloudFormationDirAbsolutePath
 	default:
 		return ""
 	}
@@ -418,6 +420,8 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentType 
 		return atmosConfig.Components.Packer.BasePath
 	case "kubernetes":
 		return atmosConfig.Components.Kubernetes.BasePath
+	case "aws/cloudformation":
+		return atmosConfig.Components.CloudFormation.BasePath
 	default:
 		return ""
 	}
