@@ -106,11 +106,15 @@ func runChangesetExecute(ctx context.Context, client CloudFormationClient, spec 
 	summary["changeset_id"] = result.ChangeSetID
 	summary["changeset_name"] = result.ChangeSetName
 
+	// Captured immediately before executeChangeSet -- see preOperationEventBaseline --
+	// so streamStackEvents can tell a fast execution's own events apart from anything
+	// already present on the stack.
+	baseline := preOperationEventBaseline(ctx, client, spec.StackName)
 	if err := executeChangeSet(ctx, client, spec, result); err != nil {
 		return summary, err
 	}
 
-	status, err := streamStackEvents(ctx, client, spec.StackName)
+	status, err := streamStackEvents(ctx, client, spec.StackName, baseline)
 	if err != nil {
 		return summary, err
 	}
