@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -179,6 +180,105 @@ func TestLoadConfigEditionRollsBackJulyDefaults(t *testing.T) {
 
 		assert.False(t, atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled())
 	})
+}
+
+// TestLoadConfigEditionInitModeAndUpgrade covers components.terraform.init.mode and
+// init.upgrade's journal entries (both dated 2026-09-12): brand-new keys that still needed a
+// journal entry, because their defaults govern behavior (running init at all; -upgrade
+// automation) Atmos always had a fixed, unconfigurable answer for before these settings existed
+// -- see pkg/edition/journal.go's comments on these entries and
+// schema.Terraform.EffectiveInitMode/EffectiveInitUpgrade's doc comments. Table-driven across
+// both keys since the pin-resolution behavior under test is identical; only the field being
+// read and its pre-edition value ("always" vs "never") differ.
+func TestLoadConfigEditionInitModeAndUpgrade(t *testing.T) {
+	_ = schema.TerraformInit{Mode: "", Upgrade: ""}
+
+	type field struct {
+		key        string // atmos.yaml key under components.terraform.init
+		preEdition string // value a pre-2026-09-12 pin restores
+		get        func(schema.AtmosConfiguration) string
+	}
+	fields := []field{
+		{
+			key:        "mode",
+			preEdition: "always",
+			get:        func(c schema.AtmosConfiguration) string { return string(c.Components.Terraform.Init.Mode) },
+		},
+		{
+			key:        "upgrade",
+			preEdition: "never",
+			get:        func(c schema.AtmosConfiguration) string { return string(c.Components.Terraform.Init.Upgrade) },
+		},
+	}
+
+	tests := []struct {
+		name string
+		yaml func(f field) string
+		want func(f field) string
+	}{
+		{
+			name: "no pin gets the new auto default",
+			yaml: func(field) string { return "base_path: ./\n" },
+			want: func(field) string { return "auto" },
+		},
+		{
+			name: "pin on the release date gets auto",
+			yaml: func(field) string { return "base_path: ./\nedition: \"2026-09-12\"\n" },
+			want: func(field) string { return "auto" },
+		},
+		{
+			name: "pin one day before the release date restores the pre-edition value",
+			yaml: func(field) string { return "base_path: ./\nedition: \"2026-09-11\"\n" },
+			want: func(f field) string { return f.preEdition },
+		},
+		{
+			name: "an old pin also restores the pre-edition value",
+			yaml: func(field) string { return "base_path: ./\nedition: \"2026-01\"\n" },
+			want: func(f field) string { return f.preEdition },
+		},
+		{
+			name: "explicit user value beats the pin",
+			yaml: func(f field) string {
+				return fmt.Sprintf("base_path: ./\nedition: \"2026-01\"\ncomponents:\n  terraform:\n    init:\n      %s: always\n", f.key)
+			},
+			want: func(field) string { return "always" },
+		},
+	}
+
+	for _, f := range fields {
+		t.Run(f.key, func(t *testing.T) {
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					writeEditionTestConfig(t, tt.yaml(f))
+
+					atmosConfig, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+					require.NoError(t, err)
+
+					assert.Equal(t, tt.want(f), f.get(atmosConfig))
+				})
+			}
+		})
+	}
+}
+
+// TestLoadConfigEditionInitReconfigureIsNotPinProtected documents, with a real end-to-end
+// assertion rather than just a code comment, that init.reconfigure deliberately does NOT get
+// the same edition-pin protection as init.mode/init.upgrade: an old pin does not restore
+// "always" here, because init.reconfigure has no Viper default (see the comment at its
+// SetDefault call site in pkg/config/load.go) -- its legacy init_run_reconfigure fallback
+// requires t.Init.Reconfigure to stay genuinely unset when the user hasn't set it explicitly.
+// If this test ever starts failing because init.reconfigure now resolves to "always" under an
+// old pin, that means someone added a SetDefault for it -- which silently breaks
+// init_run_reconfigure: false for any project relying on that legacy mapping; see
+// EffectiveInitReconfigure's doc comment before doing that.
+func TestLoadConfigEditionInitReconfigureIsNotPinProtected(t *testing.T) {
+	writeEditionTestConfig(t, "base_path: ./\nedition: \"2026-01\"\n")
+
+	atmosConfig, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+
+	assert.Equal(t, "auto", string(atmosConfig.Components.Terraform.EffectiveInitReconfigure()),
+		"init.reconfigure is not edition-pin-protected; an old pin still resolves to auto via the legacy init_run_reconfigure fallback")
 }
 
 // TestLoadConfigNoAtmosYamlDefaults exercises the fallback path taken when no
