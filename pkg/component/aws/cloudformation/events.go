@@ -40,19 +40,22 @@ type stackPoll struct {
 // event lines are printed; live per-resource spinners are a TTY-only enhancement
 // the standard I/O layer degrades automatically — this function only needs to emit
 // lines, not manage its own TTY detection.
-func streamStackEvents(ctx context.Context, client CloudFormationClient, stackName string) (cfntypes.StackStatus, error) {
+//
+// The seen map seeds the dedup map pollStackEvents uses to decide which events
+// are "fresh". Callers pass preOperationEventBaseline's result here (the
+// stack's event IDs captured immediately before ExecuteChangeSet/DeleteStack
+// was called) so that "fresh" means "an event from *this* operation", which is
+// what lets completionSignals.seenNewEvent (see below) be trusted as a
+// completion signal. A nil map is treated as empty, for callers (tests) with
+// nothing to seed.
+func streamStackEvents(ctx context.Context, client CloudFormationClient, stackName string, seen map[string]bool) (cfntypes.StackStatus, error) {
 	defer perf.Track(nil, "cloudformation.streamStackEvents")()
 
-	seen := make(map[string]bool)
+	if seen == nil {
+		seen = make(map[string]bool)
+	}
 	deadline := time.Now().Add(operationTimeout)
-
-	// seenInProgress guards against misreading a stack's leftover terminal
-	// status from a previous, unrelated operation as this operation's
-	// completion: ExecuteChangeSet/DeleteStack return before CloudFormation
-	// applies the change, so the very next DescribeStacks call can still
-	// return the pre-execution status. Once we've observed a `*_IN_PROGRESS`
-	// status for this operation, a subsequent terminal status is trustworthy.
-	seenInProgress := false
+	signals := completionSignals{}
 
 	for {
 		events, poll, err := pollStackEvents(ctx, client, stackName, seen)
@@ -63,8 +66,7 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 			printStackEvent(&events[i])
 		}
 
-		seenInProgress = seenInProgress || isInProgressStatus(poll.Status)
-		if acceptTerminalStatus(poll, seenInProgress) {
+		if signals.observe(poll, len(events)) {
 			return poll.Status, nil
 		}
 
@@ -79,6 +81,71 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 	}
 }
 
+// completionSignals accumulates, across polls, the two independent signals
+// that corroborate a terminal status as *this* operation's completion rather
+// than a stale one left over from a previous, unrelated operation -- see
+// acceptTerminalStatus.
+type completionSignals struct {
+	// seenInProgress guards against misreading a stack's leftover terminal
+	// status from a previous, unrelated operation as this operation's
+	// completion: ExecuteChangeSet/DeleteStack return before CloudFormation
+	// applies the change, so the very next DescribeStacks call can still
+	// return the pre-execution status. Once we've observed a `*_IN_PROGRESS`
+	// status for this operation, a subsequent terminal status is trustworthy.
+	seenInProgress bool
+	// seenNewEvent is the second, independent completion signal: it guards
+	// against the opposite race, where a sufficiently fast create/update
+	// reaches its terminal status *between* two polls without this loop ever
+	// observing a `*_IN_PROGRESS` status (seenInProgress never becomes true,
+	// so a genuinely successful, already-finished operation would otherwise
+	// spin until operationTimeout and report a false timeout). Because seen
+	// is pre-seeded with the pre-operation event baseline, a "fresh" event
+	// here can only be one CloudFormation emitted for *this* operation --
+	// never a stale event already present before it started -- so it's as
+	// trustworthy a signal as seenInProgress.
+	seenNewEvent bool
+}
+
+// observe folds one poll's outcome into the accumulated signals and reports
+// whether poll's status may now be accepted as this operation's completion.
+func (s *completionSignals) observe(poll stackPoll, freshEventCount int) bool {
+	s.seenInProgress = s.seenInProgress || isInProgressStatus(poll.Status)
+	s.seenNewEvent = s.seenNewEvent || freshEventCount > 0
+	return acceptTerminalStatus(poll, s.seenInProgress, s.seenNewEvent)
+}
+
+// preOperationEventBaseline captures the stack's current DescribeStackEvents
+// event IDs immediately before an operation (ExecuteChangeSet/DeleteStack) is
+// kicked off, for streamStackEvents to seed its dedup map with (see its "seen"
+// parameter). Without this baseline, streamStackEvents' first poll after a very
+// fast create/update can't distinguish "an event from this operation" from "an
+// event that already existed" -- both look equally "fresh" starting from an
+// empty map -- which is exactly the ambiguity seenNewEvent is meant to resolve.
+//
+// This is deliberately best-effort and never returns an error: a brand-new
+// CREATE has no prior events at all (DescribeStackEvents reports the stack
+// doesn't exist yet), which is not a failure, just an empty baseline. Any other
+// failure (e.g. a network blip) also degrades to an empty baseline rather than
+// aborting the create/update/delete that's about to happen -- losing the
+// new-event fast-path signal only re-exposes the pre-existing, timeout-bounded
+// race this baseline closes; it does not reintroduce the original stale-status
+// bug, since seenInProgress still guards that path independently.
+func preOperationEventBaseline(ctx context.Context, client CloudFormationClient, stackName string) map[string]bool {
+	defer perf.Track(nil, "cloudformation.preOperationEventBaseline")()
+
+	seen := make(map[string]bool)
+	out, err := client.DescribeStackEvents(ctx, &cloudformation.DescribeStackEventsInput{StackName: awsString(stackName)})
+	if err != nil {
+		return seen
+	}
+	for i := range out.StackEvents {
+		if id := stringValue(out.StackEvents[i].EventId); id != "" {
+			seen[id] = true
+		}
+	}
+	return seen
+}
+
 // isInProgressStatus reports whether status is a non-empty `*_IN_PROGRESS` status.
 func isInProgressStatus(status cfntypes.StackStatus) bool {
 	return status != "" && strings.HasSuffix(string(status), "_IN_PROGRESS")
@@ -87,12 +154,25 @@ func isInProgressStatus(status cfntypes.StackStatus) bool {
 // acceptTerminalStatus reports whether poll's status may be treated as this
 // operation's completion. A poll.Gone signal (the stack is confirmed to have
 // actually disappeared) is a positive, unambiguous signal accepted regardless
-// of seenInProgress. Any other terminal status must first have been preceded
-// by an observed `*_IN_PROGRESS` status, to rule out reading a stale,
-// pre-execution terminal status (left over from an earlier, unrelated
-// operation) as this operation's completion.
-func acceptTerminalStatus(poll stackPoll, seenInProgress bool) bool {
-	return poll.Status != "" && isTerminalStackStatus(poll.Status) && (poll.Gone || seenInProgress)
+// of seenInProgress/seenNewEvent -- this is deletion's own terminal signal and
+// must not be touched by either guard below.
+//
+// Any other terminal status must first have been corroborated by one of two
+// independent signals that it belongs to *this* operation, not a stale one:
+//   - seenInProgress: an observed `*_IN_PROGRESS` status for this operation
+//     (the normal, non-racy path).
+//   - seenNewEvent: at least one DescribeStackEvents event was observed that
+//     didn't exist in the pre-operation baseline (see
+//     preOperationEventBaseline) -- covers a create/update fast enough to go
+//     straight to a terminal status between two polls, without this loop ever
+//     observing `*_IN_PROGRESS`.
+//
+// Requiring at least one of these (rather than accepting any terminal status
+// outright) is what rules out reading a stale, pre-execution terminal status
+// (left over from an earlier, unrelated operation) as this operation's
+// completion -- the original bug this function was written to prevent.
+func acceptTerminalStatus(poll stackPoll, seenInProgress, seenNewEvent bool) bool {
+	return poll.Status != "" && isTerminalStackStatus(poll.Status) && (poll.Gone || seenInProgress || seenNewEvent)
 }
 
 // pollStackEvents fetches the current stack status and any events not already in

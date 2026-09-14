@@ -118,9 +118,13 @@ func TestRunDelete(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 
-	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
-	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+	gomock.InOrder(
+		// preOperationEventBaseline, captured immediately before DeleteStack.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+	)
 
 	spec := &stackSpec{StackName: "vpc"}
 	summary, err := runDelete(context.Background(), client, map[string]any{}, spec, map[string]any{})
@@ -140,6 +144,8 @@ func TestRunDelete_FailedStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 
+	// preOperationEventBaseline, captured immediately before DeleteStack.
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
 	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
 	gomock.InOrder(
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
@@ -271,6 +277,8 @@ func expectRunApplySuccessfulDeployFlow(t *testing.T, client *MockCloudFormation
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
+		// preOperationEventBaseline, captured immediately before ExecuteChangeSet.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
@@ -353,6 +361,8 @@ func TestRunApply_SetsStackPolicy(t *testing.T) {
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
+		// preOperationEventBaseline, captured immediately before ExecuteChangeSet.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
@@ -420,6 +430,8 @@ func expectDeployThenFinalCall(t *testing.T, client *MockCloudFormationClient, f
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
+		// preOperationEventBaseline, captured immediately before ExecuteChangeSet.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
@@ -496,6 +508,8 @@ func TestRunApply_DescribeOutputsError(t *testing.T) {
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
+		// preOperationEventBaseline, captured immediately before ExecuteChangeSet.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
@@ -577,6 +591,8 @@ func TestRunDelete_DeleteStackError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	sentinel := errors.New("delete stack failed")
 
+	// preOperationEventBaseline, captured immediately before DeleteStack.
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
 	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(nil, sentinel)
 
 	spec := &stackSpec{StackName: "vpc"}
@@ -591,8 +607,12 @@ func TestRunDelete_StreamEventsError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	sentinel := errors.New("describe stack events failed")
 
-	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
-	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, sentinel)
+	gomock.InOrder(
+		// preOperationEventBaseline, captured immediately before DeleteStack.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, sentinel),
+	)
 
 	spec := &stackSpec{StackName: "vpc"}
 	_, err := runDelete(context.Background(), client, map[string]any{}, spec, map[string]any{})
