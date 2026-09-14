@@ -32,8 +32,10 @@ package exec
 //     process outside a supported interactive environment.
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"reflect"
 	"runtime"
@@ -230,6 +232,99 @@ func funcName(fn streamingExecutorFunc) string {
 // the plain tfui.Execute path (the "unrecognized subcommand" fallback) would
 // still pass a test that only checks for errUtils.ErrStreamingNotSupported,
 // since that fallback returns the exact same sentinel error outside a real TTY.
+// ──────────────────────────────────────────────────────────────────────────────
+// combineCaptureWriters / streamingCaptureWriters
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestCombineCaptureWriters covers all three branches: neither set, only one set
+// (either side), and both set (must produce an io.MultiWriter teeing into both,
+// verified by actually writing through it and checking both buffers received the
+// bytes -- not just that a non-nil writer came back).
+func TestCombineCaptureWriters(t *testing.T) {
+	t.Run("both nil returns nil", func(t *testing.T) {
+		got := combineCaptureWriters(nil, nil)
+		assert.Nil(t, got)
+	})
+
+	t.Run("only a set returns a", func(t *testing.T) {
+		var a bytes.Buffer
+		got := combineCaptureWriters(&a, nil)
+		assert.Same(t, io.Writer(&a), got)
+	})
+
+	t.Run("only b set returns b", func(t *testing.T) {
+		var b bytes.Buffer
+		got := combineCaptureWriters(nil, &b)
+		assert.Same(t, io.Writer(&b), got)
+	})
+
+	t.Run("both set tees writes into both", func(t *testing.T) {
+		var a, b bytes.Buffer
+		got := combineCaptureWriters(&a, &b)
+		require.NotNil(t, got)
+
+		n, err := got.Write([]byte("hello"))
+		require.NoError(t, err)
+		assert.Equal(t, 5, n)
+		assert.Equal(t, "hello", a.String(), "writer a must receive the tee'd bytes")
+		assert.Equal(t, "hello", b.String(), "writer b must receive the tee'd bytes")
+	})
+}
+
+// TestStreamingCaptureWriters verifies streamingCaptureWriters correctly assembles the
+// shellCommandConfig from shellOpts and combines the ordinary stdout/stderr capture with
+// the scoped exec-metadata capture, so neither consumer's capture goes dark when a phase
+// runs through the streaming TUI instead of the plain shell path.
+func TestStreamingCaptureWriters(t *testing.T) {
+	t.Run("no capture options returns nil, nil", func(t *testing.T) {
+		stdout, stderr := streamingCaptureWriters(nil)
+		assert.Nil(t, stdout)
+		assert.Nil(t, stderr)
+	})
+
+	t.Run("only ordinary capture set", func(t *testing.T) {
+		var stdoutBuf, stderrBuf bytes.Buffer
+		opts := []ShellCommandOption{
+			WithStdoutCapture(&stdoutBuf),
+			WithStderrCapture(&stderrBuf),
+		}
+
+		stdout, stderr := streamingCaptureWriters(opts)
+		require.NotNil(t, stdout)
+		require.NotNil(t, stderr)
+
+		_, err := stdout.Write([]byte("out"))
+		require.NoError(t, err)
+		_, err = stderr.Write([]byte("err"))
+		require.NoError(t, err)
+		assert.Equal(t, "out", stdoutBuf.String())
+		assert.Equal(t, "err", stderrBuf.String())
+	})
+
+	t.Run("ordinary and exec-metadata capture both set combine via MultiWriter", func(t *testing.T) {
+		var stdoutBuf, stderrBuf, execStdoutBuf, execStderrBuf bytes.Buffer
+		opts := []ShellCommandOption{
+			WithStdoutCapture(&stdoutBuf),
+			WithStderrCapture(&stderrBuf),
+			withExecMetadataOutputCapture(&execStdoutBuf, &execStderrBuf),
+		}
+
+		stdout, stderr := streamingCaptureWriters(opts)
+		require.NotNil(t, stdout)
+		require.NotNil(t, stderr)
+
+		_, err := stdout.Write([]byte("out"))
+		require.NoError(t, err)
+		_, err = stderr.Write([]byte("err"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "out", stdoutBuf.String(), "ordinary stdout capture must still receive output")
+		assert.Equal(t, "out", execStdoutBuf.String(), "exec-metadata stdout capture must also receive the same output")
+		assert.Equal(t, "err", stderrBuf.String())
+		assert.Equal(t, "err", execStderrBuf.String())
+	})
+}
+
 func TestSelectStreamingExecutor_RoutesBySubcommand(t *testing.T) {
 	tests := []struct {
 		name       string
