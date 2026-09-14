@@ -5,9 +5,23 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 )
+
+func TestDependencyParser_ParseComponentDependenciesRejectsMalformedDependenciesSection(t *testing.T) {
+	t.Parallel()
+
+	parser := NewDependencyParser(dependency.NewBuilder(), map[string]string{})
+
+	err := parser.ParseComponentDependencies("dev", "app", map[string]any{
+		cfg.DependenciesSectionName: []any{},
+	})
+
+	assert.ErrorIs(t, err, errUtils.ErrInvalidDependenciesSection)
+	assert.NotErrorIs(t, err, errUtils.ErrUnsupportedDependencyType)
+}
 
 func TestNewDependencyParser(t *testing.T) {
 	t.Parallel()
