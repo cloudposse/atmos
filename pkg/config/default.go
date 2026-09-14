@@ -92,6 +92,7 @@ var (
 			},
 		},
 		Settings: schema.AtmosSettings{
+			Experimental:      "warn-daily",
 			ListMergeStrategy: "replace",
 			Terminal: schema.Terminal{
 				// Unlimited by default: 0 means "use the live detected terminal width".
