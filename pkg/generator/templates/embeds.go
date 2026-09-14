@@ -41,6 +41,14 @@ type Configuration struct {
 	TargetDir   string `yaml:"target_dir"`
 	Files       []File `yaml:"files"`
 	README      string `yaml:"readme"`
+	// ResolvedRef is the git commit SHA actually fetched for Source, set by
+	// pkg/generator/source's resolveRemote when Source is a git:: URL (empty
+	// for OCI/S3/HTTP/local sources, which have no equivalent concept).
+	// Runtime-only -- never part of a template's own manifest -- so it's
+	// excluded from serialization. --update-strategy=rendered uses this to
+	// pin a reproducible "before" state instead of relying on a ref string
+	// that may name a mutable branch.
+	ResolvedRef string `yaml:"-"`
 }
 
 // File represents an embedded template file used by the generator.

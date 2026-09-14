@@ -1536,7 +1536,15 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// --update against that same directory would wrongly treat it as an
 	// existing project instead of a fresh generate.
 	if !ui.processor.DryRun {
-		if err := config.SaveProjectRecord(targetPath, scaffoldConfig, embedsConfig.Source, baseRef, mergedValues); err != nil {
+		provenance := config.ProjectRecordProvenance{Source: embedsConfig.Source, BaseRef: baseRef}
+		// RenderedRef and BaseRef are mutually exclusive (see
+		// ScaffoldSpec.RenderedRef): only record the resolved commit SHA
+		// under UpdateStrategyRendered, even though embedsConfig.ResolvedRef
+		// is populated for any git:: or oci:// fetch regardless of strategy.
+		if ui.updateStrategy == engine.UpdateStrategyRendered {
+			provenance.RenderedRef = embedsConfig.ResolvedRef
+		}
+		if err := config.SaveProjectRecord(targetPath, scaffoldConfig, provenance, mergedValues); err != nil {
 			return fmt.Errorf("failed to save project record: %w", err)
 		}
 

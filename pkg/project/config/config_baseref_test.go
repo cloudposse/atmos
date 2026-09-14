@@ -39,7 +39,7 @@ func TestSaveAndLoadProjectRecordWithBaseRef(t *testing.T) {
 		"aws_region":   "us-east-1",
 	}
 
-	err := SaveProjectRecord(tmpDir, templateForRecordTests(), SourceEmbedded, "main", values)
+	err := SaveProjectRecord(tmpDir, templateForRecordTests(), ProjectRecordProvenance{Source: SourceEmbedded, BaseRef: "main"}, values)
 	require.NoError(t, err)
 
 	// Verify file was created.
@@ -94,7 +94,7 @@ func TestSaveAndLoadProjectRecord_FieldWhenSurvivesRoundTrip(t *testing.T) {
 	}
 
 	values := map[string]interface{}{"enable_vendoring": true}
-	require.NoError(t, SaveProjectRecord(tmpDir, template, "", "", values))
+	require.NoError(t, SaveProjectRecord(tmpDir, template, ProjectRecordProvenance{}, values))
 
 	record, err := LoadProjectRecord(tmpDir)
 	require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestSaveProjectRecord_EmptyBaseRef(t *testing.T) {
 		"project_name": "test-project",
 	}
 
-	err := SaveProjectRecord(tmpDir, templateForRecordTests(), "", "", values)
+	err := SaveProjectRecord(tmpDir, templateForRecordTests(), ProjectRecordProvenance{}, values)
 	require.NoError(t, err)
 
 	record, err := LoadProjectRecord(tmpDir)
@@ -140,7 +140,7 @@ func TestSaveProjectRecord_PreservesValueKeyCasing(t *testing.T) {
 		"awsRegion":   "us-east-1",
 	}
 
-	err := SaveProjectRecord(tmpDir, templateForRecordTests(), "", "", values)
+	err := SaveProjectRecord(tmpDir, templateForRecordTests(), ProjectRecordProvenance{}, values)
 	require.NoError(t, err)
 
 	loaded, err := LoadUserValues(tmpDir)
@@ -169,6 +169,6 @@ func TestSaveProjectRecord_NilTemplateConfig(t *testing.T) {
 	// validation on load, leaving the project permanently broken).
 	tmpDir := t.TempDir()
 
-	err := SaveProjectRecord(tmpDir, nil, "", "", map[string]interface{}{"k": "v"})
+	err := SaveProjectRecord(tmpDir, nil, ProjectRecordProvenance{}, map[string]interface{}{"k": "v"})
 	require.Error(t, err, "nil templateConfig must be rejected before writing")
 }

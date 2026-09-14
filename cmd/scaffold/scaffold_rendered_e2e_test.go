@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
 const renderedE2EScaffoldYAML = `apiVersion: atmos/v1
@@ -110,6 +112,12 @@ func TestScaffoldGenerate_UpdateStrategyRendered_EndToEnd(t *testing.T) {
 	scaffoldGenerateParser.RegisterFlags(cmd1)
 	require.NoError(t, cmd1.Flags().Set("ref", "v1"))
 	require.NoError(t, cmd1.Flags().Set("interactive", "false"))
+	// Establishes this project as rendered-strategy from the first generation:
+	// a later --update-strategy=rendered run needs a resolved commit SHA
+	// recorded by *some* prior generation, and that capture is keyed on the
+	// strategy active at generation time, not retrofitted once an update asks
+	// for it.
+	require.NoError(t, cmd1.Flags().Set("update-strategy", "rendered"))
 
 	require.NoError(t, scaffoldGenerateCmd.RunE(cmd1, []string{src, targetDir}))
 
@@ -145,4 +153,15 @@ func TestScaffoldGenerate_UpdateStrategyRendered_EndToEnd(t *testing.T) {
 
 	_, gitStatErr = os.Stat(filepath.Join(targetDir, ".git"))
 	assert.True(t, os.IsNotExist(gitStatErr), "rendered mode must never require the target to become a git repository")
+
+	// Regression check for the original silent-data-loss bug: an unconditional
+	// defaultBaseRef resolution used to run for any --update regardless of
+	// strategy, writing a resolved value (e.g. "HEAD") into spec.baseRef even
+	// under rendered mode. Rendered must leave spec.baseRef untouched and
+	// record its own provenance under spec.renderedRef instead.
+	record, err := config.LoadProjectRecord(targetDir)
+	require.NoError(t, err)
+	require.NotNil(t, record)
+	assert.Empty(t, record.Spec.BaseRef, "rendered-mode updates must never populate spec.baseRef")
+	assert.NotEmpty(t, record.Spec.RenderedRef, "rendered-mode updates must record the resolved commit SHA")
 }

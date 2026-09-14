@@ -25,18 +25,26 @@ type RenderedBase struct {
 
 // ResolveRenderedBase loads targetDir's own recorded project state
 // (.atmos/scaffold.yaml, written by the last successful generation) and
-// fetches the template at that same ref, so engine.UpdateStrategyRendered
-// can re-render it as the 3-way merge base.
+// fetches the template at the resolved commit SHA recorded there
+// (spec.renderedRef), so engine.UpdateStrategyRendered can re-render it as
+// the 3-way merge base.
 //
 // Must be called before this run's own SaveProjectRecord overwrites that
 // file -- the whole point is to capture "what generated what's currently on
 // disk" before this run's new answers replace it.
 //
-// Returns ErrRenderedStrategyRequiresConfig if no project record exists:
-// unlike UpdateStrategyTracked (which falls back to literal "HEAD" against
-// the target's own git history when no metadata is pinned), there is no
-// equivalent fallback here -- a pristine re-render needs a real ref and real
-// answers to reconstruct, not an assumption.
+// Returns ErrRenderedStrategyRequiresConfig if no project record exists, or
+// one exists but was never generated under rendered at all (neither
+// spec.renderedRef nor spec.baseRef is set). Unlike UpdateStrategyTracked
+// (which falls back to literal "HEAD" against the target's own git history
+// when no metadata is pinned), there is no equivalent fallback here -- a
+// pristine re-render needs a real commit and real answers to reconstruct,
+// not an assumption.
+//
+// Returns ErrUpdateStrategySwitchedToRendered if the record shows
+// spec.baseRef set and spec.renderedRef empty: the project was last managed
+// with tracked, which never records a resolved commit SHA for the template
+// source, so there is nothing here to re-render from.
 func ResolveRenderedBase(targetDir, sourceOverride string) (*RenderedBase, error) {
 	defer perf.Track(nil, "source.ResolveRenderedBase")()
 
@@ -53,14 +61,32 @@ func ResolveRenderedBase(targetDir, sourceOverride string) (*RenderedBase, error
 			WithExitCode(2).
 			Err()
 	}
+	if record.Spec.RenderedRef == "" {
+		if record.Spec.BaseRef != "" {
+			return nil, errUtils.Build(errUtils.ErrUpdateStrategySwitchedToRendered).
+				WithExplanationf("`%s` was last updated with `--update-strategy=tracked`", targetDir).
+				WithHint("Tracked mode never records a resolved commit for the template source, so there is no rendered base to reconstruct").
+				WithHint("Re-run with `--update-strategy=tracked`, or `--force` to fully regenerate and start fresh with `rendered`").
+				WithContext("target_dir", targetDir).
+				WithExitCode(2).
+				Err()
+		}
+		return nil, errUtils.Build(errUtils.ErrRenderedStrategyRequiresConfig).
+			WithExplanationf("`%s` has no recorded rendered-strategy history", targetDir).
+			WithHint("`--update-strategy=rendered` needs a previous generation's recorded answers to re-render as the merge base").
+			WithHint("Use `--update-strategy=tracked` (the default) instead").
+			WithContext("target_dir", targetDir).
+			WithExitCode(2).
+			Err()
+	}
 
 	stub := templates.Configuration{
 		Name:   record.Metadata.Name,
-		Source: WithRef(record.Spec.Source, record.Spec.BaseRef),
+		Source: WithRef(record.Spec.Source, record.Spec.RenderedRef),
 	}
 	cleanup, err := Hydrate(&stub, sourceOverride)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch the old ref %q for the rendered update-strategy base: %w", record.Spec.BaseRef, err)
+		return nil, fmt.Errorf("failed to fetch the recorded commit %q for the rendered update-strategy base: %w", record.Spec.RenderedRef, err)
 	}
 
 	return &RenderedBase{Config: &stub, Values: record.Spec.Values, Cleanup: cleanup}, nil
