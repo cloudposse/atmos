@@ -1155,6 +1155,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["COLUMNS"] = ""
 	}
 
+	// Keep snapshots independent of daily-warning cache state. Test cases can opt
+	// into warn-daily or clear the override to exercise configuration defaults.
+	if _, exists := tc.Env["ATMOS_EXPERIMENTAL"]; !exists {
+		tc.Env["ATMOS_EXPERIMENTAL"] = "warn"
+	}
+	if _, exists := tc.Env["ATMOS_STARTUP_NOTICES_SHOWN"]; !exists {
+		tc.Env["ATMOS_STARTUP_NOTICES_SHOWN"] = ""
+	}
+
 	// Standardize the terraform binary on OpenTofu for the whole suite so the
 	// runtime is deterministic and host-independent (a dev box may have
 	// terraform, tofu, both, or neither). The product default stays "terraform"

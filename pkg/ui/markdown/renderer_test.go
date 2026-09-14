@@ -1,9 +1,11 @@
 package markdown
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/glamour/styles"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -363,4 +365,35 @@ func TestNewHelpRenderer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPlainTextRenderingIsIndependent ensures renderer initialization cannot change
+// plain-text margins or mutate Glamour's shared ASCII preset.
+func TestPlainTextRenderingIsIndependent(t *testing.T) {
+	resetRendererTerminalTestState(t)
+	presetBefore, err := json.Marshal(styles.ASCIIStyleConfig)
+	require.NoError(t, err)
+
+	for _, noColor := range []bool{false, true} {
+		cfg := schema.AtmosConfiguration{}
+		cfg.Settings.Terminal.NoColor = noColor
+		regular, err := NewRenderer(cfg)
+		require.NoError(t, err)
+		help, err := NewHelpRenderer(&cfg)
+		require.NoError(t, err)
+		for _, renderer := range []*Renderer{regular, help} {
+			// Exercise both the non-TTY fallback and the explicit NoColor renderer.
+			renderer.shouldRender = func(terminal.Stream) bool { return noColor }
+			for _, render := range []func(string) (string, error){renderer.Render, renderer.RenderWithoutWordWrap} {
+				out, err := render("# Error\n\n**Details**\n\n- First\n- Second")
+				require.NoError(t, err)
+				assert.Equal(t, "# Error\n\n**Details**\n\n  • First\n  • Second", strings.Trim(out, "\n"))
+				assert.NotContains(t, out, "\x1b[")
+			}
+		}
+	}
+
+	presetAfter, err := json.Marshal(styles.ASCIIStyleConfig)
+	require.NoError(t, err)
+	assert.Equal(t, string(presetBefore), string(presetAfter))
 }

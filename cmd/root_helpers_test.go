@@ -2199,9 +2199,7 @@ func TestExperimentalModeHandling(t *testing.T) {
 			// Set the experimental mode via environment variable.
 			// This will be read during config initialization.
 			// The env var is ATMOS_EXPERIMENTAL (not ATMOS_SETTINGS_EXPERIMENTAL).
-			if tt.experimentalMode != "" {
-				t.Setenv("ATMOS_EXPERIMENTAL", tt.experimentalMode)
-			}
+			t.Setenv("ATMOS_EXPERIMENTAL", tt.experimentalMode)
 
 			// Set args to run our test experimental command.
 			RootCmd.SetArgs([]string{"test-experimental"})
