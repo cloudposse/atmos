@@ -139,7 +139,9 @@ generation's recorded answers, not the template's field definitions).
   <dt>`--base-ref`</dt>
   <dd>
     Override the recorded merge base. Only applies to `--update-strategy=tracked` — `rendered`'s
-    base comes from the project's own recorded `.atmos/scaffold.yaml`, not `--base-ref`.
+    base comes from the project's own recorded `.atmos/scaffold.yaml`, not `--base-ref`. Combining
+    `--base-ref` with `--update-strategy=rendered` is rejected; drop `--base-ref` when using
+    `rendered`.
   </dd>
 
   <dt>`--update-strategy` (default `tracked`)</dt>
