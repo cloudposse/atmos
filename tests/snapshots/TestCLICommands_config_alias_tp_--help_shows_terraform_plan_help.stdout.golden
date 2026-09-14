@@ -44,7 +44,13 @@ FLAGS
 
       --hide strings                       Hide Terraform plan output sections. Supported values: no-changes
 
+      --init-mode string                   Override init.mode from atmos.yaml (auto, always, never)
+
+      --init-reconfigure string            Override init.reconfigure from atmos.yaml (auto, always, never)
+
       --init-run-reconfigure string        Override init_run_reconfigure setting from atmos.yaml (true/false)
+
+      --init-upgrade string                Override init.upgrade from atmos.yaml (auto, always, never)
 
       --log-order string                   Order concurrent Terraform plan logs. Supported values: stream, grouped
                                            (default stream)
