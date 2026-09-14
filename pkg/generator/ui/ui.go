@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/scaffoldhooks"
+	"github.com/cloudposse/atmos/pkg/generator/source"
 	tmpl "github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -1421,6 +1422,19 @@ func generationSummaryLine(dryRun bool, successCount, errorCount int) string {
 //
 //nolint:gocognit,revive,cyclop,funlen // complex orchestration function with multiple setup phases
 func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
+	// Reject a rendered-strategy generation up front when embedsConfig's
+	// source can never yield a project record a later rendered update could
+	// actually reconstruct from (e.g. an embedded template, or a git/oci
+	// source whose ref failed to resolve) -- see
+	// source.ValidateRenderedSource's doc comment. Checked before any
+	// prompt, directory creation, or hook runs, so a doomed rendered request
+	// fails immediately instead of only surfacing at the next update.
+	if ui.updateStrategy == engine.UpdateStrategyRendered {
+		if err := source.ValidateRenderedSource(embedsConfig.Source, embedsConfig.ResolvedRef); err != nil {
+			return err
+		}
+	}
+
 	// Find the scaffold.yaml file in the configuration
 	var scaffoldConfigFile *tmpl.File
 	for i := range embedsConfig.Files {
@@ -1564,6 +1578,22 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		provenance := config.ProjectRecordProvenance{Source: embedsConfig.Source}
 		if ui.updateStrategy == engine.UpdateStrategyRendered {
 			provenance.RenderedRef = embedsConfig.ResolvedRef
+			if provenance.RenderedRef == "" && !source.IsPinnableSource(embedsConfig.Source) {
+				// Local/file, S3, and plain HTTP sources have no immutable ref
+				// to pin (see source.IsPinnableSource), so Resolve legitimately
+				// left ResolvedRef empty here -- that's expected, not a
+				// resolution failure. Recording the documented marker instead
+				// of leaving RenderedRef empty keeps SaveProjectRecord from
+				// dropping the field, so a later --update-strategy=rendered
+				// update doesn't wrongly fail with "no recorded
+				// rendered-strategy history", and a later
+				// --update-strategy=tracked run's CheckNotSwitchedFromRendered
+				// still detects the strategy switch instead of silently
+				// treating the record as if it were never generated under
+				// rendered at all. An unresolved git/oci ref (a genuine
+				// resolution failure) intentionally does not get this marker.
+				provenance.RenderedRef = source.UnpinnedRenderedRefMarker
+			}
 		} else {
 			provenance.BaseRef = baseRef
 		}
