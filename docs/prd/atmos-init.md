@@ -166,7 +166,7 @@ $ atmos init simple ./test-project --force
 atmos init [template] [target]
   --force, -f              Overwrite existing files
   --interactive, -i        Interactive mode (default: true)
-  --update                 Update an existing project via a 3-way merge (requires a git base; see --base-ref)
+  --update                 Update an existing project via a 3-way merge
   --base-ref               Git ref to use as the 3-way merge base with --update (defaults to HEAD; tracked-only, see --update-strategy)
   --update-strategy        Where --update's merge base comes from (tracked|rendered; default: tracked)
   --set key=value          Set template variables
@@ -255,7 +255,10 @@ components:
 on-disk base snapshot or metadata file. This describes the default
 `--update-strategy=tracked`; `--update-strategy=rendered` instead re-renders
 the template at the ref recorded in `.atmos/scaffold.yaml` (no git dependency
-at all) — see `docs/prd/atmos-scaffold.md`'s "Also implemented" section.
+at all) — which additionally requires the template itself to carry a
+`scaffold.yaml` (a separate file from `.atmos/scaffold.yaml`, needed to
+resolve the old ref's fields when re-rendering). See
+`docs/prd/atmos-scaffold.md`'s "Also implemented" section.
 
 ```
 Initial generation:

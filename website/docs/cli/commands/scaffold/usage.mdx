@@ -135,8 +135,11 @@ template side of a conflict.
 `--update-strategy` controls where the merge's *base* comes from, independently of `--merge-strategy`.
 `tracked` (the default) reads it from the target's own Git history. `rendered` instead re-renders
 the template at the ref that produced what's currently on disk, using that generation's recorded
-answers — no Git history dependency, but it requires the template to carry a `scaffold.yaml` (so
-those answers are recoverable from `.atmos/scaffold.yaml`).
+answers, with no Git history dependency at all. This needs two separate things, not one: the
+template itself must define a `scaffold.yaml` manifest (so the old ref's fields can be resolved
+when re-rendering), and the target must already carry a prior generation's `.atmos/scaffold.yaml`
+record (a different file, at a different path — it stores that generation's recorded answers, not
+the template's field definitions).
 
 ## Project Initialization
 
