@@ -813,6 +813,77 @@ func TestIsLocalSource(t *testing.T) {
 	}
 }
 
+// TestIsLocalSourceGHESSCPStyle verifies that an SCP-style Git URI naming the configured
+// GitHub Enterprise Server host is classified as remote, even though it has no "://"
+// separator and the GHES host isn't in the literal remoteIndicators list.
+func TestIsLocalSourceGHESSCPStyle(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+
+	tests := []struct {
+		name     string
+		uri      string
+		expected bool
+		reason   string
+	}{
+		{
+			name:     "configured GHES host",
+			uri:      "git@ghe.example.com:org/repo.git",
+			expected: false,
+			reason:   "SCP-style URI naming the configured GHES host should be classified as remote",
+		},
+		{
+			name:     "unconfigured host",
+			uri:      "git@other.example.com:org/repo.git",
+			expected: true,
+			reason:   "SCP-style URI naming an unconfigured host should not be treated as the GHES host",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isLocalSource(tt.uri), tt.reason)
+		})
+	}
+}
+
+// TestIsLocalSourceGHESSCPStyleSingleLabelHost pins CodeRabbit thread PRRT_kwDOEW4XoM6h6mmo: a
+// single-label GHES host (e.g. GITHUB_SERVER_URL=https://ghe) must still be recognized via its
+// SCP-style remote, even though scpStyleHostPattern no longer requires a dot in the host.
+func TestIsLocalSourceGHESSCPStyleSingleLabelHost(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe")
+
+	assert.False(t, isLocalSource("git@ghe:org/repo.git"),
+		"SCP-style URI naming the configured single-label GHES host should be classified as remote")
+	assert.True(t, isLocalSource("git@other:org/repo.git"),
+		"SCP-style URI naming an unrelated single-label host should remain local/unchanged")
+}
+
+// TestIsLocalSourceGHESSCPStyleUserlessDottedHost pins CodeRabbit thread PRRT_kwDOEW4XoM6h7p3R: a
+// userless SCP-style URI naming a dotted GHES host (e.g. "ghe.example.com:org/repo.git", no
+// "user@" prefix) must be recognized as remote, matching pkg/vendor's scpURLPattern and
+// rewriteSCPURL's SCP detection, both of which allow a userless dotted host.
+func TestIsLocalSourceGHESSCPStyleUserlessDottedHost(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+
+	assert.False(t, isLocalSource("ghe.example.com:org/repo.git"),
+		"userless SCP-style URI naming a dotted, configured GHES host should be classified as remote")
+	assert.True(t, isLocalSource("other.example.com:org/repo.git"),
+		"userless SCP-style URI naming an unconfigured dotted host should not be treated as the GHES host")
+}
+
+// TestIsLocalSourceGHESSCPStyleUserlessSingleLabelHostStaysLocal pins CodeRabbit thread
+// PRRT_kwDOEW4XoM6h7p3R: a userless, single-label host (e.g. "dir:file") is genuinely ambiguous
+// with a local relative path, so it must still require the "user@" prefix to be treated as
+// remote -- relaxing the dotted-host case must not also relax the single-label case.
+func TestIsLocalSourceGHESSCPStyleUserlessSingleLabelHostStaysLocal(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe")
+
+	assert.True(t, isLocalSource("ghe:org/repo.git"),
+		"userless SCP-style URI naming a single-label configured GHES host must still require user@ to be treated as remote")
+	assert.True(t, isLocalSource("dir:file"),
+		"a colon-separated relative path must remain local")
+}
+
 // Tests for checkMetadataChanges with various version scenarios.
 
 func TestCheckMetadataChanges(t *testing.T) {

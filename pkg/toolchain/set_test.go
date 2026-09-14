@@ -1003,6 +1003,147 @@ func TestFetchGitHubVersionsNetworkEdgeCases(t *testing.T) {
 	})
 }
 
+// TestMakeGitHubRequestOmitsTokenOverHTTP pins that makeGitHubRequest never sends the
+// "github-token" as a Bearer credential to a plain-http apiURL: ATMOS_TOOLCHAIN_GITHUB_API_URL
+// can resolve to a non-https scheme, and doing so would leak the token in cleartext.
+func TestMakeGitHubRequestOmitsTokenOverHTTP(t *testing.T) {
+	// Isolate the global viper instance like this package's other tests do: Reset before, and
+	// Reset plus re-bind after, so no override of "github-token" leaks into sibling tests that
+	// expect the env binding (TestGitHubTokenEnvBinding) -- order is randomized under -shuffle.
+	setupTest()
+	t.Cleanup(teardownTest)
+	viper.Set("github-token", "test-token")
+
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer server.Close()
+
+	resp, err := makeGitHubRequest(server.URL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Empty(t, gotAuth, "expected no Authorization header sent to a plain-http endpoint")
+}
+
+// TestMakeGitHubRequestSendsTokenWhenAPIHostMatchesDespiteServerHostMismatch pins CodeRabbit
+// thread PRRT_kwDOEW4XoM6h7p3Z: makeGitHubRequest must no longer prefilter the token against
+// ToolchainEndpoints().Host (the toolchain *server* host) before ever building the request --
+// requestAllowsToken (checked per-request, including every redirect hop) is the single gate,
+// and it also accepts a match against RepoEndpoints' *API* host. So when the toolchain server
+// URL differs from the repo's own server host, but the toolchain API URL happens to resolve to
+// the same host as the approved repo API host, the token must still be sent. Uses an
+// httptest.NewTLSServer (rather than the usual plain httptest.NewServer) because
+// requestAllowsToken also requires https; makeGitHubRequest's http.Client has no custom
+// Transport, so swapping out http.DefaultTransport for the test server's own (which trusts its
+// self-signed certificate) is what lets the request complete over TLS, matching the pattern in
+// TestDownloadPRArtifact_ApprovedHTTPSHostSendsToken.
+func TestMakeGitHubRequestSendsTokenWhenAPIHostMatchesDespiteServerHostMismatch(t *testing.T) {
+	setupTest()
+	t.Cleanup(teardownTest)
+	viper.Set("github-token", "test-token")
+
+	var gotAuth string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer server.Close()
+
+	origTransport := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = origTransport })
+
+	clearGitHubEndpointEnvToolchain(t)
+	// The repo's own server host differs from the toolchain server host below -- a
+	// server-host-only prefilter would incorrectly withhold the token.
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+	// The repo's API host matches the httptest TLS server -- the actual destination of this
+	// request -- so requestAllowsToken's IsAPIHost check must allow the token through.
+	t.Setenv("GITHUB_API_URL", server.URL)
+	// The toolchain server URL is deliberately different from GITHUB_SERVER_URL above.
+	t.Setenv("ATMOS_TOOLCHAIN_GITHUB_URL", "https://ghes-toolchain.example.com")
+
+	resp, err := makeGitHubRequest(server.URL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, "Bearer test-token", gotAuth,
+		"expected the token to be sent because the request's host matches RepoEndpoints' API host, even though the toolchain server host differs")
+}
+
+// TestStripAuthOnUnapprovedRedirect pins the CheckRedirect callback installed on
+// makeGitHubRequest's http.Client: net/http's default redirect policy preserves the
+// Authorization header across same-host redirects even when the scheme downgrades from
+// https to http, and never considers host at all, which would leak the token in cleartext or
+// to an unrelated host. The callback must strip it whenever the (redirect target) request is
+// not https, or its host does not match RepoEndpoints (the host the token is scoped to), and
+// leave it alone otherwise.
+func TestStripAuthOnUnapprovedRedirect(t *testing.T) {
+	t.Run("removes Authorization when redirect target is not https", func(t *testing.T) {
+		clearGitHubEndpointEnvToolchain(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+		req, err := http.NewRequest(http.MethodGet, "http://ghes.example.com/api/v3/repos/owner/repo/releases", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer leaked-token")
+
+		err = stripAuthOnUnapprovedRedirect(req, nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, req.Header.Get("Authorization"))
+	})
+
+	t.Run("preserves Authorization when redirect target is https and matches RepoEndpoints", func(t *testing.T) {
+		clearGitHubEndpointEnvToolchain(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+		req, err := http.NewRequest(http.MethodGet, "https://ghes.example.com/api/v3/repos/owner/repo/releases", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer valid-token")
+
+		err = stripAuthOnUnapprovedRedirect(req, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "Bearer valid-token", req.Header.Get("Authorization"))
+	})
+
+	t.Run("removes Authorization when redirect target is https but a different host", func(t *testing.T) {
+		clearGitHubEndpointEnvToolchain(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+		req, err := http.NewRequest(http.MethodGet, "https://attacker.example.com/repos/owner/repo/releases", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer leaked-token")
+
+		err = stripAuthOnUnapprovedRedirect(req, nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, req.Header.Get("Authorization"))
+	})
+}
+
+// clearGitHubEndpointEnvToolchain unsets every environment variable RepoEndpoints/
+// ToolchainEndpoints read, so a test starts from a known (unset) baseline regardless of the
+// ambient environment (e.g. a real GITHUB_ACTIONS runner exports GITHUB_SERVER_URL/
+// GITHUB_API_URL).
+func clearGitHubEndpointEnvToolchain(t *testing.T) {
+	t.Helper()
+
+	for _, envVar := range []string{
+		"GITHUB_SERVER_URL",
+		"GITHUB_API_URL",
+		"ATMOS_TOOLCHAIN_GITHUB_URL",
+		"ATMOS_TOOLCHAIN_GITHUB_API_URL",
+	} {
+		t.Setenv(envVar, "")
+	}
+}
+
 // TestMakeGitHubRequestRetry covers the retry behavior added to recover from
 // transient failures (network hiccups, rate limiting, server errors) the kind
 // CI runners occasionally hit — without retrying deterministic client errors

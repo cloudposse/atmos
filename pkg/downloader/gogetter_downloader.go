@@ -169,7 +169,11 @@ func isRemoteSource(src string) bool {
 	if idx := strings.IndexByte(host, ':'); idx >= 0 {
 		host = host[:idx]
 	}
-	return isSupportedHost(strings.ToLower(host))
+	// Scheme-less shorthand carries no port of its own (a trailing ":port" would already have
+	// been consumed by the SCP-style check above), so the same portless host is used for both
+	// isSupportedHost parameters here.
+	lowerHost := strings.ToLower(host)
+	return isSupportedHost(lowerHost, lowerHost)
 }
 
 // GoGetterOption configures the go-getter downloader.
