@@ -1,6 +1,7 @@
 package dependencies
 
 import (
+	"fmt"
 	"maps"
 	"path"
 	"path/filepath"
@@ -49,6 +50,16 @@ type ScopeRequest struct {
 	// selectors in the lightweight graph.
 	LeftDelim  string
 	RightDelim string
+	// SkipTargetValidation preserves direct dependent lookup's historical
+	// tolerance for unavailable targets after resolved closure evaluation.
+	SkipTargetValidation bool
+	// IncludeLegacyReverseSources evaluates legacy settings.depends_on sources
+	// while resolving reverse closures whose context-based targets are not
+	// represented by the structural graph.
+	IncludeLegacyReverseSources bool
+	// IncludeRequiredReverseSources evaluates modern required dependency sources
+	// whose unavailable targets are omitted from the structural graph.
+	IncludeRequiredReverseSources bool
 }
 
 // selector builds the seed selector for this request. Both the lightweight
@@ -176,7 +187,9 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 	if err != nil {
 		return nil, err
 	}
-	graph, err := BuildGraph(lightweightStacks)
+	// Phase A only discovers candidate nodes and edges. Required targets are
+	// validated after their declaring components have entered the closure.
+	graph, err := buildGraph(lightweightStacks, map[string]bool{}, req.LeftDelim)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +203,29 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 		return &ScopeResult{Stacks: map[string]any{}, Closure: closure}, nil
 	}
 
-	return resolveClosureStacks(describe, req, roots, closure, lightweightStacks)
+	return resolveClosureStacks(describe, req, closureResolutionParams{
+		roots:             roots,
+		targets:           rootTargets(graph, roots),
+		closure:           closure,
+		lightweightStacks: lightweightStacks,
+	})
+}
+
+type rootTarget struct {
+	component     string
+	componentType string
+	stack         string
+}
+
+func rootTargets(graph *dependency.Graph, roots []string) []rootTarget {
+	targets := make([]rootTarget, 0, len(roots))
+	for _, id := range roots {
+		node, ok := graph.GetNode(id)
+		if ok {
+			targets = append(targets, rootTarget{component: node.Component, componentType: node.Type, stack: node.Stack})
+		}
+	}
+	return targets
 }
 
 // resolveClosureStacks is Phase C: re-describe (templates/YAML functions/auth
@@ -200,61 +235,132 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 // from the lightweight pass), so a same-stack templated dependency target
 // (e.g. `stack: "{{ .vars.stage }}"` resolving to its own stack) still
 // produces the correct closure.
-func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []string, closure *dependency.Graph, lightweightStacks map[string]any) (*ScopeResult, error) {
+type closureResolutionParams struct {
+	roots             []string
+	targets           []rootTarget
+	closure           *dependency.Graph
+	lightweightStacks map[string]any
+}
+
+func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, p closureResolutionParams) (*ScopeResult, error) {
 	resolvedStacks := make(map[string]any)
 	evaluatedComponents := make(map[string]map[string]bool)
 	var resolvedGraph *dependency.Graph
 
-	// Reverse/both directions conservatively evaluate components whose
-	// dependency declarations were unresolved in the lightweight pass — see
-	// UnresolvedDependencySources and the ResolveScopedClosure doc comment.
-	extraEval := map[string][]string{}
-	if req.Direction != DirectionForward {
-		extraEval = UnresolvedDependencySources(lightweightStacks, req.LeftDelim)
-	}
+	extraEval := reverseExtraEvaluationTargets(p.lightweightStacks, req, p.targets)
 
 	for {
-		stackNames, componentsByStack := evaluationTargets(closure, extraEval)
+		stackNames, componentsByStack := evaluationTargets(p.closure, extraEval)
 		pending := pendingComponentsByStack(stackNames, componentsByStack, evaluatedComponents)
 		if len(pending) == 0 {
-			finalRoots := refineRoots(resolvedGraph, roots, req)
+			finalRoots := refineRoots(resolvedGraph, p.roots, req)
 			return &ScopeResult{
 				Stacks:  resolvedStacks,
 				Closure: ReachableClosure(resolvedGraph, finalRoots, req.Direction, req.Depths),
 			}, nil
 		}
 
-		// Evaluate only the closure's own components within each stack:
-		// unrelated components that merely share a stack file with a closure
-		// member must not have their templates/YAML functions (and thus their
-		// auth/backend requirements) evaluated. Stacks with nothing left to
-		// evaluate this round (all closure components already evaluated) are
-		// skipped.
-		for _, stackName := range stackNames {
-			components, ok := pending[stackName]
-			if !ok {
-				continue
-			}
-			partial, err := describe(stackName, components, req.ProcessTemplates, req.ProcessFunctions)
-			if err != nil {
-				return nil, err
-			}
-			resolvedStacks = mergeResolvedClosureStacks(resolvedStacks, partial)
-			if evaluatedComponents[stackName] == nil {
-				evaluatedComponents[stackName] = make(map[string]bool, len(components))
-			}
-			for _, component := range components {
-				evaluatedComponents[stackName][component] = true
-			}
-		}
-
 		var err error
-		resolvedGraph, err = BuildGraph(mergeResolvedClosureStacks(lightweightStacks, resolvedStacks))
+		resolvedStacks, err = evaluatePendingClosureComponents(describe, req, pendingClosureEvaluationParams{
+			stackNames:          stackNames,
+			pending:             pending,
+			resolvedStacks:      resolvedStacks,
+			evaluatedComponents: evaluatedComponents,
+		})
 		if err != nil {
 			return nil, err
 		}
-		closure = ReachableClosure(resolvedGraph, roots, req.Direction, req.Depths)
+
+		resolvedGraph, err = buildGraph(
+			mergeResolvedClosureStacks(p.lightweightStacks, resolvedStacks),
+			map[string]bool{},
+			req.LeftDelim,
+		)
+		if err != nil {
+			return nil, err
+		}
+		p.closure = ReachableClosure(resolvedGraph, p.roots, req.Direction, req.Depths)
+		if !req.SkipTargetValidation {
+			if _, err = buildGraph(
+				mergeResolvedClosureStacks(p.lightweightStacks, resolvedStacks),
+				evaluatedClosureNodeIDs(p.closure, evaluatedComponents),
+				req.LeftDelim,
+			); err != nil {
+				return nil, err
+			}
+		}
 	}
+}
+
+// evaluatePendingClosureComponents evaluates only closure members, avoiding
+// templates and YAML functions for unrelated components in shared stack files.
+type pendingClosureEvaluationParams struct {
+	stackNames          []string
+	pending             map[string][]string
+	resolvedStacks      map[string]any
+	evaluatedComponents map[string]map[string]bool
+}
+
+func evaluatePendingClosureComponents(describe DescribeFunc, req *ScopeRequest, p pendingClosureEvaluationParams) (map[string]any, error) {
+	for _, stackName := range p.stackNames {
+		components, ok := p.pending[stackName]
+		if !ok {
+			continue
+		}
+		partial, err := describe(stackName, components, req.ProcessTemplates, req.ProcessFunctions)
+		if err != nil {
+			return nil, fmt.Errorf("evaluating stack %q components %v: %w", stackName, components, err)
+		}
+		p.resolvedStacks = mergeResolvedClosureStacks(p.resolvedStacks, partial)
+		if p.evaluatedComponents[stackName] == nil {
+			p.evaluatedComponents[stackName] = make(map[string]bool, len(components))
+		}
+		for _, component := range components {
+			p.evaluatedComponents[stackName][component] = true
+		}
+	}
+	return p.resolvedStacks, nil
+}
+
+// reverseExtraEvaluationTargets collects sources whose dependencies cannot form
+// structural reverse edges until the sources have been fully evaluated.
+func reverseExtraEvaluationTargets(stacks map[string]any, req *ScopeRequest, targets []rootTarget) map[string][]string {
+	if req.Direction == DirectionForward {
+		return map[string][]string{}
+	}
+
+	extraEval := UnresolvedDependencySources(stacks, req.LeftDelim)
+	if req.IncludeLegacyReverseSources {
+		mergeEvaluationTargets(extraEval, LegacyDependencySources(stacks))
+	}
+	if req.IncludeRequiredReverseSources {
+		mergeEvaluationTargets(extraEval, RequiredDependencySources(stacks, targets, req.LeftDelim))
+	}
+	return extraEval
+}
+
+func mergeEvaluationTargets(targets, additional map[string][]string) {
+	for stackName, components := range additional {
+		targets[stackName] = append(targets[stackName], components...)
+		sort.Strings(targets[stackName])
+		targets[stackName] = slices.Compact(targets[stackName])
+	}
+}
+
+// evaluatedClosureNodeIDs returns the source node IDs whose required targets
+// are in scope for strict validation after Phase C evaluation.
+func evaluatedClosureNodeIDs(closure *dependency.Graph, evaluated map[string]map[string]bool) map[string]bool {
+	nodeIDs := make(map[string]bool)
+	for stackName, components := range evaluated {
+		for componentName := range components {
+			for _, node := range closure.Nodes {
+				if node.Stack == stackName && node.Component == componentName {
+					nodeIDs[node.ID] = true
+				}
+			}
+		}
+	}
+	return nodeIDs
 }
 
 // refineRoots re-tests the seed roots against the RESOLVED graph so the final
