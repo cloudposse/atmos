@@ -62,11 +62,34 @@ func TestWithRef(t *testing.T) {
 	assert.Equal(t, "./local", WithRef("./local", "v1.2.3"))
 }
 
-// TestPinRenderedRef_Git proves pinRenderedRef delegates to WithRef's
-// existing ?ref= sugar for non-OCI sources -- rendered mode's git provenance
-// pinning must behave identically to today's WithRef behavior.
+func TestReplaceRef(t *testing.T) {
+	assert.Equal(t, "github.com/acme/template?ref=v1.2.3", replaceRef("github.com/acme/template", "v1.2.3"))
+	assert.Equal(t, "github.com/acme/template?depth=1&ref=v1.2.3", replaceRef("github.com/acme/template?depth=1", "v1.2.3"))
+	// Unlike WithRef, an existing ref= is overridden, not preserved.
+	assert.Equal(t, "github.com/acme/template?ref=v1.2.3", replaceRef("github.com/acme/template?ref=main", "v1.2.3"))
+	assert.Equal(t, "github.com/acme/template?depth=1&ref=v1.2.3&clone=false", replaceRef("github.com/acme/template?depth=1&ref=main&clone=false", "v1.2.3"))
+	assert.Equal(t, "./local", replaceRef("./local", "v1.2.3"))
+	assert.Equal(t, "", replaceRef("", "v1.2.3"))
+	assert.Equal(t, "github.com/acme/template?ref=main", replaceRef("github.com/acme/template?ref=main", ""))
+}
+
+// TestPinRenderedRef_Git proves pinRenderedRef appends a ?ref= for a
+// git-flavored source that doesn't have one yet -- rendered mode's git
+// provenance pinning.
 func TestPinRenderedRef_Git(t *testing.T) {
 	pinned, err := pinRenderedRef("github.com/acme/template", "abc123")
+	require.NoError(t, err)
+	assert.Equal(t, "github.com/acme/template?ref=abc123", pinned)
+}
+
+// TestPinRenderedRef_GitReplacesExistingRef proves pinRenderedRef overrides
+// an already-present ?ref= (e.g. a recorded source's own "?ref=main") with
+// the resolved, immutable renderedRef, rather than leaving the mutable
+// tag/branch in place as WithRef's --ref sugar intentionally does. Without
+// this, a moving branch could change what --update-strategy=rendered's
+// merge base resolves to on a later run.
+func TestPinRenderedRef_GitReplacesExistingRef(t *testing.T) {
+	pinned, err := pinRenderedRef("github.com/acme/template?ref=main", "abc123")
 	require.NoError(t, err)
 	assert.Equal(t, "github.com/acme/template?ref=abc123", pinned)
 }
