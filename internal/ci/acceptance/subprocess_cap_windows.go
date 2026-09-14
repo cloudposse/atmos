@@ -19,7 +19,15 @@ import "context"
 // logic run in parallel) avoids the trigger condition without giving up test
 // parallelism where it doesn't involve a real subprocess. See subprocess_cap_other.go
 // for why this cap doesn't exist on other platforms.
-const maxConcurrentSubprocesses = 4
+//
+// A cap of 4 (set in commit 72319350ae, see
+// docs/fixes/2026-09-11-windows-acceptance-subprocess-race.md) was still insufficient:
+// the same crash signature recurred four more times on Windows shard 3 on 2026-09-12,
+// across two unrelated PRs -- #3107 (run 34699763477) and #3122 (runs 34703060789 and
+// 34726124320, twice in the same PR). Lowered to 2 so fewer real `go` toolchain
+// subprocesses can ever be in flight at once on Windows; revisit upward only with new
+// evidence that 2 is unnecessarily conservative.
+const maxConcurrentSubprocesses = 2
 
 // subprocessSlots limits how many commandRunner.run/output calls -- across every
 // commandRunner instance, since each caller constructs its own -- may have a real
