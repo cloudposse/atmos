@@ -390,13 +390,41 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 	skipGomonkeyOnDarwinARM64(t)
 
+	var describedStacks map[string]any
+	var describeErr error
+	var initErr error
+	var schedulerErr error
+	describePatches := gomonkey.NewPatches()
+	defer describePatches.Reset()
+	describePatches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, initErr
+	})
+	describePatches.ApplyFunc(ExecuteDescribeStacksWithMocks, func(
+		*schema.AtmosConfiguration,
+		string,
+		[]string,
+		[]string,
+		[]string,
+		bool,
+		bool,
+		bool,
+		bool,
+		[]string,
+		auth.AuthManager,
+		bool,
+		[]string,
+		map[string]string,
+		DescribeStacksErrorOptions,
+	) (map[string]any, error) {
+		return describedStacks, describeErr
+	})
+	describePatches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(context.Context, scheduleradapters.TerraformOptions) error {
+		return schedulerErr
+	})
+
 	t.Run("config init", func(t *testing.T) {
 		expectedErr := errors.New("config failed")
-		patches := gomonkey.NewPatches()
-		defer patches.Reset()
-		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
-			return schema.AtmosConfiguration{}, expectedErr
-		})
+		initErr = expectedErr
 
 		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
@@ -404,6 +432,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 
 	t.Run("auth manager", func(t *testing.T) {
 		expectedErr := errors.New("auth failed")
+		initErr = nil
 		ctrl := gomock.NewController(t)
 		mockFactory := NewMockAuthManagerQueryFactory(ctrl)
 		mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, expectedErr)
@@ -413,18 +442,15 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 			authManagerFactory = oldAuthManagerFactory
 		}()
 
-		patches := gomonkey.NewPatches()
-		defer patches.Reset()
-		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
-			return schema.AtmosConfiguration{}, nil
-		})
-
 		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("describe stacks", func(t *testing.T) {
 		expectedErr := errors.New("describe failed")
+		initErr = nil
+		describedStacks = nil
+		describeErr = expectedErr
 		ctrl := gomock.NewController(t)
 		mockFactory := NewMockAuthManagerQueryFactory(ctrl)
 		mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
@@ -433,38 +459,16 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 		defer func() {
 			authManagerFactory = oldAuthManagerFactory
 		}()
-
-		patches := gomonkey.NewPatches()
-		defer patches.Reset()
-		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
-			return schema.AtmosConfiguration{}, nil
-		})
-		patches.ApplyFunc(ExecuteDescribeStacksWithMocks, func(
-			*schema.AtmosConfiguration,
-			string,
-			[]string,
-			[]string,
-			[]string,
-			bool,
-			bool,
-			bool,
-			bool,
-			[]string,
-			auth.AuthManager,
-			bool,
-			[]string,
-			map[string]string,
-			DescribeStacksErrorOptions,
-		) (map[string]any, error) {
-			return nil, expectedErr
-		})
-
 		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("scheduler", func(t *testing.T) {
 		expectedErr := errors.New("scheduler failed")
+		initErr = nil
+		describedStacks = map[string]any{}
+		describeErr = nil
+		schedulerErr = expectedErr
 		ctrl := gomock.NewController(t)
 		mockFactory := NewMockAuthManagerQueryFactory(ctrl)
 		mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
@@ -473,35 +477,6 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 		defer func() {
 			authManagerFactory = oldAuthManagerFactory
 		}()
-
-		patches := gomonkey.NewPatches()
-		defer patches.Reset()
-		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
-			return schema.AtmosConfiguration{}, nil
-		})
-		patches.ApplyFunc(ExecuteDescribeStacksWithMocks, func(
-			*schema.AtmosConfiguration,
-			string,
-			[]string,
-			[]string,
-			[]string,
-			bool,
-			bool,
-			bool,
-			bool,
-			[]string,
-			auth.AuthManager,
-			bool,
-			[]string,
-			map[string]string,
-			DescribeStacksErrorOptions,
-		) (map[string]any, error) {
-			return map[string]any{}, nil
-		})
-		patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(context.Context, scheduleradapters.TerraformOptions) error {
-			return expectedErr
-		})
-
 		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
 	})

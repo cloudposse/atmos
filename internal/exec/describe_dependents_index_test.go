@@ -34,6 +34,30 @@ func TestBuildDependencyIndex_NoDependencies(t *testing.T) {
 	assert.Empty(t, idx, "components without depends_on should produce empty index")
 }
 
+func TestBuildDependencyIndex_IgnoresInvalidVars(t *testing.T) {
+	t.Parallel()
+
+	idx, err := buildDependencyIndexWithError(map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"app": map[string]any{
+						"vars": map[string]any{"tenant": []any{"invalid"}},
+						"dependencies": map[string]any{"components": []any{
+							map[string]any{"component": "vpc"},
+						}},
+					},
+				},
+			},
+		},
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, idx)
+	require.ErrorContains(t, err, `component "app"`)
+	require.ErrorContains(t, err, `stack "dev"`)
+}
+
 func TestBuildDependencyIndex_WithDependencies(t *testing.T) {
 	t.Parallel()
 
@@ -211,7 +235,8 @@ func TestFindDependentsFromIndex_NoMatches(t *testing.T) {
 	args := &DescribeDependentsArgs{Component: "vpc", Stack: "dev-use1", DepIndex: dependencyIndex{}}
 	providedVars := &schema.Context{Namespace: "acme", Tenant: "dev"}
 
-	result := findDependentsFromIndex(nil, args, providedVars)
+	result, err := findDependentsFromIndex(nil, args, providedVars, false)
+	require.NoError(t, err)
 	assert.Nil(t, result, "no index entries should return nil")
 }
 
@@ -233,6 +258,45 @@ func TestFindComponentSectionInCachedStacks_Helmfile(t *testing.T) {
 	section := findComponentSectionInCachedStacks(stacks, "dev-use1", "nginx")
 	require.NotNil(t, section)
 	assert.Equal(t, "nginx", section["vars"].(map[string]any)["chart"])
+}
+
+func TestFindComponentSectionInCachedStacks_AllTypesWithPrecedence(t *testing.T) {
+	t.Parallel()
+
+	stacks := map[string]any{
+		"dev-use1": map[string]any{
+			"components": map[string]any{
+				"packer": map[string]any{
+					"image": map[string]any{"vars": map[string]any{"source": "packer"}},
+				},
+				"terraform": map[string]any{
+					"image": map[string]any{"vars": map[string]any{"source": "terraform"}},
+				},
+			},
+		},
+	}
+
+	section := findComponentSectionInCachedStacks(stacks, "dev-use1", "image")
+	require.NotNil(t, section)
+	assert.Equal(t, "terraform", section["vars"].(map[string]any)["source"])
+}
+
+func TestFindComponentSectionInCachedStacks_PackerOnly(t *testing.T) {
+	t.Parallel()
+
+	stacks := map[string]any{
+		"dev-use1": map[string]any{
+			"components": map[string]any{
+				"packer": map[string]any{
+					"image": map[string]any{"vars": map[string]any{"source": "packer"}},
+				},
+			},
+		},
+	}
+
+	section := findComponentSectionInCachedStacks(stacks, "dev-use1", "image")
+	require.NotNil(t, section)
+	assert.Equal(t, "packer", section["vars"].(map[string]any)["source"])
 }
 
 func TestFindComponentSectionInCachedStacks_InvalidStackSection(t *testing.T) {
@@ -301,6 +365,20 @@ func TestFindDependentsByScan_SkipsAbstractAndSelf(t *testing.T) {
 				"invalid-type": "not-a-map",
 			},
 		},
+		"prod-use1": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{"tenant": "dev"},
+						"dependencies": map[string]any{
+							"components": []any{
+								map[string]any{"component": "vpc", "stack": "dev-use1"},
+							},
+						},
+					},
+				},
+			},
+		},
 		// Invalid stack section — should be skipped.
 		"bad-stack": "not-a-map",
 		// Missing components — should be skipped.
@@ -313,11 +391,14 @@ func TestFindDependentsByScan_SkipsAbstractAndSelf(t *testing.T) {
 	}
 	providedVars := &schema.Context{Tenant: "dev"}
 
-	deps, err := findDependentsByScan(nil, args, stacks, providedVars)
+	deps, err := findDependentsByScan(nil, args, stacks, providedVars, false)
 	require.NoError(t, err)
-	require.Len(t, deps, 1, "only 'app' should be a valid dependent")
-	assert.Equal(t, "app", deps[0].Component)
-	assert.Equal(t, "dev-use1", deps[0].Stack)
+	require.Len(t, deps, 2, "only the valid same-stack and cross-stack dependents should be returned")
+	actual := []string{
+		deps[0].Component + "@" + deps[0].Stack,
+		deps[1].Component + "@" + deps[1].Stack,
+	}
+	assert.ElementsMatch(t, []string{"app@dev-use1", "vpc@prod-use1"}, actual)
 }
 
 func TestFindDependentsFromIndex_SkipsSelfReference(t *testing.T) {
@@ -338,6 +419,195 @@ func TestFindDependentsFromIndex_SkipsSelfReference(t *testing.T) {
 	args := &DescribeDependentsArgs{Component: "vpc", Stack: "dev-use1", DepIndex: idx}
 	providedVars := &schema.Context{Tenant: "dev"}
 
-	result := findDependentsFromIndex(nil, args, providedVars)
+	result, err := findDependentsFromIndex(nil, args, providedVars, false)
+	require.NoError(t, err)
 	assert.Empty(t, result, "self-references should be skipped")
+}
+
+func TestFindDependentsFromIndex_IncludesCrossStackSameNameDependent(t *testing.T) {
+	t.Parallel()
+
+	idx := dependencyIndex{
+		"vpc": {
+			{
+				StackName:          "prod-use1",
+				StackComponentName: "vpc",
+				StackComponentType: "terraform",
+				StackComponentVars: schema.Context{Tenant: "dev"},
+				DepSource:          dependencySourceDependenciesComponents,
+				DependsOn: schema.ComponentDependency{
+					Component: "vpc",
+					Stack:     "dev-use1",
+				},
+			},
+		},
+	}
+	args := &DescribeDependentsArgs{Component: "vpc", Stack: "dev-use1", DepIndex: idx}
+	providedVars := &schema.Context{Tenant: "dev"}
+
+	result, err := findDependentsFromIndex(nil, args, providedVars, false)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "vpc", result[0].Component)
+	assert.Equal(t, "prod-use1", result[0].Stack)
+}
+
+func TestExecuteDescribeDependents_IgnoresOptionalAvailableCrossTypeTarget(t *testing.T) {
+	t.Parallel()
+
+	optional := false
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"image": map[string]any{
+						"metadata": map[string]any{"enabled": false},
+						"vars":     map[string]any{"tenant": "dev"},
+					},
+					"app": map[string]any{
+						"vars": map[string]any{"tenant": "dev"},
+						"dependencies": map[string]any{
+							"components": []any{map[string]any{"component": "image", "kind": "packer", "required": optional}},
+						},
+					},
+				},
+				"packer": map[string]any{
+					"image": map[string]any{"vars": map[string]any{"tenant": "dev"}},
+				},
+			},
+		},
+	}
+
+	for _, test := range []struct {
+		name  string
+		index dependencyIndex
+	}{
+		{
+			name: "index",
+			index: dependencyIndex{
+				"image": {
+					{
+						StackName:          "dev",
+						StackComponentName: "app",
+						StackComponentType: "terraform",
+						StackComponentVars: schema.Context{Tenant: "dev"},
+						DepSource:          dependencySourceDependenciesComponents,
+						DependsOn: schema.ComponentDependency{
+							Component: "image",
+							Kind:      "packer",
+							Required:  &optional,
+						},
+					},
+				},
+			},
+		},
+		{name: "scan"},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			args := &DescribeDependentsArgs{
+				Component: "image",
+				Stack:     "dev",
+				Stacks:    stacks,
+				DepIndex:  test.index,
+			}
+
+			dependents, err := ExecuteDescribeDependents(&schema.AtmosConfiguration{}, args)
+			require.NoError(t, err)
+			require.Empty(t, dependents)
+		})
+	}
+}
+
+func TestExecuteDescribeDependents_IgnoresRequiredUnavailableCrossTypeTarget(t *testing.T) {
+	t.Parallel()
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"image": map[string]any{"vars": map[string]any{"tenant": "dev"}},
+					"app": map[string]any{
+						"vars": map[string]any{"tenant": "dev"},
+						"dependencies": map[string]any{
+							"components": []any{map[string]any{"component": "image", "kind": "packer"}},
+						},
+					},
+				},
+				"packer": map[string]any{
+					"image": map[string]any{
+						"metadata": map[string]any{"enabled": false},
+						"vars":     map[string]any{"tenant": "dev"},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range []struct {
+		name  string
+		index dependencyIndex
+	}{
+		{
+			name: "index",
+			index: dependencyIndex{
+				"image": {
+					{
+						StackName:          "dev",
+						StackComponentName: "app",
+						StackComponentType: "terraform",
+						StackComponentVars: schema.Context{Tenant: "dev"},
+						DepSource:          dependencySourceDependenciesComponents,
+						DependsOn: schema.ComponentDependency{
+							Component: "image",
+							Kind:      "packer",
+						},
+					},
+				},
+			},
+		},
+		{name: "scan"},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			args := &DescribeDependentsArgs{
+				Component: "image",
+				Stack:     "dev",
+				Stacks:    stacks,
+				DepIndex:  test.index,
+			}
+
+			dependents, err := ExecuteDescribeDependents(&schema.AtmosConfiguration{}, args)
+			require.NoError(t, err)
+			require.Empty(t, dependents)
+		})
+	}
+}
+
+func TestFindDependentsByScan_ReportsInvalidVarsContext(t *testing.T) {
+	t.Parallel()
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"app": map[string]any{
+						"vars": map[string]any{"tenant": []any{"invalid"}},
+						"dependencies": map[string]any{
+							"components": []any{map[string]any{"component": "image"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := findDependentsByScan(nil, &DescribeDependentsArgs{Component: "image", Stack: "dev"}, stacks, &schema.Context{}, false)
+	require.Error(t, err)
+	require.ErrorContains(t, err, `component "app"`)
+	require.ErrorContains(t, err, `stack "dev"`)
 }
