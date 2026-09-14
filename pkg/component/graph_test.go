@@ -73,6 +73,34 @@ func TestBuildGraphIncludesDependenciesAndSkipsDisabledComponents(t *testing.T) 
 	assert.Contains(t, graph.Nodes[GraphNodeID("base", "prod")].Dependents, GraphNodeID("worker", "dev"))
 }
 
+func TestBuildGraphOptionalDependencies(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"app": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "present", "required": false},
+								map[string]any{"name": "missing", "required": false},
+								map[string]any{"name": "disabled", "required": false},
+							},
+						},
+					},
+					"present": map[string]any{},
+					"disabled": map[string]any{
+						cfg.MetadataSectionName: map[string]any{"enabled": false},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := BuildGraph(stacks, cfg.KubernetesComponentType)
+	require.NoError(t, err)
+	assert.Equal(t, []string{GraphNodeID("present", "dev")}, graph.Nodes[GraphNodeID("app", "dev")].Dependencies)
+}
+
 func TestBuildGraphSupportsLegacyDependsOn(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
@@ -94,6 +122,157 @@ func TestBuildGraphSupportsLegacyDependsOn(t *testing.T) {
 
 	api := graph.Nodes[GraphNodeID("api", "dev")]
 	assert.Equal(t, []string{GraphNodeID("base", "dev")}, api.Dependencies)
+}
+
+func TestBuildGraphEmptyModernDependenciesPreventsSettingsFallback(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{}},
+						cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"base"}},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := BuildGraph(stacks, cfg.KubernetesComponentType)
+	require.NoError(t, err)
+	assert.Empty(t, graph.Nodes[GraphNodeID("api", "dev")].Dependencies)
+}
+
+func TestBuildGraphMalformedDependenciesSectionFails(t *testing.T) {
+	_, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: "not-a-map",
+						cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"base"}},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType)
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+}
+
+func TestBuildGraphRequiredUnavailableDependenciesFail(t *testing.T) {
+	tests := []struct {
+		name       string
+		target     string
+		targetBody map[string]any
+		wantErr    error
+	}{
+		{name: "missing", target: "missing", wantErr: errUtils.ErrDependencyTargetNotFound},
+		{name: "disabled", target: "disabled", targetBody: map[string]any{cfg.MetadataSectionName: map[string]any{"enabled": false}}, wantErr: errUtils.ErrDependencyTargetUnavailable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			components := map[string]any{
+				"app": map[string]any{cfg.DependenciesSectionName: map[string]any{"components": []any{map[string]any{"name": test.target}}}},
+			}
+			if test.targetBody != nil {
+				components[test.target] = test.targetBody
+			}
+			_, err := BuildGraph(map[string]any{"dev": map[string]any{cfg.ComponentsSectionName: map[string]any{cfg.KubernetesComponentType: components}}}, cfg.KubernetesComponentType)
+			require.ErrorIs(t, err, test.wantErr)
+		})
+	}
+}
+
+func TestBuildGraphInvalidRequiredValueFails(t *testing.T) {
+	_, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{
+							map[string]any{"component": "base", "required": "sometimes"},
+						}},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType)
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+	require.ErrorIs(t, err, schema.ErrComponentDependencyInvalidRequired)
+}
+
+func TestBuildGraphDefersCustomDelimitedRequiredValue(t *testing.T) {
+	graph, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{
+							map[string]any{"component": "base", "required": "[[ .vars.base_required ]]"},
+						}},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType, "[[")
+
+	require.NoError(t, err)
+	api, ok := graph.GetNode(GraphNodeID("api", "dev"))
+	require.True(t, ok)
+	require.Equal(t, []string{GraphNodeID("base", "dev")}, api.Dependencies)
+}
+
+func TestBuildGraphOptionalUnresolvedTargetFails(t *testing.T) {
+	_, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "{{ .missing }}", "required": false},
+							},
+						},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType)
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+}
+
+func TestExecuteGraphOptionalUnresolvedTargetWithCustomDelimiterFails(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "[[ .missing ]]", "required": false},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{
+		Provider:      &graphTestProvider{},
+		AtmosConfig:   &schema.AtmosConfiguration{Templates: schema.Templates{Settings: schema.TemplatesSettings{Delimiters: []string{"[[", "]]"}}}},
+		Info:          &schema.ConfigAndStacksInfo{},
+		Stacks:        stacks,
+		ComponentType: cfg.KubernetesComponentType,
+	})
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
 }
 
 func TestBuildGraphIgnoresMalformedStackSections(t *testing.T) {
