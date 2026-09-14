@@ -127,6 +127,7 @@ func isAliasesPresent(cmds []*cobra.Command) bool {
 	return len(filterCommands(cmds, true)) > 0
 }
 
+// headingStyle renders a command help heading with the current theme.
 func headingStyle(s string) string {
 	return theme.GetCurrentStyles().Help.Heading.Render(s)
 }

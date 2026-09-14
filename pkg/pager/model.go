@@ -47,32 +47,40 @@ type pagerStatusMessage struct {
 
 var pagerHelpHeight int
 
+// statusBarNoteStyle renders ordinary pager status text with the current theme.
 func statusBarNoteStyle(text string) string {
 	return theme.GetCurrentStyles().Pager.StatusBar.Render(text)
 }
 
+// statusBarHelpStyle renders the status bar's help hint with the current theme.
 func statusBarHelpStyle(text string) string {
 	return theme.GetCurrentStyles().Pager.StatusBarHelp.Render(text)
 }
 
+// statusBarMessageStyle renders a temporary pager status message with the current theme.
 func statusBarMessageStyle(text string) string {
 	return theme.GetCurrentStyles().Pager.StatusBarMessage.Render(text)
 }
 
+// errorMessageStyle renders pager error text with the current theme.
 func errorMessageStyle(text string) string {
 	return theme.GetCurrentStyles().Pager.ErrorMessage.Render(text)
 }
 
+// statusBarMessageScrollPosStyle renders the scroll position alongside a temporary status message.
 func statusBarMessageScrollPosStyle(text string) string {
 	return theme.GetCurrentStyles().Pager.StatusBarMessage.Render(text)
 }
 
+// statusBarMessageHelpStyle renders the help hint alongside a temporary status message.
 func statusBarMessageHelpStyle(text string) string {
 	return theme.GetCurrentStyles().Pager.StatusBarHelp.Render(text)
 }
 
+// helpViewStyle renders the pager's expanded help using the current theme.
 func helpViewStyle(text string) string { return theme.GetCurrentStyles().Pager.HelpView.Render(text) }
 
+// highlightStyle renders a search match using the current theme's highlight style.
 func highlightStyle(text string) string { return theme.GetCurrentStyles().Pager.Highlight.Render(text) }
 
 // Common stuff we'll need to access in all models.
@@ -528,6 +536,7 @@ func max(a, b int) int {
 	return b
 }
 
+// statusBarView appends the pager status, scroll percentage, and context-sensitive help to b.
 func (m *model) statusBarView(b *strings.Builder) {
 	showStatusMessage := m.state == pagerStateStatusMessage
 

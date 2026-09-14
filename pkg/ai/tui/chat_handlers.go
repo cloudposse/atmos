@@ -465,6 +465,7 @@ func (m *ChatModel) View() string {
 	}
 }
 
+// headerView renders the assistant title, guidance, and current session details.
 func (m *ChatModel) headerView() string {
 	title := "Atmos AI Assistant"
 	subtitle := "Ask questions about your infrastructure, components, and stacks"

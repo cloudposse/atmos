@@ -139,6 +139,7 @@ func (c *columnView) setSize(width, height int) {
 	}
 }
 
+// getStyle sizes the workflow column and adds a themed border when it has focus.
 func (c *columnView) getStyle() lipgloss.Style {
 	s := lipgloss.NewStyle().Padding(0).Margin(2).Height(c.height).Width(c.width)
 

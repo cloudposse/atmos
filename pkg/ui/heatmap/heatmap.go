@@ -201,6 +201,7 @@ type model struct {
 // Messages.
 type tickMsg time.Time
 
+// newModel initializes performance views from a frozen snapshot in the requested visualization mode.
 func newModel(heatModel *HeatModel, mode string, ctx context.Context) *model {
 	// Initialize table.
 	columns := []table.Column{
@@ -399,6 +400,7 @@ func (m *model) updatePerformanceData() {
 	m.table.SetRows(rows)
 }
 
+// renderLegend summarizes elapsed time, accumulated CPU time, and parallelism from the frozen snapshot.
 func (m *model) renderLegend() string {
 	legendStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
@@ -430,6 +432,7 @@ func (m *model) renderLegend() string {
 	return legend
 }
 
+// View combines the performance header, legend, selected visualization, and keyboard help.
 func (m *model) View() string {
 	if m.width == 0 {
 		return "Initializing..."

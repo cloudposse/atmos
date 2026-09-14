@@ -68,6 +68,7 @@ func unifiedDiff(oldManifest, newManifest, namespace string, contextLines int) (
 	return buf.String(), changed, nil
 }
 
+// colorizeUnifiedDiff applies semantic theme colors to diff lines while preserving plain output without color.
 func colorizeUnifiedDiff(diffText string) string {
 	if diffText == "" || ui.GetColorProfile() == termenv.Ascii {
 		return diffText

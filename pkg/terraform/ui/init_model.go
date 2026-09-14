@@ -212,6 +212,7 @@ func (m InitModel) View() string {
 	return m.renderProgress()
 }
 
+// renderProgress displays the running Terraform setup action, current operation, and elapsed time.
 func (m *InitModel) renderProgress() string {
 	var b strings.Builder
 
@@ -247,6 +248,7 @@ func (m *InitModel) renderProgress() string {
 	return b.String()
 }
 
+// renderComplete formats the setup outcome, including cancellation or failure, with elapsed time.
 func (m *InitModel) renderComplete() string {
 	elapsed := m.clock.Since(m.startTime).Seconds()
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))

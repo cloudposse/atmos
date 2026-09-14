@@ -177,6 +177,7 @@ func renderVerifyResult(rows []verifyRow, format string) error {
 	return nil
 }
 
+// createVerifyTable formats verification failures with their component paths and reasons.
 func createVerifyTable(rows []verifyRow) string {
 	headers := []string{"COMPONENT", "PATH", "REASON"}
 	cells := make([][]string, 0, len(rows))

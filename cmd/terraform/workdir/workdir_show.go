@@ -66,6 +66,7 @@ The output is formatted for human readability, similar to 'kubectl describe'.`,
 	},
 }
 
+// printShowHuman displays a workdir's source, location, and lifecycle metadata.
 func printShowHuman(info *WorkdirInfo) {
 	defer perf.Track(nil, "workdir.printShowHuman")()
 

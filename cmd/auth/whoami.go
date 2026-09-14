@@ -248,6 +248,7 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 	return data.WriteJSON(redactedWhoami)
 }
 
+// printWhoamiHuman displays the active identity, credential status, and renewal hints.
 func printWhoamiHuman(whoami *authTypes.WhoamiInfo, isValid bool) {
 	defer perf.Track(nil, "auth.printWhoamiHuman")()
 

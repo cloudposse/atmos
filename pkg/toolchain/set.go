@@ -257,6 +257,7 @@ func (m *versionListModel) pageDown() {
 	}
 }
 
+// View renders the version selector and details pane with a border indicating keyboard focus.
 func (m *versionListModel) View() string {
 	defer perf.Track(nil, "toolchain.versionListModel.View")()
 

@@ -215,6 +215,7 @@ func displayToolsTable(params *displayTableParams) error {
 	return nil
 }
 
+// listRegistryTools retrieves registry tools and renders them with the requested filtering and pager options.
 func listRegistryTools(ctx context.Context, registryName string, opts *ListOptions) error {
 	defer perf.Track(nil, "registry.listRegistryTools")()
 

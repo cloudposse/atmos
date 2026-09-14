@@ -44,6 +44,7 @@ var listCmd = &cobra.Command{
 	},
 }
 
+// printListTable displays cached artifacts with their sizes and ages, or an empty-cache message.
 func printListTable(entries []tfcache.Entry) {
 	if len(entries) == 0 {
 		ui.Writeln("No cached artifacts found")

@@ -271,6 +271,7 @@ func (m *modelVendor) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+// handleInstalledPkgMsg records a package result and starts the next install or finishes the vendor UI.
 func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, tea.Cmd) {
 	// ensure index is within bounds
 	if m.index >= len(m.packages) {
@@ -418,6 +419,7 @@ func (m *modelVendor) logComponentSummary() {
 	}
 }
 
+// View renders the active package and progress or the final vendoring summary.
 func (m *modelVendor) View() string {
 	defer perf.Track(nil, "exec.View")()
 

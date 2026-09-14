@@ -51,6 +51,7 @@ var statsCmd = &cobra.Command{
 	},
 }
 
+// printStats displays cache usage and the largest and oldest artifacts when available.
 func printStats(s tfcache.Summary) {
 	rows := [][]string{
 		{"Registry cache root", s.Root},

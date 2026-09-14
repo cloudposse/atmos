@@ -60,6 +60,7 @@ func displayWebflowDialog(authURL string) {
 	ui.Writef("%s\n%s\n", instructionStyle.Render("If the browser doesn't open, visit:"), urlStyle.Render(authURL))
 }
 
+// renderWebflowDialog builds the browser sign-in prompt and reports whether the URL fits inside it.
 func renderWebflowDialog(authURL string) (string, bool) {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).

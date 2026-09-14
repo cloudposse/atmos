@@ -22,6 +22,7 @@ const BOX_PATHS: Record<string, string> = {
   "╯": "M0 1H0.5Q1 1 1 0.5V0",
 };
 
+/** Draws terminal glyphs within fixed cells while preserving selectable text and inherited colors. */
 export default function renderTerminalText(text: string) {
   return text
     .split(/([─│┌┐└┘├┤┬┴┼╭╮╰╯█●○\u2800-\u28ff])/u)

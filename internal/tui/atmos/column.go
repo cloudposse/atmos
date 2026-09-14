@@ -70,6 +70,7 @@ func (c *columnView) setSize(width, height int) {
 	c.width = width / 4
 }
 
+// getStyle sizes the column and adds a themed border when it has focus.
 func (c *columnView) getStyle() lipgloss.Style {
 	s := lipgloss.NewStyle().Padding(1, 2).Height(c.height).Width(c.width)
 

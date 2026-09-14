@@ -89,6 +89,7 @@ func printListYAML(workdirs []WorkdirInfo) error {
 	return nil
 }
 
+// printListTable displays workdir sources and access times, or a message when none exist.
 func printListTable(workdirs []WorkdirInfo) {
 	if len(workdirs) == 0 {
 		ui.Writeln("No workdirs found")

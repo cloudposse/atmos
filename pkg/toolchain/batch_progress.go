@@ -50,6 +50,7 @@ type liveBatchRenderer struct {
 	renderedLines int
 }
 
+// newLiveBatchRenderer creates a themed progress display for a batch of tool operations.
 func newLiveBatchRenderer(total int) *liveBatchRenderer {
 	spinner := ui.NewSpinner()
 

@@ -24,6 +24,7 @@ func (m *model) renderVisualization() string {
 	}
 }
 
+// renderBarChart displays the highest-cost functions as bars using the frozen performance snapshot.
 func (m *model) renderBarChart() string {
 	// Use the frozen snapshot captured at TUI start, limited to top functions for visual display.
 	snap := m.getLimitedSnapshot()
@@ -68,6 +69,7 @@ func getColorForPosition(position, totalItems int, colors []lipgloss.Color) lipg
 	return colors[colorIndex]
 }
 
+// renderBarsFromPerf scales function bars against the largest total duration in the snapshot.
 func (m *model) renderBarsFromPerf(snap perf.Snapshot) []string {
 	var bars []string
 
@@ -127,6 +129,7 @@ func (m *model) findMaxTotal(rows []perf.Row) time.Duration {
 	return maxTotal
 }
 
+// renderTableHeatMap wraps the performance table in the current theme's title and border styles.
 func (m *model) renderTableHeatMap() string {
 	// Return the actual performance table view instead of mock data.
 	title := lipgloss.NewStyle().
@@ -141,6 +144,7 @@ func (m *model) renderTableHeatMap() string {
 	return theme.GetCurrentStyles().Border.Padding(1, 2).Render(content)
 }
 
+// renderSparklines displays compact function timings from the frozen performance snapshot.
 func (m *model) renderSparklines() string {
 	// Use the frozen snapshot captured at TUI start, limited to top functions for visual display.
 	snap := m.getLimitedSnapshot()
@@ -163,6 +167,7 @@ func (m *model) renderSparklines() string {
 	return theme.GetCurrentStyles().Border.Padding(1, 2).Render(content)
 }
 
+// renderSparklinesFromPerf scales function sparklines against the largest average duration in the snapshot.
 func (m *model) renderSparklinesFromPerf(snap perf.Snapshot) []string {
 	var lines []string
 

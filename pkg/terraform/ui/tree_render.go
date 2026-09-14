@@ -590,6 +590,7 @@ func renderMultilineValueSimple(b *strings.Builder, content, indent, symbol stri
 	}
 }
 
+// colorizedActionSymbol maps a Terraform resource action to an indicator in its semantic theme color.
 func colorizedActionSymbol(action string) string {
 	createStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
 	updateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Warning))

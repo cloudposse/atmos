@@ -1,4 +1,4 @@
-// Coordinates in a 2 by 4 terminal cell, in Unicode Braille bit order.
+/** Returns active dot coordinates in a 2 by 4 cell, or null for a non-Braille character. */
 export function brailleDots(character) {
   const code = character.codePointAt(0);
   if (character.length !== 1 || code < 0x2800 || code > 0x28ff) return null;

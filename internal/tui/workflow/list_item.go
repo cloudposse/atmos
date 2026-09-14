@@ -30,6 +30,7 @@ func (d listItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil 
 
 func (i listItem) FilterValue() string { return string(i.item) }
 
+// Render writes a workflow item and its optional display name, highlighting the selected entry.
 func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	i, ok := item.(listItem)
 	if !ok {

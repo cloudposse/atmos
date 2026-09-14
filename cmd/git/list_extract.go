@@ -200,6 +200,7 @@ func gitStatusIndicator(status string) string {
 	return gitStatusIndicatorWithTTY(status, isGitListTTYCached())
 }
 
+// gitStatusIndicatorWithTTY renders a themed status dot for terminals or the status text for pipes.
 func gitStatusIndicatorWithTTY(status string, isTTY bool) string {
 	if !isTTY {
 		return status

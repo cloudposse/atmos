@@ -165,6 +165,7 @@ type spinnerModel struct {
 	quitting  bool
 }
 
+// newSpinnerModel creates the themed waiting indicator for Azure authentication.
 func newSpinnerModel() *spinnerModel {
 	s := ui.NewSpinner()
 
@@ -200,6 +201,7 @@ func (m *spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View renders the authentication wait state or a success message, leaving errors to the caller.
 func (m *spinnerModel) View() string {
 	if m.quitting {
 		if m.authErr != nil {
