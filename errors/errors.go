@@ -1287,6 +1287,7 @@ var (
 	ErrRenderedStrategyRequiresConfig   = errors.New("--update-strategy=rendered requires a recorded scaffold configuration")
 	ErrUpdateStrategySwitchedToRendered = errors.New("project was last updated with --update-strategy=tracked")
 	ErrUpdateStrategySwitchedToTracked  = errors.New("project was last updated with --update-strategy=rendered")
+	ErrRenderedBaseNotConfigured        = errors.New("--update-strategy=rendered's base source was never resolved")
 	ErrGeneratorFieldRequired           = errors.New("field is required")
 	ErrDuplicateScaffoldFieldName       = errors.New("duplicate scaffold field name")
 	ErrScaffoldConfigMissing            = errors.New("scaffold configuration not found")

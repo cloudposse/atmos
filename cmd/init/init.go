@@ -490,12 +490,47 @@ func runInitInteractiveFlow(initUI InitUI, selectedConfig *templates.Configurati
 	}
 	if offer {
 		if confirmed, cErr := initUI.ConfirmUpdateInstead(finalTargetDir); cErr == nil && confirmed {
+			renderedCleanup, prepErr := prepareRenderedRetryBase(initUI, opts, finalTargetDir)
+			if renderedCleanup != nil {
+				defer renderedCleanup()
+			}
+			if prepErr != nil {
+				return finalTargetDir, prepErr
+			}
 			return initUI.ExecuteWithInteractiveFlowAndBaseRefResult(
 				selectedConfig, finalTargetDir, opts.force, true, resolved.useDefaults, retryBaseRef, resolved.templateValues,
 			)
 		}
 	}
 	return finalTargetDir, err
+}
+
+// prepareRenderedRetryBase resolves and wires the rendered update-strategy's
+// base config before a "confirm update instead" retry, mirroring
+// cmd/scaffold's helper of the same name. Note that executeInit's and
+// resolveInteractiveInitBaseRef's normal opts.update-gated
+// ResolveRenderedBase/SetRenderedBaseSource setup only runs when --update
+// was passed up front; the retry flips update=true only after the initial
+// (non-update) attempt already failed with ErrTargetDirectoryNotEmpty, so
+// that setup never ran for this call. Without it, the retry's
+// ExecuteWithBaseRef/ExecuteWithInteractiveFlowAndBaseRefResult call would
+// reach setupUpdateBase's rendered branch with no base source ever
+// configured. Returns a nil cleanup when the strategy isn't rendered or
+// resolution failed -- callers must nil-check before deferring it.
+func prepareRenderedRetryBase(initUI InitUI, opts *initOptions, targetDir string) (cleanup func(), err error) {
+	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if err != nil {
+		return nil, err
+	}
+	if updateStrategy != engine.UpdateStrategyRendered {
+		return nil, nil
+	}
+	renderedBase, err := source.ResolveRenderedBase(targetDir, opts.sourceOverride)
+	if err != nil {
+		return nil, err
+	}
+	initUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
+	return renderedBase.Cleanup, nil
 }
 
 // interactiveInitBaseRef bundles resolveInteractiveInitBaseRef's results
@@ -590,6 +625,13 @@ func runInitTargetedFlow(initUI InitUI, selectedConfig *templates.Configuration,
 	}
 	if offer {
 		if confirmed, cErr := initUI.ConfirmUpdateInstead(opts.targetDir); cErr == nil && confirmed {
+			renderedCleanup, prepErr := prepareRenderedRetryBase(initUI, opts, opts.targetDir)
+			if renderedCleanup != nil {
+				defer renderedCleanup()
+			}
+			if prepErr != nil {
+				return opts.targetDir, prepErr
+			}
 			return opts.targetDir, initUI.ExecuteWithBaseRef(selectedConfig, opts.targetDir, opts.force, true, !opts.interactive, retryBaseRef, opts.templateVars)
 		}
 	}
