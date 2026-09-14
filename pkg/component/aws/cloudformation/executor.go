@@ -307,10 +307,14 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 // runDelete deletes the stack and streams events until it's gone.
 func runDelete(ctx context.Context, client CloudFormationClient, flags map[string]any, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 	opts := deleteOptionsFromFlags(flags)
+	// Captured immediately before deleteStack's DeleteStack call -- see
+	// preOperationEventBaseline -- so streamStackEvents can tell a fast
+	// delete's own events apart from anything already present on the stack.
+	baseline := preOperationEventBaseline(ctx, client, spec.StackName)
 	if err := deleteStack(ctx, client, spec, opts); err != nil {
 		return summary, err
 	}
-	status, err := streamStackEvents(ctx, client, spec.StackName)
+	status, err := streamStackEvents(ctx, client, spec.StackName, baseline)
 	if err != nil {
 		return summary, err
 	}

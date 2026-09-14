@@ -230,16 +230,17 @@ func TestDeployDirect_NoOp(t *testing.T) {
 
 // expectDeployDirectFlow sets up the common gomock expectation chain a
 // direct-deploy exercises: stack-doesn't-exist check, changeset create +
-// compute, execute, and event-stream polling to the given final status.
-// Shared by TestDeployDirect_Success/_FailedFinalStatus and
-// TestDeliverApply_DirectDeployKind so the two callers of deployDirect don't
-// each hand-roll the same seven-call sequence.
+// compute, pre-execution event baseline, execute, and event-stream polling to
+// the given final status. Shared by TestDeployDirect_Success/_FailedFinalStatus
+// and TestDeliverApply_DirectDeployKind so the two callers of deployDirect
+// don't each hand-roll the same eight-call sequence.
 //
 // The polling sequence includes an explicit CREATE_IN_PROGRESS poll before
 // the terminal one: streamStackEvents requires observing an `*_IN_PROGRESS`
-// status before it will accept a terminal status as this operation's
-// completion (see streamStackEvents), guarding against misreading a leftover
-// terminal status from a previous, unrelated operation.
+// status (or a genuinely new event -- see acceptTerminalStatus) before it
+// will accept a terminal status as this operation's completion, guarding
+// against misreading a leftover terminal status from a previous, unrelated
+// operation.
 func expectDeployDirectFlow(t *testing.T, client *MockCloudFormationClient, finalStatus cfntypes.StackStatus) {
 	t.Helper()
 	oldInterval := eventPollInterval
@@ -252,6 +253,8 @@ func expectDeployDirectFlow(t *testing.T, client *MockCloudFormationClient, fina
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
+		// preOperationEventBaseline, captured immediately before ExecuteChangeSet.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
@@ -318,6 +321,8 @@ func TestDeployDirect_ExecuteChangeSetError(t *testing.T) {
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
+		// preOperationEventBaseline, captured immediately before ExecuteChangeSet.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(nil, sentinel),
 	)
 
@@ -338,6 +343,8 @@ func TestDeployDirect_StreamEventsError(t *testing.T) {
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
+		// preOperationEventBaseline, captured immediately before ExecuteChangeSet.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, sentinel),
 	)
@@ -398,6 +405,8 @@ func TestDeliverApply_DirectDeployKind_PackagesLargeTemplate(t *testing.T) {
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
+		// preOperationEventBaseline, captured immediately before ExecuteChangeSet.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
