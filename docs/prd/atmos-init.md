@@ -269,14 +269,14 @@ Initial generation:
 Update (atmos init --update, --update-strategy=tracked default):
 1. Resolve --base-ref (defaults to HEAD) in the target directory's git repository
 2. Load each file's base content directly from that git ref
-   (pkg/generator/storage.GitBaseStorage.LoadBase reads the blob straight out
-   of git — no `.atmos/init/base/` snapshot is written or read)
+    (pkg/generator/storage.GitBaseStorage.LoadBase reads the blob straight out
+    of git — no `.atmos/init/base/` snapshot is written or read)
 3. Load current files (ours - with user changes)
 4. Render new template version (theirs)
 5. Perform 3-way merge (base, ours, theirs), honoring --merge-strategy
-   (manual/ours/theirs) for any genuine conflict
+    (manual/ours/theirs) for any genuine conflict
 6. Write merged content (skipped in a hypothetical --dry-run; note `atmos init`
-   has no --dry-run flag today, unlike `atmos scaffold generate --update --dry-run`)
+    has no --dry-run flag today, unlike `atmos scaffold generate --update --dry-run`)
 ```
 
 **Note**: this shipped as a git-ref-based design, not the `.atmos/init/base/` +
@@ -346,25 +346,25 @@ For each template file:
 
 **Tasks**:
 1. Create `cmd/init/` package
-   - `init.go` - Command definition
-   - `init_test.go` - Command tests
+    - `init.go` - Command definition
+    - `init_test.go` - Command tests
 2. Create init-specific embedded templates
-   - `simple` template (full project structure)
-   - `atmos` template (atmos.yaml only)
+    - `simple` template (full project structure)
+    - `atmos` template (atmos.yaml only)
 3. Implement `atmos init` command
-   - Interactive mode (default)
-   - Non-interactive mode with arguments
-   - Template selection from embedded templates
-   - Variable substitution via `--set` flags
-   - Force overwrite mode (`--force`)
+    - Interactive mode (default)
+    - Non-interactive mode with arguments
+    - Template selection from embedded templates
+    - Variable substitution via `--set` flags
+    - Force overwrite mode (`--force`)
 4. Reuse `pkg/generator` infrastructure
-   - Template rendering engine (from scaffold)
-   - File processing (from scaffold)
-   - Interactive UI/prompts (from scaffold)
+    - Template rendering engine (from scaffold)
+    - File processing (from scaffold)
+    - Interactive UI/prompts (from scaffold)
 5. Write comprehensive tests
-   - Unit tests for command
-   - Integration tests for init flows
-   - Template rendering tests
+    - Unit tests for command
+    - Integration tests for init flows
+    - Template rendering tests
 
 **Deliverables**:
 - Fully functional `atmos init` command
@@ -384,9 +384,9 @@ file.
 **What shipped**:
 1. `--update` (and `--base-ref`) flags on the command
 2. 3-way merge integrated into file handling (`pkg/generator/merge`), with
-   `--merge-strategy=manual|ours|theirs` for conflict resolution
+    `--merge-strategy=manual|ours|theirs` for conflict resolution
 3. Path-traversal and symlink-write protection (`validateWriteTarget` in
-   `pkg/generator/engine/templating.go`)
+    `pkg/generator/engine/templating.go`)
 4. Test coverage for update scenarios
 
 **Not shipped from the original plan**: the `.atmos/init/base/` +
