@@ -659,6 +659,25 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 		"component":    true,
 		"hooks":        true,
 		"flags":        true,
+		// Helm-specific sections (built-in types don't get container's pass-through;
+		// without these, `describe component` silently strips them under the default
+		// `describe.component.filter: schema` mode).
+		cfg.ChartSectionName:        true,
+		cfg.ValuesSectionName:       true,
+		cfg.ValuesFilesSectionName:  true,
+		cfg.RepositoriesSectionName: true,
+		// Kubernetes-specific sections.
+		cfg.ProviderSectionName:  true,
+		cfg.PathsSectionName:     true,
+		cfg.ManifestsSectionName: true,
+		cfg.RenderSectionName:    true,
+		// Cross-type sections (generate: terraform/kubernetes/helm; source: terraform/
+		// helmfile/packer/kubernetes/helm; provision: helm/kubernetes) — also previously
+		// missing from this whitelist for every type that defines them, not just CFN's
+		// future sections.
+		cfg.GenerateSectionName:  true,
+		cfg.SourceSectionName:    true,
+		cfg.ProvisionSectionName: true,
 	}
 
 	filtered := make(map[string]any)
