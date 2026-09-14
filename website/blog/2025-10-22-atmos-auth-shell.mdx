@@ -12,7 +12,7 @@ tags:
 release: v1.196.0
 ---
 
-We're excited to introduce `atmos auth shell`, a new command that makes working with multiple cloud identities more secure.
+We're excited to introduce [`atmos auth shell`](/cli/commands/auth/shell), a new command that makes working with multiple cloud identities more secure.
 
 This command launches isolated shell sessions scoped to specific cloud identities. Think of it like `aws-vault exec`, but for all your cloud identities managed by Atmos—AWS, Azure, GCP, GitHub, SAML, and more.
 
@@ -70,7 +70,7 @@ Each terminal operates in complete isolation. You can't accidentally run a produ
 
 No lingering environment variables, no shared credential files with overly broad access.
 
-The command supports multiple identities, custom shells (`--shell`), custom arguments (`--`), shell nesting tracking (`ATMOS_SHLVL`), and works cross-platform.
+The command supports multiple identities, custom shells ([`--shell`](/cli/commands/auth/shell#flags)), custom arguments (`--`), shell nesting tracking (`ATMOS_SHLVL`), and works cross-platform.
 
 :::tip Customize Your Prompt
 Want to see which identity is active in your prompt? You can customize your shell prompt by adding `ATMOS_IDENTITY` or `ATMOS_SHLVL` to your `PS1` (bash) or equivalent prompt variable in your shell configuration file (e.g., `.bashrc`, `.zshrc`).
@@ -201,7 +201,7 @@ Both commands serve important but different purposes:
 - You want credentials to **automatically expire** when you exit
 - You need clear boundaries between different cloud contexts
 
-**Use `atmos auth env` when:**
+**Use [`atmos auth env`](/cli/commands/auth/env) when:**
 - Integrating with CI/CD pipelines that need to export variables
 - Writing scripts that source environment variables
 - You need credentials in a specific format (bash, fish, etc.)

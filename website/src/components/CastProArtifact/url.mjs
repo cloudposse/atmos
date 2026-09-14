@@ -2,6 +2,12 @@ const ATMOS_PRO_BASE_URL = "https://atmos-pro.com";
 
 export const CAST_FORMATS = ["gif", "mp4", "svg", "webm"];
 
+// .cast files are committed under website/static/**, so the Atmos Pro
+// rendering service's repo-relative path is that literal static path.
+export function siteCastPath(src) {
+  return `website/static${src}`;
+}
+
 function encodePathSegments(path) {
   return path
     .replace(/^\/+/, "")

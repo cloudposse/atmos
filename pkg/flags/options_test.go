@@ -159,6 +159,25 @@ func TestWithNoOptDefVal_StringSliceFlag(t *testing.T) {
 	assert.Equal(t, "__SELECT__", sliceFlag.NoOptDefVal)
 }
 
+func TestWithNoOptDefVal_StringArrayFlag(t *testing.T) {
+	cfg := &parserConfig{registry: NewFlagRegistry()}
+
+	// First add a string-array flag (e.g. --set, repeatable, no comma-splitting).
+	WithStringArrayFlag("set", "", nil, "Set values")(cfg)
+
+	// Then set NoOptDefVal - this exercises the *StringArrayFlag branch added
+	// alongside the pre-existing *StringFlag/*StringSliceFlag branches.
+	opt := WithNoOptDefVal("set", "__SELECT__")
+	opt(cfg)
+
+	flag := cfg.registry.Get("set")
+	require.NotNil(t, flag)
+
+	arrayFlag, ok := flag.(*StringArrayFlag)
+	require.True(t, ok)
+	assert.Equal(t, "__SELECT__", arrayFlag.NoOptDefVal)
+}
+
 func TestWithNoOptDefValNoSpaceValue(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -188,6 +207,18 @@ func TestWithNoOptDefValNoSpaceValue(t *testing.T) {
 				require.True(t, ok)
 				assert.Equal(t, "__SELECT__", sliceFlag.NoOptDefVal)
 				assert.True(t, sliceFlag.NoOptDefValNoSpaceValue)
+			},
+		},
+		{
+			name:        "StringArrayFlag",
+			registerOpt: WithStringArrayFlag("set", "", nil, "Set values"),
+			flagName:    "set",
+			assertFlag: func(t *testing.T, flag Flag) {
+				t.Helper()
+				arrayFlag, ok := flag.(*StringArrayFlag)
+				require.True(t, ok)
+				assert.Equal(t, "__SELECT__", arrayFlag.NoOptDefVal)
+				assert.True(t, arrayFlag.NoOptDefValNoSpaceValue)
 			},
 		},
 	}
@@ -329,6 +360,24 @@ func TestWithValidValues_StringSliceFlag(t *testing.T) {
 	assert.Equal(t, []string{"claude-code", "vscode", "gemini"}, sliceFlag.ValidValues)
 }
 
+func TestWithValidValues_StringArrayFlag(t *testing.T) {
+	cfg := &parserConfig{registry: NewFlagRegistry()}
+
+	// First add a string-array flag (e.g. --set, repeatable, no comma-splitting).
+	WithStringArrayFlag("set", "", nil, "Set values")(cfg)
+
+	// Then set valid values, same option as the scalar/slice cases.
+	opt := WithValidValues("set", "image.tag", "replicas")
+	opt(cfg)
+
+	flag := cfg.registry.Get("set")
+	assert.NotNil(t, flag)
+
+	arrayFlag, ok := flag.(*StringArrayFlag)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"image.tag", "replicas"}, arrayFlag.ValidValues)
+}
+
 func TestWithValidValues_NonExistentFlag(t *testing.T) {
 	cfg := &parserConfig{registry: NewFlagRegistry()}
 
@@ -403,6 +452,24 @@ func TestWithEnvVars_StringSliceFlag(t *testing.T) {
 	sliceFlag, ok := flag.(*StringSliceFlag)
 	assert.True(t, ok)
 	assert.Equal(t, []string{"ATMOS_COMPONENTS"}, sliceFlag.EnvVars)
+}
+
+func TestWithEnvVars_StringArrayFlag(t *testing.T) {
+	cfg := &parserConfig{registry: NewFlagRegistry()}
+
+	// First add a string-array flag.
+	WithStringArrayFlag("set", "", nil, "Set values")(cfg)
+
+	// Then add env vars.
+	opt := WithEnvVars("set", "ATMOS_HELM_SET")
+	opt(cfg)
+
+	flag := cfg.registry.Get("set")
+	assert.NotNil(t, flag)
+
+	arrayFlag, ok := flag.(*StringArrayFlag)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"ATMOS_HELM_SET"}, arrayFlag.EnvVars)
 }
 
 func TestWithEnvVars_NonExistentFlag(t *testing.T) {

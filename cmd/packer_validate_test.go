@@ -18,7 +18,14 @@ func TestPackerValidateCmd(t *testing.T) {
 
 	skipIfPackerNotInstalled(t)
 
-	workDir := "../tests/fixtures/scenarios/packer"
+	// Windows acceptance shard 1 runs this cmd test binary concurrently with
+	// internal/exec's TestExecutePacker_Validate. Both commands generate and
+	// clean up the same stack/component var-file, so sharing the tracked fixture
+	// lets one process remove it while the other's Packer process opens it.
+	// Use a private copy to keep the integration test deterministic on every OS.
+	fixtureDir := "../tests/fixtures/scenarios/packer"
+	workDir := filepath.Join(t.TempDir(), "packer")
+	require.NoError(t, os.CopyFS(workDir, os.DirFS(fixtureDir)))
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 

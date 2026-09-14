@@ -26,7 +26,10 @@ captured at all, so slow pipelines were diagnosed by guesswork.
 When Atmos runs in a recognized CI environment with Atmos Pro configured, it now reports
 a lightweight execution record for every command automatically — no extra setup beyond
 what you already have. The record covers the Atmos version, the command and its exit
-code, and how long it took to run.
+code, and how long it took to run. Supported platforms also report CPU time and
+maximum resident memory for the Atmos process itself. These measurements exclude
+Terraform/OpenTofu and provider subprocesses and do not represent peak CPU usage
+or whole-job memory. See [Atmos Pro configuration](/cli/configuration/settings/pro) for integration setup.
 
 Most commands report this in the background and never slow anything down. `terraform
 plan`, `terraform apply`, and `describe affected` wait up to the configured timeout to
@@ -37,7 +40,7 @@ doesn't disappear silently.
 ## How to Use It
 
 There's nothing to turn on. If Atmos Pro is already configured and Atmos is running in a
-recognized CI environment with the usual CI prerequisites in place, execution records
+recognized CI environment with the usual CI prerequisites in place, [execution records](/cli/configuration/settings/pro)
 start flowing immediately — not every CI provider is supported yet.
 
 The only knob is how long a critical command (`terraform plan`, `terraform apply`,

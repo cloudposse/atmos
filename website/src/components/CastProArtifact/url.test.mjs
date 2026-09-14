@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CAST_FORMATS, buildArtifactUrl, buildEmbedUrl } from "./url.mjs";
+import { CAST_FORMATS, buildArtifactUrl, buildEmbedUrl, siteCastPath } from "./url.mjs";
 
 test("buildArtifactUrl defaults owner/repo to cloudposse/atmos", () => {
   const url = buildArtifactUrl({ ref: "main", path: "examples/quickstart.cast", format: "gif" });
@@ -83,4 +83,11 @@ test("buildEmbedUrl includes ttlSeconds and moves a slash-containing ref to the 
   assert.equal(url.pathname, "/casts/cloudposse/atmos/demo.cast");
   assert.equal(url.searchParams.get("ref"), "feature/foo");
   assert.equal(url.searchParams.get("ttlSeconds"), "60");
+});
+
+test("siteCastPath resolves a blog/docs cast src to its committed website/static path", () => {
+  assert.equal(
+    siteCastPath("/casts/examples/demo-component-versions/vendor-versions.cast"),
+    "website/static/casts/examples/demo-component-versions/vendor-versions.cast",
+  );
 });

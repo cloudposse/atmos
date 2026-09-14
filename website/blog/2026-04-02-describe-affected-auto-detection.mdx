@@ -6,13 +6,13 @@ authors: [osterman]
 tags: [feature, dx]
 ---
 
-The `atmos describe affected` command now auto-detects the base commit in CI environments, eliminating the need for verbose flag wiring in your workflows.
+The [`atmos describe affected`](/cli/commands/describe/affected) command now auto-detects the base commit in CI environments, eliminating the need for verbose flag wiring in your workflows.
 
 <!--truncate-->
 
 ## What Changed
 
-We introduced the `--base` flag as a unified replacement for `--ref` and `--sha`, and added automatic base resolution when running in CI with `ci.enabled: true`.
+We introduced the [`--base`](/cli/commands/describe/affected#flags) flag as a unified replacement for [`--ref`](/cli/commands/describe/affected#flags) and [`--sha`](/cli/commands/describe/affected#flags), and added automatic base resolution when running in CI with `ci.enabled: true`.
 
 ### Before
 

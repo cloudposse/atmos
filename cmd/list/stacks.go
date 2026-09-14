@@ -297,7 +297,14 @@ func executeAndExtractStacks(
 	// Without closure flags, --tags/--labels also scope the describe pass
 	// (early-skip): components excluded by the selectors never evaluate
 	// templates/YAML functions/auth.
-	stacksMap, err := e.ExecuteDescribeStacksScoped(
+	//
+	// evalSections narrows evaluation to the sections the final column set actually reads (see
+	// resolveStacksEvalSections): the default `{{ .stack }}`-only column needs none, so no
+	// !terraform.state/!terraform.output/atmos.Component call anywhere in vars/settings/etc. ever
+	// runs, and no "(computed)" degradation warning fires for a value no column would display —
+	// see https://github.com/cloudposse/atmos/issues/3068.
+	evalSections := resolveStacksEvalSections(atmosConfig, opts)
+	stacksMap, err := e.ExecuteDescribeStacksWithEvalSections(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -309,6 +316,7 @@ func executeAndExtractStacks(
 		opts.Tags,
 		labels,
 		errOpts,
+		evalSections,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
@@ -491,6 +499,23 @@ func buildStackFilters(opts *StacksOptions) []filter.Filter {
 	// renderer-level filters here in the future.
 
 	return filters
+}
+
+// resolveStacksEvalSections computes the evaluation-scope filter (see
+// column.RequiredSections/e.ExecuteDescribeStacksWithEvalSections) for the column set this
+// invocation will actually render. Resolved from the same flag + atmos.yaml merge getStackColumns
+// uses, so the filter always matches the columns that end up on screen. Returns nil (full eager
+// evaluation, the historical behavior) whenever RequiredSections can't statically prove which
+// sections are safe to skip.
+func resolveStacksEvalSections(atmosConfig *schema.AtmosConfiguration, opts *StacksOptions) []string {
+	defer perf.Track(nil, "list.stacks.resolveStacksEvalSections")()
+
+	columns := getStackColumns(atmosConfig, opts.Columns, opts.Component != "")
+	sections, ok := column.RequiredSections(columns)
+	if !ok {
+		return nil
+	}
+	return sections
 }
 
 // getStackColumns returns column configuration.

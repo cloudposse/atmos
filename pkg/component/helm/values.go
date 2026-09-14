@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
+	"helm.sh/helm/v4/pkg/cli/values"
+	"helm.sh/helm/v4/pkg/getter"
 	sigsyaml "sigs.k8s.io/yaml"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -15,6 +18,15 @@ import (
 )
 
 const defaultNamespace = "default"
+
+const (
+	flagValues     = "values"
+	flagSet        = "set"
+	flagSetString  = "set-string"
+	flagSetFile    = "set-file"
+	flagSetJSON    = "set-json"
+	flagSetLiteral = "set-literal"
+)
 
 // buildChartSpec assembles the resolved chart specification from the merged
 // component section. Local chart references are resolved relative to the
@@ -81,6 +93,40 @@ func buildValues(atmosConfig *schema.AtmosConfiguration, section map[string]any,
 		return nil, fmt.Errorf("failed to merge Helm values: %w", err)
 	}
 	return merged, nil
+}
+
+// applyValueOverrides layers Helm CLI value overrides over the already resolved
+// Atmos values. Helm's own values.Options preserves the CLI's parsing and
+// precedence rules for -f/--values and every --set variant.
+func applyValueOverrides(base map[string]any, flags map[string]any) (map[string]any, error) {
+	overrides := &values.Options{
+		ValueFiles:    stringArrayFlag(flags, flagValues),
+		Values:        stringArrayFlag(flags, flagSet),
+		StringValues:  stringArrayFlag(flags, flagSetString),
+		FileValues:    stringArrayFlag(flags, flagSetFile),
+		JSONValues:    stringArrayFlag(flags, flagSetJSON),
+		LiteralValues: stringArrayFlag(flags, flagSetLiteral),
+	}
+	if len(overrides.ValueFiles) == 0 &&
+		len(overrides.Values) == 0 &&
+		len(overrides.StringValues) == 0 &&
+		len(overrides.FileValues) == 0 &&
+		len(overrides.JSONValues) == 0 &&
+		len(overrides.LiteralValues) == 0 {
+		return base, nil
+	}
+
+	settings := newSettings()
+	parsed, err := overrides.MergeValues(getter.All(settings))
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve Helm CLI value overrides: %w", err)
+	}
+	return loader.MergeMaps(base, parsed), nil
+}
+
+func stringArrayFlag(flags map[string]any, name string) []string {
+	values, _ := flags[name].([]string)
+	return values
 }
 
 func loadValuesFile(path string) (map[string]any, error) {

@@ -8,7 +8,7 @@ date: 2026-08-21T12:00:00.000Z
 
 A container component's `build.context` and `dockerfile` looked like ordinary relative paths, but
 they weren't resolved against anything in particular — they resolved against whatever directory
-your shell happened to be in the moment you ran `atmos container build`. Run it from the repo root
+your shell happened to be in the moment you ran [`atmos container build`](/cli/commands/container/usage). Run it from the repo root
 and it worked. Run it from a subdirectory, a CI job with a different working directory, or a
 script that changes directories first, and the build silently picked up the wrong Dockerfile or
 found nothing at all. Setting `components.container.base_path` didn't help — that option was
@@ -63,6 +63,8 @@ components:
         context: app           # resolves to components/container/api/app
         dockerfile: Dockerfile  # resolves to components/container/api/app/Dockerfile
 ```
+
+For usage and configuration, see [Using Containers](/components/container).
 
 ## Get Involved
 

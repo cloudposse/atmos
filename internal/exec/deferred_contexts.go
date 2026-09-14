@@ -55,12 +55,18 @@ func cloneComponentSectionWithOverrides(raw, overrides map[string]any) map[strin
 // (configAndStacksInfo.DeferredMergeContexts), resolve them with a real
 // TemplateAwareYAMLProcessor and deep-merge the result into configAndStacksInfo.ComponentSection,
 // in place. See the call site in processStacks (utils.go) for why this must run where it does.
+//
+// The evalSections parameter is the opt-in evaluation-scope filter described on
+// isSectionRequired: nil (every caller except the `list` commands) resolves every section,
+// exactly as before this parameter was added; a non-nil filter skips sections outside it
+// entirely, leaving their deferred function strings unresolved.
 func resolveDeferredYamlFunctions(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	settingsSectionStruct *schema.Settings,
 	componentTemplateContext map[string]any,
 	skip []string,
+	evalSections []string,
 ) error {
 	defer perf.Track(atmosConfig, "exec.resolveDeferredYamlFunctions")()
 
@@ -87,6 +93,9 @@ func resolveDeferredYamlFunctions(
 
 	for sectionName, sectionDctx := range compDctx {
 		if sectionDctx == nil || !sectionDctx.HasDeferredValues() {
+			continue
+		}
+		if !isSectionRequired(evalSections, sectionName) {
 			continue
 		}
 		sectionMap, ok := configAndStacksInfo.ComponentSection[sectionName].(map[string]any)

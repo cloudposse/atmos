@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature]
 ---
 
-The `atmos auth env` command now supports `--format=github` for direct output to `$GITHUB_ENV`, eliminating shell pipelines in CI workflows.
+The [`atmos auth env`](/cli/commands/auth/env) command now supports `--format=github` for direct output to `$GITHUB_ENV`, eliminating shell pipelines in CI workflows.
 
 <!--truncate-->
 
@@ -34,7 +34,7 @@ When `$GITHUB_ENV` is set (automatically in GitHub Actions), credentials are wri
 ## Features
 
 - **Auto-detection:** Automatically writes to `$GITHUB_ENV` when set
-- **Explicit output:** Use `--output-file` (or `-o`) to specify a different file
+- **Explicit output:** Use [`--output-file`](/cli/commands/auth/env#flags) (or `-o`) to specify a different file
 - **Multiline support:** Values with newlines use GitHub's heredoc syntax
 - **No quotes:** Output is `KEY=value` format (no shell quoting)
 

@@ -95,6 +95,8 @@ func (r *FlagRegistry) SetCompletionFunc(name string, fn func(*cobra.Command, []
 		f.CompletionFunc = fn
 	case *StringSliceFlag:
 		f.CompletionFunc = fn
+	case *StringArrayFlag:
+		f.CompletionFunc = fn
 	}
 }
 
@@ -264,6 +266,14 @@ func (r *FlagRegistry) registerFlagToSet(flagSet *pflag.FlagSet, flag Flag) {
 	case *StringSliceFlag:
 		flagSet.StringSliceP(f.Name, f.Shorthand, f.Default, f.Description)
 		// Apply NoOptDefVal if set (for --flag syntax without value, e.g. --profile picker).
+		if f.NoOptDefVal != "" {
+			if err := flagSet.SetAnnotation(f.Name, cobra.BashCompOneRequiredFlag, []string{"false"}); err == nil {
+				flagSet.Lookup(f.Name).NoOptDefVal = f.NoOptDefVal
+			}
+		}
+	case *StringArrayFlag:
+		flagSet.StringArrayP(f.Name, f.Shorthand, f.Default, f.Description)
+		// Apply NoOptDefVal if set (for --flag syntax without value).
 		if f.NoOptDefVal != "" {
 			if err := flagSet.SetAnnotation(f.Name, cobra.BashCompOneRequiredFlag, []string{"false"}); err == nil {
 				flagSet.Lookup(f.Name).NoOptDefVal = f.NoOptDefVal

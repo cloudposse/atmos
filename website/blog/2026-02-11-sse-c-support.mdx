@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [enhancement]
 ---
 
-The `!terraform.state` YAML function now supports reading from S3 buckets encrypted with customer-provided keys (SSE-C).
+The [`!terraform.state`](/functions/yaml/terraform.state) YAML function now supports reading from S3 buckets encrypted with customer-provided keys (SSE-C).
 
 <!--truncate-->
 
@@ -39,7 +39,7 @@ This also works with `remote_state_backend` overrides, so you can configure SSE-
 
 ## Why This Matters
 
-Organizations that use SSE-C for S3 state encryption previously couldn't use `!terraform.state` to reference outputs from those state files. This meant either switching encryption strategies or falling back to `!terraform.output` (which runs `terraform output` and requires the full Terraform/OpenTofu binary). With SSE-C support, `!terraform.state` reads the state file directly from S3 with the correct encryption headers, keeping lookups fast and dependency-free.
+Organizations that use SSE-C for S3 state encryption previously couldn't use `!terraform.state` to reference outputs from those state files. This meant either switching encryption strategies or falling back to [`!terraform.output`](/functions/yaml/terraform.output) (which runs `terraform output` and requires the full Terraform/OpenTofu binary). With SSE-C support, `!terraform.state` reads the state file directly from S3 with the correct encryption headers, keeping lookups fast and dependency-free.
 
 Note that this only affects `!terraform.state` (which reads state files directly from S3). The `!terraform.output` function is unaffected since it delegates to Terraform/OpenTofu, which already handles SSE-C natively.
 

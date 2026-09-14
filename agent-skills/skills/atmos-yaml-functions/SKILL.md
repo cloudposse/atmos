@@ -30,6 +30,8 @@ templates first, then executes the YAML functions.
 | `!store.get` | Read arbitrary keys from stores (no naming convention required) |
 | `!secret` | Resolve declared secrets from configured secret backends |
 | `!emulator` | Resolve local emulator connection details |
+| `!labels` | Read all metadata labels, or `!labels key [default]` for one string value |
+| `!tags` / `!labels.keys` / `!labels.values` | Read metadata tags, sorted label keys, or values ordered by key |
 | `!env` | Read environment variables (from stack `env:` sections or OS) |
 | `!exec` | Execute shell scripts and use the output |
 | `!include` | Include local or remote files (YAML, JSON, HCL, text) |

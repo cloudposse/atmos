@@ -46,16 +46,18 @@ const raceParallelEnv = "ATMOS_TEST_RACE_PARALLEL"
 // tests call t.Parallel. The cap bounds that to 4 per package binary, which
 // keeps package-level concurrency (the dominant win on this ~400-package
 // sweep) as the thing that scales with the runner. Tune with
-// ATMOS_TEST_RACE_PARALLEL; note that the RunsOn "xlarge"/"large" families
-// resolve to 4- to 8-vCPU spot instances, so compare timings only across
-// runs on the same instance type.
+// ATMOS_TEST_RACE_PARALLEL; compare timings only across runs on the same
+// runner size.
 const raceParallelDefault = "4"
 
 // Race runs the full test suite (excluding ./tests/..., the CLI acceptance
 // suite) with the race detector and shuffled test order. This is the Go
 // implementation backing the `atmos test race` custom command
-// (.atmos.d/test.yaml) and the `[race] full test suite` CI job
-// (.github/workflows/test.yml).
+// (.atmos.d/test.yaml) and the `[race] non-acceptance test suite` CI job
+// (.github/workflows/test.yml). The CI job now shards this suite across
+// several parallel jobs by pre-splitting the package list upstream (see
+// Test.RaceMatrix in race_matrix.go) and passing each shard's slice through
+// the TEST override below -- Race itself has no shard-awareness of its own.
 func (Test) Race() error {
 	root, err := mageRepoRoot()
 	if err != nil {

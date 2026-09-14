@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FiAlertCircle, FiChevronDown, FiDownload, FiLoader } from 'react-icons/fi';
 
+import { describeStatus } from '../CastProArtifact/polling.mjs';
 import { CAST_FORMATS } from '../CastProArtifact/url.mjs';
 import { CastFormat, useCastArtifact } from '../CastProArtifact/useCastArtifact';
 
@@ -40,7 +41,7 @@ function FormatMenuItem({
   ttlSeconds,
   soundtrack,
 }: FormatMenuItemProps): JSX.Element {
-  const { status, errorMessage, start } = useCastArtifact({
+  const { status, phase, progress, elapsedMs, slow, errorMessage, start } = useCastArtifact({
     owner,
     repo,
     ref: gitRef,
@@ -50,6 +51,8 @@ function FormatMenuItem({
     soundtrack,
   });
   const busy = status === 'checking' || status === 'rendering';
+  const hint = busy ? describeStatus({ status, phase, elapsedMs, slow }) : null;
+  const progressPercent = progress ? Math.min(100, Math.max(0, progress.percent)) : null;
 
   return (
     <div className={styles.menuItemGroup}>
@@ -68,7 +71,20 @@ function FormatMenuItem({
           <FiDownload className={styles.icon} aria-hidden="true" />
         )}
         <span>{format.toUpperCase()}</span>
-        {status === 'rendering' && <span className={styles.hint}>Rendering…</span>}
+        {hint && <span className={styles.hint}>{hint}</span>}
+        {progressPercent !== null && (
+          <span
+            className={styles.progressTrack}
+            title={progress.stage}
+            role="progressbar"
+            aria-valuenow={Math.round(progressPercent)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuetext={`${progress.stage}: ${Math.round(progressPercent)}%`}
+          >
+            <span className={styles.progressFill} style={{ width: `${progressPercent}%` }} />
+          </span>
+        )}
       </button>
       {status === 'error' && errorMessage && (
         <p className={styles.errorText} role="alert">
@@ -83,11 +99,13 @@ function FormatMenuItem({
  * "Download ▾" split button offering rendered GIF/MP4/SVG/WEBM artifacts of a
  * .cast file from the Atmos Pro cast-rendering service
  * (https://atmos-pro.com/casts/{owner}/{repo}/{ref}/{path}.cast.{format}).
- * Handles the render service's three response shapes: an already-rendered
- * artifact (triggers a native browser download), a still-rendering one
- * (polls on Retry-After, capped at ~60s), and a hard error — surfaced inline
- * beneath the selected format button, whether it's a JSON error body, a
- * generic HTTP status, or a network failure.
+ * Handles the render service's response shapes: an already-rendered artifact
+ * (triggers a native browser download), a still-rendering one (polls the
+ * JSON status endpoint every 3s, slowing to 10s past 13 minutes, up to a
+ * 30-minute ceiling — shown inline as "Queued…"/"Rendering…" with elapsed
+ * time), and a hard error — surfaced inline beneath the selected format
+ * button, whether it's a JSON error body, a generic HTTP status, or a
+ * network failure.
  */
 export default function CastProDownload({
   owner,

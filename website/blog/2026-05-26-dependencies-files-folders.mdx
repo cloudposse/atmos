@@ -28,7 +28,7 @@ components:
           - src/lambda/handler
 ```
 
-When any listed file or folder changes, `atmos describe affected` includes the declaring component in its results, even if the component directory and stack manifest did not change.
+When any listed file or folder changes, [`atmos describe affected`](/cli/commands/describe/affected) includes the declaring component in its results, even if the component directory and stack manifest did not change.
 
 ## Why This Matters
 
@@ -43,3 +43,5 @@ This makes stack manifests easier to scan and keeps CI/CD change detection rules
 ## Get Started
 
 See the [Dependencies documentation](/stacks/dependencies) and [Component Dependencies reference](/stacks/dependencies/components) for examples and migration details.
+
+For usage and configuration, see [Component Dependencies](/stacks/dependencies/components#file-and-folder-dependencies).

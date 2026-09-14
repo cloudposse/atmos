@@ -330,7 +330,11 @@ func (m *Model) renderErrorSummary(b *strings.Builder, command string, elapsed f
 // renderSuccessSummary writes the completion summary line, noting when there were no changes.
 func (m *Model) renderSuccessSummary(b *strings.Builder, command string, summary *ChangeSummaryMessage, elapsed float64) {
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
-	noChanges := summary != nil && summary.Changes.Add == 0 && summary.Changes.Change == 0 && summary.Changes.Remove == 0
+	// An output-only change (no resource changes, only an output value) must not be reported as
+	// "no changes" - see issue #3114 - even though summary's counts are resource-only and all
+	// zero in that case.
+	noChanges := summary != nil && summary.Changes.Add == 0 && summary.Changes.Change == 0 &&
+		summary.Changes.Remove == 0 && !m.tracker.HasOutputChanges()
 
 	if noChanges {
 		// No changes - include in markdown for bold rendering.

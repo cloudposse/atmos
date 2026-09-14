@@ -10,7 +10,7 @@ date: 2025-10-20T12:00:00.000Z
 release: v1.196.0
 ---
 
-We're introducing `atmos auth` - native cloud authentication built directly into Atmos. After years of solving the same authentication problems repeatedly across different tools and teams, we've built a solution that works whether you adopt the entire Atmos framework or just need better credential management.
+We're introducing [`atmos auth`](/cli/commands/auth/usage) - native cloud authentication built directly into Atmos. After years of solving the same authentication problems repeatedly across different tools and teams, we've built a solution that works whether you adopt the entire Atmos framework or just need better credential management.
 
 <!--truncate-->
 

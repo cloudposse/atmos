@@ -321,6 +321,22 @@ components:
 
 `labels` can also be set as a [global default](#global-stack-wide-metadata).
 
+Read one label with [`!labels key [default]`](/functions/yaml/labels#single-label-lookup),
+or read the whole map with bare `!labels`:
+
+```yaml
+vars:
+  compliance: !labels compliance
+  owner: !labels owner "Platform Team"
+  tags: !labels
+```
+
+Templates can read the same values with `{{ .metadata.labels.compliance }}` or
+`{{ index .metadata.labels "cost-center" }}`. See
+[runner selection](/cli/configuration/settings/pro#choose-a-runner-per-component-or-stack)
+for using labels in Atmos Pro workflow inputs.
+
+
 ### Selector Purity
 
 Labels and tags are selectors: Atmos evaluates them **before** authentication, template processing, and YAML function execution to decide which components a command operates on. By design, their values must be resolvable without authenticating or executing external processes — this keeps selection fast, deterministic, and credential-free.

@@ -11,11 +11,11 @@ A build step often creates a value that a different step needs later. Examples a
 
 ## The Problem
 
-Atmos stores support many backends. Examples are AWS SSM, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, 1Password, Keychain, and GitHub Actions. The `!store` and `!store.get` YAML functions can read any value from these stores. But Atmos gave you only two ways to write a value into a store. You could declare the value as a formal secret with `atmos secret`. Or you could use the one existing store hook. That hook only copies a Terraform output into a store after `apply` runs. Atmos had no supported way to write other values, such as a Docker image tag from a `container` build step, a build number, or a deployment marker created mid-workflow. To write one of these values, you had to use the AWS CLI, `curl`, or a custom shell script in the workflow.
+Atmos stores support many backends. Examples are AWS SSM, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, 1Password, Keychain, and GitHub Actions. The [`!store`](/functions/yaml/store) and [`!store.get`](/functions/yaml/store.get) YAML functions can read any value from these stores. But Atmos gave you only two ways to write a value into a store. You could declare the value as a formal secret with [`atmos secret`](/cli/commands/secret/usage). Or you could use the one existing store hook. That hook only copies a Terraform output into a store after `apply` runs. Atmos had no supported way to write other values, such as a Docker image tag from a `container` build step, a build number, or a deployment marker created mid-workflow. To write one of these values, you had to use the AWS CLI, `curl`, or a custom shell script in the workflow.
 
 ## The Fix
 
-Atmos now has a new CLI command group named `atmos store`. This command group gives you raw CRUD access to any configured store. Atmos also has a new workflow step named `type: store`. This step writes a value from a workflow, a custom command, or a hook. Neither the CLI nor the step requires you to declare a value first. Both work directly on any backend listed under `stores:` in `atmos.yaml`. You can scope a value to a stack and a component. Or you can omit the stack and component to make the value global.
+Atmos now has a new CLI command group named [`atmos store`](/cli/commands/store/usage). This command group gives you raw CRUD access to any configured store. Atmos also has a new workflow step named `type: store`. This step writes a value from a workflow, a custom command, or a hook. Neither the CLI nor the step requires you to declare a value first. Both work directly on any backend listed under `stores:` in `atmos.yaml`. You can scope a value to a stack and a component. Or you can omit the stack and component to make the value global.
 
 ```shell
 atmos store set app-metadata image_tag sha256:abc123 --stack=prod --component=ecs-service
@@ -46,7 +46,7 @@ steps:
 
 The `store` step is a normal registered step type. Because of this, it also runs as a hook through the existing `kind: step` bridge. You need no extra configuration to run it after `terraform apply`.
 
-Atmos allows you to write to a `secret: true` store on purpose. For example, a step can generate a password and write it straight to a secret backend. Both the CLI and the step support this case. But this write is only a shortcut. It is not a replacement for `atmos secret`. It skips declaration and scope tracking. When a value must be tracked as a formal secret, use `secrets.vars` and `atmos secret set` instead.
+Atmos allows you to write to a `secret: true` store on purpose. For example, a step can generate a password and write it straight to a secret backend. Both the CLI and the step support this case. But this write is only a shortcut. It is not a replacement for `atmos secret`. It skips declaration and scope tracking. When a value must be tracked as a formal secret, use `secrets.vars` and [`atmos secret set`](/cli/commands/secret/set) instead.
 
 ## How to Use It
 
@@ -84,6 +84,8 @@ vars:
 ```
 
 Both the command group and the step type are experimental for now. We may change them as we get feedback from users.
+
+For usage and configuration, see [store](/workflows/steps/type/store).
 
 ## Get Involved
 

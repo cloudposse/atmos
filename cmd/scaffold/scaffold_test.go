@@ -116,10 +116,13 @@ func TestScaffoldGenerateCmd_FlagDefinitions(t *testing.T) {
 			defaultValue: "false",
 		},
 		{
-			name:         "merge-strategy flag",
-			flagName:     "merge-strategy",
-			shorthand:    "",
-			defaultValue: "manual",
+			// Registered default is "" (see ResolveConflictStrategy: an unset
+			// value defaults to "manual", or "theirs" when --force is also set
+			// with --update), so no defaultValue check here -- same pattern as
+			// base-ref flag above.
+			name:      "merge-strategy flag",
+			flagName:  "merge-strategy",
+			shorthand: "",
 		},
 		{
 			name:         "merge-driver flag",

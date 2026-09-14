@@ -1,17 +1,21 @@
 package engine
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 )
@@ -446,18 +450,186 @@ func TestProcessorMergeFile_ConflictBranchReturnsError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	// The conflict branch must still write the merged content — with real
+	// conflict markers and any non-conflicting changes — instead of leaving
+	// the file completely untouched (the original bug: a non-zero exit with
+	// an explicit error, but nothing on disk to actually resolve).
+	written, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	writtenContent := string(written)
+	assert.Contains(t, writtenContent, "<<<<<<< Ours")
+	assert.Contains(t, writtenContent, "user-change")
+	assert.Contains(t, writtenContent, "=======")
+	assert.Contains(t, writtenContent, "template-change")
+	assert.Contains(t, writtenContent, ">>>>>>> Theirs")
 }
 
-// Note: mergeFile's os.WriteFile failure branch (writing merged content back
-// to existingPath) is not covered here. Reaching it requires existingPath to
-// remain a valid, readable regular file through os.ReadFile at the top of
-// mergeFile, then fail specifically at the write step — the "directory
-// already exists at this path" trick used elsewhere (e.g.
-// templating_coverage_test.go's TestWriteFileErrors) does not apply here,
-// since that trick fails at the read step instead for a path mergeFile
-// requires to already be a regular file. Forcing this branch portably would
-// need either a chmod-based permission trick (root/Windows-unsafe, per repo
-// convention) or a new injectable write seam, both out of scope here.
+// TestProcessorMergeFile_ConflictBranchDryRunDoesNotWrite verifies dry-run
+// still reports the conflict (mergeFile returns the same error) but never
+// touches the file on disk, matching the clean-merge path's dry-run behavior.
+func TestProcessorMergeFile_ConflictBranchDryRunDoesNotWrite(t *testing.T) {
+	initialContent := "setting: original\n"
+	userContent := "setting: user-change\n"
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+	testRepo.processor.SetMaxChanges(100)
+	testRepo.processor.SetDryRun(true)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	written, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, userContent, string(written), "dry-run must not modify the file even on conflict")
+}
+
+// TestProcessorMergeFile_RejectsUnresolvedMarkers verifies mergeFile fails
+// fast with a specific error when the existing file already contains
+// unresolved conflict markers from a previous --update, instead of
+// re-attempting a merge against corrupted "ours" content and surfacing
+// whatever opaque failure that produces (a YAML parse error, in this case,
+// but TextMerger has no syntax requirement on its inputs and would silently
+// garble the result rather than error at all).
+func TestProcessorMergeFile_RejectsUnresolvedMarkers(t *testing.T) {
+	initialContent := "setting: original\n"
+	unresolvedContent := "<<<<<<< Ours\nsetting: user-change\n=======\nsetting: template-change\n>>>>>>> Theirs\n"
+	testRepo := setupGitTestRepo(t, initialContent, unresolvedContent)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	// This is a fail-fast check, not another merge attempt -- the file must
+	// be left completely untouched.
+	written, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, unresolvedContent, string(written))
+}
+
+// TestProcessorMergeFile_DocumentStreamConflictHasNoMarkers covers a
+// YAMLMerger conflict that has no ours/theirs node pair to splice inline
+// markers from: a multi-document stream where the user's stream dropped a
+// document the template went on to change.
+//
+// That case is recorded as a conflict (HasConflicts) but keeps the
+// template's version verbatim instead of inserting <<<<<<< Ours markers
+// (HasMarkers is false), so mergeFile must reflect that in its hint instead
+// of claiming markers were written when none exist in the file.
+func TestProcessorMergeFile_DocumentStreamConflictHasNoMarkers(t *testing.T) {
+	initialContent := "doc: one\n---\ndoc: two\n"
+	userContent := "doc: one\n"
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+	testRepo.processor.SetMaxChanges(100)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "doc: one\n---\ndoc: two\ntemplate: true\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	hints := cockroachErrors.GetAllHints(err)
+	for _, h := range hints {
+		assert.NotContains(t, h, "have been written to the file",
+			"no inline markers exist for this conflict, so the hint must not claim they were written")
+	}
+	assert.Contains(t, hints, "The template's version was kept for the conflicting item(s); review the file to confirm it's what you want")
+
+	// The template's version of the dropped document is kept verbatim -- no
+	// conflict markers appear anywhere in the written file.
+	written, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	writtenContent := string(written)
+	assert.NotContains(t, writtenContent, "<<<<<<<")
+	assert.Contains(t, writtenContent, "template: true")
+}
+
+// TestProcessorMergeFile_ConflictWriteFailurePropagates forces
+// newAtomicWriteFS's underlying WriteFileAtomic to fail via a mock
+// filesystem.FileSystem, and asserts the conflict-markers write failure
+// (mergeFile's first writeFileSecure call) surfaces as ErrFileWrite instead
+// of the conflict succeeding silently. Reaching a real disk write failure at
+// this exact step is impractical to trigger portably (existingPath must
+// remain a valid, readable regular file through the earlier os.ReadFile, then
+// fail specifically at the write) -- see newAtomicWriteFS's doc comment.
+func TestProcessorMergeFile_ConflictWriteFailurePropagates(t *testing.T) {
+	initialContent := "setting: original\n"
+	userContent := "setting: user-change\n"
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+	testRepo.processor.SetMaxChanges(100)
+
+	original := newAtomicWriteFS
+	injectedErr := errors.New("injected write failure")
+	ctrl := gomock.NewController(t)
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().WriteFileAtomic(gomock.Any(), gomock.Any(), gomock.Any()).Return(injectedErr)
+	newAtomicWriteFS = func() filesystem.FileSystem { return mockFS }
+	t.Cleanup(func() { newAtomicWriteFS = original })
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFileWrite)
+}
+
+// TestProcessorMergeFile_CleanWriteFailurePropagates is the clean-merge
+// counterpart of TestProcessorMergeFile_ConflictWriteFailurePropagates: no
+// conflicts, so mergeFile takes its second writeFileSecure call instead.
+func TestProcessorMergeFile_CleanWriteFailurePropagates(t *testing.T) {
+	initialContent := "setting: original\nkey1: v1\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	original := newAtomicWriteFS
+	injectedErr := errors.New("injected write failure")
+	ctrl := gomock.NewController(t)
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().WriteFileAtomic(gomock.Any(), gomock.Any(), gomock.Any()).Return(injectedErr)
+	newAtomicWriteFS = func() filesystem.FileSystem { return mockFS }
+	t.Cleanup(func() { newAtomicWriteFS = original })
+
+	// Template changes a different key: no conflict, so the merge takes the
+	// clean-write path (mergeFile's second writeFileSecure call).
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: original\nkey1: v2\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFileWrite)
+}
 
 // TestProcessorDetermineBaseContent_LoadBaseError covers LoadBase returning a
 // non-nil error (as opposed to the found=true and gitStorage==nil cases

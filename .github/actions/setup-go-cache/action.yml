@@ -34,7 +34,9 @@ inputs:
     required: false
     default: go.mod
   cache:
-    description: Whether to restore GOMODCACHE + GOCACHE ("true"/"false").
+    description: >-
+      Cache to restore: "true" for the full build/module cache, "race-plan" for the
+      lightweight race-planner cache, or "false" for none.
     required: false
     default: "true"
   cache-dependency-path:
@@ -45,7 +47,7 @@ inputs:
 outputs:
   cache-hit:
     description: Whether a cache entry was restored (exact or prefix match).
-    value: ${{ steps.restore.outputs.cache-matched-key != '' }}
+    value: ${{ steps.restore.outputs.cache-matched-key != '' || steps.restore-race-plan.outputs.cache-matched-key != '' }}
   cache-primary-key:
     description: >-
       The rendered primary key (OS/arch/Go version/dependency hash, no run suffix). The warmup
@@ -103,7 +105,11 @@ runs:
       if: runner.os != 'Windows'
       shell: bash
       run: |
-        echo "GOCACHE=$HOME/.cache/go-build" >> "$GITHUB_ENV"
+        if [ "${{ inputs.cache }}" = "race-plan" ]; then
+          echo "GOCACHE=$RUNNER_TEMP/race-plan-go-build" >> "$GITHUB_ENV"
+        else
+          echo "GOCACHE=$HOME/.cache/go-build" >> "$GITHUB_ENV"
+        fi
         echo "GOMODCACHE=$HOME/go/pkg/mod" >> "$GITHUB_ENV"
 
     - name: Set up Go
@@ -135,3 +141,19 @@ runs:
         restore-keys: |
           go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
           go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-
+
+    # The race planner only needs to compile the Mage target and enumerate
+    # local packages. Its own cache lineage avoids downloading the full,
+    # race-instrumented GOCACHE archive before any race shard can start.
+    - name: Restore the race planner build and module caches
+      id: restore-race-plan
+      if: inputs.cache == 'race-plan'
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: |
+          ${{ env.GOCACHE }}
+          ${{ env.GOMODCACHE }}
+        key: race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}
+        restore-keys: |
+          race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
+          race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-

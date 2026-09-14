@@ -13,6 +13,19 @@ inputs:
   s3-uri:
     description: 'Destination S3 URI, with or without a trailing slash (e.g. s3://my-bucket/pr-123/)'
     required: true
+  cloudfront-distribution-id:
+    description: >
+      CloudFront distribution ID to invalidate after the sync (e.g. E2WVYUGW40ZPA8).
+      `sync --delete` can remove hashed bundles that an edge location's cached
+      `index.html` from the previous deploy still references, causing chunk-load
+      404s until the cache naturally expires. Leave empty to skip invalidation
+      (e.g. when the caller has no CloudFront-invalidation permission).
+    required: false
+    default: ''
+  cloudfront-invalidation-paths:
+    description: 'Space-separated invalidation paths, only used when cloudfront-distribution-id is set.'
+    required: false
+    default: '/*'
 
 runs:
   using: composite
@@ -24,3 +37,17 @@ runs:
         LOCAL_DIR: ${{ inputs.local-dir }}
         S3_URI: ${{ inputs.s3-uri }}
       run: '"$DEPLOY_SCRIPT" "$LOCAL_DIR" "$S3_URI"'
+
+    # Fire-and-forget: invalidation typically completes in under a minute and
+    # there's no need to block the job on it.
+    - name: Invalidate CloudFront Cache
+      if: inputs.cloudfront-distribution-id != ''
+      shell: bash
+      env:
+        DISTRIBUTION_ID: ${{ inputs.cloudfront-distribution-id }}
+        INVALIDATION_PATHS: ${{ inputs.cloudfront-invalidation-paths }}
+      run: |
+        # shellcheck disable=SC2086 # INVALIDATION_PATHS is an intentionally unquoted, space-separated path list.
+        aws cloudfront create-invalidation \
+          --distribution-id "${DISTRIBUTION_ID}" \
+          --paths ${INVALIDATION_PATHS}

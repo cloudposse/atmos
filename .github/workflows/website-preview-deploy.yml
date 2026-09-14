@@ -21,6 +21,8 @@ env:
   IAM_ROLE_ARN: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
   IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-deploy-pr-${{ github.event.workflow_run.pull_requests[0].number }}
   S3_BUCKET_NAME: cplive-plat-ue2-dev-atmos-docs-origin
+  # atmos-docs-site-spa (plat-ue2-dev) in cloudposse/infra-live.
+  CLOUDFRONT_DISTRIBUTION_ID: E1U29O8X09M5UR
   PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
   DEPLOYMENT_HOST: pr-${{ github.event.workflow_run.pull_requests[0].number }}.atmos-docs.ue2.dev.plat.cloudposse.org
 
@@ -58,6 +60,7 @@ jobs:
             sts.us-east-2.amazonaws.com:443
             *.actions.githubusercontent.com:443
             cplive-plat-ue2-dev-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
+            cloudfront.amazonaws.com:443
 
       - name: Start deployment
         uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1
@@ -97,11 +100,16 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ steps.github-app.outputs.token }}
 
+      # Invalidation is scoped to this PR's own prefix so one preview deploy never
+      # invalidates every other open PR's cached preview -- see the matching
+      # comment in website-deploy-prod.yml for why an invalidation is needed at all.
       - name: Copy Website to S3 Bucket PR Folder
         uses: ./.github/actions/s3-deploy
         with:
           local-dir: website/build
           s3-uri: s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/
+          cloudfront-distribution-id: ${{ env.CLOUDFRONT_DISTRIBUTION_ID }}
+          cloudfront-invalidation-paths: /pr-${{ env.PR_NUMBER }}/*
 
       - name: Update deployment status
         uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1

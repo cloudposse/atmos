@@ -7,14 +7,14 @@ date: 2026-06-04T12:00:00.000Z
 ---
 
 Atmos now exposes Git **repository metadata** through dedicated YAML functions:
-`!git.repository`, `!git.owner`, `!git.name`, `!git.host`, and `!git.url`. These join the
-existing `!git.root`, `!git.sha`, `!git.branch`, and `!git.ref` functions.
+`!git.repository`, [`!git.owner`](/functions/yaml/git.owner), [`!git.name`](/functions/yaml/git.name), [`!git.host`](/functions/yaml/git.host), and [`!git.url`](/functions/yaml/git.url). These join the
+existing [`!git.root`](/functions/yaml/git.root), [`!git.sha`](/functions/yaml/git.sha), [`!git.branch`](/functions/yaml/git.branch), and [`!git.ref`](/functions/yaml/git.ref) functions.
 
 <!--truncate-->
 
 ## What Changed
 
-You no longer need to shell out through `!exec` and `sed` to derive the repository slug. The new
+You no longer need to shell out through [`!exec`](/functions/yaml/exec) and `sed` to derive the repository slug. The new
 functions read the `origin` remote and parse it for you, working across GitHub, GitLab, Bitbucket,
 and Azure DevOps:
 
