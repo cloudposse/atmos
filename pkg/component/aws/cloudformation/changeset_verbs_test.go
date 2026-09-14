@@ -178,6 +178,7 @@ func TestRunChangesetExecute_Success(t *testing.T) {
 			ChangeSetId: awsString("cs-id-1"),
 			Status:      cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
@@ -216,6 +217,7 @@ func TestRunChangesetExecute_ExecuteError(t *testing.T) {
 	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 		Status: cfntypes.ChangeSetStatusCreateComplete,
 	}, nil)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
 	client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(nil, errors.New("boom"))
 
 	spec := &stackSpec{StackName: "vpc"}
@@ -234,6 +236,7 @@ func TestRunChangesetExecute_StreamEventsError(t *testing.T) {
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled")),
 	)
@@ -255,6 +258,7 @@ func TestRunChangesetExecute_FailedStatus(t *testing.T) {
 		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
