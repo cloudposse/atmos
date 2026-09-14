@@ -208,6 +208,17 @@ current schema.
     erroring to falling back to the step's configured `default` value —
     [PR #2714](https://github.com/cloudposse/atmos/pull/2714).
 
+  **First post-editions candidate:** the entries above predate this feature's own merge
+  (2026-07-16) and were mined retroactively — none of them had editions available to gate them at
+  ship time. `init_run_reconfigure: true` → `init.reconfigure: auto`
+  ([PR #3127](https://github.com/cloudposse/atmos/pull/3127),
+  docs/prd/terraform-auto-init.md's Migration section) is the first behavior change to ship *after*
+  editions existed: the legacy boolean's stored value doesn't change, but what `true` means does —
+  from "always add `-reconfigure`" to "add it only when the backend changed since the last init."
+  Same as the seed entries, it ships ungated because `KindBehavior` resolution isn't implemented
+  yet; unlike them, that's now a live choice rather than a historical gap, worth resolving the next
+  time a PR needs to make this exact call.
+
   **Not gatable:** the auth credential realm isolation change (2026-02-10,
   [changelog/auth-realm-isolation](https://atmos.tools/changelog/auth-realm-isolation)) is a hard
   break — cached credentials moved realms and every user had to re-login. Editions cannot roll it
@@ -229,3 +240,4 @@ current schema.
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-07-16 | 1.0 | Initial PRD; v1 implementation (value defaults, journal, pin, list/describe commands, guardrails). |
+| 2026-09-12 | 1.1 | Documented the first post-editions `KindBehavior` candidate (`init_run_reconfigure`'s reinterpretation in PR #3127) in the Roadmap; no code change. |
