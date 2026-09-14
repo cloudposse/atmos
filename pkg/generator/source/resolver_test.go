@@ -440,6 +440,51 @@ func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
 	defer cleanup()
 	require.NotNil(t, cfg)
 	assert.True(t, hasSampleFile(cfg.Files), "remote git subdir template files must be loaded")
+	// Regression: go-getter's git fetch for a //subdir source clones the full
+	// repo into its own internal temp location and copies only the subdir's
+	// content into tempDir, so tempDir itself never has a usable .git
+	// directory for resolveFetchedGitRef to inspect directly -- ResolvedRef
+	// used to silently stay empty for this extremely common source shape
+	// (the exact one `atmos init aws/app` uses), meaning
+	// --update-strategy=rendered could never record a pinnable ref for any
+	// subdir-sourced template at all.
+	assert.Regexp(t, `^[0-9a-f]{40}$`, cfg.ResolvedRef, "ResolvedRef must be captured even for a //subdir source")
+}
+
+// TestResolve_RemoteGitSubdirWithoutRefStillResolvesCommit covers the
+// resolveSubdirGitRef fallback with no explicit ?ref= at all (default
+// branch), proving the fallback's re-fetch doesn't depend on an explicit ref
+// being present in src.
+func TestResolve_RemoteGitSubdirWithoutRefStillResolvesCommit(t *testing.T) {
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"aws/app/scaffold.yaml": sampleScaffold,
+		"aws/app/file.txt":      "hello",
+	})
+	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app"
+
+	requireGitBinary(t)
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, time.Minute)
+	require.NoError(t, err)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.Regexp(t, `^[0-9a-f]{40}$`, cfg.ResolvedRef)
+}
+
+// TestResolveSubdirGitRef_NoSubdirReturnsEmpty proves the fallback is a
+// pure no-op for a source with no //subdir at all: resolveRemote's own
+// direct resolveFetchedGitRef(tempDir) result already reflects reality for
+// that case, so this must not attempt a redundant re-fetch.
+func TestResolveSubdirGitRef_NoSubdirReturnsEmpty(t *testing.T) {
+	assert.Empty(t, resolveSubdirGitRef(&schema.AtmosConfiguration{}, "git::file:///does/not/matter?ref=main", time.Minute))
+}
+
+// TestResolveSubdirGitRef_FetchFailurePropagatesEmpty covers the re-fetch
+// itself failing (unreachable source): best-effort, so this must return ""
+// rather than propagating an error the caller has no use for.
+func TestResolveSubdirGitRef_FetchFailurePropagatesEmpty(t *testing.T) {
+	src := "git::file:///definitely/not/a/repo//sub?ref=main"
+
+	assert.Empty(t, resolveSubdirGitRef(&schema.AtmosConfiguration{}, src, time.Millisecond))
 }
 
 // TestResolve_RemoteGitExcludesGitDirectory reproduces a client-reported bug: fetching a

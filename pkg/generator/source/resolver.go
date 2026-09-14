@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/hashicorp/go-getter"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -262,9 +263,23 @@ func resolveRemote(atmosConfig *schema.AtmosConfiguration, name, src string, tim
 		cleanup()
 		return nil, noop, err
 	}
-	// Resolve while tempDir (and its .git, if src was a git:: source) still
-	// exists -- cleanup() below removes it once generation finishes.
+	// Resolve while tempDir (and its .git, if src was a git:: source with no
+	// //subdir) still exists -- cleanup() below removes it once generation
+	// finishes.
 	conf.ResolvedRef = resolveFetchedGitRef(tempDir)
+	if conf.ResolvedRef == "" && vendor.IsGitURI(src) {
+		// go-getter's git fetch for a //subdir source (e.g. the exact shape
+		// `atmos init aws/app` uses) clones the full repository into its own
+		// internal temp location first, then copies only the subdir's
+		// content into tempDir -- see pkg/downloader/get_git.go's doc
+		// comment. tempDir itself never gets a usable .git directory to
+		// inspect in that case, so resolveFetchedGitRef(tempDir) always
+		// returns "" for any git:: source using //subdir. Best-effort:
+		// re-fetch the same ref without the subdir into a throwaway
+		// directory purely to resolve the commit; a failure here doesn't
+		// invalidate the fetch that already succeeded above.
+		conf.ResolvedRef = resolveSubdirGitRef(atmosConfig, src, timeout)
+	}
 	// tempDir only exists to read files off disk and is removed by cleanup()
 	// once generation finishes; the recorded provenance must be the original
 	// source the caller passed in, not that ephemeral fetch destination.
@@ -288,6 +303,30 @@ func resolveFetchedGitRef(dir string) string {
 		return ""
 	}
 	return head.Hash().String()
+}
+
+// resolveSubdirGitRef re-fetches src's git ref without its //subdir suffix
+// into a throwaway temp directory, purely to resolve the commit checked out
+// there via resolveFetchedGitRef -- see resolveRemote's call site for why
+// this is needed. Returns "" if src has no //subdir at all (resolveRemote's
+// direct resolveFetchedGitRef(tempDir) result already reflects reality in
+// that case) or if the re-fetch itself fails.
+func resolveSubdirGitRef(atmosConfig *schema.AtmosConfiguration, src string, timeout time.Duration) string {
+	rootSrc, subdir := getter.SourceDirSubdir(src)
+	if subdir == "" {
+		return ""
+	}
+
+	tempDir, err := os.MkdirTemp("", "atmos-scaffold-gitref-")
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = os.RemoveAll(tempDir) }()
+
+	if err := fetchRemoteSource(atmosConfig, "gitref-probe", rootSrc, tempDir, timeout); err != nil {
+		return ""
+	}
+	return resolveFetchedGitRef(tempDir)
 }
 
 // fetchRemoteSource downloads src into destDir via go-getter, showing a

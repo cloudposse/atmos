@@ -116,8 +116,12 @@ func TestExecuteTemplateGeneration_RenderedStrategyRetryWiresBaseSource(t *testi
 				require.NotNil(t, cfg)
 				assert.NotEmpty(t, cfg.Files, "the old ref's template must be fully hydrated before the retry")
 			}),
+		// The retry base ref is "" under rendered mode: shouldOfferScaffoldUpdate's
+		// tracked-only defaultBaseRef resolution is skipped, since a non-empty
+		// value here would otherwise flow unchanged into executeWithSetup's
+		// spec.baseRef write regardless of strategy.
 		mockUI.EXPECT().
-			ExecuteWithBaseRef(selectedConfig, targetDir, false, true, false, "HEAD", opts.templateValues).
+			ExecuteWithBaseRef(selectedConfig, targetDir, false, true, false, "", opts.templateValues).
 			Return(nil),
 	)
 
