@@ -865,6 +865,34 @@ func setDefaultConfiguration(v *viper.Viper) {
 	// Plugin cache enabled by default for zero-config performance.
 	v.SetDefault("components.terraform.plugin_cache", true)
 	v.SetDefault("components.terraform.auto_provision_workdir_for_outputs", true)
+	// Pre-existing bug fix, not a behavior change: init_run_reconfigure's documented/intended
+	// default has always been true (see defaultCliConfig in pkg/config/default.go), but this key
+	// was never set here at all, so any project WITH an atmos.yaml (the vast majority of real
+	// usage -- defaultCliConfig, layer (c), only applies when no atmos.yaml exists) silently got
+	// Go's zero value (false) instead, via EffectiveInitReconfigure's legacy fallback. No journal
+	// entry: the intended default never changed, layer (a) was just missing it -- same class of
+	// layer-disagreement bug as the historical logs.level/pager/use_eks cases documented in
+	// docs/prd/editions.md.
+	v.SetDefault("components.terraform.init_run_reconfigure", true)
+	// terraform init only runs when something that affects it changed, since 2026-09-12
+	// (journaled in pkg/edition; previously always, since init.mode didn't exist). A project
+	// pinned to an edition before that date gets "always" restored by applyEditionDefaults --
+	// byte-for-byte the prior unconditional behavior, no explicit init.mode: always needed.
+	v.SetDefault("components.terraform.init.mode", "auto")
+	// -upgrade is added automatically once Terraform/OpenTofu reports one is required, since
+	// 2026-09-12 (journaled in pkg/edition; previously never, since Atmos had no way to pass
+	// -upgrade automatically before this setting existed). A project pinned to an edition before
+	// that date gets "never" restored by applyEditionDefaults.
+	v.SetDefault("components.terraform.init.upgrade", "auto")
+	// components.terraform.init.reconfigure is deliberately NOT given a Viper default here,
+	// unlike init.mode/init.upgrade above. EffectiveInitReconfigure's legacy fallback
+	// (deprecated init_run_reconfigure) depends on t.Init.Reconfigure being genuinely empty
+	// when the user hasn't set it explicitly; a blanket SetDefault here would make it always
+	// non-empty via Viper's defaults layer, permanently short-circuiting that fallback and
+	// silently breaking init_run_reconfigure: false's "never" mapping for any project that set
+	// it. See docs/prd/editions.md's Roadmap for why this one is a documented KindBehavior gap
+	// (a reinterpretation of an existing value, not a gate-able default) instead of a KindValue
+	// entry like its siblings.
 
 	// Token injection defaults for all supported Git hosting providers.
 	v.SetDefault("settings.inject_github_token", true)
