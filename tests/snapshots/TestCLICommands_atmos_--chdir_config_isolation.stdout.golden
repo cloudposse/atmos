@@ -9,7 +9,7 @@ components:
     apply_auto_approve: false
     append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
     deploy_run_init: false
-    init_run_reconfigure: false
+    init_run_reconfigure: true
     auto_generate_backend_file: false
     auto_generate_files: false
     command: tofu
@@ -17,6 +17,8 @@ components:
       prompt: ""
     init:
       pass_vars: false
+      mode: auto
+      upgrade: auto
     plan:
       skip_planfile: false
     plugin_cache: true

@@ -293,7 +293,15 @@ func TestExtractComponentConfig(t *testing.T) {
 			assert.Contains(t, filepath.ToSlash(config.ComponentPath), filepath.ToSlash(tt.expectedComponentPathSuffix),
 				"expected path to contain %s, got %s", tt.expectedComponentPathSuffix, config.ComponentPath)
 			assert.Equal(t, tt.autoGenerateBackend, config.AutoGenerateBackend)
-			assert.Equal(t, tt.initRunReconfigure, config.InitRunReconfigure)
+			// The legacy init_run_reconfigure bool folds into EffectiveInitReconfigure:
+			// false maps to "never", true maps to "auto" (never "always").
+			expectedReconfigure := schema.TerraformInitReconfigureAuto
+			if !tt.initRunReconfigure {
+				expectedReconfigure = schema.TerraformInitReconfigureNever
+			}
+			assert.Equal(t, expectedReconfigure, config.InitReconfigure)
+			assert.Equal(t, schema.TerraformInitModeAuto, config.InitMode)
+			assert.Equal(t, schema.TerraformInitUpgradeAuto, config.InitUpgrade)
 
 			if tt.expectedBackendType != "" {
 				assert.Equal(t, tt.expectedBackendType, config.BackendType)
@@ -451,7 +459,7 @@ func TestExtractComponentConfig_ReadsAutoProvisionWorkdirForOutputs(t *testing.T
 		"component_path": mockPath,
 	}
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs = false
 
 	config, err := ExtractComponentConfig(atmosConfig, sections, "mock", "test")
@@ -720,4 +728,43 @@ func TestExtractComponentPath(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExtractComponentConfig_InitPolicy verifies that an explicit
+// components.terraform.init.{mode,reconfigure,upgrade} setting takes precedence
+// over the legacy init_run_reconfigure bool and is surfaced on ComponentConfig
+// via the Effective* accessors.
+func TestExtractComponentConfig_InitPolicy(t *testing.T) {
+	tempDir := t.TempDir()
+	sections := map[string]any{
+		cfg.CommandSectionName:   "/usr/bin/terraform",
+		cfg.WorkspaceSectionName: "test-ws",
+		cfg.ComponentSectionName: "vpc",
+		"component_info": map[string]any{
+			"component_type": "terraform",
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+				// Legacy setting would resolve to "never"; the explicit init.*
+				// settings below must win instead.
+				InitRunReconfigure: false,
+				Init: schema.TerraformInit{
+					Mode:        schema.TerraformInitModeAlways,
+					Reconfigure: schema.TerraformInitReconfigureAlways,
+					Upgrade:     schema.TerraformInitUpgradeAlways,
+				},
+			},
+		},
+	}
+
+	config, err := ExtractComponentConfig(atmosConfig, sections, "test-component", "test-stack")
+	require.NoError(t, err)
+	assert.Equal(t, schema.TerraformInitModeAlways, config.InitMode)
+	assert.Equal(t, schema.TerraformInitReconfigureAlways, config.InitReconfigure)
+	assert.Equal(t, schema.TerraformInitUpgradeAlways, config.InitUpgrade)
 }
