@@ -61,6 +61,9 @@ const (
 	AppendUserAgentFlag         = "--append-user-agent"
 	InitRunReconfigure          = "--init-run-reconfigure"
 	InitPassVars                = "--init-pass-vars"
+	InitModeFlag                = "--init-mode"
+	InitReconfigureFlag         = "--init-reconfigure"
+	InitUpgradeFlag             = "--init-upgrade"
 	PlanSkipPlanfile            = "--skip-planfile"
 
 	FromPlanFlag       = "--from-plan"
