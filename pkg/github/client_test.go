@@ -250,6 +250,89 @@ func TestTokenForToolchainHost(t *testing.T) {
 	}
 }
 
+// TestIsPublicGitHubHost pins that IsPublicGitHubHost recognizes public github.com regardless of
+// what RepoEndpoints resolves to -- e.g. an explicit github.com blob URL must still be
+// recognized even when GITHUB_SERVER_URL points at a GitHub Enterprise Server host.
+func TestIsPublicGitHubHost(t *testing.T) {
+	clearGitHubEndpointEnv(t)
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	tests := []struct {
+		name string
+		host string
+		want bool
+	}{
+		{name: "public github.com", host: "github.com", want: true},
+		{name: "case insensitive", host: "GitHub.Com", want: true},
+		{name: "default https port stripped", host: "github.com:443", want: true},
+		{name: "the configured GHES host is not public github.com", host: "ghes.example.com", want: false},
+		{name: "unrelated host", host: "example.com", want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, IsPublicGitHubHost(tc.host))
+		})
+	}
+}
+
+// TestNewToolchainGitHubClient pins that newToolchainGitHubClient builds a client scoped to
+// ToolchainEndpoints (not RepoEndpoints), and that the repo-scoped token is only forwarded to it
+// when ToolchainEndpoints resolves to the same host as RepoEndpoints (see
+// tokenForToolchainHost) -- otherwise a GHES-scoped token must never reach the (by default
+// public github.com) toolchain host.
+func TestNewToolchainGitHubClient(t *testing.T) {
+	// clearTokenSources removes every token source GetGitHubToken() consults ahead of the
+	// per-test ATMOS_GITHUB_TOKEN below, so a stale viper value (set by another test in this
+	// package) or an ambient GITHUB_TOKEN/gh CLI session on the host can never leak in.
+	clearTokenSources := func(t *testing.T) {
+		t.Helper()
+		viper.Set("github-token", "")
+		t.Cleanup(func() { viper.Set("github-token", "") })
+		t.Setenv("GITHUB_TOKEN", "")
+		t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
+		t.Setenv("PATH", "") // Prevent the gh CLI fallback from finding a real token.
+	}
+
+	t.Run("repo and toolchain both default to public github.com: token forwarded", func(t *testing.T) {
+		clearGitHubEndpointEnv(t)
+		clearTokenSources(t)
+		t.Setenv("ATMOS_GITHUB_TOKEN", "ghp_test_token")
+
+		client, authenticated := newToolchainGitHubClient(t.Context())
+
+		require.NotNil(t, client)
+		assert.Equal(t, "https://api.github.com/", client.BaseURL.String())
+		assert.True(t, authenticated)
+	})
+
+	t.Run("repo on GHES, toolchain left at public default: token withheld", func(t *testing.T) {
+		clearGitHubEndpointEnv(t)
+		clearTokenSources(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+		t.Setenv("ATMOS_GITHUB_TOKEN", "ghp_test_token")
+
+		client, authenticated := newToolchainGitHubClient(t.Context())
+
+		require.NotNil(t, client)
+		assert.Equal(t, "https://api.github.com/", client.BaseURL.String())
+		assert.False(t, authenticated, "a repo-scoped GHES token must never reach the public github.com toolchain host")
+	})
+
+	t.Run("repo and toolchain both on the same configured GHES host: token forwarded", func(t *testing.T) {
+		clearGitHubEndpointEnv(t)
+		clearTokenSources(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+		t.Setenv("ATMOS_TOOLCHAIN_GITHUB_URL", "https://ghes.example.com")
+		t.Setenv("ATMOS_GITHUB_TOKEN", "ghp_test_token")
+
+		client, authenticated := newToolchainGitHubClient(t.Context())
+
+		require.NotNil(t, client)
+		assert.Equal(t, "https://ghes.example.com/api/v3/", client.BaseURL.String())
+		assert.True(t, authenticated)
+	})
+}
+
 // TestNewGitHubClientForEndpoints_WithholdsTokenOverHTTP pins that newGitHubClientForEndpoints
 // never sends a token to a non-https endpoint (ResolveEndpointURL accepts http:// so tests can
 // point endpoints at a local server): the request must reach the server with no Authorization
