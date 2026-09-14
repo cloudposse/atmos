@@ -274,6 +274,15 @@ func TestApplyGitHubRef(t *testing.T) {
 			ref:      "v1.0.0",
 			expected: "https://github.com/short",
 		},
+		{
+			// A control character makes url.Parse fail outright, exercising the unparseable-URL
+			// branch: the original baseURL must be returned unchanged rather than panicking or
+			// propagating the parse error.
+			name:     "unparseable URL returns original unchanged",
+			baseURL:  "https://github.com/\x7fowner/repo",
+			ref:      "v1.0.0",
+			expected: "https://github.com/\x7fowner/repo",
+		},
 	}
 
 	for _, tt := range tests {

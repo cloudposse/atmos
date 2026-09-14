@@ -210,6 +210,35 @@ func TestScopedTokenTransport_RemovesCallerSetHeader(t *testing.T) {
 	assert.Empty(t, base.gotAuth, "a caller-set Authorization header must be removed, not forwarded")
 }
 
+// TestIsApprovedGitHubDownloadHost pins that a download/redirect host is approved when it
+// matches either RepoEndpoints' or ToolchainEndpoints' server, API, or upload host, and rejected
+// otherwise -- e.g. the pre-signed S3-style blob host a GitHub artifact download redirects to.
+func TestIsApprovedGitHubDownloadHost(t *testing.T) {
+	clearGitHubEndpointEnv(t)
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+	t.Setenv("ATMOS_TOOLCHAIN_GITHUB_API_URL", "https://api-mirror.example.com")
+
+	tests := []struct {
+		name string
+		host string
+		want bool
+	}{
+		{name: "repo server host", host: "ghes.example.com", want: true},
+		{name: "repo API host (derived /api/v3)", host: "ghes.example.com", want: true},
+		{name: "toolchain default server host (public github.com)", host: "github.com", want: true},
+		{name: "toolchain API-only override host", host: "api-mirror.example.com", want: true},
+		{name: "toolchain default upload host", host: "uploads.github.com", want: true},
+		{name: "case and port normalized", host: "GHES.Example.com:443", want: true},
+		{name: "unrelated pre-signed blob host is rejected", host: "s3.amazonaws.com", want: false},
+		{name: "unrelated host is rejected", host: "attacker.example.com", want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, IsApprovedGitHubDownloadHost(tc.host))
+		})
+	}
+}
+
 // TestNewScopedTokenHTTPClient_WithholdsTokenOverHTTP pins that NewScopedTokenHTTPClient never
 // attaches a token when allowed's own API host is not https (TokenForEndpoints returns "").
 func TestNewScopedTokenHTTPClient_WithholdsTokenOverHTTP(t *testing.T) {

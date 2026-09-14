@@ -382,6 +382,61 @@ func TestEndpoints_IsHostForScheme(t *testing.T) {
 	assert.False(t, e.IsHostForScheme("ghes.example.com:8443", "https"), "explicit non-default port must match exactly")
 }
 
+// TestEndpoints_Hostname pins that Hostname strips a port kept on Host (see Host's doc comment)
+// while leaving a portless Host unchanged, so callers comparing against a portless value (e.g.
+// an SCP-style Git remote host, which carries no port of its own) get an exact match either way.
+func TestEndpoints_Hostname(t *testing.T) {
+	tests := []struct {
+		name string
+		host string
+		want string
+	}{
+		{name: "portless host unchanged", host: "ghes.example.com", want: "ghes.example.com"},
+		{name: "non-default port stripped", host: "ghes.example.com:8443", want: "ghes.example.com"},
+		{name: "default github.com host unchanged", host: "github.com", want: "github.com"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := Endpoints{Host: tc.host}
+			assert.Equal(t, tc.want, e.Hostname())
+		})
+	}
+}
+
+// TestEndpoints_IsAPIHost pins that IsAPIHost compares against APIURL's own host (not Host),
+// so an API-only override (Host still github.com, APIURL pointed at a corporate proxy) is
+// recognized independently of IsHost.
+func TestEndpoints_IsAPIHost(t *testing.T) {
+	e := Endpoints{
+		ServerURL: "https://github.com",
+		APIURL:    "https://api.proxy.example.com",
+		Host:      "github.com",
+	}
+
+	assert.True(t, e.IsAPIHost("api.proxy.example.com"), "the API host must match")
+	assert.True(t, e.IsAPIHost("API.Proxy.Example.COM"), "case must be normalized")
+	assert.True(t, e.IsAPIHost("api.proxy.example.com:443"), "default https port must be stripped")
+	assert.False(t, e.IsAPIHost("github.com"), "the server host must not also match IsAPIHost when it differs from APIURL's host")
+	assert.False(t, e.IsAPIHost("unrelated.example.com"), "an unrelated host must not match")
+}
+
+// TestEndpoints_IsUploadHost pins that IsUploadHost compares against UploadURL's own host (not
+// Host or APIURL), so the separate uploads.github.com host on public github.com -- or a GHES
+// instance's own /api/uploads host -- is recognized independently.
+func TestEndpoints_IsUploadHost(t *testing.T) {
+	e := Endpoints{
+		ServerURL: "https://github.com",
+		APIURL:    "https://api.github.com",
+		UploadURL: "https://uploads.github.com",
+		Host:      "github.com",
+	}
+
+	assert.True(t, e.IsUploadHost("uploads.github.com"), "the upload host must match")
+	assert.True(t, e.IsUploadHost("Uploads.GitHub.Com"), "case must be normalized")
+	assert.False(t, e.IsUploadHost("api.github.com"), "the API host must not also match IsUploadHost when it differs from UploadURL's host")
+	assert.False(t, e.IsUploadHost("github.com"), "the server host must not also match IsUploadHost when it differs from UploadURL's host")
+}
+
 func TestHostOf_InvalidURL(t *testing.T) {
 	// A control character makes url.Parse fail outright, exercising the error branch.
 	require.Empty(t, hostOf("http://\x7f"))
