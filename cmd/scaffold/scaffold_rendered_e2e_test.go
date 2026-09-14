@@ -99,7 +99,7 @@ func buildTwoTagTemplateRepo(t *testing.T) string {
 //     git-history read to silently overwrite it with)
 //   - the template's own v1->v2 change is applied to the file it changed
 //   - none of this requires the target directory to be a git repository at
-//     all -- the key behavioral difference from update-strategy=tracked
+//     all -- the key behavioral difference from update-strategy=tracked.
 func TestScaffoldGenerate_UpdateStrategyRendered_EndToEnd(t *testing.T) {
 	requireGitBinaryForRenderedE2E(t)
 	t.Cleanup(func() { viper.Reset() })
