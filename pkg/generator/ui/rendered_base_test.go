@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -81,6 +83,63 @@ func TestRenderPristineBase_MissingScaffoldConfigErrors(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestRenderPristineBase_InvalidScaffoldConfigErrors covers
+// loadOldScaffoldConfig's own load failure (distinct from
+// TestRenderPristineBase_MissingScaffoldConfigErrors, which never reaches
+// LoadScaffoldConfigFromContent at all): a scaffold.yaml is present, but its
+// content fails to parse.
+func TestRenderPristineBase_InvalidScaffoldConfigErrors(t *testing.T) {
+	ui := createTestUI(t)
+	cfg := &templates.Configuration{
+		Name:  "bad-scaffold-yaml",
+		Files: []templates.File{{Path: "scaffold.yaml", Content: "not: valid: yaml: [", Permissions: 0o644}},
+	}
+
+	_, _, err := ui.renderPristineBase(cfg, map[string]interface{}{}, nil)
+
+	require.Error(t, err)
+}
+
+// TestRenderPristineBase_MkdirTempFailurePropagates covers os.MkdirTemp
+// failing. Poisoning TMPDIR/TEMP/TMP makes MkdirTemp fail deterministically,
+// mirroring pkg/generator/source's TestResolve_OCIMkdirTempFails.
+func TestRenderPristineBase_MkdirTempFailurePropagates(t *testing.T) {
+	ui := createTestUI(t)
+	bogusTmp := filepath.Join(t.TempDir(), "this-subdir-does-not-exist")
+	_, statErr := os.Stat(bogusTmp)
+	require.True(t, os.IsNotExist(statErr), "test setup: bogusTmp must not exist")
+
+	t.Setenv("TMPDIR", bogusTmp)
+	t.Setenv("TEMP", bogusTmp)
+	t.Setenv("TMP", bogusTmp)
+
+	_, _, err := ui.renderPristineBase(renderedBaseConfig(), map[string]interface{}{"project_name": "old-project"}, nil)
+
+	require.Error(t, err)
+}
+
+// TestRenderPristineBase_FileRenderFailurePropagates covers
+// renderPristineBaseFiles's failure-joining path: a file that fails to
+// template-render (invalid Go template syntax, distinct from a missing
+// field) must fail the whole render and clean up the temp directory rather
+// than silently skipping that file.
+func TestRenderPristineBase_FileRenderFailurePropagates(t *testing.T) {
+	ui := createTestUI(t)
+	cfg := &templates.Configuration{
+		Name: "rendered-base-bad-template",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: renderedBaseScaffoldYAML, Permissions: 0o644},
+			{Path: "broken.txt", Content: "{{ .Unclosed", IsTemplate: true, Permissions: 0o644},
+		},
+	}
+
+	tempDir, cleanup, err := ui.renderPristineBase(cfg, map[string]interface{}{"project_name": "old-project"}, nil)
+
+	require.Error(t, err)
+	assert.Empty(t, tempDir)
+	assert.Nil(t, cleanup)
+}
+
 func TestRenderPristineBase_CleanupRemovesTempDir(t *testing.T) {
 	ui := createTestUI(t)
 
@@ -125,6 +184,53 @@ func TestSetupUpdateBase_TrackedWithEmptyBaseRef_IsNoOp(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cleanup)
 	cleanup() // Must not panic even though tracked mode never set anything up.
+}
+
+// setupUpdateBaseTestGitRepo creates a real git repository (via go-git, no
+// external git binary needed) with a single commit, so tracked-mode
+// setupUpdateBase tests have a real base ref to resolve against.
+func setupUpdateBaseTestGitRepo(t *testing.T) string {
+	t.Helper()
+	repoDir := t.TempDir()
+	repo, err := git.PlainInit(repoDir, false)
+	require.NoError(t, err)
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "config.yaml"), []byte("name: demo\n"), 0o644))
+	_, err = worktree.Add("config.yaml")
+	require.NoError(t, err)
+	_, err = worktree.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{Name: "Test", Email: "test@example.com"},
+	})
+	require.NoError(t, err)
+	return repoDir
+}
+
+// TestSetupUpdateBase_Tracked_WithBaseRefSetsUpGitStorage covers tracked
+// mode's actual git-history-backed setup path (as opposed to
+// TestSetupUpdateBase_TrackedWithEmptyBaseRef_IsNoOp's no-op case): a real
+// baseRef against a real repo must succeed and wire up base storage.
+func TestSetupUpdateBase_Tracked_WithBaseRefSetsUpGitStorage(t *testing.T) {
+	ui := createTestUI(t)
+	repoDir := setupUpdateBaseTestGitRepo(t)
+
+	cleanup, err := ui.setupUpdateBase(repoDir, "HEAD", nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+// TestSetupUpdateBase_Tracked_InvalidBaseRefPropagatesError covers tracked
+// mode's SetupGitStorage failure path: a baseRef that doesn't exist in the
+// target's git history must surface as an error, not a silent no-op base.
+func TestSetupUpdateBase_Tracked_InvalidBaseRefPropagatesError(t *testing.T) {
+	ui := createTestUI(t)
+	repoDir := setupUpdateBaseTestGitRepo(t)
+
+	_, err := ui.setupUpdateBase(repoDir, "missing-ref", nil)
+
+	require.Error(t, err)
 }
 
 // TestSetupUpdateBase_Rendered_WiresRenderedBaseIntoProcessor proves

@@ -67,6 +67,28 @@ func TestSaveAndLoadProjectRecordWithBaseRef(t *testing.T) {
 	assert.Equal(t, "aws_region", record.Spec.Fields[1].Name)
 }
 
+// TestSaveAndLoadProjectRecordWithRenderedRef mirrors
+// TestSaveAndLoadProjectRecordWithBaseRef for the rendered-strategy
+// provenance field: spec.renderedRef must round-trip the same way
+// spec.baseRef does, and leave spec.baseRef empty (the two are mutually
+// exclusive in practice -- see ScaffoldSpec.RenderedRef's doc comment).
+func TestSaveAndLoadProjectRecordWithRenderedRef(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	values := map[string]interface{}{"project_name": "test-project"}
+
+	err := SaveProjectRecord(tmpDir, templateForRecordTests(), ProjectRecordProvenance{Source: SourceEmbedded, RenderedRef: "abc123"}, values)
+	require.NoError(t, err)
+
+	record, err := LoadProjectRecord(tmpDir)
+	require.NoError(t, err)
+	require.NotNil(t, record)
+
+	assert.Equal(t, SourceEmbedded, record.Spec.Source)
+	assert.Equal(t, "abc123", record.Spec.RenderedRef)
+	assert.Empty(t, record.Spec.BaseRef)
+}
+
 // TestSaveAndLoadProjectRecord_FieldWhenSurvivesRoundTrip verifies a
 // field-level `when:` CEL condition survives a full save/load round trip
 // through the project record (.atmos/scaffold.yaml), evaluating correctly
@@ -160,6 +182,32 @@ func TestLoadProjectRecord_NonexistentFile(t *testing.T) {
 	record, err := LoadProjectRecord(tmpDir)
 	require.NoError(t, err)
 	assert.Nil(t, record) // Should return nil when file doesn't exist.
+}
+
+// TestSaveProjectRecord_MkdirAllFailurePropagatesError covers the
+// os.MkdirAll failure path: targetPath is a regular file, so creating the
+// ".atmos" subdirectory underneath it fails with a real OS error.
+func TestSaveProjectRecord_MkdirAllFailurePropagatesError(t *testing.T) {
+	tmpDir := t.TempDir()
+	targetPath := filepath.Join(tmpDir, "not-a-directory")
+	require.NoError(t, os.WriteFile(targetPath, []byte("x"), 0o644))
+
+	err := SaveProjectRecord(targetPath, templateForRecordTests(), ProjectRecordProvenance{}, nil)
+
+	require.Error(t, err)
+}
+
+// TestSaveProjectRecord_WriteFileFailurePropagatesError covers the
+// os.WriteFile failure path: the record's own destination path
+// (.atmos/scaffold.yaml) already exists as a directory, so writing the
+// marshaled record there fails with a real OS error.
+func TestSaveProjectRecord_WriteFileFailurePropagatesError(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ScaffoldConfigDir, ScaffoldConfigFileName), 0o755))
+
+	err := SaveProjectRecord(tmpDir, templateForRecordTests(), ProjectRecordProvenance{}, nil)
+
+	require.Error(t, err)
 }
 
 func TestSaveProjectRecord_NilTemplateConfig(t *testing.T) {

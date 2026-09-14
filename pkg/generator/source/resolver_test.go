@@ -386,6 +386,33 @@ func initSourceTestGitRepo(t *testing.T, files map[string]string) string {
 	return repoDir
 }
 
+// TestResolveFetchedGitRef_NotAGitRepoReturnsEmpty covers the "src wasn't a
+// git:: source" case (e.g. oci/s3/http fetches) directly, without needing a
+// full Resolve round trip.
+func TestResolveFetchedGitRef_NotAGitRepoReturnsEmpty(t *testing.T) {
+	assert.Empty(t, resolveFetchedGitRef(t.TempDir()))
+}
+
+// TestResolveFetchedGitRef_CommittedRepoReturnsHash covers the success path:
+// a real commit checked out at dir resolves to its exact hash.
+func TestResolveFetchedGitRef_CommittedRepoReturnsHash(t *testing.T) {
+	dir := initSourceTestGitRepo(t, map[string]string{"file.txt": "hello"})
+
+	assert.Regexp(t, `^[0-9a-f]{40}$`, resolveFetchedGitRef(dir))
+}
+
+// TestResolveFetchedGitRef_EmptyRepoReturnsEmpty covers repo.Head() failing
+// on a real git working tree that has no commits yet (unborn HEAD) -- a
+// legitimate git repository, distinct from "not a git repo at all", where
+// resolution is still best-effort empty rather than an error.
+func TestResolveFetchedGitRef_EmptyRepoReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	_, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+
+	assert.Empty(t, resolveFetchedGitRef(dir))
+}
+
 func sourceTestGitFileURI(path string) string {
 	cleaned := filepath.ToSlash(filepath.Clean(path))
 	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
