@@ -8,13 +8,14 @@ func cloneNodeCore(node *Node) *Node {
 	}
 
 	cloned := &Node{
-		ID:           node.ID,
-		Component:    node.Component,
-		Stack:        node.Stack,
-		Type:         node.Type,
-		Dependencies: make([]string, len(node.Dependencies)),
-		Dependents:   make([]string, len(node.Dependents)),
-		Processed:    node.Processed,
+		ID:                   node.ID,
+		Component:            node.Component,
+		Stack:                node.Stack,
+		Type:                 node.Type,
+		Dependencies:         make([]string, len(node.Dependencies)),
+		OptionalDependencies: cloneOptionalDependencies(node.OptionalDependencies),
+		Dependents:           make([]string, len(node.Dependents)),
+		Processed:            node.Processed,
 	}
 
 	// Copy dependency and dependent slices.
@@ -27,15 +28,15 @@ func cloneNodeCore(node *Node) *Node {
 	return cloned
 }
 
-// cloneNodeMetadata creates a deep copy of the metadata map.
+// cloneNodeMetadata creates a copy of the metadata map.
 func cloneNodeMetadata(metadata map[string]any) map[string]any {
 	if metadata == nil {
 		return nil
 	}
 
 	cloned := make(map[string]any, len(metadata))
-	for k, v := range metadata {
-		cloned[k] = v
+	for key, value := range metadata {
+		cloned[key] = value
 	}
 	return cloned
 }
@@ -45,16 +46,16 @@ func cloneNodeWithFilteredEdges(node *Node, allowedNodes map[string]bool) *Node 
 	if node == nil {
 		return nil
 	}
-
 	cloned := &Node{
-		ID:           node.ID,
-		Component:    node.Component,
-		Stack:        node.Stack,
-		Type:         node.Type,
-		Dependencies: filterStringSlice(node.Dependencies, allowedNodes),
-		Dependents:   filterStringSlice(node.Dependents, allowedNodes),
-		Processed:    node.Processed,
-		Metadata:     cloneNodeMetadata(node.Metadata),
+		ID:                   node.ID,
+		Component:            node.Component,
+		Stack:                node.Stack,
+		Type:                 node.Type,
+		Dependencies:         filterStringSlice(node.Dependencies, allowedNodes),
+		OptionalDependencies: filterOptionalDependencies(node.OptionalDependencies, allowedNodes),
+		Dependents:           filterStringSlice(node.Dependents, allowedNodes),
+		Processed:            node.Processed,
+		Metadata:             cloneNodeMetadata(node.Metadata),
 	}
 
 	return cloned
@@ -70,6 +71,30 @@ func filterStringSlice(slice []string, allowed map[string]bool) []string {
 	for _, item := range slice {
 		if allowed[item] {
 			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func cloneOptionalDependencies(optional map[string]bool) map[string]bool {
+	if optional == nil {
+		return nil
+	}
+	cloned := make(map[string]bool, len(optional))
+	for id, value := range optional {
+		cloned[id] = value
+	}
+	return cloned
+}
+
+func filterOptionalDependencies(optional map[string]bool, allowed map[string]bool) map[string]bool {
+	if optional == nil {
+		return map[string]bool{}
+	}
+	filtered := make(map[string]bool)
+	for id, value := range optional {
+		if allowed[id] {
+			filtered[id] = value
 		}
 	}
 	return filtered

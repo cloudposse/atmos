@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -41,6 +42,60 @@ func TestGetComponentDependencies(t *testing.T) {
 		assert.Equal(t, "tenant1-ue1-prod", deps[1].Stack)
 		assert.NotNil(t, settingsSection)
 		assert.Equal(t, dependencySourceDependenciesComponents, source)
+	})
+
+	t.Run("decodes rendered optional required values", func(t *testing.T) {
+		componentMap := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "monitoring", "required": "false"},
+				},
+			},
+		}
+
+		deps, _, source := getComponentDependencies(componentMap)
+
+		require.Equal(t, dependencySourceDependenciesComponents, source)
+		require.Len(t, deps, 1)
+		require.NotNil(t, deps[0].Required)
+		assert.False(t, *deps[0].Required)
+	})
+
+	t.Run("defers unrendered required values", func(t *testing.T) {
+		result, err := getComponentDependenciesWithError(map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "monitoring", "required": "{{ .vars.monitoring_required }}"},
+				},
+			},
+		})
+
+		require.NoError(t, err)
+		require.Len(t, result.dependencies, 1)
+		assert.Nil(t, result.dependencies[0].Required)
+	})
+
+	t.Run("returns invalid rendered required errors", func(t *testing.T) {
+		_, err := getComponentDependenciesWithError(map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "monitoring", "required": "sometimes"},
+				},
+			},
+		})
+
+		require.ErrorIs(t, err, schema.ErrComponentDependencyInvalidRequired)
+	})
+
+	t.Run("returns all modern dependency parse errors", func(t *testing.T) {
+		_, err := getComponentDependenciesWithError(map[string]any{
+			"dependencies": map[string]any{
+				"components": "not-a-list",
+			},
+			"settings": map[string]any{"depends_on": []any{"vpc"}},
+		})
+
+		require.Error(t, err)
 	})
 
 	t.Run("falls back to settings.depends_on when dependencies.components is empty", func(t *testing.T) {
@@ -111,7 +166,7 @@ func TestGetComponentDependencies(t *testing.T) {
 		assert.Equal(t, dependencySourceSettingsDependsOn, source)
 	})
 
-	t.Run("falls back to settings.depends_on when dependencies.components only has inline file and folder deps", func(t *testing.T) {
+	t.Run("falls back to settings.depends_on when dependencies.components has only path entries", func(t *testing.T) {
 		componentMap := map[string]any{
 			"dependencies": map[string]any{
 				"components": []any{
@@ -1187,6 +1242,79 @@ func TestDescribeDependents_DependenciesComponentsFormat(t *testing.T) {
 			assert.ElementsMatch(t, tc.expected, res)
 		})
 	}
+}
+
+func TestDescribeDependents_ScopesTemplateEvaluationToReverseClosure(t *testing.T) {
+	t.Chdir("../../tests/fixtures/scenarios/dependencies-scoped-evaluation")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	dependents, err := ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
+		Component:            "root",
+		Stack:                "app-a",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.Len(t, dependents, 1)
+	assert.Equal(t, "child", dependents[0].Component)
+	assert.Equal(t, "app-a", dependents[0].Stack)
+}
+
+func TestExecuteDescribeDependents_IgnoresRequiredUnavailableTargetOfDifferentType(t *testing.T) {
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(`
+base_path: .
+components:
+  terraform:
+    base_path: components/terraform
+  packer:
+    base_path: components/packer
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "dev.yaml"), []byte(`
+components:
+  terraform:
+    image:
+      vars:
+        tenant: dev
+    app:
+      vars:
+        tenant: dev
+      dependencies:
+        components:
+          - component: image
+            kind: packer
+  packer:
+    image:
+      metadata:
+        enabled: false
+      vars:
+        tenant: dev
+`), 0o644))
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	dependents, err := ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
+		Component:            "image",
+		Stack:                "dev",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.Empty(t, dependents)
 }
 
 // TestDescribeDependents_DependenciesComponentsInheritance_WithAppendMerge tests that
