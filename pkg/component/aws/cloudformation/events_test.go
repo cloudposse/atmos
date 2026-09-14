@@ -171,7 +171,7 @@ func TestStreamStackEvents_PollError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
 
-	_, err := streamStackEvents(context.Background(), client, "vpc")
+	_, err := streamStackEvents(context.Background(), client, "vpc", map[string]bool{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "access denied")
 }
@@ -190,7 +190,7 @@ func TestStreamStackEvents_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Already cancelled: the select must take the ctx.Done() branch immediately.
 
-	status, err := streamStackEvents(ctx, client, "vpc")
+	status, err := streamStackEvents(ctx, client, "vpc", map[string]bool{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, cfntypes.StackStatusCreateInProgress, status, "the last-observed (non-terminal) status must still be returned")
@@ -198,21 +198,32 @@ func TestStreamStackEvents_ContextCancelled(t *testing.T) {
 
 // streamStackEvents must not treat a terminal status observed on its very
 // first poll as completion when that status was never preceded by an
-// observed `*_IN_PROGRESS` status: ExecuteChangeSet/DeleteStack return before
-// CloudFormation applies the change, so the first DescribeStacks call can
-// still return a leftover terminal status from a previous, unrelated
-// operation. Accepting it immediately would misreport "done" before the
-// requested operation even started (the CodeRabbit-flagged race). This test
-// pre-cancels the context so that once the loop correctly declines to return
-// on the stale terminal status, the next select() picks the ctx.Done()
-// branch instead of sleeping a real eventPollInterval.
+// observed `*_IN_PROGRESS` status, AND the poll's only event was already
+// present in the pre-operation baseline (not genuinely new):
+// ExecuteChangeSet/DeleteStack return before CloudFormation applies the
+// change, so the first DescribeStacks call can still return a leftover
+// terminal status from a previous, unrelated operation -- and
+// DescribeStackEvents always returns the stack's full event history, so that
+// same previous operation's last event reappears on this poll too. Accepting
+// either signal here would misreport "done" before the requested operation
+// even started (the original CodeRabbit-flagged race). The event is seeded
+// into both the mocked poll response and the pre-operation baseline passed in,
+// proving pollStackEvents' dedup (via the shared seen map) — not just an
+// empty StackEvents list — is what keeps seenNewEvent from firing on a stale
+// event. This test pre-cancels the context so that once the loop correctly
+// declines to return on the stale terminal status, the next select() picks
+// the ctx.Done() branch instead of sleeping a real eventPollInterval.
 func TestStreamStackEvents_IgnoresStaleTerminalStatusWithoutInProgress(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 
 	// A single poll returning a terminal status left over from a previous
-	// operation, with no `*_IN_PROGRESS` status ever observed.
-	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
+	// operation, with no `*_IN_PROGRESS` status ever observed, and whose only
+	// event is the same one already recorded in the pre-operation baseline.
+	staleEventID := "stale-event-1"
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{{EventId: &staleEventID}},
+	}, nil)
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
 	}, nil)
@@ -220,11 +231,46 @@ func TestStreamStackEvents_IgnoresStaleTerminalStatusWithoutInProgress(t *testin
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Already cancelled: if the loop wrongly returns success, we'd never reach the select.
 
-	status, err := streamStackEvents(ctx, client, "vpc")
+	// Pre-seeded baseline: this event already existed before the operation
+	// started, so it must not be reported as fresh (see pollStackEvents), and
+	// therefore must not set seenNewEvent either.
+	baseline := map[string]bool{staleEventID: true}
+	status, err := streamStackEvents(ctx, client, "vpc", baseline)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled,
-		"a stale terminal status with no observed IN_PROGRESS must not be accepted as completion")
+		"a stale terminal status with no observed IN_PROGRESS and no genuinely new event must not be accepted as completion")
 	assert.Equal(t, cfntypes.StackStatusUpdateComplete, status)
+}
+
+// streamStackEvents must accept a terminal status on its very first poll when
+// that poll's events include one absent from the pre-operation baseline (see
+// preOperationEventBaseline), even though no `*_IN_PROGRESS` status was ever
+// observed. This is the fast-completion race CodeRabbit flagged on PR #3157:
+// a sufficiently fast create/update can reach its terminal status between
+// ExecuteChangeSet returning and this loop's very first poll, so relying on
+// seenInProgress alone would spin until operationTimeout and report a false
+// timeout despite the operation having already finished successfully.
+func TestStreamStackEvents_AcceptsTerminalStatusOnFirstPollWithNewEvent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	newEventID := "new-event-1"
+	logicalID := "MyBucket"
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: &newEventID, LogicalResourceId: &logicalID, ResourceStatus: cfntypes.ResourceStatusCreateComplete},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	// Empty baseline: nothing existed on the stack before this operation (a
+	// brand-new CREATE), so the single event returned on this very first poll
+	// is unambiguously new -- no *_IN_PROGRESS status is ever observed.
+	status, err := streamStackEvents(context.Background(), client, "vpc", map[string]bool{})
+	require.NoError(t, err)
+	assert.Equal(t, cfntypes.StackStatusCreateComplete, status)
 }
 
 // streamStackEvents must accept a terminal status once an `*_IN_PROGRESS`
@@ -250,9 +296,54 @@ func TestStreamStackEvents_AcceptsTerminalStatusAfterObservedInProgress(t *testi
 		}, nil),
 	)
 
-	status, err := streamStackEvents(context.Background(), client, "vpc")
+	status, err := streamStackEvents(context.Background(), client, "vpc", map[string]bool{})
 	require.NoError(t, err)
 	assert.Equal(t, cfntypes.StackStatusUpdateComplete, status)
+}
+
+// preOperationEventBaseline must collect every existing event ID from
+// DescribeStackEvents so streamStackEvents can seed its dedup map with them.
+func TestPreOperationEventBaseline_ReturnsExistingEventIDs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	eventID1, eventID2 := "event-1", "event-2"
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{{EventId: &eventID1}, {EventId: &eventID2}},
+	}, nil)
+
+	seen := preOperationEventBaseline(context.Background(), client, "vpc")
+	assert.True(t, seen["event-1"])
+	assert.True(t, seen["event-2"])
+	assert.Len(t, seen, 2)
+}
+
+// preOperationEventBaseline must degrade to an empty (non-nil) baseline --
+// never an error -- when the stack doesn't exist yet: the normal case for a
+// brand-new CREATE, which has no prior events at all.
+func TestPreOperationEventBaseline_StackNotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("Stack [vpc] does not exist"))
+
+	seen := preOperationEventBaseline(context.Background(), client, "vpc")
+	assert.NotNil(t, seen)
+	assert.Empty(t, seen)
+}
+
+// preOperationEventBaseline must also degrade to an empty baseline -- never
+// propagate the error -- for any other DescribeStackEvents failure (e.g. a
+// transient throttle/network blip): losing the fast-path new-event signal for
+// this one operation is preferable to aborting the create/update/delete that's
+// about to run over it.
+func TestPreOperationEventBaseline_OtherErrorDegradesGracefully(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
+
+	seen := preOperationEventBaseline(context.Background(), client, "vpc")
+	assert.NotNil(t, seen)
+	assert.Empty(t, seen)
 }
 
 func TestPollStackEvents_StackDeleted(t *testing.T) {
