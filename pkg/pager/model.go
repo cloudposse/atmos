@@ -15,6 +15,8 @@ import (
 	"github.com/muesli/ansi"
 	"github.com/muesli/reflow/truncate"
 	"github.com/muesli/termenv"
+
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -43,62 +45,35 @@ type pagerStatusMessage struct {
 	isError bool
 }
 
-var (
-	pagerHelpHeight int
+var pagerHelpHeight int
 
-	logo = statusBarHelpStyle(" \U0001F47D  ")
+func statusBarNoteStyle(text string) string {
+	return theme.GetCurrentStyles().Pager.StatusBar.Render(text)
+}
 
-	mintGreen = lipgloss.AdaptiveColor{Light: "#89F0CB", Dark: "#89F0CB"}
-	darkGreen = lipgloss.AdaptiveColor{Light: "#1C8760", Dark: "#1C8760"}
-	errorRed  = lipgloss.AdaptiveColor{Light: "#FF5555", Dark: "#FF5555"}
-	darkGray  = lipgloss.AdaptiveColor{Light: "#333333", Dark: "#333333"}
+func statusBarHelpStyle(text string) string {
+	return theme.GetCurrentStyles().Pager.StatusBarHelp.Render(text)
+}
 
-	statusBarNoteFg = lipgloss.AdaptiveColor{Light: "#656565", Dark: "#7D7D7D"}
-	statusBarBg     = lipgloss.AdaptiveColor{Light: "#E6E6E6", Dark: "#242424"}
+func statusBarMessageStyle(text string) string {
+	return theme.GetCurrentStyles().Pager.StatusBarMessage.Render(text)
+}
 
-	statusBarNoteStyle = lipgloss.NewStyle().
-				Foreground(statusBarNoteFg).
-				Background(statusBarBg).
-				Render
+func errorMessageStyle(text string) string {
+	return theme.GetCurrentStyles().Pager.ErrorMessage.Render(text)
+}
 
-	statusBarHelpStyle = lipgloss.NewStyle().
-				Foreground(statusBarNoteFg).
-				Background(lipgloss.AdaptiveColor{Light: "#DCDCDC", Dark: "#323232"}).
-				Render
+func statusBarMessageScrollPosStyle(text string) string {
+	return theme.GetCurrentStyles().Pager.StatusBarMessage.Render(text)
+}
 
-	statusBarMessageStyle = lipgloss.NewStyle().
-				Foreground(mintGreen).
-				Background(darkGreen).
-				Render
-	errorMessageStyle = lipgloss.NewStyle().
-				Foreground(errorRed).
-				Background(darkGray).
-				Render
+func statusBarMessageHelpStyle(text string) string {
+	return theme.GetCurrentStyles().Pager.StatusBarHelp.Render(text)
+}
 
-	statusBarMessageScrollPosStyle = lipgloss.NewStyle().
-					Foreground(mintGreen).
-					Background(darkGreen).
-					Render
+func helpViewStyle(text string) string { return theme.GetCurrentStyles().Pager.HelpView.Render(text) }
 
-	statusBarMessageHelpStyle = lipgloss.NewStyle().
-					Foreground(lipgloss.Color("#B6FFE4")).
-					Background(green).
-					Render
-
-	helpViewStyle = lipgloss.NewStyle().
-			Foreground(statusBarNoteFg).
-			Background(lipgloss.AdaptiveColor{Light: "#f2f2f2", Dark: "#1B1B1B"}).
-			Render
-
-	// Add highlight style for search matches.
-	highlightStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#FFFF00")).
-			Foreground(lipgloss.Color("#000000")).
-			Bold(true).
-			Render
-
-	green = lipgloss.Color("#04B575")
-)
+func highlightStyle(text string) string { return theme.GetCurrentStyles().Pager.Highlight.Render(text) }
 
 // Common stuff we'll need to access in all models.
 type commonModel struct {
@@ -586,7 +561,7 @@ func (m *model) statusBarView(b *strings.Builder) {
 	noteWidth := max(
 		0,
 		m.common.width-
-			ansi.PrintableRuneWidth(logo)-
+			ansi.PrintableRuneWidth(statusBarHelpStyle(" 👽  "))-
 			ansi.PrintableRuneWidth(scrollPercent),
 	)
 	note = truncate.StringWithTail(note, uint(noteWidth), ellipsis) //nolint:gosec // noteWidth is clamped to >= 0.
@@ -595,7 +570,7 @@ func (m *model) statusBarView(b *strings.Builder) {
 	padding := max(
 		0,
 		m.common.width-
-			ansi.PrintableRuneWidth(logo)-
+			ansi.PrintableRuneWidth(statusBarHelpStyle(" 👽  "))-
 			ansi.PrintableRuneWidth(note)-
 			ansi.PrintableRuneWidth(scrollPercent)-
 			ansi.PrintableRuneWidth(helpNote),
@@ -612,7 +587,7 @@ func (m *model) statusBarView(b *strings.Builder) {
 
 	fmt.Fprintf(
 		b, "%s%s%s%s%s",
-		logo,
+		statusBarHelpStyle(" 👽  "),
 		note,
 		emptySpace,
 		scrollPercent,

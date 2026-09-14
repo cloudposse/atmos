@@ -18,7 +18,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -53,9 +52,9 @@ func displayWebflowDialog(authURL string) {
 	}
 
 	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorDarkGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 	urlStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorBorder)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
 		Italic(true)
 
 	ui.Writef("%s\n%s\n", instructionStyle.Render("If the browser doesn't open, visit:"), urlStyle.Render(authURL))
@@ -64,16 +63,16 @@ func displayWebflowDialog(authURL string) {
 func renderWebflowDialog(authURL string) (string, bool) {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 		PaddingLeft(1).
 		PaddingRight(1)
 
 	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorDarkGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorBorder)).
+		BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
 		Padding(1, 2).
 		MarginTop(1).
 		MarginBottom(1)
@@ -86,7 +85,7 @@ func renderWebflowDialog(authURL string) (string, bool) {
 	containsURL := authURL != "" && lipgloss.Width(authURL) <= maxWebflowDialogURLWidth
 	if containsURL {
 		urlStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorBorder)).
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
 			Italic(true)
 		content.WriteString("\n\n")
 		content.WriteString(urlStyle.Render(authURL))
@@ -129,10 +128,8 @@ func defaultRunSpinnerProgram(model webflowSpinnerModel) (tea.Model, error) {
 
 // newWebflowSpinnerModel constructs the bubbletea model for the auth spinner.
 func newWebflowSpinnerModel(tokenCh <-chan webflowSpinnerTokenResult, cancel context.CancelFunc) webflowSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
-	fps.Apply(&s)
+	s := ui.NewSpinner()
+
 	return webflowSpinnerModel{
 		spinner: s,
 		message: "Waiting for browser authentication",
@@ -187,7 +184,7 @@ func (m webflowSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m webflowSpinnerModel) View() string {
 	if m.done {
 		if m.result != nil && m.result.err != nil {
-			return fmt.Sprintf("%s Authentication failed\n", theme.Styles.XMark)
+			return fmt.Sprintf("%s Authentication failed\n", theme.GetCurrentStyles().XMark)
 		}
 		return ""
 	}

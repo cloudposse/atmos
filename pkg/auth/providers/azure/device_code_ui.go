@@ -16,7 +16,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/browser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -112,19 +111,19 @@ func displayVerificationDialog(code, url string) {
 	// Simpler, clearer output without complex borders.
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link))
 
 	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	codeStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorGreen)).
-		Background(lipgloss.Color("#1a1a1a")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).
+		Background(lipgloss.Color(theme.GetCurrentColorScheme().Surface)).
 		Padding(0, 2)
 
 	urlStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorBlue))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Primary))
 
 	// Build simple, readable output.
 	ui.Writeln("")
@@ -167,10 +166,8 @@ type spinnerModel struct {
 }
 
 func newSpinnerModel() *spinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
-	fps.Apply(&s)
+	s := ui.NewSpinner()
+
 	return &spinnerModel{spinner: s}
 }
 
@@ -208,7 +205,7 @@ func (m *spinnerModel) View() string {
 		if m.authErr != nil {
 			return ""
 		}
-		successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
+		successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
 		return successStyle.Render("✓") + " Authentication successful!\n"
 	}
 	return m.spinner.View() + " Waiting for authentication...\n"

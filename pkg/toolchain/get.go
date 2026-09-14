@@ -160,8 +160,8 @@ func selectStyles() (lipgloss.Style, lipgloss.Style) {
 	// atmos's terminal detection (handles Terminal.app 256-color limitation).
 	profile := ui.GetColorProfile()
 	if profile == termenv.ANSI256 || profile == termenv.TrueColor {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("15")), // white
-			lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // gray
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextPrimary)), // white
+			lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)) // gray
 	}
 	return lipgloss.NewStyle().Bold(true), lipgloss.NewStyle()
 }
@@ -170,7 +170,7 @@ func printVersionsTable(versions []string, defaultVersion string, installed map[
 	for _, v := range versions {
 		indicator := " "
 		if v == defaultVersion {
-			indicator = theme.Styles.Checkmark.Render()
+			indicator = theme.GetCurrentStyles().Checkmark.Render()
 		}
 		if installed[v] {
 			ui.Writef("%s %s", indicator, installedStyle.Render(v))

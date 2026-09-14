@@ -143,7 +143,7 @@ func printListTable(workdirs []WorkdirInfo) {
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == table.HeaderRow {
 				return lipgloss.NewStyle().
-					Foreground(lipgloss.Color(theme.ColorCyan)).
+					Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 					Bold(true).
 					Padding(0, 2, 0, 0)
 			}

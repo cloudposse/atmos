@@ -16,7 +16,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -49,11 +48,11 @@ type spinnerModel struct {
 }
 
 func initialSpinnerModel(message string) *spinnerModel {
-	s := bspinner.New()
-	s.Spinner = bspinner.Dot
+	s := ui.NewSpinner()
+
 	styles := theme.GetCurrentStyles()
 	s.Style = styles.Spinner
-	fps.Apply(&s)
+
 	return &spinnerModel{
 		spinner: s,
 		message: message,
@@ -287,11 +286,11 @@ func installToolList(toolList []toolInfo, reinstallFlag, showHint bool, maxConcu
 		return installToolListConcurrently(toolList, reinstallFlag, showHint, maxConcurrency)
 	}
 
-	spinner := bspinner.New()
-	spinner.Spinner = bspinner.Dot
+	spinner := ui.NewSpinner()
+
 	styles := theme.GetCurrentStyles()
 	spinner.Style = styles.Spinner
-	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
+	progressBar := ui.NewProgress()
 
 	var installedCount, failedCount, alreadyInstalledCount int
 
@@ -564,13 +563,13 @@ type batchRenderer struct {
 }
 
 func newBatchRenderer(total int) *batchRenderer {
-	spinner := bspinner.New()
-	spinner.Spinner = bspinner.Dot
+	spinner := ui.NewSpinner()
+
 	styles := theme.GetCurrentStyles()
 	spinner.Style = styles.Spinner
 	return &batchRenderer{
 		spinner:     spinner,
-		progressBar: progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor())),
+		progressBar: ui.NewProgress(),
 		total:       total,
 	}
 }
@@ -733,10 +732,9 @@ func newBatchDisplay(total int) *batchDisplay {
 		display.renderer = newBatchRenderer(total)
 		return display
 	}
-	display.spinner = bspinner.New()
-	display.spinner.Spinner = bspinner.Dot
-	display.spinner.Style = theme.GetCurrentStyles().Spinner
-	display.progressBar = progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
+	display.spinner = ui.NewSpinner()
+
+	display.progressBar = ui.NewProgress()
 	return display
 }
 

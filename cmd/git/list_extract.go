@@ -211,6 +211,6 @@ func gitStatusIndicatorWithTTY(status string, isTTY bool) string {
 	case statusDirty:
 		return theme.GetWarningStyle().Render(statusDot)
 	default:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray)).Render(statusDot)
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).Render(statusDot)
 	}
 }

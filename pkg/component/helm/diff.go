@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // defaultDiffContextLines is the number of unchanged context lines shown around
@@ -72,10 +73,10 @@ func colorizeUnifiedDiff(diffText string) string {
 		return diffText
 	}
 
-	added := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	removed := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-	hunk := lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
-	meta := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	added := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
+	removed := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error))
+	hunk := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link))
+	meta := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	var b strings.Builder
 	for _, line := range strings.SplitAfter(diffText, "\n") {

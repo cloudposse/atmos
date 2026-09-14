@@ -8,13 +8,11 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
-var (
-	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
-	selectedItemStyle = theme.Styles.SelectedItem
-)
+var itemStyle = lipgloss.NewStyle().PaddingLeft(4)
 
 type listItem string
 
@@ -37,7 +35,7 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 	fn := itemStyle.Render
 	if index == m.Index() {
 		fn = func(s ...string) string {
-			return selectedItemStyle.Render("> " + strings.Join(s, " "))
+			return theme.GetCurrentStyles().Selected.PaddingLeft(2).Render("> " + strings.Join(s, " "))
 		}
 	}
 

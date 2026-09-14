@@ -1,4 +1,5 @@
 import React from "react";
+import { brailleDots } from "./braille.mjs";
 import styles from "./styles.module.css";
 
 // Draw terminal rails within their cells so font fallback and line spacing
@@ -26,7 +27,8 @@ export default function renderTerminalText(text: string) {
     .split(/([─│┌┐└┘├┤┬┴┼╭╮╰╯█●○\u2800-\u28ff])/u)
     .map((part, index) => {
       const path = Object.hasOwn(BOX_PATHS, part) ? BOX_PATHS[part] : undefined;
-      const graphic = path || part === "█";
+      const dots = brailleDots(part);
+      const graphic = path || part === "█" || dots !== null;
       if (!graphic && !/^[●○\u2800-\u28ff]$/u.test(part)) return part;
       return (
         <span key={index} className={styles.terminalCell}>
@@ -35,11 +37,21 @@ export default function renderTerminalText(text: string) {
           </span>
           {graphic && (
             <svg
-              viewBox="0 0 2 2"
+              viewBox={dots !== null ? "0 0 2 4" : "0 0 2 2"}
               preserveAspectRatio="none"
               aria-hidden="true"
             >
-              {path ? (
+              {dots !== null ? (
+                dots.map(([cx, cy], bit) => (
+                  <circle
+                    key={bit}
+                    cx={cx}
+                    cy={cy}
+                    r="0.3"
+                    fill="currentColor"
+                  />
+                ))
+              ) : path ? (
                 <path
                   d={path}
                   fill="none"

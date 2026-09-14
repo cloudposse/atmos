@@ -898,17 +898,17 @@ func ExecAuthShellCommand(
 // printShellEnterMessage prints a user-facing message when entering an Atmos-managed shell.
 func printShellEnterMessage(identityName, providerName string) {
 	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGreen)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).
 		Bold(true)
 
 	identityStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorCyan))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link))
 
 	providerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	// Build identity display with provider name in parentheses.
 	identityDisplay := identityName
@@ -927,10 +927,10 @@ func printShellEnterMessage(identityName, providerName string) {
 // printShellExitMessage prints a user-facing message when exiting an Atmos-managed shell.
 func printShellExitMessage(identityName, providerName string) {
 	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	identityStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	// Build identity display with provider name in parentheses.
 	identityDisplay := identityName

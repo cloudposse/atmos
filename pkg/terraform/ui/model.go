@@ -8,10 +8,9 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -71,12 +70,9 @@ type tickMsg time.Time
 func NewModel(component, stack, command string, reader io.Reader, opts ...ModelOption) *Model {
 	defer perf.Track(nil, "terraform.ui.NewModel")()
 
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
+	s := ui.NewSpinner()
 
-	p := progress.New(
-		progress.WithDefaultGradient(),
+	p := ui.NewProgress(
 		progress.WithWidth(progressBarWidth),
 		progress.WithoutPercentage(),
 	)

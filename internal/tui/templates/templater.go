@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -33,28 +32,16 @@ type Templater struct {
 	UsageTemplate string
 }
 
-// commandStyle defines the styles for command formatting
-var (
-	commandNameStyle = theme.Styles.CommandName
-	commandDescStyle = theme.Styles.Description
-
-	commandUnsupportedNameStyle = theme.Styles.CommandName.
-					Foreground(lipgloss.Color(theme.ColorGray)).
-					Bold(true)
-	commandUnsupportedDescStyle = theme.Styles.Description.
-					Foreground(lipgloss.Color(theme.ColorGray))
-)
-
 // formatCommand returns a styled string for a command and its description
 func formatCommand(name string, desc string, padding int, IsNotSupported bool) string {
 	paddedName := fmt.Sprintf("%-*s", padding, name)
 	if IsNotSupported {
-		styledName := commandUnsupportedNameStyle.Render(paddedName)
-		styledDesc := commandUnsupportedDescStyle.Render(desc + " [unsupported]")
+		styledName := theme.GetCurrentStyles().Muted.Bold(true).Render(paddedName)
+		styledDesc := theme.GetCurrentStyles().Muted.Render(desc + " [unsupported]")
 		return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
 	}
-	styledName := commandNameStyle.Render(paddedName)
-	styledDesc := commandDescStyle.Render(desc)
+	styledName := theme.GetCurrentStyles().Command.Render(paddedName)
+	styledDesc := theme.GetCurrentStyles().Description.Render(desc)
 	return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
 }
 
@@ -141,11 +128,7 @@ func isAliasesPresent(cmds []*cobra.Command) bool {
 }
 
 func headingStyle(s string) string {
-	if theme.Styles.Help.Headings != nil {
-		ch := theme.Styles.Help.Headings
-		return ch.Sprint(s)
-	}
-	return s
+	return theme.GetCurrentStyles().Help.Heading.Render(s)
 }
 
 func renderMarkdown(example string) string {

@@ -70,7 +70,7 @@ func printShowHuman(info *WorkdirInfo) {
 	defer perf.Track(nil, "workdir.printShowHuman")()
 
 	// Display status indicator with colored checkmark.
-	statusIndicator := theme.Styles.Checkmark.String()
+	statusIndicator := theme.GetCurrentStyles().Checkmark.String()
 	ui.Writef("%s Workdir Status\n\n", statusIndicator)
 
 	// Determine source type display.
@@ -127,7 +127,7 @@ func printShowHuman(info *WorkdirInfo) {
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if col == 0 {
 				return lipgloss.NewStyle().
-					Foreground(lipgloss.Color(theme.ColorCyan)).
+					Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 					Padding(0, 1, 0, 2)
 			}
 			return lipgloss.NewStyle().Padding(0, 1)

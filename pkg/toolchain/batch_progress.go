@@ -9,7 +9,6 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // batchLineStyle selects which themed ui.* function renders a completed batch item's line.
@@ -52,12 +51,11 @@ type liveBatchRenderer struct {
 }
 
 func newLiveBatchRenderer(total int) *liveBatchRenderer {
-	spinner := bspinner.New()
-	spinner.Spinner = bspinner.Dot
-	spinner.Style = theme.GetCurrentStyles().Spinner
+	spinner := ui.NewSpinner()
+
 	return &liveBatchRenderer{
 		spinner:     spinner,
-		progressBar: progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor())),
+		progressBar: ui.NewProgress(),
 		total:       total,
 	}
 }

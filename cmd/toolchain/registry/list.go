@@ -232,7 +232,8 @@ func listRegistryTools(ctx context.Context, registryName string, opts *ListOptio
 	}
 
 	// Get tools from registry.
-	tools, err := reg.ListAll(ctx,
+	tools, err := reg.ListAll(
+		ctx,
 		toolchainregistry.WithListLimit(opts.Limit),
 		toolchainregistry.WithListOffset(opts.Offset),
 		toolchainregistry.WithSort(opts.Sort),
@@ -442,7 +443,7 @@ func renderToolsTable(rows []toolRow, widths columnWidths) string {
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorBorder)).
+		BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
 		BorderBottom(true).
 		Bold(true)
 	s.Cell = s.Cell.PaddingLeft(1).PaddingRight(1)

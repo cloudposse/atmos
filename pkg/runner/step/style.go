@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -78,14 +79,14 @@ func (h *StyleHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 
 // renderMarkdown renders markdown content with optional width constraint.
 func (h *StyleHandler) renderMarkdown(content string, width int) (string, error) {
-	var opts []glamour.TermRendererOption
+	opts := []glamour.TermRendererOption{glamour.WithColorProfile(ui.GetColorProfile())}
 
 	if width > 0 {
 		opts = append(opts, glamour.WithWordWrap(width))
 	}
 
 	// Use theme-aware styles.
-	if glamourStyle, err := theme.GetGlamourStyleForTheme(theme.DefaultThemeName); err == nil {
+	if glamourStyle, err := theme.GetCurrentGlamourStyle(); err == nil {
 		opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
 	}
 

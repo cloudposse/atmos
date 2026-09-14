@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	pkgtags "github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
@@ -192,7 +193,7 @@ func createVerifyTable(rows []verifyRow) string {
 		BorderRight(false).
 		BorderRow(false).
 		BorderColumn(false).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(updateReportBorderColor))).
+		BorderStyle(theme.GetCurrentStyles().Muted).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == table.HeaderRow {
 				return updateReportHeaderStyle.Padding(0, 1)

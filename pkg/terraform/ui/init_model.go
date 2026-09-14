@@ -89,9 +89,7 @@ func NewInitModel(component, stack, subCommand string, reader io.Reader, opts ..
 	defer perf.Track(nil, "terraform.ui.NewInitModel")()
 
 	// Use MiniDot spinner for init/workspace (more subtle, different from plan/apply).
-	s := spinner.New()
-	s.Spinner = spinner.MiniDot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
+	s := atmosui.NewSpinner()
 
 	// Create scanner with increased buffer size for large terraform init output.
 	scanner := bufio.NewScanner(reader)
@@ -220,9 +218,9 @@ func (m *InitModel) renderProgress() string {
 	elapsed := m.clock.Since(m.startTime).Seconds()
 	action := m.formatAction()
 
-	// Header line with spinner.
+	// Dot includes its trailing space, keeping details aligned with the header.
 	fmt.Fprintf(
-		&b, "%s %s %s/%s (%.1fs)\n",
+		&b, "%s%s %s/%s (%.1fs)\n",
 		m.spinner.View(),
 		action,
 		m.stack,
@@ -232,12 +230,12 @@ func (m *InitModel) renderProgress() string {
 
 	// Show current operation.
 	if m.currentOp != "" {
-		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
+		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 		fmt.Fprintf(&b, "  %s\n", dimStyle.Render(m.currentOp))
 	}
 
 	// Show recent provider/module lines (dimmed).
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 	for _, line := range m.lines {
 		// Truncate long lines using rune-aware width to handle multi-byte UTF-8.
 		if runewidth.StringWidth(line) > initMaxLineWidth {
@@ -251,7 +249,7 @@ func (m *InitModel) renderProgress() string {
 
 func (m *InitModel) renderComplete() string {
 	elapsed := m.clock.Since(m.startTime).Seconds()
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	// Format the action description.
 	action := m.formatAction()
