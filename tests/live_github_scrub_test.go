@@ -65,3 +65,29 @@ func TestScrubGitHubAuth_NilEnv(t *testing.T) {
 	require.NotNil(t, tc.Env)
 	assert.Equal(t, "", tc.Env["GITHUB_TOKEN"])
 }
+
+// TestHomeFilesToCopy verifies an unauthenticated "live_github" case never copies .netrc into the
+// test's isolated HOME (a real one on the host/CI runner would otherwise silently authenticate
+// git's HTTP transport, defeating the point of the unauthenticated case), while every other case
+// -- including "live_github_authenticated", which passes liveGitHub=false here -- keeps copying it
+// alongside .gitconfig/.ssh.
+func TestHomeFilesToCopy(t *testing.T) {
+	tests := []struct {
+		name       string
+		liveGitHub bool
+		want       []string
+	}{
+		{name: "live_github omits .netrc", liveGitHub: true, want: []string{".gitconfig", ".ssh"}},
+		{name: "default case keeps .netrc", liveGitHub: false, want: []string{".gitconfig", ".ssh", ".netrc"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := homeFilesToCopy(tt.liveGitHub)
+			assert.Equal(t, tt.want, got)
+			if tt.liveGitHub {
+				assert.NotContains(t, got, ".netrc")
+			}
+		})
+	}
+}

@@ -143,7 +143,10 @@ func copyCanaryFixture(t *testing.T, name string) string {
 //   - When authenticated is false, every GitHub token env var is blanked and GH_CONFIG_DIR points
 //     at an empty temp dir, defeating the `gh auth token` CLI fallback
 //     (pkg/downloader/custom_git_detector.go resolveToken, pkg/github.GetGitHubTokenFromCLI) so
-//     the canary genuinely exercises the unauthenticated path.
+//     the canary genuinely exercises the unauthenticated path. HOME is also pointed at a fresh,
+//     netrc-free temp directory: git's HTTP transport (libcurl) reads $HOME/.netrc when present,
+//     which would silently authenticate an otherwise-unauthenticated canary on any host or CI
+//     runner that has a real GitHub credential configured there (e.g. via `gh auth login`).
 //   - When authenticated is true and GITHUB_TOKEN is set, an http.https://github.com/.extraheader
 //     basic-auth entry is added, mirroring runCLICommandTest's own token injection.
 func githubCanaryEnv(t *testing.T, base []string, authenticated bool) []string {
@@ -204,6 +207,11 @@ func githubCanaryEnv(t *testing.T, base []string, authenticated bool) []string {
 			"GH_TOKEN=",
 			"GH_CONFIG_DIR="+t.TempDir(),
 		)
+		// See the HOME bullet in the doc comment above: isolate HOME so no real ~/.netrc can reach
+		// git's HTTP transport. GIT_CONFIG_GLOBAL is already redirected to an empty file above, so
+		// this does not lose any ~/.gitconfig git would otherwise have read.
+		env = removeEnvKeys(env, "HOME")
+		env = append(env, "HOME="+t.TempDir())
 	}
 
 	gitConfigVars := map[string]string{}
@@ -369,12 +377,14 @@ func TestLiveGitHubCanary_ToolchainInstall(t *testing.T) {
 	defer versionCancel()
 
 	versionCmd := exec.CommandContext(versionCtx, binaryPath, "--version")
+	versionCmd.Env = []string{}
 	var versionStderr bytes.Buffer
 	versionCmd.Stderr = &versionStderr
 	// This runs a LOCAL binary the canary just installed: a timeout or non-zero exit here is a
 	// real failure (corrupt or non-executable asset, or a wedged binary), never a transient
 	// network condition, so it must not go through the transient classifier and skip.
-	require.NoError(t, versionCmd.Run(), "installed tree --version must succeed; stderr: %s", versionStderr.String())
+	versionErr := versionCmd.Run()
+	require.NoError(t, versionErr, "installed tree --version must succeed; stderr: %s", iolib.MaskString(versionStderr.String()))
 }
 
 // TestLiveGitHubCanary_UnauthenticatedRawInclude resolves a `!include.raw` YAML function against

@@ -1079,6 +1079,20 @@ func scrubGitHubAuth(t *testing.T, tc *TestCase) {
 	tc.Env["GH_CONFIG_DIR"] = t.TempDir()
 }
 
+// homeFilesToCopy returns the dotfiles runCLICommandTest copies from the real HOME into a test
+// case's isolated temp HOME. An unauthenticated "live_github" case never copies .netrc: git's HTTP
+// transport (libcurl) reads $HOME/.netrc when present, which would silently authenticate an
+// otherwise-unauthenticated case if the host machine or CI runner has one configured (e.g. via
+// `gh auth login`). .gitconfig/.ssh are still copied for that case -- GIT_CONFIG_GLOBAL is already
+// pointed at an empty file for live-GitHub cases (see runCLICommandTest), so the effective global
+// gitconfig is unaffected either way.
+func homeFilesToCopy(liveGitHub bool) []string {
+	if liveGitHub {
+		return []string{".gitconfig", ".ssh"}
+	}
+	return []string{".gitconfig", ".ssh", ".netrc"} // Expand list if needed.
+}
+
 // emptyGitConfigFile creates an empty gitconfig in a per-test temp dir and returns its path, for
 // use as GIT_CONFIG_GLOBAL when a test must run git WITHOUT the mirror rewrite rules TestMain
 // exports process-wide (see the live_github preconditions and tests/live_github_canary_test.go).
@@ -1359,7 +1373,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
-		// Copying over the `.gitconfig` was not enough to fix the issue
+		// Copying over the `.gitconfig` was not enough to fix the issue.
+		// NOTE: this means a "live_github" case running on macOS CI still inherits the runner's
+		// real HOME/.netrc (the isolation below is skipped entirely), unlike every other platform.
 		logger.Info("skipping empty home dir on macOS in CI", "GOOS", runtime.GOOS)
 	} else {
 		// Set environment variables for the test case
@@ -1368,8 +1384,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
 		// Copy some files to the temporary HOME directory
 		originalHome := os.Getenv("HOME")
-		filesToCopy := []string{".gitconfig", ".ssh", ".netrc"} // Expand list if needed
-		for _, file := range filesToCopy {
+		for _, file := range homeFilesToCopy(liveGitHub) {
 			src := filepath.Join(originalHome, file)
 			dest := filepath.Join(tempDir, file)
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -257,6 +258,31 @@ func TestGithubCanaryEnv_Unauthenticated(t *testing.T) {
 	// Pre-existing git config entries are preserved, not dropped.
 	assertEnvContains(t, env, "GIT_CONFIG_KEY_0=credential.helper")
 	assertEnvNotContains(t, env, "http.https://github.com/.extraheader")
+}
+
+// TestGithubCanaryEnv_Unauthenticated_IsolatesHomeFromNetrc verifies the unauthenticated branch
+// points HOME at a fresh temp directory instead of inheriting the ambient one, since git's HTTP
+// transport (libcurl) reads $HOME/.netrc when present -- leaving the real, inherited HOME in
+// place would let a genuine credential configured there (e.g. via `gh auth login`) silently
+// authenticate a canary meant to exercise the anonymous path.
+func TestGithubCanaryEnv_Unauthenticated_IsolatesHomeFromNetrc(t *testing.T) {
+	realHome := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(realHome, ".netrc"), []byte("machine github.com\nlogin x\npassword real-secret\n"), 0o600))
+
+	base := []string{"PATH=/usr/bin", mirrorGitConfigEnv, "HOME=" + realHome}
+
+	env := githubCanaryEnv(t, base, false)
+
+	var gotHome string
+	for _, kv := range env {
+		if h, ok := strings.CutPrefix(kv, "HOME="); ok {
+			gotHome = h
+		}
+	}
+	require.NotEmpty(t, gotHome, "expected env to set HOME")
+	assert.NotEqual(t, realHome, gotHome, "HOME must be isolated, not the ambient one with a real .netrc")
+	_, err := os.Stat(filepath.Join(gotHome, ".netrc"))
+	assert.True(t, os.IsNotExist(err), "the isolated HOME must not contain a .netrc")
 }
 
 // TestGithubCanaryEnv_Authenticated verifies the authenticated branch keeps GITHUB_TOKEN, adds
