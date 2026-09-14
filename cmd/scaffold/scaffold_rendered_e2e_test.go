@@ -173,3 +173,62 @@ func TestScaffoldGenerate_UpdateStrategyRendered_EndToEnd(t *testing.T) {
 	assert.Empty(t, record.Spec.BaseRef, "rendered-mode updates must never populate spec.baseRef")
 	assert.Equal(t, v2Commit, record.Spec.RenderedRef, "rendered-mode updates must record the resolved v2 commit SHA, not the mutable v2 tag")
 }
+
+// TestScaffoldGenerate_UpdateStrategyRendered_DryRun_EndToEnd drives a real
+// --update --dry-run --update-strategy=rendered preview and proves it
+// succeeds without writing anything to the target directory. Regression test
+// for a bug where the rendered-mode merge base's own internal render shared
+// ui.processor's DryRun flag with the outer run: engine.Processor.ProcessFile
+// skips real writes whenever DryRun is set, so the pristine "old ref" render
+// into its own temp directory silently produced no files whenever the outer
+// run was itself a --dry-run preview -- leaving SetupRenderedBaseStorage's
+// merge base empty and the dry-run 3-way merge with nothing to diff against
+// (surfacing as a merge failure instead of a clean preview).
+func TestScaffoldGenerate_UpdateStrategyRendered_DryRun_EndToEnd(t *testing.T) {
+	requireGitBinaryForRenderedE2E(t)
+	t.Cleanup(func() { viper.Reset() })
+
+	repoDir, v1Commit, _ := buildTwoTagTemplateRepo(t)
+	src := "git::" + renderedE2EFileURI(repoDir)
+	targetDir := t.TempDir()
+
+	cmd1 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd1)
+	require.NoError(t, cmd1.Flags().Set("ref", "v1"))
+	require.NoError(t, cmd1.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd1.Flags().Set("update-strategy", "rendered"))
+
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd1, []string{src, targetDir}))
+
+	staticPath := filepath.Join(targetDir, "static.txt")
+	updatePath := filepath.Join(targetDir, "update.txt")
+
+	// Simulate a hand-edit, mirroring the non-dry-run test above.
+	require.NoError(t, os.WriteFile(staticPath, []byte("hand-edited content\n"), 0o644))
+
+	cmd2 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd2)
+	require.NoError(t, cmd2.Flags().Set("ref", "v2"))
+	require.NoError(t, cmd2.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd2.Flags().Set("update", "true"))
+	require.NoError(t, cmd2.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd2.Flags().Set("update-strategy", "rendered"))
+
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd2, []string{src, targetDir}),
+		"a --dry-run rendered-mode update preview must succeed even though its internal merge-base render must write to its own temp dir despite the outer dry-run")
+
+	// --dry-run must never touch the target directory.
+	finalStatic, err := os.ReadFile(staticPath)
+	require.NoError(t, err)
+	assert.Equal(t, "hand-edited content\n", string(finalStatic), "--dry-run must never write to the target directory")
+
+	finalUpdate, err := os.ReadFile(updatePath)
+	require.NoError(t, err)
+	assert.Equal(t, "v1 content\n", string(finalUpdate), "--dry-run must never write to the target directory")
+
+	// The dry-run preview must never persist a new project record either.
+	record, err := config.LoadProjectRecord(targetDir)
+	require.NoError(t, err)
+	require.NotNil(t, record)
+	assert.Equal(t, v1Commit, record.Spec.RenderedRef, "--dry-run must not overwrite the recorded provenance from the initial (non-dry-run) generation")
+}
