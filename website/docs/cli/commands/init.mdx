@@ -115,7 +115,7 @@ atmos init --update --update-strategy=rendered
 `--update-strategy` controls where the merge's *base* comes from — an independent choice from
 `--merge-strategy`. `tracked` (the default) reads it from the project's own Git history at
 `--base-ref`. `rendered` instead re-renders the template at the ref that produced what's currently
-on disk, using that generation's recorded answers, with no dependency on Git history at all. This
+on disk, using that generation's recorded answers, without requiring the target project's Git history. This
 needs two separate things, not one: the template itself must define a `scaffold.yaml` manifest (so
 the old ref's fields can be resolved when re-rendering), and the project must already carry a prior
 generation's `.atmos/scaffold.yaml` record (a different file, at a different path — it stores that
