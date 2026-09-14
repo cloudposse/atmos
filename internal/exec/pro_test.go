@@ -590,11 +590,16 @@ func TestUnlockStackRequest(t *testing.T) {
 }
 
 // TestExecuteProLock tests the executeProLock function with mocked dependencies.
+//
+// Not parallel: executeProLock writes through the process-global UI writer
+// (ui.Writeln/ui.Successf -> pkg/terminal -> pkg/io's shared context buffer),
+// so running this alongside TestExecuteProUnlock's subtests under
+// t.Parallel() raced on that shared buffer (race job, shard 3/4, run
+// 34726125072). There's no per-test UI/IO isolation seam elsewhere in
+// internal/exec's tests to swap in instead, so keep this test (and its
+// subtests) serial.
 func TestExecuteProLock(t *testing.T) {
-	t.Parallel()
-
 	t.Run("successfully locks stack and shows checkmark", func(t *testing.T) {
-		t.Parallel()
 		// Create mocks
 		ctrl := gomock.NewController(t)
 		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
@@ -645,7 +650,6 @@ func TestExecuteProLock(t *testing.T) {
 	})
 
 	t.Run("returns error when git repo info fails", func(t *testing.T) {
-		t.Parallel()
 		ctrl := gomock.NewController(t)
 		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
@@ -668,7 +672,6 @@ func TestExecuteProLock(t *testing.T) {
 	})
 
 	t.Run("returns error when API lock fails", func(t *testing.T) {
-		t.Parallel()
 		ctrl := gomock.NewController(t)
 		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
@@ -697,11 +700,12 @@ func TestExecuteProLock(t *testing.T) {
 }
 
 // TestExecuteProUnlock tests the executeProUnlock function with mocked dependencies.
+//
+// Not parallel: see the comment on TestExecuteProLock -- executeProUnlock
+// writes through the same process-global UI writer, and running both tests'
+// subtests concurrently under t.Parallel() raced on it.
 func TestExecuteProUnlock(t *testing.T) {
-	t.Parallel()
-
 	t.Run("successfully unlocks stack and shows checkmark", func(t *testing.T) {
-		t.Parallel()
 		// Create mocks
 		ctrl := gomock.NewController(t)
 		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
@@ -735,7 +739,6 @@ func TestExecuteProUnlock(t *testing.T) {
 	})
 
 	t.Run("returns error when git repo info fails", func(t *testing.T) {
-		t.Parallel()
 		ctrl := gomock.NewController(t)
 		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
@@ -756,7 +759,6 @@ func TestExecuteProUnlock(t *testing.T) {
 	})
 
 	t.Run("returns error when API unlock fails", func(t *testing.T) {
-		t.Parallel()
 		ctrl := gomock.NewController(t)
 		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
