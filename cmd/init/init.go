@@ -657,12 +657,28 @@ func runInitTargetedFlow(initUI InitUI, selectedConfig *templates.Configuration,
 // real directory itself -- see resolveInteractiveInitBaseRef). Returns the
 // base ref to retry with (the caller's --base-ref, defaulting to HEAD or a
 // pinned metadata ref) alongside the decision.
+//
+// Under --update-strategy=rendered the retry base ref is always "": tracked's
+// defaultBaseRef resolution (reading .atmos/init/metadata.yaml) is
+// tracked-mode-specific bookkeeping that has no meaning for rendered, and its
+// non-empty result would otherwise flow unchanged into the retry's
+// executeWithSetup call, which sets spec.baseRef from whatever baseRef it's
+// given regardless of strategy -- the same project-record pollution
+// CheckNotSwitchedFromRendered exists to guard against, just reached through
+// this offer-a-retry path instead of an explicit --update.
 func shouldOfferUpdate(err error, opts *initOptions, targetDir string) (offer bool, baseRef string, resolveErr error) {
 	if err == nil || opts.force || opts.update || !opts.interactive {
 		return false, "", nil
 	}
 	if !errors.Is(err, errUtils.ErrTargetDirectoryNotEmpty) {
 		return false, "", nil
+	}
+	updateStrategy, resolveErr := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if resolveErr != nil {
+		return false, "", resolveErr
+	}
+	if updateStrategy == engine.UpdateStrategyRendered {
+		return true, "", nil
 	}
 	resolvedBaseRef, resolveErr := defaultBaseRef(opts.baseRef, targetDir)
 	if resolveErr != nil {

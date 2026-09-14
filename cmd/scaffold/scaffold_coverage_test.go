@@ -665,6 +665,32 @@ func TestShouldOfferScaffoldUpdate_UsesActualTargetDir(t *testing.T) {
 	assert.Equal(t, "pinned-at-real-dir", baseRef)
 }
 
+// TestShouldOfferScaffoldUpdate_RenderedStrategySkipsBaseRefResolution
+// reproduces the finding: under --update-strategy=rendered,
+// shouldOfferScaffoldUpdate used to resolve a retry base ref via
+// tracked-only defaultBaseRef regardless of strategy. That non-empty value
+// flowed unchanged into the retry's executeWithSetup call, which sets
+// spec.baseRef from whatever it's given regardless of strategy too --
+// reintroducing the exact project-record pollution
+// CheckNotSwitchedFromRendered exists to guard against, just reached through
+// this offer-a-retry path instead of an explicit --update. A real pinned
+// metadata file proves the empty result is a deliberate skip, not a
+// coincidence of nothing being pinned.
+func TestShouldOfferScaffoldUpdate_RenderedStrategySkipsBaseRefResolution(t *testing.T) {
+	dir := t.TempDir()
+	metadata := storage.NewScaffoldMetadata("demo", "1.0.0", "embedded", "pinned-at-real-dir", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.ScaffoldMetadataPath(dir)).Save(metadata))
+
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	opts := &scaffoldGenerateOptions{interactive: true, updateStrategy: "rendered"}
+
+	offer, baseRef, err := shouldOfferScaffoldUpdate(notEmptyErr, opts, dir)
+
+	require.NoError(t, err)
+	assert.True(t, offer)
+	assert.Empty(t, baseRef, "rendered mode must never resolve a retry base ref, even when one is pinned")
+}
+
 // TestShouldOfferScaffoldUpdate_PropagatesMetadataLoadError verifies a
 // corrupt/unreadable metadata file surfaces as an error from
 // shouldOfferScaffoldUpdate rather than silently resolving to "HEAD".
