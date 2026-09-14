@@ -315,12 +315,11 @@ func runTerraformInit(atmosConfig *schema.AtmosConfiguration, dir string, info *
 	initInfo := *info
 	initInfo.SubCommand = "init"
 
-	// Add -reconfigure flag conditionally based on config
-	if atmosConfig.Components.Terraform.InitRunReconfigure {
-		initInfo.AdditionalArgsAndFlags = []string{"-reconfigure"}
-	} else {
-		initInfo.AdditionalArgsAndFlags = []string{}
-	}
+	// No manual -reconfigure flag here: initInfo.SubCommand == "init" routes this call through
+	// ExecuteTerraform's normal explicit-init path (buildInitSubcommandArgs), which now decides
+	// -reconfigure/-upgrade itself via the smart-init policy (autoinit.Decide, called with
+	// Force: true for an explicit init) instead of this helper duplicating that decision.
+	initInfo.AdditionalArgsAndFlags = []string{}
 
 	// Run terraform init using ExecuteTerraform.
 	err := ExecuteTerraform(initInfo)

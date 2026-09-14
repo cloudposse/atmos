@@ -28,6 +28,9 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				v.Set("init-pass-vars", true)
 				v.Set("auto-generate-backend-file", "true")
 				v.Set("init-run-reconfigure", "false")
+				v.Set("init-mode", "never")
+				v.Set("init-reconfigure", "always")
+				v.Set("init-upgrade", "always")
 				v.Set("planfile", "/tmp/my-plan.tfplan")
 				v.Set("skip-planfile", true)
 				v.Set("deploy-run-init", true)
@@ -50,6 +53,9 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				InitPassVars:            true,
 				AutoGenerateBackendFile: "true",
 				InitRunReconfigure:      "false",
+				InitMode:                "never",
+				InitReconfigure:         "always",
+				InitUpgrade:             "always",
 				PlanFile:                "/tmp/my-plan.tfplan",
 				PlanSkipPlanfile:        true,
 				DeployRunInit:           true,
@@ -282,6 +288,9 @@ func TestParseTerraformRunOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.InitPassVars, result.InitPassVars, "InitPassVars should match")
 			assert.Equal(t, tt.expected.AutoGenerateBackendFile, result.AutoGenerateBackendFile, "AutoGenerateBackendFile should match")
 			assert.Equal(t, tt.expected.InitRunReconfigure, result.InitRunReconfigure, "InitRunReconfigure should match")
+			assert.Equal(t, tt.expected.InitMode, result.InitMode, "InitMode should match")
+			assert.Equal(t, tt.expected.InitReconfigure, result.InitReconfigure, "InitReconfigure should match")
+			assert.Equal(t, tt.expected.InitUpgrade, result.InitUpgrade, "InitUpgrade should match")
 			assert.Equal(t, tt.expected.PlanFile, result.PlanFile, "PlanFile should match")
 			assert.Equal(t, tt.expected.PlanSkipPlanfile, result.PlanSkipPlanfile, "PlanSkipPlanfile should match")
 			assert.Equal(t, tt.expected.DeployRunInit, result.DeployRunInit, "DeployRunInit should match")
@@ -364,6 +373,9 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 		InitPassVars:            true,
 		AutoGenerateBackendFile: "true",
 		InitRunReconfigure:      "false",
+		InitMode:                "never",
+		InitReconfigure:         "always",
+		InitUpgrade:             "always",
 		PlanFile:                "/tmp/plan.tfplan",
 		PlanSkipPlanfile:        true,
 		DeployRunInit:           true,
@@ -387,6 +399,9 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 	assert.True(t, opts.InitPassVars)
 	assert.Equal(t, "true", opts.AutoGenerateBackendFile)
 	assert.Equal(t, "false", opts.InitRunReconfigure)
+	assert.Equal(t, "never", opts.InitMode)
+	assert.Equal(t, "always", opts.InitReconfigure)
+	assert.Equal(t, "always", opts.InitUpgrade)
 	assert.Equal(t, "/tmp/plan.tfplan", opts.PlanFile)
 	assert.True(t, opts.PlanSkipPlanfile)
 	assert.True(t, opts.DeployRunInit)
@@ -464,6 +479,42 @@ func TestApplyOptionsToInfo(t *testing.T) {
 			},
 			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
 				assert.Equal(t, "true", info.InitPassVars)
+			},
+		},
+		{
+			name: "init-mode is applied",
+			opts: &TerraformRunOptions{
+				InitMode: "never",
+			},
+			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
+				assert.Equal(t, "never", info.InitMode)
+			},
+		},
+		{
+			name: "init-reconfigure is applied",
+			opts: &TerraformRunOptions{
+				InitReconfigure: "always",
+			},
+			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
+				assert.Equal(t, "always", info.InitReconfigure)
+			},
+		},
+		{
+			name: "init-upgrade is applied",
+			opts: &TerraformRunOptions{
+				InitUpgrade: "always",
+			},
+			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
+				assert.Equal(t, "always", info.InitUpgrade)
+			},
+		},
+		{
+			name: "empty init-mode/init-reconfigure/init-upgrade leave info unset",
+			opts: &TerraformRunOptions{},
+			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
+				assert.Empty(t, info.InitMode)
+				assert.Empty(t, info.InitReconfigure)
+				assert.Empty(t, info.InitUpgrade)
 			},
 		},
 		{
