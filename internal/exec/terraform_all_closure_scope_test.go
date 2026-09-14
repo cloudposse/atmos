@@ -110,6 +110,69 @@ func TestDescribeTerraformStacksForExecution_ClosureErrorPropagates(t *testing.T
 	require.Contains(t, err.Error(), "broken component must only be evaluated when explicitly seeded")
 }
 
+// TestDescribeTerraformStacksForExecution_LabelClosureSkipsUnrelatedComponents
+// proves label-scoped Terraform closure resolution uses inherited literal
+// metadata before rendering component templates or validating required targets
+// outside the selected closure.
+func TestDescribeTerraformStacksForExecution_LabelClosureSkipsUnrelatedComponents(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "components", "terraform", "app"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(`
+base_path: "."
+components:
+  terraform:
+    base_path: components/terraform
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`
+metadata:
+  labels:
+    deployment: app-dev
+components:
+  terraform:
+    app:
+      metadata:
+        component: app
+    unrelated:
+      metadata:
+        component: unrelated
+        labels:
+          deployment: unrelated
+      dependencies:
+        components:
+          - name: missing
+      vars:
+        value: '{{ fail "unrelated component must not be evaluated" }}'
+`), 0o600))
+
+	t.Chdir(root)
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentType:       cfg.TerraformComponentType,
+		SubCommand:          "plan",
+		Labels:              map[string]string{"deployment": "app-dev"},
+		IncludeDependencies: -1,
+		ProcessTemplates:    true,
+	}
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	require.NoError(t, err)
+
+	stacks, err := describeTerraformStacksForExecution(&atmosConfig, info, nil, nil)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"app"}, terraformComponentNames(t, stacks, "dev"))
+}
+
 // terraformComponentNames returns the terraform component names present in
 // the given stack's describe-stacks output.
 func terraformComponentNames(t *testing.T, stacks map[string]any, stackName string) []string {
