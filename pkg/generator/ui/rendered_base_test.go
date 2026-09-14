@@ -38,7 +38,7 @@ func renderedBaseConfig() *templates.Configuration {
 func TestRenderPristineBase_RendersOldConfigWithOldValues(t *testing.T) {
 	ui := createTestUI(t)
 
-	tempDir, cleanup, err := ui.renderPristineBase(renderedBaseConfig(), map[string]interface{}{"project_name": "old-project"})
+	tempDir, cleanup, err := ui.renderPristineBase(renderedBaseConfig(), map[string]interface{}{"project_name": "old-project"}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, cleanup)
 	t.Cleanup(cleanup)
@@ -62,7 +62,7 @@ func TestRenderPristineBase_DoesNotLeakOutputIntoRealBuffer(t *testing.T) {
 	ui := createTestUI(t)
 	ui.writeOutput("existing output\n")
 
-	_, cleanup, err := ui.renderPristineBase(renderedBaseConfig(), map[string]interface{}{"project_name": "old-project"})
+	_, cleanup, err := ui.renderPristineBase(renderedBaseConfig(), map[string]interface{}{"project_name": "old-project"}, nil)
 	require.NoError(t, err)
 	t.Cleanup(cleanup)
 
@@ -76,7 +76,7 @@ func TestRenderPristineBase_MissingScaffoldConfigErrors(t *testing.T) {
 		Files: []templates.File{{Path: "README.md", Content: "static\n", Permissions: 0o644}},
 	}
 
-	_, _, err := ui.renderPristineBase(cfg, map[string]interface{}{})
+	_, _, err := ui.renderPristineBase(cfg, map[string]interface{}{}, nil)
 
 	require.Error(t, err)
 }
@@ -84,7 +84,7 @@ func TestRenderPristineBase_MissingScaffoldConfigErrors(t *testing.T) {
 func TestRenderPristineBase_CleanupRemovesTempDir(t *testing.T) {
 	ui := createTestUI(t)
 
-	tempDir, cleanup, err := ui.renderPristineBase(renderedBaseConfig(), map[string]interface{}{"project_name": "old-project"})
+	tempDir, cleanup, err := ui.renderPristineBase(renderedBaseConfig(), map[string]interface{}{"project_name": "old-project"}, nil)
 	require.NoError(t, err)
 
 	cleanup()
@@ -97,7 +97,7 @@ func TestSetupUpdateBase_TrackedWithEmptyBaseRef_IsNoOp(t *testing.T) {
 	ui := createTestUI(t)
 	// UpdateStrategyTracked is the zero value; no SetUpdateStrategy call needed.
 
-	cleanup, err := ui.setupUpdateBase(t.TempDir(), "")
+	cleanup, err := ui.setupUpdateBase(t.TempDir(), "", nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, cleanup)
@@ -123,7 +123,7 @@ func TestSetupUpdateBase_Rendered_WiresRenderedBaseIntoProcessor(t *testing.T) {
 	targetDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "static.txt"), []byte("static content\n"), 0o644))
 
-	cleanup, err := ui.setupUpdateBase(targetDir, "")
+	cleanup, err := ui.setupUpdateBase(targetDir, "", nil)
 	require.NoError(t, err)
 	require.NotNil(t, cleanup)
 	t.Cleanup(cleanup)
@@ -134,6 +134,58 @@ func TestSetupUpdateBase_Rendered_WiresRenderedBaseIntoProcessor(t *testing.T) {
 	merged, err := os.ReadFile(filepath.Join(targetDir, "static.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "template content\n", string(merged))
+}
+
+// renderedBaseCustomDelimitersScaffoldYAML declares its own spec.delimiters
+// ("<<"/">>") and a body template that only renders correctly under them.
+// Since ResolveDelimiters (see ui.go) always prefers a scaffold's own
+// declared spec.delimiters over any caller-supplied override, and
+// config.LoadScaffoldConfigFromContent validates this file's own
+// matrix/template syntax against that same declaration at load time, this
+// scaffold's own delimiters -- not renderPristineBase's delimiters argument
+// -- are what actually govern its render either way.
+const renderedBaseCustomDelimitersScaffoldYAML = `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: rendered-base-custom-delimiters
+spec:
+  delimiters: ["<<", ">>"]
+  fields:
+    - name: project_name
+      type: input
+      required: true
+`
+
+// TestRenderPristineBase_HonorsOldScaffoldsOwnDelimiters proves
+// renderPristineBase accepts and forwards a delimiters argument through to
+// renderPristineBaseFiles's ResolveDelimiters(delimiters, oldScaffoldConfig)
+// call without breaking a scaffold that declares its own custom
+// spec.delimiters -- exercising the exact plumbing CodeRabbit flagged as
+// hardcoded to nil, even though (see the doc comment above) a scaffold's own
+// declared delimiters win here regardless of what this call passes. As of
+// this fix, renderPristineBase's own callers (ui.setupUpdateBase, called
+// from ExecuteWithDelimiters) always pass "{{"/"}}"  today -- so in
+// production this parameter is not yet observably different from the
+// pre-fix hardcoded nil; the value of threading it through is API
+// consistency with the sibling executeWithSetup/ResolveDelimiters call and
+// correctness for any future caller that does pass a non-default value.
+func TestRenderPristineBase_HonorsOldScaffoldsOwnDelimiters(t *testing.T) {
+	ui := createTestUI(t)
+	oldConfig := &templates.Configuration{
+		Name: "rendered-base-custom-delimiters",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: renderedBaseCustomDelimitersScaffoldYAML, Permissions: 0o644},
+			{Path: "README.md", Content: "# << .Config.project_name >>\n", IsTemplate: true, Permissions: 0o644},
+		},
+	}
+
+	tempDir, cleanup, err := ui.renderPristineBase(oldConfig, map[string]interface{}{"project_name": "old-project"}, []string{"{{", "}}"})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+
+	readme, err := os.ReadFile(filepath.Join(tempDir, "README.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "# old-project\n", string(readme), "the scaffold's own spec.delimiters must render its own template regardless of the delimiters argument passed in")
 }
 
 // TestSetupUpdateBase_Rendered_WithoutBaseSourceReturnsErrorNotPanic
@@ -152,7 +204,7 @@ func TestSetupUpdateBase_Rendered_WithoutBaseSourceReturnsErrorNotPanic(t *testi
 	// Deliberately never calling ui.SetRenderedBaseSource here.
 
 	require.NotPanics(t, func() {
-		_, err := ui.setupUpdateBase(t.TempDir(), "")
+		_, err := ui.setupUpdateBase(t.TempDir(), "", nil)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrRenderedBaseNotConfigured)
 	})
@@ -166,7 +218,7 @@ func TestSetupUpdateBase_Rendered_PropagatesRenderFailure(t *testing.T) {
 		Files: []templates.File{{Path: "README.md", Content: "static\n", Permissions: 0o644}},
 	}, map[string]interface{}{})
 
-	_, err := ui.setupUpdateBase(t.TempDir(), "")
+	_, err := ui.setupUpdateBase(t.TempDir(), "", nil)
 
 	require.Error(t, err)
 }
