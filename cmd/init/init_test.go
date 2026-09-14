@@ -929,6 +929,33 @@ func TestInitCmd_RunE_SwitchedFromRenderedToTrackedRejected(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrUpdateStrategySwitchedToTracked)
 }
 
+// TestPrepareRenderedRetryBase_InvalidUpdateStrategyPropagatesError covers
+// prepareRenderedRetryBase's own defensive re-parse of opts.updateStrategy:
+// a bogus value must surface as an error directly, not reach
+// source.ResolveRenderedBase or initUI at all (nil initUI would panic if it
+// did).
+func TestPrepareRenderedRetryBase_InvalidUpdateStrategyPropagatesError(t *testing.T) {
+	opts := &initOptions{updateStrategy: "bogus"}
+
+	cleanup, err := prepareRenderedRetryBase(nil, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}
+
+// TestPrepareRenderedRetryBase_RenderedResolveFailurePropagatesError covers
+// source.ResolveRenderedBase failing during the retry (no recorded project
+// state at targetDir): the failure must propagate directly rather than
+// reaching initUI.SetRenderedBaseSource (nil initUI would panic if it did).
+func TestPrepareRenderedRetryBase_RenderedResolveFailurePropagatesError(t *testing.T) {
+	opts := &initOptions{updateStrategy: "rendered"}
+
+	cleanup, err := prepareRenderedRetryBase(nil, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}
+
 // TestResolveInteractiveInitBaseRef_NoUpdate_PassesThroughOptsUnchanged
 // covers resolveInteractiveInitBaseRef's non-update path: without --update
 // the base ref is unused (ExecuteWithDelimiters only sets up git storage when

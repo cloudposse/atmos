@@ -439,6 +439,34 @@ func TestScaffoldGenerateRunE_SwitchedFromRenderedToTrackedRejected(t *testing.T
 	assert.ErrorIs(t, err, errUtils.ErrUpdateStrategySwitchedToTracked)
 }
 
+// TestPrepareRenderedRetryBase_InvalidUpdateStrategyPropagatesError covers
+// prepareRenderedRetryBase's own defensive re-parse of opts.updateStrategy:
+// a bogus value must surface as an error directly, not reach
+// source.ResolveRenderedBase or scaffoldUI at all (nil scaffoldUI would
+// panic if it did).
+func TestPrepareRenderedRetryBase_InvalidUpdateStrategyPropagatesError(t *testing.T) {
+	opts := &scaffoldGenerateOptions{updateStrategy: "bogus"}
+
+	cleanup, err := prepareRenderedRetryBase(nil, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}
+
+// TestPrepareRenderedRetryBase_RenderedResolveFailurePropagatesError covers
+// source.ResolveRenderedBase failing during the retry (no recorded project
+// state at targetDir): the failure must propagate directly rather than
+// reaching scaffoldUI.SetRenderedBaseSource (nil scaffoldUI would panic if
+// it did).
+func TestPrepareRenderedRetryBase_RenderedResolveFailurePropagatesError(t *testing.T) {
+	opts := &scaffoldGenerateOptions{updateStrategy: "rendered"}
+
+	cleanup, err := prepareRenderedRetryBase(nil, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}
+
 // TestMaybeInitGeneratedGitRepository_PropagatesInitGitError reproduces
 // InitGitRepository failing (a leftover regular file named ".git" blocks
 // git.PlainInit) and asserts maybeInitGeneratedGitRepository returns that
