@@ -106,6 +106,23 @@ func ResolveImage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, i
 	return &ResolvedImage{Reference: ref.Name(), Digest: descriptor.Digest.String(), MediaType: string(descriptor.MediaType)}, nil
 }
 
+// PinDigest re-expresses imageName with digest bound as an explicit
+// "repo@sha256:..." reference, discarding any tag, so a later fetch of the
+// returned string resolves to the exact manifest identified by digest
+// instead of whatever a mutable tag currently points to. Callers that need
+// to re-fetch reproducibly later should record digest (from ResolveImage)
+// and re-derive the pinned reference via this function rather than storing
+// a tag.
+func PinDigest(imageName, digest string) (string, error) {
+	defer perf.Track(nil, "oci.PinDigest")()
+
+	ref, err := name.ParseReference(imageName)
+	if err != nil {
+		return "", errors.Join(errUtils.ErrInvalidImageReference, err)
+	}
+	return ref.Context().Digest(digest).Name(), nil
+}
+
 // ProcessImage pulls an OCI image and extracts its layers to the specified
 // destination directory. The context bounds the pull (registry auth plus
 // manifest/layer fetch) -- callers should pass one with a deadline, matching

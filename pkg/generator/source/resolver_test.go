@@ -62,6 +62,48 @@ func TestWithRef(t *testing.T) {
 	assert.Equal(t, "./local", WithRef("./local", "v1.2.3"))
 }
 
+// TestPinRenderedRef_Git proves pinRenderedRef delegates to WithRef's
+// existing ?ref= sugar for non-OCI sources -- rendered mode's git provenance
+// pinning must behave identically to today's WithRef behavior.
+func TestPinRenderedRef_Git(t *testing.T) {
+	pinned, err := pinRenderedRef("github.com/acme/template", "abc123")
+	require.NoError(t, err)
+	assert.Equal(t, "github.com/acme/template?ref=abc123", pinned)
+}
+
+// TestPinRenderedRef_OCI proves pinRenderedRef pins an oci:// source to an
+// explicit "@sha256:..." digest reference rather than folding it into
+// WithRef's git-only ?ref= sugar (which OCI sources ignore entirely -- see
+// WithRef's own "local paths and file/OCI/S3 sources are returned
+// unchanged" behavior). This is the fix for the gap where
+// --update-strategy=rendered never resolved a pinnable ref for OCI-sourced
+// scaffold templates at all.
+func TestPinRenderedRef_OCI(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("a", 64)
+	pinned, err := pinRenderedRef("oci://ghcr.io/acme/template:v1", digest)
+	require.NoError(t, err)
+	assert.Equal(t, "oci://ghcr.io/acme/template@"+digest, pinned)
+}
+
+// TestPinRenderedRef_OCIInvalidReferencePropagatesError proves a malformed
+// OCI reference surfaces as an error instead of silently falling through to
+// an unpinned (and therefore not reproducible) source.
+func TestPinRenderedRef_OCIInvalidReferencePropagatesError(t *testing.T) {
+	_, err := pinRenderedRef("oci://", "sha256:"+strings.Repeat("a", 64))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidImageReference)
+}
+
+// TestPinRenderedRef_EmptyRenderedRefPassesThrough proves pinRenderedRef is
+// a no-op passthrough when no renderedRef is recorded yet, for both source
+// kinds -- mirroring WithRef's own empty-ref passthrough.
+func TestPinRenderedRef_EmptyRenderedRefPassesThrough(t *testing.T) {
+	pinned, err := pinRenderedRef("oci://ghcr.io/acme/template:v1", "")
+	require.NoError(t, err)
+	assert.Equal(t, "oci://ghcr.io/acme/template:v1", pinned)
+}
+
 func hasSampleFile(files []templates.File) bool {
 	for _, f := range files {
 		if f.Path == "file.txt" {
@@ -138,6 +180,12 @@ func TestResolve_OCISuccess(t *testing.T) {
 	require.NotNil(t, cfg)
 	assert.True(t, hasSampleFile(cfg.Files), "OCI template files must be loaded")
 	assert.Equal(t, src, cfg.Source, "OCI sources must record the original oci:// source string, not the ephemeral fetch tempdir")
+	// Regression: OCI sources must resolve an immutable manifest digest the
+	// same way git sources resolve a commit SHA, or --update-strategy=rendered
+	// has nothing to pin an OCI-sourced project's provenance to (it silently
+	// never records spec.renderedRef and every later rendered update fails
+	// with "requires a recorded scaffold configuration").
+	assert.True(t, strings.HasPrefix(cfg.ResolvedRef, "sha256:"), "OCI ResolvedRef must be the pulled manifest's digest, got %q", cfg.ResolvedRef)
 }
 
 // TestResolve_OCIEmptyRegistryFails proves a manifest with zero layers (a

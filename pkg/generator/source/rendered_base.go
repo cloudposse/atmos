@@ -25,9 +25,10 @@ type RenderedBase struct {
 
 // ResolveRenderedBase loads targetDir's own recorded project state
 // (.atmos/scaffold.yaml, written by the last successful generation) and
-// fetches the template at the resolved commit SHA recorded there
-// (spec.renderedRef), so engine.UpdateStrategyRendered can re-render it as
-// the 3-way merge base.
+// fetches the template pinned at the resolved ref recorded there
+// (spec.renderedRef -- a commit SHA for git sources, a manifest digest for
+// OCI sources, see pinRenderedRef), so engine.UpdateStrategyRendered can
+// re-render it as the 3-way merge base.
 //
 // Must be called before this run's own SaveProjectRecord overwrites that
 // file -- the whole point is to capture "what generated what's currently on
@@ -80,9 +81,13 @@ func ResolveRenderedBase(targetDir, sourceOverride string) (*RenderedBase, error
 			Err()
 	}
 
+	pinnedSource, err := pinRenderedRef(record.Spec.Source, record.Spec.RenderedRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pin the recorded source to %q for the rendered update-strategy base: %w", record.Spec.RenderedRef, err)
+	}
 	stub := templates.Configuration{
 		Name:   record.Metadata.Name,
-		Source: WithRef(record.Spec.Source, record.Spec.RenderedRef),
+		Source: pinnedSource,
 	}
 	cleanup, err := Hydrate(&stub, sourceOverride)
 	if err != nil {
