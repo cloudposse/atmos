@@ -4,11 +4,14 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/oci/ocitest"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // projectRecordFixture bundles writeProjectRecord's spec fields (grouped
@@ -64,6 +67,39 @@ func TestResolveRenderedBase_LoadsOldRefAndValues(t *testing.T) {
 	require.NotNil(t, renderedBase.Config)
 	assert.NotEmpty(t, renderedBase.Config.Files, "the old ref's template must be fully hydrated")
 	assert.Equal(t, map[string]interface{}{"project_name": "old-project"}, renderedBase.Values)
+}
+
+// TestResolveRenderedBase_OCISourcePinsToDigest reproduces and closes the gap
+// where OCI-sourced scaffold templates never recorded a resolved ref at all
+// (resolveOCI never set Configuration.ResolvedRef, and pinRenderedRef's
+// predecessor, WithRef, is a no-op for OCI sources): a project generated from
+// oci:// under --update-strategy=rendered must be able to re-render its
+// exact original content later, pinned by digest rather than by whatever
+// tag the source URI names.
+func TestResolveRenderedBase_OCISourcePinsToDigest(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "rendered-oci:v1", map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+	src := "oci://" + imageRef
+
+	// Resolve once up front to get the real digest resolveOCI would have
+	// captured into Configuration.ResolvedRef during the original generation.
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "rendered-oci", src, time.Minute)
+	require.NoError(t, err)
+	cleanup()
+	require.NotEmpty(t, cfg.ResolvedRef)
+
+	targetDir := t.TempDir()
+	writeProjectRecord(t, targetDir, projectRecordFixture{source: src, renderedRef: cfg.ResolvedRef})
+
+	renderedBase, err := ResolveRenderedBase(targetDir, "")
+	require.NoError(t, err)
+	require.NotNil(t, renderedBase.Cleanup)
+	t.Cleanup(renderedBase.Cleanup)
+
+	require.NotNil(t, renderedBase.Config)
+	assert.True(t, hasSampleFile(renderedBase.Config.Files), "the OCI-sourced old ref's template must be fully hydrated")
 }
 
 func TestResolveRenderedBase_NoProjectRecordErrors(t *testing.T) {

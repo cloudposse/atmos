@@ -60,6 +60,33 @@ func WithRef(src, ref string) string {
 	return src + sep + "ref=" + ref
 }
 
+// pinRenderedRef re-expresses src as a request to fetch exactly renderedRef
+// -- a resolved commit SHA for git sources, an OCI manifest digest for OCI
+// sources (see resolveFetchedGitRef/resolveOCI's respective capture) --
+// overriding whatever mutable ref src's own tag/branch currently names.
+// WithRef's ?ref= query-param sugar only applies to git sources; OCI's
+// immutable pin is expressed differently (an explicit @digest), so this
+// dispatches on source kind rather than folding OCI into WithRef itself.
+// WithRef also serves --ref's CLI flag, where the value is a tag/branch
+// name, not a digest -- conflating the two would let a plain --ref value
+// reach Repository.Digest and fail (or worse, silently misresolve) instead
+// of the CLI flag's existing "--ref is ignored for OCI" behavior.
+func pinRenderedRef(src, renderedRef string) (string, error) {
+	defer perf.Track(nil, "source.pinRenderedRef")()
+
+	if src == "" || renderedRef == "" {
+		return src, nil
+	}
+	if vendor.IsOCIURI(src) {
+		pinned, err := oci.PinDigest(strings.TrimPrefix(src, "oci://"), renderedRef)
+		if err != nil {
+			return "", err
+		}
+		return "oci://" + pinned, nil
+	}
+	return WithRef(src, renderedRef), nil
+}
+
 // Resolve fetches a scaffold template from src (a local path, file://, an
 // oci:// registry reference, or a go-getter remote such as git/https/s3)
 // into a usable templates.Configuration. The returned cleanup function
@@ -134,6 +161,14 @@ func resolveOCI(atmosConfig *schema.AtmosConfiguration, name, src string, timeou
 	if err := requireScaffoldConfig(conf, src); err != nil {
 		cleanup()
 		return nil, noop, err
+	}
+	// Resolve the immutable manifest digest for --update-strategy=rendered's
+	// commit-pinning, mirroring resolveFetchedGitRef's role for git sources.
+	// Best-effort: a resolution failure here doesn't invalidate the fetch
+	// that already succeeded above, since it only feeds rendered mode's
+	// optional pinning, never the fetch itself.
+	if resolved, resolveErr := oci.ResolveImage(ctx, atmosConfig, imageRef); resolveErr == nil {
+		conf.ResolvedRef = resolved.Digest
 	}
 	// tempDir only exists to read files off disk and is removed by cleanup()
 	// once generation finishes; the recorded provenance must be the original
