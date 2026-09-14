@@ -72,6 +72,9 @@ tools/gomodcheck/.gomodcheck
 .env*
 !.envrc
 !examples/quick-start-advanced/.env.local
+*.pem
+*.key
+credentials
 
 # Tool version managers
 .tool-versions
