@@ -94,6 +94,21 @@ func (ui *InitUI) renderPristineBase(oldConfig *tmpl.Configuration, oldValues ma
 		_, _ = ui.output.WriteString(savedOutput)
 	}()
 
+	// This internal render must always actually write oldConfig's files to
+	// tempDir, even when the outer run is a --dry-run preview:
+	// engine.Processor.ProcessFile skips the actual disk write whenever
+	// Processor.DryRun is set, and this render shares ui.processor with the
+	// real run (see ui.processFileEntry -> ui.writeOneOutput ->
+	// ui.processor.ProcessFile). Left as-is, SetupRenderedBaseStorage below
+	// would be pointed at an empty tempDir and a --dry-run preview under
+	// --update-strategy=rendered would have no base to diff against. Save
+	// and restore rather than leaving it disabled, since the real run
+	// continuing after this function returns still needs its own DryRun
+	// behavior intact.
+	dryRun := ui.processor.DryRun
+	ui.processor.SetDryRun(false)
+	defer ui.processor.SetDryRun(dryRun)
+
 	if err := ui.renderPristineBaseFiles(oldConfig, oldScaffoldConfig, mergedOldValues, tempDir, delimiters); err != nil {
 		cleanup()
 		return "", nil, err

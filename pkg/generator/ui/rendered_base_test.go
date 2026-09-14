@@ -93,6 +93,29 @@ func TestRenderPristineBase_CleanupRemovesTempDir(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "cleanup must remove the temp directory")
 }
 
+// TestRenderPristineBase_WritesFilesEvenWhenProcessorDryRun proves the
+// internal pristine render actually writes oldConfig's files to tempDir even
+// when the outer run has enabled --dry-run (ui.processor.DryRun):
+// engine.Processor.ProcessFile skips the real write whenever DryRun is set,
+// and this render shares ui.processor with the real run, so without
+// temporarily disabling it here, SetupRenderedBaseStorage would be pointed
+// at an empty tempDir and a --dry-run --update-strategy=rendered preview
+// would have nothing to diff its 3-way merge against.
+func TestRenderPristineBase_WritesFilesEvenWhenProcessorDryRun(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetDryRun(true)
+
+	tempDir, cleanup, err := ui.renderPristineBase(renderedBaseConfig(), map[string]interface{}{"project_name": "old-project"}, nil)
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+
+	static, err := os.ReadFile(filepath.Join(tempDir, "static.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "static content\n", string(static), "the pristine base render must write real files even under an outer --dry-run")
+
+	assert.True(t, ui.processor.DryRun, "renderPristineBase must restore the outer run's own DryRun setting once its internal render finishes")
+}
+
 func TestSetupUpdateBase_TrackedWithEmptyBaseRef_IsNoOp(t *testing.T) {
 	ui := createTestUI(t)
 	// UpdateStrategyTracked is the zero value; no SetUpdateStrategy call needed.
@@ -134,6 +157,50 @@ func TestSetupUpdateBase_Rendered_WiresRenderedBaseIntoProcessor(t *testing.T) {
 	merged, err := os.ReadFile(filepath.Join(targetDir, "static.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "template content\n", string(merged))
+}
+
+// TestSetupUpdateBase_Rendered_DryRun_UsesRealMergeBase proves the 3-way
+// merge base wired up by setupUpdateBase's rendered branch is a real,
+// materialized render even when the outer run is a --dry-run preview -- not
+// an empty temp directory. Its test file "conflict.txt" is set up so base,
+// ours, and theirs all genuinely diverge on the same line: with a real base,
+// the resulting change ratio trips the merger's conflict/threshold check and
+// ProcessFile returns an error. If renderPristineBase's internal render were
+// silently skipped because it shares Processor.DryRun with the outer run
+// (the bug this guards against), baseStorage.LoadBase would report "not
+// found", determineBaseContent would treat the file as user-added, and the
+// merge (and its error) would never happen at all -- ProcessFile would
+// report success despite the genuine conflict.
+func TestSetupUpdateBase_Rendered_DryRun_UsesRealMergeBase(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetDryRun(true)
+	ui.SetUpdateStrategy(engine.UpdateStrategyRendered)
+
+	oldConfig := &templates.Configuration{
+		Name: "conflict-base",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: renderedBaseScaffoldYAML, Permissions: 0o644},
+			{Path: "conflict.txt", Content: "line1\nbase-line2\nline3\n", Permissions: 0o644},
+		},
+	}
+	ui.SetRenderedBaseSource(oldConfig, map[string]interface{}{"project_name": "base-project"})
+
+	targetDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "conflict.txt"), []byte("line1\nours-line2\nline3\n"), 0o644))
+
+	cleanup, err := ui.setupUpdateBase(targetDir, "", nil)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	t.Cleanup(cleanup)
+
+	err = ui.processor.ProcessFile(engine.File{Path: "conflict.txt", Content: "line1\ntheirs-line2\nline3\n", Permissions: 0o644}, targetDir, false, true, nil, nil)
+	require.Error(t, err, "a real merge base must surface the genuine ours/theirs divergence even under --dry-run")
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+
+	// --dry-run must never actually write conflict markers to disk.
+	onDisk, readErr := os.ReadFile(filepath.Join(targetDir, "conflict.txt"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "line1\nours-line2\nline3\n", string(onDisk))
 }
 
 // renderedBaseCustomDelimitersScaffoldYAML declares its own spec.delimiters
