@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
@@ -69,7 +68,7 @@ func loadOldScaffoldConfig(oldConfig *tmpl.Configuration) (*config.ScaffoldConfi
 // uses for a real generation, including matrix expansion -- with
 // force=true, update=false so every file is a plain overwrite into an
 // otherwise-empty directory, never touching merge/hooks itself.
-func (ui *InitUI) renderPristineBase(oldConfig *tmpl.Configuration, oldValues map[string]interface{}) (tempDir string, cleanup func(), err error) {
+func (ui *InitUI) renderPristineBase(oldConfig *tmpl.Configuration, oldValues map[string]interface{}, delimiters []string) (tempDir string, cleanup func(), err error) {
 	oldScaffoldConfig, err := loadOldScaffoldConfig(oldConfig)
 	if err != nil {
 		return "", nil, err
@@ -84,12 +83,18 @@ func (ui *InitUI) renderPristineBase(oldConfig *tmpl.Configuration, oldValues ma
 
 	// Discard UI output produced by the reused per-file loop below. This
 	// render is a purely internal step; its progress lines must never
-	// interleave with the real run's own output buffer.
-	savedOutput := ui.output
-	ui.output = strings.Builder{}
-	defer func() { ui.output = savedOutput }()
+	// interleave with the real run's own output buffer. strings.Builder must
+	// never be copied by value once used (a copy's internal address check
+	// panics on the next write), so save/restore its string content rather
+	// than the Builder itself.
+	savedOutput := ui.output.String()
+	ui.output.Reset()
+	defer func() {
+		ui.output.Reset()
+		_, _ = ui.output.WriteString(savedOutput)
+	}()
 
-	if err := ui.renderPristineBaseFiles(oldConfig, oldScaffoldConfig, mergedOldValues, tempDir); err != nil {
+	if err := ui.renderPristineBaseFiles(oldConfig, oldScaffoldConfig, mergedOldValues, tempDir, delimiters); err != nil {
 		cleanup()
 		return "", nil, err
 	}
@@ -100,8 +105,8 @@ func (ui *InitUI) renderPristineBase(oldConfig *tmpl.Configuration, oldValues ma
 // renderPristineBaseFiles loops oldConfig's files (skipping scaffold.yaml
 // and directory entries) and renders each into tempDir via
 // ui.processFileEntry, joining any per-file failures into a single error.
-func (ui *InitUI) renderPristineBaseFiles(oldConfig *tmpl.Configuration, oldScaffoldConfig *config.ScaffoldConfig, mergedOldValues map[string]interface{}, tempDir string) error {
-	activeDelimiters := ResolveDelimiters(nil, oldScaffoldConfig)
+func (ui *InitUI) renderPristineBaseFiles(oldConfig *tmpl.Configuration, oldScaffoldConfig *config.ScaffoldConfig, mergedOldValues map[string]interface{}, tempDir string, delimiters []string) error {
+	activeDelimiters := ResolveDelimiters(delimiters, oldScaffoldConfig)
 	fileSpecs := FileSpecByPath(oldScaffoldConfig)
 	seenRenderedPaths := make(map[string]string)
 
