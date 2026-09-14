@@ -22,10 +22,9 @@ func TestPackerValidateCmd(t *testing.T) {
 	// internal/exec's TestExecutePacker_Validate. Both commands generate and
 	// clean up the same stack/component var-file, so sharing the tracked fixture
 	// lets one process remove it while the other's Packer process opens it.
-	// Use a private copy to keep the integration test deterministic on every OS.
-	fixtureDir := "../tests/fixtures/scenarios/packer"
-	workDir := filepath.Join(t.TempDir(), "packer")
-	require.NoError(t, os.CopyFS(workDir, os.DirFS(fixtureDir)))
+	// Use a private copy (see packerFixtureWorkDir in packer_fixture_test.go)
+	// to keep the integration test deterministic on every OS.
+	workDir := packerFixtureWorkDir(t)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 
