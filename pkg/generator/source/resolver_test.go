@@ -470,6 +470,76 @@ func TestResolve_RemoteGitSubdirWithoutRefStillResolvesCommit(t *testing.T) {
 	assert.Regexp(t, `^[0-9a-f]{40}$`, cfg.ResolvedRef)
 }
 
+// commitFileToTestRepo writes an additional commit to an existing repo built
+// by initSourceTestGitRepo, moving its current branch forward -- used to
+// simulate a mutable ref (branch/tag) advancing mid-flight.
+func commitFileToTestRepo(t *testing.T, repoDir, relPath, content string) {
+	t.Helper()
+
+	repo, err := git.PlainOpen(repoDir)
+	require.NoError(t, err)
+
+	path := filepath.Join(repoDir, filepath.FromSlash(relPath))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+	require.NoError(t, wt.AddGlob("."))
+	_, err = wt.Commit("advance ref", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test User",
+			Email: "test@example.com",
+			When:  time.Now(),
+		},
+	})
+	require.NoError(t, err)
+}
+
+// TestResolveRemote_SubdirGitSourcePinsRefBeforeFetch is a regression test
+// for a data-integrity race: resolveRemote used to fetch a //subdir source's
+// content first and only *afterward* re-fetch the same (possibly mutable)
+// ref a second time, purely to resolve its commit. If the ref moved between
+// those two fetches, the generated files could come from one commit while
+// conf.ResolvedRef recorded another, corrupting --update-strategy=rendered's
+// three-way merge base. The fix (pinSubdirGitSource) resolves the commit
+// *before* the content fetch and pins that fetch to the exact resolved SHA.
+// This proves the fix by moving the source repo's branch forward *after*
+// resolution but *before* the pinned fetch runs: the pinned fetch must still
+// land on the pre-move commit, and ResolvedRef must match it exactly.
+func TestResolveRemote_SubdirGitSourcePinsRefBeforeFetch(t *testing.T) {
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"aws/app/scaffold.yaml": sampleScaffold,
+		"aws/app/file.txt":      "v1",
+	})
+	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app"
+
+	requireGitBinary(t)
+
+	pinnedSrc, ref := pinSubdirGitSource(&schema.AtmosConfiguration{}, src, time.Minute)
+	require.Regexp(t, `^[0-9a-f]{40}$`, ref, "the commit must be resolved before the content fetch runs")
+	require.Contains(t, pinnedSrc, "ref="+ref, "the content fetch must be pinned to the resolved commit")
+
+	// Move "main" forward after resolution but before the pinned fetch below
+	// -- exactly the race window that used to split content from ResolvedRef.
+	commitFileToTestRepo(t, repoDir, "aws/app/file.txt", "v2")
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", pinnedSrc, time.Minute)
+	require.NoError(t, err)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.Equal(t, ref, cfg.ResolvedRef, "ResolvedRef must be exactly the commit the fetch was pinned to")
+
+	found := false
+	for _, f := range cfg.Files {
+		if f.Path == "file.txt" {
+			found = true
+			assert.Equal(t, "v1", f.Content, "the pre-move commit's content must be fetched despite the branch moving afterward")
+		}
+	}
+	assert.True(t, found, "file.txt must be present in the fetched content")
+}
+
 // TestResolveSubdirGitRef_NoSubdirReturnsEmpty proves the fallback is a
 // pure no-op for a source with no //subdir at all: resolveRemote's own
 // direct resolveFetchedGitRef(tempDir) result already reflects reality for

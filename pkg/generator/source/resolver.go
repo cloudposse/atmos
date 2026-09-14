@@ -129,6 +129,42 @@ func pinRenderedRef(src, renderedRef string) (string, error) {
 	return replaceRef(src, renderedRef), nil
 }
 
+// UnpinnedRenderedRefMarker is recorded as spec.renderedRef for
+// --update-strategy=rendered generations whose source has no immutable ref
+// to pin at all (see IsPinnableSource: local path, file://, s3::, or a plain
+// http(s) archive). Resolve legitimately leaves Configuration.ResolvedRef
+// empty for those source kinds, but SaveProjectRecord only ever persists a
+// non-empty spec.renderedRef, and ResolveRenderedBase/CheckNotSwitchedFromRendered
+// both key off spec.renderedRef being non-empty to recognize "this project
+// was generated under rendered" -- an empty ResolvedRef there would silently
+// make the record look exactly like one that was never generated under
+// rendered at all, breaking both a later rendered update (which would wrongly
+// fail with "no recorded rendered-strategy history") and a later tracked
+// update (which would wrongly skip CheckNotSwitchedFromRendered's guard and
+// attempt a 3-way merge against stale or absent git history).
+//
+// Recording it is safe: pinRenderedRef leaves any non-git/non-oci src
+// completely unchanged regardless of the ref passed to it (replaceRef's own
+// !vendor.IsGitURI(src) no-op), so recording this marker for a non-pinnable
+// source never corrupts the source that ResolveRenderedBase re-fetches --
+// it only exists to keep spec.renderedRef non-empty for those two checks.
+const UnpinnedRenderedRefMarker = "unpinned"
+
+// IsPinnableSource reports whether src is a source kind for which Resolve
+// records an immutable ResolvedRef (a git:: commit SHA or an oci:// manifest
+// digest -- see resolveFetchedGitRef/resolveSubdirGitRef and resolveOCI's
+// respective captures). Local paths, file://, s3::, and plain http(s)
+// archive sources have no equivalent immutable identity to pin to, so
+// Resolve legitimately leaves ResolvedRef empty for them; this distinguishes
+// that expected, by-design case from an unresolved git/oci ref, which
+// instead signals a resolution failure that callers should not paper over
+// with UnpinnedRenderedRefMarker.
+func IsPinnableSource(src string) bool {
+	defer perf.Track(nil, "source.IsPinnableSource")()
+
+	return vendor.IsGitURI(src) || vendor.IsOCIURI(src)
+}
+
 // Resolve fetches a scaffold template from src (a local path, file://, an
 // oci:// registry reference, or a go-getter remote such as git/https/s3)
 // into a usable templates.Configuration. The returned cleanup function
@@ -239,6 +275,18 @@ func resolveOCI(atmosConfig *schema.AtmosConfiguration, name, src string, timeou
 func resolveRemote(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) (*templates.Configuration, func(), error) {
 	noop := func() {}
 
+	// For a //subdir git source, resolve and pin the commit *before* the
+	// content fetch below, rather than after it (see pinSubdirGitSource's
+	// doc comment). Resolving afterward via a second, separate fetch let a
+	// mutable ref (a moving branch/tag) select a different commit for that
+	// second fetch than the one the first, content-bearing fetch already
+	// used, so the generated files could come from commit A while
+	// conf.ResolvedRef recorded commit B -- a later --update-strategy=rendered
+	// update would then pin B and diff against the wrong three-way merge
+	// base. Pinning fetchSrc to the pre-resolved SHA makes the single fetch
+	// below and preResolvedRef always agree.
+	fetchSrc, preResolvedRef := pinSubdirGitSource(atmosConfig, src, timeout)
+
 	tempDir, err := os.MkdirTemp("", "atmos-scaffold-")
 	if err != nil {
 		return nil, noop, errUtils.Build(errUtils.ErrCreateTempDirectory).
@@ -249,7 +297,7 @@ func resolveRemote(atmosConfig *schema.AtmosConfiguration, name, src string, tim
 	}
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
 
-	if err := fetchRemoteSource(atmosConfig, name, src, tempDir, timeout); err != nil {
+	if err := fetchRemoteSource(atmosConfig, name, fetchSrc, tempDir, timeout); err != nil {
 		cleanup()
 		return nil, noop, err
 	}
@@ -267,18 +315,13 @@ func resolveRemote(atmosConfig *schema.AtmosConfiguration, name, src string, tim
 	// //subdir) still exists -- cleanup() below removes it once generation
 	// finishes.
 	conf.ResolvedRef = resolveFetchedGitRef(tempDir)
-	if conf.ResolvedRef == "" && vendor.IsGitURI(src) {
-		// go-getter's git fetch for a //subdir source (e.g. the exact shape
-		// `atmos init aws/app` uses) clones the full repository into its own
-		// internal temp location first, then copies only the subdir's
-		// content into tempDir -- see pkg/downloader/get_git.go's doc
-		// comment. tempDir itself never gets a usable .git directory to
-		// inspect in that case, so resolveFetchedGitRef(tempDir) always
-		// returns "" for any git:: source using //subdir. Best-effort:
-		// re-fetch the same ref without the subdir into a throwaway
-		// directory purely to resolve the commit; a failure here doesn't
-		// invalidate the fetch that already succeeded above.
-		conf.ResolvedRef = resolveSubdirGitRef(atmosConfig, src, timeout)
+	if conf.ResolvedRef == "" {
+		// Either src wasn't a git source at all, or it was a //subdir git
+		// source whose fetch never leaves a usable .git in tempDir (see
+		// pinSubdirGitSource's doc comment) -- fall back to whatever commit
+		// pinSubdirGitSource already resolved, and pinned fetchSrc to,
+		// before the fetch above ran.
+		conf.ResolvedRef = preResolvedRef
 	}
 	// tempDir only exists to read files off disk and is removed by cleanup()
 	// once generation finishes; the recorded provenance must be the original
@@ -305,10 +348,51 @@ func resolveFetchedGitRef(dir string) string {
 	return head.Hash().String()
 }
 
+// pinSubdirGitSource resolves and pins the commit for a //subdir git source
+// *before* resolveRemote's own content fetch runs, so that fetch and the
+// commit recorded in conf.ResolvedRef can never split across two different
+// commits of a mutable ref. This matters because go-getter's git fetch for a
+// //subdir source clones the full repository into its own internal temp
+// location first, then copies only the subdir's content into the
+// destination -- see pkg/downloader/get_git.go's doc comment -- so the
+// destination itself never gets a usable .git directory for
+// resolveFetchedGitRef to inspect afterward. Resolving post-fetch therefore
+// requires a second, separate fetch of the same ref; if that ref is mutable
+// (a moving branch/tag), the second fetch can select a different commit
+// than the first one already used for content, silently mismatching the
+// two.
+//
+// Resolving first instead -- via resolveSubdirGitRef -- and then pinning
+// fetchSrc to that exact SHA (via replaceRef) makes the single content fetch
+// that follows always land on the very commit being recorded.
+//
+// Returns the (possibly re-pinned) source to fetch and the commit SHA it was
+// pinned to. If src isn't a git source, has no //subdir, or the resolution
+// itself fails, returns src unchanged and an empty ref -- the caller falls
+// back to resolveFetchedGitRef's post-fetch, best-effort resolution in that
+// case (e.g. a non-git source, or a subdir-less git source where tempDir's
+// own .git is directly inspectable).
+func pinSubdirGitSource(atmosConfig *schema.AtmosConfiguration, src string, timeout time.Duration) (string, string) {
+	defer perf.Track(nil, "source.pinSubdirGitSource")()
+
+	if !vendor.IsGitURI(src) {
+		return src, ""
+	}
+	_, subdir := getter.SourceDirSubdir(src)
+	if subdir == "" {
+		return src, ""
+	}
+	ref := resolveSubdirGitRef(atmosConfig, src, timeout)
+	if ref == "" {
+		return src, ""
+	}
+	return replaceRef(src, ref), ref
+}
+
 // resolveSubdirGitRef re-fetches src's git ref without its //subdir suffix
 // into a throwaway temp directory, purely to resolve the commit checked out
-// there via resolveFetchedGitRef -- see resolveRemote's call site for why
-// this is needed. Returns "" if src has no //subdir at all (resolveRemote's
+// there via resolveFetchedGitRef -- see pinSubdirGitSource's call site for
+// why this is needed. Returns "" if src has no //subdir at all (the caller's
 // direct resolveFetchedGitRef(tempDir) result already reflects reality in
 // that case) or if the re-fetch itself fails.
 func resolveSubdirGitRef(atmosConfig *schema.AtmosConfiguration, src string, timeout time.Duration) string {
