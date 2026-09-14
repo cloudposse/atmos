@@ -13,46 +13,39 @@ import (
 )
 
 // processTemplatesFlagName and processFunctionsFlagName are the Cobra flag names on
-// `atmos describe affected`; the *ViperKey constants are the namespaced Viper keys they
-// bind to (see the "describe" Viper prefix comment on newDescribeAffectedProcessFlagsParser).
+// `atmos describe affected`. The StandardOptionsBuilder helpers below bind them to Viper under
+// these same (bare) keys, so the resolver reads them by flag name.
 const (
 	processTemplatesFlagName = "process-templates"
 	processFunctionsFlagName = "process-functions"
-	processTemplatesViperKey = "describe." + processTemplatesFlagName
-	processFunctionsViperKey = "describe." + processFunctionsFlagName
 )
 
 // newDescribeAffectedProcessFlagsParser creates a minimal StandardParser wired to only the
-// --process-templates and --process-functions flags on `atmos describe affected`.
+// --process-templates and --process-functions flags on `atmos describe affected`, using the
+// shared StandardOptionsBuilder helpers so the flag names, defaults, descriptions, and
+// ATMOS_PROCESS_TEMPLATES / ATMOS_PROCESS_FUNCTIONS env-var bindings match the rest of Atmos
+// (the `list` and `terraform` families use the same helpers/bindings).
 //
-// It mirrors newDescribeErrorModeParser: the describe family predates the unified
-// flag-parsing migration, so every other flag on this command is registered via raw Cobra
-// PersistentFlags() and read back via cmd.Flags() (in exec.SetDescribeAffectedFlagValueInCliArgs).
-// Introducing this narrow, two-flag parser (rather than migrating the whole command to
-// flags.NewStandardParser) is the minimal way to give these two flags real
-// ATMOS_PROCESS_TEMPLATES / ATMOS_PROCESS_FUNCTIONS environment variable overrides without
-// calling viper.BindEnv() or viper.BindPFlag() directly, which Forbidigo bans outside
-// pkg/flags/. The `list` and `terraform` command families already bind these same env vars
-// this way (see cmd/list/flag_wrappers.go); this closes the gap for `describe affected`.
+// The describe family predates the unified flag-parsing migration: every other flag on this
+// command is still registered via raw Cobra PersistentFlags() and read back via cmd.Flags() (in
+// exec.SetDescribeAffectedFlagValueInCliArgs). Introducing this narrow, two-flag parser (rather
+// than migrating the whole command to the flag handler) is the minimal way to give these flags
+// real env-var overrides without calling viper.BindEnv()/viper.BindPFlag() directly (Forbidigo
+// bans that outside pkg/flags/); resolveDescribeAffectedProcessFlags below bridges the resolved
+// value back to the legacy reader. Fully migrating `describe affected` to the flag handler is a
+// larger, separate change.
 //
-// A "describe" Viper key prefix is used (yielding "describe.process-templates" /
-// "describe.process-functions") so this parser's bindings do not collide with the "list"
-// family's bare "process-templates" / "process-functions" Viper keys, which are bound to the
-// same env vars against the same global viper.GetViper() instance at init() time. The keys
-// differ, so both families' bindings coexist; the shared "describe" prefix with the
-// error-mode parser is likewise safe because the flag names differ.
+// These bind the bare Viper keys "process-templates" / "process-functions" — the same keys the
+// `list` family binds to the same ATMOS_PROCESS_* env vars on the shared global Viper. Binding
+// the same key to the same env var is idempotent (unlike --error-mode, which needs a "describe"
+// prefix because it maps to a different env var per family), so no prefix is needed here.
 func newDescribeAffectedProcessFlagsParser() *flags.StandardParser {
 	defer perf.Track(nil, "cmd.newDescribeAffectedProcessFlagsParser")()
 
-	return flags.NewStandardParser(
-		flags.WithBoolFlag(processTemplatesFlagName, "", true,
-			"Enable/disable Go template processing in Atmos stack manifests when executing the command"),
-		flags.WithBoolFlag(processFunctionsFlagName, "", true,
-			"Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
-		flags.WithEnvVars(processTemplatesFlagName, "ATMOS_PROCESS_TEMPLATES"),
-		flags.WithEnvVars(processFunctionsFlagName, "ATMOS_PROCESS_FUNCTIONS"),
-		flags.WithViperPrefix("describe"),
-	)
+	return flags.NewStandardOptionsBuilder().
+		WithProcessTemplates(true).
+		WithProcessFunctions(true).
+		Build()
 }
 
 // resolveDescribeAffectedProcessFlags writes the ATMOS_PROCESS_TEMPLATES /
@@ -86,11 +79,10 @@ func resolveDescribeAffectedProcessFlags(cmd *cobra.Command, v *viper.Viper) err
 
 	for _, f := range []struct {
 		flagName string
-		viperKey string
 		envVar   string
 	}{
-		{processTemplatesFlagName, processTemplatesViperKey, "ATMOS_PROCESS_TEMPLATES"},
-		{processFunctionsFlagName, processFunctionsViperKey, "ATMOS_PROCESS_FUNCTIONS"},
+		{processTemplatesFlagName, "ATMOS_PROCESS_TEMPLATES"},
+		{processFunctionsFlagName, "ATMOS_PROCESS_FUNCTIONS"},
 	} {
 		flag := cmd.Flags().Lookup(f.flagName)
 		// Skip when the flag isn't registered (defensive: the real describeAffectedCmd always
@@ -103,8 +95,8 @@ func resolveDescribeAffectedProcessFlags(cmd *cobra.Command, v *viper.Viper) err
 		// An empty value means unset — viper returns "" when neither the env var (empty env is
 		// treated as unset by default) nor a SetDefault is present (e.g. after viper.Reset). Keep
 		// the flag's current value rather than erroring; only a non-empty, non-boolean value is an
-		// error.
-		raw := v.GetString(f.viperKey)
+		// error. The builder binds the env var to the bare flag-name Viper key.
+		raw := v.GetString(f.flagName)
 		if raw == "" {
 			continue
 		}

@@ -150,10 +150,10 @@ func TestResolveDescribeAffectedProcessFlags_CLIWinsOverEnv(t *testing.T) {
 }
 
 // TestResolveDescribeAffectedProcessFlags_ViperKeyTakesEffect confirms a value set directly on
-// the namespaced Viper key (e.g. from a config source) is applied.
+// the (bare) Viper key (e.g. from a config source) is applied.
 func TestResolveDescribeAffectedProcessFlags_ViperKeyTakesEffect(t *testing.T) {
 	cmd, v := newProcessFlagsTestCmd(t)
-	v.Set(processFunctionsViperKey, false)
+	v.Set(processFunctionsFlagName, false)
 
 	mustResolveProcessFlags(t, cmd, v)
 

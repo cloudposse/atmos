@@ -32,10 +32,14 @@ that pattern rather than migrating the whole (pre-unified-flag-parsing) command.
 ## Changes
 
 - `cmd/describe_affected_process_flags.go` (new): `newDescribeAffectedProcessFlagsParser()` — a
-  minimal `StandardParser` that registers `--process-templates` / `--process-functions` and binds
-  them to `ATMOS_PROCESS_TEMPLATES` / `ATMOS_PROCESS_FUNCTIONS` (namespaced under the `describe`
-  Viper prefix, like the error-mode parser, to avoid colliding with the `list` family's bare
-  keys on the shared global Viper). `resolveDescribeAffectedProcessFlags()` writes the env-sourced
+  minimal `StandardParser` built with the shared `flags.NewStandardOptionsBuilder().WithProcessTemplates(true).WithProcessFunctions(true).Build()`
+  helpers, so the flag names, defaults, descriptions, and `ATMOS_PROCESS_TEMPLATES` /
+  `ATMOS_PROCESS_FUNCTIONS` bindings match the rest of Atmos (no duplicated `WithBoolFlag` /
+  `WithEnvVars`). These bind the bare Viper keys `process-templates` / `process-functions` — the
+  same keys the `list` family binds to the same env vars on the shared global Viper; binding the
+  same key to the same env var is idempotent, so no `describe` prefix is needed (unlike
+  `--error-mode`, which maps to a different env var per family).
+  `resolveDescribeAffectedProcessFlags()` writes the env-sourced
   value back onto the Cobra flag (via `Flags().Set`, which marks it `Changed`) so the legacy
   reader picks it up — only when the flag wasn't set on the CLI (CLI wins) and the resolved value
   differs from the flag's current value. It compares the resolved value against
