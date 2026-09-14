@@ -565,11 +565,15 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 	if update {
 		// Require base storage for a meaningful 3-way merge (either git
 		// history or a pristine template re-render). Without it, we would use
-		// template content as base, making merge a no-op.
+		// template content as base, making merge a no-op. Processor doesn't
+		// track which --update-strategy set this up (or failed to), so the
+		// message can't name one specifically -- it must stay accurate for
+		// either.
 		if p.baseStorage == nil {
 			return errUtils.Build(errUtils.ErrThreeWayMerge).
-				WithExplanation("`--update` requires a git repository to compute a 3-way merge base").
-				WithHint("Run inside a git repository and/or pass `--base-ref`").
+				WithExplanation("`--update` has no merge base configured for this file").
+				WithHint("Under `--update-strategy=tracked` (the default): run inside a git repository and/or pass `--base-ref`").
+				WithHint("Under `--update-strategy=rendered`: the project needs a prior generation's `.atmos/scaffold.yaml` record").
 				WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
 				WithContext("file_path", file.Path).
 				WithExitCode(2).
