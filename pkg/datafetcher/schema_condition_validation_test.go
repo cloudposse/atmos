@@ -450,6 +450,46 @@ func TestManifestSchema_OverridesFieldCoverage(t *testing.T) {
 	}
 }
 
+func TestManifestSchema_ComponentDependencyRequiredForms(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded": loadEmbeddedSchemaBytes(t),
+		"fixture":  loadFixtureSchemaBytes(t),
+	}
+	tests := []struct {
+		name      string
+		value     any
+		wantValid bool
+	}{
+		{name: "false", value: false, wantValid: true},
+		{name: "null", value: nil, wantValid: true},
+		{name: "yaml function", value: "!env REQUIRED", wantValid: true},
+		{name: "custom delimiter template", value: "[[ .dependencyRequired ]]", wantValid: true},
+		{name: "plain string deferred to template parsing", value: "sometimes", wantValid: true},
+	}
+
+	for schemaName, schemaData := range schemas {
+		for _, test := range tests {
+			t.Run(schemaName+"/"+test.name, func(t *testing.T) {
+				manifest := map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"app": map[string]any{
+								"dependencies": map[string]any{
+									"components": []any{
+										map[string]any{"name": "vpc", "required": test.value},
+									},
+								},
+							},
+						},
+					},
+				}
+				result := validateManifestAgainstSchema(t, schemaData, manifest)
+				assert.Equal(t, test.wantValid, result.Valid(), "%s", result.Errors())
+			})
+		}
+	}
+}
+
 // TestManifestSchema_ComponentLevelRetry guards against the component-level retry: block being
 // entirely unsupported (issue found during the #2919 field test: retry is documented at
 // website/docs/stacks/components/terraform/retry.mdx and extracted for every component type by
