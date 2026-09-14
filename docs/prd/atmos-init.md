@@ -167,7 +167,7 @@ atmos init [template] [target]
   --force, -f              Overwrite existing files
   --interactive, -i        Interactive mode (default: true)
   --update                 Update an existing project via a 3-way merge
-  --base-ref               Git ref to use as the 3-way merge base with --update (defaults to HEAD; tracked-only, see --update-strategy)
+  --base-ref               Git ref to use as the 3-way merge base with --update (defaults to HEAD; tracked-only -- rejected when combined with --update-strategy=rendered, see --update-strategy)
   --update-strategy        Where --update's merge base comes from (tracked|rendered; default: tracked)
   --set key=value          Set template variables
   --merge-strategy         Conflict resolution strategy for --update (manual|ours|theirs; default: manual)
