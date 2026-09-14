@@ -142,7 +142,19 @@ If no target directory is specified, you will be prompted for one.`,
 		// here would read .atmos/scaffold/metadata.yaml from the wrong
 		// (empty/cwd) path and permanently overwrite baseRef with "HEAD",
 		// discarding any pin at the directory the user goes on to pick.
-		if update && target != "" {
+		//
+		// Skipped entirely under rendered: this resolution (and its "HEAD"
+		// fallback) is tracked-mode-specific bookkeeping for the target's
+		// own git history. Its result flows through to SaveProjectRecord's
+		// spec.baseRef -- the same project-record field ResolveRenderedBase
+		// uses (spec.renderedRef) to tell whether a project was last
+		// managed with tracked or rendered. Running this under rendered
+		// would populate spec.baseRef with a value meaningless for that
+		// strategy, corrupting that distinction.
+		if update && target != "" && updateStrategy != "rendered" {
+			if err := source.CheckNotSwitchedFromRendered(target); err != nil {
+				return err
+			}
 			resolvedBaseRef, err := defaultBaseRef(baseRef, target)
 			if err != nil {
 				return err
@@ -863,6 +875,18 @@ func resolveInteractiveBaseRef(
 		scaffoldUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
 	}
 
+	// Skipped under rendered for the same reason as executeScaffoldGenerate's
+	// positional flow: this resolution's result flows through to
+	// spec.baseRef, the same project-record field ResolveRenderedBase's
+	// spec.renderedRef counterpart uses to detect a tracked/rendered
+	// strategy switch.
+	if updateStrategy == engine.UpdateStrategyRendered {
+		return targetDir, "", templateValues, useDefaults, cleanup, nil
+	}
+
+	if err = source.CheckNotSwitchedFromRendered(targetDir); err != nil {
+		return targetDir, "", nil, false, cleanup, err
+	}
 	baseRef, err = defaultBaseRef(opts.baseRef, targetDir)
 	if err != nil {
 		return targetDir, "", nil, false, cleanup, err

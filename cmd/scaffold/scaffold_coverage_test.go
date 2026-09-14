@@ -18,6 +18,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
@@ -412,6 +413,30 @@ func TestScaffoldGenerateRunE_RenderedStrategyRequiresScaffoldConfig(t *testing.
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrRenderedStrategyRequiresConfig)
+}
+
+// TestScaffoldGenerateRunE_SwitchedFromRenderedToTrackedRejected covers a
+// target last generated under --update-strategy=rendered (spec.renderedRef
+// set, spec.baseRef empty): a plain --update run (defaulting to tracked)
+// against it must fail loudly via CheckNotSwitchedFromRendered instead of
+// silently resolving a base ref against git history the target was never
+// meant to have.
+func TestScaffoldGenerateRunE_SwitchedFromRenderedToTrackedRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	dir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "sample"}}
+	require.NoError(t, config.SaveProjectRecord(dir, sampleConfig,
+		config.ProjectRecordProvenance{Source: "embedded", RenderedRef: "abc123"}, nil))
+
+	cmd := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+
+	err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUpdateStrategySwitchedToTracked)
 }
 
 // TestMaybeInitGeneratedGitRepository_PropagatesInitGitError reproduces

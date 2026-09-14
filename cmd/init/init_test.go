@@ -18,6 +18,8 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/manifest"
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
 func TestNewInitCommandProvider(t *testing.T) {
@@ -900,6 +902,31 @@ func TestInitCmd_RunE_RenderedStrategyRequiresScaffoldConfig(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrRenderedStrategyRequiresConfig)
+}
+
+// TestInitCmd_RunE_SwitchedFromRenderedToTrackedRejected covers a target
+// last generated under --update-strategy=rendered (spec.renderedRef set,
+// spec.baseRef empty): a plain --update run (defaulting to tracked) against
+// it must fail loudly via CheckNotSwitchedFromRendered instead of silently
+// resolving a base ref against git history the target was never meant to
+// have.
+func TestInitCmd_RunE_SwitchedFromRenderedToTrackedRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	dir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "sample"}}
+	require.NoError(t, config.SaveProjectRecord(dir, sampleConfig,
+		config.ProjectRecordProvenance{Source: "embedded", RenderedRef: "abc123"}, nil))
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+
+	err := initCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUpdateStrategySwitchedToTracked)
 }
 
 // TestResolveInteractiveInitBaseRef_NoUpdate_PassesThroughOptsUnchanged

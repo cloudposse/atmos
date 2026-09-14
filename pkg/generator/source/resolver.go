@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-git/go-git/v5"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
@@ -170,11 +172,32 @@ func resolveRemote(atmosConfig *schema.AtmosConfiguration, name, src string, tim
 		cleanup()
 		return nil, noop, err
 	}
+	// Resolve while tempDir (and its .git, if src was a git:: source) still
+	// exists -- cleanup() below removes it once generation finishes.
+	conf.ResolvedRef = resolveFetchedGitRef(tempDir)
 	// tempDir only exists to read files off disk and is removed by cleanup()
 	// once generation finishes; the recorded provenance must be the original
 	// source the caller passed in, not that ephemeral fetch destination.
 	conf.Source = src
 	return conf, cleanup, nil
+}
+
+// resolveFetchedGitRef returns the commit SHA checked out at dir, or "" if
+// dir isn't a git working tree (src wasn't a git:: source, e.g. oci/s3/http).
+// Best-effort: any resolution failure is treated the same as "not a git
+// source" rather than failing the whole fetch, since the result only feeds
+// --update-strategy=rendered's optional commit-pinning, never the fetch
+// itself.
+func resolveFetchedGitRef(dir string) string {
+	repo, err := git.PlainOpen(dir)
+	if err != nil {
+		return ""
+	}
+	head, err := repo.Head()
+	if err != nil {
+		return ""
+	}
+	return head.Hash().String()
 }
 
 // fetchRemoteSource downloads src into destDir via go-getter, showing a
