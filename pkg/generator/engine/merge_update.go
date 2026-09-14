@@ -319,7 +319,13 @@ func (p *Processor) determineBaseContent(file File, existingPath string) (string
 		return "", false, errUtils.Build(errUtils.ErrThreeWayMerge).
 			WithCause(err).
 			WithExplanationf("Failed to load the merge base for `%s`", file.Path).
-			WithHint("Verify the base ref exists: `git show <base-ref>`").
+			// p.baseStorage can be either *storage.GitBaseStorage
+			// (--update-strategy=tracked) or *storage.RenderedBaseStorage
+			// (--update-strategy=rendered, see SetupRenderedBaseStorage) --
+			// this hint stays strategy-neutral rather than always pointing at
+			// `git show`, which cannot diagnose a rendered base's own
+			// pristine-re-render failure.
+			WithHint("Verify the merge base is available: for `--update-strategy=tracked`, check the base ref exists (`git show <base-ref>`); for `--update-strategy=rendered`, check the pristine re-render of the recorded ref succeeded").
 			WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
 			WithContext("file_path", file.Path).
 			WithContext("relative_path", relativePath).
