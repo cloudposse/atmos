@@ -187,6 +187,12 @@ func hostOf(rawURL string) string {
 // importing pkg/github back would create an import cycle.
 func normalizeHost(host string) string {
 	host = strings.ToLower(host)
+	// A bare bracketed IPv6 literal ("[::1]") has no port to split, so unbracket it here; the
+	// port-bearing form below yields the same unbracketed host from SplitHostPort, keeping
+	// "[::1]" and "[::1]:443" equal.
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	}
 
 	if h, port, err := net.SplitHostPort(host); err == nil {
 		h = strings.TrimSuffix(h, trailingDot)
