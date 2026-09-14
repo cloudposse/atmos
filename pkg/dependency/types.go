@@ -17,6 +17,9 @@ type Node struct {
 	// Dependencies contains IDs of nodes that this node depends on.
 	Dependencies []string
 
+	// OptionalDependencies identifies outgoing edges that were declared optional.
+	OptionalDependencies map[string]bool
+
 	// Dependents contains IDs of nodes that depend on this node.
 	Dependents []string
 
