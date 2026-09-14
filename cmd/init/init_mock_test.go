@@ -130,6 +130,51 @@ func TestRunInitTargetedFlow_RenderedStrategyRetryWiresBaseSource(t *testing.T) 
 	assert.Equal(t, targetDir, resultDir)
 }
 
+// TestRunInitTargetedFlow_TrackedStrategyRetryRejectsSwitchFromRendered
+// covers a target last generated under --update-strategy=rendered
+// (spec.renderedRef set, spec.baseRef empty) whose initial (non-update)
+// attempt fails with ErrTargetDirectoryNotEmpty, offering the same
+// "confirm update instead" retry as
+// TestRunInitTargetedFlow_RenderedStrategyRetryWiresBaseSource -- but this
+// time the retry itself defaults to --update-strategy=tracked. Before this
+// fix, prepareRenderedRetryBase returned immediately for a non-rendered
+// strategy without ever calling source.CheckNotSwitchedFromRendered, so the
+// retry's ExecuteWithBaseRef call would have gone on to attempt a tracked
+// 3-way merge against a target that was deliberately generated with no
+// git-history dependency. It must instead fail loudly here, before that
+// retry ExecuteWithBaseRef call ever happens.
+func TestRunInitTargetedFlow_TrackedStrategyRetryRejectsSwitchFromRendered(t *testing.T) {
+	targetDir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "retry-tracked"}}
+	require.NoError(t, config.SaveProjectRecord(targetDir, sampleConfig,
+		config.ProjectRecordProvenance{Source: "embedded", RenderedRef: "abc123"}, nil))
+
+	selectedConfig := &templates.Configuration{Name: "test"}
+	opts := &initOptions{
+		targetDir:    targetDir,
+		interactive:  true,
+		templateVars: map[string]interface{}{},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockInitUI(ctrl)
+
+	// The retry's own ExecuteWithBaseRef call must never happen: the
+	// strategy-switch check must reject the retry first.
+	mockUI.EXPECT().
+		ExecuteWithBaseRef(selectedConfig, targetDir, false, false, false, "", opts.templateVars).
+		Return(errUtils.ErrTargetDirectoryNotEmpty).
+		Times(1)
+	mockUI.EXPECT().
+		ConfirmUpdateInstead(targetDir).
+		Return(true, nil)
+
+	_, err := runInitTargetedFlow(mockUI, selectedConfig, opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUpdateStrategySwitchedToTracked)
+}
+
 func TestRunInitTargetedFlow_DeclinesUpdateOffer(t *testing.T) {
 	selectedConfig := &templates.Configuration{Name: "test"}
 	opts := &initOptions{

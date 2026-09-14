@@ -733,6 +733,16 @@ func prepareRenderedRetryBase(scaffoldUI ScaffoldUI, opts *scaffoldGenerateOptio
 		return nil, err
 	}
 	if updateStrategy != engine.UpdateStrategyRendered {
+		// Tracked-strategy retries skip executeScaffoldGenerate's normal
+		// opts.update-gated strategy-switch check for the same reason they
+		// skip the rendered base setup above: that check only runs when
+		// --update was passed up front, and this retry flips update=true
+		// only after the fact. Run it here so a target last managed with
+		// --update-strategy=rendered still gets flagged instead of silently
+		// retried against stale or absent git history.
+		if err := source.CheckNotSwitchedFromRendered(targetDir); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 	renderedBase, err := source.ResolveRenderedBase(targetDir, opts.sourceOverride)

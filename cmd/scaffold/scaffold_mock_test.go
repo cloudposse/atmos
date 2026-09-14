@@ -125,6 +125,51 @@ func TestExecuteTemplateGeneration_RenderedStrategyRetryWiresBaseSource(t *testi
 	require.NoError(t, err)
 }
 
+// TestExecuteTemplateGeneration_TrackedStrategyRetryRejectsSwitchFromRendered
+// covers a target last generated under --update-strategy=rendered
+// (spec.renderedRef set, spec.baseRef empty) whose initial (non-update)
+// attempt fails with ErrTargetDirectoryNotEmpty, offering the same "confirm
+// update instead" retry as
+// TestExecuteTemplateGeneration_RenderedStrategyRetryWiresBaseSource -- but
+// this time the retry itself defaults to --update-strategy=tracked. Before
+// this fix, prepareRenderedRetryBase returned immediately for a non-rendered
+// strategy without ever calling source.CheckNotSwitchedFromRendered, so the
+// retry's ExecuteWithBaseRef call would have gone on to attempt a tracked
+// 3-way merge against a target that was deliberately generated with no
+// git-history dependency. It must instead fail loudly here, before that
+// retry ExecuteWithBaseRef call ever happens.
+func TestExecuteTemplateGeneration_TrackedStrategyRetryRejectsSwitchFromRendered(t *testing.T) {
+	targetDir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "retry-tracked"}}
+	require.NoError(t, config.SaveProjectRecord(targetDir, sampleConfig,
+		config.ProjectRecordProvenance{Source: "embedded", RenderedRef: "abc123"}, nil))
+
+	selectedConfig := &templates.Configuration{Name: "test"}
+	opts := &scaffoldGenerateOptions{
+		interactive:    true,
+		templateValues: map[string]interface{}{},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockScaffoldUI(ctrl)
+	mockUI.EXPECT().SetSkipHooks(gomock.Any())
+
+	// The retry's own ExecuteWithBaseRef call must never happen: the
+	// strategy-switch check must reject the retry first.
+	mockUI.EXPECT().
+		ExecuteWithBaseRef(selectedConfig, targetDir, false, false, false, "", opts.templateValues).
+		Return(errUtils.ErrTargetDirectoryNotEmpty).
+		Times(1)
+	mockUI.EXPECT().
+		ConfirmUpdateInstead(targetDir).
+		Return(true, nil)
+
+	err := executeTemplateGeneration(selectedConfig, targetDir, opts, mockUI)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUpdateStrategySwitchedToTracked)
+}
+
 func TestExecuteTemplateGeneration_DeclinesUpdateOffer(t *testing.T) {
 	selectedConfig := &templates.Configuration{Name: "test"}
 	opts := &scaffoldGenerateOptions{
