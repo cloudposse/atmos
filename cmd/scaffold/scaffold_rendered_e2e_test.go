@@ -53,10 +53,13 @@ func renderedE2EFileURI(path string) string {
 // scaffold template: v1 and v2, where the template changes update.txt
 // between the two tags but never touches static.txt -- so a real --update
 // run has one file the template changed and one it never touches (a stand-in
-// for a user hand-edit that must survive).
-func buildTwoTagTemplateRepo(t *testing.T) string {
+// for a user hand-edit that must survive). Also returns both tags' commit
+// hashes so callers can assert that rendered-mode records the immutable
+// resolved SHA for whichever tag was actually generated against, rather than
+// the mutable "v1"/"v2" tag names.
+func buildTwoTagTemplateRepo(t *testing.T) (repoDir, v1Commit, v2Commit string) {
 	t.Helper()
-	repoDir := t.TempDir()
+	repoDir = t.TempDir()
 	repo, err := git.PlainInitWithOptions(repoDir, &git.PlainInitOptions{
 		InitOptions: git.InitOptions{DefaultBranch: plumbing.NewBranchReferenceName("main")},
 	})
@@ -87,7 +90,7 @@ func buildTwoTagTemplateRepo(t *testing.T) string {
 	_, err = repo.CreateTag("v2", commit2, nil)
 	require.NoError(t, err)
 
-	return repoDir
+	return repoDir, commit1.String(), commit2.String()
 }
 
 // TestScaffoldGenerate_UpdateStrategyRendered_EndToEnd drives the real CLI
@@ -104,7 +107,7 @@ func TestScaffoldGenerate_UpdateStrategyRendered_EndToEnd(t *testing.T) {
 	requireGitBinaryForRenderedE2E(t)
 	t.Cleanup(func() { viper.Reset() })
 
-	repoDir := buildTwoTagTemplateRepo(t)
+	repoDir, v1Commit, v2Commit := buildTwoTagTemplateRepo(t)
 	src := "git::" + renderedE2EFileURI(repoDir)
 	targetDir := t.TempDir()
 
@@ -127,6 +130,11 @@ func TestScaffoldGenerate_UpdateStrategyRendered_EndToEnd(t *testing.T) {
 	v1Update, err := os.ReadFile(updatePath)
 	require.NoError(t, err)
 	assert.Equal(t, "v1 content\n", string(v1Update))
+
+	firstRecord, err := config.LoadProjectRecord(targetDir)
+	require.NoError(t, err)
+	require.NotNil(t, firstRecord)
+	assert.Equal(t, v1Commit, firstRecord.Spec.RenderedRef, "the initial rendered-strategy generation must record the resolved v1 commit SHA, not the mutable v1 tag")
 
 	_, gitStatErr := os.Stat(filepath.Join(targetDir, ".git"))
 	require.True(t, os.IsNotExist(gitStatErr), "the target must not be a git repository for this test to prove anything")
@@ -163,5 +171,5 @@ func TestScaffoldGenerate_UpdateStrategyRendered_EndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	assert.Empty(t, record.Spec.BaseRef, "rendered-mode updates must never populate spec.baseRef")
-	assert.NotEmpty(t, record.Spec.RenderedRef, "rendered-mode updates must record the resolved commit SHA")
+	assert.Equal(t, v2Commit, record.Spec.RenderedRef, "rendered-mode updates must record the resolved v2 commit SHA, not the mutable v2 tag")
 }
