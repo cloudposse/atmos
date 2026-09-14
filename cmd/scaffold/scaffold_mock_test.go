@@ -12,7 +12,32 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/manifest"
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
+
+const retryTestScaffoldYAML = `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: retry-rendered
+spec:
+  fields:
+    - name: project_name
+      type: input
+      default: demo
+`
+
+// writeLocalRenderedRetryTemplate creates a minimal on-disk scaffold template
+// (a local directory source, so source.ResolveRenderedBase's Hydrate call
+// resolves it without needing git or network access) and returns its
+// directory.
+func writeLocalRenderedRetryTemplate(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scaffold.yaml"), []byte(retryTestScaffoldYAML), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file.txt"), []byte("hello"), 0o600))
+	return dir
+}
 
 // These tests exercise the retry-as-update confirmation flow in
 // executeTemplateGeneration using a mocked ScaffoldUI. That flow needs a real
@@ -45,6 +70,58 @@ func TestExecuteTemplateGeneration_OffersUpdateAndRetriesOnConfirm(t *testing.T)
 	)
 
 	err := executeTemplateGeneration(selectedConfig, "/tmp/target", opts, mockUI)
+	require.NoError(t, err)
+}
+
+// TestExecuteTemplateGeneration_RenderedStrategyRetryWiresBaseSource
+// reproduces the field-test crash: under --update-strategy=rendered, the
+// initial (non-update) attempt fails with ErrTargetDirectoryNotEmpty before
+// executeScaffoldGenerate's own opts.update-gated ResolveRenderedBase setup
+// ever ran (that setup requires opts.update to already be true). Confirming
+// the "update instead" offer used to retry with update=true directly,
+// reaching setupUpdateBase's rendered branch with no base source ever
+// configured -- a nil pointer panic. This asserts the retry now resolves and
+// wires SetRenderedBaseSource before the retry ExecuteWithBaseRef call, using
+// a real target dir with a real recorded project record and a real
+// (local-directory) template source so the resolution actually exercises
+// source.ResolveRenderedBase end to end, not just a mocked pass-through.
+func TestExecuteTemplateGeneration_RenderedStrategyRetryWiresBaseSource(t *testing.T) {
+	templateDir := writeLocalRenderedRetryTemplate(t)
+	targetDir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "retry-rendered"}}
+	require.NoError(t, config.SaveProjectRecord(targetDir, sampleConfig,
+		config.ProjectRecordProvenance{Source: templateDir, RenderedRef: "irrelevant-for-local-source"}, nil))
+
+	selectedConfig := &templates.Configuration{Name: "test"}
+	opts := &scaffoldGenerateOptions{
+		interactive:    true,
+		updateStrategy: "rendered",
+		templateValues: map[string]interface{}{},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockScaffoldUI(ctrl)
+	mockUI.EXPECT().SetSkipHooks(gomock.Any())
+
+	gomock.InOrder(
+		mockUI.EXPECT().
+			ExecuteWithBaseRef(selectedConfig, targetDir, false, false, false, "", opts.templateValues).
+			Return(errUtils.ErrTargetDirectoryNotEmpty),
+		mockUI.EXPECT().
+			ConfirmUpdateInstead(targetDir).
+			Return(true, nil),
+		mockUI.EXPECT().
+			SetRenderedBaseSource(gomock.Any(), gomock.Any()).
+			Do(func(cfg *templates.Configuration, values map[string]interface{}) {
+				require.NotNil(t, cfg)
+				assert.NotEmpty(t, cfg.Files, "the old ref's template must be fully hydrated before the retry")
+			}),
+		mockUI.EXPECT().
+			ExecuteWithBaseRef(selectedConfig, targetDir, false, true, false, "HEAD", opts.templateValues).
+			Return(nil),
+	)
+
+	err := executeTemplateGeneration(selectedConfig, targetDir, opts, mockUI)
 	require.NoError(t, err)
 }
 

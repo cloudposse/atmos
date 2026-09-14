@@ -547,6 +547,19 @@ func (ui *InitUI) ExecuteWithBaseRef(embedsConfig *tmpl.Configuration, targetPat
 // no-op under UpdateStrategyTracked) and must be deferred by the caller.
 func (ui *InitUI) setupUpdateBase(targetPath, baseRef string) (cleanup func(), err error) {
 	if ui.updateStrategy == engine.UpdateStrategyRendered {
+		// ui.renderedBaseConfig is only ever populated by SetRenderedBaseSource,
+		// called by the CLI layer after resolving the target's recorded
+		// provenance (source.ResolveRenderedBase). A caller that flips
+		// updateStrategy to Rendered without also calling SetRenderedBaseSource
+		// first (e.g. a "confirm update instead" retry that turns update=true
+		// on after the fact) would otherwise reach renderPristineBase with a
+		// nil config and panic dereferencing its Files field.
+		if ui.renderedBaseConfig == nil {
+			return func() {}, errUtils.Build(errUtils.ErrRenderedBaseNotConfigured).
+				WithExplanation("Internal error: rendered update-strategy was selected but no base source was resolved").
+				WithHint("This is an atmos bug -- please report it").
+				Err()
+		}
 		renderedTempDir, cleanupRenderedBase, err := ui.renderPristineBase(ui.renderedBaseConfig, ui.renderedBaseValues)
 		if err != nil {
 			return func() {}, fmt.Errorf("failed to render the update-strategy=rendered base: %w", err)

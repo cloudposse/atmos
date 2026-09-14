@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 )
@@ -133,6 +134,28 @@ func TestSetupUpdateBase_Rendered_WiresRenderedBaseIntoProcessor(t *testing.T) {
 	merged, err := os.ReadFile(filepath.Join(targetDir, "static.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "template content\n", string(merged))
+}
+
+// TestSetupUpdateBase_Rendered_WithoutBaseSourceReturnsErrorNotPanic
+// reproduces the field-test crash: a caller can flip updateStrategy to
+// Rendered (e.g. via SetUpdateStrategy) without ever calling
+// SetRenderedBaseSource first -- notably, the CLI's "confirm update instead"
+// retry path used to do exactly this, since it flips update=true only after
+// the initial non-update attempt already failed, bypassing the normal
+// opts.update-gated ResolveRenderedBase/SetRenderedBaseSource wiring. Before
+// the nil check in setupUpdateBase, this panicked with a nil pointer
+// dereference inside loadOldScaffoldConfig; it must now return a normal
+// error instead.
+func TestSetupUpdateBase_Rendered_WithoutBaseSourceReturnsErrorNotPanic(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetUpdateStrategy(engine.UpdateStrategyRendered)
+	// Deliberately never calling ui.SetRenderedBaseSource here.
+
+	require.NotPanics(t, func() {
+		_, err := ui.setupUpdateBase(t.TempDir(), "")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrRenderedBaseNotConfigured)
+	})
 }
 
 func TestSetupUpdateBase_Rendered_PropagatesRenderFailure(t *testing.T) {

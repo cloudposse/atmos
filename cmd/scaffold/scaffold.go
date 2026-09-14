@@ -700,6 +700,13 @@ func executeTemplateGeneration(
 	}
 	if offer {
 		if confirmed, cErr := scaffoldUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {
+			renderedCleanup, prepErr := prepareRenderedRetryBase(scaffoldUI, opts, targetDir)
+			if renderedCleanup != nil {
+				defer renderedCleanup()
+			}
+			if prepErr != nil {
+				return prepErr
+			}
 			err = scaffoldUI.ExecuteWithBaseRef(selectedConfig, targetDir, opts.force, true, opts.useDefaults, retryBaseRef, opts.templateValues)
 		}
 	}
@@ -707,6 +714,33 @@ func executeTemplateGeneration(
 		return err
 	}
 	return maybeInitGeneratedGitRepository(targetDir, selectedConfig, opts)
+}
+
+// prepareRenderedRetryBase resolves and wires the rendered update-strategy's
+// base config before a "confirm update instead" retry. Note that
+// executeScaffoldGenerate's normal opts.update-gated
+// ResolveRenderedBase/SetRenderedBaseSource setup only runs when --update
+// was passed up front; the retry flips update=true only after the initial
+// (non-update) attempt already failed with ErrTargetDirectoryNotEmpty, so
+// that setup never ran for this call. Without it, the retry's
+// ExecuteWithBaseRef would reach setupUpdateBase's rendered branch with no
+// base source ever configured. Returns a nil cleanup when the strategy isn't
+// rendered or resolution failed -- callers must nil-check before deferring
+// it.
+func prepareRenderedRetryBase(scaffoldUI ScaffoldUI, opts *scaffoldGenerateOptions, targetDir string) (cleanup func(), err error) {
+	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if err != nil {
+		return nil, err
+	}
+	if updateStrategy != engine.UpdateStrategyRendered {
+		return nil, nil
+	}
+	renderedBase, err := source.ResolveRenderedBase(targetDir, opts.sourceOverride)
+	if err != nil {
+		return nil, err
+	}
+	scaffoldUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
+	return renderedBase.Cleanup, nil
 }
 
 // shouldOfferScaffoldUpdate mirrors cmd/init's shouldOfferUpdate: offer a
@@ -789,6 +823,13 @@ func executeTemplateWithoutTargetDir(
 		}
 		if offer {
 			if confirmed, cErr := scaffoldUI.ConfirmUpdateInstead(finalTargetDir); cErr == nil && confirmed {
+				renderedCleanup, prepErr := prepareRenderedRetryBase(scaffoldUI, opts, finalTargetDir)
+				if renderedCleanup != nil {
+					defer renderedCleanup()
+				}
+				if prepErr != nil {
+					return finalTargetDir, prepErr
+				}
 				return scaffoldUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, finalTargetDir, opts.force, true, useDefaults, retryBaseRef, templateValues)
 			}
 		}
