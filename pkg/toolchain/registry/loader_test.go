@@ -81,9 +81,9 @@ func TestCreateRegistry_RefValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.githubServer != "" {
-				t.Setenv("GITHUB_SERVER_URL", tt.githubServer)
-			}
+			// Always set (even to "") so rejection cases don't inherit an unrelated
+			// configured host from the parent test process's environment.
+			t.Setenv("GITHUB_SERVER_URL", tt.githubServer)
 
 			_, err := createRegistry(&tt.config)
 			if !tt.wantErr {

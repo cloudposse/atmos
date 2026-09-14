@@ -139,9 +139,9 @@ func TestParseSpec_OwnerRepoShorthand(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.githubServer != "" {
-				t.Setenv("GITHUB_SERVER_URL", tt.githubServer)
-			}
+			// Always set (even to "") so the default case doesn't inherit an ambient
+			// GITHUB_SERVER_URL from the parent test process's environment.
+			t.Setenv("GITHUB_SERVER_URL", tt.githubServer)
 
 			got, err := ParseSpec(tt.raw)
 			require.NoError(t, err)

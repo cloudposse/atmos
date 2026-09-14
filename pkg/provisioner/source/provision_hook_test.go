@@ -819,10 +819,31 @@ func TestIsLocalSource(t *testing.T) {
 func TestIsLocalSourceGHESSCPStyle(t *testing.T) {
 	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
 
-	assert.False(t, isLocalSource("git@ghe.example.com:org/repo.git"),
-		"SCP-style URI naming the configured GHES host should be classified as remote")
-	assert.True(t, isLocalSource("git@other.example.com:org/repo.git"),
-		"SCP-style URI naming an unconfigured host should not be treated as the GHES host")
+	tests := []struct {
+		name     string
+		uri      string
+		expected bool
+		reason   string
+	}{
+		{
+			name:     "configured GHES host",
+			uri:      "git@ghe.example.com:org/repo.git",
+			expected: false,
+			reason:   "SCP-style URI naming the configured GHES host should be classified as remote",
+		},
+		{
+			name:     "unconfigured host",
+			uri:      "git@other.example.com:org/repo.git",
+			expected: true,
+			reason:   "SCP-style URI naming an unconfigured host should not be treated as the GHES host",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isLocalSource(tt.uri), tt.reason)
+		})
+	}
 }
 
 // TestIsLocalSourceGHESSCPStyleSingleLabelHost pins CodeRabbit thread PRRT_kwDOEW4XoM6h6mmo: a

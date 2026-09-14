@@ -293,24 +293,46 @@ func TestApplyGitHubRef(t *testing.T) {
 func TestApplyGitHubRef_GHESHost(t *testing.T) {
 	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
 
-	assert.Equal(t,
-		"https://ghes.example.com/raw/owner/repo/v1.2.3/registry.yaml",
-		applyGitHubRef("https://ghes.example.com/owner/repo", "v1.2.3"))
+	tests := []struct {
+		name     string
+		baseURL  string
+		ref      string
+		expected string
+	}{
+		{
+			name:     "GHES owner/repo URL",
+			baseURL:  "https://ghes.example.com/owner/repo",
+			ref:      "v1.2.3",
+			expected: "https://ghes.example.com/raw/owner/repo/v1.2.3/registry.yaml",
+		},
+		{
+			name:     "GHES owner/repo URL with nested path",
+			baseURL:  "https://ghes.example.com/org/repo/path/to/registry.yaml",
+			ref:      "v2.0.0",
+			expected: "https://ghes.example.com/raw/org/repo/v2.0.0/path/to/registry.yaml",
+		},
+		{
+			// A github.com URL is still recognized and converted to raw.githubusercontent.com,
+			// even though RepoEndpoints resolves to the GHES host in this environment.
+			name:     "github.com URL still converted to raw.githubusercontent.com",
+			baseURL:  "https://github.com/owner/repo",
+			ref:      "v1.2.3",
+			expected: "https://raw.githubusercontent.com/owner/repo/v1.2.3/registry.yaml",
+		},
+		{
+			// A host that isn't github.com or the configured GHES host is left unchanged.
+			name:     "unrelated host left unchanged",
+			baseURL:  "https://unrelated.example.com/registry.yaml",
+			ref:      "v1.2.3",
+			expected: "https://unrelated.example.com/registry.yaml",
+		},
+	}
 
-	assert.Equal(t,
-		"https://ghes.example.com/raw/org/repo/v2.0.0/path/to/registry.yaml",
-		applyGitHubRef("https://ghes.example.com/org/repo/path/to/registry.yaml", "v2.0.0"))
-
-	// A github.com URL is still recognized and converted to raw.githubusercontent.com, even
-	// though RepoEndpoints resolves to the GHES host in this environment.
-	assert.Equal(t,
-		"https://raw.githubusercontent.com/owner/repo/v1.2.3/registry.yaml",
-		applyGitHubRef("https://github.com/owner/repo", "v1.2.3"))
-
-	// A host that isn't github.com or the configured GHES host is left unchanged.
-	assert.Equal(t,
-		"https://unrelated.example.com/registry.yaml",
-		applyGitHubRef("https://unrelated.example.com/registry.yaml", "v1.2.3"))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, applyGitHubRef(tt.baseURL, tt.ref))
+		})
+	}
 }
 
 // TestApplyGitHubRef_GHESRawURLUnchanged pins that a configured registry source that is
