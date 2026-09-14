@@ -67,6 +67,14 @@ If no target directory is specified, you will be prompted for one.`,
 			return err
 		}
 
+		// Reject an invalid --update-strategy/--merge-driver/--merge-strategy value
+		// before doing any work; BindFlagsToViper alone doesn't enforce the
+		// WithValidValues constraints registered below (that only happens inside
+		// Parse()), so this command validates explicitly.
+		if err := initParser.ValidateFlagValues(cmd); err != nil {
+			return err
+		}
+
 		// Get flag values with proper precedence: flag > env > config > default.
 		force := v.GetBool("force")
 		update := v.GetBool("update")

@@ -811,6 +811,50 @@ func TestInitCmd_RunE_UpdateStrategyInvalidValueRejected(t *testing.T) {
 	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
 
 	require.Error(t, err)
+	// Rejected by initParser.ValidateFlagValues (the WithValidValues
+	// registration for update-strategy), not by the later
+	// engine.ParseUpdateStrategy call -- proves the framework-standard
+	// validation entry point is actually reachable and firing, rather than
+	// the flag's own separate, redundant string-matching validation being
+	// the only thing catching this.
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MergeDriverInvalidValueRejected covers --merge-driver's own
+// WithValidValues registration: a value outside auto/text must be rejected by
+// initParser.ValidateFlagValues before merge.ParseDriver ever runs, mirroring
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected above.
+func TestInitCmd_RunE_MergeDriverInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("merge-driver", "bogus"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MergeStrategyInvalidValueRejected covers --merge-strategy's
+// own WithValidValues registration: a value outside manual/ours/theirs must be
+// rejected by initParser.ValidateFlagValues before merge.ParseConflictStrategy
+// (via merge.ResolveConflictStrategy) ever runs, mirroring
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected above.
+func TestInitCmd_RunE_MergeStrategyInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("merge-strategy", "bogus"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
 }
 
 // TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected covers the explicit
