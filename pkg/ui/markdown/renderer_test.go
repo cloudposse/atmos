@@ -69,9 +69,14 @@ func TestRenderer(t *testing.T) {
 			},
 		},
 		{
+			// glamour.WithAutoStyle() is intentionally not used (see renderer.go):
+			// without it, "**world**" renders as real ANSI-bold "world" (no
+			// literal asterisks), sourced only from Atmos's own style JSON
+			// rather than silently inheriting unset fields from whichever
+			// terminal-dependent preset WithAutoStyle would have picked.
 			name:         "Test with color",
 			input:        "## Hello **world**",
-			mustContain:  "## Hello **world**",
+			mustContain:  "## Hello world",
 			expectNoANSI: false,
 			atmosConfig: schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
@@ -128,9 +133,13 @@ func TestRenderErrorf(t *testing.T) {
 			isColor:  false,
 		},
 		{
+			// glamour.WithAutoStyle() is intentionally not used (see renderer.go),
+			// so "**world**" renders as real ANSI-bold "world" with no literal
+			// asterisks, matching Atmos's own style JSON rather than a
+			// terminal-dependent preset's leftover prefix/suffix.
 			name:     "Test with color",
 			input:    "## Hello **world**",
-			expected: "  \x1b[;1m## \x1b[0m\x1b[;1mHello \x1b[0m\x1b[;1m**\x1b[0m\x1b[;1mworld\x1b[0m\x1b[;1m**\x1b[0m",
+			expected: "  \x1b[;1m## \x1b[0m\x1b[;1mHello \x1b[0m\x1b[;1mworld\x1b[0m",
 			isColor:  true,
 		},
 	}

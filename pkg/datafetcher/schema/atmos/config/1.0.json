@@ -1807,7 +1807,7 @@
               "type": "null"
             }
           ],
-          "description": "Experimental controls how experimental features are handled.\nValues: \"silence\" (no output), \"disable\" (disabled), \"warn\" (default), \"error\" (exit)."
+          "description": "Experimental controls how experimental features are handled.\nValues: \"silence\" (no output), \"disable\" (disabled), \"warn\", \"warn-daily\" (default, once per feature every 24 hours), \"error\" (exit)."
         },
         "docs": {
           "anyOf": [

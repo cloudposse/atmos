@@ -1456,6 +1456,13 @@ func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
 	runCommand := func() string {
 		output.Reset()
 		iolib.Reset()
+		// Each call simulates an independent top-level atmos invocation (a
+		// separate OS process in real usage, inheriting a clean environment
+		// from the shell). Reset the startup-notices sentinel that
+		// MarkShown() sets via a real os.Setenv call, so the second call
+		// doesn't incorrectly inherit the first call's process-tree
+		// suppression just because this test reuses one OS process.
+		t.Setenv("ATMOS_STARTUP_NOTICES_SHOWN", "")
 		RootCmd.SetArgs([]string{"experimental-notice-test"})
 		require.NoError(t, Execute())
 		return output.String()
@@ -1466,6 +1473,39 @@ func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
 		output := runCommand()
 		assert.Equal(t, 1, strings.Count(output, "experimental-notice-test"))
 	}
+}
+
+func TestShowExperimentalCommandNotice_SuppressedWhenStartupNoticesAlreadyShown(t *testing.T) {
+	_ = NewTestKit(t)
+	t.Setenv("ATMOS_EXPERIMENTAL", "warn")
+	t.Setenv("ATMOS_STARTUP_NOTICES_SHOWN", "1")
+
+	var output strings.Builder
+	originalWriteExperimentalNotice := writeExperimentalNotice
+	writeExperimentalNotice = func(feature string) {
+		output.WriteString(feature)
+		output.WriteByte('\n')
+	}
+	t.Cleanup(func() {
+		writeExperimentalNotice = originalWriteExperimentalNotice
+	})
+
+	command := &cobra.Command{
+		Use:         "experimental-notice-suppressed-test",
+		Annotations: map[string]string{"experimental": "true"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+	}
+	RootCmd.AddCommand(command)
+	t.Cleanup(func() { RootCmd.RemoveCommand(command) })
+
+	iolib.Reset()
+	t.Cleanup(iolib.Reset)
+	RootCmd.SetArgs([]string{"experimental-notice-suppressed-test"})
+	require.NoError(t, Execute())
+
+	assert.Empty(t, output.String(), "notice must be suppressed when startup notices were already shown earlier in the process tree")
 }
 
 func TestShowExperimentalCommandNotice_EdgeCases(t *testing.T) {
@@ -2075,7 +2115,11 @@ func TestExperimentalModeHandling(t *testing.T) {
 		experimentalMode string
 		expectExit       bool
 		expectedExitCode int
+		child            bool
 	}{
+		{name: "warn daily", experimentalMode: "warn-daily"},
+		{name: "disable inherited child", experimentalMode: "disable", expectExit: true, expectedExitCode: 1, child: true},
+		{name: "error inherited child", experimentalMode: "error", expectExit: true, expectedExitCode: 1, child: true},
 		{
 			name:             "silence mode - no output or exit",
 			experimentalMode: "silence",
@@ -2099,7 +2143,7 @@ func TestExperimentalModeHandling(t *testing.T) {
 			expectedExitCode: 1,
 		},
 		{
-			name:             "empty mode defaults to warn - no exit",
+			name:             "empty mode defaults to warn-daily - no exit",
 			experimentalMode: "",
 			expectExit:       false,
 		},
@@ -2109,6 +2153,9 @@ func TestExperimentalModeHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Use NewTestKit to isolate RootCmd state.
 			_ = NewTestKit(t)
+			if tt.child {
+				t.Setenv("ATMOS_STARTUP_NOTICES_SHOWN", "1")
+			}
 
 			// Save and restore os.Exit.
 			originalOsExit := errUtils.OsExit
@@ -2210,7 +2257,7 @@ func TestCheckExperimentalSettings(t *testing.T) {
 			},
 		},
 		{
-			name: "empty experimental mode defaults to warn",
+			name: "empty experimental mode defaults to warn-daily",
 			config: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
@@ -2263,6 +2310,7 @@ func TestCheckExperimentalSettings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
 			originalOsExit := errUtils.OsExit
 			defer func() {
 				errUtils.OsExit = originalOsExit

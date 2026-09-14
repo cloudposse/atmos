@@ -243,3 +243,17 @@ Experimental features should have a clear path to stability:
 
 - [Command Registry Pattern](command-registry-pattern.md) - How commands register with Atmos
 - [Error Handling Strategy](error-handling-strategy.md) - How errors are formatted and returned
+
+## Migration: Daily Warnings (2026-09-14)
+
+The default for `settings.experimental` changes from `warn` to `warn-daily`, which
+shows each feature's warning once every 24 hours using the shared local cache.
+The edition journal preserves the `warn` default for pins before `2026-09-14`;
+explicit configuration and environment overrides continue to take precedence.
+
+The stored value `warn` also has a narrower behavior change: command and setting
+notices previously repeated in child Atmos processes, but are now suppressed after
+the parent handles startup. CI hooks retain their existing `warn` behavior. This
+child-process suppression is not edition-gated because `KindBehavior` resolution
+is not implemented; it is recorded in the editions PRD's behavior-gating roadmap.
+The `error` and `disable` modes remain enforced in all invocations.

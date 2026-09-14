@@ -83,7 +83,6 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 
 	// Initialize glamour renderer
 	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(int(r.width)),
 		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithColorProfile(r.profile),
@@ -182,7 +181,6 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 			return "", err
 		}
 		out, err = glamour.NewTermRenderer(
-			glamour.WithAutoStyle(), // Uses terminal's default style
 			glamour.WithWordWrap(0),
 			glamour.WithStylesFromJSONBytes(style),
 			glamour.WithColorProfile(r.profile),

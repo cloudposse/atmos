@@ -65,6 +65,15 @@ type Entry struct {
 // via viper.SetDefault when a project pins an earlier edition.
 var journal = []Entry{
 	{
+		Date:        "2026-09-14",
+		Key:         "settings.experimental",
+		Kind:        KindValue,
+		Old:         "warn",
+		New:         "warn-daily",
+		Description: "Experimental warnings are shown once per feature every 24 hours using the shared local cache.",
+		Ref:         "https://atmos.tools/cli/configuration/settings/experimental",
+	},
+	{
 		Date:        "2025-02-11",
 		Key:         "logs.file",
 		Kind:        KindValue,
