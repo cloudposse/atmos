@@ -115,8 +115,11 @@ atmos init --update --update-strategy=rendered
 `--update-strategy` controls where the merge's *base* comes from — an independent choice from
 `--merge-strategy`. `tracked` (the default) reads it from the project's own Git history at
 `--base-ref`. `rendered` instead re-renders the template at the ref that produced what's currently
-on disk, using that generation's recorded answers from `.atmos/scaffold.yaml`, with no dependency
-on Git history at all — it requires the project's template to carry a `scaffold.yaml`.
+on disk, using that generation's recorded answers, with no dependency on Git history at all. This
+needs two separate things, not one: the template itself must define a `scaffold.yaml` manifest (so
+the old ref's fields can be resolved when re-rendering), and the project must already carry a prior
+generation's `.atmos/scaffold.yaml` record (a different file, at a different path — it stores that
+generation's recorded answers, not the template's field definitions).
 
 ## Flags and Automation
 
@@ -144,8 +147,10 @@ on Git history at all — it requires the project's template to carry a `scaffol
     Choose where `--update`'s three-way merge base comes from. `tracked` reads it from the
     project's own Git history at `--base-ref`. `rendered` instead re-renders the template at the
     ref that produced what's currently on disk, using that generation's recorded answers, with no
-    dependency on Git history at all — it requires a prior generation's `.atmos/scaffold.yaml`
-    record (so the original answers are recoverable).
+    dependency on Git history at all. This needs the template itself to define a `scaffold.yaml`
+    manifest (so the old ref's fields can be resolved) and the project to already carry a prior
+    generation's `.atmos/scaffold.yaml` record (so the original answers are recoverable) — two
+    separate files, not one.
   </dd>
 
   <dt>`--merge-driver` (default `auto`)</dt>

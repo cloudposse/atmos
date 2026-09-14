@@ -367,8 +367,10 @@ stores, Git, and CI integrations.
     Choose where `--update`'s three-way merge base comes from. `tracked` reads it from the
     target's own Git history at `--base-ref`. `rendered` instead re-renders the template at the
     ref that produced what's currently on disk, using that generation's recorded answers, with no
-    dependency on the target being a Git repository at all — it requires a prior generation's
-    `.atmos/scaffold.yaml` record (so the original answers are recoverable).
+    dependency on the target being a Git repository at all. This needs the template itself to
+    define a `scaffold.yaml` manifest (so the old ref's fields can be resolved) and the target to
+    already carry a prior generation's `.atmos/scaffold.yaml` record (so the original answers are
+    recoverable) — two separate files, not one.
   </dd>
 
   <dt>`--merge-driver` (default `auto`)</dt>
