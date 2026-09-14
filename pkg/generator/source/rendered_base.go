@@ -9,6 +9,59 @@ import (
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
+// ValidateRenderedSource rejects a --update-strategy=rendered generation up
+// front when src/resolvedRef can never produce a project record a later
+// rendered update can actually reconstruct from -- rather than silently
+// generating now and only failing at that later update, once the answers
+// that produced this generation are no longer easily reproducible.
+//
+// A record is reconstructible in exactly two cases:
+//   - src is a pinnable source (see IsPinnableSource: git:: or oci://) and
+//     resolvedRef is non-empty -- the normal case, an immutable commit SHA
+//     or manifest digest recorded as spec.renderedRef.
+//   - src is a non-pinnable source Hydrate can still re-fetch verbatim by
+//     src itself (a local path, file://, or s3::/plain http(s) archive) --
+//     UnpinnedRenderedRefMarker documents that case; it is not immutable,
+//     but a later Hydrate(src) call still succeeds.
+//
+// It is NOT reconstructible for:
+//   - config.SourceEmbedded ("embedded"): a template bundled into the Atmos
+//     binary has no fetchable location Hydrate can re-resolve by that literal
+//     string, so a later rendered update would always fail regardless of
+//     what gets recorded now.
+//   - a pinnable source (git/oci) whose ref failed to resolve: recording
+//     UnpinnedRenderedRefMarker there would corrupt replaceRef's git ref=
+//     query parameter with the literal marker string on the next fetch
+//     attempt (see UnpinnedRenderedRefMarker's own doc comment for why the
+//     marker is safe only for non-git/non-oci sources), so this is
+//     deliberately not treated the same as the local/s3/http case above.
+func ValidateRenderedSource(src, resolvedRef string) error {
+	defer perf.Track(nil, "source.ValidateRenderedSource")()
+
+	if IsPinnableSource(src) {
+		if resolvedRef != "" {
+			return nil
+		}
+		return errUtils.Build(errUtils.ErrRenderedStrategyUnsupportedSource).
+			WithExplanationf("Failed to resolve an immutable commit or digest for `%s`", src).
+			WithHint("`--update-strategy=rendered` needs a resolved ref to pin a future update's merge base to").
+			WithHint("Re-run with `--update-strategy=tracked` instead").
+			WithContext("source", src).
+			WithExitCode(2).
+			Err()
+	}
+	if src == config.SourceEmbedded {
+		return errUtils.Build(errUtils.ErrRenderedStrategyUnsupportedSource).
+			WithExplanationf("`--update-strategy=rendered` is not supported for the embedded `%s` template", src).
+			WithHint("Embedded templates have no location Atmos can re-fetch for a future update's merge base").
+			WithHint("Re-run with `--update-strategy=tracked` instead").
+			WithContext("source", src).
+			WithExitCode(2).
+			Err()
+	}
+	return nil
+}
+
 // RenderedBase bundles ResolveRenderedBase's results (grouped into a struct,
 // rather than four separate return values, to stay under revive's
 // function-result-limit).
