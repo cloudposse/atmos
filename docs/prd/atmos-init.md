@@ -254,8 +254,9 @@ components:
 **Key concept**: The merge base is read directly from git — there is no
 on-disk base snapshot or metadata file. This describes the default
 `--update-strategy=tracked`; `--update-strategy=rendered` instead re-renders
-the template at the ref recorded in `.atmos/scaffold.yaml` (no git dependency
-at all) — which additionally requires the template itself to carry a
+the template at the ref recorded in `.atmos/scaffold.yaml` (without requiring
+the target repository's git history) — which additionally requires the
+template itself to carry a
 `scaffold.yaml` (a separate file from `.atmos/scaffold.yaml`, needed to
 resolve the old ref's fields when re-rendering). See
 `docs/prd/atmos-scaffold.md`'s "Also implemented" section.
