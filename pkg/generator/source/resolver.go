@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -27,6 +28,11 @@ import (
 // DefaultFetchTimeout bounds how long a remote scaffold fetch may take.
 const DefaultFetchTimeout = 5 * time.Minute
 
+// refParamPattern matches an existing ref= query parameter, together with
+// its leading "?" or "&" separator, in a go-getter git source (e.g.
+// "?ref=main" or "&ref=v1").
+var refParamPattern = regexp.MustCompile(`([?&])ref=[^&]*`)
+
 // IsTemplateSource reports whether an init/scaffold template argument looks
 // like a direct source rather than a catalog or embedded template key.
 func IsTemplateSource(value string) bool {
@@ -42,6 +48,23 @@ func IsTemplateSource(value string) bool {
 		vendor.HasLocalPathPrefix(value)
 }
 
+// queryStart is the separator introducing a URI's first query parameter;
+// querySep introduces every subsequent one.
+const (
+	queryStart = "?"
+	querySep   = "&"
+)
+
+// appendRefParam appends "ref=ref" to src using queryStart if src has no
+// query string yet, or querySep if it does.
+func appendRefParam(src, ref string) string {
+	sep := queryStart
+	if strings.Contains(src, queryStart) {
+		sep = querySep
+	}
+	return src + sep + "ref=" + ref
+}
+
 // WithRef applies --ref sugar to a go-getter source. Existing ref query
 // parameters win; local paths and file/OCI/S3 sources are returned unchanged.
 func WithRef(src, ref string) string {
@@ -53,24 +76,42 @@ func WithRef(src, ref string) string {
 	if !vendor.IsGitURI(src) || strings.Contains(src, "ref=") {
 		return src
 	}
-	sep := "?"
-	if strings.Contains(src, "?") {
-		sep = "&"
+	return appendRefParam(src, ref)
+}
+
+// replaceRef force-overrides src's existing ref= query parameter with ref,
+// appending one if none exists. Unlike WithRef (which intentionally leaves
+// an existing ref= alone -- that's the sugar for --ref not clobbering a
+// source that's already pinned), this always wins: it backs
+// pinRenderedRef's need to override a mutable tag/branch (e.g. a recorded
+// source's own "?ref=main") with the resolved, immutable commit SHA, so a
+// moving branch can't change what --update-strategy=rendered's merge base
+// resolves to.
+func replaceRef(src, ref string) string {
+	if src == "" || ref == "" || !vendor.IsGitURI(src) {
+		return src
 	}
-	return src + sep + "ref=" + ref
+	if refParamPattern.MatchString(src) {
+		return refParamPattern.ReplaceAllString(src, "${1}ref="+ref)
+	}
+	return appendRefParam(src, ref)
 }
 
 // pinRenderedRef re-expresses src as a request to fetch exactly renderedRef
 // -- a resolved commit SHA for git sources, an OCI manifest digest for OCI
 // sources (see resolveFetchedGitRef/resolveOCI's respective capture) --
-// overriding whatever mutable ref src's own tag/branch currently names.
-// WithRef's ?ref= query-param sugar only applies to git sources; OCI's
+// overriding whatever mutable ref src's own tag/branch currently names. Git
+// sources go through replaceRef, not WithRef: WithRef intentionally leaves
+// an existing ?ref= alone (that's the sugar for --ref not clobbering an
+// already-pinned source), which would silently keep src's original mutable
+// ref= here and defeat the whole point of pinning to renderedRef. OCI's
 // immutable pin is expressed differently (an explicit @digest), so this
-// dispatches on source kind rather than folding OCI into WithRef itself.
-// WithRef also serves --ref's CLI flag, where the value is a tag/branch
-// name, not a digest -- conflating the two would let a plain --ref value
-// reach Repository.Digest and fail (or worse, silently misresolve) instead
-// of the CLI flag's existing "--ref is ignored for OCI" behavior.
+// dispatches on source kind rather than folding OCI into replaceRef itself.
+// WithRef (unlike replaceRef) also serves --ref's CLI flag, where the value
+// is a tag/branch name, not a digest -- conflating the two would let a plain
+// --ref value reach Repository.Digest and fail (or worse, silently
+// misresolve) instead of the CLI flag's existing "--ref is ignored for OCI"
+// behavior.
 func pinRenderedRef(src, renderedRef string) (string, error) {
 	defer perf.Track(nil, "source.pinRenderedRef")()
 
@@ -84,7 +125,7 @@ func pinRenderedRef(src, renderedRef string) (string, error) {
 		}
 		return "oci://" + pinned, nil
 	}
-	return WithRef(src, renderedRef), nil
+	return replaceRef(src, renderedRef), nil
 }
 
 // Resolve fetches a scaffold template from src (a local path, file://, an
@@ -141,7 +182,28 @@ func resolveOCI(atmosConfig *schema.AtmosConfiguration, name, src string, timeou
 	defer cancel()
 
 	imageRef := strings.TrimPrefix(src, "oci://")
-	if err := oci.ProcessImage(ctx, atmosConfig, imageRef, tempDir); err != nil {
+
+	// Resolve the immutable manifest digest *before* fetching, and fetch
+	// that exact digest reference rather than imageRef's own (possibly
+	// moving) tag/branch, so the digest recorded below for
+	// --update-strategy=rendered's commit-pinning always identifies the
+	// very manifest whose layers were extracted into tempDir -- not a
+	// second, potentially different manifest a tag happened to point to by
+	// the time a separate post-fetch resolution ran. Best-effort: a
+	// resolution failure here falls back to fetching imageRef directly
+	// (today's pre-fix behavior, mirroring resolveFetchedGitRef's own
+	// best-effort git-side resolution), since it only feeds rendered mode's
+	// optional pinning, never the fetch itself.
+	fetchRef := imageRef
+	resolvedDigest := ""
+	if resolved, resolveErr := oci.ResolveImage(ctx, atmosConfig, imageRef); resolveErr == nil {
+		resolvedDigest = resolved.Digest
+		if pinned, pinErr := oci.PinDigest(imageRef, resolved.Digest); pinErr == nil {
+			fetchRef = pinned
+		}
+	}
+
+	if err := oci.ProcessImage(ctx, atmosConfig, fetchRef, tempDir); err != nil {
 		cleanup()
 		return nil, noop, errUtils.Build(errUtils.ErrScaffoldFetchSource).
 			WithCause(err).
@@ -162,14 +224,7 @@ func resolveOCI(atmosConfig *schema.AtmosConfiguration, name, src string, timeou
 		cleanup()
 		return nil, noop, err
 	}
-	// Resolve the immutable manifest digest for --update-strategy=rendered's
-	// commit-pinning, mirroring resolveFetchedGitRef's role for git sources.
-	// Best-effort: a resolution failure here doesn't invalidate the fetch
-	// that already succeeded above, since it only feeds rendered mode's
-	// optional pinning, never the fetch itself.
-	if resolved, resolveErr := oci.ResolveImage(ctx, atmosConfig, imageRef); resolveErr == nil {
-		conf.ResolvedRef = resolved.Digest
-	}
+	conf.ResolvedRef = resolvedDigest
 	// tempDir only exists to read files off disk and is removed by cleanup()
 	// once generation finishes; the recorded provenance must be the original
 	// source the caller passed in, not that ephemeral fetch destination.
