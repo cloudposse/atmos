@@ -261,7 +261,7 @@ template itself to carry a
 resolve the old ref's fields when re-rendering). See
 `docs/prd/atmos-scaffold.md`'s "Also implemented" section.
 
-```
+```text
 Initial generation:
 1. Render template files
 2. Write files to target directory
