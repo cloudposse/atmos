@@ -224,7 +224,7 @@ current schema.
   suppresses those notices after the parent handles startup. CI hooks retain their
   existing `warn` behavior. This child-process suppression is independent of the
   edition pin; only the default value change from `warn` to `warn-daily` is journaled.
-  See [quieter workflow notices](https://atmos.tools/changelog/quieter-workflow-notices)
+  See [PR #3164](https://github.com/cloudposse/atmos/pull/3164)
   and the migration section in `docs/prd/experimental-features-system.md`.
 
   **Not gatable:** the auth credential realm isolation change (2026-02-10,

@@ -71,7 +71,7 @@ var journal = []Entry{
 		Old:         "warn",
 		New:         "warn-daily",
 		Description: "Experimental warnings are shown once per feature every 24 hours using the shared local cache.",
-		Ref:         "https://atmos.tools/cli/configuration/settings/experimental",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3164",
 	},
 	{
 		Date:        "2025-02-11",
