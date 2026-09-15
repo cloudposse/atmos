@@ -1,8 +1,10 @@
 package vendor
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -92,20 +94,36 @@ var vendorCleanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		report, err := lockfile.CleanSelected(&config, components, force, dryRun)
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		basePath := config.BasePathAbsolute
+		if basePath == "" {
+			basePath = config.BasePath
+		}
+		if basePath == "" {
+			basePath = config.BasePathConfigDir
+		}
+		basePath, err = filepath.Abs(basePath)
+		if err != nil {
+			return err
+		}
+		report, err := lockfile.CleanSelectedContext(ctx, &config, components, force, dryRun)
 		if err != nil {
 			return err
 		}
 		for _, path := range report.Removed {
+			path = relativeVendorPathForDisplay(path, basePath)
 			if dryRun {
 				ui.Infof("Would remove %s", path)
 			} else {
-				ui.Infof("Removed %s", path)
+				ui.Successf("Removed %s", path)
 			}
 		}
 		if len(report.Conflicts) > 0 {
 			for _, conflict := range report.Conflicts {
-				ui.Warningf("Preserved modified vendor file %s", conflict.Path)
+				ui.Errorf("Preserved modified vendor file %s", relativeVendorPathForDisplay(conflict.Path, basePath))
 			}
 			return fmt.Errorf("%w: %d", errModifiedVendorFiles, len(report.Conflicts))
 		}
