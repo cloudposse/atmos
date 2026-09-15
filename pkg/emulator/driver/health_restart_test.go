@@ -74,3 +74,25 @@ func TestFlociHealthCheck_UsesItsOwnPort(t *testing.T) {
 			"%s health check should probe port %s, got %q", name, port, hc.Test[1])
 	}
 }
+
+// TestFlociHealthCheck_GCPAzGetLongerStartPeriod guards against a regression to
+// the 60s-total health check budget (10s start_period + 5 retries * 10s
+// interval) that flipped floci/gcp and floci/az to "unhealthy" around 54-56s
+// under CI load -- see docs/fixes for the incident; floci/aws keeps the
+// shared 10s default since it has never shown this race.
+func TestFlociHealthCheck_GCPAzGetLongerStartPeriod(t *testing.T) {
+	awsDriver, err := emu.ResolveDriver("floci/aws")
+	require.NoError(t, err)
+	awsStartPeriod := awsDriver.Defaults().HealthCheck.StartPeriod
+	assert.Equal(t, "10s", awsStartPeriod)
+
+	for _, name := range []string{"floci/gcp", "floci/az"} {
+		d, err := emu.ResolveDriver(name)
+		require.NoError(t, err)
+		hc := d.Defaults().HealthCheck
+		require.NotNil(t, hc)
+		assert.Equal(t, flociGCPAzStartPeriod, hc.StartPeriod, "%s start_period", name)
+		assert.NotEqual(t, awsStartPeriod, hc.StartPeriod,
+			"%s should get a longer start_period than floci/aws's %s default", name, awsStartPeriod)
+	}
+}
