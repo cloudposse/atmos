@@ -161,10 +161,10 @@ Choose the checklist for the user's goal.
 
 1. Install Atmos and create `atmos.yaml` in the existing project.
 2. Add one custom command that calls an existing task, such as `make build`, `just build`, or
-   `task build`.
+    `task build`.
 3. Run `atmos build` and confirm it produces the same result as the original command.
 4. Move task bodies into native steps as needed, preserving parameters, environments, dependency
-   order, and freshness behavior. No stack files or Terraform changes are required.
+    order, and freshness behavior. No stack files or Terraform changes are required.
 
 ### Terraform Orchestration
 
