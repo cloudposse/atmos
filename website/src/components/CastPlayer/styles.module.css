@@ -107,6 +107,12 @@
   text-align: center;
 }
 
+/* Paint full blocks as cell backgrounds: separate SVG viewports antialias
+   fractional edges and expose seams between adjacent progress cells. */
+.terminalBlock {
+  background-color: currentColor;
+}
+
 .drawnGlyph {
   color: transparent;
 }
