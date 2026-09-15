@@ -25,16 +25,11 @@ const (
 	flociDataDir = "/app/data"
 )
 
-// flociHealthCheck uses the GCP and Azure images' own HTTP readiness scripts.
-// These ubi9-micro images have bash but no curl; their scripts require HTTP 200
-// from the cloud-specific health endpoint, including when Azure TLS is enabled.
-// AWS retains its curl probe: any HTTP response, including a 404 on `/`, counts
-// as reachable, while a refused connection fails.
+// flociHealthCheck probes the Floci edge port with Bash, which is present in all
+// Floci images even when curl is absent. A TCP probe supports both HTTP and TLS
+// listeners without depending on an endpoint's response or certificate trust.
 func flociHealthCheck(port int) *schema.ContainerHealthCheck {
-	if port == flociGCPPort || port == flociAzPort {
-		return shellHealthCheck("/usr/local/bin/healthcheck.sh")
-	}
-	return shellHealthCheck(fmt.Sprintf("curl -s -o /dev/null http://localhost:%d/ || exit 1", port))
+	return shellHealthCheck(fmt.Sprintf("bash -c 'exec 3<>/dev/tcp/127.0.0.1/%d'", port))
 }
 
 func init() {

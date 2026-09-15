@@ -74,11 +74,9 @@ func WithToolchainStyle() Option {
 
 // New creates a renderer using the existing Atmos terminal theme.
 func New(total int, live bool, options ...Option) *Renderer {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := ui.NewSpinner()
 	terminalInfo := terminal.New()
-	r := &Renderer{spinner: s, bar: progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor())), active: map[int]Event{}, total: total, live: live, size: func() (int, int, error) {
+	r := &Renderer{spinner: s, bar: ui.NewProgress(), active: map[int]Event{}, total: total, live: live, size: func() (int, int, error) {
 		return terminalInfo.Width(terminal.Stderr), terminalInfo.Height(terminal.Stderr), nil
 	}}
 	for _, option := range options {

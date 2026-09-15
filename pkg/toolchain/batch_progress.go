@@ -46,6 +46,7 @@ type liveBatchRenderer struct {
 	completed int
 }
 
+// newLiveBatchRenderer creates a themed progress display for a batch of tool operations.
 func newLiveBatchRenderer(total int) *liveBatchRenderer {
 	return &liveBatchRenderer{display: batch.New(total, true, batch.WithToolchainStyle())}
 }
