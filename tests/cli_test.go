@@ -1294,6 +1294,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// or an authenticating extraHeader; disable it too so the canary's isolation contract does
 		// not depend on the host's system config being empty.
 		tc.Env["GIT_CONFIG_NOSYSTEM"] = "true"
+		// GIT_CONFIG_PARAMETERS is git's command-scope channel, read independently of the
+		// GIT_CONFIG_COUNT protocol; blank it so an inherited value cannot restore a filtered
+		// insteadOf rewrite, extraheader, or credential helper for a live case.
+		tc.Env["GIT_CONFIG_PARAMETERS"] = ""
 		// git's trace machinery normally redacts Authorization headers, but that only holds if
 		// GIT_TRACE_REDACT is not explicitly disabled. An inherited GIT_TRACE_REDACT=0 (e.g. from
 		// a developer's shell or a CI runner debugging git) would otherwise let git tracing print
