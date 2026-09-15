@@ -444,9 +444,9 @@ func NewInitUI(ioCtx iolib.Context, term terminal.Terminal) *InitUI {
 	return &InitUI{
 		checkmark:    "✓",
 		xMark:        "✗",
-		grayStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
-		successStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("10")),
-		errorStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
+		grayStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)),
+		successStyle: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)),
+		errorStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error)),
 		output:       strings.Builder{},
 		processor:    engine.NewProcessor(),
 		ioCtx:        ioCtx,
@@ -1808,7 +1808,7 @@ func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) 
 	// Display selected template details.
 	atmosui.Writeln("")
 	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Padding(0, 1)
 
 	atmosui.Writeln(descStyle.Render(fmt.Sprintf("Selected template: %s", selectedTemplate)))
