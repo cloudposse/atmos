@@ -255,12 +255,12 @@ func TestValidateRenderedPath_UnrenderedMarkerInPath(t *testing.T) {
 
 // TestHandleExistingFile_UpdateRenderErrorBeforeMerge covers the branch where
 // re-rendering file.Content during --update fails before mergeFile is ever
-// reached. The gitStorage field only needs to be non-nil to pass
+// reached. The baseStorage field only needs to be non-nil to pass
 // handleExistingFile's own precondition check; it's never dereferenced
 // before the render error.
 func TestHandleExistingFile_UpdateRenderErrorBeforeMerge(t *testing.T) {
 	processor := NewProcessor()
-	processor.gitStorage = &storage.GitBaseStorage{}
+	processor.baseStorage = &storage.GitBaseStorage{}
 
 	dir := t.TempDir()
 	fullPath := filepath.Join(dir, "file.txt")

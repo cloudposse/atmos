@@ -738,6 +738,29 @@ func TestResolveImage_PullError(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
 }
 
+// TestPinDigest_Success asserts a tagged reference is re-expressed with the
+// tag discarded and the digest bound on as an explicit "@sha256:..." pin.
+func TestPinDigest_Success(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("a", 64)
+
+	pinned, err := PinDigest("registry.example.com/org/repo:v1", digest)
+
+	require.NoError(t, err)
+	assert.Equal(t, "registry.example.com/org/repo@"+digest, pinned)
+}
+
+// TestPinDigest_InvalidReference asserts a malformed image reference is
+// rejected before any reference manipulation, wrapped in
+// ErrInvalidImageReference -- mirroring TestResolveImage_InvalidReference,
+// since both parse imageName the same way.
+func TestPinDigest_InvalidReference(t *testing.T) {
+	pinned, err := PinDigest("invalid::image//name", "sha256:"+strings.Repeat("a", 64))
+
+	require.Error(t, err)
+	assert.Empty(t, pinned)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidImageReference))
+}
+
 // TestProcessImageWithFS_Success exercises the full pull->extract success
 // path against a real (in-process) registry: manifest resolution, artifact
 // type check, layer retrieval, and extraction all succeed and the layer's
