@@ -15,7 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/signals"
 	"github.com/cloudposse/atmos/pkg/terminal"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -165,7 +165,7 @@ func (w *OutputModeWriter) executeViewportWithIO(runner func(stdout, stderr io.W
 	}
 	model := &outputViewportModel{
 		tail: tail, title: title, width: width, height: height,
-		spinner: spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(theme.GetCurrentStyles().Spinner)),
+		spinner: ui.NewSpinner(),
 	}
 	if w.viewport != nil {
 		model.maxWidth, model.maxHeight = w.viewport.Width, w.viewport.Height

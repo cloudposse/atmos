@@ -161,14 +161,14 @@ func (m *ChatModel) providerSelectView() string {
 	// Title.
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 		MarginBottom(1)
 	content.WriteString(titleStyle.Render("Switch AI Provider"))
 	content.WriteString(newlineChar)
 
 	// Help text.
 	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Margin(0, 0, 1, 0)
 	content.WriteString(helpStyle.Render("\u2191/\u2193: Navigate | Enter: Select | Esc/q: Cancel"))
 	content.WriteString(doubleNewline)
@@ -218,10 +218,10 @@ func (m *ChatModel) renderProviderLine(index int, name, description, currentProv
 
 	selectedStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
-		Background(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
+		Background(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 	currentStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGreen))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
 	normalStyle := lipgloss.NewStyle()
 
 	switch {
@@ -257,14 +257,14 @@ func (m *ChatModel) skillSelectView() string {
 	// Title.
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 		MarginBottom(1)
 	content.WriteString(titleStyle.Render("Switch AI Skill"))
 	content.WriteString(newlineChar)
 
 	// Help text.
 	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Margin(0, 0, 1, 0)
 	content.WriteString(helpStyle.Render("\u2191/\u2193: Navigate | Enter: Select | Esc/q: Cancel"))
 	content.WriteString(doubleNewline)
@@ -305,10 +305,10 @@ func (m *ChatModel) renderSkillLine(index int, skill *skills.Skill, currentSkill
 
 	selectedStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
-		Background(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
+		Background(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 	currentStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGreen))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
 	normalStyle := lipgloss.NewStyle()
 
 	switch {
