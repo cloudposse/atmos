@@ -300,7 +300,7 @@ func statusDot(status string, tty bool) string {
 	if !tty {
 		return " "
 	}
-	color := theme.ColorDarkGray
+	color := theme.GetCurrentColorScheme().TextMuted
 	if status == statusRunning {
 		color = theme.GetSuccessColor()
 	}
