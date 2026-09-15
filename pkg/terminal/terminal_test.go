@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -10,6 +11,7 @@ import (
 	xterm "golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 // setupTest initializes a clean viper instance for testing.
@@ -22,7 +24,7 @@ func setupTest(t *testing.T) func() {
 	// Reset viper for clean test state
 	viper.Reset()
 
-	for _, envVar := range []string{"NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "FORCE_COLOR", "TERM", "COLORTERM", "CI", "COLUMNS"} {
+	for _, envVar := range []string{"NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "FORCE_COLOR", "ATMOS_FORCE_COLOR", "TERM", "COLORTERM", "CI", "COLUMNS"} {
 		t.Setenv(envVar, "")
 	}
 
@@ -1416,4 +1418,35 @@ func TestStreamToFile(t *testing.T) {
 	assert.Equal(t, os.Stdout, streamToFile(Stdout))
 	assert.Equal(t, os.Stderr, streamToFile(Stderr))
 	assert.Nil(t, streamToFile(Stream(999)))
+}
+
+// Theme lookup binds environment variables while other UI components detect the
+// terminal. All global Viper reads, including config decoding, must share its lock.
+func TestBuildConfig_ConcurrentThemeBinding(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+	viper.Set("settings.terminal.force_color", true)
+
+	const iterations = 200
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		<-start
+		for range iterations {
+			_ = viperguard.BindEnv("settings.terminal.theme", "ATMOS_THEME", "THEME")
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		for range iterations {
+			cfg := buildConfig()
+			assert.True(t, cfg.AtmosConfig.Settings.Terminal.ForceColor)
+			assert.True(t, cfg.ForceColor)
+		}
+	}()
+	close(start)
+	wg.Wait()
 }
