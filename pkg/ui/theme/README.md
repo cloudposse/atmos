@@ -40,6 +40,7 @@ style, err := theme.ConvertToGlamourStyle(dracula)
 New themes can be added to `themes.json`. Each theme should include:
 - Standard terminal colors (black, red, green, yellow, blue, magenta, cyan, white, and bright variants)
 - Background and foreground colors
+- Optional `progressStart` and `progressEnd` gradient colors; omitted endpoints use the theme's cyan and green. The Atmos theme explicitly uses `#5A56E0` → `#EE6FF8` (purple → pink).
 - Metadata including `isDark` flag and credits
 
 The "default" theme is the first entry and is optimized for Atmos output.
