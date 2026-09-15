@@ -10,7 +10,7 @@ case "$mode" in
 	*) echo "Unknown Helm Diff mode: $mode" >&2; exit 1 ;;
 esac
 
-# Use a private directory for installation, retries, and each restored copy.
+# Use a private directory for the Atmos-managed install and each restored copy.
 # Convert paths explicitly for native Helm on Windows and tar under Git Bash.
 temp_root="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 if command -v cygpath >/dev/null 2>&1; then
@@ -36,26 +36,22 @@ verify_version() {
 }
 
 if [[ "$mode" == prepare ]]; then
-	for attempt in 1 2 3; do
-		# Helm may leave a registered but incomplete plugin after a failed hook.
-		# Only remove this action's own staging directory before retrying.
-		rm -rf "$plugin_root/plugins"
-		mkdir -p "$plugin_root/plugins"
-		if helm plugin install https://github.com/databus23/helm-diff --version "$version"; then
-			break
-		else
-			status=$?
-			if [[ "$attempt" == 3 ]]; then
-				echo "Helm Diff installation failed after $attempt attempts" >&2
-				exit "$status"
-			fi
-			sleep "$((attempt * 15))"
-		fi
-	done
+	# Atmos owns installation, transient retries, and binary version validation.
+	# Scope XDG to this invocation; acceptance tests retain their normal defaults.
+	cache_root="$plugin_root/cache"
+	if command -v cygpath >/dev/null 2>&1; then
+		cache_root="$(cygpath -w "$cache_root")"
+	fi
+	ATMOS_XDG_CACHE_HOME="$cache_root" atmos helm plugin install "diff@$version"
+	plugin_dir="$plugin_root/cache/atmos/toolchain/helm-plugins"
+	export HELM_PLUGINS="$plugin_dir"
+	if command -v cygpath >/dev/null 2>&1; then
+		HELM_PLUGINS="$(cygpath -w "$HELM_PLUGINS")"
+	fi
 	verify_version
 	mkdir -p "$(dirname "$archive")"
 	# Artifact uploads normalize file modes; a tarball preserves the executable.
-	tar --exclude=.git -czf "$archive" -C "$plugin_root/plugins" .
+	tar --exclude=.git -czf "$archive" -C "$plugin_dir" .
 else
 	mkdir -p "$plugin_root/plugins"
 	tar -xzf "$archive" -C "$plugin_root/plugins"

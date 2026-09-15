@@ -11,29 +11,21 @@ import unittest
 
 SCRIPT = Path(__file__).with_name("helm-diff.sh").resolve()
 VERSION = "v3.15.10"
+FAKE_ATMOS = r'''#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == "helm plugin install diff@v3.15.10" ]]
+echo install >> "$TEST_LOG"
+if [[ "${FAIL_INSTALL:-false}" == true ]]; then exit 42; fi
+plugins="$ATMOS_XDG_CACHE_HOME/atmos/toolchain/helm-plugins"
+mkdir -p "$plugins/helm-diff/bin" "$plugins/helm-diff/.git"
+echo metadata > "$plugins/helm-diff/.git/config"
+printf '#!/usr/bin/env bash\necho "%s"\n' "${INSTALL_VERSION:-v3.15.10}" > "$plugins/helm-diff/bin/diff"
+chmod +x "$plugins/helm-diff/bin/diff"
+'''
 FAKE_HELM = r'''#!/usr/bin/env bash
 set -euo pipefail
-if [[ "$1 $2" == "plugin install" ]]; then
-    echo install >> "$TEST_LOG"
-    attempts=$(wc -l < "$TEST_LOG")
-    # Failed installs leave debris that must be removed before retrying.
-    if [[ -e "$HELM_PLUGINS/partial" ]]; then exit 91; fi
-    touch "$HELM_PLUGINS/partial"
-    if (( attempts <= ${FAIL_COUNT:-0} )); then
-        echo "simulated upstream HTTP 500" >&2
-        exit 42
-    fi
-    rm "$HELM_PLUGINS/partial"
-    mkdir -p "$HELM_PLUGINS/helm-diff/bin"
-    mkdir -p "$HELM_PLUGINS/helm-diff/.git"
-    echo "clone metadata" > "$HELM_PLUGINS/helm-diff/.git/config"
-    printf '#!/usr/bin/env bash\necho "%s"\n' "${INSTALL_VERSION:-v3.15.10}" > "$HELM_PLUGINS/helm-diff/bin/diff"
-    chmod +x "$HELM_PLUGINS/helm-diff/bin/diff"
-elif [[ "$1 $2" == "diff version" ]]; then
-    "$HELM_PLUGINS/helm-diff/bin/diff"
-else
-    exit 92
-fi
+[[ "$*" == "diff version" ]]
+"$HELM_PLUGINS/helm-diff/bin/diff"
 '''
 
 
@@ -46,14 +38,13 @@ class HelmDiffTest(unittest.TestCase):
         self.bin.mkdir()
         for name, contents in {
             "helm": FAKE_HELM,
-            "sleep": '#!/usr/bin/env bash\nprintf "%s\\n" "$1" >> "$TEST_SLEEPS"\n',
+            "atmos": FAKE_ATMOS,
         }.items():
             executable = self.bin / name
             executable.write_text(contents)
             executable.chmod(0o755)
         self.archive = self.root / "artifact" / "plugin.tar.gz"
         self.log = self.root / "installs"
-        self.sleeps = self.root / "sleeps"
         self.github_env = self.root / "github-env"
         self.env = {
             **os.environ,
@@ -61,8 +52,6 @@ class HelmDiffTest(unittest.TestCase):
             "RUNNER_TEMP": str(self.root),
             "GITHUB_ENV": str(self.github_env),
             "TEST_LOG": str(self.log),
-            "TEST_SLEEPS": str(self.sleeps),
-            "FAIL_COUNT": "0",
             "INSTALL_VERSION": VERSION,
         }
 
@@ -88,20 +77,11 @@ class HelmDiffTest(unittest.TestCase):
         plugins = Path(self.github_env.read_text().strip().split("=", 1)[1])
         self.assertTrue(os.access(plugins / "helm-diff/bin/diff", os.X_OK))
         self.assertEqual(self.log.read_text().splitlines(), ["install"])
-        self.assertFalse(self.sleeps.exists())
 
-    def test_transient_failures_retry_with_clean_staging(self):
-        self.assert_success(self.run_action("prepare", FAIL_COUNT="2"))
-        self.assertEqual(self.sleeps.read_text().splitlines(), ["15", "30"])
-        self.assertEqual(len(self.log.read_text().splitlines()), 3)
-        self.assertTrue(self.archive.exists())
-
-    def test_exhaustion_preserves_error_and_cleans_staging(self):
-        result = self.run_action("prepare", FAIL_COUNT="3")
+    def test_atmos_failure_is_propagated_without_shell_retries(self):
+        result = self.run_action("prepare", FAIL_INSTALL="true")
         self.assertEqual(result.returncode, 42)
-        self.assertIn("simulated upstream HTTP 500", result.stderr)
-        self.assertEqual(self.sleeps.read_text().splitlines(), ["15", "30"])
-        self.assertEqual(len(self.log.read_text().splitlines()), 3)
+        self.assertEqual(self.log.read_text().splitlines(), ["install"])
         self.assertFalse(self.archive.exists())
         self.assertEqual(list(self.root.glob("helm-diff.*")), [])
 

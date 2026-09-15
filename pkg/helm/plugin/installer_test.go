@@ -3,8 +3,13 @@ package plugin
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,11 +31,25 @@ type fakeRunner struct {
 	listOutput string
 	// installErr, if set, is returned for `helm plugin install`.
 	installErr error
+	hook       func(context.Context, []string, string) (bool, string, string, error)
 }
 
-func (f *fakeRunner) Run(_ context.Context, name string, args, extraEnv []string) (string, string, error) {
+func (f *fakeRunner) Run(ctx context.Context, name string, args, extraEnv []string) (string, string, error) {
 	f.calls = append(f.calls, recordedCall{name: name, args: append([]string(nil), args...), env: append([]string(nil), extraEnv...)})
 
+	dir := strings.TrimPrefix(extraEnv[0], "HELM_PLUGINS=")
+	if f.hook != nil {
+		if handled, out, stderr, err := f.hook(ctx, args, dir); handled {
+			return out, stderr, err
+		}
+	}
+	if len(args) == 2 && args[0] == "diff" {
+		data, err := os.ReadFile(filepath.Join(dir, "diff", "version"))
+		if err == nil {
+			return string(data), "", nil
+		}
+		return parsePluginList(f.listOutput)["diff"], "", nil
+	}
 	if len(args) >= 2 && args[0] == "plugin" {
 		switch args[1] {
 		case "list":
@@ -39,7 +58,18 @@ func (f *fakeRunner) Run(_ context.Context, name string, args, extraEnv []string
 			if f.installErr != nil {
 				return "", "boom", f.installErr
 			}
-			return "", "", nil
+			version := "1.0.0"
+			if len(args) == 5 {
+				version = strings.TrimPrefix(args[4], "v")
+			}
+			pluginDir := filepath.Join(dir, "diff")
+			if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+				return "", "", err
+			}
+			if err := os.WriteFile(filepath.Join(pluginDir, "plugin.yaml"), []byte(fmt.Sprintf("name: diff\nversion: %s\n", version)), 0o644); err != nil {
+				return "", "", err
+			}
+			return "", "", os.WriteFile(filepath.Join(pluginDir, "version"), []byte(version), 0o644)
 		case "uninstall":
 			return "", "", nil
 		}
@@ -68,7 +98,18 @@ func (f *fakeRunner) uninstallCalls() []recordedCall {
 }
 
 func newTestInstaller(r Runner, dir string) *Installer {
-	return NewInstaller("/fake/helm", WithRunner(r), WithDir(dir))
+	inst := NewInstaller("/fake/helm", WithRunner(r), WithDir(dir))
+	zero := time.Duration(0)
+	inst.retryConfig.InitialDelay = &zero
+	inst.fetchArchive = func(ctx context.Context, source, stage string) error {
+		version := strings.Split(strings.Split(source, "/download/")[1], "/")[0]
+		stdout, stderr, err := r.Run(ctx, "/fake/helm", []string{"plugin", "install", source, "--version", version}, []string{"HELM_PLUGINS=" + stage})
+		if err != nil {
+			return fmt.Errorf("%w: %s %s", err, stdout, stderr)
+		}
+		return nil
+	}
+	return inst
 }
 
 func TestEnsurePlugins_InstallsMissing(t *testing.T) {
@@ -84,8 +125,9 @@ func TestEnsurePlugins_InstallsMissing(t *testing.T) {
 
 	installs := runner.installCalls()
 	require.Len(t, installs, 1)
-	assert.Equal(t, []string{"plugin", "install", "https://github.com/databus23/helm-diff", "--version", "v3.9.4"}, installs[0].args)
-	assert.Contains(t, installs[0].env, "HELM_PLUGINS="+dir)
+	assert.Equal(t, []string{"plugin", "install", installURL(Spec{URL: diffRepository, Version: "v3.9.4"}, runtime.GOOS, runtime.GOARCH), "--version", "v3.9.4"}, installs[0].args)
+	assert.NotContains(t, installs[0].env, "HELM_PLUGINS="+dir)
+	assert.FileExists(t, filepath.Join(dir, "diff", "plugin.yaml"))
 	assert.Empty(t, runner.uninstallCalls())
 }
 
