@@ -284,6 +284,16 @@ jobs:
           cache: restore-and-save
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Install once per platform instead of downloading the same release in
+      # every acceptance shard. Consumers restore independent plugin directories.
+      - name: Prepare Helm Diff for downstream jobs
+        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        uses: ./.github/actions/setup-helm-diff
+        with:
+          mode: prepare
+          target: ${{ matrix.target }}
+          version: ${{ env.HELM_DIFF_VERSION }}
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -478,9 +488,12 @@ jobs:
           helm version --short
           helmfile version
 
-      - name: Install helm-diff plugin
+      - name: Restore the prepared Helm Diff plugin
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: helm plugin install https://github.com/databus23/helm-diff --version ${{ env.HELM_DIFF_VERSION }}
+        uses: ./.github/actions/setup-helm-diff
+        with:
+          target: ${{ matrix.flavor.target }}
+          version: ${{ env.HELM_DIFF_VERSION }}
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -717,9 +730,12 @@ jobs:
           helm version --short
           helmfile version
 
-      - name: Install helm-diff plugin
+      - name: Restore the prepared Helm Diff plugin
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: helm plugin install https://github.com/databus23/helm-diff --version ${{ env.HELM_DIFF_VERSION }}
+        uses: ./.github/actions/setup-helm-diff
+        with:
+          target: ${{ matrix.flavor.target }}
+          version: ${{ env.HELM_DIFF_VERSION }}
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -826,6 +842,9 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+
+      - name: Test Helm Diff artifact preparation and restoration
+        run: python3 .github/actions/setup-helm-diff/test_helm_diff.py
 
       - name: Run magefiles unit tests with coverage
         run: go test -tags=mage -race -coverprofile=magefiles-coverage.out ./magefiles/...

@@ -1,0 +1,151 @@
+"""Exercise the action with real tar archives and a local fake Helm executable."""
+
+import concurrent.futures
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+
+
+SCRIPT = Path(__file__).with_name("helm-diff.sh").resolve()
+VERSION = "v3.15.10"
+FAKE_HELM = r'''#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1 $2" == "plugin install" ]]; then
+    echo install >> "$TEST_LOG"
+    attempts=$(wc -l < "$TEST_LOG")
+    # Failed installs leave debris that must be removed before retrying.
+    if [[ -e "$HELM_PLUGINS/partial" ]]; then exit 91; fi
+    touch "$HELM_PLUGINS/partial"
+    if (( attempts <= ${FAIL_COUNT:-0} )); then
+        echo "simulated upstream HTTP 500" >&2
+        exit 42
+    fi
+    rm "$HELM_PLUGINS/partial"
+    mkdir -p "$HELM_PLUGINS/helm-diff/bin"
+    printf '#!/usr/bin/env bash\necho "%s"\n' "${INSTALL_VERSION:-v3.15.10}" > "$HELM_PLUGINS/helm-diff/bin/diff"
+    chmod +x "$HELM_PLUGINS/helm-diff/bin/diff"
+elif [[ "$1 $2" == "diff version" ]]; then
+    "$HELM_PLUGINS/helm-diff/bin/diff"
+else
+    exit 92
+fi
+'''
+
+
+class HelmDiffTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="helm diff tests ")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        for name, contents in {
+            "helm": FAKE_HELM,
+            "sleep": '#!/usr/bin/env bash\nprintf "%s\\n" "$1" >> "$TEST_SLEEPS"\n',
+        }.items():
+            executable = self.bin / name
+            executable.write_text(contents)
+            executable.chmod(0o755)
+        self.archive = self.root / "artifact" / "plugin.tar.gz"
+        self.log = self.root / "installs"
+        self.sleeps = self.root / "sleeps"
+        self.github_env = self.root / "github-env"
+        self.env = {
+            **os.environ,
+            "PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
+            "RUNNER_TEMP": str(self.root),
+            "GITHUB_ENV": str(self.github_env),
+            "TEST_LOG": str(self.log),
+            "TEST_SLEEPS": str(self.sleeps),
+            "FAIL_COUNT": "0",
+            "INSTALL_VERSION": VERSION,
+        }
+
+    def run_action(self, mode, **env):
+        return subprocess.run(
+            ["bash", str(SCRIPT), mode, VERSION, str(self.archive)],
+            env={**self.env, **env},
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+
+    def assert_success(self, result):
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_prepare_restore_preserves_executable_without_installing(self):
+        self.assert_success(self.run_action("prepare"))
+        self.assertEqual(list(self.root.glob("helm-diff.*")), [])
+        self.assert_success(self.run_action("restore"))
+        plugins = Path(self.github_env.read_text().strip().split("=", 1)[1])
+        self.assertTrue(os.access(plugins / "helm-diff/bin/diff", os.X_OK))
+        self.assertEqual(self.log.read_text().splitlines(), ["install"])
+        self.assertFalse(self.sleeps.exists())
+
+    def test_transient_failures_retry_with_clean_staging(self):
+        self.assert_success(self.run_action("prepare", FAIL_COUNT="2"))
+        self.assertEqual(self.sleeps.read_text().splitlines(), ["15", "30"])
+        self.assertEqual(len(self.log.read_text().splitlines()), 3)
+        self.assertTrue(self.archive.exists())
+
+    def test_exhaustion_preserves_error_and_cleans_staging(self):
+        result = self.run_action("prepare", FAIL_COUNT="3")
+        self.assertEqual(result.returncode, 42)
+        self.assertIn("simulated upstream HTTP 500", result.stderr)
+        self.assertEqual(self.sleeps.read_text().splitlines(), ["15", "30"])
+        self.assertEqual(len(self.log.read_text().splitlines()), 3)
+        self.assertFalse(self.archive.exists())
+        self.assertEqual(list(self.root.glob("helm-diff.*")), [])
+
+    def test_wrong_version_is_not_published(self):
+        result = self.run_action("prepare", INSTALL_VERSION="v0.0.0")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("version mismatch", result.stderr)
+        self.assertFalse(self.archive.exists())
+        self.assertEqual(list(self.root.glob("helm-diff.*")), [])
+
+    def test_restore_rejects_wrong_version(self):
+        self.assert_success(self.run_action("prepare"))
+        result = subprocess.run(
+            ["bash", str(SCRIPT), "restore", "v0.0.0", str(self.archive)],
+            env=self.env, capture_output=True, text=True, timeout=20, check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("version mismatch", result.stderr)
+        self.assertFalse(self.github_env.exists())
+        self.assertEqual(list(self.root.glob("helm-diff.*")), [])
+
+    def test_corrupt_archive_fails_without_install_fallback(self):
+        self.archive.parent.mkdir()
+        self.archive.write_text("not a tarball")
+        self.assertNotEqual(self.run_action("restore").returncode, 0)
+        self.assertFalse(self.log.exists())
+        self.assertFalse(self.github_env.exists())
+        self.assertEqual(list(self.root.glob("helm-diff.*")), [])
+
+    def test_parallel_consumers_have_independent_copies(self):
+        self.assert_success(self.run_action("prepare"))
+
+        def restore(index):
+            env_file = self.root / f"github-env-{index}"
+            self.assert_success(self.run_action("restore", GITHUB_ENV=str(env_file)))
+            return Path(env_file.read_text().strip().split("=", 1)[1])
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            paths = list(pool.map(restore, range(4)))
+        self.assertEqual(len(set(paths)), 4)
+        (paths[0] / "helm-diff/bin/diff").unlink()
+        for plugins in paths[1:]:
+            self.assertTrue(os.access(plugins / "helm-diff/bin/diff", os.X_OK))
+        self.assertEqual(self.log.read_text().splitlines(), ["install"])
+
+    def test_unknown_mode_fails_before_installing(self):
+        self.assertNotEqual(self.run_action("invalid").returncode, 0)
+        self.assertFalse(self.log.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
