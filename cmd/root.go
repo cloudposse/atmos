@@ -601,7 +601,7 @@ var RootCmd = &cobra.Command{
 		if experimentalCmd != "" {
 			experimentalMode := tmpConfig.Settings.Experimental
 			if experimentalMode == "" {
-				experimentalMode = "warn" // Default
+				experimentalMode = "warn-daily" // Default.
 			}
 
 			switch experimentalMode {
@@ -616,8 +616,10 @@ var RootCmd = &cobra.Command{
 						Err(),
 					"", "",
 				)
-			case "warn":
-				showExperimentalCommandNotice(cmd, experimentalCmd)
+			case "warn", "warn-daily":
+				if shouldShowExperimentalWarning(experimentalWarningKey(cmd, experimentalCmd), experimentalMode) {
+					showExperimentalCommandNotice(cmd, experimentalCmd)
+				}
 			case "error":
 				showExperimentalCommandNotice(cmd, experimentalCmd)
 				errUtils.CheckErrorPrintAndExit(
@@ -659,6 +661,12 @@ var RootCmd = &cobra.Command{
 			cicache.AutoRestore(cmd, &tmpConfig)
 			cistartup.PrintStartupStatus(&tmpConfig)
 		}
+
+		// Mark startup notices as handled for this process tree so any atmos
+		// child processes spawned later (workflow/custom-command steps re-exec
+		// the binary per component) inherit the suppression via the OS
+		// environment and skip reprinting the banner.
+		cistartup.MarkShown()
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		castcmd.FinalizeRecording()
@@ -1114,7 +1122,7 @@ func resetExperimentalCommandNotices(cmd *cobra.Command) {
 }
 
 // checkExperimentalSettings checks if any experimental settings are enabled in the config
-// and applies the same experimental mode handling (silence/warn/error/disable) as commands.
+// and applies the same experimental mode handling as commands.
 // This extends the experimental system to cover non-command features gated by config values.
 func checkExperimentalSettings(atmosConfig *schema.AtmosConfiguration) {
 	if atmosConfig == nil {
@@ -1136,7 +1144,7 @@ func checkExperimentalSettings(atmosConfig *schema.AtmosConfiguration) {
 
 	experimentalMode := atmosConfig.Settings.Experimental
 	if experimentalMode == "" {
-		experimentalMode = "warn"
+		experimentalMode = "warn-daily"
 	}
 
 	for _, feature := range features {
@@ -1151,8 +1159,10 @@ func checkExperimentalSettings(atmosConfig *schema.AtmosConfiguration) {
 					Err(),
 				"", "",
 			)
-		case "warn":
-			ui.Experimental(feature)
+		case "warn", "warn-daily":
+			if shouldShowExperimentalWarning(feature, experimentalMode) {
+				writeExperimentalNotice(feature)
+			}
 		case "error":
 			ui.Experimental(feature)
 			errUtils.CheckErrorPrintAndExit(
@@ -1164,6 +1174,26 @@ func checkExperimentalSettings(atmosConfig *schema.AtmosConfiguration) {
 			)
 		}
 	}
+}
+
+// shouldShowExperimentalWarning only controls notices; error and disable modes
+// must still be enforced in nested invocations and after a warning was cached.
+func shouldShowExperimentalWarning(feature, mode string) bool {
+	if mode == "warn-daily" {
+		return cfg.ClaimExperimentalWarning(feature)
+	}
+	return !cistartup.AlreadyShown()
+}
+
+// experimentalWarningKey identifies the experimental command family by its
+// full path, so equally named subcommands in different families do not collide.
+func experimentalWarningKey(cmd *cobra.Command, feature string) string {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Name() == feature {
+			return strings.TrimPrefix(c.CommandPath(), c.Root().Name()+" ")
+		}
+	}
+	return feature
 }
 
 // isTopLevelCommand returns true if cmd is a direct child of the root command.

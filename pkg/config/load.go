@@ -912,7 +912,8 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
 	v.SetDefault("settings.terminal.speed", 0.0)
-	v.SetDefault("settings.experimental", "warn") // Experimental feature handling: silence, disable, warn, error
+	// Warn once per feature every 24 hours; earlier editions restore warn.
+	v.SetDefault("settings.experimental", "warn-daily")
 	// Provenance annotations in `describe component` output, on by default (journaled in pkg/edition).
 	v.SetDefault("describe.provenance", true)
 	// Scope of `describe component` output: the stack-manifest ("schema") sections
