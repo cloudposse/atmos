@@ -17,8 +17,9 @@ func NewProgress(opts ...progress.Option) progress.Model {
 	defer perf.Track(nil, "ui.NewProgress")()
 
 	styles := theme.GetCurrentStyles()
+	scheme := theme.GetCurrentColorScheme()
 	defaults := []progress.Option{
-		progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()),
+		progress.WithGradient(scheme.ProgressStart, scheme.ProgressEnd),
 		progress.WithColorProfile(GetColorProfile()),
 		func(bar *progress.Model) {
 			bar.EmptyColor = fmt.Sprint(styles.Muted.GetForeground())

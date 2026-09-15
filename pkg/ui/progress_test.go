@@ -113,3 +113,17 @@ func TestProgressPreservesCallerOptions(t *testing.T) {
 	assert.Contains(t, view, termenv.String("█").Foreground(termenv.TrueColor.Color("#ff0000")).String())
 	assert.Contains(t, view, termenv.String("░").Foreground(termenv.TrueColor.Color("#0000ff")).String())
 }
+
+func TestAtmosProgressMatchesOriginalGradient(t *testing.T) {
+	t.Setenv("ATMOS_THEME", "atmos")
+	original := GetColorProfile()
+	t.Cleanup(func() { SetColorProfile(original) })
+	for _, profile := range []termenv.Profile{termenv.TrueColor, termenv.ANSI256, termenv.Ascii} {
+		SetColorProfile(profile)
+		actual := NewProgress(progress.WithWidth(20), progress.WithoutPercentage())
+		legacy := progress.New(progress.WithDefaultGradient(), progress.WithColorProfile(profile),
+			progress.WithWidth(20), progress.WithoutPercentage())
+		// Empty cells retain Atmos's muted styling; compare every filled gradient cell.
+		assert.Equal(t, legacy.ViewAs(1), actual.ViewAs(1))
+	}
+}
