@@ -4,6 +4,7 @@ import concurrent.futures
 import os
 from pathlib import Path
 import subprocess
+import tarfile
 import tempfile
 import unittest
 
@@ -24,6 +25,8 @@ if [[ "$1 $2" == "plugin install" ]]; then
     fi
     rm "$HELM_PLUGINS/partial"
     mkdir -p "$HELM_PLUGINS/helm-diff/bin"
+    mkdir -p "$HELM_PLUGINS/helm-diff/.git"
+    echo "clone metadata" > "$HELM_PLUGINS/helm-diff/.git/config"
     printf '#!/usr/bin/env bash\necho "%s"\n' "${INSTALL_VERSION:-v3.15.10}" > "$HELM_PLUGINS/helm-diff/bin/diff"
     chmod +x "$HELM_PLUGINS/helm-diff/bin/diff"
 elif [[ "$1 $2" == "diff version" ]]; then
@@ -79,6 +82,8 @@ class HelmDiffTest(unittest.TestCase):
     def test_prepare_restore_preserves_executable_without_installing(self):
         self.assert_success(self.run_action("prepare"))
         self.assertEqual(list(self.root.glob("helm-diff.*")), [])
+        with tarfile.open(self.archive) as archive:
+            self.assertFalse(any(".git" in Path(name).parts for name in archive.getnames()))
         self.assert_success(self.run_action("restore"))
         plugins = Path(self.github_env.read_text().strip().split("=", 1)[1])
         self.assertTrue(os.access(plugins / "helm-diff/bin/diff", os.X_OK))

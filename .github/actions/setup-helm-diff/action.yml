@@ -40,3 +40,4 @@ runs:
         path: ${{ runner.temp }}/helm-diff-artifact/plugin.tar.gz
         if-no-files-found: error
         retention-days: 7
+        overwrite: true
