@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd"
+	"github.com/cloudposse/atmos/tests/testhelpers/gitmirror"
 )
 
 // setupJITSourceWorkdirFixture gives each test its own writable fixture whose
@@ -24,7 +25,7 @@ func setupJITSourceWorkdirFixture(t *testing.T) {
 
 	sandbox := t.TempDir()
 	require.NoError(t, os.CopyFS(sandbox, os.DirFS(fixture)))
-	rewriteJITSourceURIs(t, sandbox, initJITSourceRepo(t))
+	gitmirror.RewriteJITSourceURIs(t, sandbox, gitmirror.InitJITSourceRepo(t))
 	t.Chdir(sandbox)
 }
 
