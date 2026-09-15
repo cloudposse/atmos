@@ -76,10 +76,9 @@ replaces previously implicit sequential behavior. Define its default only in the
 configuration defaults layer, allowing `SetDefault` rollback and explicit settings
 to win. Include journal listings, descriptions, and default invariant tests.
 
-The implementation uses **2026-09-15** as its feature date. Before merging, align
-the date with the actual merge date and replace the journal's design reference
-with the implementation PR URL. This metadata cannot be finalized before that
-PR and merge date exist.
+The implementation is tracked in [PR #3169](https://github.com/cloudposse/atmos/pull/3169)
+and uses **2026-09-15** as its feature date. Before merging, align this date and
+the corresponding journal, documentation, and tests with the actual merge date.
 
 ## Execution and integrity
 
@@ -88,9 +87,9 @@ PR and merge date exist.
 Split installation into:
 
 1. **Prepare:** fetch to private temporary storage, apply preparation rules, and
-   collect inventory/provenance for an opaque prepared receipt.
+    collect inventory/provenance for an opaque prepared receipt.
 2. **Materialize:** copy files, reconcile ownership, prune stale files, and record
-   the successful receipt under mutation locks.
+    the successful receipt under mutation locks.
 
 Build the entire selection before materialization. Preserve imported-source,
 source/target, and component-before-mixin order; sort component-type groups.
