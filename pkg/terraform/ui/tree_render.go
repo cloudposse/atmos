@@ -47,7 +47,7 @@ func (t *DependencyTree) RenderTreeWithConfig(config *RenderConfig) string {
 	var b strings.Builder
 
 	// Header style.
-	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)).Bold(true)
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).Bold(true)
 
 	// Render stack/component header (cyan, bold) - aligned with tree.
 	fmt.Fprintf(&b, "     %s\n", headerStyle.Render(t.Stack+"/"+t.Component))
@@ -148,12 +148,12 @@ func BuildRenderConfig(uiConfig schema.TerraformUI) *RenderConfig {
 // display options (Compact, ShowAttributeBar, MaxLines) while filling in default styles.
 func resolveRenderConfig(config *RenderConfig) *RenderConfig {
 	resolved := &RenderConfig{
-		CreateStyle: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen)),
-		UpdateStyle: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorYellow)),
-		DeleteStyle: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed)),
-		DimStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)),
-		TreeStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)),
-		BarStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray)),
+		CreateStyle: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)),
+		UpdateStyle: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Warning)),
+		DeleteStyle: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error)),
+		DimStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)),
+		TreeStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)),
+		BarStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)),
 	}
 	if config != nil {
 		resolved.ShowAttributeBar = config.ShowAttributeBar
@@ -243,7 +243,7 @@ func forcesReplacementAnnotation(change *AttributeChange) string {
 	if !change.ForcesReplacement {
 		return ""
 	}
-	replaceStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange))
+	replaceStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Warning))
 	return spaceChar + replaceStyle.Render("# forces replacement")
 }
 
@@ -590,12 +590,13 @@ func renderMultilineValueSimple(b *strings.Builder, content, indent, symbol stri
 	}
 }
 
+// colorizedActionSymbol maps a Terraform resource action to an indicator in its semantic theme color.
 func colorizedActionSymbol(action string) string {
-	createStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
-	updateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorYellow))
-	deleteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
-	readStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
-	replaceStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange)) // Orange for replace (delete+create).
+	createStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
+	updateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Warning))
+	deleteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error))
+	readStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link))
+	replaceStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Warning)) // Orange for replace (delete+create).
 
 	// Use colored dots (●) for all actions with different colors:
 	// - Green: create
@@ -668,8 +669,8 @@ func countActions(node *TreeNode, add, change, remove *int) {
 // noChangesBadge renders the "NO CHANGES" badge shown when a plan has no changes.
 func noChangesBadge() string {
 	return lipgloss.NewStyle().
-		Background(lipgloss.Color(theme.ColorDarkGray)).
-		Foreground(lipgloss.Color(theme.ColorWhite)).
+		Background(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextPrimary)).
 		Bold(true).
 		Padding(0, 1).
 		Render("NO CHANGES")
@@ -690,13 +691,13 @@ func changeBadge(bgColor, text string) string {
 func buildChangeBadges(add, change, remove int) []string {
 	var badges []string
 	if add > 0 {
-		badges = append(badges, changeBadge(theme.ColorGreen, fmt.Sprintf("%d ADD", add)))
+		badges = append(badges, changeBadge(theme.GetCurrentColorScheme().Success, fmt.Sprintf("%d ADD", add)))
 	}
 	if change > 0 {
-		badges = append(badges, changeBadge(theme.ColorYellow, fmt.Sprintf("%d CHANGE", change)))
+		badges = append(badges, changeBadge(theme.GetCurrentColorScheme().Warning, fmt.Sprintf("%d CHANGE", change)))
 	}
 	if remove > 0 {
-		badges = append(badges, changeBadge(theme.ColorRed, fmt.Sprintf("%d DELETE", remove)))
+		badges = append(badges, changeBadge(theme.GetCurrentColorScheme().Error, fmt.Sprintf("%d DELETE", remove)))
 	}
 	return badges
 }
@@ -705,7 +706,7 @@ func buildChangeBadges(add, change, remove int) []string {
 // (yellow) visual language already used for in-place resource updates, since an output-only
 // diff is the same kind of change applied to an output instead of a resource.
 func outputsChangedBadge() string {
-	return changeBadge(theme.ColorYellow, "OUTPUTS CHANGED")
+	return changeBadge(theme.GetCurrentColorScheme().Warning, "OUTPUTS CHANGED")
 }
 
 // RenderChangeSummaryBadges renders a badge-style change summary.
