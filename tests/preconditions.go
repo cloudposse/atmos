@@ -19,6 +19,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/go-git/go-git/v5"
 	giturl "github.com/kubescape/go-git-url"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // Constants for network and API limits.
@@ -260,7 +262,7 @@ const githubRateLimitURL = "https://api.github.com/rate_limit"
 func probeGitHubRateLimit(client *http.Client, requestURL, token string) (*GitHubRateLimitInfo, error) {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: build GitHub rate-limit request: %w", errUtils.ErrHTTPRequestFailed, err)
 	}
 
 	doer := client
@@ -278,7 +280,7 @@ func probeGitHubRateLimit(client *http.Client, requestURL, token string) (*GitHu
 
 	apiResp, err := doer.Do(req) //nolint:gosec // requestURL is always either the hardcoded githubRateLimitURL constant or a test-controlled httptest server URL, never external/user input.
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: GitHub rate-limit probe: %w", errUtils.ErrHTTPRequestFailed, err)
 	}
 	defer apiResp.Body.Close()
 
