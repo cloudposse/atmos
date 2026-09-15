@@ -1,20 +1,11 @@
 package plugin
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,59 +16,61 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var pinnedDiff = Spec{Name: "diff", URL: diffRepository, Version: "v3.9.4"}
+var testPlugin = Spec{Name: "sample", URL: "https://example.com/helm-sample", Version: "v1.2.3"}
 
-func TestInstallRetry(t *testing.T) {
+func seedPlugin(t *testing.T, dir, name, version string, receipt *Spec) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	require.NoError(t, os.MkdirAll(path, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(path, "plugin.yaml"), []byte("name: "+name+"\nversion: "+version+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(path, "binary"), []byte("previous binary"), 0o755))
+	if receipt != nil {
+		require.NoError(t, writeInstallReceipt(path, *receipt))
+	}
+	return path
+}
+
+func TestInstallRetriesCleanOnlyNewEntries(t *testing.T) {
 	for _, tc := range []struct {
-		name         string
-		failures     int
-		stderr       string
-		wantAttempts int
-		wantError    bool
+		name, message      string
+		failures, attempts int
+		wantError          bool
 	}{
-		{"recovery", 2, "curl: (22) The requested URL returned error: 500", 3, false},
-		{"exhaustion", 3, "HTTP 503 Service Unavailable", 3, true},
-		{"permanent", 3, "HTTP 404 Not Found", 1, true},
+		{"recovery", "HTTP 500", 2, 3, false},
+		{"exhaustion", "HTTP 503", 3, 3, true},
+		{"permanent", "HTTP 404", 3, 1, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			parent := t.TempDir()
-			dir := filepath.Join(parent, "plugins")
-			require.NoError(t, os.MkdirAll(dir, 0o755))
-			previous := filepath.Join(dir, "keep")
-			require.NoError(t, os.WriteFile(previous, []byte("previous plugin"), 0o644))
+			dir := t.TempDir()
+			keep := seedPlugin(t, dir, "unrelated", "1.0.0", nil)
 			attempts := 0
-			var stages []string
-			runner := &fakeRunner{listOutput: "NAME VERSION\ndiff 3.8.0\n"}
-			runner.hook = func(_ context.Context, args []string, stage string) (bool, string, string, error) {
+			runner := &fakeRunner{hook: func(_ context.Context, args []string, plugins string) (bool, string, string, error) {
 				if args[0] != "plugin" || args[1] != "install" {
 					return false, "", "", nil
 				}
 				attempts++
-				entries, err := os.ReadDir(stage)
-				require.NoError(t, err)
-				require.Empty(t, entries, "every attempt must start clean")
-				for _, old := range stages {
-					require.NoDirExists(t, old)
-				}
-				stages = append(stages, stage)
+				require.Equal(t, dir, plugins, "hooks must use their final installation directory")
+				require.NoDirExists(t, filepath.Join(plugins, "sample"))
+				require.NoFileExists(t, filepath.Join(plugins, "partial"))
+				require.FileExists(t, filepath.Join(keep, "binary"))
 				if attempts <= tc.failures {
-					require.NoError(t, os.WriteFile(filepath.Join(stage, "partial"), []byte("debris"), 0o644))
-					return true, "", tc.stderr, errors.New("exit status 22")
+					seedPlugin(t, plugins, "sample", "1.2.3", nil)
+					require.NoError(t, os.WriteFile(filepath.Join(plugins, "partial"), nil, 0o644))
+					return true, "", tc.message, errors.New("exit status 22")
 				}
 				return false, "", "", nil
-			}
-			_, err := newTestInstaller(runner, dir).EnsurePlugins(context.Background(), []Spec{pinnedDiff})
+			}}
+			inst := newTestInstaller(runner, dir)
+			_, err := inst.EnsurePlugins(context.Background(), []Spec{testPlugin})
 			if tc.wantError {
 				require.ErrorIs(t, err, errUtils.ErrHelmPluginInstall)
-				require.Empty(t, runner.uninstallCalls(), "failed replacement must keep existing plugin")
+				require.NoDirExists(t, filepath.Join(dir, "sample"))
 			} else {
 				require.NoError(t, err)
+				assert.True(t, inst.hasInstallReceipt("sample", testPlugin))
 			}
-			require.Equal(t, tc.wantAttempts, attempts)
-			require.FileExists(t, previous)
-			for _, stage := range stages {
-				require.NoDirExists(t, stage)
-			}
+			assert.Equal(t, tc.attempts, attempts)
+			require.FileExists(t, filepath.Join(keep, "binary"))
 		})
 	}
 }
@@ -95,184 +88,117 @@ func TestInstallCancellation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		runner := &fakeRunner{}
-		err := newTestInstaller(runner, t.TempDir()).install(ctx, pinnedDiff, "")
-		require.ErrorIs(t, err, context.Canceled)
-		require.Empty(t, runner.calls)
+		require.ErrorIs(t, newTestInstaller(runner, t.TempDir()).install(ctx, testPlugin, ""), context.Canceled)
+		assert.Empty(t, runner.calls)
 	})
 	t.Run("during backoff", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		runner := &fakeRunner{hook: func(_ context.Context, args []string, _ string) (bool, string, string, error) {
-			if args[1] != "install" {
-				return false, "", "", nil
-			}
-			cancel()
-			return true, "", "HTTP 500", errors.New("exit status 22")
+		runner := &fakeRunner{hook: func(_ context.Context, _ []string, _ string) (bool, string, string, error) {
+			time.AfterFunc(20*time.Millisecond, cancel)
+			return true, "", "HTTP 503", os.ErrInvalid
 		}}
 		inst := newTestInstaller(runner, t.TempDir())
 		inst.retryConfig = defaultInstallRetryConfig()
-		require.ErrorIs(t, inst.install(ctx, pinnedDiff, ""), context.Canceled)
+		require.ErrorIs(t, inst.install(ctx, testPlugin, ""), context.Canceled)
 		require.Len(t, runner.installCalls(), 1)
 	})
-	t.Run("before publish", func(t *testing.T) {
+	t.Run("during hook", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		runner := &fakeRunner{hook: func(_ context.Context, args []string, _ string) (bool, string, string, error) {
-			if args[0] == "diff" {
-				cancel()
-				return true, "3.9.4", "", nil
+		dir := t.TempDir()
+		runner := &fakeRunner{hook: func(_ context.Context, args []string, plugins string) (bool, string, string, error) {
+			if args[1] != "install" {
+				return false, "", "", nil
 			}
-			return false, "", "", nil
+			seedPlugin(t, plugins, "sample", "1.2.3", nil)
+			cancel()
+			return true, "", "", nil
 		}}
-		dir := t.TempDir()
-		require.ErrorIs(t, newTestInstaller(runner, dir).install(ctx, pinnedDiff, "diff"), context.Canceled)
-		require.Empty(t, runner.uninstallCalls())
-		require.NoDirExists(t, filepath.Join(dir, "diff"))
+		require.ErrorIs(t, newTestInstaller(runner, dir).install(ctx, testPlugin, ""), context.Canceled)
+		require.NoDirExists(t, filepath.Join(dir, "sample"))
 	})
 }
 
-func TestCachedDiffBinaryIsVerifiedAndRepaired(t *testing.T) {
-	for _, tc := range []struct {
-		name, output string
-		err          error
-	}{
-		{"wrong version", "3.15.13", nil},
-		{"missing executable", "", os.ErrNotExist},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			runner := &fakeRunner{listOutput: "NAME VERSION\ndiff 3.9.4\n"}
-			runner.hook = func(_ context.Context, args []string, plugins string) (bool, string, string, error) {
-				if args[0] == "diff" && plugins == dir {
-					return true, tc.output, "missing executable", tc.err
-				}
+func TestIncompleteInstallationIsRepaired(t *testing.T) {
+	for _, receipt := range []string{"", "invalid: [", "source: wrong\nversion: v1.2.3"} {
+		dir := t.TempDir()
+		existing := seedPlugin(t, dir, "sample", "1.2.3", nil)
+		if receipt != "" {
+			require.NoError(t, os.WriteFile(filepath.Join(existing, installReceiptName), []byte(receipt), 0o644))
+		}
+		runner := &fakeRunner{}
+		inst := newTestInstaller(runner, dir)
+		_, err := inst.EnsurePlugins(context.Background(), []Spec{testPlugin, testPlugin})
+		require.NoError(t, err)
+		require.Len(t, runner.installCalls(), 1)
+		require.Len(t, runner.uninstallCalls(), 1)
+		assert.True(t, inst.hasInstallReceipt("sample", testPlugin))
+	}
+}
+
+func TestInvalidInstallIsCleaned(t *testing.T) {
+	for _, metadata := range []string{"", "name: [", "version: 1.2.3", "name: sample\nversion: 9.0.0"} {
+		dir := t.TempDir()
+		runner := &fakeRunner{hook: func(_ context.Context, args []string, plugins string) (bool, string, string, error) {
+			if args[1] != "install" {
 				return false, "", "", nil
 			}
-			_, err := newTestInstaller(runner, dir).EnsurePlugins(context.Background(), []Spec{pinnedDiff})
-			require.NoError(t, err)
-			require.Len(t, runner.installCalls(), 1)
-		})
-	}
-}
-
-func TestInvalidInstallIsNotPublished(t *testing.T) {
-	for _, tc := range []struct {
-		name, metadata, binary string
-		verifyErr              error
-	}{
-		{name: "missing metadata"},
-		{name: "invalid yaml", metadata: "name: ["},
-		{name: "missing name", metadata: "version: 3.9.4"},
-		{name: "wrong plugin", metadata: "name: secrets\nversion: 3.9.4"},
-		{name: "wrong metadata version", metadata: "name: diff\nversion: 3.15.13"},
-		{name: "wrong binary version", metadata: "name: diff\nversion: 3.9.4", binary: "3.15.13"},
-		{name: "broken executable", metadata: "name: diff\nversion: 3.9.4", verifyErr: os.ErrPermission},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			runner := &fakeRunner{hook: func(_ context.Context, args []string, stage string) (bool, string, string, error) {
-				if args[0] == "diff" {
-					return true, tc.binary, "cannot execute", tc.verifyErr
-				}
-				if args[1] != "install" {
-					return false, "", "", nil
-				}
-				if tc.metadata != "" {
-					require.NoError(t, os.MkdirAll(filepath.Join(stage, "diff"), 0o755))
-					require.NoError(t, os.WriteFile(filepath.Join(stage, "diff", "plugin.yaml"), []byte(tc.metadata), 0o644))
-				}
-				return true, "", "", nil
-			}}
-			_, err := newTestInstaller(runner, dir).EnsurePlugins(context.Background(), []Spec{pinnedDiff})
-			require.ErrorIs(t, err, errUtils.ErrHelmPluginInstall)
-			require.Len(t, runner.installCalls(), 1)
-			require.NoDirExists(t, filepath.Join(dir, "diff"))
-		})
-	}
-}
-
-func TestInstallFilesystemAndHelmErrors(t *testing.T) {
-	t.Run("staging parent missing", func(t *testing.T) {
-		inst := newTestInstaller(&fakeRunner{}, filepath.Join(t.TempDir(), "missing", "plugins"))
-		require.ErrorContains(t, inst.install(context.Background(), pinnedDiff, ""), "create staging directory")
-	})
-	t.Run("publish collision", func(t *testing.T) {
-		dir := t.TempDir()
-		require.NoError(t, os.MkdirAll(filepath.Join(dir, "diff"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "diff", "keep"), nil, 0o644))
-		inst := newTestInstaller(&fakeRunner{}, dir)
-		require.ErrorContains(t, inst.install(context.Background(), pinnedDiff, ""), "publish installed plugin")
-	})
-	for _, operation := range []string{"list", "uninstall"} {
-		t.Run(operation, func(t *testing.T) {
-			runner := &fakeRunner{listOutput: "NAME VERSION\ndiff 3.8.0\n"}
-			runner.hook = func(_ context.Context, args []string, _ string) (bool, string, string, error) {
-				if args[0] == "plugin" && args[1] == operation {
-					return true, "", "permission denied", os.ErrPermission
-				}
-				return false, "", "", nil
+			if metadata != "" {
+				path := seedPlugin(t, plugins, "sample", "1.2.3", nil)
+				require.NoError(t, os.WriteFile(filepath.Join(path, "plugin.yaml"), []byte(metadata), 0o644))
 			}
-			spec := Spec{Name: "diff", URL: "https://example.com/helm-diff", Version: "v3.9.4"}
-			_, err := newTestInstaller(runner, t.TempDir()).EnsurePlugins(context.Background(), []Spec{spec})
-			require.ErrorIs(t, err, errUtils.ErrHelmPluginInstall)
-		})
+			return true, "", "", nil
+		}}
+		_, err := newTestInstaller(runner, dir).EnsurePlugins(context.Background(), []Spec{testPlugin})
+		require.ErrorIs(t, err, errUtils.ErrHelmPluginInstall)
+		require.Len(t, runner.installCalls(), 1)
+		require.NoDirExists(t, filepath.Join(dir, "sample"))
 	}
-	t.Run("managed path is a file", func(t *testing.T) {
+}
+
+func TestPluginInstallationErrors(t *testing.T) {
+	t.Run("cannot create directory", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "file")
 		require.NoError(t, os.WriteFile(path, nil, 0o644))
-		_, err := newTestInstaller(&fakeRunner{}, path).EnsurePlugins(context.Background(), []Spec{pinnedDiff})
+		_, err := newTestInstaller(&fakeRunner{}, path).EnsurePlugins(context.Background(), []Spec{testPlugin})
 		require.ErrorIs(t, err, errUtils.ErrHelmPluginInstall)
 	})
-}
-
-func TestInstallURL(t *testing.T) {
-	for _, goos := range []string{"linux", "windows", "darwin", "freebsd"} {
-		for _, arch := range []string{"amd64", "arm64"} {
-			osName := goos
-			if goos == "darwin" {
-				osName = "macos"
+	t.Run("list failure", func(t *testing.T) {
+		runner := &fakeRunner{hook: func(_ context.Context, _ []string, _ string) (bool, string, string, error) {
+			return true, "", "denied", os.ErrPermission
+		}}
+		_, err := newTestInstaller(runner, t.TempDir()).EnsurePlugins(context.Background(), []Spec{testPlugin})
+		require.ErrorIs(t, err, errUtils.ErrHelmPluginInstall)
+	})
+	t.Run("missing directory", func(t *testing.T) {
+		inst := newTestInstaller(&fakeRunner{}, filepath.Join(t.TempDir(), "missing"))
+		require.ErrorIs(t, inst.installAttempt(context.Background(), testPlugin, ""), errUtils.ErrHelmPluginInstall)
+	})
+	t.Run("receipt failure", func(t *testing.T) {
+		dir := t.TempDir()
+		runner := &fakeRunner{hook: func(_ context.Context, args []string, plugins string) (bool, string, string, error) {
+			if args[1] != "install" {
+				return false, "", "", nil
 			}
-			want := fmt.Sprintf("%s/releases/download/v3.9.4/helm-diff-%s-%s.tgz", diffRepository, osName, arch)
-			assert.Equal(t, want, installURL(pinnedDiff, goos, arch))
-		}
-	}
-	for _, spec := range []Spec{
-		{URL: diffRepository},
-		{URL: diffRepository, Version: "main"},
-		{URL: "https://example.com/helm-diff", Version: "v3.9.4"},
-	} {
-		assert.Equal(t, spec.URL, installURL(spec, "windows", "amd64"))
-	}
-	assert.Equal(t, pinnedDiff.URL, installURL(pinnedDiff, "plan9", "amd64"))
-	assert.Equal(t, pinnedDiff.URL, installURL(pinnedDiff, "linux", "386"))
-	assert.Equal(t, installURL(pinnedDiff, "linux", "amd64"), installURL(Spec{URL: diffRepository + ".git/", Version: "3.9.4"}, "linux", "amd64"))
-}
-
-func TestTransientInstallErrors(t *testing.T) {
-	for _, message := range []string{"HTTP 429", "HTTP/2 502", "status code: 504", "error: 500", "could not resolve host", "no such host", "temporary failure in name resolution", "connection reset", "connection refused", "connection timed out", "i/o timeout", "tls handshake timeout", "unexpected EOF"} {
-		assert.True(t, isTransientInstallError(errors.New(message)), message)
-	}
-	for _, err := range []error{nil, context.Canceled, context.DeadlineExceeded, errors.New("HTTP 404"), errors.New("version mismatch"), errors.New("permission denied")} {
-		assert.False(t, isTransientInstallError(err))
-	}
+			path := seedPlugin(t, plugins, "sample", "1.2.3", nil)
+			require.NoError(t, os.Mkdir(filepath.Join(path, installReceiptName), 0o755))
+			return true, "", "", nil
+		}}
+		_, err := newTestInstaller(runner, dir).EnsurePlugins(context.Background(), []Spec{testPlugin})
+		require.ErrorContains(t, err, "record successful installation")
+		require.NoDirExists(t, filepath.Join(dir, "sample"))
+	})
 }
 
 func TestConcurrentEnsureInstallsOnce(t *testing.T) {
 	dir := t.TempDir()
 	runner := &fakeRunner{}
-	runner.hook = func(_ context.Context, args []string, plugins string) (bool, string, string, error) {
-		if args[0] == "plugin" && args[1] == "list" {
-			if _, err := os.Stat(filepath.Join(plugins, "diff", "plugin.yaml")); err == nil {
-				return true, "NAME VERSION\ndiff 3.9.4\n", "", nil
-			}
-		}
-		return false, "", "", nil
-	}
 	var wg sync.WaitGroup
 	results := make(chan error, 4)
 	for range 4 {
 		wg.Go(func() {
-			_, err := newTestInstaller(runner, dir).EnsurePlugins(context.Background(), []Spec{pinnedDiff, pinnedDiff})
+			_, err := newTestInstaller(runner, dir).EnsurePlugins(context.Background(), []Spec{testPlugin})
 			results <- err
 		})
 	}
@@ -284,92 +210,39 @@ func TestConcurrentEnsureInstallsOnce(t *testing.T) {
 	require.Len(t, runner.installCalls(), 1)
 }
 
-func TestValidateInstallReadFailure(t *testing.T) {
-	stage := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(stage, "diff", "plugin.yaml"), 0o755))
-	_, err := validateInstall(stage, pinnedDiff)
-	require.ErrorContains(t, err, "read plugin metadata")
-}
-
-func TestVerifyDiffWindowsOutput(t *testing.T) {
-	runner := &fakeRunner{hook: func(_ context.Context, _ []string, _ string) (bool, string, string, error) {
-		return true, "v3.9.4\r\n", "", nil
-	}}
-	require.NoError(t, newTestInstaller(runner, t.TempDir()).verifyDiff(context.Background(), pinnedDiff, "plugins"))
-}
-
-func TestInstallNoStagingLeak(t *testing.T) {
-	parent := t.TempDir()
-	dir := filepath.Join(parent, "plugins")
-	_, err := newTestInstaller(&fakeRunner{}, dir).EnsurePlugins(context.Background(), []Spec{pinnedDiff})
-	require.NoError(t, err)
-	entries, err := os.ReadDir(parent)
-	require.NoError(t, err)
-	for _, entry := range entries {
-		assert.False(t, strings.HasPrefix(entry.Name(), ".helm-plugin-install-"))
+func TestTransientInstallErrors(t *testing.T) {
+	for _, message := range []string{"HTTP 429", "HTTP/2 502", "response code: 503", "status code: 504", "error: 500", "could not resolve host", "no such host", "temporary failure in name resolution", "connection reset", "connection refused", "connection timed out", "i/o timeout", "tls handshake timeout", "unexpected EOF"} {
+		assert.True(t, isTransientInstallError(errors.New(message)), message)
+	}
+	for _, err := range []error{nil, context.Canceled, context.DeadlineExceeded, errors.Join(errors.New("HTTP 503"), errInstallCleanup), errors.New("HTTP 404"), errors.New("version mismatch")} {
+		assert.False(t, isTransientInstallError(err))
 	}
 }
 
-func TestDownloadDiffRelease(t *testing.T) {
-	var archive bytes.Buffer
-	compressed := gzip.NewWriter(&archive)
-	writer := tar.NewWriter(compressed)
-	for name, data := range map[string]string{"diff/plugin.yaml": "name: diff\nversion: 3.9.4", "diff/bin/diff": "binary contents"} {
-		require.NoError(t, writer.WriteHeader(&tar.Header{Name: name, Mode: 0o755, Size: int64(len(data))}))
-		_, err := writer.Write([]byte(data))
-		require.NoError(t, err)
-	}
-	require.NoError(t, writer.Close())
-	require.NoError(t, compressed.Close())
-	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
-		if strings.HasPrefix(r.URL.Path, "/failure") {
-			http.Error(w, "unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		if strings.HasPrefix(r.URL.Path, "/corrupt") {
-			_, _ = w.Write([]byte("not gzip"))
-			return
-		}
-		w.Header().Set("Content-Type", "application/octet-stream")
-		_, _ = w.Write(archive.Bytes())
-	}))
-	defer server.Close()
-	stage := t.TempDir()
-	require.NoError(t, downloadDiffRelease(context.Background(), server.URL+"/plugin.tgz", stage))
-	pluginDir, err := validateInstall(stage, pinnedDiff)
+func TestCustomPluginNameUsesReceiptIdentity(t *testing.T) {
+	runner := &fakeRunner{pluginName: "different-name"}
+	inst := newTestInstaller(runner, t.TempDir())
+	_, err := inst.EnsurePlugins(context.Background(), []Spec{testPlugin, testPlugin})
 	require.NoError(t, err)
-	binary := filepath.Join(pluginDir, "bin", "diff")
-	data, err := os.ReadFile(binary)
+	require.Len(t, runner.installCalls(), 1)
+	updated := testPlugin
+	updated.Version = "v2.0.0"
+	_, err = inst.EnsurePlugins(context.Background(), []Spec{updated})
 	require.NoError(t, err)
-	require.Equal(t, "binary contents", string(data))
-	if runtime.GOOS != "windows" {
-		info, err := os.Stat(binary)
-		require.NoError(t, err)
-		require.NotZero(t, info.Mode()&0o111)
-	}
-	err = downloadDiffRelease(context.Background(), server.URL+"/failure.tgz", t.TempDir())
-	require.Error(t, err)
-	require.True(t, isTransientInstallError(err), err.Error())
-	require.Error(t, downloadDiffRelease(context.Background(), server.URL+"/corrupt.tgz", t.TempDir()))
-	before := requests.Load()
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	require.Error(t, downloadDiffRelease(ctx, server.URL+"/plugin.tgz", t.TempDir()))
-	require.Equal(t, before, requests.Load())
+	require.Len(t, runner.installCalls(), 2)
+	require.Len(t, runner.uninstallCalls(), 1)
+	assert.True(t, inst.hasInstallReceipt("different-name", updated))
 }
 
-func TestOtherPluginsKeepFinalInstallDirectory(t *testing.T) {
-	for _, installed := range []string{"NAME VERSION\n", "NAME VERSION\nsecrets 1.0.0\n"} {
-		runner := &fakeRunner{listOutput: installed}
-		dir := t.TempDir()
-		spec := Spec{Name: "secrets", URL: "https://github.com/jkroepke/helm-secrets", Version: "v4.6.0"}
-		_, err := newTestInstaller(runner, dir).EnsurePlugins(context.Background(), []Spec{spec})
-		require.NoError(t, err)
-		calls := runner.installCalls()
-		require.Len(t, calls, 1)
-		assert.Contains(t, calls[0].env, "HELM_PLUGINS="+dir)
-		assert.Equal(t, spec.URL, calls[0].args[2])
+func TestPluginIdentityValidation(t *testing.T) {
+	for _, tc := range []struct {
+		spec     Spec
+		expected string
+		metadata pluginMetadata
+	}{
+		{Spec{Name: "diff", URL: "https://github.com/databus23/helm-diff"}, "", pluginMetadata{Name: "wrong"}},
+		{testPlugin, "previous-name", pluginMetadata{Name: "different-name"}},
+	} {
+		require.ErrorIs(t, validatePluginMetadata(tc.metadata, tc.spec, tc.expected), errUtils.ErrHelmPluginInstall)
 	}
 }

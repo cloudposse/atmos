@@ -58,12 +58,11 @@ func (execRunner) Run(ctx context.Context, name string, args, extraEnv []string)
 
 // Installer installs and inspects Helm plugins in an Atmos-managed directory.
 type Installer struct {
-	helmBin      string
-	dir          string
-	runner       Runner
-	retryConfig  schema.RetryConfig
-	fetchArchive func(context.Context, string, string) error
-	rename       func(string, string) error
+	helmBin     string
+	dir         string
+	runner      Runner
+	retryConfig schema.RetryConfig
+	rename      func(string, string) error
 }
 
 // Option configures an Installer.
@@ -106,12 +105,11 @@ func NewInstaller(helmBin string, opts ...Option) *Installer {
 	defer perf.Track(nil, "plugin.NewInstaller")()
 
 	i := &Installer{
-		helmBin:      helmBin,
-		dir:          ManagedDir(),
-		runner:       execRunner{},
-		retryConfig:  defaultInstallRetryConfig(),
-		fetchArchive: downloadDiffRelease,
-		rename:       os.Rename,
+		helmBin:     helmBin,
+		dir:         ManagedDir(),
+		runner:      execRunner{},
+		retryConfig: defaultInstallRetryConfig(),
+		rename:      os.Rename,
 	}
 	for _, opt := range opts {
 		opt(i)
@@ -170,10 +168,21 @@ func (i *Installer) ensureOne(ctx context.Context, spec Spec, installed map[stri
 	defer perf.Track(nil, "plugin.Installer.ensureOne")()
 
 	name, curVersion, present := matchInstalled(spec, installed)
+	// Repository names need not equal plugin.yaml names. Receipts retain the
+	// source identity for custom plugins whose names cannot be inferred.
+	if !present {
+		for installedName, version := range installed {
+			if receipt, ok := i.installReceipt(installedName); ok && receipt.Source == spec.URL {
+				name, curVersion, present = installedName, version, true
+				break
+			}
+		}
+	}
+
 	if present && (spec.IsLatest() || versionsEqual(curVersion, spec.Version)) {
-		// Helm's list reports plugin.yaml, which can disagree with the executable
-		// after a failed hook or an installer that silently downloaded latest.
-		if !isPinnedDiff(spec) || i.verifyDiff(ctx, spec, i.dir) == nil {
+		// Helm registers metadata before running hooks. Require proof that a prior
+		// Atmos installation completed, rather than trusting partial metadata.
+		if i.hasInstallReceipt(name, spec) {
 			log.Debug("Helm plugin already installed", "plugin", spec.Name, "version", curVersion)
 			return nil
 		}

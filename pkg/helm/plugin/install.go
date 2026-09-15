@@ -7,155 +7,157 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/hashicorp/go-getter"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/github"
-	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
-	diffRepository      = "https://github.com/databus23/helm-diff"
 	installAttempts     = 3
 	installInitialDelay = 15 * time.Second
 	installMaxDelay     = 30 * time.Second
+	installReceiptName  = ".atmos-install.yaml"
+	installReceiptPerm  = 0o600
 )
 
-var transientInstallStatus = regexp.MustCompile(`(?i)(?:http[^\n]*?|(?:status|response)(?: code)?[: ]*|error[: ]+|returned[: ]+)(?:429|500|502|503|504)\b`)
+var (
+	transientInstallStatus = regexp.MustCompile(`(?i)(?:http[^\n]*?|(?:status|response)(?: code)?[: ]*|error[: ]+|returned[: ]+)(?:429|500|502|503|504)\b`)
+	errInstallCleanup      = errors.New("failed to clean partial plugin installation")
+)
 
 func defaultInstallRetryConfig() schema.RetryConfig {
-	attempts := installAttempts
-	delay := installInitialDelay
-	maxDelay := installMaxDelay
-	return schema.RetryConfig{
-		MaxAttempts: &attempts, InitialDelay: &delay, MaxDelay: &maxDelay,
-		BackoffStrategy: schema.BackoffExponential,
-	}
+	attempts, delay, maxDelay := installAttempts, installInitialDelay, installMaxDelay
+	return schema.RetryConfig{MaxAttempts: &attempts, InitialDelay: &delay, MaxDelay: &maxDelay, BackoffStrategy: schema.BackoffExponential}
 }
 
-// install stages pinned Helm Diff archives, retrying transient failures. Other
-// plugins retain Helm's final-directory install semantics: their hooks may embed
-// absolute paths that would break if a staged installation were relocated.
+// install preserves Helm's install/uninstall hooks and their final-directory
+// paths. Failed attempts remove only newly created entries before retrying.
 func (i *Installer) install(ctx context.Context, spec Spec, replaceName string) error {
 	defer perf.Track(nil, "plugin.Installer.install")()
-
-	if installURL(spec, runtime.GOOS, runtime.GOARCH) == spec.URL {
-		return i.installWithHelm(ctx, spec, replaceName)
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-
-	return retry.WithPredicate(ctx, &i.retryConfig, func() error {
+	backup, err := i.backupPlugin(replaceName)
+	if err != nil {
+		return err
+	}
+	if replaceName != "" {
+		if err := i.uninstall(ctx, replaceName); err != nil {
+			return i.finishInstall(backup, err)
+		}
+	}
+	err = retry.WithPredicate(ctx, &i.retryConfig, func() error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		return i.installAttempt(ctx, spec, replaceName)
 	}, isTransientInstallError)
+	return i.finishInstall(backup, err)
 }
 
-func (i *Installer) installAttempt(ctx context.Context, spec Spec, replaceName string) error {
-	stage, err := os.MkdirTemp(filepath.Dir(i.dir), ".helm-plugin-install-")
+func (i *Installer) installAttempt(ctx context.Context, spec Spec, expectedName string) error {
+	before, err := directoryEntries(i.dir)
 	if err != nil {
-		return fmt.Errorf("%w: create staging directory: %w", errUtils.ErrHelmPluginInstall, err)
+		return fmt.Errorf("%w: inspect plugin directory: %w", errUtils.ErrHelmPluginInstall, err)
 	}
-	defer os.RemoveAll(stage)
-
-	if err := i.fetchArchive(ctx, installURL(spec, runtime.GOOS, runtime.GOARCH), stage); err != nil {
-		return fmt.Errorf("%w: download Helm Diff: %w", errUtils.ErrHelmPluginInstall, err)
-	}
-	pluginDir, err := validateInstall(stage, spec)
-	if err != nil {
-		return err
-	}
-	if isPinnedDiff(spec) {
-		if err := i.verifyDiff(ctx, spec, stage); err != nil {
-			return err
+	err = i.runInstall(ctx, spec)
+	if err == nil {
+		var pluginDir string
+		pluginDir, err = validateInstall(i.dir, spec, before, expectedName)
+		if err == nil {
+			err = writeInstallReceipt(pluginDir, spec)
 		}
 	}
-	if err := ctx.Err(); err != nil {
-		return err
+	if err == nil {
+		return nil
 	}
-	return i.publishInstall(pluginDir, replaceName)
+	if cleanupErr := removeNewEntries(i.dir, before); cleanupErr != nil {
+		return errors.Join(err, errInstallCleanup, cleanupErr)
+	}
+	return err
 }
 
-func (i *Installer) installWithHelm(ctx context.Context, spec Spec, replaceName string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if replaceName != "" {
-		if err := i.uninstall(ctx, replaceName); err != nil {
-			return err
-		}
-	}
-	if err := i.runInstall(ctx, spec, i.dir); err != nil {
-		return err
-	}
-	if isPinnedDiff(spec) {
-		return i.verifyDiff(ctx, spec, i.dir)
-	}
-	return nil
-}
-
-func (i *Installer) runInstall(ctx context.Context, spec Spec, stage string) error {
+func (i *Installer) runInstall(ctx context.Context, spec Spec) error {
 	args := []string{"plugin", "install", spec.URL}
 	if !spec.IsLatest() {
 		args = append(args, "--version", spec.Version)
 	}
-	stdout, stderr, err := i.runner.Run(ctx, i.helmBin, args, []string{"HELM_PLUGINS=" + stage})
+	stdout, stderr, err := i.runner.Run(ctx, i.helmBin, args, i.env())
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if err != nil {
 		return errUtils.Build(errUtils.ErrHelmPluginInstall).
 			WithCause(fmt.Errorf("%w: %s", err, strings.TrimSpace(stdout+"\n"+stderr))).
-			WithExplanationf("Failed to install helm plugin %q from %s", spec.Name, spec.URL).
-			WithExplanationf("helm reported: %s", strings.TrimSpace(stdout+"\n"+stderr)).Err()
+			WithExplanationf("Failed to install helm plugin %q from %s", spec.Name, spec.URL).Err()
 	}
 	return nil
 }
 
-// Release archives are complete Helm plugins. Extract directly into staging:
-// Helm 3 may mistake GitHub's octet-stream response for a VCS repository, and
-// the repository install hook on Windows may silently download latest.
-func downloadDiffRelease(ctx context.Context, source, stage string) error {
-	client := &getter.Client{
-		Ctx: ctx, Src: "https::" + source, Dst: stage, Mode: getter.ClientModeDir,
-		DisableSymlinks: true,
-		Getters: map[string]getter.Getter{
-			"https": &getter.HttpGetter{Client: httpClient.NewGitHubAuthenticatedHTTPClient(github.GetGitHubToken())},
-		},
+func directoryEntries(dir string) (map[string]bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
 	}
-	return client.Get()
+	result := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		result[entry.Name()] = true
+	}
+	return result, nil
 }
 
-// validateInstall locates the plugin Helm registered and checks its metadata.
-func validateInstall(stage string, spec Spec) (string, error) {
-	paths, err := filepath.Glob(filepath.Join(stage, "*", "plugin.yaml"))
+func removeNewEntries(dir string, before map[string]bool) error {
+	after, err := directoryEntries(dir)
 	if err != nil {
-		return "", fmt.Errorf("%w: locate plugin metadata: %w", errUtils.ErrHelmPluginInstall, err)
+		return err
 	}
-	if len(paths) != 1 {
-		return "", fmt.Errorf("%w: expected one installed plugin, found %d", errUtils.ErrHelmPluginInstall, len(paths))
+	for name := range after {
+		if !before[name] {
+			if err := os.RemoveAll(filepath.Join(dir, name)); err != nil {
+				return err
+			}
+		}
 	}
-	metadata, err := readPluginMetadata(paths[0])
+	return nil
+}
+
+// validateInstall validates the plugin Helm just registered, without assuming
+// any plugin-specific executable or version command.
+func validateInstall(dir string, spec Spec, before map[string]bool, expectedName string) (string, error) {
+	after, err := directoryEntries(dir)
 	if err != nil {
-		return "", fmt.Errorf("%w: read plugin metadata: %w", errUtils.ErrHelmPluginInstall, err)
+		return "", fmt.Errorf("%w: inspect installed plugin: %w", errUtils.ErrHelmPluginInstall, err)
 	}
-	if metadata.Name == "" || metadata.Version == "" {
-		return "", fmt.Errorf("%w: missing plugin name or version", errUtils.ErrHelmPluginInstall)
+	var installed string
+	for name := range after {
+		if before[name] {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		metadata, err := readPluginMetadata(filepath.Join(path, "plugin.yaml"))
+		if err != nil {
+			return "", fmt.Errorf("%w: read plugin metadata: %w", errUtils.ErrHelmPluginInstall, err)
+		}
+		if err := validatePluginMetadata(metadata, spec, expectedName); err != nil {
+			return "", err
+		}
+		if installed != "" {
+			return "", fmt.Errorf("%w: expected one installed plugin", errUtils.ErrHelmPluginInstall)
+		}
+		installed = path
 	}
-	if !slices.Contains(spec.candidateNames(), metadata.Name) {
-		return "", fmt.Errorf("%w: expected plugin %s, got %s", errUtils.ErrHelmPluginInstall, spec.Name, metadata.Name)
+	if installed == "" {
+		return "", fmt.Errorf("%w: no plugin installed", errUtils.ErrHelmPluginInstall)
 	}
-	if _, versionErr := semver.StrictNewVersion(strings.TrimPrefix(spec.Version, "v")); versionErr == nil && !versionsEqual(metadata.Version, spec.Version) {
-		return "", fmt.Errorf("%w: expected version %s, got %s", errUtils.ErrHelmPluginInstall, spec.Version, metadata.Version)
-	}
-	return filepath.Dir(paths[0]), nil
+	return installed, nil
 }
 
 type pluginMetadata struct {
@@ -173,54 +175,63 @@ func readPluginMetadata(path string) (pluginMetadata, error) {
 	return metadata, err
 }
 
-func (i *Installer) verifyDiff(ctx context.Context, spec Spec, dir string) error {
-	stdout, stderr, err := i.runner.Run(ctx, i.helmBin, []string{"diff", "version"}, []string{"HELM_PLUGINS=" + dir})
-	if err != nil {
-		return fmt.Errorf("%w: verify Helm Diff: %s: %w", errUtils.ErrHelmPluginInstall, strings.TrimSpace(stderr), err)
+func validatePluginMetadata(metadata pluginMetadata, spec Spec, expectedName string) error {
+	knownURL, knownAlias := catalogURL(spec.Name)
+	invalidAlias := knownAlias && knownURL == spec.URL && !slices.Contains(spec.candidateNames(), metadata.Name)
+	if metadata.Name == "" || invalidAlias || (expectedName != "" && metadata.Name != expectedName) {
+		return fmt.Errorf("%w: expected plugin %s, got %s", errUtils.ErrHelmPluginInstall, spec.Name, metadata.Name)
 	}
-	if actual := strings.TrimSpace(stdout); !versionsEqual(actual, spec.Version) {
-		return fmt.Errorf("%w: Helm Diff binary version mismatch: expected %s, got %s", errUtils.ErrHelmPluginInstall, spec.Version, actual)
+	if _, err := semver.StrictNewVersion(strings.TrimPrefix(spec.Version, "v")); err == nil && !versionsEqual(metadata.Version, spec.Version) {
+		return fmt.Errorf("%w: expected version %s, got %s", errUtils.ErrHelmPluginInstall, spec.Version, metadata.Version)
 	}
 	return nil
 }
 
-func isPinnedDiff(spec Spec) bool {
-	url := strings.TrimSuffix(strings.TrimRight(spec.URL, "/"), ".git")
-	_, err := semver.StrictNewVersion(strings.TrimPrefix(spec.Version, "v"))
-	return url == diffRepository && err == nil
+type installReceipt struct {
+	Source  string `yaml:"source"`
+	Version string `yaml:"version"`
 }
 
-// Helm Diff release archives include plugin.yaml and the executable. Installing
-// the exact archive avoids install-binary.ps1's cwd-dependent git describe,
-// which can silently select latest even when Helm checked out a pinned tag.
-func installURL(spec Spec, goos, goarch string) string {
-	if !isPinnedDiff(spec) || (goarch != "amd64" && goarch != "arm64") {
-		return spec.URL
+func writeInstallReceipt(dir string, spec Spec) error {
+	// A receipt is written only after Helm and all its installation hooks succeed.
+	data, err := yaml.Marshal(installReceipt{Source: spec.URL, Version: spec.Version})
+	if err != nil {
+		return fmt.Errorf("%w: encode install receipt: %w", errUtils.ErrHelmPluginInstall, err)
 	}
-	switch goos {
-	case "darwin":
-		goos = "macos"
-	case "linux", "windows", "freebsd":
-	default:
-		return spec.URL
+	if err := os.WriteFile(filepath.Join(dir, installReceiptName), data, installReceiptPerm); err != nil {
+		return fmt.Errorf("%w: record successful installation: %w", errUtils.ErrHelmPluginInstall, err)
 	}
-	return fmt.Sprintf("%s/releases/download/v%s/helm-diff-%s-%s.tgz", diffRepository,
-		strings.TrimPrefix(spec.Version, "v"), goos, goarch)
+	return nil
+}
+
+func (i *Installer) installReceipt(name string) (installReceipt, bool) {
+	var receipt installReceipt
+	dir, err := findPluginDirectory(i.dir, name)
+	if err != nil || dir == "" {
+		return receipt, false
+	}
+	data, err := os.ReadFile(filepath.Join(dir, installReceiptName))
+	if err != nil {
+		return receipt, false
+	}
+	err = yaml.Unmarshal(data, &receipt)
+	return receipt, err == nil
+}
+
+func (i *Installer) hasInstallReceipt(name string, spec Spec) bool {
+	receipt, ok := i.installReceipt(name)
+	return ok && receipt.Source == spec.URL && receipt.Version == spec.Version
 }
 
 func isTransientInstallError(err error) bool {
-	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errInstallCleanup) {
 		return false
 	}
 	message := strings.ToLower(err.Error())
 	if transientInstallStatus.MatchString(message) {
 		return true
 	}
-	for _, marker := range []string{
-		"could not resolve host", "no such host", "temporary failure in name resolution",
-		"connection reset", "connection refused", "connection timed out", "i/o timeout",
-		"tls handshake timeout", "unexpected eof",
-	} {
+	for _, marker := range []string{"could not resolve host", "no such host", "temporary failure in name resolution", "connection reset", "connection refused", "connection timed out", "i/o timeout", "tls handshake timeout", "unexpected eof"} {
 		if strings.Contains(message, marker) {
 			return true
 		}

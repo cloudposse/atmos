@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	cp "github.com/otiai10/copy"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
@@ -14,28 +16,22 @@ type pluginBackup struct {
 	parent   string
 }
 
-// publishInstall retains the previous plugin until the replacement is visible.
-// Rollback data lives outside both HELM_PLUGINS and the disposable install stage.
-func (i *Installer) publishInstall(pluginDir, replaceName string) error {
-	backup, err := i.backupPlugin(replaceName)
-	if err != nil {
-		return err
+// finishInstall restores the previous plugin after an unsuccessful replacement.
+// Keep a failed rollback outside the managed path and report its location.
+func (i *Installer) finishInstall(backup *pluginBackup, installErr error) error {
+	if backup == nil {
+		return installErr
 	}
-	destination := filepath.Join(i.dir, filepath.Base(pluginDir))
-	if err := i.rename(pluginDir, destination); err != nil {
-		publishErr := fmt.Errorf("%w: publish installed plugin: %w", errUtils.ErrHelmPluginInstall, err)
-		if backup != nil {
-			if restoreErr := i.rename(backup.dir, backup.original); restoreErr != nil {
-				return fmt.Errorf("%w; rollback failed (previous plugin retained at %s): %w", publishErr, backup.dir, restoreErr)
-			}
-			_ = os.RemoveAll(backup.parent)
+	if installErr != nil {
+		if err := os.RemoveAll(backup.original); err != nil {
+			return fmt.Errorf("%w; cannot restore previous plugin (retained at %s): %w", installErr, backup.dir, err)
 		}
-		return publishErr
+		if err := i.rename(backup.dir, backup.original); err != nil {
+			return fmt.Errorf("%w; rollback failed (previous plugin retained at %s): %w", installErr, backup.dir, err)
+		}
 	}
-	if backup != nil {
-		_ = os.RemoveAll(backup.parent)
-	}
-	return nil
+	_ = os.RemoveAll(backup.parent)
+	return installErr
 }
 
 func (i *Installer) backupPlugin(name string) (*pluginBackup, error) {
@@ -54,7 +50,7 @@ func (i *Installer) backupPlugin(name string) (*pluginBackup, error) {
 		return nil, fmt.Errorf("%w: create plugin rollback directory: %w", errUtils.ErrHelmPluginInstall, err)
 	}
 	backup := &pluginBackup{original: original, parent: parent, dir: filepath.Join(parent, "plugin")}
-	if err := i.rename(original, backup.dir); err != nil {
+	if err := cp.Copy(original, backup.dir); err != nil {
 		_ = os.RemoveAll(parent)
 		return nil, fmt.Errorf("%w: retain previous plugin: %w", errUtils.ErrHelmPluginInstall, err)
 	}

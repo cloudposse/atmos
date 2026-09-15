@@ -45,6 +45,14 @@ for existing `helmfile.yaml` projects, multi-release releases files, or `helm-se
 plugins. `atmos helm plugin` manages plugins **for Helmfile components** (native Helm does not run Helm
 CLI subcommand plugins).
 
+Declare Helmfile plugins in the component's stack configuration; Atmos ensures them before running
+Helmfile. See [Helmfile plugin configuration](../atmos-helmfile/SKILL.md#helm-plugins) for declarations
+and optional cache warming. Do not add a plugin installation prerequisite to native Helm commands.
+
+When maintaining plugin support, extend the existing generic installer in `pkg/helm/plugin`.
+Let Helm run each plugin's installation hooks. Keep plugin requirements with the consuming component
+or engine; a built-in alias such as `diff` does not justify a separate downloader or shell wrapper.
+
 ## Component Shape
 
 Define Helm releases under `components.helm` in stack manifests:
