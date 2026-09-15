@@ -12,6 +12,11 @@ import (
 // the word wrap calculation in pkg/ui/formatter.go to prevent text overflow.
 const DocumentIndent = 2
 
+// GetCurrentGlamourStyle returns Markdown colors for the configured terminal theme.
+func GetCurrentGlamourStyle() ([]byte, error) {
+	return GetGlamourStyleForTheme(getActiveThemeName())
+}
+
 // ConvertToGlamourStyle converts a terminal theme to a glamour style configuration.
 func ConvertToGlamourStyle(t *Theme) ([]byte, error) {
 	style := createGlamourStyleFromTheme(t)
