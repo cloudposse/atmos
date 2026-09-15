@@ -357,3 +357,17 @@ func TestDownloadDiffRelease(t *testing.T) {
 	require.Error(t, downloadDiffRelease(ctx, server.URL+"/plugin.tgz", t.TempDir()))
 	require.Equal(t, before, requests.Load())
 }
+
+func TestOtherPluginsKeepFinalInstallDirectory(t *testing.T) {
+	for _, installed := range []string{"NAME VERSION\n", "NAME VERSION\nsecrets 1.0.0\n"} {
+		runner := &fakeRunner{listOutput: installed}
+		dir := t.TempDir()
+		spec := Spec{Name: "secrets", URL: "https://github.com/jkroepke/helm-secrets", Version: "v4.6.0"}
+		_, err := newTestInstaller(runner, dir).EnsurePlugins(context.Background(), []Spec{spec})
+		require.NoError(t, err)
+		calls := runner.installCalls()
+		require.Len(t, calls, 1)
+		assert.Contains(t, calls[0].env, "HELM_PLUGINS="+dir)
+		assert.Equal(t, spec.URL, calls[0].args[2])
+	}
+}

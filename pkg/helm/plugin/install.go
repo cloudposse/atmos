@@ -42,10 +42,15 @@ func defaultInstallRetryConfig() schema.RetryConfig {
 	}
 }
 
-// install retries only transient failures. Every attempt gets a fresh staging
-// directory; failed hooks never register a partial plugin in the managed path.
+// install stages pinned Helm Diff archives, retrying transient failures. Other
+// plugins retain Helm's final-directory install semantics: their hooks may embed
+// absolute paths that would break if a staged installation were relocated.
 func (i *Installer) install(ctx context.Context, spec Spec, replaceName string) error {
 	defer perf.Track(nil, "plugin.Installer.install")()
+
+	if installURL(spec, runtime.GOOS, runtime.GOARCH) == spec.URL {
+		return i.installWithHelm(ctx, spec, replaceName)
+	}
 
 	return retry.WithPredicate(ctx, &i.retryConfig, func() error {
 		if err := ctx.Err(); err != nil {
@@ -62,8 +67,8 @@ func (i *Installer) installAttempt(ctx context.Context, spec Spec, replaceName s
 	}
 	defer os.RemoveAll(stage)
 
-	if err := i.runInstall(ctx, spec, stage); err != nil {
-		return err
+	if err := i.fetchArchive(ctx, installURL(spec, runtime.GOOS, runtime.GOARCH), stage); err != nil {
+		return fmt.Errorf("%w: download Helm Diff: %w", errUtils.ErrHelmPluginInstall, err)
 	}
 	pluginDir, err := validateInstall(stage, spec)
 	if err != nil {
@@ -89,14 +94,25 @@ func (i *Installer) installAttempt(ctx context.Context, spec Spec, replaceName s
 	return nil
 }
 
-func (i *Installer) runInstall(ctx context.Context, spec Spec, stage string) error {
-	source := installURL(spec, runtime.GOOS, runtime.GOARCH)
-	if source != spec.URL {
-		if err := i.fetchArchive(ctx, source, stage); err != nil {
-			return fmt.Errorf("%w: download Helm Diff: %w", errUtils.ErrHelmPluginInstall, err)
-		}
-		return nil
+func (i *Installer) installWithHelm(ctx context.Context, spec Spec, replaceName string) error {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
+	if replaceName != "" {
+		if err := i.uninstall(ctx, replaceName); err != nil {
+			return err
+		}
+	}
+	if err := i.runInstall(ctx, spec, i.dir); err != nil {
+		return err
+	}
+	if isPinnedDiff(spec) {
+		return i.verifyDiff(ctx, spec, i.dir)
+	}
+	return nil
+}
+
+func (i *Installer) runInstall(ctx context.Context, spec Spec, stage string) error {
 	args := []string{"plugin", "install", spec.URL}
 	if !spec.IsLatest() {
 		args = append(args, "--version", spec.Version)

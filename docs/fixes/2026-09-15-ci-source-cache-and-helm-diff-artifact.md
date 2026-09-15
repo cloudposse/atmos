@@ -19,7 +19,7 @@ A loopback HTTP server counts unexpected requests. The test asserts no fetch,
 preserved cached contents, the resolved workdir path, the invocation guard, and
 absence of the reprovisioning marker.
 
-Atmos's Helm plugin installer now uses clean staging directories and the shared
+Atmos's Helm Diff installer now uses clean staging directories and the shared
 retry package for transient network failures: three attempts with 15- and
 30-second backoffs. Permanent failures stop immediately, cancellation interrupts
 backoff, and failed attempts never register partial plugins in the managed path.
@@ -32,7 +32,8 @@ GitHub's archive content type for a Git repository, and Helm Diff's Windows hook
 can silently download latest when `git describe` runs outside its checkout.
 Atmos checks both metadata and the actual `helm diff version` output, including
 on cache hits. A broken or mismatched cached binary is repaired. Other plugins
-continue to install through Helm. Public commands and APIs are unchanged.
+continue to install through Helm in their final directory, preserving hooks
+that embed absolute paths. Public commands and APIs are unchanged.
 
 The existing Linux, macOS ARM, and Windows build jobs invoke
 `atmos helm plugin install diff@<version>` once after installing the pinned
