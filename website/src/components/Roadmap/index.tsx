@@ -82,11 +82,10 @@ export default function Roadmap(): JSX.Element {
             </button>
           </p>
           <div className={styles.initiativesGrid}>
-            {sortedInitiatives.map((initiative, index) => (
+            {sortedInitiatives.map((initiative) => (
               <InitiativeCard
                 key={initiative.id}
                 initiative={initiative}
-                index={index}
                 expandAllMilestones={expandAllMilestones}
               />
             ))}

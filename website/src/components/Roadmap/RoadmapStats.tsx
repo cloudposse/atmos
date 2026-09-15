@@ -59,13 +59,13 @@ export default function RoadmapStats({ initiatives }: RoadmapStatsProps): JSX.El
       <div className={styles.statsProgressBar}>
         <motion.div
           className={styles.statsProgressShipped}
-          initial={{ width: 0 }}
+          initial={false}
           animate={{ width: `${stats.total > 0 ? (stats.shipped / stats.total) * 100 : 0}%` }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
         />
         <motion.div
           className={styles.statsProgressInProgress}
-          initial={{ width: 0 }}
+          initial={false}
           animate={{ width: `${stats.total > 0 ? (stats.inProgress / stats.total) * 100 : 0}%` }}
           transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
         />

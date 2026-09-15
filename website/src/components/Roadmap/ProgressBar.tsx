@@ -13,7 +13,7 @@ export default function ProgressBar({
   progress,
   showLabel = true,
   size = 'medium',
-  animated = true,
+  animated = false,
 }: ProgressBarProps): JSX.Element {
   const clampedProgress = Math.min(100, Math.max(0, progress));
 
