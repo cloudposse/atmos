@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import ProductUpdatesNav from '@site/src/components/ProductUpdatesNav';
 import styles from './styles.module.css';
 
 interface RoadmapHeroProps {
@@ -18,6 +19,7 @@ export default function RoadmapHero({
     >
       <h1 className={styles.heroTitle}>Roadmap</h1>
       <p className={styles.heroVision}>{vision}</p>
+      <ProductUpdatesNav activeView="roadmap" />
     </motion.div>
   );
 }

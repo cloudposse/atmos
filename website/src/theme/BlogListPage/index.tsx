@@ -14,6 +14,7 @@ import Layout from '@theme/Layout';
 import SearchMetadata from '@theme/SearchMetadata';
 import type { Props } from '@theme/BlogListPage';
 import ChangelogTimeline from '@site/src/components/ChangelogTimeline';
+import ProductUpdatesNav from '@site/src/components/ProductUpdatesNav';
 import styles from './styles.module.css';
 
 function BlogListPageMetadata({ metadata }: { metadata: Props['metadata'] }): ReactNode {
@@ -41,6 +42,7 @@ function BlogListPageContent({ items, metadata }: Props): ReactNode {
             <span className={styles.titlePrefix}>Atmos </span>
             Changelog
           </h1>
+          <ProductUpdatesNav activeView="changelog" />
         </header>
 
         <ChangelogTimeline items={items} />

@@ -674,7 +674,8 @@ const config = {
                     {
                         label: 'Changelog',
                         position: 'right',
-                        to: '/changelog'
+                        to: '/changelog',
+                        activeBaseRegex: '^/(changelog|roadmap)(/|$)',
                     },
                     {
                         to: '/pro',
