@@ -155,22 +155,24 @@ func markInstalled(installer *Installer, owner, repo string, versions []string) 
 	return installed
 }
 
+// selectStyles distinguishes installed versions using theme colors or bold text when color is unavailable.
 func selectStyles() (lipgloss.Style, lipgloss.Style) {
 	// Use ui.GetColorProfile() instead of termenv.ColorProfile() to respect
 	// atmos's terminal detection (handles Terminal.app 256-color limitation).
 	profile := ui.GetColorProfile()
 	if profile == termenv.ANSI256 || profile == termenv.TrueColor {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("15")), // white
-			lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // gray
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextPrimary)), // white
+			lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)) // gray
 	}
 	return lipgloss.NewStyle().Bold(true), lipgloss.NewStyle()
 }
 
+// printVersionsTable displays versions with caller-supplied styles and marks the default version.
 func printVersionsTable(versions []string, defaultVersion string, installed map[string]bool, installedStyle, notInstalledStyle *lipgloss.Style) {
 	for _, v := range versions {
 		indicator := " "
 		if v == defaultVersion {
-			indicator = theme.Styles.Checkmark.Render()
+			indicator = theme.GetCurrentStyles().Checkmark.Render()
 		}
 		if installed[v] {
 			ui.Writef("%s %s", indicator, installedStyle.Render(v))
