@@ -4,7 +4,7 @@ author: Cloud Posse
 
 inputs:
   github-token:
-    description: GitHub token with actions:read, pull-requests:read, and issues:write permissions.
+    description: GitHub token with actions:read, pull-requests:write, and issues:write permissions.
     required: true
   workflow-run-id:
     description: ID of the completed workflow_run that triggered the coordinator.
