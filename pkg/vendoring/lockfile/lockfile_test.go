@@ -1532,7 +1532,7 @@ func TestCleanRejectsCorruptLockAndSurfacesRemovalAndSaveFailures(t *testing.T) 
 		require.ErrorIs(t, err, ErrRemoveLockOwnedFile)
 	})
 
-	t.Run("lock save failure after successful removal is surfaced, not silently dropped", func(t *testing.T) {
+	t.Run("unwritable mutation lock prevents removal", func(t *testing.T) {
 		skipUnlessWritablePermissionsWork(t)
 		base := t.TempDir()
 		target := filepath.Join(base, "vendor")
@@ -1546,13 +1546,16 @@ func TestCleanRejectsCorruptLockAndSurfacesRemovalAndSaveFailures(t *testing.T) 
 		lock.Artifacts["component"] = Artifact{Name: "component", Kind: "source", Target: target, Files: files}
 		require.NoError(t, Save(config, lock))
 
-		// Only the base (lock) directory is read-only; the target directory
-		// stays writable, so file removal succeeds but the final lock write fails.
+		// The writable target must remain intact when acquiring the project mutation
+		// lock fails in the read-only base directory.
 		require.NoError(t, os.Chmod(base, 0o555))
 		defer func() { _ = os.Chmod(base, 0o755) }()
 
 		_, err = Clean(config, "", true, false)
 		require.Error(t, err)
-		require.NoFileExists(t, filepath.Join(target, "owned.txt"))
+		require.FileExists(t, filepath.Join(target, "owned.txt"))
+		contents, readErr := os.ReadFile(filepath.Join(target, "owned.txt"))
+		require.NoError(t, readErr)
+		require.Equal(t, "original", string(contents))
 	})
 }

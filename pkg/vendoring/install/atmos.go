@@ -3,7 +3,6 @@ package install
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -62,19 +61,25 @@ func NewAtmosVendorPackage(params *AtmosPackageParams) VendorPackage {
 }
 
 func (p *atmosVendorInstaller) install(ctx context.Context, tempDir string, atmosConfig *schema.AtmosConfiguration) error {
+	prepared, err := p.prepare(ctx, tempDir, atmosConfig, preparationProgress{})
+	if err != nil {
+		return err
+	}
+	return prepared.Materialize(ctx, atmosConfig)
+}
+
+func (p *atmosVendorInstaller) prepare(ctx context.Context, tempDir string, atmosConfig *schema.AtmosConfiguration, progress preparationProgress) (*PreparedPackage, error) {
 	fetchedDir, metadata, err := fetchToTempDir(ctx, atmosConfig, p.srcURI, p.pType, tempDir, fetchOptions{
+		Progress: progress.bytes, OnRetry: progress.retry,
 		ClientMode:        downloader.ClientModeAny,
 		SourceIsLocalFile: p.localFile,
 		Retry:             p.source.Retry,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if err := copyToTargetWithPatterns(fetchedDir, p.targetPath, &p.source, p.localFile); err != nil {
-		return fmt.Errorf("%w: %w", ErrCopyPackage, err)
-	}
-
+	progress.preparing()
 	recordOpts := lockfile.RecordOptions{
 		IncludedPaths: p.source.IncludedPaths,
 		ExcludedPaths: p.source.ExcludedPaths,
@@ -91,18 +96,27 @@ func (p *atmosVendorInstaller) install(ctx context.Context, tempDir string, atmo
 		Path:           p.targetPath,
 		DeclaredSource: lockDeclaredSource(p.pType, p.srcURI),
 	}
-	if err := lockfile.Record(ctx, atmosConfig, recordTarget, recordOpts); err != nil {
-		return fmt.Errorf("%w: %w", ErrRecordVendorLock, err)
+	receipt, err := lockfile.PrepareRecord(ctx, atmosConfig, recordTarget, recordOpts)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrRecordVendorLock, err)
 	}
-	return nil
+	return &PreparedPackage{receipt: receipt, copyFiles: func() error {
+		if err := copyToTargetWithPatterns(fetchedDir, p.targetPath, &p.source, p.localFile); err != nil {
+			return fmt.Errorf("%w: %w", ErrCopyPackage, err)
+		}
+
+		return nil
+	}}, nil
 }
 
-func (p *atmosVendorInstaller) dryRunCheck(_ context.Context, atmosConfig *schema.AtmosConfiguration) error {
+func (p *atmosVendorInstaller) dryRunCheck(ctx context.Context, atmosConfig *schema.AtmosConfiguration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	log.Debug("Entering dry-run flow for generic (non component/mixin) vendoring", "package", p.name)
 	if err := detectIfNeeded(atmosConfig, p.srcURI); err != nil {
 		return fmt.Errorf("%w: %w", ErrDryRunDetectionFailed, err)
 	}
-	time.Sleep(500 * time.Millisecond)
 	return nil
 }
 

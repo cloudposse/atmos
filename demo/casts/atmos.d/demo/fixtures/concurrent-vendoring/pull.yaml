@@ -1,0 +1,57 @@
+commands:
+  - name: casts generate demo fixtures concurrent-vendoring pull
+    description: Record concurrent downloads and ordered installation using local HTTP sources
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: serve
+        working_directory: "../../.context/cast-fixtures/concurrent-vendoring"
+        command: python3 serve.py start
+        output: none
+      - type: cast
+        name: pull
+        working_directory: "../../.context/cast-fixtures/concurrent-vendoring"
+        title: Concurrent vendoring
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/demo/fixtures/concurrent-vendoring/pull.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# Prepare four packages at once; install in declaration order"
+          - type: simulate
+            text: &pull atmos vendor pull --max-concurrency 4
+          - type: shell
+            command: *pull
+          - type: simulate
+            text: "# Receipts make the next pull a fast unchanged check"
+          - type: simulate
+            text: &unchanged atmos vendor pull
+          - type: shell
+            command: *unchanged
+      - type: shell
+        name: stop
+        when: always
+        working_directory: "../../.context/cast-fixtures/concurrent-vendoring"
+        command: python3 serve.py stop
+        output: none
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          from cast_checks import load_text, strip_ansi, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/demo/fixtures/concurrent-vendoring/pull.cast")
+          plain = strip_ansi(text)
+          for expected in ["--max-concurrency 4", "4 active", "8 packages", "8 unchanged"]:
+              assert expected in plain, f"Missing {expected!r}"
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

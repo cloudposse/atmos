@@ -22,6 +22,9 @@ vendor:
   # Path to vendor manifest file or directory
   base_path: vendor.yaml
 
+  # Concurrent downloads and update checks (edition-aware default)
+  max_concurrency: 4
+
   # Configure output format for vendor list command
   list:
     format: table
@@ -143,6 +146,51 @@ vendor:
     or `atmos vendor update --pull`.
   </dd>
 </dl>
+
+## Concurrency
+
+`vendor.max_concurrency` sets the maximum number of simultaneous downloads and
+preparation jobs for [`vendor pull`](/cli/commands/vendor/pull), and upstream checks
+for [`vendor update`](/cli/commands/vendor/vendor-update). The pull phase of
+`vendor update --pull` uses the same value.
+
+Precedence is **explicit `--max-concurrency` flag → `ATMOS_VENDOR_MAX_CONCURRENCY`
+environment variable → merged configuration → edition-aware default**. Values
+must be positive integers; explicit zero, negative, and malformed values fail
+before vendoring begins.
+
+| Edition pin | Default workers |
+| :-- | --: |
+| Unpinned | 4 |
+| Before `2026-09-15` | 1 |
+| On or after `2026-09-15` | 4 |
+
+An explicit value overrides the edition pin. Partial dates follow the existing
+[edition rules](/cli/configuration/edition): `"2026-08"` ends on August 31 and keeps
+one worker; `"2026-09"` includes the September change and uses four.
+
+```shell
+atmos vendor pull --max-concurrency 8
+ATMOS_VENDOR_MAX_CONCURRENCY=2 atmos vendor update --check
+atmos vendor update --pull --max-concurrency 4
+```
+
+Downloads and preparation overlap. Destination copying and lock receipt updates
+follow declaration order, including component sources before their mixins. Local
+sources are staged after preceding writes, so they observe those files. At most
+twice the worker count may be downloading or waiting to be installed. One worker
+preserves serial execution.
+
+All editions receive the progress display. Active rows show the current phase,
+with byte counts when the download backend provides them. A **ready** package is
+waiting for its turn to install; success appears only after files and receipts
+are written. Completed results remain visible. CI and redirected output use plain
+result lines on stderr, leaving structured update output on stdout intact.
+
+Concurrent vendoring operations coordinate destination writes and receipts with
+advisory locks. A failed package does not undo packages already installed. On
+interruption, Atmos cancels pending work, cleans temporary downloads, and lets an
+already-started materialization finish before releasing its locks.
 
 ## Component Updater Configuration
 

@@ -479,6 +479,20 @@ type RecordTarget struct {
 func Record(ctx context.Context, atmosConfig *schema.AtmosConfiguration, target RecordTarget, opts RecordOptions) error {
 	defer perf.Track(atmosConfig, "lockfile.Record")()
 
+	prepared, err := PrepareRecord(ctx, atmosConfig, target, opts)
+	if err != nil {
+		return err
+	}
+	return ReplaceContext(ctx, atmosConfig, prepared.id, prepared.artifact)
+}
+
+// PrepareRecord inventories staged files and resolves provenance without holding mutation locks.
+func PrepareRecord(ctx context.Context, atmosConfig *schema.AtmosConfiguration, target RecordTarget, opts RecordOptions) (*PreparedRecord, error) {
+	defer perf.Track(atmosConfig, "lockfile.PrepareRecord")()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	var (
 		files []File
 		err   error
@@ -489,12 +503,15 @@ func Record(ctx context.Context, atmosConfig *schema.AtmosConfiguration, target 
 		files, err = VendorInventoryWithPatterns(target.TempDir, opts.IncludedPaths, opts.ExcludedPaths)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	resolved, err := downloader.ResolveArtifact(ctx, atmosConfig, target.DeclaredSource, target.TempDir)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	identity := resolved.Identity
 	if identity == "" {
@@ -519,9 +536,9 @@ func Record(ctx context.Context, atmosConfig *schema.AtmosConfiguration, target 
 	}
 	id, err := ArtifactID(atmosConfig, target.Kind, target.Path, writers...)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return Replace(atmosConfig, id, artifact)
+	return &PreparedRecord{id: id, artifact: artifact}, nil
 }
 
 // recordSource builds Record's Source value, applying opts' optional cache-metadata and
@@ -632,6 +649,16 @@ func filesMaterialized(config *schema.AtmosConfiguration, artifact Artifact) (Ma
 func Replace(config *schema.AtmosConfiguration, id string, artifact Artifact) error {
 	defer perf.Track(config, "lockfile.Replace")()
 
+	return ReplaceContext(context.Background(), config, id, artifact)
+}
+
+// ReplaceContext replaces a receipt while honoring cancellation during lock acquisition.
+func ReplaceContext(ctx context.Context, config *schema.AtmosConfiguration, id string, artifact Artifact) error {
+	defer perf.Track(config, "lockfile.ReplaceContext")()
+	return WithMutation(ctx, config, func() error { return replaceUnlocked(config, id, artifact) })
+}
+
+func replaceUnlocked(config *schema.AtmosConfiguration, id string, artifact Artifact) error {
 	target, err := projectRelativeTarget(config, artifact.Target)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, ErrNormalizeArtifactTarget, err)
@@ -786,6 +813,22 @@ func Clean(config *schema.AtmosConfiguration, component string, force, dryRun bo
 func CleanSelected(config *schema.AtmosConfiguration, components []string, force, dryRun bool) (*CleanReport, error) {
 	defer perf.Track(config, "lockfile.CleanSelected")()
 
+	return CleanSelectedContext(context.Background(), config, components, force, dryRun)
+}
+
+// CleanSelectedContext coordinates cleanup with materialization and honors cancellation while waiting.
+func CleanSelectedContext(ctx context.Context, config *schema.AtmosConfiguration, components []string, force, dryRun bool) (*CleanReport, error) {
+	defer perf.Track(config, "lockfile.CleanSelectedContext")()
+	var report *CleanReport
+	err := WithMutation(ctx, config, func() error {
+		var err error
+		report, err = cleanSelectedUnlocked(config, components, force, dryRun)
+		return err
+	})
+	return report, err
+}
+
+func cleanSelectedUnlocked(config *schema.AtmosConfiguration, components []string, force, dryRun bool) (*CleanReport, error) {
 	lock, err := Load(config)
 	if err != nil {
 		return nil, err

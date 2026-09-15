@@ -1,0 +1,7 @@
+base_path: .
+vendor:
+  max_concurrency: 4
+  lock:
+    enforcement: silent
+logs:
+  level: Warning

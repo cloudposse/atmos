@@ -1,6 +1,7 @@
 package vendor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -92,7 +93,11 @@ var vendorCleanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		report, err := lockfile.CleanSelected(&config, components, force, dryRun)
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		report, err := lockfile.CleanSelectedContext(ctx, &config, components, force, dryRun)
 		if err != nil {
 			return err
 		}

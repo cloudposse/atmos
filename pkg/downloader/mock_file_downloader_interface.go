@@ -144,6 +144,21 @@ func (mr *MockFileDownloaderMockRecorder) FetchWithMetadata(src, dest, mode, tim
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchWithMetadata", reflect.TypeOf((*MockFileDownloader)(nil).FetchWithMetadata), src, dest, mode, timeout)
 }
 
+// FetchWithMetadataContext mocks base method.
+func (m *MockFileDownloader) FetchWithMetadataContext(ctx context.Context, src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchWithMetadataContext", ctx, src, dest, mode, timeout)
+	ret0, _ := ret[0].(FetchMetadata)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchWithMetadataContext indicates an expected call of FetchWithMetadataContext.
+func (mr *MockFileDownloaderMockRecorder) FetchWithMetadataContext(ctx, src, dest, mode, timeout any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchWithMetadataContext", reflect.TypeOf((*MockFileDownloader)(nil).FetchWithMetadataContext), ctx, src, dest, mode, timeout)
+}
+
 // MockClientFactory is a mock of ClientFactory interface.
 type MockClientFactory struct {
 	ctrl     *gomock.Controller

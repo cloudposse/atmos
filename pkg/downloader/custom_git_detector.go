@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -20,6 +21,7 @@ const schemeSeparator = "://"
 // CustomGitDetector intercepts Git URLs (for GitHub, Bitbucket, GitLab, etc.)
 // and transforms them into a proper URL for cloning, optionally injecting tokens.
 type CustomGitDetector struct {
+	ctx         context.Context
 	atmosConfig *schema.AtmosConfiguration
 	source      string
 }
@@ -391,7 +393,11 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 		// Last resort: fall back to `gh auth token`, matching the fallback github.GetGitHubToken()
 		// already uses for plain HTTPS/API fetches, so a developer who's only run `gh auth login`
 		// doesn't need a separate token for private-repo git:: imports/vendoring/module fetches too.
-		if token := github.GetGitHubTokenFromCLI(); token != "" {
+		ctx := d.ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		if token := github.GetGitHubTokenFromCLIContext(ctx); token != "" {
 			return token, "GH_CLI"
 		}
 		return "", ""

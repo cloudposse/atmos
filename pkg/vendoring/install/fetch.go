@@ -2,8 +2,10 @@ package install
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -31,6 +33,8 @@ const ociScheme = "oci://"
 // componentVendorInstaller share the same pkgType dispatch but differ in a few narrow respects
 // preserved here exactly as the pre-unification code did (see each field's doc comment).
 type fetchOptions struct {
+	Progress func(int64, int64)
+	OnRetry  func(int)
 	// ClientMode is the go-getter client mode for a PkgTypeRemote fetch: ClientModeAny for
 	// atmos-vendor and component sources, ClientModeFile for mixins (a mixin's target is a
 	// single named file, not a directory).
@@ -66,19 +70,19 @@ type fetchOptions struct {
 func fetchToTempDir(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri string, pType PkgType, tempDir string, opts fetchOptions) (string, downloader.FetchMetadata, error) {
 	switch pType {
 	case PkgTypeRemote:
-		return fetchRemote(atmosConfig, uri, tempDir, opts)
+		return fetchRemote(ctx, atmosConfig, uri, tempDir, opts)
 	case PkgTypeOci:
-		dir, err := fetchOCI(ctx, atmosConfig, uri, tempDir)
+		dir, err := fetchOCI(oci.WithRetryObserver(ctx, opts.OnRetry), atmosConfig, uri, tempDir)
 		return dir, downloader.FetchMetadata{}, err
 	case PkgTypeLocal:
-		dir, err := fetchLocal(uri, tempDir, opts)
+		dir, err := fetchLocal(ctx, uri, tempDir, opts)
 		return dir, downloader.FetchMetadata{}, err
 	default:
 		return "", downloader.FetchMetadata{}, fmt.Errorf("%w %s", errUtils.ErrUnknownPackageType, pType.String())
 	}
 }
 
-func fetchRemote(atmosConfig *schema.AtmosConfiguration, uri, tempDir string, opts fetchOptions) (string, downloader.FetchMetadata, error) {
+func fetchRemote(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, tempDir string, opts fetchOptions) (string, downloader.FetchMetadata, error) {
 	target := tempDir
 	switch {
 	case opts.Target != "":
@@ -87,13 +91,13 @@ func fetchRemote(atmosConfig *schema.AtmosConfiguration, uri, tempDir string, op
 		target = filepath.Join(tempDir, vendor.SanitizeFileName(uri))
 	}
 
-	ggOpts := []downloader.GoGetterOption{}
+	ggOpts := []downloader.GoGetterOption{downloader.WithProgress(downloadProgress{notify: opts.Progress}), downloader.WithRetryObserver(opts.OnRetry)}
 	if opts.Retry != nil {
 		ggOpts = append(ggOpts, downloader.WithRetryConfig(opts.Retry))
 	}
-	metadata, err := downloader.NewGoGetterDownloader(atmosConfig, ggOpts...).FetchWithMetadata(uri, target, opts.ClientMode, fetchTimeout)
+	metadata, err := downloader.NewGoGetterDownloader(atmosConfig, ggOpts...).FetchWithMetadataContext(ctx, uri, target, opts.ClientMode, fetchTimeout)
 	if err != nil {
-		return "", downloader.FetchMetadata{}, fmt.Errorf("%w: %w", ErrDownloadPackage, err)
+		return "", downloader.FetchMetadata{}, fmt.Errorf("%w: %w", ErrDownloadPackage, errors.Join(err, ctx.Err()))
 	}
 	return target, metadata, nil
 }
@@ -107,7 +111,10 @@ func fetchOCI(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, 
 	return tempDir, nil
 }
 
-func fetchLocal(uri, tempDir string, opts fetchOptions) (string, error) {
+func fetchLocal(ctx context.Context, uri, tempDir string, opts fetchOptions) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	target := tempDir
 	switch {
 	case opts.Target != "":
@@ -119,6 +126,7 @@ func fetchLocal(uri, tempDir string, opts fetchOptions) (string, error) {
 		PreserveTimes: false,
 		PreserveOwner: false,
 		OnSymlink:     func(string) cp.SymlinkAction { return cp.Deep },
+		Skip:          func(os.FileInfo, string, string) (bool, error) { return false, ctx.Err() },
 	}
 	if err := cp.Copy(uri, target, copyOptions); err != nil {
 		return "", fmt.Errorf("%w: %w", ErrCopyPackage, err)
