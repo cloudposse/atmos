@@ -134,6 +134,11 @@ vendor:
     How `atmos vendor pull` reacts when a package's on-disk state no longer matches its
     `vendor.lock.yaml` receipt.
 
+    When the receipt matches the declaration and all its recorded files are absent, Atmos
+    treats the package as uninstalled and reinstalls it without a drift warning, including
+    under `strict`. This supports `vendor clean` followed by `vendor pull`. Partially missing
+    or modified files and changed declarations still use the enforcement policy below.
+
     **Valid values:**
     - `warn` — re-fetch the drifted package and print one warning per package naming why it drifted.
     - `silent` — re-fetch the drifted package with no reporting.

@@ -14,6 +14,8 @@ order.
 
 <!--truncate-->
 
+<CastEmbed src="/casts/demo/fixtures/concurrent-vendoring/pull.cast" title="Concurrent vendoring and cleanup" chrome controls scrubber />
+
 ## The Problem
 
 A repository can contain many component sources, mixins, and targets. Fetching
@@ -28,13 +30,16 @@ installs them in declaration order. Local sources wait for earlier writes before
 being read. [Vendor update](/cli/commands/vendor/vendor-update) checks upstream
 versions concurrently and preserves the order and formatting of manifest edits.
 
-The shared progress display shows active phases, available download sizes, retries,
-and completed results. A ready package is waiting for its turn to install. CI
-receives plain result lines, and structured update reports stay on stdout.
+The shared progress display shows active phases, download percentages when the total
+size is known, retries, and completed results. A ready package is waiting for its turn
+to install. CI receives plain result lines, and structured update reports stay on stdout.
+
+The [vendor clean](/cli/commands/vendor/vendor-clean) command displays relative paths
+and preserves every lock entry when removing vendored files. Recorded versions,
+checksums, and provenance remain available for the next pull. Fully cleaned packages
+reinstall without drift warnings; partial deletion and modified files still trigger checks.
 
 ## How to Use It
-
-<CastEmbed src="/casts/demo/fixtures/concurrent-vendoring/pull.cast" title="Concurrent vendoring" chrome controls scrubber />
 
 ```shell
 atmos vendor pull --max-concurrency 8

@@ -660,7 +660,7 @@ func processVendorImports(
 }
 
 func logInitialMessage(vendorConfigFileName string, tags []string) {
-	logMessage := fmt.Sprintf("Vendoring from '%s'", vendorConfigFileName)
+	logMessage := fmt.Sprintf("Vendoring from `%s`", vendorConfigFileName)
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}

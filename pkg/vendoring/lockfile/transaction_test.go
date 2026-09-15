@@ -189,7 +189,12 @@ func TestSeparateProcessCleanWaitsForMaterialization(t *testing.T) {
 	require.NoFileExists(t, filepath.Join(target, "main.tf"))
 	lock, err := Load(config)
 	require.NoError(t, err)
-	assert.Empty(t, lock.Artifacts)
+	require.Len(t, lock.Artifacts, 1, "clean must preserve the completed materialization receipt")
+	for _, artifact := range lock.Artifacts {
+		assert.Equal(t, "component", artifact.Name)
+		require.Len(t, artifact.Files, 1)
+		assert.Equal(t, "main.tf", artifact.Files[0].Path)
+	}
 }
 
 func TestCanonicalPathRejectsSymlinkLoop(t *testing.T) {

@@ -4,4 +4,4 @@ vendor:
   lock:
     enforcement: silent
 logs:
-  level: Warning
+  level: Info

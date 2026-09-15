@@ -175,6 +175,37 @@ func TestInstallBatchRechecksUnchangedAfterOverlay(t *testing.T) {
 	assert.Equal(t, "unchanged", report.Results[0].Outcome)
 }
 
+func TestInstallBatchReinstallsAfterCleanPreservesReceipt(t *testing.T) {
+	config, pkg, target := newMaterializedAtmosPackage(t, "original")
+	before, err := os.ReadFile(lockfile.Path(config))
+	require.NoError(t, err)
+	_, err = lockfile.Clean(config, "", false, false)
+	require.NoError(t, err)
+	require.NoFileExists(t, filepath.Join(target, "main.tf"))
+	after, err := os.ReadFile(lockfile.Path(config))
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "clean must leave the receipt untouched")
+
+	var warnings []string
+	report, err := InstallBatch(context.Background(), config, []VendorPackage{pkg}, InstallOptions{LockEnforcement: LockEnforcementWarn}, func(event batch.Event) {
+		if event.Warning != "" {
+			warnings = append(warnings, event.Warning)
+		}
+	})
+	require.NoError(t, err)
+	assert.Empty(t, warnings, "a cleaned installation must be restored without drift warnings")
+	require.Len(t, report.Results, 1)
+	assert.Equal(t, "installed", report.Results[0].Outcome)
+	contents, err := os.ReadFile(filepath.Join(target, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# original\n", string(contents))
+	receipt, err := lockfile.Load(config)
+	require.NoError(t, err)
+	drifts, err := lockfile.Verify(config, receipt)
+	require.NoError(t, err)
+	assert.Empty(t, drifts)
+}
+
 func TestInstallBatchFailureContinuesAndStrictPreflight(t *testing.T) {
 	base := t.TempDir()
 	config := &schema.AtmosConfiguration{BasePath: base}

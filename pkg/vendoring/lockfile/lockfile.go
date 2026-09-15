@@ -582,6 +582,9 @@ type MaterializationParams struct {
 // still matches its vendor.lock.yaml receipt, and -- when it doesn't -- why.
 type MaterializationCheck struct {
 	Materialized bool
+	// Uninstalled means the receipt still matches the declaration, but every owned file is absent.
+	// This is expected after cleanup or on a checkout that only contains the lockfile.
+	Uninstalled bool
 	// Reason is empty when Materialized is true. Otherwise one of: "no lock entry", "target path
 	// changed", "declared source changed", "included/excluded paths changed", or a per-file reason
 	// naming the file (e.g. `file "foo.tf" missing`, `file "foo.tf" checksum mismatch`).
@@ -627,18 +630,30 @@ func IsMaterialized(config *schema.AtmosConfiguration, params MaterializationPar
 // artifact still exists on disk with a matching checksum -- once the receipt's identity and
 // copy-filter patterns have already been confirmed unchanged.
 func filesMaterialized(config *schema.AtmosConfiguration, artifact Artifact) (MaterializationCheck, error) {
+	missing := 0
+	firstMissing := ""
 	for _, file := range artifact.Files {
 		path, pathErr := lockedPath(config, artifact.Target, file.Path)
 		if pathErr != nil {
 			return MaterializationCheck{}, pathErr
 		}
 		info, statErr := os.Lstat(path)
+		if os.IsNotExist(statErr) {
+			missing++
+			if firstMissing == "" {
+				firstMissing = fmt.Sprintf("file %q missing", file.Path)
+			}
+			continue
+		}
 		if statErr != nil {
 			return notMaterialized(fmt.Sprintf("file %q missing", file.Path))
 		}
 		if !matches(file, path, info) {
 			return notMaterialized(fmt.Sprintf("file %q checksum mismatch", file.Path))
 		}
+	}
+	if missing > 0 {
+		return MaterializationCheck{Uninstalled: missing == len(artifact.Files), Reason: firstMissing}, nil
 	}
 	return MaterializationCheck{Materialized: true}, nil
 }
@@ -795,7 +810,7 @@ func verifyArtifactFile(config *schema.AtmosConfiguration, artifactID, target st
 
 // Clean removes files owned by selected lock artifacts. A blank component
 // selects every artifact. Modified files are preserved unless force is true.
-// The lock is updated only when every selected artifact was removed cleanly.
+// Lock entries are preserved so cleanup retains recorded versions and provenance.
 func Clean(config *schema.AtmosConfiguration, component string, force, dryRun bool) (*CleanReport, error) {
 	defer perf.Track(config, "lockfile.Clean")()
 
@@ -808,8 +823,8 @@ func Clean(config *schema.AtmosConfiguration, component string, force, dryRun bo
 
 // CleanSelected removes files owned by selected lock artifacts. An empty/nil components selects
 // every artifact (same as Clean's blank-component behavior); otherwise only artifacts whose Name is
-// in components are selected. Modified files are preserved unless force is true. The lock is
-// updated only when every selected artifact was removed cleanly.
+// in components are selected. Modified files are preserved unless force is true. Lock entries
+// remain unchanged, including after every selected file has been removed.
 func CleanSelected(config *schema.AtmosConfiguration, components []string, force, dryRun bool) (*CleanReport, error) {
 	defer perf.Track(config, "lockfile.CleanSelected")()
 
@@ -846,11 +861,6 @@ func cleanSelectedUnlocked(config *schema.AtmosConfiguration, components []strin
 	}
 	if err := removeCleanArtifacts(config, selected, remainingOwners, dryRun, report); err != nil {
 		return nil, err
-	}
-	if !dryRun {
-		if err := removeCleanArtifactsFromLock(config, lock, selected); err != nil {
-			return nil, err
-		}
 	}
 	return report, nil
 }
@@ -954,13 +964,6 @@ func removeCleanFile(config *schema.AtmosConfiguration, target, path string, dry
 	}
 	removeEmptyParents(filepath.Dir(path), root)
 	return nil
-}
-
-func removeCleanArtifactsFromLock(config *schema.AtmosConfiguration, lock *LockFile, selected map[string]Artifact) error {
-	for id := range selected {
-		delete(lock.Artifacts, id)
-	}
-	return Save(config, lock)
 }
 
 func lockedPath(config *schema.AtmosConfiguration, target, relative string) (string, error) {

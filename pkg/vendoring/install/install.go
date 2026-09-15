@@ -95,7 +95,8 @@ func InstallContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 // returned as-is (matching the pre-unification "if !dryRun && !refreshLock { filter... }" guard
 // duplicated at all three call sites this replaces).
 //
-// For every drifted (non-materialized) package, opts.LockEnforcement governs what happens next:
+// A matching receipt with every owned file absent is a normal pending installation, including
+// after clean. For every drifted package, opts.LockEnforcement governs what happens next:
 //   - LockEnforcementSilent: the package is added to pending with no reporting -- the only level
 //     whose observable behavior matches this function before enforcement levels existed.
 //   - LockEnforcementWarn (the default, including "" and any unrecognized value): the package is
@@ -129,6 +130,10 @@ func filterPending(atmosConfig *schema.AtmosConfiguration, packages []VendorPack
 		}
 		if check.Materialized {
 			log.Debug("Vendor target matches immutable lock receipt; skipping download", "package", pkg.Name, "target", pkg.Target())
+			continue
+		}
+		if check.Uninstalled {
+			pending = append(pending, pkg)
 			continue
 		}
 		if blocked := applyLockEnforcementWithWarning(enforcement, pkg, check, &pending, warning); blocked != "" {

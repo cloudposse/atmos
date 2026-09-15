@@ -115,12 +115,12 @@ var vendorCleanCmd = &cobra.Command{
 			if dryRun {
 				ui.Infof("Would remove %s", path)
 			} else {
-				ui.Infof("Removed %s", path)
+				ui.Successf("Removed %s", path)
 			}
 		}
 		if len(report.Conflicts) > 0 {
 			for _, conflict := range report.Conflicts {
-				ui.Warningf("Preserved modified vendor file %s", relativeVendorPathForDisplay(conflict.Path, basePath))
+				ui.Errorf("Preserved modified vendor file %s", relativeVendorPathForDisplay(conflict.Path, basePath))
 			}
 			return fmt.Errorf("%w: %d", errModifiedVendorFiles, len(report.Conflicts))
 		}

@@ -119,6 +119,11 @@ inside the transaction before touching targets. Coordinate clean and other
 vendoring writers with the same locks. Internal unlocked helpers avoid recursive
 acquisition. Downloads and provenance resolution stay outside mutation locks.
 
+Clean preserves every lock entry, including versions, checksums, and provenance.
+A matching receipt whose owned files are all absent represents a pending installation
+and can be restored without drift warnings in every enforcement mode. Partial deletion,
+modified files, and changed declarations continue to use the configured drift policy.
+
 Lock waits honor context cancellation and appear in progress. On interruption,
 stop scheduling, cancel preparations, join workers, and remove staging. Finish
 an already-started materialization before releasing its locks, then stop further
