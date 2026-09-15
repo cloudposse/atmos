@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	cockroachdberrors "github.com/cockroachdb/errors"
@@ -1591,7 +1592,7 @@ func TestCheckExperimental(t *testing.T) {
 		expectedErr error
 	}{
 		{
-			name:      "empty defaults to warn (no error)",
+			name:      "empty defaults to warn-daily (no error)",
 			mode:      "",
 			expectErr: false,
 		},
@@ -1626,6 +1627,7 @@ func TestCheckExperimental(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
 			config := &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					Experimental: tc.mode,
@@ -1641,4 +1643,33 @@ func TestCheckExperimental(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCheckExperimentalWarnDaily(t *testing.T) {
+	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
+	output, err := os.CreateTemp(t.TempDir(), "warnings")
+	require.NoError(t, err)
+	originalStderr := os.Stderr
+	os.Stderr = output
+	t.Cleanup(func() {
+		os.Stderr = originalStderr
+		_ = output.Close()
+	})
+
+	// Another feature's warning must not silence CI. The CI command and CI
+	// hooks share the same feature ID and therefore the same daily timestamp.
+	require.True(t, cfg.ClaimExperimentalWarning("toolchain"))
+	config := &schema.AtmosConfiguration{Settings: schema.AtmosSettings{Experimental: "warn-daily"}}
+	require.NoError(t, checkExperimental(config))
+	require.NoError(t, checkExperimental(config))
+	assert.False(t, cfg.ClaimExperimentalWarning(ciExperimentalFeature))
+	warnings, err := os.ReadFile(output.Name())
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(warnings), "experimental feature"))
+
+	// Cached warnings never bypass feature enforcement.
+	config.Settings.Experimental = "error"
+	assert.ErrorIs(t, checkExperimental(config), errUtils.ErrExperimentalRequiresIn)
+	config.Settings.Experimental = "disable"
+	assert.ErrorIs(t, checkExperimental(config), errUtils.ErrExperimentalDisabled)
 }
