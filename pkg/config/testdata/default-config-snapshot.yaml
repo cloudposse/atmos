@@ -21,7 +21,7 @@ docs.generate.readme.output: ./README.md
 list.error_mode: warn
 logs.file: /dev/stderr
 logs.level: Warning
-settings.experimental: warn
+settings.experimental: warn-daily
 settings.inject_bitbucket_token: true
 settings.inject_github_token: true
 settings.inject_gitlab_token: true

@@ -38,7 +38,7 @@ Users configure experimental feature behavior via `settings.experimental` in `at
 
 ```yaml
 settings:
-  experimental: warn  # silence | disable | warn | error
+  experimental: warn-daily  # silence | disable | warn | warn-daily (default) | error
 ```
 
 ### Behavior Modes
@@ -47,10 +47,13 @@ settings:
 |------|-------------|----------|
 | `silence` | No output, feature runs normally | Production systems that knowingly use experimental features |
 | `disable` | Error when experimental command invoked | Strict environments that prohibit experimental features |
-| `warn` | Show warning, then run normally | Development environments (default) |
+| `warn` | Show warning on each top-level invocation, then run normally | Explicit override for more frequent notices |
+| `warn-daily` | Show each feature's warning once every 24 hours using the shared local cache, then run normally | Default for unpinned projects and editions on or after `2026-09-14` |
 | `error` | Show warning, then exit with error | CI/CD that wants to catch experimental usage |
 
 ### Environment Variable
+
+To explicitly select warnings on each top-level invocation:
 
 ```bash
 ATMOS_EXPERIMENTAL=warn
@@ -104,10 +107,11 @@ User invokes command
 ┌─────────────────────────────────────────┐
 │              Switch on mode             │
 ├─────────────────────────────────────────┤
-│ silence → continue silently             │
-│ disable → return error                  │
-│ warn    → ui.Experimental() + continue  │
-│ error   → ui.Experimental() + return err│
+│ silence    → continue silently          │
+│ disable    → return error               │
+│ warn       → warn at top level; continue│
+│ warn-daily → warn if due; continue      │
+│ error      → warn and return error      │
 └─────────────────────────────────────────┘
 ```
 
@@ -135,7 +139,7 @@ type Settings struct {
     // ... existing fields ...
 
     // Experimental controls how experimental features are handled.
-    // Values: "silence" (no output), "disable" (disabled), "warn" (default), "error" (exit).
+    // Values: "silence", "disable", "warn", "warn-daily" (default), "error".
     Experimental string `yaml:"experimental" json:"experimental" mapstructure:"experimental"`
 }
 ```
@@ -145,7 +149,7 @@ type Settings struct {
 In `pkg/config/load.go`:
 
 ```go
-v.SetDefault("settings.experimental", "warn")
+v.SetDefault("settings.experimental", "warn-daily")
 ```
 
 ### Command Implementation
@@ -166,7 +170,7 @@ func (p *DevcontainerCommandProvider) IsExperimental() bool {
 
 ### Experimental Warning Output
 
-When `warn` or `error` mode is active, users see:
+When `warn` or `error` mode emits a warning, or a feature's warning is due in `warn-daily` mode, users see:
 
 ```
 🧪 devcontainer is an experimental feature. Learn more atmos.tools/experimental
@@ -235,11 +239,26 @@ Experimental features should have a clear path to stability:
 
 1. **silence mode** - Verify no output, command executes
 2. **disable mode** - Verify error returned, command does not execute
-3. **warn mode** - Verify warning shown, command executes
-4. **error mode** - Verify warning shown, error returned
-5. **Non-experimental commands** - Verify unaffected by settings
+3. **warn mode** - Verify warning shown on each top-level invocation, command executes
+4. **warn-daily mode** - Verify each feature warns independently once every 24 hours across invocations sharing the local cache, with another warning eligible when its interval expires
+5. **error mode** - Verify warning shown, error returned
+6. **Non-experimental commands** - Verify unaffected by settings
 
 ## Related Documents
 
 - [Command Registry Pattern](command-registry-pattern.md) - How commands register with Atmos
 - [Error Handling Strategy](error-handling-strategy.md) - How errors are formatted and returned
+
+## Migration: Daily Warnings (2026-09-14)
+
+The default for `settings.experimental` changes from `warn` to `warn-daily`, which
+shows each feature's warning once every 24 hours using the shared local cache.
+The edition journal preserves the `warn` default for pins before `2026-09-14`;
+explicit configuration and environment overrides continue to take precedence.
+
+The stored value `warn` also has a narrower behavior change: command and setting
+notices previously repeated in child Atmos processes, but are now suppressed after
+the parent handles startup. CI hooks retain their existing `warn` behavior. This
+child-process suppression is not edition-gated because `KindBehavior` resolution
+is not implemented; it is recorded in the editions PRD's behavior-gating roadmap.
+The `error` and `disable` modes remain enforced in all invocations.
