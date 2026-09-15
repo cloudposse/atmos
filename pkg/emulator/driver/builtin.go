@@ -49,20 +49,12 @@ const defaultHealthCheckRetries = 5
 // container shell (the Compose CMD-SHELL form), with timings tuned for a local
 // emulator startup. The component's `container.healthcheck` overrides it.
 func shellHealthCheck(cmd string) *schema.ContainerHealthCheck {
-	return shellHealthCheckWithStartPeriod(cmd, "10s")
-}
-
-// shellHealthCheckWithStartPeriod is shellHealthCheck with a caller-supplied
-// start_period, for images that consistently need longer than the 10s default
-// to bind their listener (e.g. a JVM warming up) before failed probes start
-// counting toward Retries -- see floci.go's floci/gcp and floci/az drivers.
-func shellHealthCheckWithStartPeriod(cmd, startPeriod string) *schema.ContainerHealthCheck {
 	return &schema.ContainerHealthCheck{
 		Test:        []string{"CMD-SHELL", cmd},
 		Interval:    "10s",
 		Timeout:     "5s",
 		Retries:     defaultHealthCheckRetries,
-		StartPeriod: startPeriod,
+		StartPeriod: "10s",
 	}
 }
 

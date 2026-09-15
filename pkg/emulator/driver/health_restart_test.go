@@ -70,29 +70,26 @@ func TestFlociHealthCheck_UsesItsOwnPort(t *testing.T) {
 		require.NoError(t, err)
 		hc := d.Defaults().HealthCheck
 		require.NotNil(t, hc)
-		assert.True(t, strings.Contains(hc.Test[1], ":"+port+"/"),
+		assert.True(t, strings.Contains(hc.Test[1], "/dev/tcp/127.0.0.1/"+port),
 			"%s health check should probe port %s, got %q", name, port, hc.Test[1])
 	}
 }
 
-// TestFlociHealthCheck_GCPAzGetLongerStartPeriod guards against a regression to
-// the 60s-total health check budget (10s start_period + 5 retries * 10s
-// interval) that flipped floci/gcp and floci/az to "unhealthy" around 54-56s
-// under CI load -- see docs/fixes for the incident; floci/aws keeps the
-// shared 10s default since it has never shown this race.
-func TestFlociHealthCheck_GCPAzGetLongerStartPeriod(t *testing.T) {
-	awsDriver, err := emu.ResolveDriver("floci/aws")
-	require.NoError(t, err)
-	awsStartPeriod := awsDriver.Defaults().HealthCheck.StartPeriod
-	assert.Equal(t, "10s", awsStartPeriod)
-
-	for _, name := range []string{"floci/gcp", "floci/az"} {
+// TestFlociHealthCheck_DoesNotRequireCurl guards against a regression to a
+// curl-based probe: floci-gcp and floci-az are GraalVM native-image builds
+// with no HTTP client binary at all (confirmed by exec'ing into a local
+// container -- `command -v curl` finds nothing), so a curl/wget-based health
+// check fails every probe with "command not found" regardless of how long
+// the container is given to start; bash's `/dev/tcp` needs only bash, which
+// all three Floci images ship.
+func TestFlociHealthCheck_DoesNotRequireCurl(t *testing.T) {
+	for _, name := range []string{"floci/aws", "floci/gcp", "floci/az"} {
 		d, err := emu.ResolveDriver(name)
 		require.NoError(t, err)
 		hc := d.Defaults().HealthCheck
 		require.NotNil(t, hc)
-		assert.Equal(t, flociGCPAzStartPeriod, hc.StartPeriod, "%s start_period", name)
-		assert.NotEqual(t, awsStartPeriod, hc.StartPeriod,
-			"%s should get a longer start_period than floci/aws's %s default", name, awsStartPeriod)
+		assert.NotContains(t, hc.Test[1], "curl", "%s health check should not depend on curl", name)
+		assert.NotContains(t, hc.Test[1], "wget", "%s health check should not depend on wget", name)
+		assert.Contains(t, hc.Test[1], "/dev/tcp/", "%s health check should use bash's /dev/tcp", name)
 	}
 }
