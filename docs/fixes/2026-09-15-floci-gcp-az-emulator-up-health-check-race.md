@@ -64,33 +64,32 @@ stop guessing and reproduce locally instead:
 
 ## Changes
 
+A second session (`osterman/floci-health-check-failures`) hit and fixed the
+same root cause independently and landed first (squash-merged into `main` as
+part of #3165); this branch's own fix was superseded by that version on
+merge rather than kept side-by-side. The adopted fix:
+
 - `pkg/emulator/driver/floci.go`: `flociHealthCheck`'s probe command changed
   from `curl -s -o /dev/null http://localhost:<port>/ || exit 1` to
-  `bash -c '(echo > /dev/tcp/127.0.0.1/<port>)' || exit 1` -- a pure bash
-  TCP-connect test using bash's built-in `/dev/tcp` pseudo-device, which
-  needs only `bash` (present in all three Floci images) and no external HTTP
-  client binary. Semantically equivalent to the old curl probe's actual
-  intent (the doc comment already said "only a refused connection fails the
-  probe" -- curl's response body/status was never actually checked). Applied
-  to all three variants (not just gcp/az) for consistency and so a future
-  image change on any of them can't silently reintroduce this failure mode.
-  `/bin/sh` happens to be symlinked to bash in these images, but Docker's
-  `CMD-SHELL` form is documented to always invoke `/bin/sh -c`, so the
-  command invokes `bash` explicitly rather than relying on that symlink.
-- `pkg/emulator/driver/builtin.go`: reverted the earlier attempt's
-  `shellHealthCheckWithStartPeriod` split back to a single `shellHealthCheck`
-  with the original uniform `10s` `start_period` -- now confirmed to be far
-  more than enough (`floci-gcp`/`floci-az` start in ~0.02s), so the
-  per-driver override this fix added is no longer justified and would only
-  be dead complexity.
-- `pkg/emulator/driver/health_restart_test.go`: replaced
-  `TestFlociHealthCheck_GCPAzGetLongerStartPeriod` (asserted the now-reverted
-  `start_period` difference) with `TestFlociHealthCheck_DoesNotRequireCurl`,
-  which asserts every Floci variant's health check contains neither `curl`
-  nor `wget` and does use `/dev/tcp` -- a regression here would have caught
-  this immediately. Updated `TestFlociHealthCheck_UsesItsOwnPort`'s
-  assertion for the new command's `/dev/tcp/127.0.0.1/<port>` shape (the old
-  assertion looked for a `:<port>/` URL substring).
+  `bash -c 'exec 3<>/dev/tcp/127.0.0.1/<port>'` -- a pure bash TCP-connect
+  test using bash's built-in `/dev/tcp` pseudo-device, which needs only
+  `bash` (present in all three Floci images) and no external HTTP client
+  binary. `exec 3<>...` opens the connection on fd 3 without writing
+  anything into the socket (unlike this branch's own first pass at the same
+  idea, which wrote a newline via `echo >`) -- purely a connect test, and
+  bash's own exit status on a failed connection makes the command fail
+  without needing an explicit `|| exit 1`. Applied to all three variants
+  (not just gcp/az) for consistency and so a future image change on any of
+  them can't silently reintroduce this failure mode.
+- `pkg/emulator/driver/builtin.go`: no `start_period` change was needed or
+  kept -- `floci-gcp`/`floci-az` start in ~0.02s, so the original uniform
+  `10s` default was never the problem.
+- `pkg/emulator/driver/health_restart_test.go`: `TestFlociHealthCheck_Readiness`
+  actually executes the probe command via `exec.CommandContext` against a
+  real listening `net.Listen` port (expect success) and then the same port
+  after closing it (expect failure without hanging) -- a stronger regression
+  test than this branch's own first pass, which only asserted the probe
+  string didn't contain `"curl"`/`"wget"`.
 
 ## Verification
 
@@ -99,21 +98,19 @@ stop guessing and reproduce locally instead:
   (`container did not become healthy: dev/emulator/gcp reported unhealthy`),
   and `docker inspect --format '{{json .State.Health}}'` on the resulting
   container showed the `curl: command not found` output directly.
-- After the fix, rebuilt `atmos` and re-ran both
+- After merging in the adopted fix, rebuilt `atmos` and re-ran
   `atmos emulator up gcp -s dev` and (with `FLOCI_AZ_TLS_ENABLED=true`)
   `atmos emulator up azure -s dev` against freshly scaffolded projects --
-  both now come up in a few seconds (`✓ emulator gcp is up at
-  http://127.0.0.1:14588`, `✓ emulator azure is up at
-  http://127.0.0.1:14577`), then torn down cleanly with `emulator down`.
+  both now come up in a few seconds, then torn down cleanly with
+  `emulator down`.
 - `go build ./...` clean.
-- `go test ./pkg/emulator/...` — all pass, including the new
-  `TestFlociHealthCheck_DoesNotRequireCurl` and the updated
-  `TestFlociHealthCheck_UsesItsOwnPort`.
+- `go test ./pkg/emulator/...` — all pass, including
+  `TestFlociHealthCheck_Readiness` and `TestFlociHealthCheck_UsesItsOwnPort`.
 - `gofumpt -l` clean; patch-scoped `custom-gcl run --new-from-rev=origin/main`
   reports 0 issues.
 
 ## Follow-ups
 
-None. Root-caused, reproduced locally, fixed, and covered by a regression
-test that asserts the actual failure mode (a curl/wget dependency) can't
-silently return.
+None. Root-caused independently via local reproduction, confirmed the fix
+that landed on `main` addresses the same root cause, and verified it directly
+against both the GCP and Azure emulators.

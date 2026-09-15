@@ -25,22 +25,11 @@ const (
 	flociDataDir = "/app/data"
 )
 
-// flociHealthCheck probes the Floci edge port with a bash `/dev/tcp` connect
-// test: once the listener accepts a connection the emulator is reachable for
-// the SDKs and Terraform, regardless of what it returns. This intentionally
-// does NOT use curl/wget -- floci-gcp and floci-az are GraalVM native-image
-// builds with no HTTP client binary at all (confirmed by exec'ing into a
-// local container: `command -v curl` finds nothing, only a bare
-// coreutils+bash userland), which made every floci/gcp and floci/az health
-// check fail with "curl: command not found" regardless of how long the
-// start_period was. `/bin/sh` in these images happens to be a symlink to
-// bash, but CMD-SHELL health checks are documented to always run via
-// `/bin/sh -c`, so this invokes bash explicitly rather than relying on that
-// symlink; floci/aws's image does still ship curl, but is probed the same
-// way here for consistency across the family and so a future floci/aws image
-// change can't silently reintroduce this failure mode.
+// flociHealthCheck probes the Floci edge port with Bash, which is present in all
+// Floci images even when curl is absent. A TCP probe supports both HTTP and TLS
+// listeners without depending on an endpoint's response or certificate trust.
 func flociHealthCheck(port int) *schema.ContainerHealthCheck {
-	return shellHealthCheck(fmt.Sprintf("bash -c '(echo > /dev/tcp/127.0.0.1/%d)' || exit 1", port))
+	return shellHealthCheck(fmt.Sprintf("bash -c 'exec 3<>/dev/tcp/127.0.0.1/%d'", port))
 }
 
 func init() {

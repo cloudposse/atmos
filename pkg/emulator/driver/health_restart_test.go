@@ -1,8 +1,12 @@
 package driver
 
 import (
-	"strings"
+	"context"
+	"net"
+	"os/exec"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,26 +74,35 @@ func TestFlociHealthCheck_UsesItsOwnPort(t *testing.T) {
 		require.NoError(t, err)
 		hc := d.Defaults().HealthCheck
 		require.NotNil(t, hc)
-		assert.True(t, strings.Contains(hc.Test[1], "/dev/tcp/127.0.0.1/"+port),
+		assert.Contains(t, hc.Test[1], "/dev/tcp/127.0.0.1/"+port+"'",
 			"%s health check should probe port %s, got %q", name, port, hc.Test[1])
 	}
 }
 
-// TestFlociHealthCheck_DoesNotRequireCurl guards against a regression to a
-// curl-based probe: floci-gcp and floci-az are GraalVM native-image builds
-// with no HTTP client binary at all (confirmed by exec'ing into a local
-// container -- `command -v curl` finds nothing), so a curl/wget-based health
-// check fails every probe with "command not found" regardless of how long
-// the container is given to start; bash's `/dev/tcp` needs only bash, which
-// all three Floci images ship.
-func TestFlociHealthCheck_DoesNotRequireCurl(t *testing.T) {
-	for _, name := range []string{"floci/aws", "floci/gcp", "floci/az"} {
-		d, err := emu.ResolveDriver(name)
-		require.NoError(t, err)
-		hc := d.Defaults().HealthCheck
-		require.NotNil(t, hc)
-		assert.NotContains(t, hc.Test[1], "curl", "%s health check should not depend on curl", name)
-		assert.NotContains(t, hc.Test[1], "wget", "%s health check should not depend on wget", name)
-		assert.Contains(t, hc.Test[1], "/dev/tcp/", "%s health check should use bash's /dev/tcp", name)
+// TestFlociHealthCheck_Readiness exercises the actual probe against listening and
+// closed ports, without requiring curl, an HTTP endpoint, or a trusted TLS cert.
+func TestFlociHealthCheck_Readiness(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Floci health checks run inside Linux containers")
 	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("Bash is required to execute the container health check")
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	port := listener.Addr().(*net.TCPAddr).Port
+	probe := flociHealthCheck(port).Test[1]
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, bash, "-c", probe).CombinedOutput()
+	require.NoError(t, err, "%s", output)
+
+	require.NoError(t, listener.Close())
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.Error(t, exec.CommandContext(ctx, bash, "-c", probe).Run())
+	require.NoError(t, ctx.Err(), "closed-port probe should fail without timing out")
 }
