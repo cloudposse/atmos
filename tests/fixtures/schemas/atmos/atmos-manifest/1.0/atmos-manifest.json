@@ -1139,6 +1139,9 @@
             "command": {
               "$ref": "#/definitions/command"
             },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
             "provision": {
               "$ref": "#/definitions/provision"
             },
