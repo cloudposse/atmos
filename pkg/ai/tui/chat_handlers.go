@@ -465,21 +465,22 @@ func (m *ChatModel) View() string {
 	}
 }
 
+// headerView renders the assistant title, guidance, and current session details.
 func (m *ChatModel) headerView() string {
 	title := "Atmos AI Assistant"
 	subtitle := "Ask questions about your infrastructure, components, and stacks"
 
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 		Bold(true).
 		Padding(0, 1)
 
 	subtitleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Padding(0, 1)
 
 	sessionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("245")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Italic(true).
 		Padding(0, 1)
 
@@ -519,7 +520,7 @@ func (m *ChatModel) footerView() string {
 // loadingFooterContent renders the footer when AI is processing.
 func (m *ChatModel) loadingFooterContent() string {
 	cancelHint := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Italic(true).
 		Render("(Press Esc to cancel)")
 
@@ -542,7 +543,7 @@ func (m *ChatModel) loadingFooterContent() string {
 // inputFooterContent renders the footer with the input area.
 func (m *ChatModel) inputFooterContent() string {
 	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Italic(true)
 
 	help := helpStyle.Render("Enter: Send | Ctrl+J: Newline | Ctrl+L: Sessions | Ctrl+N: New | Ctrl+P: Provider | Ctrl+A: Skill | Alt+Drag: Select Text | Ctrl+C: Quit")

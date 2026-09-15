@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/spf13/viper"
 	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 const (
@@ -464,8 +464,15 @@ func resolveForceColor(configForceColor bool) bool {
 	// viper itself already prioritizes an explicitly changed flag over a bound
 	// env var for a single key). viper.IsSet excludes the flag's own default, so
 	// this only matches an explicit override, flag change, or bound env value.
-	if viper.IsSet("force-color") {
-		return viper.GetBool("force-color")
+	var explicit, enabled bool
+	viperguard.View(func(v viperguard.ViperReader) {
+		explicit = v.IsSet("force-color")
+		if explicit {
+			enabled = v.GetBool("force-color")
+		}
+	})
+	if explicit {
+		return enabled
 	}
 
 	if present, enabled := forceColorEnvState("ATMOS_FORCE_COLOR"); present {
@@ -483,9 +490,9 @@ func resolveForceColor(configForceColor bool) bool {
 func buildConfig() *Config {
 	cfg := &Config{
 		// From flags (bound via viper in cmd/root.go)
-		NoColor:  viper.GetBool("no-color"),
-		Color:    viper.GetBool("color"),
-		ForceTTY: viper.GetBool("force-tty"),
+		NoColor:  viperguard.GetBool("no-color"),
+		Color:    viperguard.GetBool("color"),
+		ForceTTY: viperguard.GetBool("force-tty"),
 
 		// From environment variables (standard terminal env vars, not Atmos-specific)
 		EnvNoColor:       os.Getenv("NO_COLOR") != "",       //nolint:forbidigo // Standard terminal env var
@@ -497,9 +504,9 @@ func buildConfig() *Config {
 	}
 
 	// Load atmos.yaml config (if available)
-	if viper.IsSet("settings") {
+	if viperguard.IsSet("settings") {
 		var atmosConfig schema.AtmosConfiguration
-		if err := viper.Unmarshal(&atmosConfig); err == nil {
+		if err := viperguard.Unmarshal(&atmosConfig); err == nil {
 			cfg.AtmosConfig = atmosConfig
 		}
 	}
