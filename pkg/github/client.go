@@ -53,7 +53,7 @@ func newGitHubClient(ctx context.Context) *github.Client {
 	// 2. ATMOS_GITHUB_TOKEN environment variable
 	// 3. GITHUB_TOKEN environment variable
 	// 4. `gh auth token` CLI fallback
-	githubToken := GetGitHubToken()
+	githubToken := GetGitHubTokenContext(ctx)
 
 	return newGitHubClientWithToken(ctx, githubToken)
 }
