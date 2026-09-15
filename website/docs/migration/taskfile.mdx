@@ -83,9 +83,11 @@ runs concurrently by default — matching Task's `deps:` behavior directly, not 
     tasks:
       deploy:
         desc: Deploy the application to the selected environment
+        vars:
+          ENV: '{{.ENV | default "dev"}}'
         deps: [test, lint]
         cmds:
-          - ./scripts/deploy.sh dev
+          - ./scripts/deploy.sh "{{.ENV}}"
     ```
   </TabItem>
   <TabItem value="after" label="After (atmos.yaml)">
@@ -93,14 +95,21 @@ runs concurrently by default — matching Task's `deps:` behavior directly, not 
     commands:
       - name: deploy
         description: Deploy the application to the selected environment
+        flags:
+          - name: env
+            default: "dev"
         dependencies:
           commands: [test, lint]
         steps:
           - type: shell
-            command: ./scripts/deploy.sh dev
+            command: ./scripts/deploy.sh "{{ .Flags.env }}"
     ```
   </TabItem>
 </Tabs>
+
+The Task `ENV` variable becomes the Atmos `--env` flag. `atmos deploy` passes the default
+`dev` to your script; `atmos deploy --env staging` passes `staging`. The matching Task commands
+are `task deploy` and `task deploy ENV=staging`.
 
 `dependencies.commands` also matches a behavior Task itself has that a hand-rolled `parallel`
 step does not: if two commands both depend on the same one — for example both `test` and `lint`
@@ -247,6 +256,10 @@ commands:
 
 <Terminal>
 ```bash
+# Use the default environment (dev)
+atmos deploy
+
+# Override the environment
 atmos deploy --env staging
 ```
 </Terminal>

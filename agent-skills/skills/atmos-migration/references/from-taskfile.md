@@ -78,9 +78,11 @@ tasks:
 
   deploy:
     desc: Deploy the application to the selected environment
+    vars:
+      ENV: '{{.ENV | default "dev"}}'
     deps: [test, lint]
     cmds:
-      - ./scripts/deploy.sh dev
+      - ./scripts/deploy.sh "{{.ENV}}"
 ```
 
 Task runs `deps:` at the same time by default. Atmos custom-command and workflow steps run one
@@ -93,14 +95,19 @@ directly, not working around it with a hand-built `parallel` step:
 commands:
   - name: deploy
     description: Deploy the application to the selected environment
+    flags:
+      - name: env
+        default: "dev"
     dependencies:
       commands: [test, lint]
     steps:
       - type: shell
-        command: ./scripts/deploy.sh dev
+        command: ./scripts/deploy.sh "{{ .Flags.env }}"
 ```
 
 Keep the user's existing deployment script. No component or stack configuration is needed.
+`atmos deploy` passes the default `dev` to the script; `atmos deploy --env staging` passes
+`staging`. These match `task deploy` and `task deploy ENV=staging`, respectively.
 
 `dependencies.commands` also matches a behavior Task itself has that a hand-rolled `parallel`
 step does not: if two commands both depend on the same one -- for example both `test` and `lint`
@@ -118,9 +125,6 @@ commands side by side that were never their own Task tasks to begin with.
 
 **Before:**
 ```yaml
-vars:
-  ENV: '{{.ENV | default "dev"}}'
-
 tasks:
   build:
     desc: Compile the deployable artifact
@@ -134,8 +138,9 @@ tasks:
 
 **Steps:**
 
-- Turn `vars: ENV: '{{.ENV | default "dev"}}'` into a command `flags:` entry with
-  `default: "dev"`. Task's Sprig `default` filter becomes the plain `default:` field.
+- As shown in Shape B, turn `vars: ENV: '{{.ENV | default "dev"}}'` into a command `flags:`
+  entry with `default: "dev"`, and pass `{{ .Flags.env }}` to the script that uses it.
+  Task's Sprig `default` filter becomes the plain `default:` field.
 - Turn `env:` into an `env:` map. The two are almost identical.
 
 ### `sources:`/`generates:` becomes `inputs`/`artifacts`
