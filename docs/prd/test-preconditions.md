@@ -201,3 +201,20 @@ The precondition system specifically enhances the integration and acceptance tes
 - `ATMOS_TEST_MOCK_AWS`: Automatically use mocked AWS services
 - `ATMOS_TEST_VERBOSE_SKIP`: Provide detailed skip reasoning
 - Integration with test coverage tools to track skip patterns
+
+## Why live GitHub access is a canary concern, not a per-PR one
+
+Two external changes turned "the test fetches something from github.com" from a minor cost into a reliability
+problem:
+
+- GitHub introduced protections against unauthenticated traffic to public repositories
+  (https://github.com/orgs/community/discussions/206581#discussioncomment-18269356). Anonymous fetches now fail
+  or rate-limit in ways that surface as 401s and 404s, at GitHub's discretion and without notice.
+- The same pressure shows up across the ecosystem, for example hashicorp/terraform#39130
+  (https://github.com/hashicorp/terraform/issues/39130), where users ask for SSH module fetching because
+  unauthenticated HTTPS to GitHub is rate limited.
+
+The acceptance suite therefore serves git sources from a local mirror (`tests/testhelpers/gitmirror`) and GitHub
+HTTP endpoints from a local façade (`tests/testhelpers/httpmock`) by default, keeps atmos unaware of both, and
+confines real GitHub access to the explicit `live_github` / `live_github_authenticated` canaries described above,
+which skip on transient network conditions and under `ATMOS_TEST_OFFLINE`.
