@@ -614,3 +614,96 @@ func TestRequireAzureCredentials(t *testing.T) {
 	// Will skip if Azure credentials not available
 	RequireAzureCredentials(t)
 }
+
+// TestOffline is a table-driven test for the ATMOS_TEST_OFFLINE switch. It follows the same
+// "== true" exact-match convention as ShouldCheckPreconditions (see TestShouldCheckPreconditions)
+// rather than a general truthy parse.
+func TestOffline(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		unset    bool
+		want     bool
+	}{
+		{name: "unset", unset: true, want: false},
+		{name: "true", envValue: "true", want: true},
+		{name: "TRUE (case sensitive)", envValue: "TRUE", want: false},
+		{name: "numeric 1 is not truthy", envValue: "1", want: false},
+		{name: "false", envValue: "false", want: false},
+		{name: "random value", envValue: "random", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.unset {
+				orig := os.Getenv("ATMOS_TEST_OFFLINE")
+				os.Unsetenv("ATMOS_TEST_OFFLINE")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("ATMOS_TEST_OFFLINE", orig)
+					}
+				})
+			} else {
+				t.Setenv("ATMOS_TEST_OFFLINE", tt.envValue)
+			}
+
+			assert.Equal(t, tt.want, Offline())
+		})
+	}
+}
+
+// TestRequireGitHubAccess_OfflineNotOverridableByPreconditionChecks regression-tests that
+// ATMOS_TEST_OFFLINE always skips RequireGitHubAccess even when
+// ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true (the flag CI sets to bypass the connectivity *probe* --
+// it must never be read as "run live network calls anyway").
+func TestRequireGitHubAccess_OfflineNotOverridableByPreconditionChecks(t *testing.T) {
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+	t.Setenv("ATMOS_TEST_OFFLINE", "true")
+
+	RequireGitHubAccess(t)
+
+	t.Fatal("expected RequireGitHubAccess to skip under ATMOS_TEST_OFFLINE even with precondition checks disabled")
+}
+
+// TestRequireNetworkAccess_OfflineNotOverridableByPreconditionChecks mirrors
+// TestRequireGitHubAccess_OfflineNotOverridableByPreconditionChecks for RequireNetworkAccess.
+func TestRequireNetworkAccess_OfflineNotOverridableByPreconditionChecks(t *testing.T) {
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+	t.Setenv("ATMOS_TEST_OFFLINE", "true")
+
+	RequireNetworkAccess(t, "https://github.com")
+
+	t.Fatal("expected RequireNetworkAccess to skip under ATMOS_TEST_OFFLINE even with precondition checks disabled")
+}
+
+// TestRequireLiveGitHub_Offline verifies RequireLiveGitHub delegates to RequireGitHubAccess's
+// offline gate.
+func TestRequireLiveGitHub_Offline(t *testing.T) {
+	t.Setenv("ATMOS_TEST_OFFLINE", "true")
+
+	RequireLiveGitHub(t)
+
+	t.Fatal("expected RequireLiveGitHub to skip under ATMOS_TEST_OFFLINE")
+}
+
+// TestRequireLiveGitHubAuthenticated_Offline verifies the offline gate is checked before the
+// GITHUB_TOKEN requirement.
+func TestRequireLiveGitHubAuthenticated_Offline(t *testing.T) {
+	t.Setenv("ATMOS_TEST_OFFLINE", "true")
+	t.Setenv("GITHUB_TOKEN", "")
+
+	RequireLiveGitHubAuthenticated(t)
+
+	t.Fatal("expected RequireLiveGitHubAuthenticated to skip under ATMOS_TEST_OFFLINE")
+}
+
+// TestRequireLiveGitHubAuthenticated_NoToken verifies RequireLiveGitHubAuthenticated skips when
+// GITHUB_TOKEN is unset, independent of live GitHub reachability.
+func TestRequireLiveGitHubAuthenticated_NoToken(t *testing.T) {
+	enablePreconditionChecks(t)
+	t.Setenv("GITHUB_TOKEN", "")
+
+	RequireLiveGitHubAuthenticated(t)
+
+	t.Fatal("expected RequireLiveGitHubAuthenticated to skip without GITHUB_TOKEN")
+}
