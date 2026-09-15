@@ -27,10 +27,18 @@ const (
 // CacheConfig holds persistent application state for version checks,
 // telemetry preferences, and session-level warnings.
 type CacheConfig struct {
-	LastChecked                int64  `mapstructure:"last_checked" yaml:"last_checked"`
-	InstallationId             string `mapstructure:"installation_id" yaml:"installation_id"`
-	TelemetryDisclosureShown   bool   `mapstructure:"telemetry_disclosure_shown" yaml:"telemetry_disclosure_shown"`
-	BrowserSessionWarningShown bool   `mapstructure:"browser_session_warning_shown" yaml:"browser_session_warning_shown"`
+	LastChecked                int64                      `mapstructure:"last_checked" yaml:"last_checked"`
+	InstallationId             string                     `mapstructure:"installation_id" yaml:"installation_id"`
+	TelemetryDisclosureShown   bool                       `mapstructure:"telemetry_disclosure_shown" yaml:"telemetry_disclosure_shown"`
+	BrowserSessionWarningShown bool                       `mapstructure:"browser_session_warning_shown" yaml:"browser_session_warning_shown"`
+	ExperimentalWarnings       []ExperimentalWarningState `mapstructure:"experimental_warnings" yaml:"experimental_warnings,omitempty"`
+}
+
+// ExperimentalWarningState records when an experimental feature was last shown.
+// A sequence of records preserves feature names literally through Viper parsing.
+type ExperimentalWarningState struct {
+	Feature   string `mapstructure:"feature" yaml:"feature"`
+	LastShown int64  `mapstructure:"last_shown" yaml:"last_shown"`
 }
 
 // GetCacheFilePath returns the filesystem path to the Atmos cache file.
@@ -125,12 +133,19 @@ func SaveCache(cfg CacheConfig) error {
 	lock := getCacheFileLock(cacheFile)
 	// Use file locking to prevent concurrent writes.
 	return lock.WithLock(func() error {
+		// A caller may have loaded its snapshot before another process claimed a
+		// warning. Preserve the newest timestamps when saving that older snapshot.
+		mergeExperimentalWarnings(cacheFile, &cfg)
 		// Prepare the config data.
 		data := map[string]interface{}{
 			"last_checked":                  cfg.LastChecked,
 			"installation_id":               cfg.InstallationId,
 			"telemetry_disclosure_shown":    cfg.TelemetryDisclosureShown,
 			"browser_session_warning_shown": cfg.BrowserSessionWarningShown,
+		}
+
+		if len(cfg.ExperimentalWarnings) > 0 {
+			data["experimental_warnings"] = cfg.ExperimentalWarnings
 		}
 
 		// Marshal to YAML.
@@ -196,6 +211,10 @@ func UpdateCache(update func(*CacheConfig)) error {
 			"installation_id":               cfg.InstallationId,
 			"telemetry_disclosure_shown":    cfg.TelemetryDisclosureShown,
 			"browser_session_warning_shown": cfg.BrowserSessionWarningShown,
+		}
+
+		if len(cfg.ExperimentalWarnings) > 0 {
+			data["experimental_warnings"] = cfg.ExperimentalWarnings
 		}
 
 		// Marshal to YAML.
