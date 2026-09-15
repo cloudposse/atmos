@@ -91,7 +91,7 @@ auth:
 |---------------------------------------------------------------------------|--------------------------|
 | `okta-aws-cli web --oidc-client-id ... --aws-acct-fed-app-id ... --org-domain ...` | `atmos auth login -i <identity>` -- **only if** the org allows direct password+MFA API auth, see [Identifying the User's Shape](#identifying-the-users-shape) |
 | `okta-aws-cli web --write-aws-credentials --profile <name>`               | Not needed -- Atmos never writes to `~/.aws/credentials`; use `atmos auth exec -i <identity> -- <cmd>` or `eval $(atmos auth env -i <identity>)` instead |
-| `okta-aws-cli list-profiles`                                               | `atmos auth list` |
+| `okta-aws-cli list-profiles`                                               | **No direct equivalent** -- `okta-aws-cli list-profiles` lists locally cached AWS profile names from prior `--profile` runs; `atmos auth list` lists the providers/identities *configured in `atmos.yaml`*, not cached credential artifacts. Each Okta AWS profile the user relies on must be configured as its own Atmos identity first, then `atmos auth list` shows those. |
 | `okta-aws-cli m2m` / `okta-aws-cli direct`                                  | **Not supported yet** -- see [Not Yet Supported: m2m / Direct Authentication](#not-yet-supported-m2m--direct-authentication) |
 
 Get the SAML SSO URL from the same Okta AWS Federation Application's Sign On tab that
@@ -151,9 +151,11 @@ no general-purpose Okta identity provider yet. Same planned-but-not-shipped road
 - **The AWS Federation Application itself is always SAML-based -- there's no "OIDC-flavored"
   variant of it.** Don't ask users to check whether their org's AWS Federation app is "SAML vs.
   OIDC"; that distinction doesn't exist for the Fed app itself. `okta-aws-cli web` does involve a
-  *second*, separate Okta object -- an OIDC Native Application used only for the device-authorization
-  login step -- paired with the Fed app via its "Allowed Web SSO Client" setting, but that's a
-  different object for a different purpose, not a different kind of Fed app. The real fork is
+  *second*, separate Okta object -- an OIDC Native Application used for the OIDC authorization and
+  token-exchange flow (it needs Authorization Code, Device Authorization, *and* Token Exchange
+  grants enabled) and, when `okta.users.read.self` is granted, for discovering linked AWS
+  Federation applications -- paired with the Fed app via its "Allowed Web SSO Client" setting, but
+  that's a different object for a different purpose, not a different kind of Fed app. The real fork is
   which Okta-side auth policy applies to `/api/v1/authn` for their org, not which app type exists.
 - **`driver: Okta` is SAML under the hood** -- it produces a SAML assertion for
   `AssumeRoleWithSAML`, same as `okta-aws-cli web` ultimately does, just reached via a different

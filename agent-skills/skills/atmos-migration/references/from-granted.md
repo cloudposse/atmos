@@ -52,15 +52,15 @@ without checking; some of the commands below don't have a 1:1 Atmos flag equival
 | Granted command                                        | `atmos auth` equivalent            |
 |------------------------------------------------------------|--------------------------------------|
 | `assume` (no args -- interactive fuzzy role picker)          | any `atmos auth` command with `-i` omitted (interactive picker when no `default: true` identity is set) |
-| `assume <profile>`                                          | `atmos auth shell -i <identity>`      |
-| `assume <profile> --export` / `assume <profile> -ex`         | `eval $(atmos auth env -i <identity>)` -- `env` alone doesn't authenticate; add `--login` or run `atmos auth login -i <identity>` first |
+| `assume <profile>` / `assume <profile> --export` / `-ex` (both export into the current shell) | `eval $(atmos auth env -i <identity> --login)` -- `env` alone doesn't authenticate; `--login` triggers it inline (or run `atmos auth login -i <identity>` first and drop `--login`) |
+| (no Granted equivalent -- a dedicated subshell instead of exporting into the current one) | `atmos auth shell -i <identity>` |
 | `assume -c <profile>` (console; repeat with another profile for simultaneous multi-account sessions) | `atmos auth console -i <identity> --isolated` |
 | `assume <profile> -d 3h` / `--duration 3h`                    | `session.duration` on the identity or provider (see [providers-and-identities.md](../../atmos-auth/references/providers-and-identities.md#session-configuration)) |
 
-`assume <profile>` alone uses a shell hook to export credentials into the current shell without
-writing any file. `assume <profile> --export`/`-ex` is different -- it explicitly writes into
-`~/.aws/credentials` under a named profile. Atmos never writes into that file regardless of which
-command you use (`shell`, `exec`, or `env`) -- see
+Both bare `assume <profile>` and `assume <profile> --export`/`-ex` export into Granted's *current*
+shell -- the only difference is that `--export`/`-ex` additionally writes into `~/.aws/credentials`
+under a named profile, which is why they map to the same Atmos command: Atmos never writes into
+that file regardless of which command you use (`shell`, `exec`, or `env`) -- see
 [from-aws-config.md's "Shells, exec, and Your Default AWS Config File"](from-aws-config.md#shells-exec-and-your-default-aws-config-file)
 for exactly how `atmos auth shell`/`exec`/`env` interact with the default AWS CLI config instead.
 
