@@ -24,6 +24,22 @@ Sticky-comment lookup requires both the hidden marker and the comment author's
 login. The default author is `github-actions[bot]`; set the `comment-author`
 input when the action runs with a personal access token or GitHub App token.
 
+## Permissions
+
+The coordinator job grants `actions: read`, `contents: read`, `issues: write`,
+and `pull-requests: write`. These permissions let it read workflow timings,
+check out the trusted action, and create or update the sticky PR comment.
+
+Grant `pull-requests: write` even though PR conversation comments use the
+issue-comments API. Runs with `issues: write` and `pull-requests: read` failed
+to create comments with `403 Resource not accessible by integration`.
+
+After permission changes reach the default branch, verify that an eligible
+PR's completed CI cycle creates a comment and a subsequent completed cycle
+updates that same comment. A successful coordinator run can also mean it
+skipped posting because CI is incomplete or the PR head changed; check the
+action's logs and `published` output to confirm publication.
+
 ## Development
 
 ```shell
