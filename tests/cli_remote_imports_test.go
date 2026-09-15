@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
+	"github.com/cloudposse/atmos/tests/testhelpers/gitmirror"
 )
 
 func initRemoteImportsGitRepo(t *testing.T, files map[string]string) string {
@@ -47,14 +47,6 @@ func runRemoteImportsGit(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %v failed: %s", args, string(out))
-}
-
-func remoteImportsGitFileURI(path string) string {
-	cleaned := filepath.ToSlash(filepath.Clean(path))
-	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
-		cleaned = "/" + cleaned
-	}
-	return (&url.URL{Scheme: "file", Path: cleaned}).String()
 }
 
 func executeRootCommand(t *testing.T, args ...string) string {
@@ -319,7 +311,7 @@ stacks:
 	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
 	require.NoError(t, err)
 
-	repoURI := remoteImportsGitFileURI(repoDir)
+	repoURI := gitmirror.FileURI(repoDir)
 	stackContent := fmt.Sprintf(`
 import:
   - git::%s//remote?ref=main
@@ -398,7 +390,7 @@ stacks:
 	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
 	require.NoError(t, err)
 
-	repoURI := remoteImportsGitFileURI(repoDir)
+	repoURI := gitmirror.FileURI(repoDir)
 	stackContent := fmt.Sprintf(`
 import:
   - path: "git::%s//stacks/orgs/l360/_defaults.yaml?ref=main"
