@@ -1,235 +1,228 @@
-# Migrating from Aqua CLI
+# Replace Aqua with the Atmos Toolchain
 
-[Aqua CLI](https://aquaproj.github.io/) is a tool-version manager. It reads a config file named
-`aqua.yaml`.
+This reference explains how to replace the [Aqua](https://aquaproj.github.io/) CLI with the Atmos
+toolchain. For the skill's decision guide, see [../SKILL.md](../SKILL.md). For the full toolchain
+feature reference, see [atmos-toolchain](../../atmos-toolchain/SKILL.md).
 
-Read this distinction before you start: Aqua CLI is not the same thing as the Aqua registry.
-Atmos does not run the Aqua CLI tool. Atmos does reuse the Aqua **registry** data format --
-the same package listings that Aqua CLI reads. Atmos reimplemented the registry parser itself,
-because the Aqua project states that its own Go modules are for internal use, not for external
-tools to depend on. This means the registry ecosystem carries over. The `aqua.yaml` file, the
-checksum lockfile, and the policy file do not carry over as-is. See "Common Gotchas" below.
+## Overview
 
-This reference is a scenario-keyed decision guide. It covers only tool-version management: the
-migration of `aqua.yaml` to the Atmos toolchain. It does not cover the migration of Terraform code
-itself. For that task, use the other references in this skill.
+Aqua is a tool-version manager and a CLI. Its config file is `aqua.yaml`. Atmos does not run the
+Aqua CLI and does not read `aqua.yaml`. Atmos reuses only the Aqua **registry** data format: the
+`pkgs/` package listings the Aqua CLI also reads. The Atmos toolchain reimplements that registry
+YAML schema with its own parser. It does not use the Aqua Go SDK. However, the toolchain supports
+only a **subset** of the schema. It is **not** a full reimplementation.
 
-## Identifying the User's Shape
+Migration is mechanical for plain GitHub-release packages. Migration is not purely mechanical for
+packages that use the schema features listed in Functional Gaps below. Check each package against
+that table before you assume a 1:1 port.
 
-Read the `aqua.yaml` file, or ask the user to show it to you.
+## Before / After
 
-| Shape | Recipe |
-|---|---|
-| `aqua.yaml` uses the standard registry only | [Shape A](#shape-a-standard-registry-only) |
-| `aqua.yaml` uses a custom registry, a checksum block, or a policy file | [Shape B](#shape-b-custom-registry-checksums-or-policy) |
+**Before** (`aqua.yaml`):
+```yaml
+registries:
+  - type: standard
+    ref: v4.245.0 # renovate: depName=aquaproj/aqua-registry
 
-## Shape A: Standard Registry Only
+packages:
+  - name: hashicorp/terraform
+    version: v1.9.8
+  - name: kubernetes/kubectl
+    version: v1.28.0
+  - name: jqlang/jq
+    version: v1.7.1
+```
+Aqua also generates `aqua-checksums.json`. This file records checksums for supply-chain
+verification.
 
-**Before:**
+**After** (`atmos.yaml` + `.tool-versions`):
+```yaml
+# atmos.yaml
+toolchain:
+  use_lock_file: true # Explicit here; only required if you pin an edition before 2026-08-05.
+  registries:
+    - name: aqua
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/pkgs
+      ref: v4.245.0
+      priority: 10
+  verification:
+    checksums: when_available
+    signatures: when_available
+```
 ```text
-project/
-├── aqua.yaml
-└── main.tf
+# .tool-versions
+hashicorp/terraform 1.9.8
+kubernetes/kubectl 1.28.0
+jqlang/jq 1.7.1
 ```
-```yaml
-# aqua.yaml
-registries:
-  - type: standard
-    ref: v4.0.0
-
-packages:
-  - name: hashicorp/terraform@v1.10.3
-  - name: jqlang/jq@jq-1.7.1
-  - name: kubernetes/kubectl@v1.28.0
+```bash
+atmos toolchain install
 ```
+Atmos also generates a lock file. Whether it does so automatically depends on the project's
+edition. An unpinned project, or one anchored to an edition on or after `2026-08-05`, gets
+`use_lock_file: true` as its default. No configuration is needed. A project whose `atmos.yaml`
+pins an edition dated before `2026-08-05` keeps the old default, `false`, and must set
+`toolchain.use_lock_file: true` explicitly. By default, Atmos writes the lock file as
+`toolchain.lock.yaml` under the toolchain install path. Set `toolchain.lock_file` to choose a
+different path, for example a repo-relative path you can commit. This file records the resolved
+version and checksum for each tool. It serves the same purpose as `aqua-checksums.json`.
 
-**Recipe:**
+## Steps
 
-1. Add the `toolchain:` block to `atmos.yaml`. A `registries:` entry with `type: standard` maps
-    to a `toolchain.registries[]` entry with `type: aqua`. Carry over the `ref:` pin from
-    `aqua.yaml` -- an unpinned registry can change under you the same way an unpinned `ref: main`
-    would. Do not put a `tree/<ref>` segment in `source`; Atmos treats everything after
-    `github.com/<owner>/<repo>` as a literal file path, so `source` must end at the repository
-    (plus an optional subpath like `pkgs`) and the ref belongs in the separate `ref:` field.
-    ```yaml
-    toolchain:
-      versions_file: .tool-versions
-      registries:
-        - name: aqua
-          type: aqua
-          source: https://github.com/aquaproj/aqua-registry/pkgs
-          ref: v4.0.0
-          priority: 10
-    ```
-2. Convert each `packages:` entry to a `.tool-versions` line. The common `name: owner/repo@version`
-    form splits into a short tool name and a version:
-    ```text
-    # .tool-versions
-    terraform 1.10.3
-    jq 1.7.1
-    kubectl 1.28.0
-    ```
-    If the short name in `.tool-versions` does not match the Aqua `owner/repo` name, add an alias:
-    ```yaml
-    toolchain:
-      aliases:
-        terraform: hashicorp/terraform
-        jq: jqlang/jq
-        kubectl: kubernetes/kubectl
-    ```
-3. Check the migration. Run `atmos toolchain install`, then `atmos toolchain list`, then
-    `atmos toolchain which <tool>` for each tool. Confirm each version matches what Aqua CLI
-    reported.
+1. **Mirror the registry.** Map Aqua's `type: standard` registry with a `ref:` pin to a
+  `toolchain.registries` entry of `type: aqua`. Set `source` to
+  `https://github.com/aquaproj/aqua-registry/pkgs`. Set `ref` to the same tag Aqua pinned. Atmos
+  resolves the pin through the separate `ref` field, not through the URL path. Atmos accepts `ref`
+  only when `source` is a `github.com` URL. If `aqua.yaml` used a private or custom registry
+  (including one declared with Aqua's `type: github_content`), add it as a second `type: aqua`
+  registry entry. Use a `file://` or GitHub `source` for this entry. Set its `priority` higher
+  than the public registry. Pin `ref` to a tag or commit SHA, not a branch. A branch such as `main`
+  is mutable and can change what installs without any change to `atmos.yaml`.
+2. **Convert each plain package.** For a `packages:` entry with no unusual fields, run
+  `atmos toolchain add owner/repo@version`. You can also hand-write the `.tool-versions` line.
+  Both methods produce the same result.
+3. **Flag nonstandard packages.** For any entry that uses a field or package type from the
+  Functional Gaps table below, do not assume it ports automatically. Follow that row's
+  workaround. Or leave the tool on Aqua temporarily until the team decides how to handle it.
+4. **Replace `aqua-checksums.json` with `toolchain.verification` and `use_lock_file`.** Atmos
+  verifies packages against checksum and signature metadata published by the registry itself.
+  Set `checksums` and `signatures` to `when_available`, `required`, or `disabled`. Set
+  `use_lock_file: true` to also record resolved versions and checksums in `toolchain.lock.yaml`,
+  for the same reproducibility `aqua-checksums.json` provides.
+5. **Verify the migration.** Run `atmos toolchain install`, then run `atmos toolchain list`.
+  Confirm the resolved versions match what `aqua list` reported before. If you added a custom
+  registry, confirm Atmos actually used it. A registry entry that cannot resolve a tool fails
+  silently: Atmos falls back to the built-in public registry instead of raising an error. For a
+  tool that also exists publicly, this produces no visible symptom, just the wrong source. Run
+  `atmos toolchain install --reinstall` with `logs.level: Debug` set in `atmos.yaml`, and confirm
+  the log shows the tool resolved from your configured registry, not the public fallback.
 
-## Shape B: Custom Registry, Checksums, or Policy
+## Command Mapping
 
-This shape builds on Shape A. Do the Shape A recipe first, then add the steps below.
+| aqua command | Atmos toolchain equivalent |
+|---|---|
+| `aqua install` | `atmos toolchain install` |
+| `aqua install github.com/hashicorp/terraform@v1.9.8` (ad hoc) | `atmos toolchain install hashicorp/terraform@1.9.8` |
+| `aqua g -i` (generate + insert into `aqua.yaml`) | `atmos toolchain add owner/repo@version` (writes to `.tool-versions`) |
+| `aqua list` | `atmos toolchain list` |
+| `aqua which terraform` | `atmos toolchain which terraform` |
+| `aqua info hashicorp/terraform` | `atmos toolchain info terraform` (registry metadata for one tool) |
+| `aqua exec -- terraform plan` | `atmos toolchain exec terraform@<version> -- plan` (direct third-party use only). `atmos terraform plan` already resolves the toolchain automatically. Do not wrap it in `atmos toolchain exec`. |
+| `aqua update-checksum` | No separate command. `toolchain.verification` handles this automatically at install time. |
 
-**Before:**
-```yaml
-# aqua.yaml
-registries:
-  - type: standard
-    ref: v4.0.0
-  - type: github_content
-    repo_owner: myorg
-    repo_name: my-registry
-    ref: main
-    path: registry.yaml
+## Shell Integration
 
-packages:
-  - name: hashicorp/terraform@v1.10.3
-  - name: myorg/internal-tool@v2.0.0
+Aqua uses the same shim-based method as asdf. Add `export PATH="$(aqua root-dir)/bin:$PATH"` to
+`~/.bashrc` or `~/.zshrc`. This puts Aqua's proxy directory on `PATH`. `aqua-proxy` resolves the
+nearest `aqua.yaml` again on every invocation. As a result, plain `terraform` always resolves
+correctly in any shell. This method needs no per-project setup.
 
-checksum:
-  enabled: true
-  require_checksum: true
-```
-```yaml
-# aqua-policy.yaml
-registries:
-  - type: standard
-policies:
-  - myorg/my-registry/registry.yaml
+**The Atmos toolchain does not do this by default.** Atmos resolves tools declared in
+`.tool-versions` (the project-wide default) or `dependencies.tools` (a scoped override) and injects
+them into `PATH` only for the duration of one `atmos <subcommand>` invocation. If you run plain
+`terraform` in your shell, it will not use the Atmos-managed version unless you opt in to shell
+integration. This is a **supported mode**, not a limitation. Use `atmos toolchain env` to export the
+resolved `PATH` into your interactive shell:
+
+**Bash** (add to `~/.bashrc`):
+```bash
+eval "$(atmos toolchain env --format=bash)"
 ```
 
-**Recipe:**
+**Zsh** (add to `~/.zshrc`):
+```zsh
+eval "$(atmos toolchain env --format=bash)"
+```
+Atmos has no separate `--format=zsh` option. The `bash` format emits plain POSIX
+`export PATH=...`. Zsh evaluates this output the same way.
 
-1. Add the custom registry as a second `toolchain.registries[]` entry. Use `source` for the
-    registry location, and `ref` to pin a version. Atmos accepts `ref` only when `source` is a
-    `github.com` URL. Pin `ref` to a tag or commit SHA, not a branch -- a branch like `main` is
-    mutable and can change what gets installed without any change to `atmos.yaml`. Do not encode
-    the ref as a `tree/<ref>` path segment in `source`; that breaks tool lookups against this
-    registry (see "Common Gotchas" below). Keep `source` at the repository, plus an optional
-    subpath, and put the ref in `ref:`.
-    ```yaml
-    toolchain:
-      registries:
-        - name: internal
-          type: aqua
-          source: https://github.com/myorg/my-registry
-          ref: v1.2.0
-          priority: 100
-        - name: aqua
-          type: aqua
-          source: https://github.com/aquaproj/aqua-registry/pkgs
-          ref: v4.0.0
-          priority: 10
-    ```
-2. Replace the `checksum:` block with `toolchain.verification`:
-    ```yaml
-    toolchain:
-      verification:
-        checksums: required
-        signatures: when_available
-        verifier_install: auto
-    ```
-3. Drop `aqua-policy.yaml`. Atmos has no trust or policy step. See "Common Gotchas" below.
-4. Do not migrate `aqua-checksums.json`. Atmos manages its own lockfile, `toolchain.lock.yaml`.
-    Whether it writes that lockfile automatically depends on the project's edition: unpinned or
-    newer projects get it by default, with no configuration needed. A project whose `atmos.yaml`
-    pins an edition dated before `2026-08-05` keeps the old opt-in behavior and must set
-    `toolchain.use_lock_file: true` explicitly to get the same automatic lockfile.
-5. Check the migration the same way as Shape A.
+**Fish** (add to `~/.config/fish/config.fish`):
+```fish
+atmos toolchain env --format=fish | source
+```
 
-## CLI Command Mapping
+**PowerShell** (add to `$PROFILE`):
+```powershell
+Invoke-Expression (atmos toolchain env --format powershell | Out-String)
+```
 
-| Aqua CLI command | Atmos equivalent | Notes |
+Verify with `which terraform` (use `Get-Command terraform` on PowerShell). It must resolve under
+the Atmos toolchain install directory, not Aqua's proxy directory.
+
+Run `atmos` commands, including the shell integration commands above, from the directory that
+contains `atmos.yaml`. If your shell is in a different directory, add `--chdir /path/to/project`
+(short form `-C /path/to/project`) to the command.
+
+**Important: this method takes a static snapshot, not Aqua's dynamic per-directory resolution.**
+`aqua-proxy` resolves the nearest `aqua.yaml` again on every command. As a result, when you `cd`
+into a different project, Aqua automatically switches versions. `atmos toolchain env` bakes the
+resolved paths of the current directory into `PATH` one time, at eval time. It does not update
+automatically when you `cd`. Re-run the `eval` line after you switch projects. Or use
+`atmos terraform ...` instead of bare `terraform` when you work across multiple projects.
+`atmos terraform ...` always resolves per invocation, regardless of shell state.
+
+**Atmos also has a direct equivalent to `aqua-proxy`: `toolchain.proxies`.** Configure a proxy to
+expose a toolchain tool under a command name that differs from the tool's own binary name. Atmos
+creates a link in `${toolchain.install_path}/bin/proxy`. That link re-invokes Atmos under the
+configured command name. Atmos then resolves the tool, installs it if needed, and forwards the
+arguments. `atmos toolchain env` puts this proxy directory on `PATH` when you configure at least
+one proxy. Use this when a package name differs from the command name, for example a multicall
+binary such as `coreutils` that must run under the name `ls`. You do not need a proxy for the
+common case, where the tool's binary already has the name you want to type. In that case, the
+direct `PATH` export above already provides it. The
+[atmos-toolchain](../../atmos-toolchain/SKILL.md) skill does not yet cover `toolchain.proxies` in
+depth; see [Toolchain Proxies](https://atmos.tools/cli/configuration/toolchain/proxies) for the
+full reference.
+
+## Functional Gaps
+
+Atmos intentionally does not support the following Aqua schema features. Most of this list comes
+from the "Unsupported Aqua Features" list in [atmos-toolchain](../../atmos-toolchain/SKILL.md).
+
+| Aqua feature | Why it does not port directly | Workaround |
 |---|---|---|
-| `aqua init` | Create the `toolchain:` block in `atmos.yaml` by hand | There is no init command. |
-| `aqua install` | `atmos toolchain install` | Installs all tools from `.tool-versions` |
-| `aqua g` / `aqua generate` | `atmos toolchain search <name>`, then add a `.tool-versions` line | Atmos has no interactive picker. |
-| `aqua cp` | No direct equivalent | `toolchain.install_path` gives a predictable local directory, for caching, not for vendoring binaries into another image. |
-| `aqua exec -- <command>` | `atmos toolchain exec <tool>@<version> -- <command>` | Runs one command with a pinned tool version |
-| `aqua which <tool>` | `atmos toolchain which <tool>` | Shows the path to the tool binary |
-| `aqua list` | `atmos toolchain list` | Lists installed tools |
-| `aqua update-checksum` | No action needed | Atmos manages `toolchain.lock.yaml` on its own. |
-| `aqua policy allow [file]` | No equivalent | Atmos has no trust or policy step. |
-| `aqua info` | `atmos toolchain info <tool>` | Shows registry metadata for one tool, not full environment diagnostics |
+| `go_build` package type | Not implemented. Atmos does not build tools from source. | Use a pre-built release if the project publishes one. Add it via a `type: atmos` inline registry. |
+| `cargo` package type | Not implemented. Atmos has no Cargo or crates.io installer. | No direct equivalent exists. Source the binary another way. |
+| `go_install` package type | Not implemented. Atmos does not run `go install`. | Use a pre-built release if the project publishes one. Add it via a `type: atmos` inline registry. |
+| `aqua-policy.yaml` / `AQUA_POLICY_CONFIG` | Atmos has no trust or policy-gating step. Aqua uses its policy file to control which configs and registries a user trusts, because some Aqua package types run arbitrary build or install scripts. Atmos supports only package types that download a pre-built asset directly, so it never runs an install script and needs no matching trust step. | None needed. Drop the policy file. |
+| `version_filter` | Atmos does not support this Aqua registry field. Aqua uses it to filter candidate GitHub tags before version resolution. | Pin an exact, already-known-good version in `.tool-versions`. |
+| `version_expr` / `version_expr_prefix` | Atmos does not support version-string manipulation through an expression. | Pin an exact version. |
+| `go_version_file` | Atmos does not support reading a version from a Go source file. | Pin the version explicitly in `.tool-versions`. |
+| `import` | Not needed. Atmos already lets you compose multiple registries by importing multiple `atmos.yaml` files through its own `import:` mechanism. A separate registry-level `import` field was not implemented. | Add multiple `toolchain.registries` entries directly. Or split them across `atmos.yaml` files and combine them with `import:`. |
+| `command_aliases` | Atmos does not support this Aqua field. | Use `toolchain.proxies` in `atmos.yaml` instead. `toolchain.proxies` creates a command-name link, the same role `command_aliases` plays in Aqua. Do not use `toolchain.aliases` for this. `toolchain.aliases` only maps a short tool name to an `owner/repo` registry entry for lookup. It does not change the command name a tool runs under. See the Shell Integration section above. |
+| `tags` | Not supported. | No equivalent exists. Atmos does not filter installs by tag. |
+| `vars` | Atmos does not support Aqua's per-package template variables. | Hard-code the value into the `url` template of a `type: atmos` inline registry entry. |
 
-## Common Gotchas
+**`version_prefix` is supported, not a gap.** Atmos reads `version_prefix` directly from an Aqua
+registry package definition. It applies the prefix automatically when it builds the download URL
+and compares versions. A package that already ships from an Aqua registry needs no workaround. Add
+`version_prefix` to a custom `type: atmos` inline registry entry when you define a tool with no
+upstream Aqua registry entry.
 
-### The registry format is shared. The CLI tool is not.
+**`github_archive` and `github_content` are supported, not a gap.** Atmos added these two Aqua
+package types in [PR #2416](https://github.com/cloudposse/atmos/pull/2416). Treat a package that
+uses either type the same as any other Aqua package: convert it with
+`atmos toolchain add owner/repo@version`.
 
-Atmos reads Aqua registry package listings. Atmos does not read `aqua.yaml` directly, and Atmos
-does not run the Aqua CLI. Translate `aqua.yaml` by hand, using the recipes above. Do not expect
-Atmos to parse `aqua.yaml` as config.
+## Example
 
-### No policy or trust-gating step
+This mixed `aqua.yaml` file shows both cases:
+```yaml
+packages:
+  - name: hashicorp/terraform    # plain GitHub release -- migrates cleanly
+    version: v1.9.8
+  - name: some-org/custom-tool   # uses go_build -- needs manual porting
+    version: v2.1.0
+```
 
-Aqua CLI uses `aqua-policy.yaml` and the `AQUA_POLICY_CONFIG` variable to control which configs
-and registries a user trusts, because some Aqua package types run arbitrary build steps or
-scripts. Atmos supports only the two safest package types, `github_release` and `http`. Atmos
-never runs an install script. This removes the need for a trust step. Do not look for a policy
-equivalent.
+`hashicorp/terraform` becomes `atmos toolchain add hashicorp/terraform@1.9.8`. For
+`some-org/custom-tool`, add a `type: atmos` inline registry entry that points at a pre-built
+release asset, if one exists. Otherwise, leave it out of scope for this migration pass.
 
-### No layered global config
+## Cross-Links
 
-Aqua CLI supports `AQUA_GLOBAL_CONFIG`, a list of config file paths that apply everywhere, not
-just in one project. Atmos has no matching variable. Use the project `.tool-versions` file for
-tools every developer needs, or `toolchain.aliases`/`toolchain.registries` in `atmos.yaml` or in
-`.atmos.d/`.
-
-### A broken custom registry fails silently for public tools
-
-If a custom `toolchain.registries[]` entry can't resolve a tool (wrong `source`, unreachable
-host, tool not present at that path), Atmos does not error. It falls back to searching the
-built-in public Aqua registry for that same tool. For a tool that also exists publicly, this
-means a misconfigured custom registry produces no visible symptom at all -- the install succeeds,
-just from the wrong source. The failure only becomes visible for a tool that exists *only* in the
-custom registry, like the `myorg/internal-tool` example above, where it fails outright with "tool
-not in registry." After adding a custom registry, verify it is actually being used: run
-`atmos toolchain install` with `--reinstall` and `logs.level: Debug` in `atmos.yaml`, and confirm
-the log shows `Tool found in configured registry`, not a `Searching builtin registry` fallback.
-
-### Shims are opt-in, not automatic
-
-Aqua CLI installs a shim for every declared tool automatically, then downloads the real binary
-the first time the shim runs. Atmos has an equivalent, `toolchain.proxies`, but it is opt-in per
-command, not automatic for every package in `.tool-versions`: add a `proxies:` entry (command
-name -> tool) under the `toolchain:` block, then run `atmos toolchain env` to activate it in an
-interactive shell -- the pinned tool installs on first use, the same lazy-install behavior as an
-Aqua shim. See [Toolchain Proxies](https://atmos.tools/cli/configuration/toolchain/proxies).
-
-Without an explicit proxy entry, Atmos installs a tool when a component, workflow, or command
-that declares it runs, or when the user runs `atmos toolchain install` directly.
-
-### Unsupported package types
-
-Atmos does not support these Aqua package types: `github_content`, `github_archive`, `go_build`,
-`cargo`, `go_install`. If a package in `aqua.yaml` uses one of these types, find another source
-for it, or define an inline `type: atmos` registry entry with a `github_release` or `http`
-package type instead. See the [atmos-toolchain](../../atmos-toolchain/SKILL.md) skill for the
-full list of supported and unsupported registry features.
-
-## What to NOT Do
-
-- Do not point Atmos at `aqua.yaml` directly. Atmos does not read this file. Translate it by
-  hand, using the recipes above.
-- Do not look for an Atmos equivalent of `aqua-policy.yaml` or `AQUA_POLICY_CONFIG`. Atmos has no
-  trust step, by design.
-- Do not try to migrate `aqua-checksums.json`. Atmos writes its own lockfile automatically.
-- Do not use a naive `grep` on `name:` lines to convert `packages:` entries. This breaks on the
-  common single-line `name: owner/repo@version` form. Use the recipe above instead.
-- Do not introduce Gomplate datasources for things YAML functions can express. See the Core
-  Principles in the [SKILL.md](../SKILL.md).
+- [atmos-toolchain SKILL.md](../../atmos-toolchain/SKILL.md): the Registries section and the
+  "Unsupported Aqua Features" list. The Functional Gaps table above comes from this list.
+- [atmos-toolchain commands-reference.md](../../atmos-toolchain/references/commands-reference.md):
+  covers `atmos toolchain add`, `registry list`, `registry search`.
