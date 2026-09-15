@@ -521,6 +521,10 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/opentracing/opentracing-go/blob/v1.2.0/LICENSE
 
+  - github.com/pb33f/ordered-map/v2
+    License: Apache-2.0
+    URL: https://github.com/pb33f/ordered-map/blob/v2.3.1/LICENSE
+
   - github.com/petermattis/goid
     License: Apache-2.0
     URL: https://github.com/petermattis/goid/blob/df67b199bc81/LICENSE
@@ -1470,7 +1474,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/anthropics/anthropic-sdk-go
     License: MIT
-    URL: https://github.com/anthropics/anthropic-sdk-go/blob/v1.43.0/LICENSE
+    URL: https://github.com/anthropics/anthropic-sdk-go/blob/v1.68.0/LICENSE
 
   - github.com/apparentlymart/go-cidr/cidr
     License: MIT
@@ -1846,7 +1850,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/invopop/jsonschema
     License: MIT
-    URL: https://github.com/invopop/jsonschema/blob/v0.13.0/COPYING
+    URL: https://github.com/invopop/jsonschema/blob/v0.14.0/COPYING
 
   - github.com/itchyny/gojq
     License: MIT
