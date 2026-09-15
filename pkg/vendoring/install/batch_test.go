@@ -330,25 +330,10 @@ func TestInstallBatchCancelWaitingForMutationReportsOneCanceledResult(t *testing
 	}
 }
 
-func TestPackageLabelUsesRelativeProjectTargets(t *testing.T) {
-	base := t.TempDir()
-	outside := filepath.Join(t.TempDir(), "external")
-	for _, tc := range []struct {
-		name         string
-		config       *schema.AtmosConfiguration
-		target, want string
-	}{
-		{"project target", &schema.AtmosConfiguration{BasePath: base}, filepath.Join(base, "components", "vpc"), "vpc@1.2.0 → components/vpc"},
-		{"project root", &schema.AtmosConfiguration{BasePath: base}, base, "vpc@1.2.0 → ."},
-		{"external target", &schema.AtmosConfiguration{BasePath: base}, outside, "vpc@1.2.0 → " + filepath.ToSlash(outside)},
-		{"config path fallback", &schema.AtmosConfiguration{CliConfigPath: base}, filepath.Join(base, "components", "vpc"), "vpc@1.2.0 → components/vpc"},
-		{"relative target", &schema.AtmosConfiguration{BasePath: base}, filepath.Join("components", "vpc"), "vpc@1.2.0 → components/vpc"},
-		{"no config", nil, outside, "vpc@1.2.0 → " + filepath.ToSlash(outside)},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			pkg := NewAtmosVendorPackage(&AtmosPackageParams{Name: "vpc", Version: "1.2.0", TargetPath: tc.target})
-			assert.Equal(t, tc.want, packageLabel(tc.config, pkg))
-		})
+func TestPackageLabelOmitsVersionAndDestination(t *testing.T) {
+	for _, target := range []string{filepath.Join(t.TempDir(), "components", "vpc"), filepath.Join("components", "vpc")} {
+		pkg := NewAtmosVendorPackage(&AtmosPackageParams{Name: "vpc", Version: "1.2.0", TargetPath: target})
+		assert.Equal(t, "vpc", packageLabel(pkg))
 	}
 }
 
@@ -356,7 +341,7 @@ func TestPackageLabelDistinguishesMixinOutputFilenames(t *testing.T) {
 	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	for _, filename := range []string{"providers.tf", "context.tf"} {
 		pkg := NewComponentVendorPackage(&ComponentPackageParams{Name: "mixin https://example.com/shared.tf", ComponentPath: filepath.Join(config.BasePath, "components", "vpc"), IsMixin: true, MixinFilename: filename})
-		assert.Equal(t, "mixin "+filename+" → components/vpc", packageLabel(config, pkg))
+		assert.Equal(t, "mixin "+filename, packageLabel(pkg))
 	}
 }
 

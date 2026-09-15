@@ -85,7 +85,8 @@ func TestVendorCleanCmd_RemovesLockOwnedFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NoFileExists(t, filePath)
-	assert.Contains(t, plainOutput(stderr.String()), "Removed")
+	assert.Contains(t, plainOutput(stderr.String()), "Removed vendor/owned.txt")
+	assert.NotContains(t, plainOutput(stderr.String()), filepath.Dir(filePath))
 
 	config := &schema.AtmosConfiguration{BasePath: "."}
 	loaded, err := lockfile.Load(config)
@@ -105,7 +106,8 @@ func TestVendorCleanCmd_DryRunPreservesFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.FileExists(t, filePath, "dry-run must not remove the file")
-	assert.Contains(t, plainOutput(stderr.String()), "Would remove")
+	assert.Contains(t, plainOutput(stderr.String()), "Would remove vendor/owned.txt")
+	assert.NotContains(t, plainOutput(stderr.String()), filepath.Dir(filePath))
 
 	config := &schema.AtmosConfiguration{BasePath: "."}
 	loaded, err := lockfile.Load(config)
@@ -129,7 +131,8 @@ func TestVendorCleanCmd_ModifiedFilePreservedWithoutForce(t *testing.T) {
 
 	assert.FileExists(t, filePath, "a modified lock-owned file must be preserved without --force")
 	assert.Equal(t, "modified-on-disk", readFile(t, filePath))
-	assert.Contains(t, plainOutput(stderr.String()), "Preserved modified vendor file")
+	assert.Contains(t, plainOutput(stderr.String()), "Preserved modified vendor file vendor/owned.txt")
+	assert.NotContains(t, plainOutput(stderr.String()), filepath.Dir(filePath))
 
 	config := &schema.AtmosConfiguration{BasePath: "."}
 	loaded, err := lockfile.Load(config)

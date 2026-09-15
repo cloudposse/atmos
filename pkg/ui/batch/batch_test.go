@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,20 +77,20 @@ func TestRendererDuplicateLabelsAndByteUpdates(t *testing.T) {
 	r.Update(&Event{ID: 99, Bytes: true, Downloaded: 4096})
 	r.Tick()
 	text := ansi.Strip(output.String())
-	assert.Contains(t, text, "Downloading same")
-	assert.Contains(t, text, "Preparing same")
+	assert.Contains(t, text, "same · downloading 50%")
+	assert.Contains(t, text, "same · preparing")
 	assert.Contains(t, text, "1.0 KB/2.0 KB")
 	assert.Contains(t, text, "0/4 complete, 2 active, 2 queued")
 	output.Reset()
 	r.Update(&Event{ID: 10, Done: true, Label: "same", Outcome: "installed"})
 	text = ansi.Strip(output.String())
-	assert.NotContains(t, text, "Downloading same")
-	assert.Contains(t, text, "Preparing same")
+	assert.NotContains(t, text, "same · downloading 50%")
+	assert.Contains(t, text, "same · preparing")
 	assert.Contains(t, text, "1/4 complete, 1 active, 2 queued")
 	output.Reset()
 	r.Update(&Event{ID: 11, Label: "same", Phase: "Retrying", Attempt: 2, Count: 3})
 	text = ansi.Strip(output.String())
-	assert.Contains(t, text, "Retrying same (attempt 2)")
+	assert.Contains(t, text, "same · retrying · attempt 2")
 	assert.Contains(t, text, "1/3 complete, 1 active, 1 queued")
 	r.Clear()
 	output.Reset()
@@ -129,7 +130,7 @@ func TestRendererSizeFallbackAndReset(t *testing.T) {
 	r := New(3, true)
 	r.size = func() (int, int, error) { return 0, 0, errors.New("not a terminal") }
 	r.Update(&Event{ID: 1, Label: "old", Phase: "Checking"})
-	assert.Contains(t, ansi.Strip(output.String()), "Checking old")
+	assert.Contains(t, ansi.Strip(output.String()), "old · checking")
 	r.Update(&Event{ID: 0, Label: "finished", Done: true})
 	output.Reset()
 	r.Update(&Event{Reset: true, Count: 2})
@@ -139,7 +140,7 @@ func TestRendererSizeFallbackAndReset(t *testing.T) {
 	text := ansi.Strip(output.String())
 	assert.Contains(t, text, "0/2 complete, 1 active, 1 queued")
 	assert.NotContains(t, text, "old")
-	assert.Contains(t, text, "Downloading new")
+	assert.Contains(t, text, "new · downloading")
 }
 
 func TestRunDrainsConcurrentProducersAndReturnsFailure(t *testing.T) {
@@ -261,7 +262,7 @@ func TestRunHonorsForcedTTYAndUnsupportedTerminals(t *testing.T) {
 			text := ansi.Strip(output.String())
 			assert.Contains(t, text, "recorded-job")
 			if terminalName == "xterm-256color" {
-				assert.Contains(t, text, "Downloading recorded-job")
+				assert.Contains(t, text, "recorded-job · downloading")
 				assert.Contains(t, output.String(), "\x1b[J")
 				for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
 					assert.LessOrEqual(t, lipgloss.Width(line), 49)
@@ -285,7 +286,7 @@ func TestRendererSnapshotsCallerEvent(t *testing.T) {
 	output.Reset()
 	renderer.Tick()
 	text := ansi.Strip(output.String())
-	assert.Contains(t, text, "Downloading original")
+	assert.Contains(t, text, "original · downloading")
 	assert.Contains(t, text, "12 B/24 B")
 	assert.NotContains(t, text, "caller changed label")
 	assert.NotContains(t, text, "999 B")
@@ -303,7 +304,7 @@ func TestRendererWarningPreservesActiveJobAndCounts(t *testing.T) {
 	renderer.Update(&Event{Warning: "Vendor lock drift detected for vpc"})
 	text := ansi.Strip(output.String())
 	assert.Contains(t, text, "Vendor lock drift detected for vpc")
-	assert.Contains(t, text, "Checking vpc")
+	assert.Contains(t, text, "vpc · checking")
 	assert.Contains(t, text, "0/2 complete, 1 active, 1 queued")
 	assert.Zero(t, renderer.completed)
 	require.Len(t, renderer.active, 1)
@@ -322,5 +323,72 @@ func TestRendererVeryShortTerminalReservesFooter(t *testing.T) {
 		renderer.Tick()
 		assert.LessOrEqual(t, renderer.lines, max(1, height-1))
 		assert.Contains(t, ansi.Strip(output.String()), "0/3 complete, 3 active, 0 queued")
+	}
+}
+
+func TestRendererCompletedVersionUsesCompactSuffix(t *testing.T) {
+	output := captureUI(t)
+	renderer := New(2, true)
+	renderer.size = func() (int, int, error) { return 100, 24, nil }
+	renderer.Update(&Event{ID: 0, Label: "ipinfo", Version: "main", Phase: "Pulling"})
+	assert.Contains(t, ansi.Strip(output.String()), "ipinfo (main) · downloading")
+	assert.NotContains(t, ansi.Strip(output.String()), "ipinfo@main")
+	output.Reset()
+	renderer.Update(&Event{ID: 0, Label: "ipinfo", Version: "main", Done: true, Outcome: "installed"})
+	assert.Equal(t, "✓ ipinfo (main)\n", strings.TrimPrefix(ansi.Strip(output.String()), "\r"))
+	assert.NotContains(t, output.String(), "→")
+	renderer.Update(&Event{ID: 1, Label: "mixin providers.tf", Done: true, Outcome: "installed"})
+	assert.Contains(t, ansi.Strip(output.String()), "✓ mixin providers.tf\n")
+}
+
+func TestRendererDownloadPercentOnlyForKnownTotals(t *testing.T) {
+	output := captureUI(t)
+	renderer := New(1, true)
+	renderer.size = func() (int, int, error) { return 100, 24, nil }
+	cases := []struct {
+		phase             string
+		downloaded, total int64
+		want              string
+	}{
+		{"Downloading", 0, 100, "ipinfo (main) · downloading 0%"},
+		{"Downloading", 42, 100, "ipinfo (main) · downloading 42%"},
+		{"Downloading", 200, 100, "ipinfo (main) · downloading 100%"},
+		{"Downloading", 42, -1, "ipinfo (main) · downloading"},
+		{"Downloading", 42, 0, "ipinfo (main) · downloading"},
+		{"Staging", 42, 100, "ipinfo (main) · staging"},
+		{"Ready", 100, 100, "ipinfo (main) · ready"},
+	}
+	for _, tc := range cases {
+		output.Reset()
+		renderer.Update(&Event{ID: 0, Label: "ipinfo", Version: "main", Phase: tc.phase, Downloaded: tc.downloaded, Total: tc.total})
+		assert.Contains(t, ansi.Strip(output.String()), tc.want)
+		if !strings.Contains(tc.want, "%") {
+			assert.NotContains(t, renderer.activeLabel(&Event{Label: "ipinfo", Phase: tc.phase, Downloaded: tc.downloaded, Total: tc.total}), "%")
+		}
+	}
+}
+
+func TestRendererColoredResultsPreserveVersionSuffix(t *testing.T) {
+	output := captureUI(t)
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("ATMOS_FORCE_COLOR", "1")
+	ctx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ctx)
+	previous := ui.GetColorProfile()
+	t.Cleanup(func() { ui.SetColorProfile(previous) })
+	ui.SetColorProfile(termenv.TrueColor)
+	for _, outcome := range []string{"installed", "unchanged", "skipped", "canceled", "updated", "failed"} {
+		output.Reset()
+		event := Event{Label: "ipinfo", Version: "main", Outcome: outcome}
+		if outcome == "failed" {
+			event.Err = errors.New("download failed")
+		}
+		event.printResult()
+		plain := ansi.Strip(output.String())
+		assert.Contains(t, output.String(), "\x1b[")
+		assert.Contains(t, plain, "ipinfo (main)")
+		assert.NotContains(t, plain, "\x1b")
+		assert.Contains(t, output.String(), event.versionSuffix())
 	}
 }

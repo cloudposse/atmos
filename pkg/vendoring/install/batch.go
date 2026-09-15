@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/cloudposse/atmos/pkg/auth/broker"
@@ -101,7 +99,7 @@ func (b *batchInstaller) emit(e *batch.Event) {
 }
 
 func (b *batchInstaller) phase(i int, phase string) {
-	b.emit(&batch.Event{ID: i, Label: packageLabel(b.config, b.packages[i]), Phase: phase})
+	b.emit(&batch.Event{ID: i, Label: packageLabel(b.packages[i]), Version: b.packages[i].Version, Phase: phase})
 }
 
 func (b *batchInstaller) prepare(ctx context.Context, i int) (*PreparedPackage, error) {
@@ -118,12 +116,16 @@ func (b *batchInstaller) prepare(ctx context.Context, i int) (*PreparedPackage, 
 		b.phase(i, "Checking")
 		return nil, pkg.installer.dryRunCheck(ctx, b.config)
 	}
-	b.phase(i, "Downloading")
+	phase := "Downloading"
+	if pkg.PkgType() == PkgTypeLocal {
+		phase = "Staging"
+	}
+	b.phase(i, phase)
 	prepared, err := prepareWithProgress(ctx, b.config, pkg, preparationProgress{
 		bytes: func(done, total int64) { b.emit(&batch.Event{ID: i, Bytes: true, Downloaded: done, Total: total}) },
 		phase: func(phase string) { b.phase(i, phase) },
 		retry: func(attempt int) {
-			b.emit(&batch.Event{ID: i, Label: packageLabel(b.config, pkg), Phase: "Retrying", Attempt: attempt})
+			b.emit(&batch.Event{ID: i, Label: packageLabel(pkg), Version: pkg.Version, Phase: "Retrying", Attempt: attempt})
 		},
 	})
 	if err == nil {
@@ -155,7 +157,7 @@ func (b *batchInstaller) commit(i int, prepared *PreparedPackage, err error) err
 		b.failures = append(b.failures, err)
 	}
 	b.report.Results[i] = Result{Name: pkg.Name, Err: err, Outcome: outcome}
-	b.emit(&batch.Event{ID: i, Label: packageLabel(b.config, pkg), Done: true, Outcome: outcome, Err: err})
+	b.emit(&batch.Event{ID: i, Label: packageLabel(pkg), Version: pkg.Version, Done: true, Outcome: outcome, Err: err})
 	return nil
 }
 
@@ -164,42 +166,16 @@ func (b *batchInstaller) finish(err error) (*BatchReport, error) {
 		b.failures = append(b.failures, err)
 		for i, result := range b.report.Results {
 			if result.Outcome == "canceled" && result.Err == nil {
-				b.emit(&batch.Event{ID: i, Label: packageLabel(b.config, b.packages[i]), Done: true, Outcome: "canceled"})
+				b.emit(&batch.Event{ID: i, Label: packageLabel(b.packages[i]), Version: b.packages[i].Version, Done: true, Outcome: "canceled"})
 			}
 		}
 	}
 	return b.report, errors.Join(b.failures...)
 }
 
-func packageLabel(config *schema.AtmosConfiguration, pkg VendorPackage) string {
-	label := pkg.Name
+func packageLabel(pkg VendorPackage) string {
 	if pkg.IsMixin() && pkg.MixinFilename() != "" {
-		label = "mixin " + pkg.MixinFilename()
+		return "mixin " + pkg.MixinFilename()
 	}
-	if pkg.Version != "" {
-		label += "@" + pkg.Version
-	}
-	return fmt.Sprintf("%s → %s", label, filepath.ToSlash(packageTargetLabel(config, pkg.Target())))
-}
-
-func packageTargetLabel(config *schema.AtmosConfiguration, target string) string {
-	if config == nil || !filepath.IsAbs(target) {
-		return target
-	}
-	base := config.BasePath
-	if base == "" {
-		base = config.CliConfigPath
-	}
-	if base == "" {
-		return target
-	}
-	absBase, err := filepath.Abs(base)
-	if err != nil {
-		return target
-	}
-	relative, err := filepath.Rel(absBase, target)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return target
-	}
-	return relative
+	return pkg.Name
 }

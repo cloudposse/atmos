@@ -33,10 +33,12 @@ type Event struct {
 	// Warning is a permanent diagnostic and does not count as a job.
 	Warning string
 	// Reset starts a new phase, clearing counts and active jobs.
-	Reset             bool
-	ID                int
-	Count             int
-	Label             string
+	Reset bool
+	ID    int
+	Count int
+	Label string
+	// Version is displayed as a muted parenthesized suffix after the label.
+	Version           string
 	Phase             string
 	Downloaded, Total int64
 	// Bytes marks coalescible byte-only updates. Terminal events are never dropped.
@@ -168,16 +170,61 @@ func (r *Renderer) Update(event *Event) {
 }
 
 func (e *Event) printResult() {
+	// Append styled suffixes after markdown rendering so ANSI escapes remain intact.
+	suffix := e.versionSuffix()
 	switch {
 	case e.Err != nil:
-		ui.Errorf("%s: %v", e.Label, e.Err)
+		ui.Writef("%s%s: %s\n", ui.FormatError(e.Label), suffix, ui.FormatInline(e.Err.Error()))
 	case e.Outcome == "unchanged", e.Outcome == "skipped", e.Outcome == "canceled":
-		ui.Infof("%s (%s)", e.Label, e.Outcome)
+		ui.Writef("%s %s%s (%s)\n", theme.GetCurrentStyles().Info.Render(theme.IconInfo), ui.FormatInline(e.Label), suffix, e.Outcome)
 	case e.Outcome != "" && e.Outcome != "installed":
-		ui.Success(fmt.Sprintf("%s (%s)", e.Label, e.Outcome))
+		ui.Writef("%s%s (%s)\n", ui.FormatSuccess(e.Label), suffix, e.Outcome)
 	default:
-		ui.Success(e.Label)
+		ui.Writef("%s%s\n", ui.FormatSuccess(e.Label), suffix)
 	}
+}
+
+func (e *Event) versionSuffix() string {
+	if e.Version == "" {
+		return ""
+	}
+	return " " + theme.GetCurrentStyles().VersionNumber.Render("("+e.Version+")")
+}
+
+// activeLabel keeps vendoring stages in a muted suffix and preserves toolchain rows.
+func (r *Renderer) activeLabel(e *Event) string {
+	if r.toolchainStyle {
+		label := strings.TrimSpace(e.Phase + " " + e.Label)
+		if e.Attempt > 0 {
+			label += fmt.Sprintf(" (attempt %d)", e.Attempt)
+		}
+		return label
+	}
+	suffix := ""
+	if e.Version != "" {
+		suffix = " (" + e.Version + ")"
+	}
+	if stage := e.stageLabel(); stage != "" {
+		suffix += " · " + stage
+	}
+	label := theme.GetCurrentStyles().PackageName.Render(e.Label) + theme.GetCurrentStyles().VersionNumber.Render(suffix)
+	return label
+}
+
+func (e *Event) stageLabel() string {
+	stage := strings.ToLower(e.Phase)
+	if stage == "pulling" {
+		stage = "downloading"
+	}
+	if stage == "downloading" && e.Total > 0 {
+		const completePercent = 100
+		percent := int(min(float64(completePercent), max(0, float64(e.Downloaded)/float64(e.Total)*completePercent)))
+		stage += fmt.Sprintf(" %d%%", percent)
+	}
+	if e.Attempt > 0 {
+		stage += fmt.Sprintf(" · attempt %d", e.Attempt)
+	}
+	return stage
 }
 
 // Complete replaces an active row with caller-formatted permanent output.
@@ -224,10 +271,7 @@ func (r *Renderer) render() {
 	limit := max(0, height-3)
 	for _, id := range r.order[:min(len(r.order), limit)] {
 		e := r.active[id]
-		left := fmt.Sprintf("%s %s", r.spinner.View(), strings.TrimSpace(e.Phase+" "+e.Label))
-		if e.Attempt > 0 {
-			left += fmt.Sprintf(" (attempt %d)", e.Attempt)
-		}
+		left := fmt.Sprintf("%s %s", r.spinner.View(), r.activeLabel(&e))
 		left = truncate.StringWithTail(left, uint(width), "…")
 		ui.Writef("%s\n", AlignProgress(left, e.Downloaded, e.Total, width))
 		r.lines++

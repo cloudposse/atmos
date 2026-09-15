@@ -29,7 +29,11 @@ reusable presentation into `pkg/ui/batch`; keep scheduling and vendoring rules
 outside it. Preserve toolchain appearance and behavior during extraction.
 
 Each active row has a stable job ID independent of its label. Labels identify
-component/version and target or mixin filename as needed. Phases include checking,
+the component name or mixin filename, without destination paths or arrows. Completed
+results use `✓ component (version)`, with the version muted; active rows highlight
+the component name with a dimmed stage suffix, such as `ipinfo (main) · downloading 42%`.
+Download percentages appear only when the backend supplies a total size. Job IDs
+distinguish equal labels internally. Phases include checking,
 downloading, preparing, ready, installing, retrying, and waiting for another
 vendoring operation. Display bytes and total size only when the backend supplies
 them, otherwise use an indeterminate spinner.
