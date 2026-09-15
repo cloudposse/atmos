@@ -12,6 +12,7 @@ import (
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -19,11 +20,6 @@ const (
 	defaultMarker = "✓"
 	emptyMarker   = "-"
 	newline       = "\n"
-
-	// Tree colors.
-	treeBranchColor = "#555555" // Dark grey for tree branches.
-	treeKeyColor    = "#888888" // Medium grey for keys.
-	treeValueColor  = "#FFFFFF" // White for values.
 
 	// Status indicator - expiration thresholds.
 	expiringThreshold = 15 * time.Minute // Show yellow dot when credentials expire within 15 minutes.
@@ -105,9 +101,9 @@ func getStatusIndicator(status authStatus) string {
 	defer perf.Track(nil, "list.getStatusIndicator")()
 
 	// Use lipgloss colors matching the version list command.
-	greenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))  // Green.
-	yellowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // Yellow.
-	redStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))     // Red.
+	greenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))  // Green.
+	yellowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Warning)) // Yellow.
+	redStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error))      // Red.
 
 	switch status {
 	case authStatusValid:
@@ -220,11 +216,11 @@ func formatExpirationWithColor(duration string, status authStatus) string {
 	var style lipgloss.Style
 	switch status {
 	case authStatusValid:
-		style = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Green.
+		style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)) // Green.
 	case authStatusExpiring:
-		style = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // Yellow.
+		style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Warning)) // Yellow.
 	case authStatusExpired:
-		style = lipgloss.NewStyle().Foreground(lipgloss.Color("9")) // Red.
+		style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error)) // Red.
 	default:
 		return duration // No coloring for unknown status.
 	}

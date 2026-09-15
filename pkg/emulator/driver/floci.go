@@ -25,12 +25,11 @@ const (
 	flociDataDir = "/app/data"
 )
 
-// flociHealthCheck probes the Floci edge port with curl (present in every Floci
-// image): once the listener accepts a connection the emulator is reachable for
-// the SDKs and Terraform. `-s` (not `-f`) means any HTTP response — including a
-// 404 on `/` — counts as up; only a refused connection fails the probe.
+// flociHealthCheck probes the Floci edge port with Bash, which is present in all
+// Floci images even when curl is absent. A TCP probe supports both HTTP and TLS
+// listeners without depending on an endpoint's response or certificate trust.
 func flociHealthCheck(port int) *schema.ContainerHealthCheck {
-	return shellHealthCheck(fmt.Sprintf("curl -s -o /dev/null http://localhost:%d/ || exit 1", port))
+	return shellHealthCheck(fmt.Sprintf("bash -c 'exec 3<>/dev/tcp/127.0.0.1/%d'", port))
 }
 
 func init() {
