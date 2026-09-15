@@ -39,7 +39,7 @@ func PrintMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 	// Define box
 	style := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorGreen)).
+		BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).
 		Padding(0, 1).
 		Align(lipgloss.Center)
 

@@ -9,12 +9,15 @@ import {
 } from "./playback.mjs";
 import { CURSOR_MARKER, replayTerminal } from "./terminal.mjs";
 import renderTerminalText from "./terminal-text";
+import useTerminalSize from "./use-terminal-size";
 
 type CastEvent = [number, string, string];
 
 type CastHeader = {
   command?: string;
   title?: string;
+  width?: number;
+  term?: { cols?: number };
 };
 
 type Props = {
@@ -70,6 +73,7 @@ export default function CastPlayer({
   static: staticFrame = false,
   className,
 }: Props) {
+  const [columns, setColumns] = useState(80);
   const [events, setEvents] = useState<CastEvent[]>([]);
   const [content, setContent] = useState("");
   const [playing, setPlaying] = useState(autoplay);
@@ -82,6 +86,7 @@ export default function CastPlayer({
   const screenRef = useRef<HTMLPreElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
+  useTerminalSize(screenRef, columns);
 
   // Defer fetching the cast until the player is near the viewport. Pages
   // like the examples gallery mount dozens of players at once; fetching
@@ -123,6 +128,14 @@ export default function CastPlayer({
           header: CastHeader;
           events: CastEvent[];
         };
+        const recordedColumns = header.term?.cols ?? header.width;
+        setColumns(
+          typeof recordedColumns === "number" &&
+            Number.isFinite(recordedColumns) &&
+            recordedColumns > 0
+            ? recordedColumns
+            : 80,
+        );
         const parsed = events.map<CastEvent>((event) => [
           event[0],
           event[1],
