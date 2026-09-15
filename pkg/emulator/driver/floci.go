@@ -25,12 +25,15 @@ const (
 	flociDataDir = "/app/data"
 )
 
-// flociHealthCheck probes the Floci edge port with curl (present in every Floci
-// image): once the listener accepts a connection the emulator is reachable for
-// the SDKs and Terraform. `-s` (not `-f`) means any HTTP response — including a
-// 404 on `/` — counts as up; only a refused connection fails the probe.
+// flociHealthCheck uses the image's own readiness probe when available. The
+// minimal GCP and Azure images ship this script but no curl. Older images and
+// the AWS image use curl instead; any HTTP response (including 404) counts as up.
+// A failing native probe must remain a failure, without falling back to curl.
 func flociHealthCheck(port int) *schema.ContainerHealthCheck {
-	return shellHealthCheck(fmt.Sprintf("curl -s -o /dev/null http://localhost:%d/ || exit 1", port))
+	return shellHealthCheck(fmt.Sprintf(
+		"if [ -x /usr/local/bin/healthcheck.sh ]; then exec /usr/local/bin/healthcheck.sh; fi; curl -s -o /dev/null http://localhost:%d/ || exit 1",
+		port,
+	))
 }
 
 func init() {
