@@ -219,6 +219,14 @@ current schema.
   yet; unlike them, that's now a live choice rather than a historical gap, worth resolving the next
   time a PR needs to make this exact call.
 
+  **Additional post-editions candidate (2026-09-14):** `settings.experimental: warn`
+  previously emitted command and setting notices in each child Atmos process; it now
+  suppresses those notices after the parent handles startup. CI hooks retain their
+  existing `warn` behavior. This child-process suppression is independent of the
+  edition pin; only the default value change from `warn` to `warn-daily` is journaled.
+  See [PR #3164](https://github.com/cloudposse/atmos/pull/3164)
+  and the migration section in `docs/prd/experimental-features-system.md`.
+
   **Not gatable:** the auth credential realm isolation change (2026-02-10,
   [changelog/auth-realm-isolation](https://atmos.tools/changelog/auth-realm-isolation)) is a hard
   break — cached credentials moved realms and every user had to re-login. Editions cannot roll it
@@ -241,3 +249,4 @@ current schema.
 |------|---------|---------|
 | 2026-07-16 | 1.0 | Initial PRD; v1 implementation (value defaults, journal, pin, list/describe commands, guardrails). |
 | 2026-09-12 | 1.1 | Documented the first post-editions `KindBehavior` candidate (`init_run_reconfigure`'s reinterpretation in PR #3127) in the Roadmap; no code change. |
+| 2026-09-14 | 1.2 | Documented child-process suppression of experimental command and setting notices as an additional post-editions behavior-gating candidate. |
