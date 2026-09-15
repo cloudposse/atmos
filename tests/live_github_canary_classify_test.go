@@ -184,8 +184,11 @@ func TestGithubCanaryEnv_Unauthenticated(t *testing.T) {
 }
 
 // TestGithubCanaryEnv_Authenticated verifies the authenticated branch keeps GITHUB_TOKEN, adds
-// the extraheader entry, forces GIT_TRACE_REDACT=true, and still disables the mirror's insteadOf
-// rules.
+// the extraheader entry, forces GIT_TRACE_REDACT=true, still disables the mirror's insteadOf
+// rules, and -- critically -- drops any inherited http.*.extraheader entry rather than sending it
+// alongside the controlled one. Git sends every repeated http.extraHeader value it is given, so an
+// inherited Authorization header left in place would let the canary authenticate with unintended
+// credentials.
 func TestGithubCanaryEnv_Authenticated(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "ghp_test_token")
 
@@ -193,6 +196,9 @@ func TestGithubCanaryEnv_Authenticated(t *testing.T) {
 		"PATH=/usr/bin",
 		"GITHUB_TOKEN=ghp_test_token",
 		mirrorGitConfigEnv,
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=http.https://github.com/.extraheader",
+		"GIT_CONFIG_VALUE_0=AUTHORIZATION: basic inherited-should-not-survive",
 	}
 
 	env := githubCanaryEnv(t, base, true)
@@ -201,14 +207,16 @@ func TestGithubCanaryEnv_Authenticated(t *testing.T) {
 	assertEnvContains(t, env, "GIT_TRACE_REDACT=true")
 	assertMirrorRulesDisabled(t, env)
 
-	found := false
+	var extraHeaders []string
 	for _, entry := range gitconfigenv.ReadEntries(env) {
 		if entry.Key == "http.https://github.com/.extraheader" {
-			found = true
-			break
+			extraHeaders = append(extraHeaders, entry.Value)
 		}
 	}
-	require.True(t, found, "expected an http.https://github.com/.extraheader git config entry in %v", env)
+	require.Len(t, extraHeaders, 1, "expected exactly one http.https://github.com/.extraheader entry in %v", env)
+	assert.NotContains(t, extraHeaders, "AUTHORIZATION: basic inherited-should-not-survive",
+		"inherited extraheader entry must be dropped, not sent alongside the controlled one")
+	assert.NotEqual(t, "AUTHORIZATION: basic inherited-should-not-survive", extraHeaders[0])
 }
 
 // TestGithubCanaryEnv_Authenticated_RegistersTokenForMasking verifies that the authenticated
