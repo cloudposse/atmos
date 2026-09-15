@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -12,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -20,13 +22,21 @@ const schemeSeparator = "://"
 // CustomGitDetector intercepts Git URLs (for GitHub, Bitbucket, GitLab, etc.)
 // and transforms them into a proper URL for cloning, optionally injecting tokens.
 type CustomGitDetector struct {
+	ctx         context.Context
 	atmosConfig *schema.AtmosConfiguration
 	source      string
 }
 
 // NewCustomGitDetector creates a new CustomGitDetector with the provided configuration and source URL.
 func NewCustomGitDetector(atmosConfig *schema.AtmosConfiguration, source string) *CustomGitDetector {
+	return NewCustomGitDetectorContext(context.Background(), atmosConfig, source)
+}
+
+// NewCustomGitDetectorContext propagates caller cancellation to credential lookup.
+func NewCustomGitDetectorContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, source string) *CustomGitDetector {
+	defer perf.Track(atmosConfig, "downloader.NewCustomGitDetectorContext")()
 	return &CustomGitDetector{
+		ctx:         ctx,
 		atmosConfig: atmosConfig,
 		source:      source,
 	}
@@ -391,7 +401,11 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 		// Last resort: fall back to `gh auth token`, matching the fallback github.GetGitHubToken()
 		// already uses for plain HTTPS/API fetches, so a developer who's only run `gh auth login`
 		// doesn't need a separate token for private-repo git:: imports/vendoring/module fetches too.
-		if token := github.GetGitHubTokenFromCLI(); token != "" {
+		ctx := d.ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		if token := github.GetGitHubTokenFromCLIContext(ctx); token != "" {
 			return token, "GH_CLI"
 		}
 		return "", ""
