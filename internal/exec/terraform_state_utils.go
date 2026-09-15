@@ -167,10 +167,15 @@ func GetTerraformState(
 		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
 		result, exists, err := tfoutput.GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 		if err != nil {
-			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
+			// Wrap the cause with %w rather than %v so the error-mode classifier can tell an
+			// environmental failure from a manifest defect. See isRecoverableInWarnMode.
+			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		}
 		if !exists {
-			return nil, fmt.Errorf("%w: output `%s` does not exist for component `%s` in stack `%s`\nin YAML function: `%s`", errUtils.ErrReadTerraformState, output, component, stack, yamlFunc)
+			// A static backend's outputs are declared in the manifest, so a missing key is a
+			// typo, not an environmental condition. Tag it so warn mode keeps it fatal.
+			return nil, fmt.Errorf("%w: %w `%s` for component `%s` in stack `%s`\nin YAML function: `%s`",
+				errUtils.ErrReadTerraformState, errUtils.ErrStaticRemoteStateOutputMissing, output, component, stack, yamlFunc)
 		}
 		// result may be nil if the output is legitimately null
 		return result, nil
@@ -179,7 +184,12 @@ func GetTerraformState(
 	// Read Terraform backend using resolved auth context.
 	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, resolvedAuthContext)
 	if err != nil {
-		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
+		// Wrap the cause with %w rather than %v: GetTerraformBackend returns both
+		// environmental failures (S3 AccessDenied, credential refresh) and manifest defects
+		// (ErrUnsupportedBackendType, ErrProcessTerraformStateFile), and isRecoverableInWarnMode
+		// must be able to tell them apart. Formatting with %v flattened them into one
+		// indistinguishable string.
+		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		return nil, er
 	}
 

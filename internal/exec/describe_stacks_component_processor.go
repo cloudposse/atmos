@@ -587,7 +587,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 			p.evalSections,
 		)
 		if err != nil {
-			return err
+			return p.explainRepositoryWideYAMLFunctionFailure(err, componentName, stackName)
 		}
 		info.ComponentSection = componentSection
 
