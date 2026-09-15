@@ -12,6 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// authHeaderObservation carries what an httptest handler goroutine observed about a request's
+// Authorization header (or, via saw alone, some other one-shot event) back to the test goroutine
+// through a buffered channel, so tests never read a plain variable the handler wrote concurrently.
+type authHeaderObservation struct {
+	values []string
+	value  string
+	saw    bool
+}
+
 func enablePreconditionChecks(t *testing.T) {
 	t.Helper()
 	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "false")
@@ -734,11 +743,13 @@ func TestProbeGitHubRateLimit_SendsAuthorizationHeaderWhenTokenSet(t *testing.T)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var gotAuth []string
-			var sawAuthHeader bool
+			// The handler runs on its own goroutine; send its observation through a buffered
+			// channel instead of writing to a shared variable the test goroutine reads after
+			// client.Do returns, which go test -race would otherwise flag as a data race.
+			authCh := make(chan authHeaderObservation, 1)
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				gotAuth, sawAuthHeader = r.Header["Authorization"], r.Header.Get("Authorization") != ""
+				authCh <- authHeaderObservation{values: r.Header["Authorization"], saw: r.Header.Get("Authorization") != ""}
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"rate":{"limit":60,"remaining":42,"reset":1893456000}}`))
 			}))
@@ -749,6 +760,9 @@ func TestProbeGitHubRateLimit_SendsAuthorizationHeaderWhenTokenSet(t *testing.T)
 			require.NoError(t, err)
 			require.NotNil(t, info)
 			assert.Equal(t, 42, info.Remaining)
+
+			observed := <-authCh
+			gotAuth, sawAuthHeader := observed.values, observed.saw
 
 			if tt.wantEmpty {
 				assert.False(t, sawAuthHeader, "expected no Authorization header, got %v", gotAuth)
@@ -806,12 +820,14 @@ func TestCheckGitHubRateLimit_ReturnsInfoWhenRemaining(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var gotAuth string
-			var sawAuthHeader bool
+			// See the buffered-channel comment on TestProbeGitHubRateLimit_SendsAuthorizationHeaderWhenTokenSet
+			// above: the handler runs on its own goroutine, so its observation must not be written
+			// to a plain variable the test goroutine reads after the probe returns.
+			authCh := make(chan authHeaderObservation, 1)
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				gotAuth = r.Header.Get("Authorization")
-				_, sawAuthHeader = r.Header["Authorization"]
+				_, saw := r.Header["Authorization"]
+				authCh <- authHeaderObservation{value: r.Header.Get("Authorization"), saw: saw}
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"rate":{"limit":5000,"remaining":4999,"reset":9999999999}}`))
 			}))
@@ -822,6 +838,9 @@ func TestCheckGitHubRateLimit_ReturnsInfoWhenRemaining(t *testing.T) {
 			info := checkGitHubRateLimit(t, client, server.URL, tt.token)
 			require.NotNil(t, info)
 			assert.Equal(t, 4999, info.Remaining)
+
+			observed := <-authCh
+			gotAuth, sawAuthHeader := observed.value, observed.saw
 
 			if tt.wantEmpty {
 				assert.False(t, sawAuthHeader, "anonymous probe must not send an Authorization header")
@@ -860,11 +879,13 @@ func TestProbeGitHubRateLimit_DoesNotFollowRedirectWhenAuthenticated(t *testing.
 // path (token == "") is unaffected by the redirect fix: it still follows the redirect exactly as
 // http.Client's default behavior did before this change.
 func TestProbeGitHubRateLimit_UnauthenticatedFollowsRedirectAsBefore(t *testing.T) {
-	var redirectTargetHit bool
+	// The redirect-target handler runs on its own goroutine; signal the hit through a buffered
+	// channel instead of a shared bool the test goroutine reads after the probe returns.
+	redirectHitCh := make(chan struct{}, 1)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/redirect-target", func(w http.ResponseWriter, r *http.Request) {
-		redirectTargetHit = true
+		redirectHitCh <- struct{}{}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"rate":{"limit":60,"remaining":42,"reset":1893456000}}`))
 	})
@@ -879,6 +900,13 @@ func TestProbeGitHubRateLimit_UnauthenticatedFollowsRedirectAsBefore(t *testing.
 	info, err := probeGitHubRateLimit(client, server.URL+"/rate_limit", "")
 	require.NoError(t, err)
 	require.NotNil(t, info)
+
+	var redirectTargetHit bool
+	select {
+	case <-redirectHitCh:
+		redirectTargetHit = true
+	default:
+	}
 	assert.True(t, redirectTargetHit, "expected the unauthenticated probe to follow the redirect as before")
 	assert.Equal(t, 42, info.Remaining)
 }

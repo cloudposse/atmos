@@ -1,6 +1,8 @@
 package tests
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -84,7 +86,71 @@ func TestClassifyLiveGitHubFailure(t *testing.T) {
 // TestSkipOrFailLiveGitHubCanary_NilError verifies a nil error is always a silent no-op,
 // regardless of stderr content.
 func TestSkipOrFailLiveGitHubCanary_NilError(t *testing.T) {
-	skipOrFailLiveGitHubCanary(t, "no-op", nil, "500 Internal Server Error")
+	skipOrFailLiveGitHubCanary(t, context.Background(), "no-op", nil, "500 Internal Server Error")
+}
+
+// TestClassifyCanaryFailure covers classifyCanaryFailure's extra ctxErr branch on top of
+// classifyLiveGitHubFailure's stderr-only patterns: exec.CommandContext kills a hung subprocess
+// the instant canaryTimeout fires, which can leave stderr empty (or mid-write), so a deadline
+// exceeded on the driving context must be treated as transient even when stderr has nothing to
+// say -- and must NOT be misclassified when the context error is something else entirely (e.g.
+// explicit cancellation, which is a real bug in the canary, not a network condition).
+func TestClassifyCanaryFailure(t *testing.T) {
+	tests := []struct {
+		name          string
+		ctxErr        error
+		stderr        string
+		wantTransient bool
+	}{
+		{
+			name:          "deadline exceeded with empty stderr is transient",
+			ctxErr:        context.DeadlineExceeded,
+			stderr:        "",
+			wantTransient: true,
+		},
+		{
+			name:          "deadline exceeded with unrelated stderr is still transient",
+			ctxErr:        context.DeadlineExceeded,
+			stderr:        "Error: component \"vpc\" not found in stack \"nonprod\"",
+			wantTransient: true,
+		},
+		{
+			name:          "wrapped deadline exceeded is transient",
+			ctxErr:        fmt.Errorf("running command: %w", context.DeadlineExceeded),
+			stderr:        "",
+			wantTransient: true,
+		},
+		{
+			name:          "no ctx error falls back to stderr classification (transient)",
+			ctxErr:        nil,
+			stderr:        "dial tcp: could not connect to github.com:443",
+			wantTransient: true,
+		},
+		{
+			name:          "no ctx error falls back to stderr classification (not transient)",
+			ctxErr:        nil,
+			stderr:        "Error: component \"vpc\" not found in stack \"nonprod\"",
+			wantTransient: false,
+		},
+		{
+			name:          "context canceled (not a deadline) with unrelated stderr is not transient",
+			ctxErr:        context.Canceled,
+			stderr:        "Error: component \"vpc\" not found in stack \"nonprod\"",
+			wantTransient: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transient, reason := classifyCanaryFailure(tt.ctxErr, tt.stderr)
+			assert.Equal(t, tt.wantTransient, transient)
+			if tt.wantTransient {
+				assert.NotEmpty(t, reason, "expected a reason when transient")
+			} else {
+				assert.Empty(t, reason)
+			}
+		})
+	}
 }
 
 func TestRemoveEnvKeys(t *testing.T) {

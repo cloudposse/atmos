@@ -1294,6 +1294,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// or an authenticating extraHeader; disable it too so the canary's isolation contract does
 		// not depend on the host's system config being empty.
 		tc.Env["GIT_CONFIG_NOSYSTEM"] = "true"
+		// git's trace machinery normally redacts Authorization headers, but that only holds if
+		// GIT_TRACE_REDACT is not explicitly disabled. An inherited GIT_TRACE_REDACT=0 (e.g. from
+		// a developer's shell or a CI runner debugging git) would otherwise let git tracing print
+		// the extraheader injected above -- including the authenticated canary's real token --
+		// straight into captured test output. Force redaction on for both live-GitHub variants so
+		// the canary's isolation contract never depends on the host's ambient trace settings.
+		tc.Env["GIT_TRACE_REDACT"] = "true"
 	}
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
