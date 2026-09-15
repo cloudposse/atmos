@@ -198,6 +198,8 @@ func TestAppend_ScrubsCaseVariantKeys(t *testing.T) {
 	}
 }
 
+// TestIsInsteadOfEntry verifies IsInsteadOfEntry recognizes only url.<base>.insteadOf rules and
+// not unrelated overrides such as credential.helper or an HTTP extraheader.
 func TestIsInsteadOfEntry(t *testing.T) {
 	tests := []struct {
 		name  string
