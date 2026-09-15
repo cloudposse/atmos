@@ -91,3 +91,27 @@ func TestHomeFilesToCopy(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateLiveGitHubPreconditions(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		preconditions []string
+		invalid       bool
+	}{
+		{name: "no preconditions"},
+		{name: "unrelated preconditions", preconditions: []string{"terraform", "github_token"}},
+		{name: "unauthenticated", preconditions: []string{"terraform", "live_github"}},
+		{name: "authenticated", preconditions: []string{"live_github_authenticated"}},
+		{name: "combined", preconditions: []string{"live_github", "live_github_authenticated"}, invalid: true},
+		{name: "combined reversed", preconditions: []string{"live_github_authenticated", "terraform", "live_github"}, invalid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateLiveGitHubPreconditions(tc.preconditions)
+			if tc.invalid {
+				require.EqualError(t, err, `preconditions "live_github" and "live_github_authenticated" are mutually exclusive`)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}

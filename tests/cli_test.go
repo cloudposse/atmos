@@ -972,9 +972,13 @@ func TestMain(m *testing.M) {
 }
 
 // checkPreconditions checks if all required preconditions for a test are met.
-// If any precondition is not met, the test is skipped with an appropriate message.
+// Invalid combinations fail before checks run; unmet preconditions skip the test.
 func checkPreconditions(t *testing.T, preconditions []string) {
 	t.Helper()
+
+	if err := validateLiveGitHubPreconditions(preconditions); err != nil {
+		t.Fatal(err)
+	}
 
 	// Map of precondition names to their check functions
 	preconditionChecks := map[string]func(*testing.T){
@@ -997,6 +1001,14 @@ func checkPreconditions(t *testing.T, preconditions []string) {
 		}
 		checkFunc(t)
 	}
+}
+
+// validateLiveGitHubPreconditions rejects contradictory authentication modes before network checks.
+func validateLiveGitHubPreconditions(preconditions []string) error {
+	if hasPrecondition(preconditions, "live_github") && hasPrecondition(preconditions, "live_github_authenticated") {
+		return errors.New(`preconditions "live_github" and "live_github_authenticated" are mutually exclusive`)
+	}
+	return nil
 }
 
 // hasPrecondition reports whether name is present in preconditions.
