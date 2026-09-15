@@ -46,8 +46,8 @@ func RenderInstancesTree(stacksWithComponents map[string]map[string][]*listtree.
 // renderTreeHeader creates and renders a styled header for tree output.
 func renderTreeHeader(title string) string {
 	h1Style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorWhite)).
-		Background(lipgloss.Color(theme.ColorBlue)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextPrimary)).
+		Background(lipgloss.Color(theme.GetCurrentColorScheme().Primary)).
 		Bold(true).
 		Padding(0, 1)
 
@@ -184,7 +184,7 @@ func buildComponentNodeSimple(componentName string, componentFolder string) *tre
 		// Style component name and folder path separately.
 		styledName := getComponentStyle().Render(componentName)
 		// Use muted style for the folder path in parentheses.
-		mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
+		mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 		styledFolder := mutedStyle.Render(fmt.Sprintf(" (%s)", componentFolder))
 		displayText = styledName + styledFolder
 	} else {
