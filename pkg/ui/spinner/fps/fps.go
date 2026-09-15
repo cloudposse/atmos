@@ -13,7 +13,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 // EnvVar is the environment variable that overrides the spinner redraw rate
@@ -39,8 +40,8 @@ func Apply(s *spinner.Model) {
 // FromEnv returns the spinner redraw rate (frames per second) parsed from
 // ATMOS_SPINNER_FPS, or 0 when unset/invalid (meaning "keep the default rate").
 func FromEnv() int {
-	_ = viper.BindEnv(EnvVar, EnvVar)
-	raw := viper.GetString(EnvVar)
+	_ = viperguard.BindEnv(EnvVar, EnvVar)
+	raw := viperguard.GetString(EnvVar)
 	if raw == "" {
 		return 0
 	}

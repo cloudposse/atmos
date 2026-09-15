@@ -206,14 +206,14 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 			// Create a styled table for TTY
 			t := table.New().
 				Border(lipgloss.ThickBorder()).
-				BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
+				BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Border))).
 				StyleFunc(func(row, col int) lipgloss.Style {
 					style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
 					if row == 0 {
-						return style.Inherit(theme.Styles.CommandName).Align(lipgloss.Center)
+						return style.Inherit(theme.GetCurrentStyles().Command).Align(lipgloss.Center)
 					}
 					// Use consistent style for all rows
-					return style.Inherit(theme.Styles.Description)
+					return style.Inherit(theme.GetCurrentStyles().Description)
 				}).
 				Headers(header...).
 				Rows(rows...)

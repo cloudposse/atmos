@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -124,10 +125,10 @@ func (h *PagerHandler) shouldRenderMarkdown(step *schema.WorkflowStep, path stri
 
 // renderMarkdown renders markdown content using glamour.
 func (h *PagerHandler) renderMarkdown(content string) (string, error) {
-	var opts []glamour.TermRendererOption
+	opts := []glamour.TermRendererOption{glamour.WithColorProfile(ui.GetColorProfile())}
 
 	// Use theme-aware styles.
-	if glamourStyle, err := theme.GetGlamourStyleForTheme(theme.DefaultThemeName); err == nil {
+	if glamourStyle, err := theme.GetCurrentGlamourStyle(); err == nil {
 		opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
 	}
 

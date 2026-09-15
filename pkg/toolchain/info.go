@@ -22,7 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -206,8 +206,8 @@ func displayVersionsWithMetadata(versions []versionItem, installedVersions []str
 	}
 
 	// Styling to match atmos version list exactly.
-	installedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Green for installed.
-	configuredStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray for configured.
+	installedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))    // Green for installed.
+	configuredStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)) // Gray for configured.
 	emptyIndicator := emptyValuePlaceholder
 	const tableBorderPadding = 8 // Account for column padding.
 
@@ -252,19 +252,19 @@ func createVersionsTable(rows [][]string, tableWidth int) (*lipglosstable.Table,
 
 	// Styling to match atmos version list exactly.
 	headerStyle := lipgloss.NewStyle().Bold(true)
-	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray for date.
+	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)) // Gray for date.
 	// Create table with lipgloss/table - only border under header.
 	t := lipglosstable.New().
 		Headers("", "VERSION", "DATE", "TITLE").
 		Rows(rows...).
-		BorderHeader(true).                                               // Show border under header.
-		BorderTop(false).                                                 // No top border.
-		BorderBottom(false).                                              // No bottom border.
-		BorderLeft(false).                                                // No left border.
-		BorderRight(false).                                               // No right border.
-		BorderRow(false).                                                 // No row separators.
-		BorderColumn(false).                                              // No column separators.
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))). // Gray border.
+		BorderHeader(true).                                                                                   // Show border under header.
+		BorderTop(false).                                                                                     // No top border.
+		BorderBottom(false).                                                                                  // No bottom border.
+		BorderLeft(false).                                                                                    // No left border.
+		BorderRight(false).                                                                                   // No right border.
+		BorderRow(false).                                                                                     // No row separators.
+		BorderColumn(false).                                                                                  // No column separators.
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))). // Gray border.
 		StyleFunc(func(row, col int) lipgloss.Style {
 			switch {
 			case col == 0:
@@ -292,15 +292,22 @@ func createVersionsTable(rows [][]string, tableWidth int) (*lipglosstable.Table,
 // renderMarkdownInline renders inline markdown with proper ANSI colors preserved.
 // This matches the implementation from cmd/version/formatters.go.
 func renderMarkdownInline(text string) string {
-	// Use Glamour to render markdown inline with colors.
+	// Use the active theme and configured profile, including piped recordings.
+	style, err := theme.GetCurrentGlamourStyle()
+	if err != nil {
+		return strings.ReplaceAll(text, "`", "")
+	}
 	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStylesFromJSONBytes(style),
+		glamour.WithColorProfile(ui.GetColorProfile()),
 		glamour.WithWordWrap(0),
 	)
 	if err != nil {
 		// Fallback: just remove backticks if rendering fails.
 		return strings.ReplaceAll(text, "`", "")
 	}
+
+	defer renderer.Close()
 
 	rendered, err := renderer.Render(text)
 	if err != nil {
@@ -493,9 +500,7 @@ func fetchGitHubVersionsWithSpinner(owner, repo string) ([]versionItem, error) {
 	//nolint:nestif // Spinner logic requires nested conditions for TTY check.
 	if isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd()) {
 		// Create spinner model.
-		s := spinner.New()
-		s.Spinner = spinner.Dot
-		fps.Apply(&s)
+		s := ui.NewSpinner()
 
 		// Fetch versions with spinner.
 		m := &versionFetchModel{spinner: s, owner: owner, repo: repo}

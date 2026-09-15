@@ -56,9 +56,9 @@ func (m *Model) progressView() string {
 // progressHeaderLine builds the spinner + command + activity + right-aligned progress info line.
 func (m *Model) progressHeaderLine() string {
 	// Styles.
-	stackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)).Bold(true)
-	componentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
+	stackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).Bold(true)
+	componentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
+	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	// Build spinner + command + stack/component.
 	spin := m.spinner.View() + " "
@@ -149,10 +149,10 @@ func (m Model) renderResource(res *ResourceOperation) string {
 	var actionVerb string
 	var style lipgloss.Style
 
-	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
-	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
-	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorYellow))
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error))
+	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Warning))
+	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	switch res.State {
 	case ResourceStatePending:
@@ -314,7 +314,7 @@ func (m *Model) renderErrorSummary(b *strings.Builder, command string, elapsed f
 	b.WriteString(newlineStr)
 
 	// Show failed resources (different from diagnostics - these have resource addresses).
-	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error))
 	for _, res := range m.tracker.GetResources() {
 		if res.State == ResourceStateError && res.Error != "" {
 			fmt.Fprintf(
@@ -329,7 +329,7 @@ func (m *Model) renderErrorSummary(b *strings.Builder, command string, elapsed f
 
 // renderSuccessSummary writes the completion summary line, noting when there were no changes.
 func (m *Model) renderSuccessSummary(b *strings.Builder, command string, summary *ChangeSummaryMessage, elapsed float64) {
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 	// An output-only change (no resource changes, only an output value) must not be reported as
 	// "no changes" - see issue #3114 - even though summary's counts are resource-only and all
 	// zero in that case.
