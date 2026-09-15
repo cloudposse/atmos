@@ -95,7 +95,7 @@ func fetchRemote(ctx context.Context, atmosConfig *schema.AtmosConfiguration, ur
 	if opts.Retry != nil {
 		ggOpts = append(ggOpts, downloader.WithRetryConfig(opts.Retry))
 	}
-	metadata, err := downloader.NewGoGetterDownloader(atmosConfig, ggOpts...).FetchWithMetadataContext(ctx, uri, target, opts.ClientMode, fetchTimeout)
+	metadata, err := downloader.NewGoGetterDownloader(atmosConfig, ggOpts...).(downloader.ContextFileDownloader).FetchWithMetadataContext(ctx, uri, target, opts.ClientMode, fetchTimeout)
 	if err != nil {
 		return "", downloader.FetchMetadata{}, fmt.Errorf("%w: %w", ErrDownloadPackage, errors.Join(err, ctx.Err()))
 	}
@@ -193,11 +193,11 @@ func needsCustomDetection(src string) bool {
 
 // detectIfNeeded runs the custom Git detector against uri only when needsCustomDetection reports
 // it's required, matching the pre-unification dry-run behavior for both installer types.
-func detectIfNeeded(atmosConfig *schema.AtmosConfiguration, uri string) error {
+func detectIfNeeded(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri string) error {
 	if !needsCustomDetection(uri) {
 		return nil
 	}
-	detector := downloader.NewCustomGitDetector(atmosConfig, "")
+	detector := downloader.NewCustomGitDetectorContext(ctx, atmosConfig, "")
 	_, _, err := detector.Detect(uri, "")
-	return err
+	return errors.Join(err, ctx.Err())
 }

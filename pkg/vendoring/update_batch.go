@@ -21,6 +21,9 @@ import (
 
 // UpdateSourcesContext checks a resolved selection in parallel with ordered manifest edits.
 // Progress callbacks are serialized and the returned report follows source order.
+// Custom VersionSetter callbacks run outside the validation lock and own their
+// write synchronization and stale-declaration checks. The default setter validates
+// and writes atomically under the manifest lock.
 func UpdateSourcesContext(ctx context.Context, config *schema.AtmosConfiguration, sources []*ResolvedSource, params *UpdateParams) (*UpdateReport, error) {
 	defer perf.Track(config, "vendoring.UpdateSourcesContext")()
 	n, err := concurrency.Effective(config, params.MaxConcurrency)
@@ -110,6 +113,10 @@ func (b *updateBatchResults) finish(err error) (*UpdateReport, error) {
 	return b.report, errors.Join(b.failures...)
 }
 
+// applyUpdateProposal validates discovery before persisting a version. The default
+// setter validates and writes under one lock. A custom setter runs after the
+// validation lock is released so it can use the public locking setters; it owns
+// synchronization and any stale-declaration checks required during its write.
 func applyUpdateProposal(ctx context.Context, src *ResolvedSource, latest string, setter func(string, string, string) error) error {
 	file, err := filepath.Abs(src.File)
 	if err != nil {
@@ -118,18 +125,25 @@ func applyUpdateProposal(ctx context.Context, src *ResolvedSource, latest string
 	if canonical, err := filepath.EvalSymlinks(file); err == nil {
 		file = canonical
 	}
-	return filelock.New(file+".lock").WithExclusive(ctx, func() error {
+	err = filelock.New(file+".lock").WithExclusive(ctx, func() error {
 		if err := validateUpdateDeclaration(src); err != nil {
 			return err
 		}
 		if setter != nil {
-			return setter(src.File, src.Source.Component, latest)
+			return nil
 		}
 		if src.FromComponentManifest {
 			return setComponentManifestVersionUnlocked(src.File, latest)
 		}
 		return setComponentVersionUnlocked(src.File, src.Source.Component, latest)
 	})
+	if err != nil || setter == nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return setter(src.File, src.Source.Component, latest)
 }
 
 // validateUpdateDeclaration tolerates unrelated edits but never overwrites a changed source.

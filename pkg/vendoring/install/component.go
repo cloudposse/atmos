@@ -212,7 +212,7 @@ func (p *componentVendorInstaller) dryRunCheck(ctx context.Context, atmosConfig 
 		return err
 	}
 	log.Debug("Dry-run mode: custom detection required for component (or mixin) URI", "component", p.name, "uri", p.srcURI)
-	if err := detectIfNeeded(atmosConfig, p.srcURI); err != nil {
+	if err := detectIfNeeded(ctx, atmosConfig, p.srcURI); err != nil {
 		return fmt.Errorf("%w for component %s: %w", ErrDryRunDetectionFailed, p.name, err)
 	}
 	return nil

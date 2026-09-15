@@ -39,7 +39,7 @@ func TestPackageDescriptorsPreserveSourceAndMixinIdentity(t *testing.T) {
 	assert.False(t, (VendorPackage{}).IsMixin())
 }
 
-func TestPrepareVersionReceiptAndCopyFailures(t *testing.T) {
+func TestPrepareVersionReceiptAndInvalidTarget(t *testing.T) {
 	for _, kind := range []string{"atmos", "component", "mixin"} {
 		t.Run(kind, func(t *testing.T) {
 			base := t.TempDir()
@@ -59,7 +59,14 @@ func TestPrepareVersionReceiptAndCopyFailures(t *testing.T) {
 			require.NoError(t, err)
 			defer prepared.Close()
 			require.NoError(t, os.WriteFile(pkg.Target(), []byte("target is a file"), 0o644))
-			require.ErrorIs(t, prepared.Materialize(context.Background(), config), ErrCopyPackage)
+			// Snapshot preflight rejects this invalid destination before copy begins.
+			var pathErr *os.PathError
+			require.ErrorAs(t, prepared.Materialize(context.Background(), config), &pathErr)
+			assert.Equal(t, pkg.Target(), pathErr.Path)
+			assert.Contains(t, pathErr.Err.Error(), "not a directory")
+			unchanged, err := os.ReadFile(pkg.Target())
+			require.NoError(t, err)
+			assert.Equal(t, "target is a file", string(unchanged))
 			require.NoFileExists(t, lockfile.Path(config), "failed copy must not record success")
 			require.NoError(t, os.Remove(pkg.Target()))
 			require.NoError(t, prepared.Materialize(context.Background(), config))

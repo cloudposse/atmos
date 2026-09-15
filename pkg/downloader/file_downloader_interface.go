@@ -10,9 +10,6 @@ import (
 // FileDownloader handles downloading files and directories from various sources
 // without exposing the underlying implementation.
 type FileDownloader interface {
-	// FetchWithMetadataContext fetches content with caller cancellation.
-	FetchWithMetadataContext(ctx context.Context, src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error)
-
 	// Fetch fetches content from a given source and saves it to the destination
 	Fetch(src, dest string, mode ClientMode, timeout time.Duration) error
 
@@ -36,6 +33,13 @@ type FileDownloader interface {
 	// metadata (ETag/Last-Modified) captured from the response. It is empty for non-HTTP
 	// sources (git, OCI, local) or when the underlying client doesn't expose any.
 	FetchWithMetadata(src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error)
+}
+
+// ContextFileDownloader is the optional capability for downloading with caller cancellation.
+// FileDownloader retains its original method set so existing implementations remain compatible.
+// Built-in downloaders implement both interfaces.
+type ContextFileDownloader interface {
+	FetchWithMetadataContext(ctx context.Context, src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error)
 }
 
 // ClientFactory abstracts the creation of a downloader client for better testability.

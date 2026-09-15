@@ -98,9 +98,12 @@ var vendorCleanCmd = &cobra.Command{
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		basePath := config.BasePath
+		basePath := config.BasePathAbsolute
 		if basePath == "" {
-			basePath = config.CliConfigPath
+			basePath = config.BasePath
+		}
+		if basePath == "" {
+			basePath = config.BasePathConfigDir
 		}
 		basePath, err = filepath.Abs(basePath)
 		if err != nil {

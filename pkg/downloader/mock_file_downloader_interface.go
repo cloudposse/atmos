@@ -144,8 +144,32 @@ func (mr *MockFileDownloaderMockRecorder) FetchWithMetadata(src, dest, mode, tim
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchWithMetadata", reflect.TypeOf((*MockFileDownloader)(nil).FetchWithMetadata), src, dest, mode, timeout)
 }
 
+// MockContextFileDownloader is a mock of ContextFileDownloader interface.
+type MockContextFileDownloader struct {
+	ctrl     *gomock.Controller
+	recorder *MockContextFileDownloaderMockRecorder
+	isgomock struct{}
+}
+
+// MockContextFileDownloaderMockRecorder is the mock recorder for MockContextFileDownloader.
+type MockContextFileDownloaderMockRecorder struct {
+	mock *MockContextFileDownloader
+}
+
+// NewMockContextFileDownloader creates a new mock instance.
+func NewMockContextFileDownloader(ctrl *gomock.Controller) *MockContextFileDownloader {
+	mock := &MockContextFileDownloader{ctrl: ctrl}
+	mock.recorder = &MockContextFileDownloaderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockContextFileDownloader) EXPECT() *MockContextFileDownloaderMockRecorder {
+	return m.recorder
+}
+
 // FetchWithMetadataContext mocks base method.
-func (m *MockFileDownloader) FetchWithMetadataContext(ctx context.Context, src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error) {
+func (m *MockContextFileDownloader) FetchWithMetadataContext(ctx context.Context, src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchWithMetadataContext", ctx, src, dest, mode, timeout)
 	ret0, _ := ret[0].(FetchMetadata)
@@ -154,9 +178,9 @@ func (m *MockFileDownloader) FetchWithMetadataContext(ctx context.Context, src, 
 }
 
 // FetchWithMetadataContext indicates an expected call of FetchWithMetadataContext.
-func (mr *MockFileDownloaderMockRecorder) FetchWithMetadataContext(ctx, src, dest, mode, timeout any) *gomock.Call {
+func (mr *MockContextFileDownloaderMockRecorder) FetchWithMetadataContext(ctx, src, dest, mode, timeout any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchWithMetadataContext", reflect.TypeOf((*MockFileDownloader)(nil).FetchWithMetadataContext), ctx, src, dest, mode, timeout)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchWithMetadataContext", reflect.TypeOf((*MockContextFileDownloader)(nil).FetchWithMetadataContext), ctx, src, dest, mode, timeout)
 }
 
 // MockClientFactory is a mock of ClientFactory interface.

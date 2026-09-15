@@ -114,7 +114,7 @@ func (p *atmosVendorInstaller) dryRunCheck(ctx context.Context, atmosConfig *sch
 		return err
 	}
 	log.Debug("Entering dry-run flow for generic (non component/mixin) vendoring", "package", p.name)
-	if err := detectIfNeeded(atmosConfig, p.srcURI); err != nil {
+	if err := detectIfNeeded(ctx, atmosConfig, p.srcURI); err != nil {
 		return fmt.Errorf("%w: %w", ErrDryRunDetectionFailed, err)
 	}
 	return nil

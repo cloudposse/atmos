@@ -107,8 +107,16 @@ entire repository. Treat local reads as barriers after preceding writes. Recheck
 proposed unchanged results after earlier writes that may affect their targets.
 
 Continue after per-package failures, aggregate errors in plan order, and preserve
-successful earlier installations. There is no whole-batch rollback. Neither copy
-nor receipt failures may emit success. Clean staging directories on every exit.
+successful earlier installations. There is no whole-batch rollback.
+
+Before each materialization, snapshot its existing target trees under the
+mutation locks. On copy, pruning, or receipt-save failure,
+restore that package’s previous files and preserve its previous receipt. This
+adds temporary disk usage proportional to the package’s existing targets. If the
+filesystem also prevents restoration, retain the backup and report its recovery
+path. Reject targets that overlap receipt or mutation-lock files before copying.
+Neither copy nor receipt failures may emit success. Clean staging directories on
+every exit.
 
 ### Shared files and processes
 

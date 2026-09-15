@@ -112,14 +112,10 @@ type CleanReport struct {
 // Path returns the absolute vendor lock path for the given Atmos configuration.
 func Path(config *schema.AtmosConfiguration) string { //nolint:lintroller // Trivial pure path computation; perf.Track overhead is unwarranted.
 	lockPath := DefaultFileName
-	basePath := ""
+	basePath := configuredProjectBase(config)
 	if config != nil {
 		if config.Vendor.LockFile != "" {
 			lockPath = config.Vendor.LockFile
-		}
-		basePath = config.BasePath
-		if basePath == "" {
-			basePath = config.CliConfigPath
 		}
 	}
 	if filepath.IsAbs(lockPath) {
@@ -1051,14 +1047,27 @@ func lockTargetRoot(config *schema.AtmosConfiguration, target string) (string, e
 	return root, nil
 }
 
-func projectBase(config *schema.AtmosConfiguration) (string, error) {
-	base := ""
-	if config != nil {
-		base = config.BasePath
-		if base == "" {
-			base = config.CliConfigPath
-		}
+// configuredProjectBase follows config loading's resolved root before considering
+// manually constructed configurations. CliConfigPath is legacy metadata and may
+// contain multiple semicolon-separated directories, so prefer the selected source.
+func configuredProjectBase(config *schema.AtmosConfiguration) string {
+	if config == nil {
+		return ""
 	}
+	if config.BasePathAbsolute != "" {
+		return config.BasePathAbsolute
+	}
+	if config.BasePath != "" {
+		return config.BasePath
+	}
+	if config.BasePathConfigDir != "" {
+		return config.BasePathConfigDir
+	}
+	return config.CliConfigPath
+}
+
+func projectBase(config *schema.AtmosConfiguration) (string, error) {
+	base := configuredProjectBase(config)
 	if base == "" {
 		var err error
 		base, err = os.Getwd()

@@ -74,6 +74,7 @@ func (p *PreparedPackage) Close() {
 
 type downloadProgress struct{ notify func(int64, int64) }
 
+// TrackProgress wraps a download stream with byte-count notifications for its batch job.
 func (p downloadProgress) TrackProgress(_ string, current, total int64, stream io.ReadCloser) io.ReadCloser {
 	defer perf.Track(nil, "install.downloadProgress.TrackProgress")()
 	if p.notify == nil {
@@ -89,6 +90,7 @@ type progressReader struct {
 	notify         func(int64, int64)
 }
 
+// Read forwards the stream read and reports the updated transferred-byte count.
 func (r *progressReader) Read(buf []byte) (int, error) {
 	defer perf.Track(nil, "install.progressReader.Read")()
 	n, err := r.ReadCloser.Read(buf)

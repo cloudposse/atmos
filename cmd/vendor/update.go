@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -451,17 +450,10 @@ type vendorPullParams struct {
 // unchanged: that path already pulls correctly regardless of whether the component's source
 // comes from vendor.yaml or a standalone component.yaml, so it's delegated straight through.
 //
-// When p.component is empty (a repo-wide "--pull" sweep), pull only the components update actually
-// changed instead of setting --everything=true. --everything only knows how to enumerate a
-// vendor.yaml's sources and hard-errors when one doesn't exist (internal/exec/vendor.go's
-// handleVendorConfig / ErrVendorConfigNotExist), which broke repo-wide "--pull" in a
-// component.yaml-only repo (no vendor.yaml at all) even though every updated component's own pull
-// already worked fine. Re-pulling only what changed is also strictly better behavior on its own
-// merits: there's no reason to re-pull untouched (up-to-date/skipped/failed) components after an
-// update.
-//
-// Resolve component manifests in sorted type groups and imported vendor sources in
-// their existing selection order, then execute one batch across the combined plan.
+// When p.component is empty, reconcile every selected report entry, including
+// unchanged versions whose local materialization may be absent or modified.
+// Resolve packages in report order, preserving each component's source/mixin
+// order, then run one concurrent installation batch with ordered destination writes.
 func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateReport, p vendorPullParams) error {
 	originalContext := cmd.Context()
 	ctx := originalContext
@@ -496,18 +488,14 @@ func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateRe
 	var packages []install.VendorPackage
 	collect := opts
 	collect.Collect = &packages
-	groups, fallback := partitionPullResults(report)
-	types := make([]string, 0, len(groups))
-	for typ := range groups {
-		types = append(types, typ)
-	}
-	sort.Strings(types)
-	for _, typ := range types {
-		if err := e.ExecuteComponentVendorPullBatch(&config, groups[typ], typ, collect); err != nil {
-			return err
+	for i := range report.Results {
+		result := &report.Results[i]
+		if componentManifestBasenames[filepath.Base(result.File)] {
+			if err := e.ExecuteComponentVendorPullBatch(&config, []string{result.Component}, result.ComponentType, collect); err != nil {
+				return err
+			}
+			continue
 		}
-	}
-	for _, result := range fallback {
 		if err := setPullComponentFlags(cmd, result.Component); err != nil {
 			return err
 		}
@@ -522,38 +510,11 @@ func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateRe
 
 // componentManifestBasenames are the physical file basenames a component.yaml-declared source's
 // SourceUpdateResult.File can carry (see ReadAndProcessComponentVendorConfigFile's
-// findComponentConfigFile), used by partitionReportResults to distinguish it from a
+// findComponentConfigFile), used by runVendorPull to distinguish it from a
 // vendor.yaml-declared source (vendor.yaml itself, or any file it imports).
 var componentManifestBasenames = map[string]bool{
 	"component.yaml": true,
 	"component.yml":  true,
-}
-
-// partitionPullResults selects every report entry because an unchanged version
-// can still need materialization reconciliation against vendor.lock.yaml.
-func partitionPullResults(report *vendoring.UpdateReport) (batchComponentsByType map[string][]string, fallback []vendoring.SourceUpdateResult) {
-	return partitionReportResults(report, false)
-}
-
-// partitionReportResults splits report's results (optionally filtered to StatusUpdated only,
-// via updatedOnly) into components declared via their own component.yaml/component.yml manifest
-// (eligible for the batched ExecuteComponentVendorPullBatch call, grouped by ComponentType since a
-// repo-wide sweep can mix types in one report) versus everything else (vendor.yaml or an imported
-// manifest file), which keeps using the existing per-component pullUpdatedComponent loop.
-func partitionReportResults(report *vendoring.UpdateReport, updatedOnly bool) (batchComponentsByType map[string][]string, fallback []vendoring.SourceUpdateResult) {
-	batchComponentsByType = map[string][]string{}
-	for i := range report.Results {
-		result := report.Results[i]
-		if updatedOnly && result.Status != vendoring.StatusUpdated {
-			continue
-		}
-		if componentManifestBasenames[filepath.Base(result.File)] {
-			batchComponentsByType[result.ComponentType] = append(batchComponentsByType[result.ComponentType], result.Component)
-			continue
-		}
-		fallback = append(fallback, result)
-	}
-	return batchComponentsByType, fallback
 }
 
 // batchedComponentManifestsParams bundles pullBatchedComponentManifests' inputs (Options Pattern,

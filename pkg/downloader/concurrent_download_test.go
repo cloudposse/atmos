@@ -82,7 +82,7 @@ func TestWithProgressReportsActualHTTPTransfer(t *testing.T) {
 	}))
 	defer server.Close()
 	destination := filepath.Join(t.TempDir(), "download.txt")
-	_, err := NewGoGetterDownloader(nil, WithHTTPClient(server.Client()), WithProgress(progress)).FetchWithMetadataContext(context.Background(), server.URL+"/source", destination, ClientModeFile, time.Second*5)
+	_, err := NewGoGetterDownloader(nil, WithHTTPClient(server.Client()), WithProgress(progress)).(ContextFileDownloader).FetchWithMetadataContext(context.Background(), server.URL+"/source", destination, ClientModeFile, time.Second*5)
 	require.NoError(t, err)
 	content, err := os.ReadFile(destination)
 	require.NoError(t, err)
@@ -104,7 +104,7 @@ func TestFetchWithMetadataContextCancelsActiveRequest(t *testing.T) {
 	finished := make(chan error, 1)
 	destination := filepath.Join(t.TempDir(), "download.txt")
 	go func() {
-		_, err := NewGoGetterDownloader(nil, WithHTTPClient(server.Client())).FetchWithMetadataContext(ctx, server.URL+"/source", destination, ClientModeFile, time.Minute)
+		_, err := NewGoGetterDownloader(nil, WithHTTPClient(server.Client())).(ContextFileDownloader).FetchWithMetadataContext(ctx, server.URL+"/source", destination, ClientModeFile, time.Minute)
 		finished <- err
 	}()
 	select {
@@ -126,7 +126,7 @@ func TestFetchWithMetadataContextAlreadyCanceledDoesNotCreateClient(t *testing.T
 	factory := NewMockClientFactory(ctrl)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	metadata, err := NewFileDownloader(factory).FetchWithMetadataContext(ctx, "local-source", "destination", ClientModeFile, time.Minute)
+	metadata, err := NewFileDownloader(factory).(ContextFileDownloader).FetchWithMetadataContext(ctx, "local-source", "destination", ClientModeFile, time.Minute)
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Empty(t, metadata)
 }
@@ -147,7 +147,7 @@ func TestFetchWithMetadataContextPreservesEarlierDeadline(t *testing.T) {
 		},
 	)
 	client.EXPECT().Get().Return(nil)
-	_, err := NewFileDownloader(factory).FetchWithMetadataContext(ctx, "source", "dest", ClientModeFile, time.Hour)
+	_, err := NewFileDownloader(factory).(ContextFileDownloader).FetchWithMetadataContext(ctx, "source", "dest", ClientModeFile, time.Hour)
 	require.NoError(t, err)
 }
 
@@ -172,7 +172,7 @@ func TestFetchWithMetadataContextRateWaitCancellation(t *testing.T) {
 				factory.EXPECT().NewClient(gomock.Any(), gomock.Any(), "dest", ClientModeFile).Return(client, nil)
 				client.EXPECT().Get().Return(nil)
 			}
-			_, err := NewFileDownloader(factory).FetchWithMetadataContext(ctx, "https://raw.githubusercontent.com/org/repo/main/file", "dest", ClientModeFile, time.Minute)
+			_, err := NewFileDownloader(factory).(ContextFileDownloader).FetchWithMetadataContext(ctx, "https://raw.githubusercontent.com/org/repo/main/file", "dest", ClientModeFile, time.Minute)
 			if interrupted {
 				require.ErrorIs(t, err, context.Canceled)
 			} else {

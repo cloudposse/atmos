@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -28,7 +29,14 @@ type CustomGitDetector struct {
 
 // NewCustomGitDetector creates a new CustomGitDetector with the provided configuration and source URL.
 func NewCustomGitDetector(atmosConfig *schema.AtmosConfiguration, source string) *CustomGitDetector {
+	return NewCustomGitDetectorContext(context.Background(), atmosConfig, source)
+}
+
+// NewCustomGitDetectorContext propagates caller cancellation to credential lookup.
+func NewCustomGitDetectorContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, source string) *CustomGitDetector {
+	defer perf.Track(atmosConfig, "downloader.NewCustomGitDetectorContext")()
 	return &CustomGitDetector{
+		ctx:         ctx,
 		atmosConfig: atmosConfig,
 		source:      source,
 	}

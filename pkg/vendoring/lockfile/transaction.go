@@ -2,6 +2,8 @@ package lockfile
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -22,13 +24,25 @@ func (r *PreparedRecord) Materialize(ctx context.Context, config *schema.AtmosCo
 	defer perf.Track(config, "lockfile.PreparedRecord.Materialize")()
 	return WithMutation(ctx, config, func() error {
 		// Reject a receipt changed or corrupted by another process before touching targets.
-		if _, err := Load(config); err != nil {
+		previous, err := Load(config)
+		if err != nil {
 			return err
 		}
-		if err := copyFiles(); err != nil {
+		snapshot, err := snapshotTargets(config, previous, r)
+		if err != nil {
 			return err
 		}
-		return replaceUnlocked(config, r.id, r.artifact)
+		err = copyFiles()
+		if err == nil {
+			err = replaceUnlocked(config, r.id, r.artifact)
+		}
+		if err != nil {
+			if restoreErr := snapshot.restore(); restoreErr != nil {
+				// Preserve the only recovery copy when the filesystem also rejects rollback.
+				return errors.Join(err, fmt.Errorf("restore vendor target (backup retained at %s): %w", snapshot.dir, restoreErr))
+			}
+		}
+		return errors.Join(err, snapshot.close())
 	})
 }
 
