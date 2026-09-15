@@ -165,3 +165,12 @@ func View(fn func(v ViperReader)) {
 	defer mu.RUnlock()
 	fn(viperReaderAdapter{v: viper.GetViper()})
 }
+
+// Unmarshal decodes the global configuration while excluding concurrent writers.
+func Unmarshal(rawVal any) error {
+	defer perf.Track(nil, "viperguard.Unmarshal")()
+
+	mu.RLock()
+	defer mu.RUnlock()
+	return viper.Unmarshal(rawVal)
+}

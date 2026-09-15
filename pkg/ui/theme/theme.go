@@ -52,6 +52,9 @@ type Theme struct {
 	Foreground    string `json:"foreground"`
 	Cursor        string `json:"cursor"`
 	Selection     string `json:"selection"`
+	// Optional progress gradient overrides; omitted endpoints use Cyan and Green.
+	ProgressStart string `json:"progressStart,omitempty"`
+	ProgressEnd   string `json:"progressEnd,omitempty"`
 	Meta          Meta   `json:"meta"`
 }
 
