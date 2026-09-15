@@ -12,6 +12,14 @@
   letter-spacing: -0.03em;
 }
 
+:global(html[data-theme='dark']) .title {
+  color: transparent;
+  background-image: linear-gradient(180deg, #ffffff 0%, #e7e5e4 45%, #a8a29e 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .description {
   margin: 0;
   color: var(--ifm-color-emphasis-700);
