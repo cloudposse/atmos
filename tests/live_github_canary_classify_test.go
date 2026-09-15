@@ -137,11 +137,14 @@ func TestSetEnvVar_AddsNewKey(t *testing.T) {
 const mirrorGitConfigEnv = "GIT_CONFIG_GLOBAL=/mirror/gitconfig"
 
 // assertMirrorRulesDisabled verifies env points GIT_CONFIG_GLOBAL at an empty file (so the
-// mirror's insteadOf rules do not apply) rather than at TestMain's mirror gitconfig.
+// mirror's insteadOf rules do not apply) rather than at TestMain's mirror gitconfig, and that
+// GIT_CONFIG_NOSYSTEM=true is set so a system-level git config (e.g. /etc/gitconfig) cannot
+// redirect or authenticate the canary either.
 func assertMirrorRulesDisabled(t *testing.T, env []string) {
 	t.Helper()
 
 	assertEnvNotContains(t, env, mirrorGitConfigEnv)
+	assertEnvContains(t, env, "GIT_CONFIG_NOSYSTEM=true")
 	for _, kv := range env {
 		if path, ok := strings.CutPrefix(kv, "GIT_CONFIG_GLOBAL="); ok {
 			info, err := os.Stat(path)

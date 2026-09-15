@@ -1287,6 +1287,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// empty file instead: git then sees no rewrite rules at all, and atmos -- which never reads
 		// that variable -- behaves exactly as it does for any other case.
 		tc.Env["GIT_CONFIG_GLOBAL"] = emptyGitConfigFile(t)
+		// A system-level git config (e.g. /etc/gitconfig) could still carry an insteadOf redirect
+		// or an authenticating extraHeader; disable it too so the canary's isolation contract does
+		// not depend on the host's system config being empty.
+		tc.Env["GIT_CONFIG_NOSYSTEM"] = "true"
 	}
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {

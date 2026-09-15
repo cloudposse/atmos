@@ -146,6 +146,10 @@ func githubCanaryEnv(t *testing.T, base []string, authenticated bool) []string {
 	// point git at an empty global config instead; atmos never reads that variable.
 	env = removeEnvKeys(env, "GIT_CONFIG_GLOBAL")
 	env = append(env, "GIT_CONFIG_GLOBAL="+emptyGitConfigFile(t))
+	// A system-level git config (e.g. /etc/gitconfig) could still carry an insteadOf redirect or
+	// an authenticating extraHeader; disable it too so the canary's isolation contract does not
+	// depend on the host's system config being empty.
+	env = setEnvVar(env, "GIT_CONFIG_NOSYSTEM", "true")
 
 	gitEntries := []gitconfigenv.GitConfigEntry{
 		// Disable credential helper (prevents osxkeychain hangs/popups), mirroring
