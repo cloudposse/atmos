@@ -79,6 +79,27 @@ func (f *fakeProvider) OutputWriter() provider.OutputWriter { return nil }
 
 func (f *fakeProvider) ResolveBase() (*provider.BaseResolution, error) { return nil, nil }
 
+func TestAlreadyShownAndMarkShown(t *testing.T) {
+	t.Setenv(noticesShownEnvVar, "") // Baseline + auto-restore of the pre-test value on cleanup.
+	assert.False(t, AlreadyShown())
+
+	MarkShown()
+	assert.True(t, AlreadyShown())
+}
+
+func TestPrintStartupStatus_NoOpWhenAlreadyShown(t *testing.T) {
+	restore := ci.SwapRegistryForTest()
+	defer restore()
+	ci.Register(&fakeProvider{detected: true}) // Would normally print, if not for the sentinel.
+
+	t.Setenv(noticesShownEnvVar, "1")
+	stderr := initTestUI(t)
+
+	PrintStartupStatus(&schema.AtmosConfiguration{})
+
+	assert.Empty(t, stderr.String())
+}
+
 func TestPrintStartupStatus_NoOpOutsideCI(t *testing.T) {
 	restore := ci.SwapRegistryForTest()
 	defer restore()
