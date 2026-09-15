@@ -517,7 +517,7 @@ func requestAllowsToken(req *http.Request) bool {
 		return false
 	}
 	repo := github.RepoEndpoints()
-	return repo.IsHost(req.URL.Host) || repo.IsAPIHost(req.URL.Host)
+	return repo.IsHostForScheme(req.URL.Host, req.URL.Scheme) || repo.IsAPIHostForScheme(req.URL.Host, req.URL.Scheme)
 }
 
 // stripAuthOnUnapprovedRedirect removes the Authorization header from req (the request that

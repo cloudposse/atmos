@@ -2285,3 +2285,48 @@ func TestSetToolVersion_NonGitHubReleaseWithoutVersion(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "interactive version selection is only available for GitHub release type tools")
 }
+
+func TestRequestAllowsTokenSchemeAwarePorts(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		serverURL  string
+		apiURL     string
+		requestURL string
+		allowed    bool
+	}{
+		{name: "server default port", requestURL: "https://ghes.example.com/releases", allowed: true},
+		{name: "server explicit TLS port", requestURL: "https://ghes.example.com:443/releases", allowed: true},
+		{name: "server TLS on HTTP port", requestURL: "https://ghes.example.com:80/releases"},
+		{name: "API default port", requestURL: "https://api.ghes.example.com/releases", allowed: true},
+		{name: "API explicit TLS port", requestURL: "https://api.ghes.example.com:443/releases", allowed: true},
+		{name: "API TLS on HTTP port", requestURL: "https://api.ghes.example.com:80/releases"},
+		{name: "HTTP downgrade", requestURL: "http://ghes.example.com/releases"},
+		{name: "configured server port", serverURL: "https://ghes.example.com:8443", requestURL: "https://ghes.example.com:8443/releases", allowed: true},
+		{name: "configured API port", apiURL: "https://api.ghes.example.com:8443", requestURL: "https://api.ghes.example.com:8443/releases", allowed: true},
+		{name: "wrong configured port", serverURL: "https://ghes.example.com:8443", requestURL: "https://ghes.example.com/releases"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearGitHubEndpointEnvToolchain(t)
+			serverURL := tc.serverURL
+			if serverURL == "" {
+				serverURL = "https://ghes.example.com"
+			}
+			apiURL := tc.apiURL
+			if apiURL == "" {
+				apiURL = "https://api.ghes.example.com"
+			}
+			t.Setenv("GITHUB_SERVER_URL", serverURL)
+			t.Setenv("GITHUB_API_URL", apiURL)
+			req, err := http.NewRequest(http.MethodGet, tc.requestURL, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tc.allowed, requestAllowsToken(req))
+			req.Header.Set("Authorization", "Bearer test-token")
+			require.NoError(t, stripAuthOnUnapprovedRedirect(req, nil))
+			if tc.allowed {
+				assert.Equal(t, "Bearer test-token", req.Header.Get("Authorization"))
+			} else {
+				assert.Empty(t, req.Header.Get("Authorization"))
+			}
+		})
+	}
+}
