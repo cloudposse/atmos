@@ -78,7 +78,7 @@ func (r *Reporter) Start(live bool, cancel context.CancelFunc) {
 	if !live {
 		return
 	}
-	m := model{report: r, width: defaultWidth, spinner: spinner.New(spinner.WithSpinner(spinner.Dot))}
+	m := model{report: r, width: defaultWidth, spinner: ui.NewSpinner()}
 	r.program = tea.NewProgram(&m, tea.WithOutput(r.output), tea.WithInput(nil), tea.WithoutSignalHandler())
 	r.done = make(chan error, 1)
 	go func() {
@@ -226,10 +226,8 @@ func (r *Reporter) View(width int, spinning string, final bool) string {
 	complete := c[Passed] + c[Failed] + c[Skipped] + c[Canceled]
 	fmt.Fprintln(&b)
 	if !final {
-		bar := progress.New(
-			progress.WithDefaultGradient(),
+		bar := ui.NewProgress(
 			progress.WithWidth(max(4, min(progressWidth, width-20))),
-			progress.WithColorProfile(ui.GetColorProfile()),
 		)
 		fraction := 0.0
 		if c["total"] > 0 {
