@@ -9,6 +9,7 @@ interface ProgressBarProps {
   animated?: boolean;
 }
 
+/** Render a clamped completion percentage, with optional animation and a numeric label. */
 export default function ProgressBar({
   progress,
   showLabel = true,

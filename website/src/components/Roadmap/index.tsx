@@ -18,6 +18,7 @@ const initiativePriority: Record<string, number> = {
   'ci-cd': 4,
 };
 
+/** Compose the timeline, curated highlights, and initiatives with shared expansion controls. */
 export default function Roadmap(): JSX.Element {
   const [expandAllMilestones, setExpandAllMilestones] = useState(false);
 

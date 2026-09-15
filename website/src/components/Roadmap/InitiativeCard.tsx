@@ -36,6 +36,7 @@ interface InitiativeCardProps {
   expandAllMilestones?: boolean;
 }
 
+/** Display initiative progress with expandable milestones and a detail drawer. */
 export default function InitiativeCard({
   initiative,
   expandAllMilestones = false,

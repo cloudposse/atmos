@@ -17,6 +17,7 @@ const statusConfig = {
 
 const PAGE_SIZE = 6;
 
+/** Page through curated highlights in their configured order and open feature details. */
 export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.Element {
   const [selectedItem, setSelectedItem] = useState<FeaturedItem | undefined>(undefined);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);

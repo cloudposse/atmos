@@ -3,6 +3,7 @@ import Layout from '@theme/Layout';
 import ProductUpdatesHeader from '@site/src/components/ProductUpdatesHeader';
 import Roadmap from '@site/src/components/Roadmap';
 
+/** Provide roadmap page metadata and the shared navigation above roadmap content. */
 export default function RoadmapPage() {
   return (
     <Layout

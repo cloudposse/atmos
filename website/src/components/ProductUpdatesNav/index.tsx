@@ -6,6 +6,7 @@ export interface ProductUpdatesNavProps {
   activeView: 'changelog' | 'roadmap';
 }
 
+/** Link the update views and identify the current route for assistive technology. */
 export default function ProductUpdatesNav({
   activeView,
 }: ProductUpdatesNavProps): JSX.Element {

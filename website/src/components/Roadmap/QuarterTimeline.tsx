@@ -46,6 +46,7 @@ const statusConfig = {
   },
 };
 
+/** Center the current quarter and let readers inspect milestones grouped by initiative. */
 export default function QuarterTimeline({
   quarters,
   initiatives = [],
