@@ -166,9 +166,7 @@ func TestEnsurePlugins_ReinstallsOnVersionMismatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	uninstalls := runner.uninstallCalls()
-	require.Len(t, uninstalls, 1)
-	assert.Equal(t, []string{"plugin", "uninstall", "diff"}, uninstalls[0].args)
+	assert.Empty(t, runner.uninstallCalls(), "archive replacement does not run uninstall hooks")
 	require.Len(t, runner.installCalls(), 1)
 }
 

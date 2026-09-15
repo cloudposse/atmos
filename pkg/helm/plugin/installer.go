@@ -63,6 +63,7 @@ type Installer struct {
 	runner       Runner
 	retryConfig  schema.RetryConfig
 	fetchArchive func(context.Context, string, string) error
+	rename       func(string, string) error
 }
 
 // Option configures an Installer.
@@ -110,6 +111,7 @@ func NewInstaller(helmBin string, opts ...Option) *Installer {
 		runner:       execRunner{},
 		retryConfig:  defaultInstallRetryConfig(),
 		fetchArchive: downloadDiffRelease,
+		rename:       os.Rename,
 	}
 	for _, opt := range opts {
 		opt(i)

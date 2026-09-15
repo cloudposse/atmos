@@ -163,6 +163,7 @@ func TestInvalidInstallIsNotPublished(t *testing.T) {
 		{name: "missing metadata"},
 		{name: "invalid yaml", metadata: "name: ["},
 		{name: "missing name", metadata: "version: 3.9.4"},
+		{name: "wrong plugin", metadata: "name: secrets\nversion: 3.9.4"},
 		{name: "wrong metadata version", metadata: "name: diff\nversion: 3.15.13"},
 		{name: "wrong binary version", metadata: "name: diff\nversion: 3.9.4", binary: "3.15.13"},
 		{name: "broken executable", metadata: "name: diff\nversion: 3.9.4", verifyErr: os.ErrPermission},
@@ -211,7 +212,8 @@ func TestInstallFilesystemAndHelmErrors(t *testing.T) {
 				}
 				return false, "", "", nil
 			}
-			_, err := newTestInstaller(runner, t.TempDir()).EnsurePlugins(context.Background(), []Spec{pinnedDiff})
+			spec := Spec{Name: "diff", URL: "https://example.com/helm-diff", Version: "v3.9.4"}
+			_, err := newTestInstaller(runner, t.TempDir()).EnsurePlugins(context.Background(), []Spec{spec})
 			require.ErrorIs(t, err, errUtils.ErrHelmPluginInstall)
 		})
 	}

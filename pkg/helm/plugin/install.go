@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -82,16 +83,7 @@ func (i *Installer) installAttempt(ctx context.Context, spec Spec, replaceName s
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	// Keep the previous plugin until the replacement has installed and verified.
-	if replaceName != "" {
-		if err := i.uninstall(ctx, replaceName); err != nil {
-			return err
-		}
-	}
-	if err := os.Rename(pluginDir, filepath.Join(i.dir, filepath.Base(pluginDir))); err != nil {
-		return fmt.Errorf("%w: publish installed plugin: %w", errUtils.ErrHelmPluginInstall, err)
-	}
-	return nil
+	return i.publishInstall(pluginDir, replaceName)
 }
 
 func (i *Installer) installWithHelm(ctx context.Context, spec Spec, replaceName string) error {
@@ -150,24 +142,35 @@ func validateInstall(stage string, spec Spec) (string, error) {
 	if len(paths) != 1 {
 		return "", fmt.Errorf("%w: expected one installed plugin, found %d", errUtils.ErrHelmPluginInstall, len(paths))
 	}
-	data, err := os.ReadFile(paths[0])
+	metadata, err := readPluginMetadata(paths[0])
 	if err != nil {
 		return "", fmt.Errorf("%w: read plugin metadata: %w", errUtils.ErrHelmPluginInstall, err)
 	}
-	var metadata struct {
-		Name    string `yaml:"name"`
-		Version string `yaml:"version"`
-	}
-	if err := yaml.Unmarshal(data, &metadata); err != nil {
-		return "", fmt.Errorf("%w: parse plugin metadata: %w", errUtils.ErrHelmPluginInstall, err)
-	}
 	if metadata.Name == "" || metadata.Version == "" {
 		return "", fmt.Errorf("%w: missing plugin name or version", errUtils.ErrHelmPluginInstall)
+	}
+	if !slices.Contains(spec.candidateNames(), metadata.Name) {
+		return "", fmt.Errorf("%w: expected plugin %s, got %s", errUtils.ErrHelmPluginInstall, spec.Name, metadata.Name)
 	}
 	if _, versionErr := semver.StrictNewVersion(strings.TrimPrefix(spec.Version, "v")); versionErr == nil && !versionsEqual(metadata.Version, spec.Version) {
 		return "", fmt.Errorf("%w: expected version %s, got %s", errUtils.ErrHelmPluginInstall, spec.Version, metadata.Version)
 	}
 	return filepath.Dir(paths[0]), nil
+}
+
+type pluginMetadata struct {
+	Name    string `yaml:"name"`
+	Version string `yaml:"version"`
+}
+
+func readPluginMetadata(path string) (pluginMetadata, error) {
+	var metadata pluginMetadata
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return metadata, err
+	}
+	err = yaml.Unmarshal(data, &metadata)
+	return metadata, err
 }
 
 func (i *Installer) verifyDiff(ctx context.Context, spec Spec, dir string) error {

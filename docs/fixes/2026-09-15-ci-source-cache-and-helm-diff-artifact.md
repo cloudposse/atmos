@@ -24,6 +24,9 @@ retry package for transient network failures: three attempts with 15- and
 30-second backoffs. Permanent failures stop immediately, cancellation interrupts
 backoff, and failed attempts never register partial plugins in the managed path.
 A directory-scoped file lock prevents concurrent installs from racing.
+Publication retains a rollback copy of an existing Helm Diff plugin. A failed
+rename restores it; if restoration also fails, Atmos preserves the backup and
+reports its path. Archive validation checks the plugin name as well as version.
 
 For pinned releases of the canonical Helm Diff repository, Atmos downloads and
 extracts the complete platform plugin archive with its existing Go dependencies.
