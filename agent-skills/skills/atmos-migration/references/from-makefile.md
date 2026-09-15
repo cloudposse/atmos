@@ -171,8 +171,8 @@ build-parallel:
 
 1. `build-all`'s recipe is a shell `for` loop, not multiple Make targets -- `make -j` only
     parallelizes independent targets within a single `make` invocation, it does not parallelize
-    commands inside one recipe's shell script. So `$(MAKE) -j4 build-all` still runs `vpc`, `eks`,
-    and `rds` one at a time, in order, exactly like plain `build-all` would. `-j4` here does
+    commands inside one recipe's shell script. So `$(MAKE) -j4 build-all` still runs `api`, `worker`,
+    and `web` one at a time, in order, exactly like plain `build-all` would. `-j4` here does
     nothing.
 2. Turn `$(MAKE) -C dir target` recursion over a fixed set of directories into a `matrix` step.
     Define a `service` axis, and call the per-service command once for each value. Using
