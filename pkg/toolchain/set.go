@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -256,6 +257,7 @@ func (m *versionListModel) pageDown() {
 	}
 }
 
+// View renders the version selector and details pane with a border indicating keyboard focus.
 func (m *versionListModel) View() string {
 	defer perf.Track(nil, "toolchain.versionListModel.View")()
 
@@ -265,7 +267,7 @@ func (m *versionListModel) View() string {
 
 	// Create title
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("62")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Primary)).
 		Bold(true).
 		MarginBottom(1)
 	title := titleStyle.Render(m.title)
@@ -277,11 +279,11 @@ func (m *versionListModel) View() string {
 	// Add border styling with focus indication - just change color, no thick borders
 	var leftStyle, rightStyle lipgloss.Style
 	if m.focused == focusList {
-		leftStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("62"))
-		rightStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240"))
+		leftStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Primary))
+		rightStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 	} else {
-		leftStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240"))
-		rightStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("62"))
+		leftStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
+		rightStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Primary))
 	}
 
 	leftPane = leftStyle.Render(leftPane)
@@ -292,7 +294,7 @@ func (m *versionListModel) View() string {
 
 	// Add hint about tab navigation and scroll speed
 	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Italic(true).
 		MarginTop(1)
 
