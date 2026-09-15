@@ -14,7 +14,7 @@ import Note from '@site/src/components/Note';
 import File from '@site/src/components/File';
 
 <Intro>
-Atmos can print a one-line resource-usage summary — elapsed time, CPU time, and peak memory — after `terraform plan`/`apply`/`deploy` complete, plus a final aggregate summary covering every subprocess spawned during the whole invocation. The `settings.metrics` section controls whether that local display is shown. The same numbers also appear in the GitHub Actions job summary when [Native CI](/cli/configuration/ci) is active, independent of this setting.
+Atmos can print a one-line resource-usage summary — elapsed time, CPU time, and peak memory of the largest process — after `terraform plan`/`apply`/`deploy` complete, plus a final aggregate summary covering every subprocess spawned during the whole invocation. The `settings.metrics` section controls whether that local display is shown. The same numbers also appear in the GitHub Actions job summary when [Native CI](/cli/configuration/ci) is active, independent of this setting.
 </Intro>
 
 <KeyPoints>
@@ -53,6 +53,8 @@ settings:
   <dd>
     Controls whether the local resource-usage summary (elapsed time, CPU time, peak memory) is printed after `terraform plan`/`apply`/`deploy`, and whether the final aggregate summary is printed at the end of the whole `atmos` invocation. This setting only controls local display — it never gates or affects the separate Atmos Pro command-execution metadata upload, which is controlled by CI detection and Atmos Pro configuration (see [Atmos Pro settings](/cli/configuration/settings/pro)).
 
+    "Peak memory" here means the largest single process's peak RSS observed during the run (Terraform, OpenTofu, or a provider plugin) — not a simultaneous sum across every concurrently running process. See the note below for what that means when sizing a runner.
+
     - **Type:** `boolean`
     - **Default:** `true`
   </dd>
@@ -62,12 +64,16 @@ settings:
 The per-command display only appears for `terraform plan`, `apply`, and `deploy` — the same commands that synchronously report execution metadata to Atmos Pro when it's configured. Commands with no subprocess (e.g. `describe affected`) don't show a per-command line, and don't trigger the final aggregate summary either — that line only appears when at least one subprocess ran during the invocation (Terraform/OpenTofu, Helmfile, Packer, or a workflow step), and covers Atmos's own usage together with every one of those subprocess runs.
 </Note>
 
+<Note>
+**Peak memory is a lower bound, not an exact whole-job figure.** The underlying measurement (`ru_maxrss`) reports the peak RSS of the single largest process observed in the run, not a simultaneous sum across every concurrently running process. If `terraform` and two provider plugins each peak at 200 MB at the same moment, this reports roughly 200 MB, not 600 MB. Use it to catch obviously undersized runners, but don't treat it as the exact ceiling a runner needs.
+</Note>
+
 ## Native CI Job Summaries
 
 When [Native CI](/cli/configuration/ci) is active, `terraform plan` and `apply` also render a **Resource usage** line in the GitHub Actions job summary — the same wall-time, CPU-time, and peak-memory figures as the local display, formatted identically:
 
 ```
-📊 Resource usage: 45.2s wall · 12.3s user / 4.1s sys CPU · 512.0 MB peak memory
+📊 Resource usage: 45.2s wall · 12.3s user / 4.1s sys CPU · 512.0 MB peak memory (largest process)
 ```
 
 This is controlled by CI detection, not by `settings.metrics.enabled` — it appears whenever the job summary itself is generated, so it's visible directly in the GitHub Actions run UI without opening a log. It's the fastest way to see what a component actually costs when sizing a runner tier or a self-hosted pool.

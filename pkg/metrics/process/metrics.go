@@ -16,9 +16,19 @@ import (
 // (e.g. Windows) are left zero-valued; callers that marshal this struct
 // should use omitempty for those fields.
 type ProcessMetrics struct {
-	WallTime         time.Duration
-	UserCPUTime      time.Duration
-	SystemCPUTime    time.Duration
+	WallTime      time.Duration
+	UserCPUTime   time.Duration
+	SystemCPUTime time.Duration
+	// MaxRSSBytes is the kernel's ru_maxrss for the sample (RUSAGE_SELF for
+	// Atmos's own usage, or the wait4(2)-reported rusage for a subprocess
+	// tree). For a subprocess tree specifically, ru_maxrss is documented as
+	// the peak RSS of the single largest process among the child and its own
+	// already-reaped descendants — NOT the simultaneous sum of every
+	// concurrently running process's RSS. If Terraform and two provider
+	// plugins each peak at 200MB at the same moment, this reports ~200MB,
+	// not ~600MB. Treat it as a lower bound on true peak memory, not an
+	// exact whole-tree figure — hence every user-facing label calls it "peak
+	// memory (largest process)", not simply "peak memory".
 	MaxRSSBytes      int64
 	MinorPageFaults  int64
 	MajorPageFaults  int64
@@ -113,7 +123,10 @@ func CollectFromProcessState(cmd *exec.Cmd, wallTime time.Duration) *ProcessMetr
 }
 
 // Combine sums two ProcessMetrics samples field-by-field, taking the max for
-// MaxRSSBytes (a peak value, not an additive counter).
+// MaxRSSBytes (a peak value, not an additive counter). Note that max() here
+// does not recover a true simultaneous whole-tree peak either — see
+// ProcessMetrics.MaxRSSBytes's doc comment — it only ever narrows down to the
+// single largest process observed across both samples.
 //
 // WallTime is deliberately left at its zero value in the result: when a
 // child process runs synchronously inside a parent's measured window, the
@@ -204,7 +217,7 @@ func DisplaySummary(label string, m ProcessMetrics, atmosConfig *schema.AtmosCon
 	msg := fmt.Sprintf("%s in **%s** | CPU: %s user, %s sys",
 		label, FormatDuration(m.WallTime), FormatDuration(m.UserCPUTime), FormatDuration(m.SystemCPUTime))
 	if m.MaxRSSBytes > 0 {
-		msg += fmt.Sprintf(" | Peak memory: **%s**", FormatBytes(m.MaxRSSBytes))
+		msg += fmt.Sprintf(" | Peak memory (largest process): **%s**", FormatBytes(m.MaxRSSBytes))
 	}
 	ui.Info(msg)
 }

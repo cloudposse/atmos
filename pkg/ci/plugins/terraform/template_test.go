@@ -444,7 +444,7 @@ func TestTemplateRendering(t *testing.T) {
 				"**45.2s** wall",
 				"12.3s user",
 				"4.1s sys CPU",
-				"**512.0 MB** peak memory",
+				"**512.0 MB** peak memory (largest process)",
 			},
 		},
 		{
@@ -529,7 +529,7 @@ func TestTemplateRendering(t *testing.T) {
 				"**45.2s** wall",
 				"12.3s user",
 				"4.1s sys CPU",
-				"**512.0 MB** peak memory",
+				"**512.0 MB** peak memory (largest process)",
 			},
 		},
 		{

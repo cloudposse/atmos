@@ -69,7 +69,12 @@ type TerraformTemplateContext struct {
 // TerraformMetricsSummary is the pre-formatted, template-ready resource-usage
 // summary for a single terraform plan/apply/deploy run. PeakMemory is empty on
 // platforms (e.g. Windows) or samples where no memory figure is available —
-// templates should omit that portion of the line when it's empty.
+// templates should omit that portion of the line when it's empty. PeakMemory
+// is the largest single process's peak RSS observed in the run (terraform,
+// tofu, or a provider plugin) — not a simultaneous sum across every
+// concurrently running process; see metricsprocess.ProcessMetrics.MaxRSSBytes.
+// Templates must render this alongside the "(largest process)" qualifier, not
+// bare "peak memory", so it isn't mistaken for a whole-tree figure.
 type TerraformMetricsSummary struct {
 	WallTime   string
 	CPUUser    string

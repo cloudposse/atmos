@@ -30,13 +30,13 @@ prints a one-line summary identifying which component and stack it covers — im
 multi-component `--all`/`--affected` run, where this line prints once per component:
 
 ```
-▶ Completed vpc (dev) in 45.2s | CPU: 12.3s user, 4.1s sys | Peak memory: 512 MB
+▶ Completed vpc (dev) in 45.2s | CPU: 12.3s user, 4.1s sys | Peak memory (largest process): 512 MB
 ```
 
 At the end of the whole invocation, Atmos also prints one aggregate summary covering everything that ran:
 
 ```
-▶ Total for this invocation in 3m12.4s | CPU: 48.9s user, 16.2s sys | Peak memory: 780 MB
+▶ Total for this invocation in 3m12.4s | CPU: 48.9s user, 16.2s sys | Peak memory (largest process): 780 MB
 ```
 
 The same, more accurate numbers now flow into the execution data Atmos Pro receives for CI runs, and — when
@@ -44,12 +44,14 @@ The same, more accurate numbers now flow into the execution data Atmos Pro recei
 resource-change badges:
 
 ```
-📊 Resource usage: 45.2s wall · 12.3s user / 4.1s sys CPU · 512.0 MB peak memory
+📊 Resource usage: 45.2s wall · 12.3s user / 4.1s sys CPU · 512.0 MB peak memory (largest process)
 ```
 
-Instead of guessing at a runner tier and adjusting after the fact, size a pool from real peak-memory and
-CPU-time numbers per component, visible directly in the run UI — and re-check that sizing whenever a
-provider version bump or a new component changes the actual footprint.
+Instead of guessing at a runner tier and adjusting after the fact, size a pool from real CPU-time and
+peak-memory numbers per component, visible directly in the run UI. The memory figure is the largest single
+process observed, not a simultaneous sum across Terraform and every provider plugin running alongside it —
+a lower bound worth catching an obviously undersized runner with, not the exact ceiling to provision to.
+Re-check the sizing whenever a provider version bump or a new component changes the actual footprint.
 
 ## How to Use It
 
