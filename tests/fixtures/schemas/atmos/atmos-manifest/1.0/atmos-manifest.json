@@ -590,6 +590,9 @@
             "command": {
               "$ref": "#/definitions/command"
             },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
             "overrides": {
               "$ref": "#/definitions/overrides"
             },

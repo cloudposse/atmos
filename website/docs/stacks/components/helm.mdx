@@ -117,6 +117,29 @@ In this example, every Helm component receives `cluster: shared`, while the
 stack-level override enforces `environment: production` after component
 inheritance and component overrides are merged.
 
+### Helm CLI Plugin Defaults
+
+Use top-level `helm.plugins` to declare Helm CLI plugins for every Helm component,
+including components supplied by imported stack files:
+
+```yaml
+helm:
+  plugins:
+    - diff@v3.15.10
+```
+
+Plugins are inherited in increasing precedence: `helm.plugins`, base components
+from `metadata.inherits`, then the component's own `plugins`. Lists follow the
+effective `settings.list_merge_strategy` (default: `replace`). With `replace`, a
+component's list replaces inherited plugins, and `plugins: []` clears the list.
+Use `append` to combine lists; `merge` uses the existing element-wise list merge
+behavior.
+
+These plugins apply to commands passed through to the Helm CLI. Native Helm SDK
+operations do not run CLI plugins. Defaults under `helm.plugins` and
+`helmfile.plugins` apply only to their respective component types.
+See [`atmos helm plugin`](/cli/commands/helm/plugin) for plugin spec syntax.
+
 ## Release Lifecycle
 
 Cluster-backed `apply`, `deploy`, and `delete` operations can use Helm 4 release
