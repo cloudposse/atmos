@@ -351,8 +351,10 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 		return err
 	}
 
-	// Load all available templates
-	configs, _, scaffoldUI, err := loadScaffoldTemplates(opts.sourceOverride)
+	// Load all available templates. absTargetDir is threaded through so a
+	// local-source template (`source: "."`) never re-ingests its own prior
+	// output as template content when the target happens to land inside it.
+	configs, _, scaffoldUI, err := loadScaffoldTemplates(opts.sourceOverride, absTargetDir)
 	if err != nil {
 		return err
 	}
@@ -460,8 +462,13 @@ func resolveTargetDirectory(targetDir string) (string, error) {
 }
 
 // loadScaffoldTemplates loads all available scaffold templates from embedded and atmos.yaml.
+// The excludeTargetDir parameter, when non-empty, is the resolved absolute target directory
+// for the generation about to run; it's passed through to local-source templates so a target
+// nested inside its own `source` never leaks back in as template content (see
+// templates.WithExcludePath). Callers that aren't about to generate (e.g. `scaffold list`)
+// pass "".
 // Returns configs, origins (map[name]source where source is "embedded" or "atmos.yaml"), UI, and error.
-func loadScaffoldTemplates(sourceOverride string) (map[string]templates.Configuration, map[string]string, ScaffoldUI, error) {
+func loadScaffoldTemplates(sourceOverride, excludeTargetDir string) (map[string]templates.Configuration, map[string]string, ScaffoldUI, error) {
 	// Create generator context
 	genCtx, err := setup.NewGeneratorContext()
 	if err != nil {
@@ -505,7 +512,7 @@ func loadScaffoldTemplates(sourceOverride string) (map[string]templates.Configur
 	}
 
 	// Merge with configured templates from atmos.yaml (these override the above).
-	if err := mergeConfiguredTemplates(configs, origins); err != nil {
+	if err := mergeConfiguredTemplates(configs, origins, excludeTargetDir); err != nil {
 		return nil, nil, nil, err
 	}
 
@@ -514,7 +521,9 @@ func loadScaffoldTemplates(sourceOverride string) (map[string]templates.Configur
 
 // mergeConfiguredTemplates merges scaffold templates from atmos.yaml into the configs map.
 // It also updates the origins map to track which templates came from atmos.yaml.
-func mergeConfiguredTemplates(configs map[string]templates.Configuration, origins map[string]string) error {
+// The excludeTargetDir parameter is forwarded to convertScaffoldTemplateToConfiguration -- see
+// loadScaffoldTemplates.
+func mergeConfiguredTemplates(configs map[string]templates.Configuration, origins map[string]string, excludeTargetDir string) error {
 	defer perf.Track(nil, "scaffold.mergeConfiguredTemplates")()
 
 	scaffoldSection, err := config.ReadAtmosScaffoldSection(".")
@@ -546,7 +555,7 @@ func mergeConfiguredTemplates(configs map[string]templates.Configuration, origin
 	}
 
 	for templateName, templateData := range templatesMap {
-		cfg, err := convertScaffoldTemplateToConfiguration(templateName, templateData)
+		cfg, err := convertScaffoldTemplateToConfiguration(templateName, templateData, excludeTargetDir)
 		if err != nil {
 			// Log error but continue with other templates.
 			atmosui.Warning(fmt.Sprintf("Failed to load scaffold template '%s': %v", templateName, err))
@@ -782,7 +791,7 @@ func resolveInteractiveBaseRef(
 // This logic was moved from internal/exec/scaffold.go to keep command logic in cmd/.
 func executeScaffoldList(_ *cobra.Command) error {
 	// Load all available templates (embedded + catalog + atmos.yaml).
-	configs, origins, scaffoldUI, err := loadScaffoldTemplates("")
+	configs, origins, scaffoldUI, err := loadScaffoldTemplates("", "")
 	if err != nil {
 		return err
 	}
@@ -1006,8 +1015,10 @@ func validateScaffoldFile(scaffoldPath string) error {
 // shown in validation error messages.
 const scaffoldManifestExample = "```yaml\napiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: my-scaffold\n  description: My scaffold template\nspec:\n  fields:\n    - name: project_name\n      type: input\n      default: my-project\n```"
 
-// convertScaffoldTemplateToConfiguration converts an atmos.yaml scaffold template entry to a templates.Configuration.
-func convertScaffoldTemplateToConfiguration(name string, templateData interface{}) (templates.Configuration, error) {
+// convertScaffoldTemplateToConfiguration converts an atmos.yaml scaffold template entry to a
+// templates.Configuration. The excludeTargetDir parameter, when non-empty, is forwarded to
+// templates.LoadConfigurationFromDir via templates.WithExcludePath -- see loadScaffoldTemplates.
+func convertScaffoldTemplateToConfiguration(name string, templateData interface{}, excludeTargetDir string) (templates.Configuration, error) {
 	templateMap, ok := templateData.(map[string]interface{})
 	if !ok {
 		return templates.Configuration{}, errUtils.Build(errUtils.ErrInvalidTemplateData).
@@ -1043,7 +1054,9 @@ func convertScaffoldTemplateToConfiguration(name string, templateData interface{
 
 	// Load the template files from the local source directory. The path is
 	// resolved relative to the current directory (where atmos.yaml lives).
-	cfg, err := templates.LoadConfigurationFromDir(name, source)
+	// WithExcludePath is a no-op when excludeTargetDir is "" or doesn't
+	// resolve inside source.
+	cfg, err := templates.LoadConfigurationFromDir(name, source, templates.WithExcludePath(excludeTargetDir))
 	if err != nil {
 		return templates.Configuration{}, err
 	}

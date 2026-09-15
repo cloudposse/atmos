@@ -2535,7 +2535,7 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	return true
 }
 
-// Clean up untracked files in the working directory.
+// Clean up untracked and gitignored files in the working directory.
 func cleanDirectory(t *testing.T, workdir string) error {
 	// Find the root of the Git repository
 	repoRoot, err := findGitRepoRoot(workdir)
@@ -2577,7 +2577,77 @@ func cleanDirectory(t *testing.T, workdir string) error {
 		}
 	}
 
+	// worktree.Status() mirrors plain `git status`: it never reports a
+	// gitignored path, even as Untracked, so it's blind to test fixtures
+	// whose own output directory is gitignored (e.g. a scaffold template
+	// with `source: "."` writing its target under a gitignored `generated/`
+	// next to it -- see tests/fixtures/scenarios/scaffold-matrix-freetext).
+	// Without this pass, `clean: true` silently leaves such directories in
+	// place between runs, letting a self-referential scaffold source
+	// accumulate its own prior output across every local `atmos test`
+	// invocation.
+	if err := removeIgnoredEntries(t, repo, repoRoot, workdir); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// removeIgnoredEntries removes entries directly under workdir that Git does
+// not track and that worktree.Status() does not surface (i.e. gitignored
+// paths). It uses the repository index -- not gitignore pattern matching --
+// as the source of truth for what's tracked, so it never deletes a
+// directory that still holds tracked content.
+func removeIgnoredEntries(t *testing.T, repo *git.Repository, repoRoot, workdir string) error {
+	idx, err := repo.Storer.Index()
+	if err != nil {
+		return fmt.Errorf("failed to read git index: %w", err)
+	}
+	tracked := make(map[string]bool, len(idx.Entries))
+	for _, e := range idx.Entries {
+		tracked[e.Name] = true
+	}
+
+	entries, err := os.ReadDir(workdir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to read workdir %q: %w", workdir, err)
+	}
+
+	for _, entry := range entries {
+		fullPath := filepath.Join(workdir, entry.Name())
+		relPath, err := filepath.Rel(repoRoot, fullPath)
+		if err != nil {
+			return fmt.Errorf("failed to compute relative path for %q: %w", fullPath, err)
+		}
+		relPath = filepath.ToSlash(relPath)
+
+		if tracked[relPath] || hasTrackedDescendant(tracked, relPath) {
+			continue
+		}
+
+		t.Logf("Removing gitignored entry: %q", fullPath)
+		if err := os.RemoveAll(fullPath); err != nil {
+			return fmt.Errorf("failed to remove %q: %w", fullPath, err)
+		}
+	}
+
+	return nil
+}
+
+// hasTrackedDescendant reports whether any tracked index path is nested
+// under relPath, meaning relPath is a directory that still holds tracked
+// content and must not be removed wholesale.
+func hasTrackedDescendant(tracked map[string]bool, relPath string) bool {
+	prefix := relPath + "/"
+	for trackedPath := range tracked {
+		if strings.HasPrefix(trackedPath, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // findGitRepo finds the Git repository root.
