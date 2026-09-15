@@ -1177,7 +1177,10 @@ func (f *formatter) buildMarkdownRenderOptions(preserveNewlines, noWrap bool) []
 		}
 		// Fallback to notty style if theme conversion fails.
 	} else {
-		opts = append(opts, glamour.WithStylePath("notty"))
+		style, err := markdown.GetPlainTextStyle()
+		if err == nil {
+			opts = append(opts, glamour.WithStylesFromJSONBytes(style))
+		}
 	}
 
 	return opts
