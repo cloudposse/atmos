@@ -1,7 +1,6 @@
 package driver
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -35,8 +34,8 @@ func TestBuiltinDrivers_RestartDefault(t *testing.T) {
 func TestBuiltinDrivers_HealthCheckDefault(t *testing.T) {
 	withHealthCheck := map[string]string{
 		"floci/aws": "4566",
-		"floci/gcp": "4588",
-		"floci/az":  "4577",
+		"floci/gcp": "/usr/local/bin/healthcheck.sh",
+		"floci/az":  "/usr/local/bin/healthcheck.sh",
 		"registry":  "/v2/",
 	}
 	for name, probe := range withHealthCheck {
@@ -61,16 +60,24 @@ func TestBuiltinDrivers_HealthCheckDefault(t *testing.T) {
 	}
 }
 
-// TestFlociHealthCheck_UsesItsOwnPort guards against a port/healthcheck mismatch
-// across the Floci variants (each probes its own edge port).
-func TestFlociHealthCheck_UsesItsOwnPort(t *testing.T) {
-	cases := map[string]string{"floci/aws": "4566", "floci/gcp": "4588", "floci/az": "4577"}
-	for name, port := range cases {
-		d, err := emu.ResolveDriver(name)
-		require.NoError(t, err)
-		hc := d.Defaults().HealthCheck
-		require.NotNil(t, hc)
-		assert.True(t, strings.Contains(hc.Test[1], ":"+port+"/"),
-			"%s health check should probe port %s, got %q", name, port, hc.Test[1])
+// TestFlociHealthCheck_UsesAvailableProbe guards against replacing the GCP and
+// Azure images' working readiness scripts with curl, absent from ubi9-micro.
+// The image-owned scripts probe their own port and require HTTP 200 readiness.
+func TestFlociHealthCheck_UsesAvailableProbe(t *testing.T) {
+	cases := map[string]string{
+		"floci/aws": "curl -s -o /dev/null http://localhost:4566/ || exit 1",
+		"floci/gcp": "/usr/local/bin/healthcheck.sh",
+		"floci/az":  "/usr/local/bin/healthcheck.sh",
+	}
+	for name, probe := range cases {
+		t.Run(name, func(t *testing.T) {
+			d, err := emu.ResolveDriver(name)
+			require.NoError(t, err)
+			hc := d.Defaults().HealthCheck
+			require.NotNil(t, hc)
+			assert.Equal(t, []string{"CMD-SHELL", probe}, hc.Test)
+			assert.NotEmpty(t, hc.Timeout)
+			assert.Positive(t, hc.Retries)
+		})
 	}
 }
