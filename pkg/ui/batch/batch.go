@@ -41,6 +41,9 @@ type Event struct {
 	Version           string
 	Phase             string
 	Downloaded, Total int64
+	// Fraction is caller-defined job progress in [0, 1], independent of completion.
+	// The renderer retains the highest value across transitions and retries.
+	Fraction float64
 	// Bytes marks coalescible byte-only updates. Terminal events are never dropped.
 	Bytes   bool
 	Done    bool
@@ -151,6 +154,7 @@ func (r *Renderer) Update(event *Event) {
 	if e.Bytes {
 		if old, ok := r.active[e.ID]; ok {
 			old.Downloaded, old.Total = e.Downloaded, e.Total
+			old.Fraction = max(old.Fraction, min(1, e.Fraction))
 			r.active[e.ID] = old
 		}
 		return
@@ -160,9 +164,12 @@ func (r *Renderer) Update(event *Event) {
 		return
 	}
 	r.Clear()
-	if _, ok := r.active[e.ID]; !ok {
+	if old, ok := r.active[e.ID]; ok {
+		e.Fraction = max(old.Fraction, e.Fraction)
+	} else {
 		r.order = append(r.order, e.ID)
 	}
+	e.Fraction = min(1, max(0, e.Fraction))
 	r.active[e.ID] = e
 	r.render()
 }
@@ -279,7 +286,11 @@ func (r *Renderer) render() {
 		r.lines++
 	}
 	r.bar.Width = min(maxProgressWidth, max(1, width/3))
-	summary := fmt.Sprintf("%s %d/%d complete, %d active, %d queued", r.bar.ViewAs(float64(r.completed)/float64(max(1, r.total))), r.completed, r.total, len(r.active), max(0, r.total-r.completed-len(r.active)))
+	progress := float64(r.completed)
+	for id := range r.active {
+		progress += r.active[id].Fraction
+	}
+	summary := fmt.Sprintf("%s %d/%d complete, %d active, %d queued", r.bar.ViewAs(progress/float64(max(1, r.total))), r.completed, r.total, len(r.active), max(0, r.total-r.completed-len(r.active)))
 	if r.toolchainStyle {
 		summary = fmt.Sprintf("%s %d/%d complete, %d running", r.bar.ViewAs(float64(r.completed)/float64(max(1, r.total))), r.completed, r.total, len(r.active))
 	}

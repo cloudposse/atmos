@@ -73,6 +73,7 @@ commands:
               assert expected in plain, f"Missing {expected!r}"
           import re
           assert re.search(r"vpc \(1\.0\.0\) · downloading \d+%", plain), "Missing compact download percentage"
+          assert re.search(r"\b[1-9]\d*% 0/8 complete", plain), "Overall progress must advance before the first installation completes"
           assert "→" not in plain, "Destination arrows must not appear in package labels"
           assert "vpc@" not in plain, "Versions must use parenthesized suffixes"
           assert "Vendoring from vendor.yaml" in plain, "The manifest should render as inline code"

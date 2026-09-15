@@ -99,7 +99,23 @@ func (b *batchInstaller) emit(e *batch.Event) {
 }
 
 func (b *batchInstaller) phase(i int, phase string) {
-	b.emit(&batch.Event{ID: i, Label: packageLabel(b.packages[i]), Version: b.packages[i].Version, Phase: phase})
+	e := batch.Event{ID: i, Label: packageLabel(b.packages[i]), Version: b.packages[i].Version, Phase: phase}
+	if phase == "Ready" {
+		e.Fraction = preparationWeight
+	}
+	b.emit(&e)
+}
+
+// Preparation and materialization each contribute half of a package's progress.
+// This measures milestones, not elapsed time; only a terminal result counts as complete.
+const preparationWeight = 0.5
+
+func (b *batchInstaller) downloadProgress(i int, done, total int64) {
+	e := batch.Event{ID: i, Bytes: true, Downloaded: done, Total: total}
+	if total > 0 {
+		e.Fraction = preparationWeight * min(1, max(0, float64(done)/float64(total)))
+	}
+	b.emit(&e)
 }
 
 func (b *batchInstaller) prepare(ctx context.Context, i int) (*PreparedPackage, error) {
@@ -122,7 +138,7 @@ func (b *batchInstaller) prepare(ctx context.Context, i int) (*PreparedPackage, 
 	}
 	b.phase(i, phase)
 	prepared, err := prepareWithProgress(ctx, b.config, pkg, preparationProgress{
-		bytes: func(done, total int64) { b.emit(&batch.Event{ID: i, Bytes: true, Downloaded: done, Total: total}) },
+		bytes: func(done, total int64) { b.downloadProgress(i, done, total) },
 		phase: func(phase string) { b.phase(i, phase) },
 		retry: func(attempt int) {
 			b.emit(&batch.Event{ID: i, Label: packageLabel(pkg), Version: pkg.Version, Phase: "Retrying", Attempt: attempt})

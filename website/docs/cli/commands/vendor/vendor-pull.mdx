@@ -388,6 +388,10 @@ atmos vendor update --pull --max-concurrency 8
 
 The display identifies active packages, phases, retries, and available download
 sizes. Downloads may finish in any order; destination writes remain ordered.
+The overall bar gives equal weight to preparation and installation for each package.
+Known download bytes advance the preparation portion; otherwise it advances when
+the package is ready. This is milestone progress, not an estimate of time remaining.
+The completed count advances only after a package finishes processing.
 All editions use this display, including serial execution. Non-interactive runs
 emit plain result lines to stderr. Update report formats on stdout are unchanged.
 

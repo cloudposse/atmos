@@ -128,6 +128,12 @@ func TestInstallBatchParallelPreparationOrderedReceipts(t *testing.T) {
 	phases := map[string]bool{}
 	bytesSeen := false
 	for _, e := range events {
+		if e.Phase == "Ready" {
+			assert.Equal(t, 0.5, e.Fraction, "prepared packages contribute before their ordered commit")
+			if e.ID == 1 {
+				assert.Empty(t, completed, "the second package prepares while the first is still downloading")
+			}
+		}
 		if e.Done {
 			completed = append(completed, e.ID)
 			assert.Equal(t, "installed", e.Outcome)
@@ -143,6 +149,29 @@ func TestInstallBatchParallelPreparationOrderedReceipts(t *testing.T) {
 		id, err := pkg.installer.(*componentVendorInstaller).artifactID(config)
 		require.NoError(t, err)
 		assert.EqualValues(t, i+1, receipt.Artifacts[id].Order)
+	}
+}
+
+func TestBatchDownloadProgressWeightsKnownBytes(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		done, total int64
+		fraction    float64
+	}{
+		{"unknown", 42, 0, 0},
+		{"unknown negative", 42, -1, 0},
+		{"empty", 0, 100, 0},
+		{"partial", 42, 100, 0.21},
+		{"download finished", 100, 100, 0.5},
+		{"over total", 200, 100, 0.5},
+		{"negative bytes", -1, 100, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var events []batch.Event
+			b := &batchInstaller{observer: func(e batch.Event) { events = append(events, e) }}
+			b.downloadProgress(7, tc.done, tc.total)
+			require.Equal(t, []batch.Event{{ID: 7, Bytes: true, Downloaded: tc.done, Total: tc.total, Fraction: tc.fraction}}, events)
+		})
 	}
 }
 
