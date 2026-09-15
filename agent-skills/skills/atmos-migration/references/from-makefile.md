@@ -1,14 +1,11 @@
 # Migrating from Makefiles
 
-This guide shows how to move Make targets to Atmos. Find the correct shape for the Makefile
-below. Then follow the matching steps. For the full tutorial, see
-[atmos.tools/migration/makefile](https://atmos.tools/migration/makefile).
+Migrate Make targets to Atmos as a general-purpose task runner. Preserve the user's build,
+test, lint, release, and maintenance commands. Start with `atmos.yaml` and custom commands;
+Terraform, stacks, components, and cloud credentials are not prerequisites.
 
-This guide covers the `make` orchestration layer only: targets, target dependencies, variables,
-and conditionals. If the Makefile also selects a Terraform environment through `-var-file` or
-per-environment directories, also use
-[from-native-terraform.md](from-native-terraform.md). That guide covers the Terraform-specific
-steps: backend generation, `.tfvars` files, and workspace mapping.
+Atmos can call the existing task runner as a shell step while individual tasks are migrated.
+Follow the matching shape below and the [end-user guide](https://atmos.tools/migration/makefile).
 
 ## Find the Shape of the Makefile
 
@@ -37,7 +34,7 @@ test: build ## Run unit tests
 	go test ./...
 
 lint: ## Run static analysis
-	golangci-lint run ./...
+	go vet ./...
 
 clean: ## Remove build artifacts
 	@rm -rf bin/
@@ -82,7 +79,7 @@ commands:
     description: Run static analysis
     steps:
       - type: shell
-        command: golangci-lint run ./...
+        command: go vet ./...
 
   - name: clean
     description: Remove build artifacts
@@ -100,8 +97,8 @@ commands:
 ```makefile
 ENV ?= dev
 
-deploy: build test ## Plan and apply the given ENV (default: dev)
-	cd terraform && terraform apply -var-file=envs/$(ENV).tfvars
+deploy: build test ## Deploy the application to the selected ENV (default: dev)
+	./scripts/deploy.sh "$(ENV)"
 ```
 <!-- editorconfig-checker-enable -->
 
@@ -121,14 +118,11 @@ deploy: build test ## Plan and apply the given ENV (default: dev)
     still orders `build` before `test` even though both now run through the same
     concurrent-by-default mechanism, instead of listing `build` and `test` as a flat, unordered
     sibling list on `deploy`.
-3. Move the Terraform-specific line, `terraform apply -var-file=envs/$(ENV).tfvars`, to
-    [from-native-terraform.md Shape B](from-native-terraform.md#shape-b-single-dir-with--var-file-from-a-makefile).
-    That guide shows how the Terraform side maps to stacks. Here, the line becomes a single
-    `type: atmos` step, because `terraform apply` is a native Atmos verb.
+3. Keep the existing deployment command as a `type: shell` step, passing the selected
+    environment through `{{ .Flags.env }}`.
 4. Turn `ifeq ($(ENV),prod)` conditionals into a Go template conditional inside a custom command:
     `{{ if eq .Flags.env "prod" }}...{{ end }}`. This is the same pattern used for `--verbose` and
-    other boolean flags. Inside a workflow, use `when: !cel 'stack == "prod"'` on the step
-    instead.
+    other boolean flags. Use workflow `when:` conditions when moving conditional behavior into a workflow.
 
 ```yaml
 commands:
@@ -141,7 +135,7 @@ commands:
         command: go test ./...
 
   - name: deploy
-    description: Plan and apply the given environment (default dev)
+    description: Deploy the application to the selected environment (default dev)
     flags:
       - name: env
         shorthand: e
@@ -149,24 +143,21 @@ commands:
     dependencies:
       commands: [build, test]
     steps:
-      - type: atmos
-        command: terraform apply infra -s {{ .Flags.env }}
+      - type: shell
+        command: ./scripts/deploy.sh "{{ .Flags.env }}"
 ```
 
 `build` still runs exactly once for the whole `atmos deploy` invocation -- `test`'s own edge on
 `build` orders it correctly ahead of `test`, and `deploy`'s own steps wait for both to finish.
 
-`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the
-target's Terraform code to `components/terraform/infra/` (the default
-`components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever the
-user actually names the component.
+Keep the user's existing deployment script. No component or stack configuration is needed.
 
 ## Shape C: Recursive or Parallel Make
 
 **Before:**
 <!-- editorconfig-checker-disable -->
 ```makefile
-SERVICES := vpc eks rds
+SERVICES := api worker web
 
 build-all:
 	for dir in $(SERVICES); do $(MAKE) -C services/$$dir build; done
@@ -212,7 +203,7 @@ commands:
       - name: build-services
         type: matrix
         matrix:
-          service: [vpc, eks, rds]
+          service: [api, worker, web]
         max_concurrency: 4
         steps:
           - type: atmos

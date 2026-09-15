@@ -98,9 +98,17 @@ module.exports = {
                         'migration/terragrunt',
                         'migration/terraform-workspaces',
                         'migration/terramate',
-                        'migration/makefile',
-                        'migration/justfile',
-                        'migration/taskfile'
+                        {
+                            type: 'category',
+                            label: 'Task Runners',
+                            collapsible: true,
+                            collapsed: false,
+                            items: [
+                                'migration/makefile',
+                                'migration/justfile',
+                                'migration/taskfile',
+                            ]
+                        }
                     ]
                 },
             ]
