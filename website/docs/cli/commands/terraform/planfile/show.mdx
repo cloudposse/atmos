@@ -35,7 +35,7 @@ atmos terraform planfile show <component> [flags]
   <dd>Output format: `yaml` (default) or `json`.</dd>
 
   <dt>`--store`</dt>
-  <dd>Storage backend to use (default from config).</dd>
+  <dd>Storage backend to use: a store name from `planfiles.stores` or a store type (e.g. `aws/s3`). When omitted, the [configured store selection](/ci/planfile-storage#store-selection) applies.</dd>
 </dl>
 
 ## Examples
