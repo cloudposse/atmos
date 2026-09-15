@@ -517,7 +517,7 @@ type AtmosSettings struct {
 	Terminal          Terminal          `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
 	YAML              AtmosYAMLSettings `yaml:"yaml,omitempty" json:"yaml,omitempty" mapstructure:"yaml"`
 	// Experimental controls how experimental features are handled.
-	// Values: "silence" (no output), "disable" (disabled), "warn" (default), "error" (exit).
+	// Values: "silence" (no output), "disable" (disabled), "warn", "warn-daily" (default, once per feature every 24 hours), "error" (exit).
 	Experimental string `yaml:"experimental" json:"experimental" mapstructure:"experimental"`
 	// Deprecated: this was moved to top-level Atmos config
 	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs" jsonschema_extras:"deprecated=true,x-atmos-replacement=docs"`
