@@ -16,8 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -103,10 +102,7 @@ func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*gith
 	//nolint:nestif // Spinner logic requires nested conditions for TTY check.
 	if isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd()) {
 		// Create spinner model.
-		s := spinner.New()
-		s.Spinner = spinner.Dot
-		s.Style = theme.GetCurrentStyles().Spinner
-		fps.Apply(&s)
+		s := ui.NewSpinner()
 
 		// Fetch releases with spinner.
 		m := &listModel{spinner: s, client: client, opts: opts}
