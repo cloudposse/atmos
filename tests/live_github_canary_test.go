@@ -66,7 +66,9 @@ var transientLiveGitHubPatterns = []*regexp.Regexp{
 	// "tls:" (colon) is how Go's crypto/tls wraps its own errors (e.g. "tls: failed to verify
 	// certificate"); a bare "tls" word elsewhere is not necessarily a network condition.
 	regexp.MustCompile(`(?i)\btls:`),
-	regexp.MustCompile(`(?i)x509`),
+	// "x509:" (colon) is how Go's crypto/x509 prefixes its diagnostics; a bare "x509" token can be
+	// an ordinary identifier in a real atmos error (e.g. a component literally named x509).
+	regexp.MustCompile(`(?i)\bx509:`),
 	regexp.MustCompile(`(?i)rate limit`),
 	// A 429/5xx HTTP status code is only meaningful paired with its reason phrase (e.g. "429 Too
 	// Many Requests", "503 Service Unavailable"); a bare 3-digit number could be a line number, a
