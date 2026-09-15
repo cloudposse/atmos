@@ -133,6 +133,27 @@ func TestLoadConfigEditionPin(t *testing.T) {
 	}
 }
 
+func TestLoadConfigEditionExperimentalDefault(t *testing.T) {
+	for _, tt := range []struct {
+		name, config, env, want string
+	}{
+		{"current default", "", "", "warn-daily"},
+		{"earlier edition", "edition: '2026-09-13'\n", "", "warn"},
+		{"change date", "edition: '2026-09-14'\n", "", "warn-daily"},
+		{"explicit legacy mode", "settings:\n  experimental: warn\n", "", "warn"},
+		{"explicit daily on old edition", "edition: '2026-09-13'\nsettings:\n  experimental: warn-daily\n", "", "warn-daily"},
+		{"environment beats edition and config", "edition: '2026-09-13'\nsettings:\n  experimental: silence\n", "warn-daily", "warn-daily"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			writeEditionTestConfig(t, "base_path: ./\n"+tt.config)
+			t.Setenv("ATMOS_EXPERIMENTAL", tt.env)
+			config, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, config.Settings.Experimental)
+		})
+	}
+}
+
 // TestLoadConfigEditionRollsBackJulyDefaults covers the July 2026 default flips
 // (graceful error modes, help filter, provenance, component filter) and the
 // December 2025 metadata-inheritance flip with one pre-July pin.
