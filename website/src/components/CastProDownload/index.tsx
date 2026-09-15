@@ -1,0 +1,182 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { FiAlertCircle, FiChevronDown, FiDownload, FiLoader } from 'react-icons/fi';
+
+import { describeStatus } from '../CastProArtifact/polling.mjs';
+import { CAST_FORMATS } from '../CastProArtifact/url.mjs';
+import { CastFormat, useCastArtifact } from '../CastProArtifact/useCastArtifact';
+
+import styles from './styles.module.css';
+
+export interface CastProDownloadProps {
+  owner?: string;
+  repo?: string;
+  // Branch, tag, or full commit SHA. Named `gitRef` (not `ref`) because `ref`
+  // is a reserved JSX attribute on components and would otherwise never reach
+  // props.
+  gitRef: string;
+  path: string;
+  formats?: CastFormat[];
+  ttlSeconds?: number;
+  soundtrack?: string;
+  label?: string;
+  className?: string;
+}
+
+interface FormatMenuItemProps {
+  owner?: string;
+  repo?: string;
+  gitRef: string;
+  path: string;
+  format: CastFormat;
+  ttlSeconds?: number;
+  soundtrack?: string;
+}
+
+function FormatMenuItem({
+  owner,
+  repo,
+  gitRef,
+  path,
+  format,
+  ttlSeconds,
+  soundtrack,
+}: FormatMenuItemProps): JSX.Element {
+  const { status, phase, progress, elapsedMs, slow, errorMessage, start } = useCastArtifact({
+    owner,
+    repo,
+    ref: gitRef,
+    path,
+    format,
+    ttlSeconds,
+    soundtrack,
+  });
+  const busy = status === 'checking' || status === 'rendering';
+  const hint = busy ? describeStatus({ status, phase, elapsedMs, slow }) : null;
+  const progressPercent = progress ? Math.min(100, Math.max(0, progress.percent)) : null;
+
+  return (
+    <div className={styles.menuItemGroup}>
+      <button
+        type="button"
+        className={styles.menuItem}
+        onClick={start}
+        disabled={busy}
+        title={`Download ${format.toUpperCase()}`}
+      >
+        {busy ? (
+          <FiLoader className={`${styles.icon} ${styles.spin}`} aria-hidden="true" />
+        ) : status === 'error' ? (
+          <FiAlertCircle className={styles.icon} aria-hidden="true" />
+        ) : (
+          <FiDownload className={styles.icon} aria-hidden="true" />
+        )}
+        <span>{format.toUpperCase()}</span>
+        {hint && <span className={styles.hint}>{hint}</span>}
+        {progressPercent !== null && (
+          <span
+            className={styles.progressTrack}
+            title={progress.stage}
+            role="progressbar"
+            aria-valuenow={Math.round(progressPercent)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuetext={`${progress.stage}: ${Math.round(progressPercent)}%`}
+          >
+            <span className={styles.progressFill} style={{ width: `${progressPercent}%` }} />
+          </span>
+        )}
+      </button>
+      {status === 'error' && errorMessage && (
+        <p className={styles.errorText} role="alert">
+          {errorMessage}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Download ▾" split button offering rendered GIF/MP4/SVG/WEBM artifacts of a
+ * .cast file from the Atmos Pro cast-rendering service
+ * (https://atmos-pro.com/casts/{owner}/{repo}/{ref}/{path}.cast.{format}).
+ * Handles the render service's response shapes: an already-rendered artifact
+ * (triggers a native browser download), a still-rendering one (polls the
+ * JSON status endpoint every 3s, slowing to 10s past 13 minutes, up to a
+ * 30-minute ceiling — shown inline as "Queued…"/"Rendering…" with elapsed
+ * time), and a hard error — surfaced inline beneath the selected format
+ * button, whether it's a JSON error body, a generic HTTP status, or a
+ * network failure.
+ */
+export default function CastProDownload({
+  owner,
+  repo,
+  gitRef,
+  path,
+  formats = CAST_FORMATS as CastFormat[],
+  ttlSeconds,
+  soundtrack,
+  label = 'Download',
+  className,
+}: CastProDownloadProps): JSX.Element {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // Close menu on outside click or Escape (same convention as CopyMarkdownButton).
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointer(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        // Escape can unmount a focused format button; return focus to the
+        // trigger instead of leaving it stuck on a removed element.
+        requestAnimationFrame(() => triggerRef.current?.focus());
+      }
+    }
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
+  return (
+    <div className={[styles.container, className].filter(Boolean).join(' ')} ref={rootRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={styles.trigger}
+        onClick={() => setMenuOpen((open) => !open)}
+        aria-expanded={menuOpen}
+        aria-label={`${label} cast`}
+      >
+        <FiDownload className={styles.icon} aria-hidden="true" />
+        <span>{label}</span>
+        <FiChevronDown className={styles.icon} aria-hidden="true" />
+      </button>
+
+      {menuOpen && (
+        <div className={styles.menu}>
+          {formats.map((format) => (
+            <FormatMenuItem
+              key={format}
+              owner={owner}
+              repo={repo}
+              gitRef={gitRef}
+              path={path}
+              format={format}
+              ttlSeconds={ttlSeconds}
+              soundtrack={soundtrack}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

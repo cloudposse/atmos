@@ -266,7 +266,7 @@ commands:
         reset: true
       - type: workdir
         name: hooks-infracost-fixture
-        source: "../../examples/hooks-infracost"
+        source: "fixtures/hooks-infracost"
         path: "../../.context/cast-fixtures/hooks-infracost"
         reset: true
       - type: workdir

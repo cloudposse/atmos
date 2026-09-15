@@ -1,0 +1,63 @@
+---
+title: Diagnostics
+sidebar_label: diagnostics
+sidebar_class_name: command
+description: Capture structured subprocess diagnostics as JSONL for troubleshooting and CI artifacts.
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Capture machine-readable diagnostic events in a JSONL file to inspect subprocess commands,
+working directories, exit codes, and durations after a run.
+</Intro>
+
+## Usage
+
+Set both `enabled` and `file` to capture events:
+
+<File title="atmos.yaml">
+```yaml
+diagnostics:
+  enabled: true
+  file: .atmos/diagnostics.jsonl
+  include_output: false
+```
+</File>
+
+Atmos appends one JSON object per event and creates parent directories as needed.
+Inspect process exits after running a command:
+
+```shell
+atmos terraform plan vpc -s plat-ue2-dev
+jq 'select(.type == "process.exit")' .atmos/diagnostics.jsonl
+```
+
+## Configuration Reference
+
+<dl>
+  <dt>`diagnostics.enabled`</dt>
+  <dd>Enable diagnostic events. Boolean; default `false`.
+  Environment variable: `ATMOS_DIAGNOSTICS_ENABLED`.</dd>
+  <dt>`diagnostics.file`</dt>
+  <dd>Output file path. Default: empty, which disables capture even when `enabled` is true.
+  Relative paths resolve against the process working directory.
+  Environment variable: `ATMOS_DIAGNOSTICS_FILE`.</dd>
+  <dt>`diagnostics.include_output`</dt>
+  <dd>Include masked subprocess stdout/stderr chunks as `process.output` events.
+  Boolean; default `false`. Environment variable: `ATMOS_DIAGNOSTICS_INCLUDE_OUTPUT`.</dd>
+</dl>
+
+## Enable for One Invocation
+
+```shell
+ATMOS_DIAGNOSTICS_ENABLED=true \
+ATMOS_DIAGNOSTICS_FILE=.atmos/diagnostics.jsonl \
+atmos terraform plan vpc -s plat-ue2-dev
+```
+
+Diagnostic events are masked before writing. They complement human-readable logs with
+structured execution facts; output capture is optional. Collect the JSONL file as a CI
+artifact when investigating a failed run. See [error handling](/cli/configuration/errors)
+for the separate error-reporting configuration.

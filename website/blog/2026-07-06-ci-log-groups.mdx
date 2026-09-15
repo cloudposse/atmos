@@ -32,7 +32,7 @@ sections instead of a wall of text. A single `ci.groups.mode` picks the granular
 CI providers can't nest groups, the mode is the one knob you need:
 
 - **`auto`** (default) — the finest grouping per command. A **workflow** renders one group per
-  step; a direct **`atmos terraform plan`** renders one group per phase (`init`, then `plan`):
+  step; a direct **[`atmos terraform plan`](/cli/commands/terraform/plan)** renders one group per phase (`init`, then `plan`):
 
   ```text
   ▸ deploy network          ▸ terraform init
@@ -45,7 +45,7 @@ CI providers can't nest groups, the mode is the one knob you need:
   invoke directly from CI YAML.
 - **`off`** — no grouping.
 
-A step that runs `atmos terraform apply` is one group, not three — the outermost group always wins.
+A step that runs [`atmos terraform apply`](/cli/commands/terraform/apply) is one group, not three — the outermost group always wins.
 You write nothing extra: no markers in your workflows, custom commands, or CI YAML.
 
 ## How to Use It

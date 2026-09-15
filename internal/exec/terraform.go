@@ -36,10 +36,11 @@ const (
 	// can run a terraform subcommand against the live env, RC, and working directory.
 	afterTerraformInitEvent = "after.terraform.init"
 
-	subcommandApply     = "apply"
-	subcommandDeploy    = "deploy"
-	subcommandInit      = "init"
-	subcommandWorkspace = "workspace"
+	subcommandApply         = "apply"
+	subcommandDeploy        = "deploy"
+	subcommandInit          = "init"
+	subcommandWorkspace     = "workspace"
+	subcommandProvidersLock = "providers-lock"
 
 	autoApproveFlag           = "-auto-approve"
 	outFlag                   = "-out"

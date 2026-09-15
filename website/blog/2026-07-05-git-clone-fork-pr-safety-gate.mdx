@@ -6,7 +6,7 @@ tags: [security, feature]
 date: 2026-07-05T12:00:00.000Z
 ---
 
-`atmos git clone` is Atmos's native replacement for `actions/checkout`. Mirroring the
+[`atmos git clone`](/cli/commands/git/clone) is Atmos's native replacement for `actions/checkout`. Mirroring the
 [`actions/checkout` v7 hardening](https://github.blog/changelog/2026-06-18-safer-pull_request_target-defaults-for-github-actions-checkout/),
 it now **refuses by default to clone untrusted fork content under the elevated
 `pull_request_target` and `workflow_run` events** — the classic "pwn request" where fork code
@@ -22,7 +22,7 @@ which execute with your base repository's secrets, `GITHUB_TOKEN`, and cloud cre
 Atmos now refuses to clone fork content unless you explicitly opt in. The gate triggers only
 on the genuinely dangerous combination:
 
-- an explicit `--branch` / ref override that is a pull-request ref (e.g. `refs/pull/<N>/merge`
+- an explicit [`--branch`](/cli/commands/git/clone#flags) / ref override that is a pull-request ref (e.g. `refs/pull/<N>/merge`
   or `refs/pull/<N>/head`), or
 - an ad hoc clone URI whose `owner/repo` differs from the base `GITHUB_REPOSITORY`.
 
@@ -53,7 +53,7 @@ ci:
   allow_unsafe_fork_execution: true
 ```
 
-or per-invocation via the `--allow-unsafe-fork` flag or the
+or per-invocation via the [`--allow-unsafe-fork`](/cli/commands/git/clone#flags) flag or the
 `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` environment variable.
 
 ## Get Involved

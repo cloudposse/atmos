@@ -125,6 +125,7 @@ func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration,
 			info.UseMocks,
 			nil, // tagsFilter: see above.
 			nil, // labelsFilter: see above.
+			terraformPreflightErrorOptions(),
 		)
 	}
 
@@ -179,7 +180,39 @@ func describeTerraformStacksNarrowed(atmosConfig *schema.AtmosConfiguration, inf
 		info.UseMocks,
 		info.Tags,
 		info.Labels,
+		terraformPreflightErrorOptions(),
 	)
+}
+
+// terraformPreflightErrorOptions makes the `--all` preflight describe pass tolerant of
+// recoverable per-value YAML function errors (e.g. `!terraform.state`/`!terraform.output`
+// against a component that hasn't been applied yet). This is not the user-facing
+// `--error-mode` choice used by `list`/`describe` — it's intrinsic to how `--all` bootstraps
+// dependency order: the preflight only builds the dependency graph from static
+// `dependencies`/`settings.depends_on`/`metadata` (never from resolved vars), and every node
+// re-resolves its own vars fresh immediately before its own plan/apply, so a degraded
+// placeholder value here is never reused for a real apply. Other error classes (e.g. a
+// missing `!secret`) are not in the recoverable set and still fail the preflight as before.
+//
+// StrictAuth is set so a component whose own declared identity can't be resolved (e.g. its
+// local emulator isn't running) still fails the preflight immediately, instead of silently
+// falling back to a parent AuthManager and going on to attempt a real, and much slower and
+// more confusing, network call with the wrong credentials — the list/describe --error-mode=warn
+// behavior that plain YAML-function degradation shares this mechanism with.
+func terraformPreflightErrorOptions() DescribeStacksErrorOptions {
+	return DescribeStacksErrorOptions{
+		OnError:    OnErrorWarn,
+		StrictAuth: true,
+		OnWarning: func(w DegradationWarning) {
+			log.Debug(
+				"Deferring unresolved value until its dependency is applied",
+				cfg.ComponentStr, w.Component,
+				cfg.StackStr, w.Stack,
+				"function", w.Function,
+				"reason", w.Reason,
+			)
+		},
+	}
 }
 
 // terraformPreflightDescribeError preserves structured errors from stack resolution
@@ -203,7 +236,7 @@ func terraformPreflightDescribeError(cause error) error {
 
 // buildTerraformDependencyGraph builds the complete dependency graph from stacks.
 func buildTerraformDependencyGraph(
-	_ *schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	stacks map[string]any,
 	_ *schema.ConfigAndStacksInfo,
 ) (*dependency.Graph, error) {
@@ -216,7 +249,7 @@ func buildTerraformDependencyGraph(
 	}
 
 	// Second pass: build dependencies using settings.depends_on.
-	if err := buildGraphDependencies(stacks, builder, nodeMap); err != nil {
+	if err := buildGraphDependencies(atmosConfig, stacks, builder, nodeMap); err != nil {
 		return nil, fmt.Errorf("%w: building dependencies: %w", errUtils.ErrBuildDepGraph, err)
 	}
 
@@ -257,17 +290,32 @@ func addNodesToGraph(
 
 // buildGraphDependencies builds dependencies between nodes in the graph.
 func buildGraphDependencies(
+	atmosConfig *schema.AtmosConfiguration,
 	stacks map[string]any,
 	builder *dependency.GraphBuilder,
 	nodeMap map[string]string,
 ) error {
-	parser := NewDependencyParser(builder, nodeMap)
+	targetStates := make(map[string]string)
+	if err := walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+		nodeID := fmt.Sprintf("%s-%s", componentName, stackName)
+		if metadata, ok := componentSection[cfg.MetadataSectionName].(map[string]any); ok {
+			if metadataType, ok := metadata["type"].(string); ok && metadataType == "abstract" {
+				targetStates[nodeID] = "target_missing"
+			} else if enabled, ok := metadata["enabled"].(bool); ok && !enabled {
+				targetStates[nodeID] = "target_disabled"
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	parser := NewDependencyParserWithDelimiter(builder, nodeMap, targetStates, leftDelim)
 
 	return walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
 		if shouldSkipComponentForGraph(componentSection, componentName) {
 			return nil
 		}
-
 		return parser.ParseComponentDependencies(stackName, componentName, componentSection)
 	})
 }

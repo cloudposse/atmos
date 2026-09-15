@@ -265,7 +265,12 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	// Without closure flags, --tags/--labels also scope the describe pass
 	// (early-skip): components excluded by the selectors never evaluate
 	// templates/YAML functions/auth.
-	stacksMap, err := e.ExecuteDescribeStacksScoped(
+	//
+	// evalSections narrows evaluation to the sections the final column set (plus `metadata`,
+	// which extract.UniqueComponents and buildComponentFilters always need for
+	// enabled/locked/tags/labels/type/status) actually reads — see resolveComponentsEvalSections.
+	evalSections := resolveComponentsEvalSections(&atmosConfig, opts)
+	stacksMap, err := e.ExecuteDescribeStacksWithEvalSections(
 		&atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -277,6 +282,7 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		opts.Tags,
 		labels,
 		errOpts,
+		evalSections,
 	)
 	if err != nil {
 		return componentsExtractResult{}, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
@@ -430,6 +436,26 @@ func buildComponentFilters(opts *ComponentsOptions) ([]filter.Filter, error) {
 	}
 
 	return filters, nil
+}
+
+// resolveComponentsEvalSections computes the evaluation-scope filter (see
+// column.RequiredSections/e.ExecuteDescribeStacksWithEvalSections) for the column set this
+// invocation will actually render, resolved from the same flag + atmos.yaml merge
+// getComponentColumns uses. `metadata` is unconditionally folded in: extract.UniqueComponents
+// always reads it (enabled/locked/type/tags/labels/status derive from it, and abstract-component
+// filtering depends on metadata.type), independent of which columns are displayed — see
+// enrichUniqueComponentMetadata in pkg/list/extract/components.go. Returns nil (full eager
+// evaluation, the historical behavior) whenever RequiredSections can't statically prove which
+// sections are safe to skip.
+func resolveComponentsEvalSections(atmosConfig *schema.AtmosConfiguration, opts *ComponentsOptions) []string {
+	defer perf.Track(nil, "list.components.resolveComponentsEvalSections")()
+
+	columns := getComponentColumns(atmosConfig, opts.Columns)
+	sections, ok := column.RequiredSections(columns)
+	if !ok {
+		return nil
+	}
+	return column.EnsureSection(sections, "metadata")
 }
 
 // getComponentColumns returns column configuration for unique components listing.

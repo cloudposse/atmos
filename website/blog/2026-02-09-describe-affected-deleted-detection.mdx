@@ -15,7 +15,7 @@ This enables CI/CD pipelines to trigger `terraform destroy` workflows for remove
 
 ## The Problem
 
-Previously, `atmos describe affected` only detected components that were **modified** between two Git commits.
+Previously, [`atmos describe affected`](/cli/commands/describe/affected) only detected components that were **modified** between two Git commits.
 It worked by iterating over stacks in HEAD (current branch) and comparing them to BASE (target branch).
 This meant:
 

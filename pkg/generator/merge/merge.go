@@ -150,6 +150,54 @@ func ParseConflictStrategy(s string) (ConflictStrategy, error) {
 	}
 }
 
+// ResolveConflictStrategy determines the effective --merge-strategy after
+// accounting for --force, and is what `atmos scaffold generate --update`/
+// `atmos init --update` call instead of ParseConflictStrategy directly.
+//
+// Without --force (or without --update, where merge-strategy has no effect
+// at all), an unset mergeStrategy resolves via ParseConflictStrategy as
+// usual, defaulting to ConflictStrategyManual.
+//
+// With --force AND --update, an unset mergeStrategy instead defaults to
+// ConflictStrategyTheirs. --force's own meaning -- both without --update
+// (skip the file-exists check, overwrite) and with it -- is "resolve
+// whichever safety blocker exists in favor of the fresh generation"; leaving
+// <<<<<<< conflict markers for the user to resolve by hand
+// (ConflictStrategyManual) is the opposite of that, so --force must not
+// silently do nothing the way it used to (mergeStrategy defaulting to
+// "manual" regardless left every conflict-branch hint suggesting --force as
+// a remedy false).
+//
+// An EXPLICITLY set "manual" or "ours" together with --force and --update is
+// rejected outright: that combination is a genuine contradiction ("force
+// through the conflict" vs. "keep my own value" / "show me the conflict to
+// resolve by hand"), not a preference to silently pick a side on -- unlike
+// an explicit "theirs", which simply agrees with what --force already
+// implies and is allowed through unchanged.
+func ResolveConflictStrategy(mergeStrategy string, force, update bool) (ConflictStrategy, error) {
+	defer perf.Track(nil, "merge.ResolveConflictStrategy")()
+
+	if mergeStrategy == "" && force && update {
+		return ConflictStrategyTheirs, nil
+	}
+
+	strategy, err := ParseConflictStrategy(mergeStrategy)
+	if err != nil {
+		return ConflictStrategyManual, err
+	}
+
+	if force && update && strategy != ConflictStrategyTheirs {
+		return ConflictStrategyManual, errUtils.Build(errUtils.ErrMutuallyExclusiveFlags).
+			WithExplanationf("`--force` and `--merge-strategy=%s` conflict when `--update` is set", mergeStrategy).
+			WithHint("`--force` already means \"on conflict, the latest generation wins\" (the same as `--merge-strategy=theirs`)").
+			WithHint("Drop `--force`, or use `--merge-strategy=theirs` (or omit `--merge-strategy`) instead").
+			WithExitCode(2).
+			Err()
+	}
+
+	return strategy, nil
+}
+
 // Driver selects which merger runs, named after git's merge driver concept
 // (see `man gitattributes`).
 type Driver int

@@ -357,6 +357,21 @@
   line-height: 1.6;
 }
 
+/* Small cast preview - decorative duplicate of the entryTitle link, see TimelineEntry.tsx */
+.entryCastPreview,
+.entryCastPreview:hover {
+  display: block;
+  margin-top: 0.75rem;
+  border: none !important;
+  text-decoration: none !important;
+}
+
+/* Override CastPlayer's thumbnail max-width so the preview spans the card's text width. */
+.entryCastThumbnail {
+  width: 100% !important;
+  max-width: none !important;
+}
+
 /* ==================== */
 /* TAGS                 */
 /* ==================== */

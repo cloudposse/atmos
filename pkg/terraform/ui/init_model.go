@@ -297,6 +297,8 @@ func (m *InitModel) formatAction() string {
 	switch m.subCommand {
 	case "init":
 		return "Init"
+	case "providers-lock":
+		return "Provider lock"
 	case "workspace":
 		if m.workspace != "" {
 			return fmt.Sprintf("Selected `%s` workspace for", m.workspace)

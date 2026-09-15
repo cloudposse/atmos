@@ -4,9 +4,11 @@ title: "Flag-Aware Custom Commands and Dynamic Tables"
 date: 2026-06-30T12:00:00.000Z
 authors: [osterman]
 tags: [enhancement, dx]
+cast: "/casts/examples/interactive-workflows/table-and-build.cast"
+castTitle: "atmos interactive workflow steps"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Custom command steps can now read their own command-line flags through `{{ .Flags.<name> }}`, and the [`table`](/workflows/steps/type/table) step templates its `data`, `columns`, and `title` per-step. Together they let you build flag-driven runbooks — rich, dynamic output assembled declaratively in `atmos.yaml`, no shell scripting required.
 
@@ -60,7 +62,7 @@ atmos platform status -s plat-ue2-dev
 
 Every `{{ .Flags.stack }}` resolves to `plat-ue2-dev`, the stage titles and table rows fill in, and the shell steps run against the right stack.
 
-<CastPlayer src="/casts/examples/interactive-workflows/table-and-build.cast" title="atmos interactive workflow steps" chrome controls scrubber />
+<CastEmbed src="/casts/examples/interactive-workflows/table-and-build.cast" title="atmos interactive workflow steps" chrome controls scrubber />
 
 [View the full example](/examples/interactive-workflows)
 
@@ -69,6 +71,8 @@ Every `{{ .Flags.stack }}` resolves to `plat-ue2-dev`, the stage titles and tabl
 - **Build your own shortcuts.** Wrap your team's day-two operations — discovery, planning, secret access — into named commands that adapt to their flags.
 - **Rich output without scripts.** Tables, staged sections, and dynamic titles are declared in YAML, not hand-rolled in bash with `printf` and `column`.
 - **Consistent across workflows and custom commands.** The same step library powers both, so what you learn in one applies to the other.
+
+For usage and configuration, see [flags](/cli/configuration/commands/flags).
 
 ## Get Involved
 

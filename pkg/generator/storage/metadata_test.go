@@ -25,6 +25,19 @@ func TestMetadataStorage_GetMetadataPath(t *testing.T) {
 	assert.Equal(t, path, storage.GetMetadataPath())
 }
 
+// TestInitMetadataPath verifies `atmos init` reads/writes its pinned
+// generation metadata at .atmos/init/metadata.yaml, distinct from
+// ScaffoldMetadataPath's .atmos/scaffold/metadata.yaml -- the two commands
+// must not clobber each other's pin when generating into the same directory.
+func TestInitMetadataPath(t *testing.T) {
+	targetDir := filepath.Join("some", "target", "dir")
+
+	got := InitMetadataPath(targetDir)
+
+	assert.Equal(t, filepath.Join(targetDir, ".atmos", "init", "metadata.yaml"), got)
+	assert.NotEqual(t, ScaffoldMetadataPath(targetDir), got)
+}
+
 func TestMetadataStorage_Exists(t *testing.T) {
 	tests := []struct {
 		name     string

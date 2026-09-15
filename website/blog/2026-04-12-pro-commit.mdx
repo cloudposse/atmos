@@ -8,7 +8,7 @@ tags: [feature, atmos-pro]
 
 import ActionCard from '@site/src/components/ActionCard'
 
-Atmos now supports **server-side commits** via the Atmos Pro GitHub App. The new `atmos pro commit` command
+Atmos now supports **server-side commits** via the Atmos Pro GitHub App. The new [`atmos pro commit`](/cli/commands/pro/commit) command
 sends your changes to Atmos Pro, which creates the commit using its GitHub App installation — ensuring
 commits trigger CI workflows.
 
@@ -26,7 +26,7 @@ Previously, teams worked around this by minting PATs (insecure and static), crea
 
 ## How It Works
 
-1. Your workflow makes changes (e.g., `atmos toolchain exec -- tofu fmt -recursive`)
+1. Your workflow makes changes (e.g., [`atmos toolchain exec -- tofu fmt -recursive`](/cli/commands/toolchain/exec))
 2. `atmos pro commit` detects staged changes, base64-encodes file contents, and authenticates via GitHub OIDC
 3. Atmos Pro creates the commit server-side using its GitHub App
 4. Because the commit comes from the app (not `GITHUB_TOKEN`), GitHub triggers CI normally

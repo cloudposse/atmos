@@ -1,0 +1,63 @@
+---
+slug: native-helm-cli-value-overrides
+title: "Preview and Deploy Native Helm Value Overrides"
+date: 2026-09-09T12:00:00.000Z
+authors: [osterman]
+tags: [feature, experimental]
+---
+
+An urgent image rollback, a temporary feature flag, or a one-off chart setting should not require
+editing a stack manifest just to make one deployment. Yet a preview is only useful when it renders
+the exact values that the later deployment will use. When temporary values live in a shell wrapper
+or are applied only at deploy time, teams cannot reliably see the change before it reaches a
+cluster.
+
+<!--truncate-->
+
+## The Problem
+
+Native Helm components already resolve chart values from inherited stack configuration, component
+value files, and inline values. Before this update, there was no Helm-compatible command-line
+override surface for those resolved values. Operators had to commit a temporary configuration
+change, use a separate wrapper around Helm, or accept that a `diff` did not necessarily match the
+subsequent deployment.
+
+## The Fix
+
+Native Helm now accepts repeatable Helm-compatible `-f`/`--values`, `--set`, `--set-string`,
+`--set-file`, `--set-json`, and `--set-literal` flags on `template`/`render`, `diff`/`plan`, and
+`apply`/`deploy`. The overrides apply only to the current invocation and take precedence over the
+resolved component values; they never modify stack configuration.
+
+The new `atmos helm values` command prints the final, masked value map as formatted YAML. It lets
+you inspect the value set that a preview or deployment will consume, including temporary command
+line overrides, without contacting Kubernetes.
+
+## How to Use It
+
+Use the same override arguments for inspection, preview, and deployment:
+
+```shell
+atmos helm values monitoring -s plat-ue2-dev \
+  -f incident-values.yaml \
+  --set image.tag=2026.09.09
+
+atmos helm diff monitoring -s plat-ue2-dev \
+  -f incident-values.yaml \
+  --set image.tag=2026.09.09
+
+atmos helm apply monitoring -s plat-ue2-dev \
+  -f incident-values.yaml \
+  --set image.tag=2026.09.09
+```
+
+Atmos layers command-line value files and each supported `--set` variant over the component's
+resolved values using Helm's normal parsing and precedence rules. That includes nested paths,
+list indexes, typed values, string and literal handling, JSON input, and file-backed values.
+
+## Get Involved
+
+See the [native Helm command reference](/cli/commands/helm/usage#runtime-value-overrides) for
+the complete override reference and the [`values`](/cli/commands/helm/values) command guide.
+Have feedback? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the
+[Cloud Posse community Slack](https://cloudposse.com/slack).

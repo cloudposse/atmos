@@ -15,7 +15,7 @@ Atmos now detects circular dependencies in YAML function calls and provides a cl
 
 ## What Changed
 
-Previously, circular dependencies in YAML functions like `!terraform.state` and `!terraform.output` would cause stack overflow panics with cryptic error messages. Now Atmos detects these cycles before they cause problems and shows you exactly where the circular dependency exists.
+Previously, circular dependencies in YAML functions like [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output) would cause stack overflow panics with cryptic error messages. Now Atmos detects these cycles before they cause problems and shows you exactly where the circular dependency exists.
 
 ## Why This Matters
 
@@ -55,6 +55,8 @@ To fix this issue:
 ## Performance Impact
 
 The cycle detection adds negligible overhead (less than 0.001% of execution time) and uses goroutine-local storage to ensure thread safety.
+
+For usage and configuration, see [Atmos YAML Functions](/functions/yaml).
 
 ## Get Involved
 

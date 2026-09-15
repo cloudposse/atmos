@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -125,8 +126,10 @@ func executeSingle(
 		return err
 	}
 
-	if err := maybeAutoGenerateFiles(atmosConfig, info, componentPath); err != nil {
-		return err
+	if operation != OperationValues {
+		if err := maybeAutoGenerateFiles(atmosConfig, info, componentPath); err != nil {
+			return err
+		}
 	}
 
 	tenv, err := dependenciesForComponent(atmosConfig, cfg.HelmComponentType, info.StackSection, info.ComponentSection)
@@ -197,17 +200,16 @@ func runWithHooks(
 	if err := ctx.GoContext().Err(); err != nil {
 		return err
 	}
-	hookSet, err := getHooks(atmosConfig, info)
-	if err != nil {
-		return err
-	}
-	before, after := eventsFor(info.SubCommand, operation)
-	if err := hookSet.RunAll(before, atmosConfig, info, nil, nil); err != nil {
-		return err
-	}
 
+	// Build and validate the chart spec -- including CLI value overrides --
+	// before running any before-hooks. Hooks can have side effects (git
+	// operations, external commands), so a malformed --set/--values must abort
+	// the operation before those side effects run, not after.
 	spec, err := buildChartSpec(atmosConfig, info, componentPath)
 	if err != nil {
+		return err
+	}
+	if spec.Values, err = applyValueOverrides(spec.Values, ctx.Flags); err != nil {
 		return err
 	}
 	if spec.ReleaseName == "" {
@@ -229,10 +231,20 @@ func runWithHooks(
 		}
 		reportResolvedLifecycle(spec.Lifecycle)
 	}
+
+	hookSet, err := getHooks(atmosConfig, info)
+	if err != nil {
+		return err
+	}
+	before, after := eventsFor(info.SubCommand, operation)
+	if err := hookSet.RunAll(before, atmosConfig, info, nil, nil); err != nil {
+		return err
+	}
+
 	if err := ctx.GoContext().Err(); err != nil {
 		return err
 	}
-	if operation != OperationDelete {
+	if operationUsesRenderedChart(operation) {
 		if err := setupRepositories(spec.Repositories); err != nil {
 			return err
 		}
@@ -280,6 +292,8 @@ func runOperation(
 		diffText, err := runDiff(ctx.GoContext(), atmosConfig, info, ctx.Flags, spec)
 		summary["diff"] = diffText
 		return summary, err
+	case OperationValues:
+		return summary, u.PrintAsYAML(atmosConfig, spec.Values)
 	case OperationApply:
 		applySummary, err := deliverApply(ctx.GoContext(), atmosConfig, info, ctx.Flags, spec)
 		mergeSummary(summary, applySummary)
@@ -299,6 +313,15 @@ func runOperation(
 	}
 }
 
+func operationUsesRenderedChart(operation Operation) bool {
+	switch operation {
+	case OperationTemplate, OperationDiff, OperationApply:
+		return true
+	default:
+		return false
+	}
+}
+
 func emitLifecycleWarnings(warnings []lifecycleWarning) {
 	for _, warning := range warnings {
 		ui.Warningf("%s (field: %s, code: %s)", warning.Message, warning.Field, warning.Code)
@@ -315,7 +338,8 @@ func reportResolvedLifecycle(resolution releaseLifecycleResolution) {
 		}
 	}
 	policy := resolution.Policy
-	log.Debug("Resolved Helm release lifecycle",
+	log.Debug(
+		"Resolved Helm release lifecycle",
 		"operation", policy.Operation,
 		"wait_strategy", policy.WaitStrategy,
 		"wait_strategy_reason", reason,
@@ -721,6 +745,26 @@ func emitOperationStatus(operation Operation, summary map[string]any, opErr erro
 	writeStatusLine(msg)
 }
 
+// displayPath renders an absolute path relative to the current working directory for
+// display in status messages. Local chart paths are always resolved to absolute
+// internally (see resolveLocalChart) so Helm's loader works regardless of invoking
+// directory, but an absolute path is noisy in a terminal message -- fall back to the
+// original path whenever the working directory or relative path can't be determined.
+func displayPath(path string) string {
+	if path == "" || !filepath.IsAbs(path) {
+		return path
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return path
+	}
+	rel, err := filepath.Rel(wd, path)
+	if err != nil {
+		return path
+	}
+	return rel
+}
+
 // formatOperationStatus builds the one-line status message for apply/delete from the operation
 // summary. It returns an empty string for operations that need no status line (template, diff).
 func formatOperationStatus(operation Operation, summary map[string]any) string {
@@ -730,7 +774,7 @@ func formatOperationStatus(operation Operation, summary map[string]any) string {
 	case OperationApply:
 		msg := fmt.Sprintf("Applied Helm release `%s` to namespace `%s`", release, namespace)
 		if chart, ok := summary["chart"].(string); ok && chart != "" {
-			msg += fmt.Sprintf(" ((chart `%s`))", chart)
+			msg += fmt.Sprintf(" (chart `%s`)", displayPath(chart))
 		}
 		return msg
 	case OperationDelete:

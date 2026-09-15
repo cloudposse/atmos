@@ -8,7 +8,7 @@ tags:
 date: 2026-01-22T12:00:00.000Z
 ---
 
-Atmos now correctly detects component file changes when running `atmos describe affected`.
+Atmos now correctly detects component file changes when running [`atmos describe affected`](/cli/commands/describe/affected).
 A regression introduced in v1.195.0 caused changes to Terraform, Helmfile, or Packer component files to not be detected when `atmos.yaml` was located in a subdirectory of the git repository (e.g., when using `atmos -C path/to/project`).
 
 <!--truncate-->

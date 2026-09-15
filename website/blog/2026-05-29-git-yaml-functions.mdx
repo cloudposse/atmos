@@ -6,17 +6,17 @@ tags: [feature]
 date: 2026-05-29T12:00:00.000Z
 ---
 
-Atmos now includes core Git YAML functions for resolving repository metadata directly in stack and config processing: `!git.root`, `!git.sha`, `!git.branch`, and `!git.ref`.
+Atmos now includes core Git YAML functions for resolving repository metadata directly in stack and config processing: [`!git.root`](/functions/yaml/git.root), [`!git.sha`](/functions/yaml/git.sha), [`!git.branch`](/functions/yaml/git.branch), and [`!git.ref`](/functions/yaml/git.ref).
 
 <!--truncate-->
 
 ## What Changed
 
-The new Git function family exposes common repository values without shelling out through `!exec`:
+The new Git function family exposes common repository values without shelling out through [`!exec`](/functions/yaml/exec):
 
 | Function | Returns |
 |----------|---------|
-| `!git.root` | The current repository root, with the same behavior as `!repo-root` |
+| `!git.root` | The current repository root, with the same behavior as [`!repo-root`](/functions/yaml/repo-root) |
 | `!git.sha` | The full current `HEAD` commit SHA |
 | `!git.ref` | The same full current `HEAD` commit SHA, intended for immutable source pinning |
 | `!git.branch` | The current branch name |
@@ -74,7 +74,7 @@ terraform:
           atmos_git_branch: !git.branch unknown
 ```
 
-When you run an `atmos terraform` command, Atmos writes the provider override for the component:
+When you run an [`atmos terraform`](/cli/commands/terraform/usage) command, Atmos writes the provider override for the component:
 
 ```json
 {
@@ -109,3 +109,5 @@ The same functions work in both stack/component YAML processing and Atmos config
 ## Detached HEAD Behavior
 
 `!git.sha` and `!git.ref` continue to work in detached HEAD checkouts because `HEAD` still resolves to a commit. `!git.branch` returns an error when no branch name exists unless a fallback value is provided.
+
+For usage and configuration, see [!git.repository](/functions/yaml/git.repository).

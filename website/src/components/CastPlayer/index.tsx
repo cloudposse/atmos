@@ -8,6 +8,7 @@ import {
   resolvePlaybackSpeed,
 } from "./playback.mjs";
 import { CURSOR_MARKER, replayTerminal } from "./terminal.mjs";
+import renderTerminalText from "./terminal-text";
 
 type CastEvent = [number, string, string];
 
@@ -42,6 +43,8 @@ type Props = {
    * instead of clipping to a 16:9 viewport. Used for docs screengrabs.
    */
   static?: boolean;
+  /** Extra class name(s) merged onto the root element, e.g. to override the `thumbnail` width cap. */
+  className?: string;
 };
 
 export default function CastPlayer({
@@ -65,6 +68,7 @@ export default function CastPlayer({
   enterDelay = 0.5,
   exitDelay = 0.6,
   static: staticFrame = false,
+  className,
 }: Props) {
   const [events, setEvents] = useState<CastEvent[]>([]);
   const [content, setContent] = useState("");
@@ -210,8 +214,7 @@ export default function CastPlayer({
       return;
     }
 
-    const startedAt =
-      performance.now() - (position * 1000) / effectiveSpeed;
+    const startedAt = performance.now() - (position * 1000) / effectiveSpeed;
     const tick = (now: number) => {
       const nextPosition = Math.min(
         duration,
@@ -289,6 +292,7 @@ export default function CastPlayer({
     chrome ? styles.window : styles.plain,
     thumbnail ? styles.thumbnail : "",
     staticFrame ? styles.staticFrame : "",
+    className || "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -416,7 +420,7 @@ function renderAnsi(input: string) {
       <span key={index} className={styles.cursor} aria-hidden="true" />
     ) : (
       <span key={index} style={segment.style}>
-        {segment.text}
+        {renderTerminalText(segment.text)}
       </span>
     ),
   );

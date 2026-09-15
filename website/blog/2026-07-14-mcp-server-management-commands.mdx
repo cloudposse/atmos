@@ -15,17 +15,17 @@ mean opening `atmos.yaml` and hand-writing a `mcp.servers` entry — then, separ
 
 ## The Fix
 
-`atmos mcp add` and `atmos mcp remove` manage `mcp.servers` in `atmos.yaml` directly — no YAML editing
+[`atmos mcp add`](/cli/commands/mcp/add) and [`atmos mcp remove`](/cli/commands/mcp/remove) manage `mcp.servers` in `atmos.yaml` directly — no YAML editing
 required. Two built-in presets skip the boilerplate entirely: `self` wires up Atmos's own MCP server, and
 `atmos-pro` wires up the Atmos Pro MCP server. Run `atmos mcp add` with no arguments at all and it defaults
 to `atmos mcp add self`, so the entire "let my AI assistant use Atmos" flow is one command.
 
-On the other side, `atmos mcp uninstall` is the mirror image of the existing `atmos mcp install` — it
+On the other side, [`atmos mcp uninstall`](/cli/commands/mcp/uninstall) is the mirror image of the existing [`atmos mcp install`](/cli/commands/mcp/install) — it
 removes servers from an AI client's config without touching `atmos.yaml`. `add`/`remove` manage the
 declarative source of truth; `install`/`uninstall` push and pull it to your client. They compose, but
 never step on each other.
 
-`atmos mcp list` and `atmos mcp status` also now mention these commands directly instead of just saying
+[`atmos mcp list`](/cli/commands/mcp/list) and [`atmos mcp status`](/cli/commands/mcp/status) also now mention these commands directly instead of just saying
 "no servers configured," and nudge you to run `atmos mcp add atmos-pro` if Atmos Pro is already configured
 but its MCP server hasn't been added yet.
 

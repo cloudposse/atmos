@@ -38,7 +38,7 @@ components:
 
 ## How It Works
 
-When you run `atmos terraform generate required-providers`, Atmos creates a `terraform_override.tf.json` file in your component directory:
+When you run [`atmos terraform generate required-providers`](/cli/commands/terraform/generate), Atmos creates a `terraform_override.tf.json` file in your component directory:
 
 ```json
 {
@@ -102,3 +102,5 @@ atmos terraform generate required-providers vpc --stack dev-us-east-1 \
 - **Environment-specific versions** - Pin stricter versions in production while allowing flexibility in development
 - **No component modification** - Override files work without changing component source code
 - **Inheritance support** - Define base versions in catalogs and override where needed
+
+For usage and configuration, see [Provider Generation](/components/terraform/providers).

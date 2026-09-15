@@ -250,11 +250,12 @@ workflows on a per-stack, per-event basis. The contract is defined under
 Atmos Pro to handle, declare which workflow file to dispatch and which inputs
 to pass.
 
-The CLI does not interpret these blocks — they are passed through unchanged in
-the payload uploaded by `atmos describe affected --upload` (and `atmos list
-instances --upload`). Atmos Pro reads the blocks server-side when the matching
-GitHub webhook arrives and dispatches the configured workflow against the
-correct SHA.
+Atmos evaluates the stack’s templates and YAML functions, including workflow
+inputs, before uploading the resolved event configuration with
+[`atmos describe affected --upload`](/cli/commands/describe/affected) or
+[`atmos list instances --upload`](/cli/commands/list/list-instances). Atmos Pro reads
+that configuration server-side when the matching GitHub webhook arrives and
+dispatches the configured workflow against the correct SHA.
 
 ### Supported events
 
@@ -488,15 +489,112 @@ inferred from a backstop.
 
 ### Workflow input templating
 
-Inputs to dispatched workflows are rendered as Go templates against the
-component context. The most common variables:
+Atmos resolves workflow inputs against the component’s [template context](/templates)
+while processing the stack, before uploading the workflow configuration to Atmos Pro.
+These are Atmos Go templates; GitHub evaluates its own `${{ inputs.runner }}` expressions
+later, in the dispatched workflow.
 
-- `{{ .atmos_component }}` — the affected component name
-- `{{ .atmos_stack }}` — the affected stack name
-- `{{ .vars.<name> }}` — any value from the component's `vars` section
-- `{{ .settings.<name> }}` — any value from the component's `settings` section
+- `{{ .atmos_component }}` — the Atmos component instance name, such as `cluster/prod`
+- `{{ .atmos_stack }}` or `{{ .stack }}` — the stack name
+- `{{ .vars.<name> }}` — a value from the component’s [`vars`](/stacks/vars)
+- `{{ .settings.<name> }}` — a value from its [`settings`](/stacks/settings)
+- `{{ .metadata.labels.runner }}` — a value from its [labels](/stacks/components/component-metadata#labels)
+- `{{ index .metadata.labels "cost-center" }}` — a label whose key contains a hyphen
 
-Use these to keep workflow definitions DRY across stacks.
+Use `.atmos_component` for the workflow’s component input. The shorter `.component`
+can identify the underlying implementation selected by
+[`metadata.component`](/stacks/components/component-metadata#component), which may
+be shared by several differently named instances.
+
+The [YAML functions](/functions/yaml) also work in workflow inputs. For example,
+[`!labels runner ubuntu-latest`](/functions/yaml/labels#single-label-lookup) reads
+one label and supplies a fallback when it is absent.
+
+### Choose a runner per component or stack
+
+Set a [runner label](/stacks/components/component-metadata#labels) on the component
+and pass it to the workflow:
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    cluster:
+      metadata:
+        labels:
+          runner: self-hosted-large
+      settings:
+        pro:
+          pull_request:
+            synchronize:
+              workflows:
+                atmos-terraform-plan.yaml:
+                  inputs:
+                    component: "{{ .atmos_component }}"
+                    stack: "{{ .atmos_stack }}"
+                    runner: "{{ .metadata.labels.runner }}"
+```
+</File>
+
+In the GitHub workflow, add a `runner` dispatch input and use it on the job.
+These excerpts extend the workflow’s existing inputs and job steps:
+
+<File title=".github/workflows/atmos-terraform-plan.yaml">
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner label
+        type: string
+        default: ubuntu-latest
+
+jobs:
+  atmos-plan:
+    runs-on: "${{ inputs.runner }}"
+```
+</File>
+
+Do the same in the **apply workflow**, and pass `runner` in its event configuration
+for merges, releases, and drift remediation. The selector must match an existing
+runner available to the repository; it does not create or size one. Workflows
+using job containers require a compatible Linux runner with Docker.
+
+This selects one runner label. Putting the input in a one-element array does not
+split comma-separated labels. See [GitHub’s runner syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idruns-on)
+for selecting multiple labels.
+
+For components without a runner label, supply a fallback with
+[`!labels`](/functions/yaml/labels#single-label-lookup):
+
+```yaml
+runner: !labels runner ubuntu-latest
+```
+
+Alternatively, [import a stack-wide label default](/stacks/components/component-metadata#global-stack-wide-metadata).
+The template form requires the label to exist: GitHub’s input default cannot
+recover from an Atmos template error before dispatch. See
+[metadata inheritance](/howto/inheritance) for sharing component labels; mapping
+a component with `metadata.component` alone does not inherit its labels.
+
+Inspect the resolved runner with
+[`atmos describe component cluster -s <stack>`](/cli/commands/describe/component).
+You can also select components by it using
+[`atmos list components --labels runner=self-hosted-large`](/cli/commands/list/components).
+
+### Execution metrics and runner sizing
+
+Starting with **Atmos CLI v1.228.0**, qualifying invocations in recognized CI
+environments automatically upload execution records when Atmos Pro credentials
+are configured. Records include elapsed time and, on supported platforms, CPU
+time and maximum resident memory for the **Atmos process itself**.
+
+These measurements exclude Terraform/OpenTofu and provider subprocesses. CPU
+time is not peak CPU utilization, and the reported memory is not the peak memory
+of the whole job. Use measurements that include the complete workload when choosing
+runner capacity; these execution records alone cannot establish Terraform runner
+requirements. See [execution metadata](/changelog/pro-exec-metadata-upload) for
+upload behavior and configuration.
 
 ## Related Commands
 

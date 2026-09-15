@@ -8,17 +8,19 @@ authors:
 tags:
   - feature
 release: v1.196.0
+cast: "/casts/examples/demo-auth/auth-list.cast"
+castTitle: "atmos auth identities"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
-We're excited to announce a powerful new command for managing authentication in Atmos: `atmos auth list`. This command provides comprehensive visibility into your authentication configuration, making it easier than ever to understand and manage complex authentication chains across multiple cloud providers and identities.
+We're excited to announce a powerful new command for managing authentication in Atmos: [`atmos auth list`](/cli/commands/auth/list). This command provides comprehensive visibility into your authentication configuration, making it easier than ever to understand and manage complex authentication chains across multiple cloud providers and identities.
 
 <!--truncate-->
 
 See it in action:
 
-<CastPlayer src="/casts/examples/demo-auth/auth-list.cast" title="atmos auth identities" chrome controls scrubber />
+<CastEmbed src="/casts/examples/demo-auth/auth-list.cast" title="atmos auth identities" chrome controls scrubber />
 
 [View the full example](/examples/demo-auth)
 
@@ -141,7 +143,7 @@ Authentication Configuration
 │        └─ Principal
 │           └─ arn: arn:aws:iam::123456789012:role/DeveloperRole
 └─ okta (okta)
-   └─ URL: https://example.okta.com
+    └─ URL: https://example.okta.com
 ```
 
 The tree format shows the hierarchical relationship between providers and identities. Identities that authenticate through a provider appear as children under that provider's "Identities" section. Identity chains (where one identity assumes another) are shown as nested children - notice how `ops` appears as a child of `admin` since it authenticates via the `admin` identity.
@@ -178,11 +180,11 @@ These chains can be arbitrarily long, supporting even the most complex enterpris
 
 `atmos auth list` complements the existing authentication commands:
 
-- **`atmos auth whoami`** - See your current authentication status
-- **`atmos auth login`** - Authenticate with a provider
+- **[`atmos auth whoami`](/cli/commands/auth/whoami)** - See your current authentication status
+- **[`atmos auth login`](/cli/commands/auth/login)** - Authenticate with a provider
 - **`atmos auth list`** - **NEW!** View all available providers and identities
-- **`atmos auth validate`** - Validate authentication configuration
-- **`atmos auth env`** - Export credentials as environment variables
+- **[`atmos auth validate`](/cli/commands/auth/validate)** - Validate authentication configuration
+- **[`atmos auth env`](/cli/commands/auth/env)** - Export credentials as environment variables
 
 Together, these commands provide a complete authentication workflow from discovery to usage.
 
@@ -201,8 +203,8 @@ For full documentation, see the [atmos auth list command reference](/cli/command
 
 The `atmos auth list` command is part of our broader authentication management initiative. Coming soon:
 
-- **`atmos auth logout`** - Cleanly terminate authentication sessions and clear cached credentials
-- **`atmos auth shell`** - Launch an authenticated shell session with credentials automatically configured
+- **[`atmos auth logout`](/cli/commands/auth/logout)** - Cleanly terminate authentication sessions and clear cached credentials
+- **[`atmos auth shell`](/cli/commands/auth/shell)** - Launch an authenticated shell session with credentials automatically configured
 - **Interactive identity selection** - Enhanced `atmos auth login` with improved identity selection and TTY dialogs
 - **AWS SSO improvements** - Better user experience with spinners and interactive prompts for AWS SSO authentication
 

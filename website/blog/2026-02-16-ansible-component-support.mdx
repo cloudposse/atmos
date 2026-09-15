@@ -4,9 +4,11 @@ title: "Ansible Component Support"
 date: 2026-02-16T12:00:00.000Z
 authors: [rosesecurity]
 tags: [feature]
+cast: "/casts/examples/demo-ansible/playbook.cast"
+castTitle: "atmos Ansible playbook"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Atmos now supports Ansible as a first-class component type, enabling unified orchestration of infrastructure provisioning (Terraform) and configuration management (Ansible) from the same stack manifests.
 
@@ -14,7 +16,7 @@ Atmos now supports Ansible as a first-class component type, enabling unified orc
 
 See it in action:
 
-<CastPlayer src="/casts/examples/demo-ansible/playbook.cast" title="atmos Ansible playbook" chrome controls scrubber />
+<CastEmbed src="/casts/examples/demo-ansible/playbook.cast" title="atmos Ansible playbook" chrome controls scrubber />
 
 [View the full example](/examples/demo-ansible)
 
@@ -22,8 +24,8 @@ See it in action:
 
 Ansible joins Terraform, Helmfile, and Packer as a native component type in Atmos:
 
-- **New `atmos ansible playbook` command** executes Ansible playbooks with stack-based configuration
-- **New `atmos ansible version` command** displays Ansible version information
+- **New [`atmos ansible playbook`](/cli/commands/ansible/playbook) command** executes Ansible playbooks with stack-based configuration
+- **New [`atmos ansible version`](/cli/commands/ansible/version) command** displays Ansible version information
 - **Full-stack processor support** including inheritance, vars, env, settings, and auth sections
 - **Automatic variable file generation** passed to Ansible via `--extra-vars @<varfile>`
 - **Native flag passthrough** via `--` separator for any Ansible option

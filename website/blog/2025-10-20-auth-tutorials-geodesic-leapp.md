@@ -10,7 +10,7 @@ date: 2025-10-20T12:00:00.000Z
 release: v1.196.0
 ---
 
-We've published two comprehensive guides to help you adopt and integrate `atmos auth` into your workflows: migrating from Leapp and configuring Geodesic for seamless authentication.
+We've published two comprehensive guides to help you adopt and integrate [`atmos auth`](/cli/commands/auth/usage) into your workflows: migrating from Leapp and configuring Geodesic for seamless authentication.
 
 <!--truncate-->
 
@@ -54,25 +54,25 @@ Using `atmos auth` provides several advantages over external credential managers
 ## Getting Started
 
 1. **Read the guides**:
-   - [Migrating from Leapp](/tutorials/migrating-from-leapp)
-   - [Configuring Geodesic](/tutorials/configuring-geodesic)
+    - [Migrating from Leapp](/tutorials/migrating-from-leapp)
+    - [Configuring Geodesic](/tutorials/configuring-geodesic)
 
 2. **Review the main documentation**:
-   - [Authentication User Guide](/cli/commands/auth/usage)
-   - [Command Reference](/cli/commands/auth/login)
+    - [Authentication User Guide](/cli/commands/auth/usage)
+    - [Command Reference](/cli/commands/auth/login)
 
 3. **Try it out**:
-   ```bash
-   # Configure providers and identities in atmos.yaml
-   # Then authenticate
-   atmos auth login
+    ```bash
+    # Configure providers and identities in atmos.yaml
+    # Then authenticate
+    atmos auth login
 
-   # Verify authentication
-   atmos auth whoami
+    # Verify authentication
+    atmos auth whoami
 
-   # Use with Terraform
-   atmos terraform plan <component> -s <stack>
-   ```
+    # Use with Terraform
+    atmos terraform plan <component> -s <stack>
+    ```
 
 ## Feedback Welcome
 

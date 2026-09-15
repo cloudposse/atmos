@@ -10,7 +10,7 @@ date: 2026-07-16T12:00:00.000Z
 release: v1.196.0
 ---
 
-Atmos now supports Azure Blob Storage backends in the `!terraform.state` YAML function. Read Terraform outputs directly from Azure-backed state files without initializing Terraform—bringing the same blazing-fast performance to Azure that S3 users already enjoy.
+Atmos now supports Azure Blob Storage backends in the [`!terraform.state`](/functions/yaml/terraform.state) YAML function. Read Terraform outputs directly from Azure-backed state files without initializing Terraform—bringing the same blazing-fast performance to Azure that S3 users already enjoy.
 
 <!--truncate-->
 
@@ -22,8 +22,8 @@ The `!terraform.state` YAML function now supports **Azure Blob Storage (azurerm)
 
 Before this feature, if you were using Azure Blob Storage as your Terraform backend, you had two options for reading remote state:
 
-1. **`!terraform.output`** - Slow but reliable. Requires full Terraform initialization, provider downloads, and varfile generation.
-2. **`!store`** - Fast but requires extra setup. You had to manually configure external secret stores.
+1. **[`!terraform.output`](/functions/yaml/terraform.output)** - Slow but reliable. Requires full Terraform initialization, provider downloads, and varfile generation.
+2. **[`!store`](/functions/yaml/store)** - Fast but requires extra setup. You had to manually configure external secret stores.
 
 Now you can use **`!terraform.state`** with Azure backends—getting **10-100x faster performance** compared to `!terraform.output` by reading directly from blob storage.
 
@@ -273,7 +273,7 @@ components:
 
 ## Considerations
 
-- **Secrets exposure**: Using `!terraform.state` with secrets will expose them in `atmos describe` output
+- **Secrets exposure**: Using `!terraform.state` with secrets will expose them in [`atmos describe`](/cli/commands/describe/usage) output
 - **Permission scoping**: Ensure your Azure credentials have access to all referenced storage accounts
 - **Cross-region access**: Consider latency when reading state across regions
 - **Cold starts**: Components not yet provisioned return `null` (use YQ default values to handle this)

@@ -171,6 +171,11 @@ atmos describe component . --stack dev --provenance
 ## Flags
 
 <dl>
+    <dt>`--use-mocks` <em>(optional)</em></dt>
+    <dd>Resolve Terraform YAML lookups from the producer’s literal
+    [component mocks](/stacks/components/mocks) instead of its remote state.
+    Default: `false`. Requires YAML function processing to remain enabled.</dd>
+
   <dt>`--stack` / `-s` <em>(required)</em></dt>
   <dd>Atmos stack.</dd>
 

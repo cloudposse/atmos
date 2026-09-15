@@ -16,7 +16,7 @@ Atmos now automatically chunks large payloads when uploading affected stacks and
 
 ## What Changed
 
-When running `atmos describe affected --upload` or `atmos list instances --upload`, the CLI now checks the serialized payload size before sending. If the payload exceeds the configurable threshold (default 4MB), Atmos splits the data into multiple smaller requests, each tagged with batch metadata (`batch_id`, `batch_index`, `batch_total`) for server-side reassembly.
+When running [`atmos describe affected --upload`](/cli/commands/describe/affected) or [`atmos list instances --upload`](/cli/commands/list/list-instances), the CLI now checks the serialized payload size before sending. If the payload exceeds the configurable threshold (default 4MB), Atmos splits the data into multiple smaller requests, each tagged with batch metadata (`batch_id`, `batch_index`, `batch_total`) for server-side reassembly.
 
 ### Key Improvements
 

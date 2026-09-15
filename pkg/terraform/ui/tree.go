@@ -7,6 +7,11 @@ type DependencyTree struct {
 	nodes     map[string]*TreeNode
 	Stack     string // Atmos stack name (e.g., "plat-ue2-dev").
 	Component string // Atmos component name (e.g., "vpc").
+	// outputChanges is the count of plan.OutputChanges entries with a real (non-no-op, non-read)
+	// action. Kept separate from GetChangeSummary's (add, change, remove) resource-only counts,
+	// which have specific semantics used elsewhere (exit codes, Destroy labeling) - see
+	// HasOutputChanges.
+	outputChanges int
 }
 
 // TreeNode represents a resource in the dependency tree.

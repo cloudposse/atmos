@@ -78,6 +78,7 @@ var (
 	ErrInvalidTemplateSettings               = errors.New("invalid template settings")
 	ErrTemplateEvaluation                    = errors.New("template evaluation failed")
 	ErrCommandEnvDecodeFailed                = schemaPkg.ErrCommandEnvDecodeFailed
+	ErrComponentDependencyMissingComponent   = schemaPkg.ErrComponentDependencyMissingComponent
 	ErrCastStepRequiresSteps                 = errors.New("cast step requires nested steps")
 	ErrCastSessionRequiresActions            = errors.New("cast session step requires session actions")
 	ErrInvalidCastMode                       = errors.New("cast step has invalid mode")
@@ -202,6 +203,7 @@ var (
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
 	ErrClosureFlagsRequireMultiComponent                     = errors.New("the `--include-dependencies` and `--include-dependents` flags expand a multi-component selection and require one of `--all`, `--components`, `--query`, `-s`, `--tags`, `--labels`, or `--affected`")
 
+	ErrLabelNotFound                    = errors.New("component label not found")
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
 	ErrDeferredTemplateContextMissing   = errors.New("cannot resolve deferred !template value: template context is unavailable because template processing was disabled for this invocation")
@@ -230,6 +232,16 @@ var (
 	ErrProviderFileGeneration = errors.New("failed to generate provider override file")
 	ErrTerraformInit          = errors.New("terraform init failed")
 	ErrTerraformWorkspaceOp   = errors.New("terraform workspace operation failed")
+
+	// Terraform auto-init errors.
+	ErrTerraformInitRequired            = errors.New("terraform reports the working directory must be initialized")
+	ErrTerraformInitReconfigureRequired = errors.New("terraform init -reconfigure is required because the backend configuration changed")
+	ErrTerraformInitUpgradeRequired     = errors.New("terraform init -upgrade is required to satisfy provider or module constraints")
+	ErrInitFingerprint                  = errors.New("failed to compute terraform init fingerprint")
+	ErrInitMarker                       = errors.New("failed to read or write terraform init marker")
+	ErrInvalidInitMode                  = errors.New("invalid components.terraform.init.mode (expected auto, always, or never)")
+	ErrInvalidInitReconfigure           = errors.New("invalid components.terraform.init.reconfigure (expected auto, always, or never)")
+	ErrInvalidInitUpgrade               = errors.New("invalid components.terraform.init.upgrade (expected auto, always, or never)")
 
 	// Terraform lint errors.
 	ErrTerraformLint             = errors.New("terraform lint failed")
@@ -872,9 +884,10 @@ var (
 	ErrProcessStack              = errors.New("error processing stack")
 
 	// Dependency errors.
-	ErrUnsupportedDependencyType = errors.New("unsupported dependency type")
-	ErrMissingDependencyField    = errors.New("dependency missing required field")
-	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
+	ErrUnsupportedDependencyType   = errors.New("unsupported dependency type")
+	ErrMissingDependencyField      = errors.New("dependency missing required field")
+	ErrDependencyTargetNotFound    = errors.New("dependency target not found")
+	ErrDependencyTargetUnavailable = errors.New("dependency target unavailable")
 	// ErrCustomCommandDependencyNotRegistered is returned when a dependencies.commands entry
 	// names a command that isn't registered under the custom-command cobra tree.
 	ErrCustomCommandDependencyNotRegistered = errors.New("dependency command is not registered")
@@ -1673,6 +1686,21 @@ var (
 	ErrGitHubAuthorization = errors.New("GitHub authorization failed")
 	// ErrPullRequestReconciliation indicates Atmos could not reconcile an existing or new PR.
 	ErrPullRequestReconciliation = errors.New("pull request reconciliation failed")
+	// ErrAzureDevOpsTokenNotFound indicates AZURE_DEVOPS_EXT_PAT is not set.
+	ErrAzureDevOpsTokenNotFound = errors.New("Azure DevOps personal access token not found")
+	// ErrAzureDevOpsAuthorization indicates an authentication or permission failure from the Azure DevOps API.
+	ErrAzureDevOpsAuthorization = errors.New("Azure DevOps authorization failed")
+	// ErrAzureDevOpsAssigneesUnsupported indicates Azure DevOps pull requests do not support assignees.
+	ErrAzureDevOpsAssigneesUnsupported = errors.New("Azure DevOps pull requests do not support assignees")
+	// ErrAzureDevOpsNamespaceInvalid indicates PullRequestOptions.Namespace was not exactly the
+	// single project segment Azure DevOps' organization/project/repository addressing requires.
+	ErrAzureDevOpsNamespaceInvalid = errors.New("Azure DevOps pull request namespace must be exactly one project segment")
+	// ErrAzureDevOpsReviewerNotFound indicates a configured reviewer's display name, account name,
+	// or email matched no Azure DevOps identity.
+	ErrAzureDevOpsReviewerNotFound = errors.New("Azure DevOps reviewer identity not found")
+	// ErrAzureDevOpsReviewerAmbiguous indicates a configured reviewer's display name, account name,
+	// or email matched more than one Azure DevOps identity.
+	ErrAzureDevOpsReviewerAmbiguous = errors.New("Azure DevOps reviewer identity is ambiguous")
 	// ErrGitFetchFailed indicates `git fetch` of a base or feature branch failed.
 	ErrGitFetchFailed = errors.New("git fetch failed")
 	// ErrGitCheckoutFailed indicates `git checkout` of a feature branch failed.

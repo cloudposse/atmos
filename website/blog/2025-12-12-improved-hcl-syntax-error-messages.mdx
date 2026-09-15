@@ -53,11 +53,13 @@ The new error message includes:
 
 - **The actual HCL parsing error** from the Terraform parser
 - **The exact file and line number** where the error occurred
-- **A copy-pasteable command** to run `atmos terraform validate` for more details
+- **A copy-pasteable command** to run [`atmos terraform validate`](/cli/commands/terraform/validate) for more details
 
 ## Why This Matters
 
 HCL syntax errors are easy to make—a mismatched bracket, a typo in a block name, or a missing quote. When these errors produce misleading messages, developers waste time looking in the wrong places. Now you'll know immediately that the issue is in your Terraform code and exactly where to look.
+
+For usage and configuration, see [Error Handling & Monitoring](/cli/configuration/errors).
 
 ## Get Involved
 

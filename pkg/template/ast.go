@@ -12,6 +12,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// templateOpenDelim is the default Go-template opening delimiter, used as a cheap pre-check
+// before parsing: a string containing none of it cannot possibly hold a template action.
+const templateOpenDelim = "{{"
+
 // FieldRef represents a reference to a field in a template (e.g., .locals.foo).
 type FieldRef struct {
 	Path []string // e.g., ["locals", "foo"] for .locals.foo
@@ -31,7 +35,7 @@ func ExtractFieldRefs(templateStr string) ([]FieldRef, error) {
 	defer perf.Track(nil, "template.ExtractFieldRefs")()
 
 	// Quick check - if no template delimiters, no refs possible.
-	if !strings.Contains(templateStr, "{{") {
+	if !strings.Contains(templateStr, templateOpenDelim) {
 		return nil, nil
 	}
 
@@ -174,7 +178,7 @@ func HasTemplateActions(str string) (bool, error) {
 	defer perf.Track(nil, "template.HasTemplateActions")()
 
 	// Quick check - if no template delimiters, no actions possible.
-	if !strings.Contains(str, "{{") {
+	if !strings.Contains(str, templateOpenDelim) {
 		return false, nil
 	}
 
@@ -231,7 +235,7 @@ func ExtractAllFieldRefsByPrefix(templateStr string, prefix string) ([]string, e
 func ExtractPlainFieldRef(templateStr string) (FieldRef, bool, error) {
 	defer perf.Track(nil, "template.ExtractPlainFieldRef")()
 
-	if !strings.Contains(templateStr, "{{") {
+	if !strings.Contains(templateStr, templateOpenDelim) {
 		return FieldRef{}, false, nil
 	}
 
@@ -287,6 +291,76 @@ func fieldRefFromAction(action *parse.ActionNode) (FieldRef, bool) {
 	}
 
 	return FieldRef{Path: field.Ident}, true
+}
+
+// HasDynamicScope reports whether a template contains a `range` or `with` action, either of
+// which rebinds "." to something other than the template's root data for the body it encloses.
+// Field references found inside such a body (e.g. `.name` inside
+// `{{ range .vars.list }}{{ .name }}{{ end }}`) are NOT relative to the template's root, so a
+// caller using ExtractFieldRefs to statically determine which root-level fields a template
+// touches (see pkg/list/column.RequiredSections) must treat any template containing dynamic
+// scope as unresolvable rather than misattributing those inner references to the root.
+func HasDynamicScope(templateStr string) (bool, error) {
+	defer perf.Track(nil, "template.HasDynamicScope")()
+
+	if !strings.Contains(templateStr, templateOpenDelim) {
+		return false, nil
+	}
+
+	tmpl, err := template.New("").Parse(templateStr)
+	if err != nil {
+		return false, err
+	}
+
+	tree := tmpl.Tree
+	if tree == nil || tree.Root == nil {
+		return false, nil
+	}
+
+	dynamic := false
+	walkAST(tree.Root, func(node parse.Node) {
+		switch node.(type) {
+		case *parse.RangeNode, *parse.WithNode:
+			dynamic = true
+		}
+	})
+
+	return dynamic, nil
+}
+
+// HasRootReference reports whether a template contains a bare "." action (*parse.DotNode) --
+// e.g. "{{ . }}" or "{{ printf "%v" . }}" -- which accesses the entire root data value rather
+// than a specific named field. ExtractFieldRefs only records *parse.FieldNode matches, so a
+// template consisting solely of "{{ . }}" yields zero field references even though it exposes
+// every field of the root, including ones no FieldNode ever names. Callers like
+// pkg/list/column.RequiredSections that statically enumerate which root-level fields a template
+// touches must treat any such reference as unresolvable rather than silently recording it as
+// touching nothing.
+func HasRootReference(templateStr string) (bool, error) {
+	defer perf.Track(nil, "template.HasRootReference")()
+
+	if !strings.Contains(templateStr, templateOpenDelim) {
+		return false, nil
+	}
+
+	tmpl, err := template.New("").Parse(templateStr)
+	if err != nil {
+		return false, err
+	}
+
+	tree := tmpl.Tree
+	if tree == nil || tree.Root == nil {
+		return false, nil
+	}
+
+	root := false
+	walkAST(tree.Root, func(node parse.Node) {
+		if _, ok := node.(*parse.DotNode); ok {
+			root = true
+		}
+	})
+
+	return root, nil
 }
 
 // LookupFieldPath resolves a field path against map-like data.

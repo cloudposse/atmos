@@ -113,7 +113,7 @@ const (
 	// Tags returns the current component's own metadata.tags as a list.
 	Tags = "tags"
 
-	// Labels returns the current component's own metadata.labels as a map.
+	// Labels returns the current component's own metadata.labels as a map, or a single label with an optional fallback.
 	Labels = "labels"
 
 	// LabelsKeys returns the current component's own metadata.labels keys as a sorted list.

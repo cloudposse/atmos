@@ -4,23 +4,25 @@ slug: store-identity-support
 title: "Identity-Based Authentication for Stores"
 authors: [aknysh]
 tags: [feature]
+cast: "/casts/examples/auth-stores/identity-backed-stores.cast"
+castTitle: "atmos auth-backed stores"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
-Atmos stores now support identity-based authentication. You can configure stores to authenticate using the same named identities from `atmos auth` instead of relying on default credential chains.
+Atmos stores now support identity-based authentication. You can configure stores to authenticate using the same named identities from [`atmos auth`](/cli/commands/auth/usage) instead of relying on default credential chains.
 
 <!--truncate-->
 
 See it in action:
 
-<CastPlayer src="/casts/examples/auth-stores/identity-backed-stores.cast" title="atmos auth-backed stores" chrome controls scrubber />
+<CastEmbed src="/casts/examples/auth-stores/identity-backed-stores.cast" title="atmos auth-backed stores" chrome controls scrubber />
 
 [View the full example](/examples/auth-stores)
 
 ## What Changed
 
-Stores (`!store` YAML function) can now reference an Atmos auth identity via a new `identity` field in the store configuration. When set, the store uses that identity's credentials instead of the default credential chain (environment variables, default AWS profiles, etc.).
+Stores ([`!store`](/functions/yaml/store) YAML function) can now reference an Atmos auth identity via a new `identity` field in the store configuration. When set, the store uses that identity's credentials instead of the default credential chain (environment variables, default AWS profiles, etc.).
 
 ```yaml
 stores:
@@ -76,6 +78,8 @@ stores:
 ```
 
 Stores without the `identity` field continue to work exactly as before -- this is a fully backward-compatible change.
+
+For usage and configuration, see [Stores Configuration](/cli/configuration/stores).
 
 ## Get Involved
 

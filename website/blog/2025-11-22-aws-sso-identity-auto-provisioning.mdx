@@ -20,7 +20,7 @@ One of Atmos's core design principles is **zero-configuration**: the tool should
 
 Previously, if you had access to 50 AWS accounts with multiple permission sets each, you'd need to manually configure hundreds of identity entries in your `atmos.yaml`. This was tedious, error-prone, and a barrier to adoption.
 
-Now, you authenticate once with `atmos auth login --provider {provider}`, and Atmos automatically discovers and provisions all available permission sets as identities. You can immediately use any role without touching configuration files.
+Now, you authenticate once with [`atmos auth login --provider {provider}`](/cli/commands/auth/login), and Atmos automatically discovers and provisions all available permission sets as identities. You can immediately use any role without touching configuration files.
 
 ## Why This Matters
 
@@ -76,7 +76,7 @@ Auto-provisioning follows a two-phase design:
 5. Identities are written to `~/.cache/atmos/auth/sso-prod/provisioned-identities.yaml`
 
 **Phase 2: Config Loading**
-1. User runs any Atmos command: `atmos terraform plan`
+1. User runs any Atmos command: [`atmos terraform plan`](/cli/commands/terraform/plan)
 2. Config loader automatically imports provisioned identity files
 3. Provisioned imports are loaded FIRST (manual config takes precedence)
 4. All identities (manual + provisioned) are available
@@ -118,7 +118,7 @@ auth:
 
 ### Viewing Provisioned Identities
 
-Use `atmos auth list` to see all identities, including provisioned ones:
+Use [`atmos auth list`](/cli/commands/auth/list) to see all identities, including provisioned ones:
 
 ```bash
 atmos auth list

@@ -83,7 +83,7 @@ The `profiles.default` setting removes a second papercut: teams that always use 
 
 ### Generic fallback for all auth commands
 
-The identity-specific suggestion above needs a name to search on. That misses a more common case: you run `atmos auth login` (no `--identity`, no `--profile`) in a repo whose entire auth config lives in profiles. The base `atmos.yaml` has neither `auth.identities` nor `auth.providers`, and the old behavior was a flat `no providers available` — with no hint that the answer lived one flag away.
+The identity-specific suggestion above needs a name to search on. That misses a more common case: you run [`atmos auth login`](/cli/commands/auth/login) (no `--identity`, no `--profile`) in a repo whose entire auth config lives in profiles. The base `atmos.yaml` has neither `auth.identities` nor `auth.providers`, and the old behavior was a flat `no providers available` — with no hint that the answer lived one flag away.
 
 Now every identity-dependent auth command (`auth login`, `auth exec`, `auth shell`, `auth env`, `auth console`, `auth whoami`) checks for profiles with auth config when it hits "no identities / no providers / no default" and offers the same switch:
 

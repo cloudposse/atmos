@@ -37,7 +37,7 @@ with your infrastructure workflows.
 
 ### Getting Started
 
-When you run `atmos toolchain list` without a `.tool-versions` file, Atmos provides helpful guidance:
+When you run [`atmos toolchain list`](/cli/commands/toolchain/list) without a `.tool-versions` file, Atmos provides helpful guidance:
 
 ```
 # No Configuration Found
@@ -263,7 +263,7 @@ The toolchain includes safety features for robust operation:
 - **Version pinning**: `.tool-versions` ensures consistent tool versions across environments
 - **Error handling**: Graceful fallbacks for missing files or network issues
 - **Helpful messages**: Clear guidance when configuration is missing or tools aren't found
-- **Clean uninstall**: `atmos toolchain clean` removes unused tool versions
+- **Clean uninstall**: [`atmos toolchain clean`](/cli/commands/toolchain/clean) removes unused tool versions
 - **Cross-platform**: Works consistently on Linux, macOS, and Windows
 
 ## Benefits Over Traditional Tool Managers
@@ -406,3 +406,5 @@ We're continually improving the toolchain experience. Planned enhancements inclu
 - **Performance optimizations**: Parallel downloads and improved caching
 
 We'd love your feedback! Try the toolchain commands and let us know what you think.
+
+For usage and configuration, see [atmos toolchain](/cli/commands/toolchain/usage).
