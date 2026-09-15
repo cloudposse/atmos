@@ -38,7 +38,7 @@ const (
 // var would freeze NoColor at init(), before TTY detection runs).
 // Matches the colour used by `atmos auth list`.
 func styledActiveDot() string {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(activeMarker)
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).Render(activeMarker)
 }
 
 // RenderTable renders profiles as a formatted table. Profiles in activeProfiles
