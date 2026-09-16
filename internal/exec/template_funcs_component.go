@@ -56,6 +56,7 @@ func componentFunc(
 	component string,
 	stack string,
 ) (any, error) {
+	maskOnly := configAndStacksInfo != nil && configAndStacksInfo.SecretsMaskOnly
 	functionName := fmt.Sprintf("atmos.Component(%s, %s)", component, stack)
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
@@ -71,8 +72,12 @@ func componentFunc(
 		return emptyComponentSections(), nil
 	}
 
-	// If the result for the component in the stack already exists in the cache, return it
-	existingSections, found := componentFuncSyncMap.Load(stackSlug)
+	// Inspection must neither consume resolved secrets nor cache display placeholders.
+	var existingSections any
+	var found bool
+	if !maskOnly {
+		existingSections, found = componentFuncSyncMap.Load(stackSlug)
+	}
 	if found && existingSections != nil {
 		log.Debug("Cache hit for template function", "function", functionName)
 
@@ -96,6 +101,8 @@ func componentFunc(
 	resolvedAuthMgr := resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
 
 	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		AtmosConfig:          atmosConfig,
+		ResolveSecrets:       !maskOnly,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
@@ -142,7 +149,9 @@ func componentFunc(
 	}
 
 	// Cache the result
-	componentFuncSyncMap.Store(stackSlug, sections)
+	if !maskOnly {
+		componentFuncSyncMap.Store(stackSlug, sections)
+	}
 
 	log.Debug("Executed template function", "function", functionName)
 
