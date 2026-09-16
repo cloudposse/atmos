@@ -574,7 +574,9 @@ func TestDeliverApply_AutoProvisionFailure_AbortsBeforeUpload(t *testing.T) {
 	backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI { return s3Client })
 
 	ctrl := gomock.NewController(t)
-	client := NewMockCloudFormationClient(ctrl) // no expectations: any call fails the test.
+	client := NewMockCloudFormationClient(ctrl)  // no expectations: any call fails the test.
+	mockBackend := artifact.NewMockBackend(ctrl) // no expectations: Upload must never run.
+	stubNewS3Backend(t, mockBackend, nil)
 
 	octx := &opContext{
 		Ctx:         context.Background(),
