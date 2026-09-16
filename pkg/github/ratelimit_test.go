@@ -274,7 +274,7 @@ func TestWaitForRateLimit_SufficientRemaining_ViaMock(t *testing.T) {
 	ctx := context.Background()
 
 	// With a very low threshold, we should not need to wait.
-	err := WaitForRateLimit(ctx, 0)
+	err := WaitForRateLimit(ctx, 5)
 	assert.NoError(t, err)
 }
 
@@ -286,7 +286,7 @@ func TestShouldWaitForRateLimit_ViaMock(t *testing.T) {
 	ctx := context.Background()
 
 	// With threshold of 0, should never need to wait.
-	shouldWait := ShouldWaitForRateLimit(ctx, 0)
+	shouldWait := ShouldWaitForRateLimit(ctx, 5)
 	assert.False(t, shouldWait)
 }
 
