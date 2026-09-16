@@ -59,6 +59,8 @@ jobs:
             github.com:443
             sts.us-east-2.amazonaws.com:443
             *.actions.githubusercontent.com:443
+            proxy.golang.org:443
+            storage.googleapis.com:443
             cplive-plat-ue2-dev-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
             cloudfront.amazonaws.com:443
 
@@ -76,6 +78,12 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
 
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials

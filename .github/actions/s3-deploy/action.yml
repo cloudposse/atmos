@@ -40,11 +40,10 @@ runs:
     - name: Incrementally sync to S3
       shell: bash
       env:
-        DEPLOY_SCRIPT: ${{ github.action_path }}/deploy.sh
         LOCAL_DIR: ${{ inputs.local-dir }}
         S3_URI: ${{ inputs.s3-uri }}
         PROTECTED_PATTERNS: ${{ inputs.protected-patterns }}
-      run: '"$DEPLOY_SCRIPT" "$LOCAL_DIR" "$S3_URI"'
+      run: go tool mage s3:deploy "$LOCAL_DIR" "$S3_URI"
 
     # Fire-and-forget: invalidation typically completes in under a minute and
     # there's no need to block the job on it.
