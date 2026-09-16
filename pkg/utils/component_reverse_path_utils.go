@@ -259,6 +259,18 @@ func tryExtractComponentType(
 		return nil, err
 	}
 
+	// Guard against a degenerate base path. When componentType's base_path was never
+	// configured (and no dedicated env var override is set), its resolved base path collapses to
+	// the project's own root (see componentTypeHasExplicitBasePath). Matching against that would
+	// misclassify every path in the project as a component of this type, so treat it as
+	// "not configured" instead of a match.
+	if !componentTypeHasExplicitBasePath(atmosConfig, componentType) {
+		projectBasePath, projErr := ResolveAndCleanBasePath(atmosConfig.BasePath)
+		if projErr == nil && basePath == projectBasePath {
+			return nil, fmt.Errorf("%w: %s", errUtils.ErrPathNotWithinComponentBase, componentType)
+		}
+	}
+
 	// Compute relative path and validate it's within base path.
 	relPath, err := validatePathWithinBase(absPath, basePath, componentType)
 	if err != nil {

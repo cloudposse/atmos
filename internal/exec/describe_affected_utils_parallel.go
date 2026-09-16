@@ -237,5 +237,25 @@ func processStackAffected(
 		affected = append(affected, helmAffected...)
 	}
 
+	// Process aws/cloudformation components.
+	if cloudFormationSection, ok := componentsSection[cfg.CloudFormationComponentType].(map[string]any); ok {
+		cloudFormationAffected, err := processCloudFormationComponentsIndexed(
+			stackName,
+			cloudFormationSection,
+			remoteStacks,
+			currentStacks,
+			atmosConfig,
+			filesIndex,
+			patternCache,
+			includeSpaceliftAdminStacks,
+			includeSettings,
+			excludeLocked,
+		)
+		if err != nil {
+			return nil, err
+		}
+		affected = append(affected, cloudFormationAffected...)
+	}
+
 	return affected, nil
 }
