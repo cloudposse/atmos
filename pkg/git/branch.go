@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -119,12 +120,30 @@ func GitHubRepository(ctx context.Context, workdir, remote string) (string, stri
 	return owner, repo, nil
 }
 
+// githubRepositoryPath extracts the "owner/repo" path from a GitHub (or GitHub Enterprise
+// Server) remote URL. The GHES host is resolved from RepoEndpoints (GITHUB_SERVER_URL), since
+// this is a user-repository concern (their PR-publishing remote).
 func githubRepositoryPath(remoteURL string) (string, bool) {
 	if strings.HasPrefix(remoteURL, "git@github.com:") {
 		return strings.TrimPrefix(remoteURL, "git@github.com:"), true
 	}
+	endpoints := ghtoken.RepoEndpoints()
+	// SCP-style remotes (git@host:org/repo.git) carry no port of their own, so the comparison
+	// here must use the portless hostname rather than endpoints.Host, which keeps a
+	// non-default port (e.g. "ghe.example.com:8443") -- otherwise this prefix could never
+	// match a GHES remote configured on a non-default port.
+	repoHostname := endpoints.Hostname()
+	if scpPrefix := "git@" + repoHostname + ":"; repoHostname != "github.com" && strings.HasPrefix(remoteURL, scpPrefix) {
+		return strings.TrimPrefix(remoteURL, scpPrefix), true
+	}
 	parsed, err := url.Parse(remoteURL)
-	if err != nil || !strings.EqualFold(parsed.Hostname(), "github.com") {
+	if err != nil {
+		return "", false
+	}
+	// URL-style remotes do carry their own port (parsed.Host), so the full authority is
+	// compared against endpoints.Host (via IsHost) rather than the portless hostname.
+	host := strings.ToLower(parsed.Host)
+	if host != "github.com" && !endpoints.IsHost(host) {
 		return "", false
 	}
 	return strings.TrimPrefix(parsed.Path, "/"), true
