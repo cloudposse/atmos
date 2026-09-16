@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -13,8 +12,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	iolib "github.com/cloudposse/atmos/pkg/io"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
@@ -117,33 +114,11 @@ func executeVendorModel(
 	opts install.InstallOptions,
 	atmosConfig *schema.AtmosConfiguration,
 ) error {
-	if len(packages) == 0 {
+	if opts.Collect != nil {
+		*opts.Collect = append(*opts.Collect, packages...)
 		return nil
 	}
-
-	model, err := newModelVendor(packages, opts.DryRun, atmosConfig)
-	if err != nil {
-		return fmt.Errorf("%w: %v (verify terminal capabilities and permissions)", errUtils.ErrTUIModel, err)
-	}
-
-	progOpts := []tea.ProgramOption{tea.WithOutput(iolib.MaskWriter(os.Stdout))}
-	if !term.IsTTYSupportForStdout() {
-		progOpts = append(progOpts, tea.WithoutRenderer(), tea.WithInput(nil))
-		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
-	} else if !terminal.HasRealTTYInput() {
-		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
-		// but don't let bubbletea open /dev/tty for input — there isn't one.
-		progOpts = append(progOpts, tea.WithInput(nil))
-	}
-
-	if _, err := tea.NewProgram(&model, progOpts...).Run(); err != nil {
-		return fmt.Errorf("execution failed: %w", err)
-	}
-
-	if model.failedPkg > 0 {
-		return vendorFailureError(model.failedPkg, len(model.packages), model.failedPkgNames)
-	}
-	return nil
+	return ExecuteVendorPackages(opts.Context, atmosConfig, packages, opts)
 }
 
 // vendorFailureError builds a descriptive error listing the names of the

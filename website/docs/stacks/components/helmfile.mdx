@@ -130,6 +130,8 @@ Define defaults for all Helmfile components:
 ```yaml
 # Apply to all Helmfile components
 helmfile:
+  plugins:
+    - diff@v3.15.10
   vars:
     timeout: 600
     atomic: true
@@ -145,6 +147,16 @@ components:
       vars:
         chart_version: "4.7.1"
 ```
+
+Helm CLI `plugins` are inherited in increasing precedence: top-level `helmfile.plugins`,
+base components from `metadata.inherits`, then the component's own `plugins`.
+This also works when defaults are defined in an imported stack file.
+
+Lists follow the effective `settings.list_merge_strategy` (default: `replace`).
+With `replace`, a component's plugin list replaces the inherited list, and `plugins: []`
+clears it. Use `append` to combine the lists; `merge` uses the existing element-wise
+list merge behavior. Atmos installs the resolved plugins before running Helmfile.
+See [`atmos helm plugin`](/cli/commands/helm/plugin) for plugin spec syntax.
 
 ## Complete Example
 
