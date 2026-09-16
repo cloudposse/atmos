@@ -1,0 +1,75 @@
+---
+title: atmos aws cloudformation stackset instances
+sidebar_label: instances
+sidebar_class_name: command
+id: instances
+description: List a StackSet's stack instances.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  List a CloudFormation StackSet's stack instances (`ListStackInstances`) —
+  each instance's account, region, status, and stack ID.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation stackset instances --help" src="/casts/screengrabs/atmos-aws-cloudformation-stackset-instances--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation stackset instances <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation stackset instances vpc -s plat-ue2-dev
+```
+
+List instances for all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation stackset instances --all -s plat-ue2-dev
+atmos aws cloudformation stackset instances --affected --base origin/main
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>List instances for all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>List instances for affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+## Output
+
+If the StackSet has no instances, `stackset instances` prints a single line
+saying so. Otherwise, each line shows the instance's account, region, status,
+and stack ID.
+
+`stackset instances` acts directly on the StackSet whose name matches the
+component's `stack_name` — it takes no `--target` flag and does not need a
+`kind: aws/stackset` provision target declared.
+
+:::note
+`stackset instances` does not fire `before`/`after` hook events — only
+[`apply`](/cli/commands/aws/cloudformation/apply),
+[`diff`](/cli/commands/aws/cloudformation/diff), and
+[`delete`](/cli/commands/aws/cloudformation/delete) do.
+:::

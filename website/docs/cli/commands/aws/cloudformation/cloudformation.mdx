@@ -54,7 +54,15 @@ atmos aws cloudformation drift describe <component> --stack <stack>
 atmos aws cloudformation get template <component> --stack <stack>
 atmos aws cloudformation get policy <component> --stack <stack>
 
+atmos aws cloudformation stackset create <component> --stack <stack>
+atmos aws cloudformation stackset update <component> --stack <stack>
+atmos aws cloudformation stackset delete <component> --stack <stack>
+atmos aws cloudformation stackset instances <component> --stack <stack>
+
 atmos aws cloudformation fmt <component> --stack <stack>
+atmos aws cloudformation tree <component> --stack <stack>
+atmos aws cloudformation logs <component> --stack <stack>
+atmos aws cloudformation watch <component> --stack <stack>
 atmos aws cloudformation list --stack <stack>
 
 atmos aws cloudformation source pull <component> --stack <stack>
