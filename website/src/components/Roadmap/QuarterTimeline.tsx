@@ -46,11 +46,13 @@ const statusConfig = {
   },
 };
 
+/** Center the current quarter and let readers inspect milestones grouped by initiative. */
 export default function QuarterTimeline({
   quarters,
   initiatives = [],
 }: QuarterTimelineProps): JSX.Element {
   const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null);
+  const currentQuarterRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -67,6 +69,11 @@ export default function QuarterTimeline({
   };
 
   useEffect(() => {
+    const container = scrollContainerRef.current;
+    const current = currentQuarterRef.current;
+    if (container && current) {
+      container.scrollLeft = current.offsetLeft - container.offsetLeft - (container.clientWidth - current.offsetWidth) / 2;
+    }
     checkScroll();
     window.addEventListener('resize', checkScroll);
     return () => window.removeEventListener('resize', checkScroll);
@@ -153,12 +160,10 @@ export default function QuarterTimeline({
 
               return (
                 <React.Fragment key={quarter.id}>
-                  <motion.button
+                  <button
+                    ref={quarter.status === 'current' ? currentQuarterRef : undefined}
+                    type="button"
                     className={`${styles.quarterNode} ${styles[config.className]} ${isSelected ? styles.quarterSelected : ''}`}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.4, delay: index * 0.1 }}
                     onClick={() => setSelectedQuarter(isSelected ? null : quarter.id)}
                     aria-expanded={isSelected}
                     aria-label={`${quarter.label}: ${milestoneCount} milestones`}
@@ -170,7 +175,7 @@ export default function QuarterTimeline({
                     {milestoneCount > 0 && (
                       <span className={styles.quarterMilestoneCount}>{milestoneCount}</span>
                     )}
-                  </motion.button>
+                  </button>
                   {!isLast && (
                     <div
                       className={`${styles.quarterConnector} ${
@@ -228,16 +233,11 @@ export default function QuarterTimeline({
                   {Object.entries(milestonesByInitiative).map(([initiativeId, group]) => (
                     <div key={initiativeId} className={styles.quarterDetailInitiativeGroup}>
                       <h4 className={styles.quarterDetailInitiativeTitle}>{group.name}</h4>
-                      <ul className={styles.quarterDetailMilestoneList}>
+                      <ul className={styles.quarterDetailMilestoneList} role="list">
                         {group.milestones.map((milestone, idx) => {
-                          const statusDotClass = {
-                            shipped: styles.quarterDetailStatusDotShipped,
-                            'in-progress': styles.quarterDetailStatusDotInProgress,
-                            planned: styles.quarterDetailStatusDotPlanned,
-                          }[milestone.status];
                           return (
                           <li key={idx} className={styles.quarterDetailMilestoneItem}>
-                            <span className={`${styles.quarterDetailStatusDot} ${statusDotClass}`} />
+                            <span className={styles.srOnly}>{milestone.status.replace('-', ' ')}: </span>
                             {milestone.changelog ? (
                               <Link
                                 to={`/changelog/${milestone.changelog}`}
