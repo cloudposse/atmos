@@ -113,7 +113,7 @@ func processTagTerraformOutputWithContext(
 		}
 	}
 
-	value, exists, err := outputGetter.GetOutput(atmosConfig, stack, component, output, false, authContext, authManager)
+	value, exists, err := outputGetter.GetOutput(atmosConfig, stack, component, output, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
 	if err != nil {
 		// Only use YQ defaults for recoverable terraform errors (state not provisioned, output not found).
 		// Non-recoverable errors (API failures, auth errors, infrastructure issues) should fail hard.
