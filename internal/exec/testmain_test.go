@@ -65,6 +65,9 @@ func TestMain(m *testing.M) {
 		ui.InitFormatter(ioCtx)
 	}
 
+	if os.Getenv("_ATMOS_TEST_SECRET_PLAN") == "1" {
+		os.Exit(runSecretPlanForTest())
+	}
 	if os.Getenv(testEnvFakeTerraform) == "1" {
 		os.Exit(runFakeTerraformForTest())
 	}
