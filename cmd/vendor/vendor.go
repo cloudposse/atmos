@@ -8,6 +8,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/vendoring/concurrency"
 )
 
 var vendorPullParser *flags.StandardParser
@@ -57,6 +58,8 @@ func init() {
 	// Set up vendor pull flags. Registered via Flags() (not PersistentFlags()): vendorPullCmd has
 	// no subcommands of its own, so persistent inheritance was never needed here.
 	vendorPullParser = flags.NewStandardParser(
+		flags.WithIntFlag(concurrency.Flag, "", 0, "Maximum concurrent preparations or version checks (edition default: 4; earlier editions: 1)"),
+		flags.WithEnvVars(concurrency.Flag, concurrency.Env),
 		flags.WithStringSliceFlag("component", "c", []string{}, "Only vendor the specified component (accepts a single value; repeating the flag is an error)"),
 		flags.WithStringFlag("stack", "s", "", "Only vendor components belonging to the specified stack"),
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),

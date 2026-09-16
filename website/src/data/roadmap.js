@@ -463,9 +463,10 @@ export const roadmapConfig = {
       tagline: 'Purpose-built engine with retry and resilience',
       description:
         'Terraform users expect to declare module sources inline. The source provisioner brings this pattern to stack configuration—declare where components come from and let vendoring handle the rest with retries, concurrency, and graceful failure recovery.',
-      progress: 94,
+      progress: 100,
       status: 'in-progress',
       milestones: [
+        { label: 'Concurrent vendoring with ordered writes', status: 'shipped', quarter: 'q3-2026', changelog: 'concurrent-vendoring', docs: '/cli/configuration/vendor#concurrency', prd: 'concurrent-vendoring', description: 'Bounded concurrent downloads and upstream checks share toolchain-style progress. Destination writes and receipts remain ordered, and older edition pins retain one worker.', benefits: 'Fetch independent components faster while retaining reproducible destination contents and a readable terminal.' },
         { label: 'Retry with exponential backoff', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/vendor/vendor-pull', description: 'Automatic retries with increasing delays for transient network failures and rate limits.', category: 'featured', priority: 'high', benefits: 'Vendoring succeeds despite flaky networks or GitHub rate limits. CI doesn\'t fail on transient errors.' },
         { label: 'Version constraints for vendor updates', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/vendor', changelog: 'version-constraint-validation', version: 'v1.201.0', description: 'Semantic versioning constraints to control which versions are pulled during vendor updates.', benefits: 'Control upgrade behavior. Pin to major versions or allow patches automatically.' },
         { label: 'Vendor pull `--stack` flag', status: 'shipped', quarter: 'q3-2026', pr: 1889, changelog: 'vendor-stack-flag', description: 'atmos vendor pull --stack <stack> vendors every component in the stack that declares its own component.yaml, without touching vendor.yaml.', benefits: 'Vendor all component.yaml-declared components for a specific stack with one command. No need to vendor components individually.' },

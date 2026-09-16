@@ -10,12 +10,12 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/batch"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -547,6 +547,7 @@ type downloadProgress struct {
 }
 
 type activeInstall struct {
+	id int
 	toolInfo
 	downloadProgress
 	phase string
@@ -556,108 +557,81 @@ type activeInstall struct {
 // result-toast style while reserving a small, redrawn area for active spinners.
 // Worker goroutines never touch the terminal.
 type batchRenderer struct {
-	spinner       bspinner.Model
-	progressBar   progress.Model
-	active        []activeInstall
-	completed     int
-	total         int
-	renderedLines int
+	display *batch.Renderer
+	active  []activeInstall
+	total   int
+	nextID  int
 }
 
 // newBatchRenderer creates the themed display for concurrent tool downloads and installation progress.
 func newBatchRenderer(total int) *batchRenderer {
-	spinner := ui.NewSpinner()
+	return &batchRenderer{total: total, display: batch.New(total, true, batch.WithToolchainStyle())}
+}
 
-	styles := theme.GetCurrentStyles()
-	spinner.Style = styles.Spinner
-	return &batchRenderer{
-		spinner:     spinner,
-		progressBar: ui.NewProgress(),
-		total:       total,
+func (r *batchRenderer) ensureDisplay() {
+	if r.display == nil {
+		r.display = batch.New(r.total, true, batch.WithToolchainStyle())
 	}
 }
 
 func (r *batchRenderer) start(tool toolInfo) {
-	r.clear()
-	r.active = append(r.active, activeInstall{toolInfo: tool, downloadProgress: downloadProgress{total: -1}, phase: "Downloading"})
-	r.render()
+	r.ensureDisplay()
+	id := r.nextID
+	r.nextID++
+	r.active = append(r.active, activeInstall{id: id, toolInfo: tool, downloadProgress: downloadProgress{total: -1}, phase: "Downloading"})
+	r.display.Update(&batch.Event{ID: id, Label: fmt.Sprintf("%s/%s@%s", tool.owner, tool.repo, tool.version), Phase: "Downloading"})
 }
 
 func (r *batchRenderer) complete(tool toolInfo, result string, err error) {
-	r.clear()
+	r.ensureDisplay()
 	for i, active := range r.active {
 		if active.toolInfo == tool {
 			r.active = append(r.active[:i], r.active[i+1:]...)
-			break
+			r.display.Complete(active.id, func() { printToolResult(tool, result, err) })
+			return
 		}
 	}
-	r.completed++
-	printToolResult(tool, result, err)
-	r.render()
+	id := r.nextID
+	r.nextID++
+	r.display.Complete(id, func() { printToolResult(tool, result, err) })
 }
 
 func (r *batchRenderer) updateProgress(tool toolInfo, download downloadProgress) {
 	for i := range r.active {
-		if r.active[i].toolInfo == tool {
-			r.active[i].downloadProgress = download
-			if download.total > 0 && download.downloaded >= download.total {
-				r.active[i].phase = "Verifying"
-			}
-			return
+		active := &r.active[i]
+		if active.toolInfo != tool {
+			continue
 		}
+		active.downloadProgress = download
+		oldPhase := active.phase
+		if download.total > 0 && download.downloaded >= download.total {
+			active.phase = "Verifying"
+		}
+		if r.display != nil {
+			if oldPhase != active.phase {
+				r.display.Update(&batch.Event{ID: active.id, Label: fmt.Sprintf("%s/%s@%s", tool.owner, tool.repo, tool.version), Phase: active.phase, Downloaded: download.downloaded, Total: download.total})
+			} else {
+				r.display.Update(&batch.Event{ID: active.id, Bytes: true, Downloaded: download.downloaded, Total: download.total})
+			}
+		}
+		return
 	}
 }
 
 func (r *batchRenderer) tick() {
-	r.clear()
-	updated, _ := r.spinner.Update(bspinner.TickMsg{})
-	r.spinner = updated
-	r.render()
+	if r.display != nil {
+		r.display.Tick()
+	}
 }
 
 func (r *batchRenderer) clear() {
-	if r.renderedLines == 0 {
-		return
-	}
-	ui.Writef("\033[%dA", r.renderedLines)
-	for i := 0; i < r.renderedLines; i++ {
-		ui.Write("\r\033[K")
-		if i < r.renderedLines-1 {
-			ui.Write("\n")
-		}
-	}
-	if r.renderedLines > 1 {
-		ui.Writef("\033[%dA", r.renderedLines-1)
-	}
-	r.renderedLines = 0
-}
-
-func (r *batchRenderer) render() {
-	for _, active := range r.active {
-		left := fmt.Sprintf("%s %s %s/%s@%s", r.spinner.View(), active.phase, active.owner, active.repo, active.version)
-		ui.Writef("%s\n", rightAlignInstallProgress(left, active.downloaded, active.total, getTerminalWidth()))
-		r.renderedLines++
-	}
-	if len(r.active) > 0 {
-		percent := float64(r.completed) / float64(r.total)
-		ui.Writef("%s %d/%d complete, %d running\n", r.progressBar.ViewAs(percent), r.completed, r.total, len(r.active))
-		r.renderedLines++
+	if r.display != nil {
+		r.display.Clear()
 	}
 }
 
 func rightAlignInstallProgress(left string, downloaded, total int64, terminalWidth int) string {
-	if downloaded == 0 && total <= 0 {
-		return left
-	}
-	progress := formatFileSize(downloaded)
-	if total > 0 {
-		progress = fmt.Sprintf("%s/%s", progress, formatFileSize(total))
-	}
-	padding := terminalWidth - lipgloss.Width(left) - lipgloss.Width(progress)
-	if padding < 1 {
-		return left
-	}
-	return left + strings.Repeat(" ", padding) + progress
+	return batch.AlignProgress(left, downloaded, total, terminalWidth)
 }
 
 func installToolListConcurrently(toolList []toolInfo, reinstallFlag, showHint bool, maxConcurrency int) error {

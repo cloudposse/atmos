@@ -21,8 +21,12 @@ atmos vendor clean [--stack <stack>] [--labels <k>=<v>] [--tags <a,b>] [--force]
 ```
 
 By default, `vendor clean` preserves any lock-owned file whose content doesn't match its recorded
-checksum. It refuses to run and names every such file. Pass `--force` to delete them anyway. After
-a successful clean, `vendor clean` drops the removed artifacts from `vendor.lock.yaml`.
+checksum. It refuses to run and names every such file. Pass `--force` to delete them anyway.
+`vendor clean` preserves `vendor.lock.yaml` and all its entries, including recorded versions,
+checksums, and provenance. This also applies to selective cleanup and `--force`. A subsequent
+`vendor pull` reinstalls a fully cleaned package without missing-file drift warnings, using
+the retained lock information. Partially missing or modified files still trigger drift checks; use
+`vendor pull --refresh-lock` when you intend to refresh the lock.
 
 At most one base selector may be given: `--component` or `--stack`/`--labels` (a stack-resolved
 component set, composable with each other, like
