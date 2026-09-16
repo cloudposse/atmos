@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"sort"
 )
 
 // archiveFilePermissions is the mode recorded for every file BuildTarGz/BuildZip write. Tests
@@ -14,16 +15,30 @@ import (
 // unimportant beyond being a plausible regular-file permission.
 const archiveFilePermissions = 0o755
 
+// sortedArchiveNames returns the keys of files in sorted order so BuildTarGz/BuildZip write
+// entries deterministically. Go's map iteration order is randomized, so writing entries in
+// map order would make byte-for-byte comparisons of otherwise-identical archives flaky.
+func sortedArchiveNames(files map[string]string) []string {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // BuildTarGz builds a minimal gzip-compressed tar archive containing files (archive path ->
 // content), suitable for registering as a fake release asset via RegisterReleaseAsset or
 // RegisterArchive. The result is a tiny stand-in for a real tool's release tarball: tests
-// should assert atmos extracted/placed a file at the expected path, never execute it.
+// should assert atmos extracted/placed a file at the expected path, never execute it. Entries
+// are written in sorted name order so identical inputs always produce identical archive bytes.
 func BuildTarGz(files map[string]string) ([]byte, error) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
 
-	for name, content := range files {
+	for _, name := range sortedArchiveNames(files) {
+		content := files[name]
 		header := &tar.Header{
 			Name: name,
 			Mode: archiveFilePermissions,
@@ -48,12 +63,13 @@ func BuildTarGz(files map[string]string) ([]byte, error) {
 
 // BuildZip builds a minimal zip archive containing files (archive path -> content), suitable
 // for registering as a fake release asset via RegisterReleaseAsset. See BuildTarGz for the
-// "never execute the fake binary" caveat.
+// "never execute the fake binary" caveat and the sorted-write-order determinism rationale.
 func BuildZip(files map[string]string) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
-	for name, content := range files {
+	for _, name := range sortedArchiveNames(files) {
+		content := files[name]
 		fw, err := zw.Create(name)
 		if err != nil {
 			return nil, fmt.Errorf("create zip entry %q: %w", name, err)
