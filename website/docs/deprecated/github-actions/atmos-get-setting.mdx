@@ -1,0 +1,28 @@
+---
+title: Get Setting (Deprecated)
+sidebar_position: 25
+sidebar_label: Get Setting
+description: Legacy GitHub Action for extracting settings from Atmos metadata
+---
+import Intro from '@site/src/components/Intro'
+
+:::warning Deprecated
+`cloudposse/github-action-atmos-get-setting` is deprecated. Use [`atmos list settings --query`](/cli/commands/list/settings) to extract a setting across stacks, or [`atmos describe component --query`](/cli/commands/describe/component) to read a single setting from one component/stack, directly in your workflow — no wrapper action needed.
+:::
+
+<Intro>
+The [Atmos Get Setting GitHub Action](https://github.com/cloudposse/github-action-atmos-get-setting) retrieved a single setting, or a group of settings, from Atmos configuration and exposed them as GitHub Action outputs.
+</Intro>
+
+## Native CI Equivalent
+
+```yaml
+- name: Read a setting
+  run: |
+    value=$(atmos describe component vpc -s plat-ue2-prod --query .settings.some_key)
+    echo "value=$value" >> "$GITHUB_OUTPUT"
+```
+
+Use [`--query`](/cli/commands/describe/component) to pull a single value out of a component/stack, or [`atmos list settings --query`](/cli/commands/list/settings) to compare the same setting across every stack in a table.
+
+Discover more details, including the full list of `inputs` and `outputs`, in the [GitHub Action repository](https://github.com/cloudposse/github-action-atmos-get-setting) on GitHub.

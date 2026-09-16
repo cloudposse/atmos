@@ -6,16 +6,26 @@
 package startup
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/version"
 )
+
+// legacyActionDocsURL is the migration hub for every deprecated
+// cloudposse/github-action-atmos-* (and sibling) marketplace action. Unlike
+// https://atmos.tools/ci, this single page fans out to the correct specific
+// replacement for each one — including non-CI topics like `atmos vendor
+// update` for the component updater — so it's accurate regardless of which
+// legacy action triggered the warning.
+const legacyActionDocsURL = "https://atmos.tools/deprecated/github-actions"
 
 // noticesShownEnvVar marks that this process tree has already printed its
 // startup notices, so atmos child processes spawned afterward (workflow and
@@ -81,6 +91,15 @@ func printStatusLines(atmosConfig *schema.AtmosConfiguration) {
 	}
 
 	if repo, ok := github.LegacyActionRepo(); ok {
-		ui.Warningf("Detected legacy action %s; migrate to Native CI for better performance — learn more at https://atmos.tools/ci", repo)
+		msg := fmt.Sprintf("Detected legacy action %s; migrate to Native CI for better performance — learn more at %s", repo, legacyActionDocsURL)
+		ui.Warning(msg)
+
+		// Also surface this as a real GitHub Actions annotation (not just a
+		// console line) so it shows up in the PR Checks/Files UI.
+		_ = github.NewProvider().Annotate([]provider.Annotation{{
+			Level:   provider.AnnotationWarning,
+			Title:   "Deprecated GitHub Action",
+			Message: msg,
+		}})
 	}
 }
