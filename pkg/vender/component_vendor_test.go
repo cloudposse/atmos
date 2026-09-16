@@ -16,6 +16,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
+	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
 
 func TestVendorComponentPullCommand(t *testing.T) {
@@ -57,6 +58,9 @@ func TestVendorComponentPullCommand(t *testing.T) {
 			// Never materialize or delete files in the shared repository fixture.
 			isolatedConfig := atmosConfig
 			isolatedConfig.BasePath = t.TempDir()
+			// InitCliConfig caches the resolved root; move it with the declared root.
+			isolatedConfig.BasePathAbsolute = isolatedConfig.BasePath
+			isolatedConfig.Vendor.LockFile = lockfile.DefaultFileName
 			componentPath := filepath.Join(isolatedConfig.BasePath, "components", "terraform", tc.component)
 			require.NoError(t, os.MkdirAll(componentPath, 0o755))
 			err = e.ExecuteComponentVendorInternal(&isolatedConfig, &componentConfig.Spec, tc.component, componentPath, install.InstallOptions{})
@@ -70,8 +74,31 @@ func TestVendorComponentPullCommand(t *testing.T) {
 			for _, file := range tc.excluded {
 				assert.NoFileExists(t, filepath.Join(componentPath, file))
 			}
+			assertIsolatedComponentReceipt(t, &isolatedConfig, tc.component, tc.included)
 		})
 	}
+}
+
+func assertIsolatedComponentReceipt(t *testing.T, config *schema.AtmosConfiguration, component string, included []string) {
+	t.Helper()
+	expectedPath := filepath.Join(config.BasePath, lockfile.DefaultFileName)
+	require.Equal(t, expectedPath, lockfile.Path(config))
+	require.FileExists(t, expectedPath)
+	receipt, err := lockfile.Load(config)
+	require.NoError(t, err)
+	require.Len(t, receipt.Artifacts, 1)
+	for id := range receipt.Artifacts {
+		assert.Equal(t, component, receipt.Artifacts[id].Name)
+		assert.Equal(t, "components/terraform/"+component, receipt.Artifacts[id].Target)
+		paths := make([]string, 0, len(receipt.Artifacts[id].Files))
+		for _, file := range receipt.Artifacts[id].Files {
+			paths = append(paths, file.Path)
+		}
+		assert.ElementsMatch(t, included, paths, "receipt must own exactly the included files")
+	}
+	drift, err := lockfile.Verify(config, receipt)
+	require.NoError(t, err)
+	assert.Empty(t, drift)
 }
 
 // serveComponentArchive serves a versioned ZIP so the test exercises HTTP fetching,

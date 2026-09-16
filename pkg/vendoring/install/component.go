@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"time"
 
 	cp "github.com/otiai10/copy"
 
@@ -79,8 +78,24 @@ func (p *componentVendorInstaller) install(ctx context.Context, tempDir string, 
 	return p.installComponent(ctx, tempDir, atmosConfig)
 }
 
+func (p *componentVendorInstaller) prepare(ctx context.Context, tempDir string, config *schema.AtmosConfiguration, progress preparationProgress) (*PreparedPackage, error) {
+	if p.mixin {
+		return p.prepareMixin(ctx, tempDir, config, progress)
+	}
+	return p.prepareComponent(ctx, tempDir, config, progress)
+}
+
 func (p *componentVendorInstaller) installComponent(ctx context.Context, tempDir string, atmosConfig *schema.AtmosConfiguration) error {
+	prepared, err := p.prepareComponent(ctx, tempDir, atmosConfig, preparationProgress{})
+	if err != nil {
+		return err
+	}
+	return prepared.Materialize(ctx, atmosConfig)
+}
+
+func (p *componentVendorInstaller) prepareComponent(ctx context.Context, tempDir string, atmosConfig *schema.AtmosConfiguration, progress preparationProgress) (*PreparedPackage, error) {
 	fetchedDir, metadata, err := fetchToTempDir(ctx, atmosConfig, p.srcURI, p.pType, tempDir, fetchOptions{
+		Progress: progress.bytes, OnRetry: progress.retry,
 		ClientMode: downloader.ClientModeAny,
 		// component.yaml's remote sources (unlike vendor.yaml's) join tempDir with the
 		// sanitized source filename before fetching -- installComponent's pre-unification
@@ -90,16 +105,10 @@ func (p *componentVendorInstaller) installComponent(ctx context.Context, tempDir
 		Retry:                 p.retry(),
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if err := vendor.CopyToTarget(fetchedDir, p.componentPath, vendor.CopyOptions{
-		IncludedPaths: p.includedPaths(),
-		ExcludedPaths: p.excludedPaths(),
-	}); err != nil {
-		return fmt.Errorf("%w %s: %w", ErrCopyPackage, p.name, err)
-	}
-
+	progress.preparing()
 	recordOpts := lockfile.RecordOptions{
 		IncludedPaths: p.includedPaths(),
 		ExcludedPaths: p.excludedPaths(),
@@ -116,15 +125,33 @@ func (p *componentVendorInstaller) installComponent(ctx context.Context, tempDir
 		Path:           p.componentPath,
 		DeclaredSource: lockDeclaredSource(p.pType, p.srcURI),
 	}
-	if err := lockfile.Record(ctx, atmosConfig, recordTarget, recordOpts); err != nil {
-		return fmt.Errorf("%w: %w", ErrRecordComponentVendorLock, err)
+	receipt, err := lockfile.PrepareRecord(ctx, atmosConfig, recordTarget, recordOpts)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrRecordComponentVendorLock, err)
 	}
-	return nil
+	return &PreparedPackage{receipt: receipt, copyFiles: func() error {
+		if err := vendor.CopyToTarget(fetchedDir, p.componentPath, vendor.CopyOptions{
+			IncludedPaths: p.includedPaths(),
+			ExcludedPaths: p.excludedPaths(),
+		}); err != nil {
+			return fmt.Errorf("%w %s: %w", ErrCopyPackage, p.name, err)
+		}
+
+		return nil
+	}}, nil
 }
 
 func (p *componentVendorInstaller) installMixin(ctx context.Context, tempDir string, atmosConfig *schema.AtmosConfiguration) error {
+	prepared, err := p.prepareMixin(ctx, tempDir, atmosConfig, preparationProgress{})
+	if err != nil {
+		return err
+	}
+	return prepared.Materialize(ctx, atmosConfig)
+}
+
+func (p *componentVendorInstaller) prepareMixin(ctx context.Context, tempDir string, atmosConfig *schema.AtmosConfiguration, progress preparationProgress) (*PreparedPackage, error) {
 	if p.pType == PkgTypeLocal && p.srcURI == "" {
-		return ErrMixinEmpty
+		return nil, ErrMixinEmpty
 	}
 
 	// A mixin's remote or local fetch writes to tempDir/<mixinFile> (ClientModeFile for remote,
@@ -132,32 +159,16 @@ func (p *componentVendorInstaller) installMixin(ctx context.Context, tempDir str
 	// just fetchToTempDir's returned content root -- is what gets copied to the destination below,
 	// matching the pre-unification installMixin, which always copied from its own top-level tempDir.
 	_, metadata, err := fetchToTempDir(ctx, atmosConfig, p.srcURI, p.pType, tempDir, fetchOptions{
+		Progress: progress.bytes, OnRetry: progress.retry,
 		ClientMode: downloader.ClientModeFile,
 		Target:     filepath.Join(tempDir, p.mixinFile),
 		Retry:      p.retry(),
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	copyOptions := cp.Options{
-		PreserveTimes: false,
-		PreserveOwner: false,
-		OnSymlink:     func(string) cp.SymlinkAction { return cp.Deep },
-		// If the destination already has a .git directory (from a previous vendor run), leave
-		// it untouched to avoid permission errors on git packfiles, which often have
-		// restrictive permissions.
-		OnDirExists: func(src, dest string) cp.DirExistsAction {
-			if filepath.Base(dest) == ".git" {
-				return cp.Untouchable
-			}
-			return cp.Merge
-		},
-	}
-	if err := cp.Copy(tempDir, p.componentPath, copyOptions); err != nil {
-		return fmt.Errorf("%w %s: %w", ErrCopyPackage, p.name, err)
-	}
-
+	progress.preparing()
 	mixinRecordTarget := lockfile.RecordTarget{
 		Kind:           p.pType.String(),
 		Name:           p.name,
@@ -165,22 +176,45 @@ func (p *componentVendorInstaller) installMixin(ctx context.Context, tempDir str
 		Path:           p.componentPath,
 		DeclaredSource: lockDeclaredSource(p.pType, p.srcURI),
 	}
-	if err := lockfile.Record(ctx, atmosConfig, mixinRecordTarget, lockfile.RecordOptions{
+	receipt, err := lockfile.PrepareRecord(ctx, atmosConfig, mixinRecordTarget, lockfile.RecordOptions{
 		Mixin:         true,
 		MixinFilename: p.mixinFile,
 		HTTPMetadata:  metadata,
-	}); err != nil {
-		return fmt.Errorf("%w: %w", ErrRecordMixinVendorLock, err)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrRecordMixinVendorLock, err)
 	}
-	return nil
+	return &PreparedPackage{receipt: receipt, copyFiles: func() error {
+		copyOptions := cp.Options{
+			PreserveTimes: false,
+			PreserveOwner: false,
+			OnSymlink:     func(string) cp.SymlinkAction { return cp.Deep },
+			// If the destination already has a .git directory (from a previous vendor run), leave
+			// it untouched to avoid permission errors on git packfiles, which often have
+			// restrictive permissions.
+			OnDirExists: func(src, dest string) cp.DirExistsAction {
+				if filepath.Base(dest) == ".git" {
+					return cp.Untouchable
+				}
+				return cp.Merge
+			},
+		}
+		if err := cp.Copy(tempDir, p.componentPath, copyOptions); err != nil {
+			return fmt.Errorf("%w %s: %w", ErrCopyPackage, p.name, err)
+		}
+
+		return nil
+	}}, nil
 }
 
-func (p *componentVendorInstaller) dryRunCheck(_ context.Context, atmosConfig *schema.AtmosConfiguration) error {
+func (p *componentVendorInstaller) dryRunCheck(ctx context.Context, atmosConfig *schema.AtmosConfiguration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	log.Debug("Dry-run mode: custom detection required for component (or mixin) URI", "component", p.name, "uri", p.srcURI)
-	if err := detectIfNeeded(atmosConfig, p.srcURI); err != nil {
+	if err := detectIfNeeded(ctx, atmosConfig, p.srcURI); err != nil {
 		return fmt.Errorf("%w for component %s: %w", ErrDryRunDetectionFailed, p.name, err)
 	}
-	time.Sleep(100 * time.Millisecond)
 	return nil
 }
 

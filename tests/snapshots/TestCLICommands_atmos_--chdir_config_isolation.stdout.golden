@@ -106,6 +106,7 @@ describe:
   component:
     filter: schema
 vendor:
+  max_concurrency: 4
   base_path: chdir-isolation-vendor
 initialized: true
 basePathAbsolute: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
