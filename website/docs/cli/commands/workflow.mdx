@@ -97,6 +97,12 @@ Pass `--tags` and `--labels` to apply the existing component selectors to every 
 atmos workflow deploy --tags networking --labels deployment:dev
 ```
 
+Repeat `--labels` to combine multiple selectors across occurrences:
+
+```shell
+atmos workflow deploy --tags networking --labels deployment:dev --labels cost-center:platform
+```
+
 For example, a step with `command: terraform apply --include-dependencies` receives both selectors and lets the Terraform command select the matching components.
 
 ### Inline Script Step
@@ -178,7 +184,7 @@ Run `atmos workflow --help` to see all the available options
   <dd>Component tag selector. Tags match any provided value and are forwarded to every `type: atmos` workflow step.</dd>
 
   <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Component label selector. Labels match all provided key-value pairs and are forwarded to every `type: atmos` workflow step.</dd>
+  <dd>Component label selector. Labels match all provided key-value pairs (comma-separated within one occurrence, and/or repeated for more) and are forwarded to every `type: atmos` workflow step.</dd>
 
   <dt>`--from-step` <em>(optional)</em></dt>
   <dd>Start the workflow from the named step.</dd>
