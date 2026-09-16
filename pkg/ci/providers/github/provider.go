@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/git"
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -107,7 +108,7 @@ func (p *Provider) Context() (*provider.Context, error) {
 
 	// Checkout metadata: honor GITHUB_SERVER_URL so GitHub Enterprise
 	// clone URLs resolve to the right host.
-	ctx.ServerURL = serverURLOrDefault()
+	ctx.ServerURL = ghtoken.RepoEndpoints().ServerURL
 	if ctx.Repository != "" {
 		ctx.CloneURL = ctx.ServerURL + "/" + ctx.Repository + ".git"
 	}
@@ -167,7 +168,7 @@ func parsePRInfo() *provider.PRInfo {
 	}
 
 	repo := os.Getenv("GITHUB_REPOSITORY")
-	serverURL := serverURLOrDefault()
+	serverURL := ghtoken.RepoEndpoints().ServerURL
 
 	var prURL string
 	if prNumber > 0 && repo != "" {
@@ -210,13 +211,4 @@ func init() {
 	// detected one. The client is lazily initialized — GITHUB_TOKEN is not
 	// required at init time.
 	ci.Register(NewProvider())
-}
-
-// serverURLOrDefault returns GITHUB_SERVER_URL, defaulting to github.com.
-// GitHub Enterprise sets this to the enterprise host.
-func serverURLOrDefault() string {
-	if serverURL := os.Getenv("GITHUB_SERVER_URL"); serverURL != "" {
-		return serverURL
-	}
-	return "https://github.com"
 }
