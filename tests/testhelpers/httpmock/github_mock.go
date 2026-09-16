@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -391,4 +392,23 @@ func (g *githubInterceptor) RoundTrip(req *http.Request) (*http.Response, error)
 		return g.base.RoundTrip(newReq)
 	}
 	return g.base.RoundTrip(req)
+}
+
+// IsolatedCacheEnv returns environment entries that point atmos's XDG cache and data
+// directories at a private temp dir for a subprocess driven against this mock. Without it, a
+// subprocess `atmos toolchain install` fetches the mock's aqua registry index and installs the
+// mock's fake release asset into the developer's REAL ~/.cache/atmos/toolchain, poisoning the
+// registry index cache (24h TTL) and the toolchain bin directory for every atmos invocation on
+// that machine until they expire or are removed. Append the result to cmd.Env alongside
+// EnvForSubprocess.
+func IsolatedCacheEnv(t *testing.T) []string {
+	t.Helper()
+
+	root := t.TempDir()
+	return []string{
+		"XDG_CACHE_HOME=" + filepath.Join(root, "cache"),
+		"ATMOS_XDG_CACHE_HOME=" + filepath.Join(root, "cache"),
+		"XDG_DATA_HOME=" + filepath.Join(root, "data"),
+		"ATMOS_XDG_DATA_HOME=" + filepath.Join(root, "data"),
+	}
 }

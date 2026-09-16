@@ -454,6 +454,7 @@ func TestToolchainAquaTools_NonExistentToolError(t *testing.T) {
 	for k, v := range mock.EnvForSubprocess() {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
+	cmd.Env = append(cmd.Env, httpmock.IsolatedCacheEnv(t)...)
 	output, err := cmd.CombinedOutput()
 	outputStr := string(output)
 	plainOutput := ansi.Strip(outputStr)
@@ -504,6 +505,7 @@ func installViaAquaMockJQ(t *testing.T, atmosBinary, version string) ([]byte, er
 	for k, v := range mock.EnvForSubprocess() {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
+	cmd.Env = append(cmd.Env, httpmock.IsolatedCacheEnv(t)...)
 	return cmd.CombinedOutput()
 }
 
