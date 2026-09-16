@@ -34,3 +34,4 @@ settings.terminal.pager: "false"
 settings.terminal.speed: 0
 stacks.inherit.metadata: true
 toolchain.use_lock_file: true
+vendor.max_concurrency: 4

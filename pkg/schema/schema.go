@@ -2380,6 +2380,8 @@ type ComponentManifest struct {
 }
 
 type Vendor struct {
+	// MaxConcurrency bounds concurrent preparation and update checks; earlier editions restore one worker.
+	MaxConcurrency int `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty" mapstructure:"max_concurrency" jsonschema:"minimum=1"`
 	// Path to vendor configuration file or directory containing vendor files.
 	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order.
 	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
