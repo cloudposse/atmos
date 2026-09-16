@@ -1,10 +1,14 @@
 package updater
 
 import (
+	"context"
+
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/batch"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
 
@@ -17,6 +21,10 @@ type RunWithProgress func(doWork func(onProgress func(component string, index, t
 // SelectionParams bundles ResolveGroupSelection and UpdateSelectedComponents' shared inputs
 // (Options Pattern, CLAUDE.md: crossed the >4-total-parameters threshold).
 type SelectionParams struct {
+	Context         context.Context
+	AtmosConfig     *schema.AtmosConfiguration
+	MaxConcurrency  int
+	OnEvent         batch.Observer
 	Viper           *viper.Viper
 	ComponentType   string
 	Tags            []string
@@ -65,20 +73,32 @@ func ResolveGroupSelection(p *SelectionParams) (finalReport *vendoring.UpdateRep
 func UpdateSelectedComponents(p *SelectionParams, components []string) (*vendoring.UpdateReport, error) {
 	defer perf.Track(nil, "updater.UpdateSelectedComponents")()
 
-	results := make([]vendoring.SourceUpdateResult, 0, len(components))
+	var sources []*vendoring.ResolvedSource
 	for _, component := range components {
 		resolved, err := vendoring.ResolveComponentSource(&vendoring.ResolveSourceParams{VendorFile: p.VendorFile, Component: component, ComponentType: p.ComponentType})
 		if err != nil {
-			return &vendoring.UpdateReport{Results: results}, err
+			return &vendoring.UpdateReport{}, err
 		}
-		report, err := p.RunWithProgress(func(onProgress func(component string, index, total int)) (*vendoring.UpdateReport, error) {
-			return vendoring.UpdateResolved(resolved, &vendoring.UpdateParams{Tags: p.Tags, DryRun: p.Check, OnProgress: onProgress})
-		})
-		if err != nil {
-			return &vendoring.UpdateReport{Results: results}, err
-		}
-		results = append(results, report.Results...)
+		sources = append(sources, resolved)
 	}
+	ctx := p.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	work := func(onProgress func(string, int, int)) (*vendoring.UpdateReport, error) {
+		return vendoring.UpdateSourcesContext(ctx, p.AtmosConfig, sources, &vendoring.UpdateParams{Tags: p.Tags, DryRun: p.Check, MaxConcurrency: p.MaxConcurrency, OnEvent: p.OnEvent, OnProgress: onProgress})
+	}
+	var report *vendoring.UpdateReport
+	var err error
+	if p.RunWithProgress != nil {
+		report, err = p.RunWithProgress(work)
+	} else {
+		report, err = work(nil)
+	}
+	if err != nil {
+		return report, err
+	}
+	results := report.Results
 	if len(components) > 0 && len(p.Tags) > 0 && len(results) == 0 {
 		return nil, errUtils.Build(errUtils.ErrInvalidArgumentError).
 			WithExplanation("No selected component matched the given --tags filter.").
