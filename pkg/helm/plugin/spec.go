@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -97,7 +98,9 @@ func ParseSpec(raw string) (Spec, error) {
 		spec.URL = base
 		spec.Name = repoName(base)
 	case strings.Contains(base, "/"):
-		spec.URL = "https://github.com/" + base
+		// "owner/repo" shorthand assumes the user's own repo host: RepoEndpoints resolves to
+		// github.com by default, or to a configured GitHub Enterprise Server host.
+		spec.URL = ghtoken.RepoEndpoints().ServerURL + "/" + base
 		spec.Name = repoName(base)
 	default:
 		url, ok := catalogURL(base)
