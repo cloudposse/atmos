@@ -13033,6 +13033,21 @@
     },
     "Vendor": {
       "properties": {
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "MaxConcurrency bounds concurrent preparation and update checks; earlier editions restore one worker."
+        },
         "base_path": {
           "anyOf": [
             {

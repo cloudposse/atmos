@@ -107,7 +107,7 @@ tests:
       stderr:
         - "✓ github/stargazers \\(main\\)"
         - "✓ weather \\(main\\)"
-        - "✓ Vendored components \\(success: 2\\)"
+        - "Vendored 2 packages, 0 unchanged, 0 failed, 0 canceled"
       file_exists:
         - "./components/terraform/github/stargazers/main/main.tf"
         - "./components/terraform/github/stargazers/main/outputs.tf"
@@ -152,7 +152,7 @@ tests:
       stderr:
         - "✓ github/stargazers \\(main\\)"
         - "✓ weather \\(main\\)"
-        - "✓ Vendored components \\(success: 2\\)"
+        - "Vendored 2 packages, 0 unchanged, 0 failed, 0 canceled"
       file_exists:
         - "./components/terraform/github/stargazers/main/main.tf"
         - "./components/terraform/github/stargazers/main/outputs.tf"

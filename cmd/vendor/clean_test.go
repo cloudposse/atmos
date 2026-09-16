@@ -74,23 +74,26 @@ func writeCleanLockFixture(t *testing.T) (filePath string) {
 }
 
 // TestVendorCleanCmd_RemovesLockOwnedFiles proves the happy path end to end: a clean lock
-// entry for a materialized file is removed from disk, reported via "Removed", and dropped
-// from vendor.lock.yaml.
+// entry's materialized file is removed from disk and reported via "Removed", while
+// vendor.lock.yaml remains byte-for-byte unchanged.
 func TestVendorCleanCmd_RemovesLockOwnedFiles(t *testing.T) {
 	filePath := writeCleanLockFixture(t)
 	stderr := setupVendorUICapture(t)
+	lockBefore := readFile(t, "vendor.lock.yaml")
 
 	cmd := newVendorCleanTestCmd()
 	err := vendorCleanCmd.RunE(cmd, nil)
 	require.NoError(t, err)
 
 	assert.NoFileExists(t, filePath)
-	assert.Contains(t, plainOutput(stderr.String()), "Removed")
+	assert.Contains(t, plainOutput(stderr.String()), "✓ Removed vendor/owned.txt")
+	assert.NotContains(t, plainOutput(stderr.String()), filepath.Dir(filePath))
 
 	config := &schema.AtmosConfiguration{BasePath: "."}
 	loaded, err := lockfile.Load(config)
 	require.NoError(t, err)
-	assert.Empty(t, loaded.Artifacts, "cleaned artifact must be dropped from the lock")
+	assert.Contains(t, loaded.Artifacts, "artifact-mock", "clean must preserve the artifact's lock entry")
+	assert.Equal(t, lockBefore, readFile(t, "vendor.lock.yaml"))
 }
 
 // TestVendorCleanCmd_DryRunPreservesFiles proves --dry-run reports what would be removed
@@ -105,7 +108,8 @@ func TestVendorCleanCmd_DryRunPreservesFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.FileExists(t, filePath, "dry-run must not remove the file")
-	assert.Contains(t, plainOutput(stderr.String()), "Would remove")
+	assert.Contains(t, plainOutput(stderr.String()), "Would remove vendor/owned.txt")
+	assert.NotContains(t, plainOutput(stderr.String()), filepath.Dir(filePath))
 
 	config := &schema.AtmosConfiguration{BasePath: "."}
 	loaded, err := lockfile.Load(config)
@@ -129,7 +133,8 @@ func TestVendorCleanCmd_ModifiedFilePreservedWithoutForce(t *testing.T) {
 
 	assert.FileExists(t, filePath, "a modified lock-owned file must be preserved without --force")
 	assert.Equal(t, "modified-on-disk", readFile(t, filePath))
-	assert.Contains(t, plainOutput(stderr.String()), "Preserved modified vendor file")
+	assert.Contains(t, plainOutput(stderr.String()), "✗ Preserved modified vendor file vendor/owned.txt")
+	assert.NotContains(t, plainOutput(stderr.String()), filepath.Dir(filePath))
 
 	config := &schema.AtmosConfiguration{BasePath: "."}
 	loaded, err := lockfile.Load(config)
@@ -141,6 +146,7 @@ func TestVendorCleanCmd_ModifiedFilePreservedWithoutForce(t *testing.T) {
 // lock-owned file instead of preserving it.
 func TestVendorCleanCmd_ForceRemovesModifiedFiles(t *testing.T) {
 	filePath := writeCleanLockFixture(t)
+	lockBefore := readFile(t, "vendor.lock.yaml")
 	require.NoError(t, os.WriteFile(filePath, []byte("modified-on-disk"), 0o644))
 	setupVendorUICapture(t)
 
@@ -150,6 +156,7 @@ func TestVendorCleanCmd_ForceRemovesModifiedFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NoFileExists(t, filePath, "--force must remove even a modified lock-owned file")
+	assert.Equal(t, lockBefore, readFile(t, "vendor.lock.yaml"), "--force must preserve lock entries")
 }
 
 // TestVendorCleanCmd_ComponentFilterScopesRemoval proves --component only cleans the named
@@ -189,7 +196,7 @@ func TestVendorCleanCmd_ComponentFilterScopesRemoval(t *testing.T) {
 
 	loaded, err := lockfile.Load(config)
 	require.NoError(t, err)
-	assert.NotContains(t, loaded.Artifacts, "artifact-first")
+	assert.Contains(t, loaded.Artifacts, "artifact-first", "selective clean must retain the selected artifact's lock entry")
 	assert.Contains(t, loaded.Artifacts, "artifact-second")
 }
 
@@ -510,6 +517,7 @@ func TestVendorCleanCmd_NoLockOwnedFilesIsANoop(t *testing.T) {
 	err := vendorCleanCmd.RunE(cmd, nil)
 	require.NoError(t, err)
 	assert.Empty(t, plainOutput(stderr.String()))
+	assert.NoFileExists(t, "vendor.lock.yaml", "clean without a lock must not create one")
 }
 
 // TestVendorCleanCmd_ProcessCommandLineArgsError proves a broken command wiring (a required
