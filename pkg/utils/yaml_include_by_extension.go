@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -242,11 +243,30 @@ func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile strin
 	return dl.FetchAndParseByExtension(downloadURL)
 }
 
-// isGitHubURL checks if the URL is a GitHub URL that needs conversion.
-func isGitHubURL(url string) bool {
-	return strings.HasPrefix(url, "https://github.com/") ||
-		strings.HasPrefix(url, "http://github.com/") ||
-		strings.HasPrefix(url, "github://")
+// isGitHubURL checks if the URL is a GitHub (or configured GitHub Enterprise Server) URL that
+// needs conversion to raw content via github.ConvertToRawURL.
+//
+// RawURL is parsed and its Host compared via IsHost rather than a literal string-prefix match.
+// IsHost normalizes case, a trailing dot, and the port on both sides (dropping only the scheme
+// default), so a GITHUB_SERVER_URL with a non-default port such as "https://ghe.example.com:8443"
+// is recognized and a URL on a different port is not.
+//
+// Public github.com is matched in addition to RepoEndpoints (github.IsPublicGitHubHost), not
+// instead of it: when GHES is configured (GITHUB_SERVER_URL points at a different host), a
+// public "https://github.com/owner/repo/blob/..." include must still be converted to raw
+// content -- it is a link to public GitHub, unrelated to the caller's own GHES instance.
+func isGitHubURL(rawURL string) bool {
+	if strings.HasPrefix(rawURL, "github://") {
+		return true
+	}
+	parsed, err := neturl.Parse(rawURL)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	if !strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https") {
+		return false
+	}
+	return github.IsPublicGitHubHost(parsed.Host) || github.RepoEndpoints().IsHost(parsed.Host)
 }
 
 // handleCommentString updates the node for string values that start with '#'.
