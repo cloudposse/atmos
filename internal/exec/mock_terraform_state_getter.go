@@ -41,16 +41,21 @@ func (m *MockTerraformStateGetter) EXPECT() *MockTerraformStateGetterMockRecorde
 }
 
 // GetState mocks base method.
-func (m *MockTerraformStateGetter) GetState(atmosConfig *schema.AtmosConfiguration, yamlFunc, stack, component, output string, skipCache bool, authContext *schema.AuthContext, authManager any) (any, error) {
+func (m *MockTerraformStateGetter) GetState(atmosConfig *schema.AtmosConfiguration, yamlFunc, stack, component, output string, skipCache bool, authContext *schema.AuthContext, authManager any, options ...TerraformLookupOptions) (any, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetState", atmosConfig, yamlFunc, stack, component, output, skipCache, authContext, authManager)
+	varargs := []any{atmosConfig, yamlFunc, stack, component, output, skipCache, authContext, authManager}
+	for _, a := range options {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetState", varargs...)
 	ret0, _ := ret[0].(any)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetState indicates an expected call of GetState.
-func (mr *MockTerraformStateGetterMockRecorder) GetState(atmosConfig, yamlFunc, stack, component, output, skipCache, authContext, authManager any) *gomock.Call {
+func (mr *MockTerraformStateGetterMockRecorder) GetState(atmosConfig, yamlFunc, stack, component, output, skipCache, authContext, authManager any, options ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetState", reflect.TypeOf((*MockTerraformStateGetter)(nil).GetState), atmosConfig, yamlFunc, stack, component, output, skipCache, authContext, authManager)
+	varargs := append([]any{atmosConfig, yamlFunc, stack, component, output, skipCache, authContext, authManager}, options...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetState", reflect.TypeOf((*MockTerraformStateGetter)(nil).GetState), varargs...)
 }
