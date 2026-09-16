@@ -26,8 +26,8 @@ import (
 
 const nativeReferenceSecret = "synthetic-reference-secret-63f7a92"
 
-// These tests use the real stack loader with a mock secret provider. Mocking the
-// component describer would miss the inspection flag that caused this regression.
+// setupNativeSecretReference loads real stack files with a mock secret store.
+// Mocking the component describer would miss the inspection-mode regression.
 func setupNativeSecretReference(t *testing.T) (*schema.AtmosConfiguration, *store.MockStore) {
 	t.Helper()
 	dir := t.TempDir()
@@ -105,6 +105,7 @@ settings:
 	return &atmosConfig, mockStore
 }
 
+// nativeSecretReferenceLoaders exercises each production component-reference entry point.
 func nativeSecretReferenceLoaders() map[string]func(*schema.AtmosConfiguration) (any, error) {
 	return map[string]func(*schema.AtmosConfiguration) (any, error){
 		"terraform.output": func(config *schema.AtmosConfiguration) (any, error) {
@@ -124,6 +125,7 @@ func nativeSecretReferenceLoaders() map[string]func(*schema.AtmosConfiguration) 
 	}
 }
 
+// TestNativeReferencesResolveSecrets verifies real values, output masking, and cache hits.
 func TestNativeReferencesResolveSecrets(t *testing.T) {
 	for name, load := range nativeSecretReferenceLoaders() {
 		t.Run(name, func(t *testing.T) {
@@ -156,6 +158,7 @@ func TestNativeReferencesResolveSecrets(t *testing.T) {
 	}
 }
 
+// TestNativeReferencesMissingSecretFails rejects missing credentials during execution.
 func TestNativeReferencesMissingSecretFails(t *testing.T) {
 	for name, load := range nativeSecretReferenceLoaders() {
 		t.Run(name, func(t *testing.T) {
@@ -167,6 +170,7 @@ func TestNativeReferencesMissingSecretFails(t *testing.T) {
 	}
 }
 
+// TestOutputComponentDescriberPreservesSecretConfiguration checks backend and input values.
 func TestOutputComponentDescriberPreservesSecretConfiguration(t *testing.T) {
 	config, mockStore := setupNativeSecretReference(t)
 	mockStore.EXPECT().Get("dev", "producer", "CREDENTIAL").Return(nativeReferenceSecret, nil).MinTimes(1)
@@ -185,6 +189,7 @@ func TestOutputComponentDescriberPreservesSecretConfiguration(t *testing.T) {
 	assert.Equal(t, iolib.MaskReplacement, displayed.String())
 }
 
+// TestDescribeComponentSecretInspection checks credential-free direct inspection with provenance.
 func TestDescribeComponentSecretInspection(t *testing.T) {
 	for _, provenance := range []bool{false, true} {
 		t.Run(map[bool]string{true: "provenance", false: "plain"}[provenance], func(t *testing.T) {
@@ -217,6 +222,7 @@ func TestDescribeComponentSecretInspection(t *testing.T) {
 	}
 }
 
+// TestOutputComponentDescriberSkippedSecrets preserves explicit YAML-function skips.
 func TestOutputComponentDescriberSkippedSecrets(t *testing.T) {
 	for _, processFunctions := range []bool{false, true} {
 		t.Run(map[bool]string{true: "skip secret", false: "skip all functions"}[processFunctions], func(t *testing.T) {
@@ -263,6 +269,7 @@ func runSecretPlanForTest() int {
 	return 0
 }
 
+// TestSecretReferenceReachesTerraformPlan checks subprocess inputs and masked output together.
 func TestSecretReferenceReachesTerraformPlan(t *testing.T) {
 	config, mockStore := setupNativeSecretReference(t)
 	mockStore.EXPECT().Get("dev", "producer", "CREDENTIAL").Return(nativeReferenceSecret, nil).MinTimes(1)
@@ -295,6 +302,7 @@ func TestSecretReferenceReachesTerraformPlan(t *testing.T) {
 	assert.NotContains(t, stdout.String()+stderr.String(), nativeReferenceSecret)
 }
 
+// TestNonTerraformSecretReferences checks native references in non-Terraform execution.
 func TestNonTerraformSecretReferences(t *testing.T) {
 	for _, componentType := range []string{"helm", "helmfile", "kubernetes", "container"} {
 		t.Run(componentType, func(t *testing.T) {

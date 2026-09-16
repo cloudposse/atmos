@@ -25,7 +25,7 @@ func (c *componentDescriberAdapter) DescribeComponent(params *tfoutput.DescribeC
 	}
 
 	return ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
-		ResolveSecrets:       true,
+		ResolveSecrets:       !params.SecretsMaskOnly,
 		AtmosConfig:          params.AtmosConfig,
 		Component:            params.Component,
 		Stack:                params.Stack,

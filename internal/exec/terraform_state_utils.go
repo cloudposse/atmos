@@ -64,32 +64,36 @@ func GetTerraformState(
 	skipCache bool,
 	authContext *schema.AuthContext,
 	authManager any,
+	options ...TerraformLookupOptions,
 ) (any, error) {
 	defer perf.Track(atmosConfig, "exec.GetTerraformState")()
 
+	maskOnly := lookupSecretsMaskOnly(options)
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
-	// If the result for the component in the stack already exists in the cache, return it.
-	if !skipCache {
-		backend, found := terraformStateCache.Load(stackSlug)
-		if found {
-			if _, notProvisioned := backend.(terraformStateNotProvisionedCacheEntry); notProvisioned {
-				return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
-			}
-			log.Debug(
-				"Cache hit",
-				"function", yamlFunc,
-				cfg.ComponentStr, component,
-				cfg.StackStr, stack,
-				"output", output,
-			)
-			result, err := tb.GetTerraformBackendVariable(atmosConfig, backend.(map[string]any), output)
-			if err != nil {
-				er := fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
-				return nil, er
-			}
-			return result, nil
+	// Keep inspection placeholders and resolved execution values out of each other's lookups.
+	var cachedBackend any
+	var found bool
+	if !skipCache && !maskOnly {
+		cachedBackend, found = terraformStateCache.Load(stackSlug)
+	}
+	if found {
+		if _, notProvisioned := cachedBackend.(terraformStateNotProvisionedCacheEntry); notProvisioned {
+			return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
 		}
+		log.Debug(
+			"Cache hit",
+			"function", yamlFunc,
+			cfg.ComponentStr, component,
+			cfg.StackStr, stack,
+			"output", output,
+		)
+		result, err := tb.GetTerraformBackendVariable(atmosConfig, cachedBackend.(map[string]any), output)
+		if err != nil {
+			er := fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
+			return nil, er
+		}
+		return result, nil
 	}
 
 	// Cast authManager from 'any' to auth.AuthManager if provided.
@@ -140,7 +144,7 @@ func GetTerraformState(
 	}
 
 	componentSections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
-		ResolveSecrets:       true,
+		ResolveSecrets:       !maskOnly,
 		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
@@ -165,7 +169,9 @@ func GetTerraformState(
 	// Read static remote state backend outputs.
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
-		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
+		if !maskOnly {
+			terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
+		}
 		result, exists, err := tfoutput.GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 		if err != nil {
 			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
@@ -187,12 +193,16 @@ func GetTerraformState(
 	// Cache a missing state until its component succeeds. ExecuteTerraform invalidates this exact
 	// entry after every successful node, so later dependents still see freshly-created state.
 	if backend == nil {
-		terraformStateCache.Store(stackSlug, terraformStateNotProvisionedCacheEntry{})
+		if !maskOnly {
+			terraformStateCache.Store(stackSlug, terraformStateNotProvisionedCacheEntry{})
+		}
 		return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
 	}
 
 	// Cache the result now that we know it reflects a real, provisioned backend.
-	terraformStateCache.Store(stackSlug, backend)
+	if !maskOnly {
+		terraformStateCache.Store(stackSlug, backend)
+	}
 
 	// Get the output.
 	result, err := tb.GetTerraformBackendVariable(atmosConfig, backend, output)

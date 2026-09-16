@@ -32,6 +32,12 @@ inputs receive real values, while terminal output remains masked. Direct
 provenance path. Disabling or skipping YAML functions still skips retrieval.
 Missing required secrets fail resolution rather than becoming placeholders.
 
+Nested references preserve the enclosing `SecretsMaskOnly` mode during inspection,
+including template references and both Terraform YAML functions. Inspection bypasses
+execution caches: it neither reuses resolved secret values nor stores placeholders
+that a later execution could consume. Tests exercise inspection before and after
+execution, with and without provenance, and require zero secret-store calls.
+
 Custom command component execution also opts into real secret resolution. Its
 configuration loader used the same inspection API.
 
