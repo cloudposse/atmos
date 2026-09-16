@@ -601,3 +601,47 @@ func TestLoadConfigurationFromDir_WithExcludePath_OutsideSourceIsNoop(t *testing
 	assert.Contains(t, paths, "main.go")
 	assert.Contains(t, paths, "generated", "a target outside source must not exclude an unrelated same-named file")
 }
+
+// TestLoadConfigurationFromDir_WithExcludePath_DotDotPrefixedDirIsNotTreatedAsOutside
+// guards against a regression in resolveExcludeRootEntry: filepath.Rel can
+// legitimately return a relative path starting with ".." (e.g. "..generated/app")
+// when the source directory contains a top-level entry literally named
+// "..generated" and the exclude target is nested inside it. A naive
+// strings.HasPrefix(rel, "..") check wrongly treats that as "target resolves
+// outside dir" and disables exclusion entirely, meaning a template whose
+// output directory happens to start with ".." would keep leaking its own
+// previously generated output back in as template content on the next run.
+func TestLoadConfigurationFromDir_WithExcludePath_DotDotPrefixedDirIsNotTreatedAsOutside(t *testing.T) {
+	dir := t.TempDir()
+
+	// A top-level entry whose name literally begins with "..", distinct from
+	// the ".." parent-directory token itself.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "..generated", "app"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "..generated", "app", "output.txt"),
+		[]byte("stale generated output\n"), 0o644,
+	))
+
+	// A sibling top-level entry that must remain included.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "template.yaml"), []byte("key: value\n"), 0o644))
+
+	target := filepath.Join(dir, "..generated", "app")
+
+	cfg, err := LoadConfigurationFromDir("test-template", dir, WithExcludePath(target))
+	require.NoError(t, err)
+
+	for _, file := range cfg.Files {
+		normalized := filepath.ToSlash(file.Path)
+		assert.NotEqual(t, "..generated", normalized, "loaded configuration must not include the excluded ..generated container")
+		assert.False(t, strings.HasPrefix(normalized, "..generated/"),
+			"loaded configuration must not include anything under ..generated/, got %q -- the dot-dot-prefixed name must not be mistaken for an outside-of-dir path", file.Path)
+	}
+
+	var paths []string
+	for _, file := range cfg.Files {
+		if !file.IsDirectory {
+			paths = append(paths, filepath.ToSlash(file.Path))
+		}
+	}
+	assert.Contains(t, paths, "template.yaml", "the unrelated top-level file must still be present")
+}

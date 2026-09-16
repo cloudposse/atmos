@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
@@ -32,6 +33,7 @@ import (
 	"github.com/otiai10/copy"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 	"golang.org/x/term"
 
@@ -2617,6 +2619,14 @@ func removeIgnoredEntries(t *testing.T, repo *git.Repository, repoRoot, workdir 
 	}
 
 	for _, entry := range entries {
+		// The ".git" directory is never present in the index -- git never tracks
+		// its own metadata directory -- so without this guard it would be
+		// mistaken for a gitignored entry and deleted wholesale whenever workdir
+		// is the repository root, destroying the repository's history.
+		if entry.Name() == ".git" {
+			continue
+		}
+
 		fullPath := filepath.Join(workdir, entry.Name())
 		relPath, err := filepath.Rel(repoRoot, fullPath)
 		if err != nil {
@@ -2692,4 +2702,49 @@ expect:
 	if err != nil {
 		t.Fatalf("Failed to unmarshal YAML: %v", err)
 	}
+}
+
+// TestRemoveIgnoredEntriesPreservesGitDir guards against a regression where
+// removeIgnoredEntries, when called with workdir equal to the repository
+// root, would treat ".git" as a gitignored entry (it's never in the git
+// index) and delete it wholesale -- destroying the repository's history.
+// It also verifies the fix didn't disable cleanup altogether: a genuinely
+// untracked/gitignored file alongside ".git" must still be removed.
+func TestRemoveIgnoredEntriesPreservesGitDir(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	repo, err := git.PlainInit(repoRoot, false)
+	require.NoError(t, err)
+
+	// Write and commit a tracked file so the index and HEAD exist.
+	trackedPath := filepath.Join(repoRoot, "tracked.txt")
+	require.NoError(t, os.WriteFile(trackedPath, []byte("tracked content\n"), 0o600))
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	_, err = worktree.Add("tracked.txt")
+	require.NoError(t, err)
+
+	_, err = worktree.Commit("initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test",
+			Email: "test@example.com",
+			When:  time.Unix(1_000_000, 0),
+		},
+	})
+	require.NoError(t, err)
+
+	// Add an untracked file directly under the repo root. It's not in the
+	// git index, so removeIgnoredEntries should treat it like a gitignored
+	// entry and remove it.
+	untrackedPath := filepath.Join(repoRoot, "untracked.txt")
+	require.NoError(t, os.WriteFile(untrackedPath, []byte("untracked content\n"), 0o600))
+
+	err = removeIgnoredEntries(t, repo, repoRoot, repoRoot)
+	require.NoError(t, err)
+
+	assert.DirExists(t, filepath.Join(repoRoot, ".git"), "removeIgnoredEntries must never delete the .git directory")
+	assert.FileExists(t, trackedPath, "tracked files must be left untouched")
+	assert.NoFileExists(t, untrackedPath, "untracked/gitignored entries must still be removed")
 }

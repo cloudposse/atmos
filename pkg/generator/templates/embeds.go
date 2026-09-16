@@ -196,7 +196,8 @@ func resolveExcludeRootEntry(dir, absPath string) string {
 	}
 
 	rel, err := filepath.Rel(absDir, absTarget)
-	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+	if err != nil || rel == "." || rel == ".." ||
+		strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
 
