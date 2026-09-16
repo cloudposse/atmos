@@ -2635,6 +2635,7 @@ func resolveCustomComponentConfig(
 
 	// Get the config for the component in the stack.
 	return describeFn(&e.ExecuteDescribeComponentParams{
+		ResolveSecrets:       true,
 		Component:            componentName,
 		Stack:                stackName,
 		ComponentType:        commandConfig.Component.Type,
