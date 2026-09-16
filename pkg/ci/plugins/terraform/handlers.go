@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -1067,16 +1068,18 @@ func formatResourceCount(count int) string {
 }
 
 // getGitHubActionsRunURL constructs the GitHub Actions run URL from environment variables.
+// The presence check on the raw GITHUB_SERVER_URL env var (rather than RepoEndpoints, which
+// always resolves to a default) is what detects "not running in GitHub Actions"; the actual
+// host value comes from RepoEndpoints so a GitHub Enterprise Server host is honored.
 func getGitHubActionsRunURL() string {
-	serverURL := os.Getenv("GITHUB_SERVER_URL")
 	repo := os.Getenv("GITHUB_REPOSITORY")
 	runID := os.Getenv("GITHUB_RUN_ID")
 
-	if serverURL == "" || repo == "" || runID == "" {
+	if os.Getenv("GITHUB_SERVER_URL") == "" || repo == "" || runID == "" {
 		return ""
 	}
 
-	return serverURL + "/" + repo + "/actions/runs/" + runID
+	return ghtoken.RepoEndpoints().ServerURL + "/" + repo + "/actions/runs/" + runID
 }
 
 // logCheckRunError logs check run errors at an appropriate level.

@@ -12,10 +12,14 @@ import (
 // TestCreateRegistry_RefValidation tests that ref is only allowed with GitHub URLs.
 func TestCreateRegistry_RefValidation(t *testing.T) {
 	tests := []struct {
-		name        string
-		config      schema.ToolchainRegistry
-		wantErr     bool
-		errContains string
+		name string
+		// githubServer, when non-empty, is set as GITHUB_SERVER_URL for this sub-test only, so
+		// isGitHubURL's GHES branch (RepoEndpoints().Host) is exercised without leaking into
+		// sibling sub-tests.
+		githubServer string
+		config       schema.ToolchainRegistry
+		wantErr      bool
+		errContains  string
 	}{
 		{
 			name: "ref without source should error",
@@ -36,6 +40,16 @@ func TestCreateRegistry_RefValidation(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:         "ref with a configured GitHub Enterprise Server source URL should succeed",
+			githubServer: "https://ghes.example.com",
+			config: schema.ToolchainRegistry{
+				Type:   "aqua",
+				Source: "https://ghes.example.com/myorg/registry",
+				Ref:    "v1.0.0",
+			},
+			wantErr: false,
+		},
+		{
 			name: "ref with raw.githubusercontent.com URL should error",
 			config: schema.ToolchainRegistry{
 				Type:   "aqua",
@@ -43,7 +57,7 @@ func TestCreateRegistry_RefValidation(t *testing.T) {
 				Ref:    "v1.0.0",
 			},
 			wantErr:     true,
-			errContains: "'ref' is only supported for github.com URLs",
+			errContains: "'ref' is only supported for github.com (or configured GitHub Enterprise Server) URLs",
 		},
 		{
 			name: "ref with non-GitHub URL should error",
@@ -53,7 +67,7 @@ func TestCreateRegistry_RefValidation(t *testing.T) {
 				Ref:    "v1.0.0",
 			},
 			wantErr:     true,
-			errContains: "'ref' is only supported for github.com URLs",
+			errContains: "'ref' is only supported for github.com (or configured GitHub Enterprise Server) URLs",
 		},
 		{
 			name: "no ref with any URL should succeed",
@@ -67,6 +81,10 @@ func TestCreateRegistry_RefValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Always set (even to "") so rejection cases don't inherit an unrelated
+			// configured host from the parent test process's environment.
+			t.Setenv("GITHUB_SERVER_URL", tt.githubServer)
+
 			_, err := createRegistry(&tt.config)
 			if !tt.wantErr {
 				require.NoError(t, err)
