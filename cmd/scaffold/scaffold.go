@@ -351,8 +351,10 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 		return err
 	}
 
-	// Load all available templates
-	configs, _, scaffoldUI, err := loadScaffoldTemplates(opts.sourceOverride)
+	// Load all available templates. absTargetDir is threaded through so a
+	// local-source template (`source: "."`) never re-ingests its own prior
+	// output as template content when the target happens to land inside it.
+	configs, _, scaffoldUI, err := loadScaffoldTemplates(opts.sourceOverride, absTargetDir)
 	if err != nil {
 		return err
 	}
@@ -460,8 +462,13 @@ func resolveTargetDirectory(targetDir string) (string, error) {
 }
 
 // loadScaffoldTemplates loads all available scaffold templates from embedded and atmos.yaml.
+// The excludeTargetDir parameter, when non-empty, is the resolved absolute target directory
+// for the generation about to run; it's passed through to local-source templates so a target
+// nested inside its own `source` never leaks back in as template content (see
+// templates.WithExcludePath). Callers that aren't about to generate (e.g. `scaffold list`)
+// pass "".
 // Returns configs, origins (map[name]source where source is "embedded" or "atmos.yaml"), UI, and error.
-func loadScaffoldTemplates(sourceOverride string) (map[string]templates.Configuration, map[string]string, ScaffoldUI, error) {
+func loadScaffoldTemplates(sourceOverride, excludeTargetDir string) (map[string]templates.Configuration, map[string]string, ScaffoldUI, error) {
 	// Create generator context
 	genCtx, err := setup.NewGeneratorContext()
 	if err != nil {
@@ -505,7 +512,7 @@ func loadScaffoldTemplates(sourceOverride string) (map[string]templates.Configur
 	}
 
 	// Merge with configured templates from atmos.yaml (these override the above).
-	if err := mergeConfiguredTemplates(configs, origins); err != nil {
+	if err := mergeConfiguredTemplates(configs, origins, excludeTargetDir); err != nil {
 		return nil, nil, nil, err
 	}
 
@@ -514,7 +521,9 @@ func loadScaffoldTemplates(sourceOverride string) (map[string]templates.Configur
 
 // mergeConfiguredTemplates merges scaffold templates from atmos.yaml into the configs map.
 // It also updates the origins map to track which templates came from atmos.yaml.
-func mergeConfiguredTemplates(configs map[string]templates.Configuration, origins map[string]string) error {
+// The excludeTargetDir parameter is forwarded to convertScaffoldTemplateToConfiguration -- see
+// loadScaffoldTemplates.
+func mergeConfiguredTemplates(configs map[string]templates.Configuration, origins map[string]string, excludeTargetDir string) error {
 	defer perf.Track(nil, "scaffold.mergeConfiguredTemplates")()
 
 	scaffoldSection, err := config.ReadAtmosScaffoldSection(".")
@@ -546,7 +555,7 @@ func mergeConfiguredTemplates(configs map[string]templates.Configuration, origin
 	}
 
 	for templateName, templateData := range templatesMap {
-		cfg, err := convertScaffoldTemplateToConfiguration(templateName, templateData)
+		cfg, err := convertScaffoldTemplateToConfiguration(templateName, templateData, excludeTargetDir)
 		if err != nil {
 			// Log error but continue with other templates.
 			atmosui.Warning(fmt.Sprintf("Failed to load scaffold template '%s': %v", templateName, err))
@@ -719,6 +728,16 @@ func executeTemplateWithoutTargetDir(
 			return targetDir, err
 		}
 
+		// The real target is only known now (it didn't exist at the initial
+		// loadScaffoldTemplates call in executeScaffoldGenerate, which ran
+		// with no exclusion since opts.targetDir was empty). Re-exclude a
+		// local-source template's own previously generated output the same
+		// way loadScaffoldTemplates does for a positional target, now that
+		// the interactive prompt above has picked one.
+		if err := reloadLocalTemplateFiles(selectedConfig, targetDir); err != nil {
+			return targetDir, err
+		}
+
 		finalTargetDir, err := scaffoldUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, targetDir, opts.force, opts.update, useDefaults, baseRef, templateValues)
 		offer, retryBaseRef, offerErr := shouldOfferScaffoldUpdate(err, opts, finalTargetDir)
 		if offerErr != nil {
@@ -742,33 +761,35 @@ func executeTemplateWithoutTargetDir(
 		Err()
 }
 
-// resolveInteractiveBaseRef resolves the --update merge base ref for the
-// no-positional-target interactive flow. --base-ref's default (the pinned
-// ref from .atmos/scaffold/metadata.yaml, see defaultBaseRef) can only be
-// looked up once the real target directory is known, but in this flow that
-// directory doesn't exist until the interactive prompt below picks one --
-// so for --update, resolve the target directory first (scaffoldUI.
-// ResolveTargetPath runs the same prompt/setup-form logic
-// ExecuteWithInteractiveFlowAndBaseRefResult would, and is a no-op once
-// targetDir is non-empty), then resolve the base ref against it, and finally
-// hand both back to the caller's ExecuteWithInteractiveFlowAndBaseRefResult
-// call -- which skips prompting again since targetDir is already set.
+// resolveInteractiveBaseRef resolves the real target directory for the
+// no-positional-target interactive flow before generation runs, and -- only
+// when --update is set -- also resolves the --update merge base ref against
+// it. The target must be known early for two reasons: --base-ref's default
+// (the pinned ref from .atmos/scaffold/metadata.yaml, see defaultBaseRef)
+// can only be looked up once the real target directory exists, and a
+// local-source template's own previously generated output can only be
+// re-excluded from selectedConfig.Files (see reloadLocalTemplateFiles) once
+// the target is known -- but in this flow the directory doesn't exist until
+// the interactive prompt below picks one; scaffoldUI.ResolveTargetPath runs
+// the same prompt/setup-form logic ExecuteWithInteractiveFlowAndBaseRefResult
+// would, and is a no-op once targetDir is non-empty, so resolving it here and
+// handing the result back to the caller's
+// ExecuteWithInteractiveFlowAndBaseRefResult call skips prompting again.
 //
 // Without --update the base ref is unused (ExecuteWithDelimiters only sets
-// up git storage when update is true), so this is a no-op passthrough that
-// still lets the interactive flow prompt for the target itself.
+// up git storage when update is true), so baseRef is left as opts.baseRef.
 func resolveInteractiveBaseRef(
 	selectedConfig *templates.Configuration,
 	opts *scaffoldGenerateOptions,
 	scaffoldUI ScaffoldUI,
 ) (targetDir, baseRef string, templateValues map[string]interface{}, useDefaults bool, err error) {
-	if !opts.update {
-		return "", opts.baseRef, opts.templateValues, opts.useDefaults, nil
-	}
-
 	targetDir, templateValues, useDefaults, err = scaffoldUI.ResolveTargetPath(selectedConfig, "", opts.update, opts.useDefaults, opts.templateValues)
 	if err != nil {
 		return targetDir, "", nil, false, err
+	}
+
+	if !opts.update {
+		return targetDir, opts.baseRef, templateValues, useDefaults, nil
 	}
 
 	baseRef, err = defaultBaseRef(opts.baseRef, targetDir)
@@ -778,11 +799,55 @@ func resolveInteractiveBaseRef(
 	return targetDir, baseRef, templateValues, useDefaults, nil
 }
 
+// reloadLocalTemplateFiles re-loads selectedConfig.Files from disk with
+// targetDir excluded, once the real target directory is known. This mirrors
+// the exclusion loadScaffoldTemplates/convertScaffoldTemplateToConfiguration
+// apply when a positional target is given up front; the no-positional-target
+// interactive flow can't apply it at load time since the target doesn't
+// exist yet, so it's re-applied here once resolveInteractiveBaseRef has
+// resolved one. Only .Files is replaced -- .Name, .Description, .TargetDir,
+// .Version, and .README may carry atmos.yaml-level overrides applied by
+// convertScaffoldTemplateToConfiguration that a fresh LoadConfigurationFromDir
+// call wouldn't reproduce.
+//
+// The reload only applies to local-source templates: an empty Source (a
+// zero-value Configuration, never produced by the real loaders) and the
+// config.SourceEmbedded sentinel are excluded explicitly, since vendor.
+// IsLocalPath would otherwise misclassify both as real local paths (neither
+// has a scheme separator, slash, or domain-like dot). Hydrated remote/catalog
+// templates have their Source restored to the original remote URL by
+// source.Hydrate once fetched (see resolveRemote/resolveOCI), so they fail
+// the vendor.IsLocalPath/IsFileURI check normally and need no special case.
+func reloadLocalTemplateFiles(selectedConfig *templates.Configuration, targetDir string) error {
+	source := selectedConfig.Source
+	if source == "" || source == config.SourceEmbedded {
+		return nil
+	}
+	if !vendor.IsLocalPath(source) && !vendor.IsFileURI(source) {
+		return nil
+	}
+
+	reloaded, err := templates.LoadConfigurationFromDir(selectedConfig.Name, source, templates.WithExcludePath(targetDir))
+	if err != nil {
+		return errUtils.Build(errUtils.ErrLoadScaffoldTemplates).
+			WithCause(err).
+			WithExplanationf("Failed to reload scaffold template `%s` after resolving the target directory", selectedConfig.Name).
+			WithHint("Check that the template `source` directory is still accessible").
+			WithContext("template", selectedConfig.Name).
+			WithContext("source", source).
+			WithContext("target_dir", targetDir).
+			WithExitCode(1).
+			Err()
+	}
+	selectedConfig.Files = reloaded.Files
+	return nil
+}
+
 // executeScaffoldList lists all available scaffold templates (embedded and configured).
 // This logic was moved from internal/exec/scaffold.go to keep command logic in cmd/.
 func executeScaffoldList(_ *cobra.Command) error {
 	// Load all available templates (embedded + catalog + atmos.yaml).
-	configs, origins, scaffoldUI, err := loadScaffoldTemplates("")
+	configs, origins, scaffoldUI, err := loadScaffoldTemplates("", "")
 	if err != nil {
 		return err
 	}
@@ -1006,8 +1071,10 @@ func validateScaffoldFile(scaffoldPath string) error {
 // shown in validation error messages.
 const scaffoldManifestExample = "```yaml\napiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: my-scaffold\n  description: My scaffold template\nspec:\n  fields:\n    - name: project_name\n      type: input\n      default: my-project\n```"
 
-// convertScaffoldTemplateToConfiguration converts an atmos.yaml scaffold template entry to a templates.Configuration.
-func convertScaffoldTemplateToConfiguration(name string, templateData interface{}) (templates.Configuration, error) {
+// convertScaffoldTemplateToConfiguration converts an atmos.yaml scaffold template entry to a
+// templates.Configuration. The excludeTargetDir parameter, when non-empty, is forwarded to
+// templates.LoadConfigurationFromDir via templates.WithExcludePath -- see loadScaffoldTemplates.
+func convertScaffoldTemplateToConfiguration(name string, templateData interface{}, excludeTargetDir string) (templates.Configuration, error) {
 	templateMap, ok := templateData.(map[string]interface{})
 	if !ok {
 		return templates.Configuration{}, errUtils.Build(errUtils.ErrInvalidTemplateData).
@@ -1043,7 +1110,9 @@ func convertScaffoldTemplateToConfiguration(name string, templateData interface{
 
 	// Load the template files from the local source directory. The path is
 	// resolved relative to the current directory (where atmos.yaml lives).
-	cfg, err := templates.LoadConfigurationFromDir(name, source)
+	// WithExcludePath is a no-op when excludeTargetDir is "" or doesn't
+	// resolve inside source.
+	cfg, err := templates.LoadConfigurationFromDir(name, source, templates.WithExcludePath(excludeTargetDir))
 	if err != nil {
 		return templates.Configuration{}, err
 	}
