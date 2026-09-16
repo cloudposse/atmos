@@ -54,8 +54,8 @@ outputs:
       workflow appends the run id to this to form its save key.
     value: ${{ steps.restore.outputs.cache-primary-key }}
   go-version:
-    description: actions/setup-go's go-version output.
-    value: ${{ steps.go.outputs.go-version }}
+    description: The verified actions/setup-go go-version output.
+    value: ${{ steps.verify-go.outputs.go-version }}
 
 runs:
   using: composite
@@ -112,13 +112,61 @@ runs:
         fi
         echo "GOMODCACHE=$HOME/go/pkg/mod" >> "$GITHUB_ENV"
 
-    - name: Set up Go
+    # A stalled setup-go download can exit successfully without installing Go
+    # or setting go-version. Treat that as a failed attempt too, before an
+    # empty version can reach the cache key or a build runs without Go.
+    - name: Set up Go (attempt 1 of 3)
       id: go
+      continue-on-error: true
       uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
       with:
         go-version-file: ${{ inputs.go-version-file }}
         # Caching is handled by the restore step below (see the description).
         cache: false
+
+    - name: Wait before retry
+      if: steps.go.outcome == 'failure' || steps.go.outputs.go-version == ''
+      shell: bash
+      run: sleep 5
+
+    - name: Set up Go (attempt 2 of 3)
+      id: go-retry
+      if: steps.go.outcome == 'failure' || steps.go.outputs.go-version == ''
+      continue-on-error: true
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      with:
+        go-version-file: ${{ inputs.go-version-file }}
+        cache: false
+
+    - name: Wait before final retry
+      if: steps.go-retry.outcome == 'failure' || (steps.go-retry.outcome == 'success' && steps.go-retry.outputs.go-version == '')
+      shell: bash
+      run: sleep 15
+
+    - name: Set up Go (attempt 3 of 3)
+      id: go-final
+      if: steps.go-retry.outcome == 'failure' || (steps.go-retry.outcome == 'success' && steps.go-retry.outputs.go-version == '')
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      with:
+        go-version-file: ${{ inputs.go-version-file }}
+        cache: false
+
+    - name: Verify Go installation
+      id: verify-go
+      shell: bash
+      env:
+        EXPECTED_GO_VERSION: ${{ steps.go-final.outputs.go-version || steps.go-retry.outputs.go-version || steps.go.outputs.go-version }}
+      run: |
+        if [ -z "$EXPECTED_GO_VERSION" ]; then
+          echo "::error::setup-go did not report a Go version after three attempts"
+          exit 1
+        fi
+        actual_version=$(GOTOOLCHAIN=local go env GOVERSION)
+        if [ "$actual_version" != "go$EXPECTED_GO_VERSION" ]; then
+          echo "::error::Expected Go $EXPECTED_GO_VERSION on PATH, found $actual_version"
+          exit 1
+        fi
+        echo "go-version=$EXPECTED_GO_VERSION" >> "$GITHUB_OUTPUT"
 
     # GitHub Actions cache scoping isolates this: a pull_request run gets
     # read-only access to the default branch's cache scope, cannot restore
@@ -137,10 +185,10 @@ runs:
         path: |
           ${{ env.GOCACHE }}
           ${{ env.GOMODCACHE }}
-        key: go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}
+        key: go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}
         restore-keys: |
-          go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
-          go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-
+          go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
+          go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-
 
     # The race planner only needs to compile the Mage target and enumerate
     # local packages. Its own cache lineage avoids downloading the full,
@@ -153,7 +201,7 @@ runs:
         path: |
           ${{ env.GOCACHE }}
           ${{ env.GOMODCACHE }}
-        key: race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}
+        key: race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}
         restore-keys: |
-          race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
-          race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-
+          race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
+          race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.verify-go.outputs.go-version }}-
