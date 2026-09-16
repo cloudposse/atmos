@@ -939,12 +939,16 @@ func TestMain(m *testing.M) {
 	// opts into ATMOS_TEST_GITHUB_MOCK_URL gets real, checked-in content back instead of a 404.
 	includeFixturePath := filepath.Join(repoRoot, "tests", "fixtures", "scenarios",
 		"stack-templates-2", "stacks", "deploy", "nonprod.yaml")
-	if includeFixtureContent, readErr := os.ReadFile(includeFixturePath); readErr == nil {
-		githubMock.RegisterRawFile("cloudposse", "atmos", "main",
-			"tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml", string(includeFixtureContent))
-	} else {
-		logger.Warn("failed to read atmos-include-yaml-function raw-fetch fixture; that test-case's mock route will 404", "path", includeFixturePath, "error", readErr)
+	// This route is required by the opted-in CLI test case, so an unreadable fixture is a setup
+	// error: fail here, where the cause is named, instead of letting the case report a 404.
+	includeFixtureContent, readErr := os.ReadFile(includeFixturePath)
+	if readErr != nil {
+		logger.Error("failed to read atmos-include-yaml-function raw-fetch fixture", "path", includeFixturePath, "error", readErr)
+		githubMockClose()
+		errUtils.Exit(1)
 	}
+	githubMock.RegisterRawFile("cloudposse", "atmos", "main",
+		"tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml", string(includeFixtureContent))
 
 	// Auto-start the Floci cloud emulators for the opt-in Floci E2E tests. This is a
 	// no-op unless ATMOS_TEST_FLOCI=true and the FLOCI_* endpoint env vars are unset,
