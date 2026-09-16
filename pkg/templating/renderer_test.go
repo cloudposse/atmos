@@ -554,17 +554,22 @@ func TestParseDatasourceURL(t *testing.T) {
 		name        string
 		in          string
 		wantScheme  string
+		wantHost    string
 		wantPath    string
 		wantErr     bool
 		windowsOnly bool
 	}{
 		{name: "stdin dash", in: "-", wantScheme: "stdin", wantPath: ""},
-		{name: "https", in: "https://example.com/a.json?x=1", wantScheme: "https", wantPath: "/a.json"},
+		{name: "https", in: "https://example.com/a.json?x=1", wantScheme: "https", wantHost: "example.com", wantPath: "/a.json"},
 		{name: "absolute path becomes file", in: "/tmp/a.yaml", wantScheme: "file", wantPath: "/tmp/a.yaml"},
 		{name: "relative path keeps no scheme", in: "configs/a.yaml", wantScheme: "", wantPath: "configs/a.yaml"},
+		// A UNC server is the URL host, not part of its path. The explicit URL
+		// exercises this representation on every platform.
+		{name: "UNC file URL", in: "file://server/share/a.json", wantScheme: "file", wantHost: "server", wantPath: "/share/a.json"},
+		{name: "drive letter host folds into path", in: "file://D:/data/a.json", wantScheme: "file", wantPath: "D:/data/a.json"},
 		// filepath.VolumeName only recognizes drive letters and UNC prefixes on Windows.
 		{name: "windows drive path", in: `C:\data\a.json`, wantScheme: "file", wantPath: "C:/data/a.json", windowsOnly: true},
-		{name: "windows UNC path", in: `\\server\share\a.json`, wantScheme: "file", wantPath: "//server/share/a.json", windowsOnly: true},
+		{name: "windows UNC path", in: `\\server\share\a.json`, wantScheme: "file", wantHost: "server", wantPath: "/share/a.json", windowsOnly: true},
 		{name: "invalid", in: "http://[::1", wantErr: true},
 	}
 
@@ -580,6 +585,7 @@ func TestParseDatasourceURL(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantScheme, u.Scheme)
+			assert.Equal(t, tt.wantHost, u.Host)
 			assert.Equal(t, tt.wantPath, u.Path)
 		})
 	}
