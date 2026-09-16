@@ -432,7 +432,8 @@ func TestToolchainAquaTools_WindowsKotsPlatformError(t *testing.T) {
 // a tool that doesn't exist in any registry shows a clear "tool not in registry" error.
 //
 // This uses replicatedhq/replicated which does NOT exist in the Aqua registry
-// (only replicatedhq/kots and replicatedhq/outdated exist). Verified against a mock instead
+// TestToolchainAquaTools_NonExistentToolError verifies the error for a missing Aqua tool.
+// Only replicatedhq/kots and replicatedhq/outdated exist. Verified against a mock instead
 // of the real aqua registry -- this test asserts atmos's own "not found" error formatting,
 // not anything about the real registry's contents, and an unregistered path 404s on the mock
 // exactly as an absent package does on the real registry, with no special setup required.
