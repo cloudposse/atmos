@@ -1789,7 +1789,7 @@ func TestProcessComponentEntry_WithDegradation_RecoverableError_Warns(t *testing
 	ac := &schema.AtmosConfiguration{}
 	recoverableErr := fmt.Errorf("%w for component `vpc` in stack `test-stack`", errUtils.ErrTerraformStateNotProvisioned)
 	mockStateGetter.EXPECT().
-		GetState(ac, gomock.Any(), "test-stack", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		GetState(ac, gomock.Any(), "test-stack", "vpc", "bucket_name", false, gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return(nil, recoverableErr).
 		Times(1)
 

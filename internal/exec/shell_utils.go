@@ -25,6 +25,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -79,6 +80,14 @@ type shellCommandConfig struct {
 	// Decision 32).
 	execMetadataStdoutCapture io.Writer
 	execMetadataStderrCapture io.Writer
+
+	// metricsCallback, when set, is invoked once after the subprocess exits
+	// with the subprocess tree's collected resource-usage metrics (nil-safe:
+	// only called when a non-nil result was collected). Lets a caller (e.g.
+	// executeMainTerraformCommand) capture this specific shell command's
+	// subprocess-tree metrics for combining with atmos's own self-usage, for
+	// both the local per-command display and the exec-metadata sync upload.
+	metricsCallback func(*metricsprocess.ProcessMetrics)
 }
 
 // WithInvokingCommand provides the Cobra command the user actually invoked,
@@ -129,6 +138,19 @@ func execMetadataParserFromOpts(opts ...ShellCommandOption) func(subCommand stri
 		opt(&cfg)
 	}
 	return cfg.execMetadataParser
+}
+
+// WithMetricsCallback provides a closure that ExecuteShellCommand invokes
+// once, after the subprocess exits, with the subprocess tree's collected
+// resource-usage metrics. Used by executeMainTerraformCommand to capture the
+// main plan/apply/deploy subprocess's own metrics for combining with atmos's
+// self-usage — both for local display and the exec-metadata sync upload.
+func WithMetricsCallback(fn func(*metricsprocess.ProcessMetrics)) ShellCommandOption {
+	defer perf.Track(nil, "exec.WithMetricsCallback")()
+
+	return func(c *shellCommandConfig) {
+		c.metricsCallback = fn
+	}
 }
 
 // withExecMetadataOutputCapture tees this specific ExecuteShellCommand call's
@@ -461,6 +483,9 @@ func ExecuteShellCommand(
 		},
 	})
 	emitProcessEndDiagnostics(diagConfig, diagID, diagStartedAt, &result)
+	if cfg.metricsCallback != nil && result.Metrics != nil {
+		cfg.metricsCallback(result.Metrics)
+	}
 	if closeErr := closePacedWriters(pacedClosers); closeErr != nil && result.Err == nil {
 		return closeErr
 	}

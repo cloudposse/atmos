@@ -118,13 +118,18 @@ func TestExecuteTemplateWithoutTargetDir_UpdateResolvesBaseRefAfterInteractiveTa
 	assert.Equal(t, dir, targetDir)
 }
 
-// TestExecuteTemplateWithoutTargetDir_NoUpdateSkipsTargetResolution verifies
-// that without --update, executeTemplateWithoutTargetDir does not pre-resolve
-// the target directory (which would require an extra prompt round-trip):
-// the base ref is unused for fresh generation, so ResolveTargetPath must not
-// be called, and the interactive flow's own prompt (inside
-// ExecuteWithInteractiveFlowAndBaseRefResult) is the only one that runs.
-func TestExecuteTemplateWithoutTargetDir_NoUpdateSkipsTargetResolution(t *testing.T) {
+// TestExecuteTemplateWithoutTargetDir_NoUpdateStillResolvesTargetEarly
+// verifies that even without --update, executeTemplateWithoutTargetDir now
+// pre-resolves the target directory via ResolveTargetPath (needed so a
+// local-source template's own previously generated output can be re-excluded
+// from selectedConfig.Files -- see reloadLocalTemplateFiles -- before
+// ExecuteWithInteractiveFlowAndBaseRefResult runs). ResolveTargetPath is a
+// no-op passthrough once it returns a directory, so the interactive flow's
+// own prompt does not run a second time: the resolved directory is passed
+// straight through as ExecuteWithInteractiveFlowAndBaseRefResult's
+// targetPath, and the base ref stays empty since it's unused without
+// --update.
+func TestExecuteTemplateWithoutTargetDir_NoUpdateStillResolvesTargetEarly(t *testing.T) {
 	selectedConfig := &templates.Configuration{Name: "test"}
 	dir := t.TempDir()
 
@@ -136,9 +141,11 @@ func TestExecuteTemplateWithoutTargetDir_NoUpdateSkipsTargetResolution(t *testin
 	ctrl := gomock.NewController(t)
 	mockUI := NewMockScaffoldUI(ctrl)
 	mockUI.EXPECT().SetSkipHooks(gomock.Any())
-	// No ResolveTargetPath expectation: gomock fails the test if it's called.
 	mockUI.EXPECT().
-		ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, "", false, false, false, "", opts.templateValues).
+		ResolveTargetPath(selectedConfig, "", false, false, opts.templateValues).
+		Return(dir, opts.templateValues, false, nil)
+	mockUI.EXPECT().
+		ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, dir, false, false, false, "", opts.templateValues).
 		Return(dir, nil)
 
 	targetDir, err := executeTemplateWithoutTargetDir(selectedConfig, opts, mockUI)
@@ -316,11 +323,14 @@ func TestExecuteTemplateWithoutTargetDir_OfferErrorPropagates(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockUI := NewMockScaffoldUI(ctrl)
 	mockUI.EXPECT().SetSkipHooks(gomock.Any())
-	// opts.update is false, so resolveInteractiveBaseRef takes the no-op
-	// passthrough branch (no ResolveTargetPath call) and the interactive flow
-	// itself resolves the real directory.
+	// opts.update is false, so resolveInteractiveBaseRef's defaultBaseRef
+	// lookup is skipped, but it still resolves the real target directory via
+	// ResolveTargetPath before generation runs.
 	mockUI.EXPECT().
-		ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, "", false, false, false, "", opts.templateValues).
+		ResolveTargetPath(selectedConfig, "", false, false, opts.templateValues).
+		Return(dir, opts.templateValues, false, nil)
+	mockUI.EXPECT().
+		ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, dir, false, false, false, "", opts.templateValues).
 		Return(dir, errUtils.ErrTargetDirectoryNotEmpty)
 	mockUI.EXPECT().ConfirmUpdateInstead(gomock.Any()).Times(0)
 
@@ -329,4 +339,88 @@ func TestExecuteTemplateWithoutTargetDir_OfferErrorPropagates(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, dir, finalTargetDir)
 	assert.NotErrorIs(t, err, errUtils.ErrTargetDirectoryNotEmpty, "the base-ref resolution error must win, not the original merge-offer trigger")
+}
+
+// TestExecuteTemplateWithoutTargetDir_ReExcludesLocalSourceOutputAfterInteractiveTarget
+// covers the gap CodeRabbit flagged in the fix for a local-source scaffold
+// template (`source: "."`) re-ingesting its own previously generated output
+// as template content: that fix only threaded the resolved target directory
+// through when the user supplies <target> on the CLI. With an omitted
+// target, the initial loadScaffoldTemplates call in executeScaffoldGenerate
+// runs before the target exists (absTargetDir is "" for the no-positional-
+// target flow), so selectedConfig.Files was loaded with no exclusion at all.
+// Only once the interactive flow resolves a real target -- here, a nested
+// local target that lands inside the template's own prior output -- can that
+// output be excluded. This exercises both halves of CodeRabbit's own
+// suggestion: an omitted target and a nested local target.
+func TestExecuteTemplateWithoutTargetDir_ReExcludesLocalSourceOutputAfterInteractiveTarget(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "template.txt"), []byte("hello"), 0o600))
+
+	// A prior run's output, sitting inside the template's own source tree --
+	// exactly the scenario that compounded into 47,000+ self-nested
+	// directories before the fix (see templates.WithExcludePath's doc).
+	priorOutputDir := filepath.Join(sourceDir, "generated", "myapp")
+	require.NoError(t, os.MkdirAll(priorOutputDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(priorOutputDir, "output.txt"), []byte("stale"), 0o600))
+
+	// Load exactly as the initial, un-excluded loadScaffoldTemplates call
+	// would (absTargetDir == "" since no positional target was given).
+	selectedConfig, err := templates.LoadConfigurationFromDir("test", sourceDir)
+	require.NoError(t, err)
+
+	// File.Path always uses forward slashes (loadConfiguration builds it with
+	// path.Join, never filepath.Join -- see pkg/generator/templates/embeds.go)
+	// regardless of host OS, so assertions below compare against a literal
+	// forward-slash path rather than one built with filepath.Join.
+	const stalePath = "generated/myapp/output.txt"
+
+	// Sanity check the fixture: without the fix, the stale output is loaded
+	// as template content.
+	require.True(t, containsFilePath(selectedConfig.Files, stalePath),
+		"fixture must reproduce the stale-output-loaded bug before asserting the fix removes it")
+
+	opts := &scaffoldGenerateOptions{
+		interactive:    true,
+		templateValues: map[string]interface{}{},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockScaffoldUI(ctrl)
+	mockUI.EXPECT().SetSkipHooks(gomock.Any())
+	// The interactive prompt (stood in for by ResolveTargetPath) picks a
+	// target nested inside the template's own `generated/` output.
+	mockUI.EXPECT().
+		ResolveTargetPath(selectedConfig, "", false, false, opts.templateValues).
+		Return(priorOutputDir, opts.templateValues, false, nil)
+	mockUI.EXPECT().
+		ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, priorOutputDir, false, false, false, "", opts.templateValues).
+		DoAndReturn(func(cfg *templates.Configuration, targetPath string, _, _, _ bool, _ string, _ map[string]interface{}) (string, error) {
+			// By the time generation runs, selectedConfig.Files must already
+			// have been reloaded with the target's containing directory
+			// excluded.
+			assert.False(t, containsFilePath(cfg.Files, stalePath),
+				"stale prior-run output must be excluded from Files once the real target is known")
+			assert.True(t, containsFilePath(cfg.Files, "template.txt"), "unrelated template content must survive the reload")
+			return targetPath, nil
+		})
+
+	targetDir, err := executeTemplateWithoutTargetDir(selectedConfig, opts, mockUI)
+
+	require.NoError(t, err)
+	assert.Equal(t, priorOutputDir, targetDir)
+	// Also assert directly against the mutated selectedConfig, not just what
+	// the mock observed mid-call.
+	assert.False(t, containsFilePath(selectedConfig.Files, stalePath))
+	assert.True(t, containsFilePath(selectedConfig.Files, "template.txt"))
+}
+
+// containsFilePath reports whether files contains an entry with the given path.
+func containsFilePath(files []templates.File, path string) bool {
+	for _, f := range files {
+		if f.Path == path {
+			return true
+		}
+	}
+	return false
 }

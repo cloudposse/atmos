@@ -4,11 +4,10 @@ import (
 	"fmt"
 	stdio "io"
 
-	"github.com/spf13/viper"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 // context implements the Context interface.
@@ -170,14 +169,14 @@ func WithMasker(masker Masker) ContextOption {
 func buildConfig() *Config {
 	cfg := &Config{
 		// From flags (bound via viper in cmd/root.go)
-		RedirectStderr: viper.GetString("redirect-stderr"),
+		RedirectStderr: viperguard.GetString("redirect-stderr"),
 	}
 
 	// Mask flag: --mask (default true) means masking is enabled.
 	// Invert for DisableMasking field (true = disabled).
 	// If the flag isn't set (e.g., in tests), default to masking enabled.
-	if viper.IsSet("mask") {
-		cfg.DisableMasking = !viper.GetBool("mask")
+	if viperguard.IsSet("mask") {
+		cfg.DisableMasking = !viperguard.GetBool("mask")
 	} else {
 		// Default: masking enabled
 		cfg.DisableMasking = false
@@ -185,25 +184,25 @@ func buildConfig() *Config {
 
 	// Load atmos.yaml config (if available)
 	// This may not be loaded yet during early initialization
-	if !viper.IsSet("settings") {
+	if !viperguard.IsSet("settings") {
 		return cfg
 	}
 
 	var atmosConfig schema.AtmosConfiguration
-	if err := viper.Unmarshal(&atmosConfig); err != nil {
+	if err := viperguard.Unmarshal(&atmosConfig); err != nil {
 		return cfg
 	}
 
 	cfg.AtmosConfig = atmosConfig
 
 	// If --mask flag wasn't explicitly set, use atmos.yaml config
-	if viper.IsSet("mask") {
+	if viperguard.IsSet("mask") {
 		return cfg
 	}
 
 	// settings.terminal.mask.enabled in atmos.yaml
 	// Default behavior when not set: masking enabled (DisableMasking=false)
-	if viper.IsSet("settings.terminal.mask.enabled") {
+	if viperguard.IsSet("settings.terminal.mask.enabled") {
 		cfg.DisableMasking = !atmosConfig.Settings.Terminal.Mask.Enabled
 	}
 

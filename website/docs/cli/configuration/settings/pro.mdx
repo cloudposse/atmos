@@ -587,14 +587,20 @@ You can also select components by it using
 Starting with **Atmos CLI v1.228.0**, qualifying invocations in recognized CI
 environments automatically upload execution records when Atmos Pro credentials
 are configured. Records include elapsed time and, on supported platforms, CPU
-time and maximum resident memory for the **Atmos process itself**.
+time and peak memory — combining the `terraform`/`tofu` subprocess tree
+(including provider plugins) with Atmos's own usage, so the numbers reflect
+what the run actually cost, not just the CLI wrapper's overhead.
 
-These measurements exclude Terraform/OpenTofu and provider subprocesses. CPU
-time is not peak CPU utilization, and the reported memory is not the peak memory
-of the whole job. Use measurements that include the complete workload when choosing
-runner capacity; these execution records alone cannot establish Terraform runner
-requirements. See [execution metadata](/changelog/pro-exec-metadata-upload) for
-upload behavior and configuration.
+CPU time is not peak CPU utilization, and the reported peak memory is the
+largest single process observed during the run (`terraform`, `tofu`, or one
+provider plugin) — not a simultaneous sum across every concurrently running
+process. If Terraform and two provider plugins each peak at 200 MB at the
+same moment, this reports roughly 200 MB, not 600 MB; treat it as a lower
+bound, not an exact whole-job figure, when choosing runner capacity. See
+[Metrics](/cli/configuration/settings/metrics) for the local-display
+counterpart of these same numbers, and [execution
+metadata](/changelog/pro-exec-metadata-upload) for upload behavior and
+configuration.
 
 ## Related Commands
 

@@ -213,7 +213,7 @@ func TestExecuteDescribeStacksWithEvalSections_SkipsUnrequiredSection(t *testing
 
 		recoverableErr := fmt.Errorf("%w for component `vpc` in stack `dev`", errUtils.ErrTerraformStateNotProvisioned)
 		mockStateGetter.EXPECT().
-			GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+			GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 			Return(nil, recoverableErr).
 			Times(1)
 
@@ -247,7 +247,7 @@ func TestExecuteDescribeStacksWithEvalSections_SkipsUnrequiredSection(t *testing
 
 		recoverableErr := fmt.Errorf("%w for component `vpc` in stack `dev`", errUtils.ErrTerraformStateNotProvisioned)
 		mockStateGetter.EXPECT().
-			GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+			GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 			Return(nil, recoverableErr).
 			Times(1)
 
