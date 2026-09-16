@@ -2,8 +2,11 @@ package source
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1441,26 +1444,19 @@ func TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning(t *testi
 // (cache still valid). This ensures the before.terraform.init hook will be a no-op.
 func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) {
 	tmpDir := t.TempDir()
-
-	// Create a workdir with valid metadata so needsProvisioning returns false
-	// (TTL not expired, version unchanged).
-	workdirPath := filepath.Join(tmpDir, ".workdir", "terraform", "demo-null-label")
-	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
-	// Place a dummy file so isNonEmptyDir returns true.
-	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# test"), 0o644))
-	// Write metadata matching the source spec so TTL check is the only gate.
-	meta := &workdir.WorkdirMetadata{
-		SourceURI:     "github.com/cloudposse/terraform-null-label.git//",
-		SourceVersion: "0.25.0",
-		UpdatedAt:     time.Now(), // Fresh — 1h TTL not expired.
-	}
-	require.NoError(t, workdir.WriteMetadata(workdirPath, meta))
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	sourceURI := server.URL + "/source.tar.gz"
 
 	componentConfig := map[string]any{
 		"component":   "null-label",
 		"atmos_stack": "demo",
 		"source": map[string]any{
-			"uri":     "github.com/cloudposse/terraform-null-label.git//",
+			"uri":     sourceURI,
 			"version": "0.25.0",
 			"ttl":     "1h",
 		},
@@ -1471,6 +1467,21 @@ func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) 
 		},
 	}
 
+	// Seed the actual hash-suffixed workdir used by the provisioner. A legacy
+	// hardcoded path silently misses the cache and downloads the source instead.
+	workdirPath, err := workdir.BuildPath(tmpDir, "terraform", "null-label", "demo", componentConfig)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+	fixturePath := filepath.Join(workdirPath, "main.tf")
+	fixtureContents := []byte("# cached source must be preserved\n")
+	require.NoError(t, os.WriteFile(fixturePath, fixtureContents, 0o644))
+	meta := &workdir.WorkdirMetadata{
+		SourceURI:     sourceURI,
+		SourceVersion: "0.25.0",
+		UpdatedAt:     time.Now(), // Fresh — 1h TTL not expired.
+	}
+	require.NoError(t, workdir.WriteMetadata(workdirPath, meta))
+
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: tmpDir,
 		Components: schema.Components{
@@ -1480,13 +1491,16 @@ func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) 
 		},
 	}
 
-	ctx := t.Context()
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
+	err = AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
-
-	// The guard marker must now be present in componentConfig.
-	_, done := componentConfig[invocationDoneKey]
-	assert.True(t, done, "invocationDoneKey should be set in componentConfig after a skipped provision")
+	assert.Zero(t, requests.Load(), "a cache hit must not fetch the source")
+	contents, err := os.ReadFile(fixturePath)
+	require.NoError(t, err)
+	assert.Equal(t, fixtureContents, contents)
+	assert.Equal(t, workdirPath, componentConfig[workdir.WorkdirPathKey])
+	assert.NotContains(t, componentConfig, workdir.WorkdirReprovisionedKey)
+	assert.Contains(t, componentConfig, invocationDoneKey,
+		"invocationDoneKey should be set after a skipped provision")
 }
 
 func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
