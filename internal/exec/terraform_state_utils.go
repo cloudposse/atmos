@@ -140,6 +140,7 @@ func GetTerraformState(
 	}
 
 	componentSections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		ResolveSecrets:       true,
 		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,

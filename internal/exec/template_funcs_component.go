@@ -96,6 +96,8 @@ func componentFunc(
 	resolvedAuthMgr := resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
 
 	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		AtmosConfig:          atmosConfig,
+		ResolveSecrets:       true,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
