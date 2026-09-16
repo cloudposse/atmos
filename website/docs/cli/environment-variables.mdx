@@ -518,6 +518,110 @@ These environment variables configure Atmos behavior and can override settings i
   </dd>
 </dl>
 
+## GitHub Enterprise Server (GHES) {#github-enterprise-server-ghes}
+
+These variables point Atmos at a GitHub Enterprise Server instance instead of public
+`github.com`. `GITHUB_SERVER_URL` and `GITHUB_API_URL` are the same variables GitHub Actions
+already exports on both `github.com` and GHES runners, so CI configuration typically needs no
+changes.
+
+The toolchain (aqua-registry tools and their release assets) is a **separate concern** from
+where your own repositories live: aqua-registry tools are hosted on public `github.com` even
+when your repositories are on GHES, so the toolchain does not follow `GITHUB_SERVER_URL` /
+`GITHUB_API_URL`. Use the `ATMOS_TOOLCHAIN_*` variables instead — for example, to point the
+toolchain at a corporate release proxy or mirror.
+
+<dl>
+  <dt>`GITHUB_SERVER_URL`</dt>
+  <dd>
+    Base URL of the GitHub (or GHES) web/clone host for your own repositories. Default:
+    `https://github.com`. Used by the CI provider, imports/vendoring raw fetches, the
+    `pkg/github` API client (releases, tags, artifacts), the token host allowlist, and token
+    injection host recognition.
+
+    ```shell
+    GITHUB_SERVER_URL=https://github.example.com
+    ```
+  </dd>
+
+  <dt>`GITHUB_API_URL`</dt>
+  <dd>
+    Base URL of the GitHub (or GHES) REST API for your own repositories. Default:
+    `https://api.github.com`; on GHES this is typically `https://<host>/api/v3`.
+
+    ```shell
+    GITHUB_API_URL=https://github.example.com/api/v3
+    ```
+  </dd>
+
+  <dt>`ATMOS_TOOLCHAIN_GITHUB_URL`</dt>
+  <dd>
+    Base URL used for toolchain release assets and source archives (`github_release` and
+    `github_archive` tool types). Default: `https://github.com`. Independent of
+    `GITHUB_SERVER_URL`.
+  </dd>
+
+  <dt>`ATMOS_TOOLCHAIN_GITHUB_API_URL`</dt>
+  <dd>
+    Base URL used for toolchain repository API calls (e.g. fetching a tool's available
+    versions). Default: `https://api.github.com`. Independent of `GITHUB_API_URL`.
+  </dd>
+
+  <dt>`ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL`</dt>
+  <dd>
+    Base URL of the aqua-registry raw content mirror (serves `registry.yaml` and per-package
+    `pkgs/<name>/registry.yaml` files). Default:
+    `https://raw.githubusercontent.com/aquaproj/aqua-registry/main`.
+
+    ```shell
+    ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL=https://releases.corp.example.com/aqua-registry/main
+    ```
+  </dd>
+</dl>
+
+:::note
+The bare `owner/repo` and literal `github.com/owner/repo` shorthand forms (imports, vendoring,
+`atmos git clone`, AI skill sources, etc.) always resolve to public `github.com` — a bare
+hostname can't be distinguished from a relative path, so shorthand detection can't safely guess
+a GHES host from either form. On GHES, write the full URL instead (e.g.
+`https://github.example.com/owner/repo`), with one exception: AI skill sources also accept the
+*actual* configured GHES host without a scheme (`github.example.com/owner/repo`), since a skill
+source is always a repository reference, never a local path. Imports and vendor manifests need
+the explicit scheme even for the real GHES host. `atmos git clone` has no shorthand form at all
+(on github.com or GHES); it always needs a full URI (HTTPS, SCP-style, or go-getter syntax).
+:::
+
+:::caution Token scoping
+Your GitHub token (`ATMOS_GITHUB_TOKEN`, `GITHUB_TOKEN`, `--github-token`, or `gh auth token`) is
+only ever sent to an endpoint under two conditions:
+
+- **The request's actual destination is `https`.** `GITHUB_SERVER_URL` / `GITHUB_API_URL` and the
+  `ATMOS_TOOLCHAIN_*` variables above may resolve to a plain `http://` endpoint (this is only
+  expected in local testing); Atmos never attaches the token to a request against a non-`https`
+  destination, since doing so would send it over the network in cleartext. This is re-checked
+  against the request that is actually about to go out on the wire, not just the URL you
+  configured: an HTTPS endpoint that redirects down to plain `http://` on the *same* host never
+  receives the token on that redirected request either.
+- **The request's actual destination belongs to an approved host.** For your own repositories
+  (the CI provider, imports/vendoring, the `pkg/github` API client, and the artifact/cache
+  backends), the approved hosts are `GITHUB_SERVER_URL`'s server, API, and upload hosts. Your
+  token is resolved without regard to host, so it is also treated as scoped to
+  `GITHUB_SERVER_URL`'s host for the toolchain installer and the aqua-registry client: it is
+  forwarded to `ATMOS_TOOLCHAIN_GITHUB_URL` / `ATMOS_TOOLCHAIN_GITHUB_API_URL` only when *both*
+  resolve to that *same* host as `GITHUB_SERVER_URL` / `GITHUB_API_URL`. By default the
+  toolchain endpoints point at public `github.com`, so on a GHES instance the toolchain fetches
+  proceed **unauthenticated** unless you explicitly point `ATMOS_TOOLCHAIN_GITHUB_URL` /
+  `ATMOS_TOOLCHAIN_GITHUB_API_URL` at your own GHES host too. This host check, like the `https`
+  check above, is re-evaluated against every request Atmos actually sends -- including every hop
+  of an automatic redirect -- so a redirect to an unapproved host (e.g. GitHub's own pre-signed,
+  unauthenticated blob-storage redirect for an artifact download) never carries the token along,
+  even when that redirect target is itself `https`.
+
+Both rules apply independently everywhere Atmos builds an authenticated GitHub request or
+client (the CI provider, imports/vendoring, the `pkg/github` API client, the artifact/cache
+backends, the toolchain installer, and the aqua-registry client).
+:::
+
 ## AI Integration
 
 <dl>
