@@ -1,7 +1,10 @@
 package exec
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -13,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
+	"github.com/cloudposse/atmos/pkg/vendoring/concurrency"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
 )
 
@@ -69,6 +73,8 @@ func ExecuteVendorPullCmd(cmd *cobra.Command, args []string) error {
 // VendorFlags bundles the parsed 'atmos vendor pull' CLI flags, produced by parseVendorFlags and
 // consumed by validateVendorFlags and handleVendorConfig.
 type VendorFlags struct {
+	ctx       context.Context
+	collect   *[]install.VendorPackage
 	DryRun    bool
 	Component string
 	// Stack, when set, vendors every component declared in the stack that has its own
@@ -96,9 +102,33 @@ type VendorFlags struct {
 func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteVendorPullCommand")()
 
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
+	plan, err := PlanVendorPull(cmd, args)
 	if err != nil {
 		return err
+	}
+	return ExecuteVendorPackages(cmd.Context(), &plan.Config, plan.Packages, plan.Options)
+}
+
+// VendorPullPlan holds validated command selection before any downloads begin.
+type VendorPullPlan struct {
+	Config   schema.AtmosConfiguration
+	Packages []install.VendorPackage
+	Options  install.InstallOptions
+}
+
+// PlanVendorPull resolves all selected packages without materializing their destinations.
+func PlanVendorPull(cmd *cobra.Command, args []string) (*VendorPullPlan, error) {
+	defer perf.Track(nil, "exec.PlanVendorPull")()
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+	defer cancel()
+
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	flags := cmd.Flags()
@@ -115,19 +145,30 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 
 	atmosConfig, err := cfg.InitCliConfig(info, needsStackProcessing)
 	if err != nil {
-		return fmt.Errorf("failed to initialize CLI config: %w", err)
+		return nil, fmt.Errorf("failed to initialize CLI config: %w", err)
 	}
 
 	vendorFlags, err := parseVendorFlags(flags, &atmosConfig)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := validateVendorFlags(&vendorFlags); err != nil {
-		return err
+		return nil, err
 	}
 
-	return handleVendorConfig(&atmosConfig, &vendorFlags, args)
+	n, err := concurrency.Resolve(cmd.Flags(), &atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	atmosConfig.Vendor.MaxConcurrency = n
+	plan := &VendorPullPlan{Config: atmosConfig, Options: install.InstallOptions{DryRun: vendorFlags.DryRun, RefreshLock: vendorFlags.RefreshLock, LockEnforcement: vendorFlags.LockEnforcement, MaxConcurrency: n}}
+	vendorFlags.ctx = ctx
+	vendorFlags.collect = &plan.Packages
+	if err := handleVendorConfig(&plan.Config, &vendorFlags, args); err != nil {
+		return nil, err
+	}
+	return plan, nil
 }
 
 func parseVendorFlags(flags *pflag.FlagSet, atmosConfig *schema.AtmosConfiguration) (VendorFlags, error) {
@@ -334,6 +375,8 @@ func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags
 	if vendorConfigExists {
 		return ExecuteAtmosVendorInternal(&executeVendorOptions{
 			vendorConfigFileName: foundVendorConfigFile,
+			collect:              flg.collect,
+			ctx:                  flg.ctx,
 			dryRun:               flg.DryRun,
 			refreshLock:          flg.RefreshLock,
 			lockEnforcement:      flg.LockEnforcement,
@@ -385,6 +428,6 @@ func handleComponentVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFl
 		&config.Spec,
 		flg.Component,
 		path,
-		install.InstallOptions{DryRun: flg.DryRun, RefreshLock: flg.RefreshLock, LockEnforcement: flg.LockEnforcement},
+		install.InstallOptions{DryRun: flg.DryRun, RefreshLock: flg.RefreshLock, LockEnforcement: flg.LockEnforcement, Collect: flg.collect, Context: flg.ctx},
 	)
 }
