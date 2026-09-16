@@ -21,7 +21,7 @@ Tests can detect missing preconditions and skip gracefully with informative mess
 
 ### Precondition Helper Functions
 
-Created a centralized set of helper functions in `tests/test_preconditions.go` that check for specific preconditions and skip tests when not met.
+Created a centralized set of helper functions in `tests/preconditions.go` that check for specific preconditions and skip tests when not met.
 
 **Available Helpers**:
 
@@ -30,8 +30,10 @@ Created a centralized set of helper functions in `tests/test_preconditions.go` t
 | `RequireAWSProfile(t, profile)` | Verify AWS profile exists | Profile not configured |
 | `RequireGitRepository(t)` | Ensure running in Git repo | Not a Git repository |
 | `RequireGitRemoteWithValidURL(t)` | Check Git remote configuration | No valid remote URL |
-| `RequireGitHubAccess(t)` | Test GitHub API connectivity | Network issues or rate limits |
-| `RequireNetworkAccess(t, url)` | Verify network connectivity | URL unreachable |
+| `RequireGitHubAccess(t)` | Test GitHub API connectivity | Network issues, rate limits, or `ATMOS_TEST_OFFLINE=true` |
+| `RequireNetworkAccess(t, url)` | Verify network connectivity | URL unreachable or `ATMOS_TEST_OFFLINE=true` |
+| `RequireLiveGitHub(t)` | Gate a canary that must reach real github.com, not the acceptance suite's local git mirror/HTTP mock | Same as `RequireGitHubAccess` |
+| `RequireLiveGitHubAuthenticated(t)` | Like `RequireLiveGitHub`, and additionally requires a real `GITHUB_TOKEN` | Same as `RequireLiveGitHub`, plus `GITHUB_TOKEN` unset |
 | `RequireExecutable(t, name)` | Check executable availability | Not found in PATH |
 | `RequireEnvVar(t, name)` | Ensure environment variable set | Variable not set |
 
@@ -66,17 +68,58 @@ func ShouldCheckPreconditions() bool {
 }
 ```
 
+**Environment Variable**: `ATMOS_TEST_OFFLINE`
+- When set to `true`, every test that depends on live network access skips outright
+  (`RequireGitHubAccess`, `RequireNetworkAccess`, and the `live_github`/`live_github_authenticated`
+  canaries gated by `RequireLiveGitHub`/`RequireLiveGitHubAuthenticated`)
+- Checked **independently** of `ATMOS_TEST_SKIP_PRECONDITION_CHECKS`: that flag only bypasses the
+  connectivity *probes* those helpers run before a test (so CI can rely on the local git mirror
+  and HTTP mock without also requiring live GitHub reachability) -- it never means "run this
+  test's live network calls anyway." `ATMOS_TEST_OFFLINE` is the switch for that.
+
+**Implementation**:
+```go
+func Offline() bool {
+    return os.Getenv("ATMOS_TEST_OFFLINE") == "true"
+}
+```
+
+### Live GitHub Canaries
+
+Most of the acceptance suite runs against a local git mirror (`tests/testhelpers/gitmirror`) or an
+HTTP mock instead of live GitHub, for speed and determinism. A small number of canary tests
+(`tests/live_github_canary_test.go`) deliberately keep exercising the real, live GitHub path --
+one unauthenticated `vendor pull` of a real external repo, one authenticated variant, one
+unauthenticated toolchain release-asset install, and one unauthenticated raw-content `!include`
+fetch.
+
+Two test-case preconditions identify these canaries:
+
+- **`live_github`**: the test must reach real, unauthenticated GitHub. `GITHUB_TOKEN`,
+  `ATMOS_GITHUB_TOKEN`, `ATMOS_PRO_GITHUB_TOKEN`, and `GH_TOKEN` are blanked, `GH_CONFIG_DIR`
+  points at an empty temp directory (defeating the `gh auth token` CLI fallback), and the local git
+  mirror's `insteadOf` redirect rules are removed so the test actually reaches github.com instead
+  of being silently redirected to the mirror.
+- **`live_github_authenticated`**: like `live_github`, but keeps `GITHUB_TOKEN` and the git
+  extraheader token injection. Skips if `GITHUB_TOKEN` is not set.
+
+Both gate on `RequireLiveGitHub`/`RequireLiveGitHubAuthenticated`, so they honor
+`ATMOS_TEST_OFFLINE` like every other live-network test. Because they still run in the normal PR
+shard matrix (no separate scheduled workflow), each canary also classifies a subprocess failure as
+*transient* (DNS/connect failures, timeouts, TLS trust failures, rate limits, 5xx) and skips rather
+than fails in that case -- only a genuine 401/403/404 or an actual atmos bug fails the build.
+
 ### Linting and Enforcement
 
 **Enforced Rules**:
 1. **Must use `t.Skipf()` instead of `t.Skip()`**: Ensures all skips include descriptive reasons
-   - Enforced via `forbidigo` linter pattern: `\.Skip\(`
-   - Message: "Use t.Skipf with a descriptive reason instead of t.Skip"
+    - Enforced via `forbidigo` linter pattern: `\.Skip\(`
+    - Message: "Use t.Skipf with a descriptive reason instead of t.Skip"
 
 2. **Environment variable handling**:
-   - Production code must use `viper.BindEnv` (enforced by `forbidigo`)
-   - Test files and test helpers can use `os.Getenv`/`os.Setenv`
-   - Configured via `exclude-rules` in `.golangci.yml`
+    - Production code must use `viper.BindEnv` (enforced by `forbidigo`)
+    - Test files and test helpers can use `os.Getenv`/`os.Setenv`
+    - Configured via `exclude-rules` in `.golangci.yml`
 
 ### Binary Freshness Detection
 
@@ -116,22 +159,22 @@ func TestGitHubVendoring(t *testing.T) {
 ### Developer Workflow
 
 1. **Run tests to see requirements**:
-   ```bash
-   go test ./...
-   # SKIP: AWS profile 'dev' not configured: required for S3 backend testing...
-   ```
+    ```bash
+    go test ./...
+    # SKIP: AWS profile 'dev' not configured: required for S3 backend testing...
+    ```
 
 2. **Either configure dependencies**:
-   ```bash
-   aws configure --profile dev
-   export GITHUB_TOKEN=ghp_...
-   ```
+    ```bash
+    aws configure --profile dev
+    export GITHUB_TOKEN=ghp_...
+    ```
 
 3. **Or bypass checks**:
-   ```bash
-   export ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true
-   go test ./...
-   ```
+    ```bash
+    export ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true
+    go test ./...
+    ```
 
 ## Benefits Achieved
 
@@ -156,6 +199,22 @@ The precondition system specifically enhances the integration and acceptance tes
 ## Future Enhancements
 
 - `ATMOS_TEST_MOCK_AWS`: Automatically use mocked AWS services
-- `ATMOS_TEST_OFFLINE`: Skip all network-dependent tests
 - `ATMOS_TEST_VERBOSE_SKIP`: Provide detailed skip reasoning
 - Integration with test coverage tools to track skip patterns
+
+## Why live GitHub access is a canary concern, not a per-PR one
+
+Two external changes turned "the test fetches something from github.com" from a minor cost into a reliability
+problem:
+
+- GitHub introduced protections against unauthenticated traffic to public repositories
+  (https://github.com/orgs/community/discussions/206581#discussioncomment-18269356). Anonymous fetches now fail
+  or rate-limit in ways that surface as 401s and 404s, at GitHub's discretion and without notice.
+- The same pressure shows up across the ecosystem, for example hashicorp/terraform#39130
+  (https://github.com/hashicorp/terraform/issues/39130), where users ask for SSH module fetching because
+  unauthenticated HTTPS to GitHub is rate limited.
+
+The acceptance suite therefore serves git sources from a local mirror (`tests/testhelpers/gitmirror`) and GitHub
+HTTP endpoints from a local façade (`tests/testhelpers/httpmock`) by default, keeps atmos unaware of both, and
+confines real GitHub access to the explicit `live_github` / `live_github_authenticated` canaries described above,
+which skip on transient network conditions and under `ATMOS_TEST_OFFLINE`.
