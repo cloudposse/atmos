@@ -2572,7 +2572,7 @@ func cleanDirectory(t *testing.T, workdir string) error {
 			fullPath := filepath.Join(repoRoot, file)
 			if strings.HasPrefix(fullPath, workdirPrefix) || fullPath == workdir {
 				t.Logf("Removing untracked file: %q", fullPath)
-				if err := os.RemoveAll(fullPath); err != nil {
+				if err := removeTestOutput(fullPath); err != nil {
 					return fmt.Errorf("failed to remove %q: %w", fullPath, err)
 				}
 			}
@@ -2639,7 +2639,7 @@ func removeIgnoredEntries(t *testing.T, repo *git.Repository, repoRoot, workdir 
 		}
 
 		t.Logf("Removing gitignored entry: %q", fullPath)
-		if err := os.RemoveAll(fullPath); err != nil {
+		if err := removeTestOutput(fullPath); err != nil {
 			return fmt.Errorf("failed to remove %q: %w", fullPath, err)
 		}
 	}
