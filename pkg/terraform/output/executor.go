@@ -51,6 +51,8 @@ type RunnerFactory func(workdir, executable string) (TerraformRunner, error)
 
 // DescribeComponentParams contains parameters for describing a component.
 type DescribeComponentParams struct {
+	// SecretsMaskOnly preserves credential-free secret inspection for nested lookups.
+	SecretsMaskOnly      bool
 	AtmosConfig          *schema.AtmosConfiguration // Optional: Use provided config instead of initializing new one.
 	Component            string
 	Stack                string
@@ -74,6 +76,8 @@ type StaticRemoteStateGetter interface {
 
 // OutputOptions configures behavior for terraform output retrieval.
 type OutputOptions struct {
+	// SecretsMaskOnly preserves inspection mode and bypasses the execution output cache.
+	SecretsMaskOnly bool
 	// QuietMode suppresses terraform init/workspace output (sends to io.Discard).
 	// Use this when formatting output for scripts to avoid polluting stdout/stderr.
 	// If an error occurs, captured stderr is included in the error message.
@@ -297,10 +301,11 @@ func (e *Executor) GetOutputWithOptions(
 		}
 	}
 
+	maskOnly := opts != nil && opts.SecretsMaskOnly
 	stackSlug := stackComponentKey(stack, component)
 
 	// Check cache first.
-	if !skipCache {
+	if !skipCache && !maskOnly {
 		if result := resolveOutputFromCache(atmosConfig, stackSlug, component, stack, output); result != nil {
 			return result.value, result.exists, result.err
 		}
@@ -320,6 +325,7 @@ func (e *Executor) GetOutputWithOptions(
 	}
 
 	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
+		SecretsMaskOnly:      maskOnly,
 		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
@@ -335,7 +341,9 @@ func (e *Executor) GetOutputWithOptions(
 	// Check for static remote state backend.
 	if e.staticRemoteStateGetter != nil {
 		if staticOutputs := e.staticRemoteStateGetter.GetStaticRemoteStateOutputs(&sections); staticOutputs != nil {
-			terraformOutputsCache.Store(stackSlug, staticOutputs)
+			if !maskOnly {
+				terraformOutputsCache.Store(stackSlug, staticOutputs)
+			}
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
 				outputLookupFailed(message)
@@ -360,7 +368,9 @@ func (e *Executor) GetOutputWithOptions(
 	}
 
 	// Cache the result.
-	terraformOutputsCache.Store(stackSlug, outputs)
+	if !maskOnly {
+		terraformOutputsCache.Store(stackSlug, outputs)
+	}
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
