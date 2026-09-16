@@ -21,6 +21,7 @@ type TerraformStateGetter interface {
 		skipCache bool,
 		authContext *schema.AuthContext,
 		authManager any,
+		options ...TerraformLookupOptions,
 	) (any, error)
 }
 
@@ -37,10 +38,11 @@ func (d *defaultStateGetter) GetState(
 	skipCache bool,
 	authContext *schema.AuthContext,
 	authManager any,
+	options ...TerraformLookupOptions,
 ) (any, error) {
 	defer perf.Track(atmosConfig, "exec.defaultStateGetter.GetState")()
 
-	return GetTerraformState(atmosConfig, yamlFunc, stack, component, output, skipCache, authContext, authManager)
+	return GetTerraformState(atmosConfig, yamlFunc, stack, component, output, skipCache, authContext, authManager, options...)
 }
 
 // Global variable that can be overridden in tests.

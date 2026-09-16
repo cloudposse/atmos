@@ -121,7 +121,7 @@ func processTagTerraformStateWithContext(
 		}
 	}
 
-	value, err := stateGetter.GetState(atmosConfig, input, stack, component, output, false, authContext, authManager)
+	value, err := stateGetter.GetState(atmosConfig, input, stack, component, output, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
 	if err != nil {
 		// Check if this is a recoverable error AND the expression has a YQ default.
 		if isRecoverableTerraformError(err) && hasYqDefault(output) {
