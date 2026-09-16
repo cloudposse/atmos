@@ -304,7 +304,7 @@ docs:
 #
 # The cache is purely an accelerator: the workflow always installs exact pinned
 # versions, so it stays correct no matter what the cache already holds. The
-# .tool-versions hash rolls the key automatically when tool pins change
+# tool and plugin declaration hashes roll the key when their pins change
 # (GitHub Actions cache entries are immutable, so without it a bump kept
 # serving the stale blob until someone hand-bumped the version token). The
 # version token remains as a manual cache-bust for anything the hash misses.
@@ -314,8 +314,9 @@ ci:
   enabled: true
   cache:
     enabled: true
-    key: 'atmos-toolchain-{{.OS}}-{{.Arch}}-v2-{{ hashFiles ".tool-versions" }}'
+    key: 'atmos-toolchain-{{.OS}}-{{.Arch}}-v3-{{ hashFiles ".tool-versions" "tests/fixtures/scenarios/helm-plugin-install/stacks/*.yaml" }}'
     restore_keys:
+      - 'atmos-toolchain-{{.OS}}-{{.Arch}}-v3-'
       - 'atmos-toolchain-{{.OS}}-{{.Arch}}-v2-'
       - 'atmos-toolchain-{{.OS}}-{{.Arch}}-'
 toolchain:
