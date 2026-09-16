@@ -42,7 +42,7 @@ func TestDownloadTokenLookupsInheritOperationCancellation(t *testing.T) {
 			} else {
 				config := schema.AtmosConfiguration{}
 				detector := customDetectors(ctx, &config, "github.com/org/repo")[0].(*CustomGitDetector)
-				token, source := detector.resolveToken(hostGitHub)
+				token, source := detector.resolveToken(hostGitHub, hostGitHub)
 				assert.Empty(t, token)
 				assert.Empty(t, source)
 			}

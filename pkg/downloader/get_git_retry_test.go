@@ -311,6 +311,19 @@ func TestIsGitHubHTTPURL(t *testing.T) {
 			url:      "HTTPS://RAW.GITHUBUSERCONTENT.COM/org/repo/main/file.yaml",
 			expected: true,
 		},
+
+		// Host substring appearing only in path or query must not be misclassified
+		// (regression: the check used to be a plain strings.Contains over the whole URL).
+		{
+			name:     "github.com only in path, unrelated host",
+			url:      "https://malicious.example.com/github.com/archive/refs/tags/v1.0.0.tar.gz",
+			expected: false,
+		},
+		{
+			name:     "github.com only in query string",
+			url:      "https://malicious.example.com/download?redirect=github.com/releases/download/x",
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -319,6 +332,15 @@ func TestIsGitHubHTTPURL(t *testing.T) {
 			assert.Equal(t, tt.expected, result, "isGitHubHTTPURL(%s) = %v, want %v", tt.url, result, tt.expected)
 		})
 	}
+}
+
+// TestIsGitHubHTTPURL_GHESHostInPathOnly pins that a URL whose path (not its actual host)
+// merely contains the configured GHES host string is never misclassified as a GitHub URL.
+func TestIsGitHubHTTPURL_GHESHostInPathOnly(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	assert.False(t, isGitHubHTTPURL("https://malicious.example.com/ghes.example.com/raw/main/file.yaml"))
+	assert.True(t, isGitHubHTTPURL("https://ghes.example.com/owner/repo/raw/main/file.yaml"))
 }
 
 // writeCountingFakeGit creates a fake git that tracks invocation count via a file.
