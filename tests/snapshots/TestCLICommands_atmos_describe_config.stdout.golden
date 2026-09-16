@@ -228,7 +228,8 @@
     },
     "provision": {
       "workdir": {}
-    }
+    },
+    "metrics": {}
   },
   "describe": {
     "settings": {},
