@@ -1,8 +1,8 @@
 ---
-title: Migrating from Taskfile.yml
+title: Migrating Tasks from Taskfile.yml
 sidebar_position: 6
 sidebar_label: From Taskfile (go-task)
-description: How to migrate from Taskfile.yml (go-task) to Atmos
+description: Adopt Atmos as a task runner for existing Taskfile.yml automation, including builds, tests, scripts, and releases.
 id: taskfile
 ---
 import FAQItem from '@site/src/components/FAQItem'
@@ -14,11 +14,9 @@ import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
 <Intro>
-A Taskfile gives your team an ad-hoc way to run build, test, and deploy tasks, defined in YAML.
-Atmos gives you the same capability as a native, documented feature: custom commands and
-workflows. Task and Atmos both use declarative YAML, so most of the mapping from one field to
-another is direct. Two Task features map to a dedicated field rather than plain steps, covered
-below. Your Terraform code and scripts do not need to change.
+Use Atmos as a task runner for the build, test, lint, release, and maintenance tasks your team
+currently runs with Task (go-task). This guide maps Taskfile tasks, dependencies, variables,
+and freshness checks to Atmos custom commands and workflows.
 </Intro>
 
 :::tip Using an AI Coding Assistant?
@@ -31,6 +29,31 @@ atmos ai skill install atmos-migration
 
 See [AI Agent Skills](/ai/skills) for details.
 :::
+
+
+## Start with Your Existing Tasks
+
+Task-runner adoption starts with an `atmos.yaml` file in your project. Stacks, components,
+Terraform, and cloud credentials are optional; none are required for the tasks in this guide.
+The examples use a Go application, but the same mapping works for other languages, documentation
+builds, release scripts, and local development tools.
+
+You can migrate one task at a time. To start, expose an existing task through Atmos:
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: build
+    description: Build the application
+    steps:
+      - type: shell
+        command: task build
+```
+</File>
+
+Run `atmos build` from the project directory. When you are ready, replace `task build` with
+the task's own commands. The examples below show that next step. They assume your existing
+application, scripts, and required tools are available.
 
 ## Key Concepts at a Glance
 
@@ -59,33 +82,34 @@ runs concurrently by default — matching Task's `deps:` behavior directly, not 
     ```yaml
     tasks:
       deploy:
-        desc: Plan and apply the given environment
+        desc: Deploy the application to the selected environment
+        vars:
+          ENV: '{{.ENV | default "dev"}}'
         deps: [test, lint]
         cmds:
-          - terraform -chdir=terraform apply -var-file=envs/dev.tfvars
+          - ./scripts/deploy.sh "{{.ENV}}"
     ```
   </TabItem>
   <TabItem value="after" label="After (atmos.yaml)">
     ```yaml
     commands:
       - name: deploy
-        description: Plan and apply the given environment
+        description: Deploy the application to the selected environment
+        flags:
+          - name: env
+            default: "dev"
         dependencies:
           commands: [test, lint]
         steps:
-          - type: atmos
-            command: terraform apply infra -s dev
+          - type: shell
+            command: ./scripts/deploy.sh "{{ .Flags.env }}"
     ```
   </TabItem>
 </Tabs>
 
-`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Moving the old
-`terraform/` directory's `.tf` files to `components/terraform/infra/` (the default
-`components.terraform.base_path` is `components/terraform`) is one option -- swap `infra` for
-whatever you actually name the component. Alternatively, keep the existing `terraform/` directory
-where it is: set `components.terraform.base_path: "."` and add `metadata.component: terraform`
-on the `infra` stack component -- `metadata.component` points the stack component at the physical
-directory, so no files need to move.
+The Task `ENV` variable becomes the Atmos `--env` flag. `atmos deploy` passes the default
+`dev` to your script; `atmos deploy --env staging` passes `staging`. The matching Task commands
+are `task deploy` and `task deploy ENV=staging`.
 
 `dependencies.commands` also matches a behavior Task itself has that a hand-rolled `parallel`
 step does not: if two commands both depend on the same one — for example both `test` and `lint`
@@ -123,7 +147,7 @@ commands:
 With no explicit `when:`, declaring `inputs`/`artifacts` on a step is enough — it implicitly means
 `when: checksum.changed`, and the step is skipped when the hash of the matched source files
 matches the hash recorded after the last successful run. Run the same command twice in a row and
-the second run skips `build` entirely; edit a matched source file and the next run executes it
+the second run skips the build step; edit a matched source file and the next run executes it
 again. See [inputs](/workflows/steps/inputs) for the full field reference, including the
 `timestamp.changed` fact for an mtime-based check matching Task's `method: timestamp` mode.
 [`require`/`assert`](/workflows/steps/type/require) is a different, older step type — it only
@@ -149,8 +173,8 @@ reachable from another task's `deps:`/`cmds:`. Atmos's `internal: true` maps to 
 field: it removes the command from help output and shell completion, but the command still
 executes if invoked directly (`atmos <name> ...`). If the user has a Task helper that must
 genuinely be unreachable on its own — not just hidden from discovery — migrating it straight to
-`internal: true` does not reproduce that constraint. Tell the user to audit any such helpers and,
-if true unreachability matters, add their own guard inside the command (for example a
+`internal: true` does not reproduce that constraint. Review any such helpers and,
+if direct invocation must be blocked, add a guard inside the command (for example a
 precondition or an early check on an expected caller-only flag/env var) rather than relying on
 `internal: true` alone. Reserve inlining the logic into a caller's step for a helper that's
 genuinely single-caller and has no reason to be invoked on its own.
@@ -161,9 +185,6 @@ genuinely single-caller and has no reason to be invoked on its own.
   <TabItem value="before" label="Before (Taskfile.yml)">
     ```yaml
     version: '3'
-
-    vars:
-      ENV: '{{.ENV | default "dev"}}'
 
     tasks:
       build:
@@ -184,7 +205,7 @@ genuinely single-caller and has no reason to be invoked on its own.
       lint:
         desc: Run static analysis
         cmds:
-          - golangci-lint run ./...
+          - go vet ./...
     ```
   </TabItem>
   <TabItem value="after" label="After (atmos.yaml)">
@@ -212,7 +233,7 @@ genuinely single-caller and has no reason to be invoked on its own.
         description: Run static analysis
         steps:
           - type: shell
-            command: golangci-lint run ./...
+            command: go vet ./...
     ```
   </TabItem>
 </Tabs>
@@ -221,15 +242,24 @@ genuinely single-caller and has no reason to be invoked on its own.
 ```yaml
 commands:
   - name: deploy
-    description: Plan and apply the given environment (default dev)
+    description: Deploy the application to the selected environment (default dev)
     flags:
       - name: env
         default: "dev"
+    dependencies:
+      commands: [test, lint]
+    steps:
+      - type: shell
+        command: ./scripts/deploy.sh "{{ .Flags.env }}"
 ```
 </File>
 
 <Terminal>
 ```bash
+# Use the default environment (dev)
+atmos deploy
+
+# Override the environment
 atmos deploy --env staging
 ```
 </Terminal>
@@ -252,18 +282,14 @@ Choose the one that fits what you are splitting:
 
 ## What You Gain
 
-- **A larger set of built-in step types.** A Taskfile task runs shell commands only. Atmos adds
-  step types for orchestration (`parallel`, `matrix`, `wait`), user prompts (`confirm`, `choose`,
-  `input`), and output (`table`, `markdown`, `toast`), with more than 30 types in total. See
-  [Step Types](/workflows/steps/type) for the full list.
-- **Interactive commands.** A step such as `confirm` or `choose` can pause a command and ask the
-  user a question. A Taskfile task cannot do this without a custom shell script.
-- **Automatic tool installation.** A command can list the tools it needs under
-  `dependencies.tools`. Atmos installs the correct version before the command runs. See
-  [Toolchain Configuration](/cli/configuration/toolchain). Task has no built-in match for this.
-- **One interface across every command.** `task --list` shows task names and descriptions.
-  Atmos adds `atmos <command> --help` with the same flag and argument format for every command,
-  in addition to the CLI-wide `atmos --help`.
+- **Discoverable commands.** Add descriptions, typed flags, defaults, and per-command help for
+  your team's tasks with `atmos --help` and `atmos <command> --help`.
+- **Typed steps.** Combine shell commands with HTTP requests, containers, parallel execution,
+  matrices, and other [step types](/workflows/steps/type).
+- **Interactive workflows.** Add prompts, confirmations, and structured output where your
+  tasks need them.
+- **Tool dependencies.** Declare required CLI versions with `dependencies.tools` so Atmos
+  installs them before running the command. See [Toolchain Configuration](/cli/configuration/toolchain).
 
 ## Migration Checklist
 
@@ -278,6 +304,13 @@ Choose the one that fits what you are splitting:
 </TaskList>
 
 ## Common Questions
+
+<FAQItem question="Do these tasks require Terraform or Atmos stacks?">
+No. Custom commands can run application builds, tests, scripts, and other tools from
+`atmos.yaml` alone. If you later choose to adopt Atmos's Terraform orchestration, follow
+[Migrating from Native Terraform](/migration/native-terraform) for that separate change.
+</FAQItem>
+
 
 <FAQItem question="Will my sources:/generates: caching still work?">
 Yes, once you migrate it. Turn `sources:`/`generates:` into step `inputs.sources`/`artifacts.paths`
