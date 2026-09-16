@@ -60,7 +60,7 @@ so a template still containing `!Rain::*` tags will fail as invalid CloudFormati
 | `!Rain::Constant` | Injects a named constant's value into the template at preprocess time | Move the value to a CloudFormation `Parameters:` entry, referenced via `!Ref` in the template; feed the value from the component's `parameters:` section in stack config (which itself supports inheritance, Go templates, and `!env`/`!template`) |
 | `!Rain::Env` | Injects an environment variable's value into the template at preprocess time | Same as `Constant`: turn it into a `Parameters:` entry, and set the component's `parameters:` value with `!env VAR_NAME` in the stack manifest |
 | `!Rain::Include` | Merges an external JSON/YAML fragment into the template at preprocess time | No direct Atmos-side equivalent (templates aren't preprocessed). For genuine fragment reuse, use CloudFormation's own native `Fn::Transform`/`AWS::Include` intrinsic (resolved by CloudFormation itself at deploy time, from a fragment already in S3) — this is a CloudFormation feature, not Rain- or Atmos-specific. For anything more structural, see `Module` below |
-| `!Rain::Embed` | Inlines a local file's contents as a string literal (e.g. Lambda inline code, `UserData` scripts) at preprocess time | For small scripts: inline the content directly using a YAML block scalar (literal `\|` or folded `>`) in the template by hand — this is a one-time manual flatten, not an ongoing process. For larger assets: pre-upload to S3 out-of-band and reference the S3 location directly (same gap noted in Core Principle 4) |
+| `!Rain::Embed` | Inlines a local file's contents as a string literal (e.g. Lambda inline code, `UserData` scripts) at preprocess time | For small scripts: inline the content directly using a YAML literal block scalar or folded `>` block scalar in the template by hand — this is a one-time manual flatten, not an ongoing process. For larger assets: pre-upload to S3 out-of-band and reference the S3 location directly (same gap noted in Core Principle 4) |
 | `!Rain::S3` | Uploads a local file/directory to S3 and rewrites the reference (e.g. Lambda `S3Bucket`/`S3Key`, nested-stack `TemplateURL`) at preprocess time | **Partial today**: the template body itself auto-packages via the component's `kind: aws/s3` provision target when it exceeds the inline size limit. Arbitrary local assets (Lambda zips, nested templates by relative path) are **not** auto-rewritten yet — pre-upload them out-of-band and reference the resulting S3 URL directly in the template |
 | `!Rain::Module` | Client-side, multi-file template composition (Rain's own docs mark this experimental) | Not supported — use AWS CDK for real modular/reusable template composition. This mirrors the PRD's own Non-Goal: Rain's module system is not a design Atmos is replicating |
 
@@ -213,10 +213,9 @@ mapped to" rather than guessing.
 
 ### The component type string has a slash
 
-Stack config uses the literal key `components."aws/cloudformation".<name>:` — the quotes around
-`"aws/cloudformation"` are required YAML syntax because the key contains a `/`. This is unlike
-every other built-in component type (`terraform`, `helmfile`, etc.), which are flat, unquoted
-keys.
+Under `components:`, `aws/cloudformation` is one literal component-type key. The slash
+does not create a nested mapping. Both `aws/cloudformation:` and `"aws/cloudformation":`
+are valid YAML; quoting this key is optional.
 
 ### Secrets go into `parameters:`, not `env:`
 
