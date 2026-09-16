@@ -223,10 +223,13 @@ func TestPrintStatusLines_LegacyActionWarning(t *testing.T) {
 func TestPrintStatusLines_LegacyActionWarning_PlanStorage(t *testing.T) {
 	t.Setenv("GITHUB_ACTION_REPOSITORY", "cloudposse/github-action-terraform-plan-storage")
 	stderr := initTestUI(t)
+	stdout := initTestDataWriter(t)
 
 	printStatusLines(&schema.AtmosConfiguration{})
 
 	assert.Contains(t, stderr.String(), "Detected legacy action cloudposse/github-action-terraform-plan-storage")
+	assert.Contains(t, stdout.String(), "::warning")
+	assert.Contains(t, stdout.String(), "Detected legacy action cloudposse/github-action-terraform-plan-storage")
 }
 
 func TestPrintStatusLines_NoLegacyActionWarningWhenUnset(t *testing.T) {
