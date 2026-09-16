@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -54,6 +55,9 @@ func TestGetLatestRelease_ViaMock(t *testing.T) {
 		_, err := GetLatestRelease("owner", "repo")
 
 		require.Error(t, err)
+		var ghErr *github.ErrorResponse
+		require.ErrorAs(t, err, &ghErr, "a 404 must surface go-github's ErrorResponse unchanged")
+		assert.Equal(t, http.StatusNotFound, ghErr.Response.StatusCode)
 		assert.NotErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 		assert.NotErrorIs(t, err, errUtils.ErrGitHubRateLimitExceeded)
 	})
@@ -93,6 +97,9 @@ func TestGetReleases_ViaMock(t *testing.T) {
 		_, err := GetReleases(ReleasesOptions{Owner: "owner", Repo: "repo"})
 
 		require.Error(t, err)
+		var ghErr *github.ErrorResponse
+		require.ErrorAs(t, err, &ghErr, "a 404 must surface go-github's ErrorResponse unchanged")
+		assert.Equal(t, http.StatusNotFound, ghErr.Response.StatusCode)
 		assert.NotErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 		assert.NotErrorIs(t, err, errUtils.ErrGitHubRateLimitExceeded)
 	})
