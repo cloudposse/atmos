@@ -325,6 +325,9 @@ func TestNormalizeHost(t *testing.T) {
 		host string
 		want string
 	}{
+		{"bare bracketed IPv6 unbrackets", "[::1]", "::1"},
+		{"bracketed IPv6 with default port unbrackets", "[::1]:443", "::1"},
+		{"bracketed IPv6 with custom port keeps the port", "[::1]:8443", "[::1]:8443"},
 		{name: "lowercased", host: "GitHub.com", want: "github.com"},
 		{name: "trailing dot stripped", host: "github.com.", want: "github.com"},
 		{name: "default https port stripped", host: "github.com:443", want: "github.com"},
