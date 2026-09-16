@@ -1,0 +1,265 @@
+{
+  "jobs": [
+    {
+      "name": "Acceptance Tests (macos, shard 2/10)",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "completed_at": "2026-09-16T12:32:05Z",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:47:06Z",
+          "completed_at": "2026-09-16T11:47:07Z"
+        },
+        {
+          "name": "Pre Harden Runner",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:47:07Z",
+          "completed_at": "2026-09-16T11:47:13Z"
+        },
+        {
+          "name": "Harden Runner",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:47:13Z",
+          "completed_at": "2026-09-16T11:47:14Z"
+        },
+        {
+          "name": "Check out code into the Go module directory",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:47:14Z",
+          "completed_at": "2026-09-16T11:47:22Z"
+        },
+        {
+          "name": "Guard DNS against the harden-runner post-step race",
+          "status": "completed",
+          "conclusion": "skipped",
+          "started_at": "2026-09-16T11:47:22Z",
+          "completed_at": "2026-09-16T11:47:22Z"
+        },
+        {
+          "name": "Set up Atmos (install build artifact for macos)",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:47:22Z",
+          "completed_at": "2026-09-16T11:47:47Z"
+        },
+        {
+          "name": "Set up the CI toolchain",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:47:47Z",
+          "completed_at": "2026-09-16T11:48:00Z"
+        },
+        {
+          "name": "Verify Terraform, OpenTofu, Packer, Helm, and Helmfile",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:48:00Z",
+          "completed_at": "2026-09-16T11:48:02Z"
+        },
+        {
+          "name": "Verify the stack-declared Helm plugins",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:48:02Z",
+          "completed_at": "2026-09-16T11:48:03Z"
+        },
+        {
+          "name": "Check atmos.exe integrity",
+          "status": "completed",
+          "conclusion": "skipped",
+          "started_at": "2026-09-16T11:48:03Z",
+          "completed_at": "2026-09-16T11:48:03Z"
+        },
+        {
+          "name": "Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:48:03Z",
+          "completed_at": "2026-09-16T11:50:20Z"
+        },
+        {
+          "name": "Get dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:50:20Z",
+          "completed_at": "2026-09-16T11:50:22Z"
+        },
+        {
+          "name": "Verify function parser coverage",
+          "status": "completed",
+          "conclusion": "skipped",
+          "started_at": "2026-09-16T11:50:22Z",
+          "completed_at": "2026-09-16T11:50:22Z"
+        },
+        {
+          "name": "Verify Terraform example syntax",
+          "status": "completed",
+          "conclusion": "skipped",
+          "started_at": "2026-09-16T11:50:22Z",
+          "completed_at": "2026-09-16T11:50:22Z"
+        },
+        {
+          "name": "Acceptance tests with coverage",
+          "status": "completed",
+          "conclusion": "skipped",
+          "started_at": "2026-09-16T11:50:22Z",
+          "completed_at": "2026-09-16T11:50:22Z"
+        },
+        {
+          "name": "Acceptance tests",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:50:22Z",
+          "completed_at": "2026-09-16T11:58:22Z"
+        },
+        {
+          "name": "Upload native coverage artifact",
+          "status": "completed",
+          "conclusion": "skipped",
+          "started_at": "2026-09-16T11:58:22Z",
+          "completed_at": "2026-09-16T11:58:22Z"
+        },
+        {
+          "name": "Post Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:58:22Z",
+          "completed_at": "2026-09-16T11:58:22Z"
+        },
+        {
+          "name": "Post Set up the CI toolchain",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:58:22Z",
+          "completed_at": "2026-09-16T11:58:22Z"
+        },
+        {
+          "name": "Post Set up Atmos (install build artifact for macos)",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:58:22Z",
+          "completed_at": "2026-09-16T11:58:22Z"
+        },
+        {
+          "name": "Post Check out code into the Go module directory",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:58:22Z",
+          "completed_at": "2026-09-16T11:58:23Z"
+        },
+        {
+          "name": "Post Harden Runner",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T11:58:23Z",
+          "completed_at": "2026-09-16T11:58:25Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "in_progress",
+          "conclusion": null,
+          "started_at": "2026-09-16T11:58:25Z",
+          "completed_at": null
+        }
+      ]
+    },
+    {
+      "name": "Acceptance Tests (macos)",
+      "status": "completed",
+      "conclusion": "failure",
+      "completed_at": "2026-09-16T12:33:09Z",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T12:32:08Z",
+          "completed_at": "2026-09-16T12:32:09Z"
+        },
+        {
+          "name": "Pre Harden Runner",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T12:32:09Z",
+          "completed_at": "2026-09-16T12:32:15Z"
+        },
+        {
+          "name": "Harden Runner",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T12:32:15Z",
+          "completed_at": "2026-09-16T12:32:15Z"
+        },
+        {
+          "name": "Skip verification (workflow run was cancelled)",
+          "status": "completed",
+          "conclusion": "skipped",
+          "started_at": "2026-09-16T12:32:15Z",
+          "completed_at": "2026-09-16T12:32:15Z"
+        },
+        {
+          "name": "Check out code into the Go module directory",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T12:32:15Z",
+          "completed_at": "2026-09-16T12:32:21Z"
+        },
+        {
+          "name": "Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T12:32:21Z",
+          "completed_at": "2026-09-16T12:32:29Z"
+        },
+        {
+          "name": "Check per-OS test matrix result",
+          "status": "completed",
+          "conclusion": "failure",
+          "started_at": "2026-09-16T12:32:29Z",
+          "completed_at": "2026-09-16T12:33:06Z"
+        },
+        {
+          "name": "Check terraform-registry-cache result",
+          "status": "completed",
+          "conclusion": "skipped",
+          "started_at": "2026-09-16T12:33:06Z",
+          "completed_at": "2026-09-16T12:33:06Z"
+        },
+        {
+          "name": "Post Set up Go",
+          "status": "completed",
+          "conclusion": "skipped",
+          "started_at": "2026-09-16T12:33:06Z",
+          "completed_at": "2026-09-16T12:33:06Z"
+        },
+        {
+          "name": "Post Check out code into the Go module directory",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T12:33:06Z",
+          "completed_at": "2026-09-16T12:33:06Z"
+        },
+        {
+          "name": "Post Harden Runner",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T12:33:06Z",
+          "completed_at": "2026-09-16T12:33:07Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-09-16T12:33:07Z",
+          "completed_at": "2026-09-16T12:33:07Z"
+        }
+      ]
+    }
+  ]
+}
