@@ -83,6 +83,7 @@ func ExecuteComponentVendorInternal(
 	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
 
 	packages, err := vendorcomponent.BuildVendorPackages(vendorcomponent.BuildPackagesOptions{
+		Context:             opts.Context,
 		AtmosConfig:         atmosConfig,
 		VendorComponentSpec: vendorComponentSpec,
 		Component:           component,
@@ -90,10 +91,6 @@ func ExecuteComponentVendorInternal(
 		RefreshLock:         opts.RefreshLock,
 		TemplateFunc:        ProcessTmpl,
 	})
-	if err != nil {
-		return err
-	}
-	packages, err = install.FilterPending(atmosConfig, packages, opts)
 	if err != nil {
 		return err
 	}
@@ -130,6 +127,7 @@ func ExecuteComponentVendorPullBatch(
 			return fmt.Errorf("component %q: %w", component, err)
 		}
 		packages, err := vendorcomponent.BuildVendorPackages(vendorcomponent.BuildPackagesOptions{
+			Context:             opts.Context,
 			AtmosConfig:         atmosConfig,
 			VendorComponentSpec: &config.Spec,
 			Component:           component,
@@ -139,10 +137,6 @@ func ExecuteComponentVendorPullBatch(
 		})
 		if err != nil {
 			return fmt.Errorf("component %q: %w", component, err)
-		}
-		packages, err = install.FilterPending(atmosConfig, packages, opts)
-		if err != nil {
-			return fmt.Errorf("component %q: verify vendor lock: %w", component, err)
 		}
 		allPackages = append(allPackages, packages...)
 	}
@@ -190,7 +184,7 @@ func handleVendorPullSweep(atmosConfig *schema.AtmosConfiguration, flg *VendorFl
 	}
 	sort.Strings(componentTypes)
 
-	opts := install.InstallOptions{DryRun: flg.DryRun, RefreshLock: flg.RefreshLock, LockEnforcement: flg.LockEnforcement}
+	opts := install.InstallOptions{DryRun: flg.DryRun, RefreshLock: flg.RefreshLock, LockEnforcement: flg.LockEnforcement, Collect: flg.collect, Context: flg.ctx}
 	var errs []error
 	for _, componentType := range componentTypes {
 		if err := ExecuteComponentVendorPullBatch(atmosConfig, componentsByType[componentType], componentType, opts); err != nil {
@@ -324,6 +318,8 @@ func handleStackVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags)
 		DryRun:          flg.DryRun,
 		RefreshLock:     flg.RefreshLock,
 		LockEnforcement: flg.LockEnforcement,
+		Collect:         flg.collect,
+		Context:         flg.ctx,
 	})
 }
 

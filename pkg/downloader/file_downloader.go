@@ -91,13 +91,24 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 // (ETag/Last-Modified) captured from the response when the underlying client exposes any -- empty
 // for non-HTTP sources (git, OCI, local) or when the fetch itself fails.
 func (fd *fileDownloader) FetchWithMetadata(src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	return fd.FetchWithMetadataContext(context.Background(), src, dest, mode, timeout)
+}
+
+// FetchWithMetadataContext propagates cancellation to the download and rate-limit waits.
+func (fd *fileDownloader) FetchWithMetadataContext(parent context.Context, src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return FetchMetadata{}, err
+	}
 
 	// Pre-check GitHub rate limits for GitHub HTTP URLs.
 	if isGitHubHTTPURL(src) {
-		if err := github.WaitForRateLimit(ctx, MinRateLimitRemaining); err != nil {
-			log.Warn("Rate limit wait interrupted", "error", err)
+		if err := fd.waitForMetadataRateLimit(ctx, github.CheckRateLimit); err != nil {
+			if ctx.Err() != nil {
+				return FetchMetadata{}, ctx.Err()
+			}
+			log.Debug("Rate limit wait interrupted", "error", err)
 			// Continue anyway - don't block on rate limit check failures.
 		}
 	}
@@ -112,7 +123,7 @@ func (fd *fileDownloader) FetchWithMetadata(src, dest string, mode ClientMode, t
 	}
 
 	if err := client.Get(); err != nil {
-		return FetchMetadata{}, fmt.Errorf(errWrapFormat, errUtils.ErrDownloadFile, err)
+		return FetchMetadata{}, fmt.Errorf("%w: %w", errUtils.ErrDownloadFile, err)
 	}
 
 	// DownloadClient implementations that don't do HTTP (git, OCI, local copy, test mocks/fakes)
