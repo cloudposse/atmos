@@ -118,6 +118,7 @@ func (c *countingStateGetter) GetState(
 	_ bool,
 	_ *schema.AuthContext,
 	_ any,
+	_ ...TerraformLookupOptions,
 ) (any, error) {
 	c.calls.Add(1)
 	return c.ret, nil
