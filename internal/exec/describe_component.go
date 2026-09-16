@@ -261,6 +261,9 @@ type DescribeComponentResult struct {
 
 // ExecuteDescribeComponentParams contains parameters for ExecuteDescribeComponent.
 type ExecuteDescribeComponentParams struct {
+	// ResolveSecrets retrieves actual secrets for internal value-producing callers.
+	// The default preserves credential-free, masked inspection.
+	ResolveSecrets       bool
 	AtmosConfig          *schema.AtmosConfiguration // Optional: Use provided config instead of initializing new one.
 	Component            string
 	Stack                string
@@ -279,6 +282,7 @@ func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[strin
 	defer perf.Track(params.AtmosConfig, "exec.ExecuteDescribeComponent")()
 
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+		ResolveSecrets:       params.ResolveSecrets,
 		AtmosConfig:          params.AtmosConfig,
 		Component:            params.Component,
 		Stack:                params.Stack,
@@ -441,6 +445,8 @@ func recordImportsProvenance(mergeContext *m.MergeContext, imports []string) {
 
 // DescribeComponentContextParams contains parameters for describing a component with context.
 type DescribeComponentContextParams struct {
+	// ResolveSecrets retrieves actual secrets while retaining output masking.
+	ResolveSecrets       bool
 	AtmosConfig          *schema.AtmosConfiguration
 	Component            string
 	Stack                string
@@ -456,6 +462,7 @@ type DescribeComponentContextParams struct {
 
 // componentTypeProcessParams contains parameters for tryProcessWithComponentType.
 type componentTypeProcessParams struct {
+	resolveSecrets       bool
 	atmosConfig          *schema.AtmosConfiguration
 	configAndStacksInfo  schema.ConfigAndStacksInfo
 	componentType        string
@@ -469,10 +476,9 @@ type componentTypeProcessParams struct {
 // tryProcessWithComponentType attempts to process stacks with a specific component type.
 func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.ConfigAndStacksInfo, error) {
 	params.configAndStacksInfo.ComponentType = params.componentType
-	// `describe component` is an inspection command: when masking is enabled (the default),
-	// resolve `!secret` to the mask replacement WITHOUT retrieving from the backend, so the
-	// command needs no credentials for the secret provider.
-	params.configAndStacksInfo.SecretsMaskOnly = iolib.MaskingEnabled()
+	// Inspection can avoid provider access, but internal value-producing callers must
+	// retrieve real secrets even when their terminal output is masked.
+	params.configAndStacksInfo.SecretsMaskOnly = !params.resolveSecrets && iolib.MaskingEnabled()
 	result, err := ProcessStacksWithDegradation(params.atmosConfig, params.configAndStacksInfo, true, params.processTemplates, params.processYamlFunctions, params.skip, params.authManager, params.onWarning)
 	result.ComponentSection[cfg.ComponentTypeSectionName] = params.componentType
 	return result, err
@@ -485,6 +491,7 @@ func detectComponentType(
 	params DescribeComponentContextParams,
 ) (schema.ConfigAndStacksInfo, error) {
 	baseParams := componentTypeProcessParams{
+		resolveSecrets:       params.ResolveSecrets,
 		atmosConfig:          atmosConfig,
 		configAndStacksInfo:  *configAndStacksInfo,
 		processTemplates:     params.ProcessTemplates,
