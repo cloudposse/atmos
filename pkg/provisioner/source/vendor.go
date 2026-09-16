@@ -540,7 +540,7 @@ func copySingleFile(src, dst string) error {
 		return err
 	}
 
-	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode()) //nolint:gosec // G703: dst is the caller-provided, already-validated component target path, not tainted input.
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode())
 	if err != nil {
 		return err
 	}
