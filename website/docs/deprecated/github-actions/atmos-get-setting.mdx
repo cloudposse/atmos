@@ -19,9 +19,14 @@ The [Atmos Get Setting GitHub Action](https://github.com/cloudposse/github-actio
 ```yaml
 - name: Read a setting
   run: |
-    value=$(atmos describe component vpc -s plat-ue2-prod --query .settings.some_key)
-    echo "value=$value" >> "$GITHUB_OUTPUT"
+    {
+      echo "value<<EOF"
+      atmos describe component vpc -s plat-ue2-prod --query .settings.some_key
+      echo "EOF"
+    } >> "$GITHUB_OUTPUT"
 ```
+
+The multiline `<<EOF` delimiter form handles any setting value safely, including ones with embedded newlines — a plain `value=$(...)` assignment can silently split into multiple `$GITHUB_OUTPUT` records if the query result isn't a single-line scalar.
 
 Use [`--query`](/cli/commands/describe/component) to pull a single value out of a component/stack, or [`atmos list settings --query`](/cli/commands/list/settings) to compare the same setting across every stack in a table.
 

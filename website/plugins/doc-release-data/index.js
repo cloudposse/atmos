@@ -96,6 +96,25 @@ function getLatestStableTag() {
 }
 
 /**
+ * Finds the absolute path to the repo root. Unlike the other git lookups in
+ * this file, a failure here (e.g. building from a source archive without git
+ * metadata) must not abort the whole Docusaurus build — callers treat a null
+ * result as "skip the stable-tag comparison" and fall back to 'unreleased'.
+ * @returns {string|null} - Absolute path to the repo root, or null if unavailable.
+ */
+function getRepoRoot() {
+  try {
+    return execSync('git rev-parse --show-toplevel', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch (e) {
+    console.warn(`[doc-release-data] Failed to determine the repo root: ${e.message}`);
+    return null;
+  }
+}
+
+/**
  * Reports whether a file already existed at a given tag.
  * @param {string} tag - The git tag to check.
  * @param {string} relPath - Path to the file, relative to the repo root.
@@ -145,7 +164,15 @@ function countChangedLinesSince(tag, relPath) {
 function countLines(filePath) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    return content.split('\n').length;
+    if (content === '') return 0;
+    const lines = content.split('\n');
+    // A trailing newline adds one empty element to the split result that isn't
+    // a real physical line (e.g. "a\nb\n".split('\n') -> ["a","b",""]) — drop
+    // it so the denominator matches the file's actual line count.
+    if (lines[lines.length - 1] === '') {
+      lines.pop();
+    }
+    return lines.length;
   } catch (e) {
     return 0;
   }
@@ -173,7 +200,7 @@ function determineRelease(filePath, repoState) {
   // tag and, if so, how much of it actually changed since then — an incremental edit
   // to a long-lived page shouldn't badge the entire page "unreleased".
   const { repoRoot, latestStableTag } = repoState;
-  if (latestStableTag) {
+  if (repoRoot && latestStableTag) {
     const relPath = path.relative(repoRoot, filePath);
     if (fileExistsAtTag(latestStableTag, relPath)) {
       const changedLines = countChangedLinesSince(latestStableTag, relPath);
@@ -276,7 +303,7 @@ module.exports = function docReleaseDataPlugin(context, options) {
 
       // Computed once per build and shared across all files.
       const repoState = {
-        repoRoot: execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim(),
+        repoRoot: getRepoRoot(),
         latestStableTag: getLatestStableTag(),
       };
 

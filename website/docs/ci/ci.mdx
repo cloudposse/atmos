@@ -261,6 +261,7 @@ jobs:
       checks: write
     env:
       ATMOS_PROFILE: github
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
 
@@ -365,6 +366,7 @@ permissions:
 
 env:
   ATMOS_PROFILE: github
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   deploy:
