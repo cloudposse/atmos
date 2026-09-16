@@ -132,7 +132,8 @@ func TestGitHubMockServer_ReleaseAssetDownload(t *testing.T) {
 
 func TestGitHubMockServer_ArchiveDownload(t *testing.T) {
 	mock := NewGitHubMockServer(t)
-	archive := BuildTarGz(map[string]string{"tool-1.0.0/tool": "#!/bin/sh\necho fake\n"})
+	archive, err := BuildTarGz(map[string]string{"tool-1.0.0/tool": "#!/bin/sh\necho fake\n"})
+	require.NoError(t, err)
 	mock.RegisterArchive("owner", "repo", "v1.0.0", archive)
 
 	resp, err := http.Get(mock.URL() + "/owner/repo/archive/refs/tags/v1.0.0.tar.gz")
@@ -251,7 +252,8 @@ func TestGitHubMockServer_AquaRegistry_EmptyPrefix_DoesNotShadowOtherRoutes(t *t
 	mock.SetAquaPrefix("")
 	mock.RegisterAquaTool(&AquaTool{Owner: "jqlang", Repo: "jq"})
 	mock.RegisterReleaseAsset("jqlang", "jq", "jq-1.7.1", "jq-linux-amd64", []byte("fake-binary"))
-	archive := BuildTarGz(map[string]string{"tool-1.0.0/tool": "#!/bin/sh\necho fake\n"})
+	archive, err := BuildTarGz(map[string]string{"tool-1.0.0/tool": "#!/bin/sh\necho fake\n"})
+	require.NoError(t, err)
 	mock.RegisterArchive("owner", "repo", "v1.0.0", archive)
 	mock.RegisterFile("bar.yaml", "legacy: content")
 
@@ -359,10 +361,12 @@ func TestGitHubMockServer_Setenv(t *testing.T) {
 }
 
 func TestBuildTarGzAndZip_RoundTrip(t *testing.T) {
-	tarball := BuildTarGz(map[string]string{"tool": "content"})
+	tarball, err := BuildTarGz(map[string]string{"tool": "content"})
+	require.NoError(t, err)
 	assert.NotEmpty(t, tarball)
 
-	zipped := BuildZip(map[string]string{"tool": "content"})
+	zipped, err := BuildZip(map[string]string{"tool": "content"})
+	require.NoError(t, err)
 	assert.NotEmpty(t, zipped)
 	// A zip archive always starts with the local file header signature "PK\x03\x04".
 	require.GreaterOrEqual(t, len(zipped), 4)

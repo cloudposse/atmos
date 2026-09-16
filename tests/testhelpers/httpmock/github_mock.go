@@ -128,14 +128,27 @@ func (m *GitHubMockServer) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Legacy suffix-matched raw file registrations (backward compatible).
-	for pathSuffix, content := range m.files {
-		if strings.HasSuffix(r.URL.Path, pathSuffix) {
-			writeBytes(w, []byte(content), "")
-			return
-		}
+	// Legacy suffix-matched raw file registrations (backward compatible). m.files is guarded by
+	// m.mu since RegisterFile can be called concurrently with this handler serving requests.
+	if content, ok := m.matchFile(r.URL.Path); ok {
+		writeBytes(w, []byte(content), "")
+		return
 	}
 	http.NotFound(w, r)
+}
+
+// matchFile looks up the legacy suffix-matched raw file registration for the given request
+// path under m.mu, reporting the content and whether a match was found.
+func (m *GitHubMockServer) matchFile(path string) (string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for pathSuffix, content := range m.files {
+		if strings.HasSuffix(path, pathSuffix) {
+			return content, true
+		}
+	}
+	return "", false
 }
 
 // applyFailureInjection answers the request with a registered FailWith/FailWithTimes/
@@ -175,6 +188,9 @@ func (m *GitHubMockServer) route(w http.ResponseWriter, r *http.Request) bool {
 // For example, RegisterFile("stacks/deploy/nonprod.yaml", content) will match
 // requests to /cloudposse/atmos/main/tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml.
 func (m *GitHubMockServer) RegisterFile(pathSuffix, content string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.files[pathSuffix] = content
 }
 

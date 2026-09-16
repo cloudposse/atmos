@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"fmt"
 )
 
 // archiveFilePermissions is the mode recorded for every file BuildTarGz/BuildZip write. Tests
@@ -17,7 +18,7 @@ const archiveFilePermissions = 0o755
 // content), suitable for registering as a fake release asset via RegisterReleaseAsset or
 // RegisterArchive. The result is a tiny stand-in for a real tool's release tarball: tests
 // should assert atmos extracted/placed a file at the expected path, never execute it.
-func BuildTarGz(files map[string]string) []byte {
+func BuildTarGz(files map[string]string) ([]byte, error) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
@@ -28,30 +29,42 @@ func BuildTarGz(files map[string]string) []byte {
 			Mode: archiveFilePermissions,
 			Size: int64(len(content)),
 		}
-		_ = tw.WriteHeader(header)
-		_, _ = tw.Write([]byte(content))
+		if err := tw.WriteHeader(header); err != nil {
+			return nil, fmt.Errorf("write tar header %q: %w", name, err)
+		}
+		if _, err := tw.Write([]byte(content)); err != nil {
+			return nil, fmt.Errorf("write tar content %q: %w", name, err)
+		}
 	}
 
-	_ = tw.Close()
-	_ = gz.Close()
-	return buf.Bytes()
+	if err := tw.Close(); err != nil {
+		return nil, fmt.Errorf("close tar writer: %w", err)
+	}
+	if err := gz.Close(); err != nil {
+		return nil, fmt.Errorf("close gzip writer: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 // BuildZip builds a minimal zip archive containing files (archive path -> content), suitable
 // for registering as a fake release asset via RegisterReleaseAsset. See BuildTarGz for the
 // "never execute the fake binary" caveat.
-func BuildZip(files map[string]string) []byte {
+func BuildZip(files map[string]string) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
 	for name, content := range files {
 		fw, err := zw.Create(name)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("create zip entry %q: %w", name, err)
 		}
-		_, _ = fw.Write([]byte(content))
+		if _, err := fw.Write([]byte(content)); err != nil {
+			return nil, fmt.Errorf("write zip entry %q: %w", name, err)
+		}
 	}
 
-	_ = zw.Close()
-	return buf.Bytes()
+	if err := zw.Close(); err != nil {
+		return nil, fmt.Errorf("close zip writer: %w", err)
+	}
+	return buf.Bytes(), nil
 }

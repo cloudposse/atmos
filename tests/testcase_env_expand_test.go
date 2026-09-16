@@ -12,6 +12,11 @@ import (
 // facade -- since YAML test-cases otherwise only support static string values.
 func TestExpandTestCaseEnv(t *testing.T) {
 	t.Setenv("ATMOS_TEST_GITHUB_MOCK_URL", "http://127.0.0.1:54321")
+	// expandTestCaseEnv uses os.ExpandEnv, which treats an unset variable the same as an empty
+	// one, so t.Setenv("", "") is sufficient here (and self-restoring on test cleanup) --
+	// unlike os.Unsetenv, it doesn't depend on the host's environment not already defining
+	// this var.
+	t.Setenv("THIS_VAR_IS_DEFINITELY_NOT_SET_ANYWHERE", "")
 
 	env := map[string]string{
 		"GITHUB_SERVER_URL": "${ATMOS_TEST_GITHUB_MOCK_URL}",

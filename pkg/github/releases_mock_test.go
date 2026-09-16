@@ -99,12 +99,30 @@ func TestGetReleases_ViaMock(t *testing.T) {
 
 	// GetReleases calls checkRateLimitBeforeFetch (pkg/github/releases.go) before listing, which
 	// itself surfaces ErrGitHubRateLimitExceeded once remaining drops below the 5-request
-	// threshold -- the mock's SetRateLimit(0, ...) triggers that pre-check, so the list request
-	// (and its own FailWith 429) is never reached. Both paths produce the same sentinel.
-	t.Run("429 returns ErrGitHubRateLimitExceeded", func(t *testing.T) {
+	// threshold -- the mock's SetRateLimit(0, ...) triggers that pre-check before the list
+	// request is ever made, so this subtest exercises the pre-check, not the list endpoint's
+	// own 429 handling. See "429 from the list endpoint returns ErrGitHubRateLimitExceeded"
+	// below for that path.
+	t.Run("pre-check rate-limit exhaustion returns ErrGitHubRateLimitExceeded", func(t *testing.T) {
 		mock := setupMockGitHubClient(t)
 		mock.SetRateLimit(0, time.Now().Add(time.Hour))
-		mock.FailWith("/api/v3/repos/owner/repo/releases", http.StatusTooManyRequests)
+
+		_, err := GetReleases(ReleasesOptions{Owner: "owner", Repo: "repo"})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrGitHubRateLimitExceeded)
+	})
+
+	// Unlike the pre-check subtest above, this keeps the rate-limit budget healthy (the mock's
+	// default full budget) so checkRateLimitBeforeFetch passes and the list request itself is
+	// made; FailWithHeaders then makes that request answer 429 with X-RateLimit-Remaining: 0,
+	// which is what handleGitHubAPIError (pkg/github/client.go) requires to classify a 403/429
+	// response as a genuine rate limit rather than passing the raw error through.
+	t.Run("429 from the list endpoint returns ErrGitHubRateLimitExceeded", func(t *testing.T) {
+		mock := setupMockGitHubClient(t)
+		mock.FailWithHeaders("/api/v3/repos/owner/repo/releases", http.StatusTooManyRequests, map[string]string{
+			"X-RateLimit-Remaining": "0",
+		})
 
 		_, err := GetReleases(ReleasesOptions{Owner: "owner", Repo: "repo"})
 
