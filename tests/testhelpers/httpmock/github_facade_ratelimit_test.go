@@ -34,6 +34,13 @@ func TestGitHubMockServer_RateLimit_Default(t *testing.T) {
 	require.NoError(t, decodeJSON(resp.Body, &body))
 	assert.Equal(t, 5000, body.Resources.Core.Limit)
 	assert.Equal(t, 5000, body.Resources.Core.Remaining)
+
+	// The header (stamped before routing) and the JSON body (built inside tryRateLimit) must
+	// report the exact same reset instant for a single request -- they must never straddle a
+	// second boundary and disagree, which recomputing "now + 1h" separately for each would risk.
+	headerReset, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64)
+	require.NoError(t, err)
+	assert.Equal(t, headerReset, body.Resources.Core.Reset, "X-RateLimit-Reset header and JSON resources.core.reset must agree")
 }
 
 func TestGitHubMockServer_RateLimit_Configured(t *testing.T) {
