@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -20,6 +21,8 @@ type deleteOptions struct {
 	RetainResources              []string
 	DisableTerminationProtection bool
 }
+
+const terminationProtectionRestoreTimeout = 30 * time.Second
 
 // deleteStack deletes the stack, respecting termination protection: deleting a
 // protected stack fails with an actionable hint unless
@@ -125,7 +128,11 @@ func handleDeleteStackError(ctx context.Context, attempt deleteAttempt, deleteAP
 	if !attempt.WasProtected {
 		return deleteErr
 	}
-	if restoreErr := restoreTerminationProtectionAfterFailedDelete(ctx, attempt.Client, attempt.Spec.StackName); restoreErr != nil {
+	// A failed or canceled delete must not prevent restoring the protection we
+	// disabled. Preserve context values, but give cleanup its own bounded lifetime.
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), terminationProtectionRestoreTimeout)
+	defer cancel()
+	if restoreErr := restoreTerminationProtectionAfterFailedDelete(cleanupCtx, attempt.Client, attempt.Spec.StackName); restoreErr != nil {
 		return errors.Join(deleteErr, restoreErr)
 	}
 	return deleteErr

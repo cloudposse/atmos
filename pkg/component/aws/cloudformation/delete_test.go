@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -76,6 +77,47 @@ func TestDeleteStack_RestoresTerminationProtectionOnDeleteFailure(t *testing.T) 
 	assert.Contains(t, err.Error(), "delete rejected")
 }
 
+func TestHandleDeleteStackError_RestoresProtectionWithIndependentDeadline(t *testing.T) {
+	for _, expired := range []bool{false, true} {
+		name := "canceled"
+		if expired {
+			name = "deadline exceeded"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			if expired {
+				ctx, cancel = context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+				defer cancel()
+			}
+			require.Error(t, ctx.Err())
+			ctrl := gomock.NewController(t)
+			client := NewMockCloudFormationClient(ctrl)
+			var cleanupCtx context.Context
+			client.EXPECT().UpdateTerminationProtection(gomock.Any(), &cloudformation.UpdateTerminationProtectionInput{
+				StackName:                   aws.String("vpc"),
+				EnableTerminationProtection: aws.Bool(true),
+			}).DoAndReturn(func(restoreCtx context.Context, _ *cloudformation.UpdateTerminationProtectionInput, _ ...func(*cloudformation.Options)) (*cloudformation.UpdateTerminationProtectionOutput, error) {
+				cleanupCtx = restoreCtx
+				require.NoError(t, restoreCtx.Err())
+				deadline, ok := restoreCtx.Deadline()
+				require.True(t, ok, "cleanup must be bounded")
+				assert.Positive(t, time.Until(deadline))
+				assert.LessOrEqual(t, time.Until(deadline), 30*time.Second)
+				return &cloudformation.UpdateTerminationProtectionOutput{}, nil
+			})
+
+			err := handleDeleteStackError(ctx, deleteAttempt{
+				Client: client, Spec: &stackSpec{StackName: "vpc"}, WasProtected: true,
+			}, ctx.Err())
+			assert.ErrorIs(t, err, ctx.Err())
+			assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+			require.NotNil(t, cleanupCtx)
+			assert.ErrorIs(t, cleanupCtx.Err(), context.Canceled, "cleanup must be released after restoration")
+		})
+	}
+}
+
 // deleteStack must NOT restore termination protection after a failed
 // DeleteStack when the stack was never actually protected live to begin with
 // (e.g. --disable-termination-protection was passed redundantly). Restoring
@@ -107,21 +149,30 @@ func TestDeleteStack_DoesNotRestoreWhenStackWasNeverProtected(t *testing.T) {
 func TestDeleteStack_RestoreFailureJoinedWithDeleteError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	restoreErr := errors.New("access denied")
 
 	gomock.InOrder(
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{EnableTerminationProtection: aws.Bool(true)}},
 		}, nil),
 		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
-		client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(nil, errors.New("delete rejected")),
-		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied")),
+		client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *cloudformation.DeleteStackInput, ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error) {
+			cancel()
+			return nil, ctx.Err()
+		}),
+		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).DoAndReturn(func(restoreCtx context.Context, _ *cloudformation.UpdateTerminationProtectionInput, _ ...func(*cloudformation.Options)) (*cloudformation.UpdateTerminationProtectionOutput, error) {
+			require.NoError(t, restoreCtx.Err())
+			return nil, restoreErr
+		}),
 	)
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
+	err := deleteStack(ctx, client, spec, deleteOptions{DisableTerminationProtection: true})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "delete rejected", "must preserve the original delete error")
-	assert.Contains(t, err.Error(), "access denied", "must include the restoration failure with context")
+	assert.ErrorIs(t, err, context.Canceled, "must preserve the original delete error")
+	assert.ErrorIs(t, err, restoreErr, "must include the restoration failure")
 }
 
 // deleteStack must not treat AWS's DELETE_IN_PROGRESS/DELETE_COMPLETE
