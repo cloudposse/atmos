@@ -23,6 +23,7 @@ type TerraformOutputGetter interface {
 		skipCache bool,
 		authContext *schema.AuthContext,
 		authManager any,
+		options ...TerraformLookupOptions,
 	) (any, bool, error)
 }
 
@@ -38,6 +39,7 @@ func (d *defaultOutputGetter) GetOutput(
 	skipCache bool,
 	authContext *schema.AuthContext,
 	authManager any,
+	options ...TerraformLookupOptions,
 ) (any, bool, error) {
 	defer perf.Track(atmosConfig, "exec.defaultOutputGetter.GetOutput")()
 
@@ -47,6 +49,13 @@ func (d *defaultOutputGetter) GetOutput(
 	resolvedAuthContext, resolvedAuthManager := resolveNestedOutputAuth(
 		atmosConfig, component, stack, authContext, authManager, resolveAuthManagerForNestedComponent,
 	)
+	if lookupSecretsMaskOnly(options) {
+		return tfoutput.GetDefaultExecutor().GetOutputWithOptions(
+			atmosConfig, stack, component, output, skipCache, resolvedAuthContext, resolvedAuthManager,
+			&tfoutput.OutputOptions{SecretsMaskOnly: true},
+		)
+	}
+
 	return tfoutput.GetOutput(atmosConfig, stack, component, output, skipCache, resolvedAuthContext, resolvedAuthManager)
 }
 

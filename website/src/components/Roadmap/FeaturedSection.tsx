@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
 import * as Icons from 'react-icons/ri';
-import { RiExternalLinkLine, RiBookOpenLine, RiMegaphoneLine, RiGitPullRequestLine, RiFileTextLine, RiFlaskLine } from 'react-icons/ri';
+import { RiArrowLeftSLine, RiArrowRightSLine, RiBookOpenLine, RiMegaphoneLine, RiGitPullRequestLine, RiFileTextLine, RiFlaskLine } from 'react-icons/ri';
 import FeaturedDrawer, { FeaturedItem } from './FeaturedDrawer';
 import styles from './styles.module.css';
 
@@ -16,31 +15,17 @@ const statusConfig = {
   planned: { label: 'Planned', className: 'featuredStatusPlanned' },
 };
 
-// Sort order: shipped first, then in-progress, then planned.
-const statusOrder: Record<string, number> = {
-  shipped: 0,
-  'in-progress': 1,
-  planned: 2,
-};
+const PAGE_SIZE = 6;
 
-// Parse quarter string (e.g., "q1-2026") into a sortable number.
-const parseQuarter = (quarter: string): number => {
-  const match = quarter.match(/q(\d)-(\d{4})/);
-  if (!match) return 0;
-  const [, q, year] = match;
-  return parseInt(year, 10) * 10 + parseInt(q, 10);
-};
-
+/** Page through curated highlights in their configured order and open feature details. */
 export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.Element {
   const [selectedItem, setSelectedItem] = useState<FeaturedItem | undefined>(undefined);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  // Sort items by status (shipped first), then by quarter (earlier first).
-  const sortedItems = [...items].sort((a, b) => {
-    const statusDiff = statusOrder[a.status] - statusOrder[b.status];
-    if (statusDiff !== 0) return statusDiff;
-    return parseQuarter(a.quarter) - parseQuarter(b.quarter);
-  });
+  const [page, setPage] = useState(0);
+  // The data is curated newest first. Pagination preserves that editorial order.
+  const pageCount = Math.ceil(items.length / PAGE_SIZE);
+  const visibleItems = items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const handleCardClick = (item: FeaturedItem) => {
     setSelectedItem(item);
@@ -52,6 +37,7 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, item: FeaturedItem) => {
+    if (e.target !== e.currentTarget) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       handleCardClick(item);
@@ -64,20 +50,42 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
       <p className={styles.sectionDescription}>
         Major capabilities that transform how you work with infrastructure.
       </p>
-      <div className={styles.featuredGrid}>
-        {sortedItems.map((item, index) => {
+      {pageCount > 1 && (
+        <nav className={styles.featuredPagination} aria-label="Featured improvements pages">
+          <button
+            type="button"
+            className={styles.featuredPageButton}
+            disabled={page === 0}
+            aria-controls="featured-improvements"
+            onClick={() => setPage((current) => Math.max(0, current - 1))}
+          >
+            <RiArrowLeftSLine aria-hidden="true" /> Previous
+          </button>
+          <span className={styles.featuredPageStatus} role="status">
+            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, items.length)} of {items.length}
+          </span>
+          <button
+            type="button"
+            className={styles.featuredPageButton}
+            disabled={page === pageCount - 1}
+            aria-controls="featured-improvements"
+            onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}
+          >
+            Next <RiArrowRightSLine aria-hidden="true" />
+          </button>
+        </nav>
+      )}
+      <div id="featured-improvements" className={styles.featuredGrid}>
+        {visibleItems.map((item) => {
           const IconComponent = (Icons as Record<string, React.ComponentType<{ className?: string }>>)[
             item.icon
           ] || Icons.RiQuestionLine;
           const config = statusConfig[item.status];
 
           return (
-            <motion.div
+            <div
               key={item.id}
               className={`${styles.featuredCard} ${styles.featuredCardClickable}`}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: index * 0.1 }}
               onClick={() => handleCardClick(item)}
               onKeyDown={(e) => handleKeyDown(e, item)}
               role="button"
@@ -158,7 +166,7 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
                   )}
                 </div>
               </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>
