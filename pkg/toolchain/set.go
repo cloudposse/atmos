@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -370,8 +371,10 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 }
 
 // fetchGitHubVersions fetches available versions and titles from GitHub releases.
+// Uses the toolchain endpoints (ATMOS_TOOLCHAIN_GITHUB_API_URL), not the repo endpoints:
+// aqua-registry tool releases live on public github.com even for GHES users, by default.
 func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", owner, repo)
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=100", github.ToolchainEndpoints().APIURL, owner, repo)
 
 	resp, err := makeGitHubRequest(apiURL)
 	if err != nil {
@@ -434,9 +437,20 @@ func githubBackoffDelay(attempt int) time.Duration {
 // that can run to tens of minutes; this fetch already degrades gracefully to
 // "no available versions" on failure.
 func makeGitHubRequest(apiURL string) (*http.Response, error) {
+	// "github-token" is resolved without regard to host, so it is treated as scoped to
+	// RepoEndpoints() (the user's own repository host). requestAllowsToken -- applied to the
+	// initial request below and to every redirect hop via stripAuthOnUnapprovedRedirect -- is
+	// the single gate deciding whether it is safe to attach: it checks the request's actual
+	// destination against both RepoEndpoints' server host and its API host, so a token is still
+	// sent when ATMOS_TOOLCHAIN_GITHUB_API_URL matches the approved repo API host even though
+	// ATMOS_TOOLCHAIN_GITHUB_URL (the server URL) differs from it. A server-host-only prefilter
+	// here would incorrectly withhold the token in that case; it is not the check that would
+	// have caught a token being sent to the wrong host to begin with -- requestAllowsToken
+	// already does that per-request.
 	token := viper.GetString("github-token")
 	client := &http.Client{
-		Timeout: defaultHTTPTimeout,
+		Timeout:       defaultHTTPTimeout,
+		CheckRedirect: stripAuthOnUnapprovedRedirect,
 	}
 
 	var lastErr error
@@ -445,11 +459,19 @@ func makeGitHubRequest(apiURL string) (*http.Response, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToCreateRequest, err)
 		}
-		if token != "" {
+		// Only send the token when the request's actual destination (not just the
+		// ToolchainEndpoints URL it was built from) is https and belongs to the host the
+		// token is scoped to (RepoEndpoints -- see the comment above). ATMOS_TOOLCHAIN_GITHUB_API_URL
+		// can resolve to a non-https scheme (resolveEndpointURL accepts it as a
+		// fallback-safe default) or, independently, to a host that only coincidentally
+		// matched RepoEndpoints at the check above; re-validating req.URL here (rather than
+		// trusting apiURL) is what stripAuthOnUnapprovedRedirect also relies on for every
+		// redirect hop.
+		if token != "" && requestAllowsToken(req) {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
 
-		r, err := client.Do(req) //nolint:gosec // Scheme+host (api.github.com) is a hardcoded literal; owner/repo only ever substitute into the path, so they cannot redirect the request to a different host.
+		r, err := client.Do(req) //nolint:gosec // Scheme+host come from the trusted ToolchainEndpoints resolver (env-configured, not request data); owner/repo only ever substitute into the path, so they cannot redirect the request to a different host.
 		if err != nil {
 			lastErr = fmt.Errorf("%w: failed to fetch releases from GitHub: %w", errUtils.ErrHTTPRequestFailed, err)
 			if attempt == githubRequestRetryMaxAttempts {
@@ -479,6 +501,37 @@ func makeGitHubRequest(apiURL string) (*http.Response, error) {
 		time.Sleep(wait)
 	}
 	return nil, lastErr
+}
+
+// requestAllowsToken reports whether it is safe to attach the repo-scoped GitHub token
+// (viper's "github-token", resolved without regard to host) to a request whose actual
+// destination is req.URL: only when its scheme is https and its host matches RepoEndpoints'
+// own server or API host -- the host the token is scoped to. Re-evaluated against req.URL
+// (not the ToolchainEndpoints URL the request was originally built from) both for the initial
+// request and, via stripAuthOnUnapprovedRedirect, every hop of an automatic redirect, since
+// ATMOS_TOOLCHAIN_GITHUB_API_URL can point at a different host than ATMOS_TOOLCHAIN_GITHUB_URL,
+// and net/http's default redirect policy otherwise keeps forwarding Authorization across a
+// same-host scheme downgrade and does not consider host at all for the initial request.
+func requestAllowsToken(req *http.Request) bool {
+	if !strings.EqualFold(req.URL.Scheme, "https") {
+		return false
+	}
+	repo := github.RepoEndpoints()
+	return repo.IsHostForScheme(req.URL.Host, req.URL.Scheme) || repo.IsAPIHostForScheme(req.URL.Host, req.URL.Scheme)
+}
+
+// stripAuthOnUnapprovedRedirect removes the Authorization header from req (the request that
+// will be sent for a redirect hop) unless requestAllowsToken(req) still holds for its new,
+// possibly cross-host or scheme-downgraded, URL. Installed as makeGitHubRequest's
+// http.Client.CheckRedirect: net/http's default redirect policy preserves Authorization across
+// a same-host scheme downgrade (https to http) and never considers host at all for a same- or
+// cross-scheme redirect to a different host, either of which would otherwise leak the token to
+// an endpoint it was never scoped to.
+func stripAuthOnUnapprovedRedirect(req *http.Request, _ []*http.Request) error {
+	if !requestAllowsToken(req) {
+		req.Header.Del("Authorization")
+	}
+	return nil
 }
 
 type release struct {
