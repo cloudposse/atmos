@@ -67,7 +67,7 @@ func TestResolveTargetDirectory(t *testing.T) {
 
 // TestLoadScaffoldTemplates tests loading scaffold templates.
 func TestLoadScaffoldTemplates(t *testing.T) {
-	configs, origins, ui, err := loadScaffoldTemplates("")
+	configs, origins, ui, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 	assert.NotNil(t, configs)
 	assert.NotNil(t, origins)
@@ -333,7 +333,7 @@ func TestMaybeInitGeneratedGitRepository_PropagatesInitGitError(t *testing.T) {
 // surface a parse error immediately, rather than silently proceeding to
 // preview an empty file list.
 func TestExecuteScaffoldGenerate_DryRunPropagatesInvalidScaffoldConfig(t *testing.T) {
-	_, _, scaffoldUI, err := loadScaffoldTemplates("")
+	_, _, scaffoldUI, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 
 	cfg := &templates.Configuration{
@@ -417,7 +417,7 @@ func TestMaybeInitGeneratedGitRepository_GitDisabled(t *testing.T) {
 // prompts) rather than the targetDir == "" branch, which always prompts for a
 // target directory via a real terminal form and cannot be safely unit tested.
 func TestExecuteTemplateGeneration_WithTargetDir(t *testing.T) {
-	configs, _, scaffoldUI, err := loadScaffoldTemplates("")
+	configs, _, scaffoldUI, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 	cfg := configs["simple"]
 
@@ -595,7 +595,7 @@ func TestDefaultBaseRef_PropagatesUnreadableMetadataError(t *testing.T) {
 // regenerates the template while preserving the user's own edits via a
 // 3-way merge, instead of failing with "target directory is not empty".
 func TestExecuteTemplateGeneration_UpdateFlag_MergesExistingDirectory(t *testing.T) {
-	configs, _, scaffoldUI, err := loadScaffoldTemplates("")
+	configs, _, scaffoldUI, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 	cfg := configs["simple"]
 
@@ -649,7 +649,7 @@ func TestExecuteTemplateGeneration_UpdateFlag_MergesExistingDirectory(t *testing
 // diffs against the true pristine content regardless of what's since been
 // committed.
 func TestExecuteTemplateGeneration_UpdateFlag_PreservesCommittedEdit(t *testing.T) {
-	_, _, scaffoldUI, err := loadScaffoldTemplates("")
+	_, _, scaffoldUI, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 
 	cfg := &templates.Configuration{
@@ -715,7 +715,7 @@ func TestExecuteTemplateGeneration_UpdateFlag_PreservesCommittedEdit(t *testing.
 // the identical template, which must write nothing to either its own target
 // directory or any matrix-expanded subpath.
 func TestExecuteTemplateGeneration_DryRunMatrixExpansion(t *testing.T) {
-	_, _, scaffoldUI, err := loadScaffoldTemplates("")
+	_, _, scaffoldUI, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 
 	scaffoldYAML := `apiVersion: atmos/v1
@@ -841,7 +841,7 @@ func TestMergeConfiguredTemplates_Success(t *testing.T) {
 
 	configs := map[string]templates.Configuration{}
 	origins := map[string]string{}
-	err := mergeConfiguredTemplates(configs, origins)
+	err := mergeConfiguredTemplates(configs, origins, "")
 
 	require.NoError(t, err)
 	require.Contains(t, configs, "my-template")
@@ -859,7 +859,7 @@ func TestMergeConfiguredTemplates_WarnsAndContinues(t *testing.T) {
 
 	configs := map[string]templates.Configuration{}
 	origins := map[string]string{}
-	err := mergeConfiguredTemplates(configs, origins)
+	err := mergeConfiguredTemplates(configs, origins, "")
 
 	require.NoError(t, err)
 	assert.NotContains(t, configs, "broken-template")
