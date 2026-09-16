@@ -1,6 +1,8 @@
 package tests
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -112,6 +114,37 @@ func TestValidateLiveGitHubPreconditions(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
+		})
+	}
+}
+
+func TestRequireNetrcFreeHome(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		hasNetrc  bool
+		emptyHome bool
+		wantSkip  bool
+	}{
+		{name: "no netrc"},
+		{name: "existing netrc", hasNetrc: true, wantSkip: true},
+		{name: "unknown home", emptyHome: true, wantSkip: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			homeDir := t.TempDir()
+			if tc.hasNetrc {
+				require.NoError(t, os.WriteFile(filepath.Join(homeDir, ".netrc"), nil, 0o600))
+			}
+			if tc.emptyHome {
+				homeDir = ""
+			}
+			var skipped, continued bool
+			t.Run("canary", func(t *testing.T) {
+				defer func() { skipped = t.Skipped() }()
+				requireNetrcFreeHome(t, homeDir)
+				continued = true
+			})
+			assert.Equal(t, tc.wantSkip, skipped)
+			assert.Equal(t, !tc.wantSkip, continued)
 		})
 	}
 }

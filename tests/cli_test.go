@@ -1055,6 +1055,22 @@ func homeFilesToCopy(liveGitHub bool) []string {
 	return []string{".gitconfig", ".ssh", ".netrc"} // Expand list if needed.
 }
 
+// requireNetrcFreeHome skips unauthenticated canaries when HOME cannot be isolated safely.
+func requireNetrcFreeHome(t *testing.T, homeDir string) {
+	t.Helper()
+
+	if homeDir == "" {
+		t.Skip("live_github requires a known HOME without .netrc")
+	}
+	_, err := os.Lstat(filepath.Join(homeDir, ".netrc"))
+	if err == nil {
+		t.Skip("live_github requires an isolated HOME when the runner has a .netrc")
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("cannot verify live_github HOME has no .netrc: %v", err)
+	}
+}
+
 // emptyGitConfigFile creates an empty gitconfig in a per-test temp dir and returns its path, for
 // use as GIT_CONFIG_GLOBAL when a test must run git WITHOUT the mirror rewrite rules TestMain
 // exports process-wide (see the live_github preconditions and tests/live_github_canary_test.go).
@@ -1334,10 +1350,16 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
+		if liveGitHub {
+			homeDir := os.Getenv("HOME")
+			if override, ok := tc.Env["HOME"]; ok {
+				homeDir = override
+			}
+			requireNetrcFreeHome(t, homeDir)
+		}
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
 		// Copying over the `.gitconfig` was not enough to fix the issue.
-		// NOTE: this means a "live_github" case running on macOS CI still inherits the runner's
-		// real HOME/.netrc (the isolation below is skipped entirely), unlike every other platform.
+		// A "live_github" case can only keep this HOME after the .netrc guard above passes.
 		logger.Info("skipping empty home dir on macOS in CI", "GOOS", runtime.GOOS)
 	} else {
 		// Set environment variables for the test case
