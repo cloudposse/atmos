@@ -65,6 +65,11 @@ type Entry struct {
 // via viper.SetDefault when a project pins an earlier edition.
 var journal = []Entry{
 	{
+		Date: "2026-09-15", Key: "vendor.max_concurrency", Kind: KindValue, Old: 1, New: 4,
+		Description: "Vendor downloads and upstream version checks run with four workers; destination writes remain ordered.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3169",
+	},
+	{
 		Date:        "2026-09-14",
 		Key:         "settings.experimental",
 		Kind:        KindValue,

@@ -717,13 +717,14 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	}
 
 	// Merge the Helm CLI plugins list (helm and helmfile components).
-	// Base-component plugins (e.g. from an abstract/catalog component) are merged
-	// with the concrete component's plugins; the configured list_merge_strategy
+	// Component-type defaults, base-component plugins, and concrete component plugins
+	// are merged in increasing precedence; the configured list_merge_strategy
 	// (default: replace) governs how the lists combine.
 	if supportsPlugins(opts.ComponentType) {
 		finalComponentPlugins, err := mergeComponentAnySection(
 			mergeConfig,
 			cfg.PluginsSectionName,
+			opts.GlobalPlugins,
 			result.BaseComponentPlugins,
 			result.ComponentPlugins,
 		)

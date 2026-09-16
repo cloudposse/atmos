@@ -1,0 +1,7 @@
+base_path: .
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - dev.yaml
+  name_template: '{{ .vars.stage }}'

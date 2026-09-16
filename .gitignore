@@ -233,3 +233,10 @@ __pycache__/
 
 # Per-worktree golangci-lint cache (GOLANGCI_LINT_CACHE).
 .cache/
+
+# Vendoring advisory locks (receipts and manifest edits).
+**/vendor.lock.yaml.lock
+**/vendor*.yaml.lock
+**/vendor*.yml.lock
+**/component.yaml.lock
+**/component.yml.lock

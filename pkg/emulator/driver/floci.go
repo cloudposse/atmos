@@ -25,11 +25,18 @@ const (
 	flociDataDir = "/app/data"
 )
 
-// flociHealthCheck probes the Floci edge port with Bash, which is present in all
-// Floci images even when curl is absent. A TCP probe supports both HTTP and TLS
-// listeners without depending on an endpoint's response or certificate trust.
+// flociHealthCheck prefers the image's own readiness script when available (the
+// strongest signal, since it's the vendor's own readiness check), falling back to
+// a bare TCP connect via Bash — present in every Floci image, unlike curl — for
+// images without the script. The TCP fallback works for both HTTP and TLS
+// listeners without depending on an endpoint's response or certificate trust. A
+// failing native probe must remain a failure, without falling back to TCP.
 func flociHealthCheck(port int) *schema.ContainerHealthCheck {
-	return shellHealthCheck(fmt.Sprintf("bash -c 'exec 3<>/dev/tcp/127.0.0.1/%d'", port))
+	return shellHealthCheck(fmt.Sprintf(
+		"if [ -x /usr/local/bin/healthcheck.sh ]; then exec /usr/local/bin/healthcheck.sh; fi; "+
+			"bash -c 'exec 3<>/dev/tcp/127.0.0.1/%d'",
+		port,
+	))
 }
 
 func init() {
