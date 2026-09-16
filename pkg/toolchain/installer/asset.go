@@ -11,6 +11,7 @@ import (
 	sprig "github.com/Masterminds/sprig/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	github "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
@@ -100,8 +101,10 @@ func (i *Installer) buildGitHubReleaseURLForPlatform(tool *registry.Tool, versio
 		assetName = ensureWindowsExeExtensionForOS(assetName, goos)
 	}
 
-	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
-		tool.RepoOwner, tool.RepoName, data.Version, assetName)
+	// Toolchain release assets use the toolchain endpoints (ATMOS_TOOLCHAIN_GITHUB_URL), not
+	// the repo endpoints: aqua-registry tool releases live on public github.com even for GHES
+	// users, by default.
+	url := github.ToolchainEndpoints().ReleaseAssetURL(tool.RepoOwner, tool.RepoName, data.Version, assetName)
 
 	return url, nil
 }
@@ -120,8 +123,7 @@ func (i *Installer) buildGitHubArchiveURL(tool *registry.Tool, version string) (
 	}
 
 	data := buildTemplateData(tool, version)
-	return fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz",
-		tool.RepoOwner, tool.RepoName, data.Version), nil
+	return github.ToolchainEndpoints().ArchiveURL(tool.RepoOwner, tool.RepoName, data.Version), nil
 }
 
 // buildGitHubContentURL builds an asset URL for github_content type tools.
@@ -155,10 +157,10 @@ func validateGitHubContentFields(tool *registry.Tool) error {
 	return nil
 }
 
-// formatGitHubContentURL formats a raw.githubusercontent.com URL from its
-// component parts. Pure function: no inputs beyond the parameters.
+// formatGitHubContentURL formats a raw content URL (raw.githubusercontent.com by default, or
+// the toolchain endpoints' equivalent) from its component parts.
 func formatGitHubContentURL(owner, repo, version, path string) string {
-	return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo, version, path)
+	return github.ToolchainEndpoints().RawURL(owner, repo, version, path)
 }
 
 // archiveExtensions contains known archive file extensions.
