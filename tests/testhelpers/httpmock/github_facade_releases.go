@@ -267,21 +267,23 @@ func (m *GitHubMockServer) tryArchiveDownload(w http.ResponseWriter, r *http.Req
 }
 
 // RegisterReleaseAsset registers data to be served at
-// /{owner}/{repo}/releases/download/{tag}/{asset}.
+// /{owner}/{repo}/releases/download/{tag}/{asset}. The bytes are copied so that later
+// mutations to the caller's slice (e.g. a reused test buffer) never change what is served.
 func (m *GitHubMockServer) RegisterReleaseAsset(owner, repo, tag, asset string, data []byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	key := strings.Join([]string{owner, repo, tag, asset}, "/")
-	m.assets[key] = data
+	m.assets[key] = append([]byte(nil), data...)
 }
 
 // RegisterArchive registers data to be served at
-// /{owner}/{repo}/archive/refs/tags/{tag}.tar.gz.
+// /{owner}/{repo}/archive/refs/tags/{tag}.tar.gz. The bytes are copied so that later
+// mutations to the caller's slice (e.g. a reused test buffer) never change what is served.
 func (m *GitHubMockServer) RegisterArchive(owner, repo, tag string, data []byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	key := strings.Join([]string{owner, repo, tag}, "/")
-	m.archives[key] = data
+	m.archives[key] = append([]byte(nil), data...)
 }
 
 // RegisterRawFile registers content to be served at /raw/{owner}/{repo}/{ref}/{path}, the
