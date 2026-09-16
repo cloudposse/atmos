@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
 import clsx from 'clsx';
+import CastPlayer from '@site/src/components/CastPlayer';
 import type { BlogPostItem } from './utils';
 import { getTagColorClass } from './utils';
 import styles from './styles.module.css';
@@ -15,8 +16,9 @@ export default function TimelineEntry({
   position,
 }: TimelineEntryProps): JSX.Element {
   // Docusaurus provides metadata and frontMatter as siblings on content.
-  const { metadata } = item.content;
+  const { metadata, frontMatter } = item.content;
   const { title, permalink, date, tags = [], description } = metadata;
+  const { cast, castTitle } = frontMatter;
 
   const formattedDate = new Date(date).toLocaleDateString('en-US', {
     month: 'short',
@@ -54,6 +56,25 @@ export default function TimelineEntry({
         </Link>
         {description && (
           <p className={styles.entryExcerpt}>{description}</p>
+        )}
+        {typeof cast === 'string' && cast && (
+          <Link
+            to={permalink}
+            className={styles.entryCastPreview}
+            aria-hidden="true"
+            tabIndex={-1}
+          >
+            <CastPlayer
+              src={cast}
+              title={typeof castTitle === 'string' && castTitle ? castTitle : title}
+              chrome
+              thumbnail
+              controls={false}
+              scrubber={false}
+              showCommand={false}
+              className={styles.entryCastThumbnail}
+            />
+          </Link>
         )}
       </div>
     </article>

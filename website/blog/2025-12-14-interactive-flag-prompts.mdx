@@ -14,7 +14,7 @@ Atmos now includes interactive prompts for missing required flags and positional
 
 Commands with required flags or positional arguments now automatically prompt you to select from available options when values are missing. This works just like shell autocomplete, helping you discover available options without memorizing values or checking documentation.
 
-For example, running `atmos theme show` without arguments now displays an interactive menu:
+For example, running [`atmos theme show`](/cli/commands/theme/show) without arguments now displays an interactive menu:
 
 ```bash
 atmos theme show
@@ -129,9 +129,9 @@ When a selector has many options, you can filter by typing `/` followed by your 
 
 This feature is currently being rolled out across Atmos commands. Initial support is available for:
 - `atmos theme show` - Theme selection.
-- `atmos auth` commands - Identity selection.
+- [`atmos auth`](/cli/commands/auth/usage) commands - Identity selection.
 
-**Coming soon:** We're actively working to add interactive prompts to core functionality including `atmos terraform`, `atmos helmfile`, and `atmos packer`. These commands will prompt for component and stack selection when values are missing, making it even easier to work with infrastructure components.
+**Coming soon:** We're actively working to add interactive prompts to core functionality including [`atmos terraform`](/cli/commands/terraform/usage), [`atmos helmfile`](/cli/commands/helmfile/usage), and [`atmos packer`](/cli/commands/packer/usage). These commands will prompt for component and stack selection when values are missing, making it even easier to work with infrastructure components.
 
 ## Get Involved
 

@@ -7,6 +7,7 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
@@ -199,6 +200,81 @@ func TestUploadStatus(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+
+			mockGitRepo.AssertExpectations(t)
+		})
+	}
+}
+
+// TestUploadStatusReportsFullComponentName is the regression test for GitHub
+// issue #3102: for a nested (slash-containing) logical component name,
+// uploadStatus must report the DTO's Component as the full logical name
+// (info.ComponentFromArg), never the truncated working-directory leaf
+// (info.Component) that ProcessStacks splits off for path resolution. A
+// flat-name control case guards that unaffected components keep reporting
+// the same value they always have.
+func TestUploadStatusReportsFullComponentName(t *testing.T) {
+	t.Parallel()
+
+	testRepoInfo := &atmosgit.RepoInfo{
+		RepoUrl:   "https://github.com/test/repo",
+		RepoName:  "repo",
+		RepoOwner: "test",
+		RepoHost:  "github.com",
+	}
+
+	testCases := []struct {
+		name              string
+		componentFromArg  string
+		truncatedLeaf     string
+		expectedComponent string
+	}{
+		{
+			name:              "nested component name reports full logical name",
+			componentFromArg:  "foo/bar/baz",
+			truncatedLeaf:     "baz",
+			expectedComponent: "foo/bar/baz",
+		},
+		{
+			name:              "flat component name is unaffected",
+			componentFromArg:  "vpc",
+			truncatedLeaf:     "vpc",
+			expectedComponent: "vpc",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			mockProClient := pro.NewMockAtmosProAPIClientInterface(ctrl)
+			mockGitRepo := new(MockGitRepo)
+
+			info := &schema.ConfigAndStacksInfo{
+				Stack:            "plat-use2-dev",
+				Component:        tc.truncatedLeaf,
+				ComponentFromArg: tc.componentFromArg,
+				ComponentType:    "terraform",
+				SubCommand:       "plan",
+			}
+
+			mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
+			mockGitRepo.On("GetCurrentCommitSHA").Return("abc123def456", nil)
+
+			var captured *dtos.InstanceStatusUploadRequest
+			mockProClient.EXPECT().UploadInstanceStatus(gomock.Cond(func(x any) bool {
+				dto, ok := x.(*dtos.InstanceStatusUploadRequest)
+				if ok {
+					captured = dto
+				}
+				return ok
+			})).Return(nil)
+
+			err := uploadStatus(info, 0, mockProClient, mockGitRepo)
+			assert.NoError(t, err)
+
+			require.NotNil(t, captured)
+			assert.Equal(t, tc.expectedComponent, captured.Component)
 
 			mockGitRepo.AssertExpectations(t)
 		})
@@ -514,11 +590,16 @@ func TestUnlockStackRequest(t *testing.T) {
 }
 
 // TestExecuteProLock tests the executeProLock function with mocked dependencies.
+//
+// Not parallel: executeProLock writes through the process-global UI writer
+// (ui.Writeln/ui.Successf -> pkg/terminal -> pkg/io's shared context buffer),
+// so running this alongside TestExecuteProUnlock's subtests under
+// t.Parallel() raced on that shared buffer (race job, shard 3/4, run
+// 34726125072). There's no per-test UI/IO isolation seam elsewhere in
+// internal/exec's tests to swap in instead, so keep this test (and its
+// subtests) serial.
 func TestExecuteProLock(t *testing.T) {
-	t.Parallel()
-
 	t.Run("successfully locks stack and shows checkmark", func(t *testing.T) {
-		t.Parallel()
 		// Create mocks
 		ctrl := gomock.NewController(t)
 		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
@@ -569,7 +650,6 @@ func TestExecuteProLock(t *testing.T) {
 	})
 
 	t.Run("returns error when git repo info fails", func(t *testing.T) {
-		t.Parallel()
 		ctrl := gomock.NewController(t)
 		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
@@ -592,7 +672,6 @@ func TestExecuteProLock(t *testing.T) {
 	})
 
 	t.Run("returns error when API lock fails", func(t *testing.T) {
-		t.Parallel()
 		ctrl := gomock.NewController(t)
 		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
@@ -621,11 +700,12 @@ func TestExecuteProLock(t *testing.T) {
 }
 
 // TestExecuteProUnlock tests the executeProUnlock function with mocked dependencies.
+//
+// Not parallel: see the comment on TestExecuteProLock -- executeProUnlock
+// writes through the same process-global UI writer, and running both tests'
+// subtests concurrently under t.Parallel() raced on it.
 func TestExecuteProUnlock(t *testing.T) {
-	t.Parallel()
-
 	t.Run("successfully unlocks stack and shows checkmark", func(t *testing.T) {
-		t.Parallel()
 		// Create mocks
 		ctrl := gomock.NewController(t)
 		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
@@ -659,7 +739,6 @@ func TestExecuteProUnlock(t *testing.T) {
 	})
 
 	t.Run("returns error when git repo info fails", func(t *testing.T) {
-		t.Parallel()
 		ctrl := gomock.NewController(t)
 		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
@@ -680,7 +759,6 @@ func TestExecuteProUnlock(t *testing.T) {
 	})
 
 	t.Run("returns error when API unlock fails", func(t *testing.T) {
-		t.Parallel()
 		ctrl := gomock.NewController(t)
 		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)

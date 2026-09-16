@@ -6,7 +6,7 @@ tags: [feature]
 date: 2026-04-13T00:00:00.000Z
 ---
 
-`atmos list instances` now supports `--format=matrix`, producing GitHub Actions-compatible JSON for driving parallel CI/CD jobs — the same format already available in `atmos describe affected`.
+[`atmos list instances`](/cli/commands/list/list-instances) now supports `--format=matrix`, producing GitHub Actions-compatible JSON for driving parallel CI/CD jobs — the same format already available in [`atmos describe affected`](/cli/commands/describe/affected).
 
 <!--truncate-->
 
@@ -24,7 +24,7 @@ atmos list instances --format=matrix
 
 Each entry contains four fields: `stack`, `component`, `component_path`, and `component_type`.
 
-The `--output-file` flag writes results in `key=value` format for `$GITHUB_OUTPUT`:
+The [`--output-file`](/cli/commands/list/list-instances#flags) flag writes results in `key=value` format for `$GITHUB_OUTPUT`:
 
 ```bash
 atmos list instances --format=matrix --output-file=$GITHUB_OUTPUT

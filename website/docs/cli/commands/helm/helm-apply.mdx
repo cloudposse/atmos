@@ -26,6 +26,12 @@ Install or upgrade the release in the cluster:
 atmos helm apply monitoring -s plat-ue2-dev
 ```
 
+Apply a one-time image override without changing stack configuration:
+
+```shell
+atmos helm apply monitoring -s plat-ue2-dev -f incident-values.yaml --set image.tag=2026.09.09
+```
+
 Upgrade an existing release with an explicit production readiness and recovery policy:
 
 ```shell
@@ -78,6 +84,9 @@ through the masked UI stream; chart hook container logs are not streamed automat
 
   <dt>`--dependency-update` <em>(optional)</em></dt>
   <dd>Fetch declared chart dependencies when they are missing. This may access dependency repositories and update the chart's <code>charts/</code> directory and lock file.</dd>
+
+  <dt>`-f` / `--values`, `--set`, `--set-string`, `--set-file`, `--set-json`, `--set-literal` <em>(optional)</em></dt>
+  <dd>Repeatable Helm-compatible value overrides for this apply. They override stack-resolved values only for this invocation. See <a href="/cli/commands/helm/usage#runtime-value-overrides">runtime value overrides</a>.</dd>
 
   <dt>`--dry-run` <em>(optional)</em></dt>
   <dd>Preview the install or upgrade without persisting release state or creating Kubernetes resources.</dd>

@@ -256,6 +256,8 @@ func (p *StandardFlagParser) registerFlagToSet(flagSet *pflag.FlagSet, flag Flag
 		p.registerIntFlag(flagSet, f, markRequired)
 	case *StringSliceFlag:
 		p.registerStringSliceFlag(flagSet, f, markRequired)
+	case *StringArrayFlag:
+		p.registerStringArrayFlag(flagSet, f, markRequired)
 	case *StringMapFlag:
 		p.registerStringMapFlag(flagSet, f, markRequired)
 	default:
@@ -316,6 +318,29 @@ func (p *StandardFlagParser) registerStringSliceFlag(flagSet *pflag.FlagSet, f *
 	}
 
 	// Populate validValues map for runtime validation.
+	if len(f.ValidValues) > 0 {
+		p.validValues[f.Name] = f.ValidValues
+	}
+
+	if f.Required {
+		_ = markRequired(f.Name)
+	}
+}
+
+// registerStringArrayFlag registers a repeatable string flag without splitting
+// values at commas.
+func (p *StandardFlagParser) registerStringArrayFlag(flagSet *pflag.FlagSet, f *StringArrayFlag, markRequired func(string) error) {
+	defer perf.Track(nil, "flags.StandardFlagParser.registerStringArrayFlag")()
+
+	flagSet.StringArrayP(f.Name, f.Shorthand, f.Default, f.Description)
+
+	if f.NoOptDefVal != "" {
+		cobraFlag := flagSet.Lookup(f.Name)
+		if cobraFlag != nil {
+			cobraFlag.NoOptDefVal = f.NoOptDefVal
+		}
+	}
+
 	if len(f.ValidValues) > 0 {
 		p.validValues[f.Name] = f.ValidValues
 	}
@@ -685,6 +710,8 @@ func (p *StandardFlagParser) populateFlagsFromViper(result *ParsedConfig, combin
 			result.Flags[flagName] = value
 		case *StringSliceFlag:
 			result.Flags[flagName] = p.viper.GetStringSlice(viperKey)
+		case *StringArrayFlag:
+			result.Flags[flagName] = p.viper.GetStringSlice(viperKey)
 		default:
 			result.Flags[flagName] = p.viper.Get(viperKey)
 		}
@@ -814,11 +841,13 @@ func (p *StandardFlagParser) ValidateFlagValues(cmd *cobra.Command) error {
 // directly when no Viper instance is bound (e.g. callers that never call
 // BindFlagsToViper before ValidateFlagValues).
 func (p *StandardFlagParser) currentFlagValue(cmd *cobra.Command, flagName string) (interface{}, bool) {
-	_, isSlice := p.registry.Get(flagName).(*StringSliceFlag)
+	flag := p.registry.Get(flagName)
+	_, isSlice := flag.(*StringSliceFlag)
+	_, isArray := flag.(*StringArrayFlag)
 
 	if p.viper != nil {
 		viperKey := p.getViperKey(flagName)
-		if isSlice {
+		if isSlice || isArray {
 			return p.viper.GetStringSlice(viperKey), true
 		}
 		return p.viper.GetString(viperKey), true
@@ -826,6 +855,13 @@ func (p *StandardFlagParser) currentFlagValue(cmd *cobra.Command, flagName strin
 
 	if isSlice {
 		value, err := cmd.Flags().GetStringSlice(flagName)
+		if err != nil {
+			return nil, false
+		}
+		return value, true
+	}
+	if isArray {
+		value, err := cmd.Flags().GetStringArray(flagName)
 		if err != nil {
 			return nil, false
 		}
@@ -1021,13 +1057,24 @@ func (p *StandardFlagParser) handleInteractivePrompts(result *ParsedConfig, comb
 		return err
 	}
 
-	// Use Case 1: Handle missing required flags.
-	if err := p.promptForMissingRequiredFlags(result, combinedFlags); err != nil {
+	// Use Case 3: Handle missing required positional arguments BEFORE Use Case 1's
+	// flag prompts. A missing required flag's completion function (e.g. a "Choose a
+	// stack" selector) is often filtered by an already-selected positional arg (e.g.
+	// the component the user is targeting) -- see cmd/terraform/shared.StackFlagCompletion
+	// and cmd/aws/cloudformation's stackFlagCompletion, both of which filter stacks by
+	// result.PositionalArgs[0] when present. If the required-flag prompt ran first while
+	// the positional arg was still unresolved, its completion function would always see
+	// an empty args slice and fall back to an unfiltered "list everything" result (e.g.
+	// every stack across every account/region in the org) instead of waiting for the
+	// positional arg to be resolved. Resolving positional args first lets that filtering
+	// benefit from the freshly-selected value the vast majority of the time a command
+	// combines both (a required flag + a required positional arg).
+	if err := p.promptForMissingPositionalArgs(result); err != nil {
 		return err
 	}
 
-	// Use Case 3: Handle missing required positional arguments.
-	if err := p.promptForMissingPositionalArgs(result); err != nil {
+	// Use Case 1: Handle missing required flags.
+	if err := p.promptForMissingRequiredFlags(result, combinedFlags); err != nil {
 		return err
 	}
 

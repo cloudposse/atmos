@@ -3,15 +3,17 @@ slug: terraform-streaming-ui
 title: "Introducing Streaming UI: Real-Time Progress for Terraform Commands"
 authors: [osterman]
 tags: [feature, dx]
+cast: "/casts/demo/fixtures/streaming-ui/terraform-ui.cast"
+castTitle: "atmos terraform --ui: plan, apply, destroy"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
-Say goodbye to overwhelming Terraform output. The new streaming UI mode transforms verbose terraform output into a clean, Docker-build-style progress display with interactive confirmations, resource dependency tree visualization, and attribute-level change details.
+Say goodbye to overwhelming Terraform output. The new [streaming UI](/cli/configuration/components/terraform) mode transforms verbose terraform output into a clean, Docker-build-style progress display with interactive confirmations, resource dependency tree visualization, and attribute-level change details.
 
 <!--truncate-->
 
-<CastPlayer src="/casts/demo/fixtures/streaming-ui/terraform-ui.cast" title="atmos terraform --ui: plan, apply, destroy" chrome controls scrubber />
+<CastEmbed src="/casts/demo/fixtures/streaming-ui/terraform-ui.cast" title="atmos terraform --ui: plan, apply, destroy" chrome controls scrubber />
 
 ## What Changed
 

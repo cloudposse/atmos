@@ -10,7 +10,7 @@ date: 2025-10-19T12:00:00.000Z
 release: v1.195.0
 ---
 
-We're introducing two new commands for exploring Atmos releases: `atmos version list` and `atmos version show`. Browse release history with date filtering, inspect artifacts, and keep your infrastructure tooling up-to-date—all from your terminal with beautiful formatted output.
+We're introducing two new commands for exploring Atmos releases: [`atmos version list`](/cli/commands/version/list) and [`atmos version show`](/cli/commands/version/show). Browse release history with date filtering, inspect artifacts, and keep your infrastructure tooling up-to-date—all from your terminal with beautiful formatted output.
 
 <!--truncate-->
 
@@ -27,8 +27,8 @@ $ atmos version list
 **Features:**
 - 📋 **Clean table view** - Borderless table with header separator
 - 📖 **Markdown-rendered titles** - Release titles displayed with proper formatting and colors
-- 📅 **Date filtering** - Filter releases with `--since` (ISO 8601 dates)
-- 📄 **Pagination support** - Browse through extensive release history with `--limit` and `--offset`
+- 📅 **Date filtering** - Filter releases with [`--since`](/cli/commands/version/list#flags) (ISO 8601 dates)
+- 📄 **Pagination support** - Browse through extensive release history with [`--limit`](/cli/commands/version/list#flags) and [`--offset`](/cli/commands/version/list#flags)
 - ✨ **Current version indicator** - Green bullet (●) marks your installed version
 - 🔄 **Spinner feedback** - Visual feedback during GitHub API calls
 - 📱 **Terminal width detection** - Automatically adapts to your terminal size

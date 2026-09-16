@@ -15,7 +15,7 @@ Atmos now properly handles nested maps in Terraform backend configurations when 
 
 ## The Problem
 
-When generating backend configurations with `atmos terraform generate backends --format hcl`, nested maps were missing from the output. For example:
+When generating backend configurations with [`atmos terraform generate backends --format hcl`](/cli/commands/terraform/generate/backends), nested maps were missing from the output. For example:
 
 ```yaml
 terraform:
@@ -58,3 +58,5 @@ atmos terraform generate backends --format hcl
 ```
 
 All three formats (HCL, JSON, backend-config) now correctly handle nested structures.
+
+For usage and configuration, see [State Backends](/components/terraform/backends).

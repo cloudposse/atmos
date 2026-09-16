@@ -21,7 +21,7 @@ answered "what's newer, and can I have it?"
 
 ## The Fix
 
-`atmos toolchain update` resolves each tool's newest available version and moves the pin forward for you,
+[`atmos toolchain update`](/cli/commands/toolchain/update) resolves each tool's newest available version and moves the pin forward for you,
 then installs it. Run it with no arguments to update everything in `.tool-versions`, or name specific tools
 to update just those. Tools pinned to a PR, commit SHA, or git ref are left alone — those pins are meant to
 stay exact, so `update` skips them with an explanation instead of silently doing nothing.
@@ -45,7 +45,7 @@ terraform: 1.9.8 -> 1.11.4 (dry-run)
 Would update 1 tool(s)
 ```
 
-Tools are updated concurrently, with the same `--max-concurrency` control `atmos toolchain install` already
+Tools are updated concurrently, with the same [`--max-concurrency`](/cli/commands/toolchain/update#flags) control [`atmos toolchain install`](/cli/commands/toolchain/install) already
 supports.
 
 ## Get Involved

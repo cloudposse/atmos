@@ -240,7 +240,7 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 ## Testing
 
-**Preconditions**: Tests skip gracefully with helpers from `tests/test_preconditions.go`. See `docs/prd/testing-strategy.md`.
+**Preconditions**: Tests skip gracefully with helpers from `tests/preconditions.go`. See `docs/prd/testing-strategy.md`.
 
 **Commands**: `atmos test` (quick), `atmos test --full` (all), `atmos test --coverage` (coverage)
 
@@ -448,5 +448,5 @@ NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Hooks run
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at `specs/002-pro-exec-metadata/plan.md`
+at `specs/003-fix-upload-component-name/plan.md`
 <!-- SPECKIT END -->

@@ -1081,7 +1081,10 @@ func processStacks(
 	// is a freshly-built tree (never aliasing the shared FindStacksMap cache) once ProcessCustomYamlTags
 	// has returned, so mutating it in place here is safe under concurrent bulk commands.
 	if processYamlFunctions {
-		if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, skip); err != nil {
+		// evalSections is nil (full eager evaluation): processStacks backs terraform/helmfile/
+		// describe-component and every other non-list caller, none of which opt into the
+		// evaluation-scope filter -- see isSectionRequired.
+		if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, skip, nil); err != nil {
 			return configAndStacksInfo, err
 		}
 	}

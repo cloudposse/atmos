@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 
 	"github.com/charmbracelet/glamour/ansi"
+	"github.com/charmbracelet/glamour/styles"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -280,22 +282,28 @@ func uintPtr(u uint) *uint {
 	return &u
 }
 
-// GetListIndentStyle returns a minimal style configuration with only list indentation settings.
-// This is used for ASCII rendering to add list indentation without colors.
-func GetListIndentStyle() ([]byte, error) {
-	style := ansi.StyleConfig{
-		List: ansi.StyleList{
-			StyleBlock: ansi.StyleBlock{
-				Indent: uintPtr(2),
-			},
-			LevelIndent: 4,
-		},
-		Item: ansi.StylePrimitive{
-			BlockPrefix: "• ",
-		},
-		Enumeration: ansi.StylePrimitive{
-			BlockPrefix: ". ",
-		},
+// GetASCIIStyle returns the plain-text style with no document margin and indented lists.
+func GetASCIIStyle() ([]byte, error) {
+	// Replace pointers instead of changing Glamour's shared preset. Serializing the
+	// full style lets each renderer decode its own copy without mutating the preset.
+	style := plainTextStyle()
+	style.List = ansi.StyleList{
+		StyleBlock:  ansi.StyleBlock{Indent: uintPtr(2)},
+		LevelIndent: 4,
 	}
+	style.Item = ansi.StylePrimitive{BlockPrefix: "• "}
+	style.Enumeration = ansi.StylePrimitive{BlockPrefix: ". "}
 	return json.Marshal(style)
+}
+
+// GetPlainTextStyle returns the uncolored document style used by help and messages.
+func GetPlainTextStyle() ([]byte, error) {
+	return json.Marshal(plainTextStyle())
+}
+
+func plainTextStyle() ansi.StyleConfig {
+	style := styles.ASCIIStyleConfig
+	style.Document.Margin = uintPtr(0)
+	style.CodeBlock.Margin = uintPtr(1)
+	return style
 }

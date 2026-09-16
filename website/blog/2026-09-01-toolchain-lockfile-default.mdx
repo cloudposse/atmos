@@ -16,7 +16,7 @@ reproducible, because the version string matched.
 ## The Problem
 
 A version in `.tool-versions` pins what you asked for. It does not pin what Atmos actually
-installed. Every `atmos toolchain install` command resolves that version against the live registry
+installed. Every [`atmos toolchain install`](/cli/commands/toolchain/install) command resolves that version against the live registry
 again. The exact download URL, checksum, and platform artifact are not fixed anywhere. Only the
 version number is fixed.
 
@@ -25,7 +25,7 @@ version number is fixed.
 Toolchain installs now write a lockfile by default. You do not need to configure anything. Run
 `atmos toolchain install`. Atmos records the exact resolved version, download URL, checksum, and
 size for your platform. Installs skip a tool that already exists on disk, so an already-installed
-tool will not get a lockfile entry until you run `atmos toolchain lock` (or reinstall it with
+tool will not get a lockfile entry until you run [`atmos toolchain lock`](/cli/commands/toolchain/lock) (or reinstall it with
 `atmos toolchain install --reinstall`). Once every tool has an entry, the next install resolves
 against the lockfile instead of asking the registry again, on your machine, a teammate's, or in
 CI. Reproducibility holds per platform: everyone on an operating system and architecture with a
@@ -50,7 +50,7 @@ Once every tool has an entry, every install resolves the exact pinned artifact f
 This applies on your machine, a teammate's machine, and a CI runner. Atmos does not resolve the
 version against the registry again.
 
-The `atmos toolchain` command is still experimental. Its interface may change. The reproducibility
+The [`atmos toolchain`](/cli/commands/toolchain/usage) command is still experimental. Its interface may change. The reproducibility
 does not depend on that.
 
 ## Get Involved

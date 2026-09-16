@@ -6,8 +6,8 @@ tags: [bugfix]
 date: 2026-05-15T00:00:00.000Z
 ---
 
-Three documented flags on `atmos list instances` were silently ignored:
-`--stack`, `--filter`, and `--query`. They now do what the docs say.
+Three documented flags on [`atmos list instances`](/cli/commands/list/list-instances) were silently ignored:
+[`--stack`](/cli/commands/list/list-instances#flags), [`--filter`](/cli/commands/list/list-instances#flags), and [`--query`](/cli/commands/list/list-instances#flags). They now do what the docs say.
 
 <!--truncate-->
 
@@ -21,7 +21,7 @@ Three documented flags on `atmos list instances` were silently ignored:
 
 The fix also closes a latent ENV-precedence gap: `ATMOS_LIST_FORMAT` and
 `ATMOS_UPLOAD` are now honored. Previously the implementation re-read
-`--format` and `--upload` directly from cobra, bypassing viper.
+[`--format`](/cli/commands/list/list-instances#flags) and [`--upload`](/cli/commands/list/list-instances#flags) directly from cobra, bypassing viper.
 
 ## How to Use It
 

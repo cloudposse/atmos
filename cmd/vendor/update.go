@@ -1,7 +1,10 @@
 package vendor
 
 import (
+	"context"
 	"errors"
+	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 
@@ -14,13 +17,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	_ "github.com/cloudposse/atmos/pkg/git/providers/azuredevops"
 	_ "github.com/cloudposse/atmos/pkg/git/providers/cli"
 	_ "github.com/cloudposse/atmos/pkg/git/providers/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	// Aliased: this file already has a local "tags" variable (the --tags flag's parsed value).
 	pkgtags "github.com/cloudposse/atmos/pkg/tags"
+	"github.com/cloudposse/atmos/pkg/ui/batch"
 	"github.com/cloudposse/atmos/pkg/vendoring"
+	"github.com/cloudposse/atmos/pkg/vendoring/concurrency"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
 	"github.com/cloudposse/atmos/pkg/vendoring/updater"
 )
@@ -45,6 +51,16 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 		if err := vendorUpdateParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
+
+		atmosConfig, configErr := cfg.InitCliConfig(flags.BuildConfigAndStacksInfo(cmd, v), false)
+		if configErr != nil {
+			return configErr
+		}
+		maxConcurrency, configErr := concurrency.Resolve(cmd.Flags(), &atmosConfig)
+		if configErr != nil {
+			return configErr
+		}
+		atmosConfig.Vendor.MaxConcurrency = maxConcurrency
 
 		check := v.GetBool("check")
 		components, flagErr := cmd.Flags().GetStringSlice("component")
@@ -132,7 +148,7 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 			defer execWorkdir.Cleanup()
 			workdir = execWorkdir.Workdir
 
-			discovery, dErr := runVendorUpdate(&vendorUpdateParams{viper: v, componentType: componentType, tags: tags, typeChanged: typeChanged, components: selected, group: group, check: true})
+			discovery, dErr := runVendorUpdate(&vendorUpdateParams{ctx: cmd.Context(), config: &atmosConfig, maxConcurrency: maxConcurrency, viper: v, componentType: componentType, tags: tags, typeChanged: typeChanged, components: selected, group: group, check: true})
 			if dErr != nil {
 				result.Status, result.Failure = "failed", dErr.Error()
 				return dErr
@@ -165,7 +181,7 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 			baseBranch = base
 		}
 
-		report, err = runVendorUpdate(&vendorUpdateParams{viper: v, componentType: componentType, tags: tags, typeChanged: typeChanged, components: selected, group: group, check: check})
+		report, err = runVendorUpdate(&vendorUpdateParams{ctx: cmd.Context(), config: &atmosConfig, maxConcurrency: maxConcurrency, viper: v, componentType: componentType, tags: tags, typeChanged: typeChanged, components: selected, group: group, check: check})
 
 		if report != nil {
 			applyComponentUpdaterReport(&result, report)
@@ -295,6 +311,9 @@ func vendorPullRequestConfig(v *viper.Viper) schema.VendorPullRequestConfig {
 		Draft:        v.GetBool("vendor.ci.pull_request.draft"),
 		Reviewers:    v.GetStringSlice("vendor.ci.pull_request.reviewers"),
 		Assignees:    v.GetStringSlice("vendor.ci.pull_request.assignees"),
+		Organization: v.GetString("vendor.ci.pull_request.organization"),
+		Project:      v.GetString("vendor.ci.pull_request.project"),
+		Repository:   v.GetString("vendor.ci.pull_request.repository"),
 	}
 }
 
@@ -310,11 +329,15 @@ func applyComponentUpdaterReport(result *updater.Result, report *vendoring.Updat
 // repoWideUpdateParams bundles runRepoWideUpdate's inputs (an Options-pattern struct, since the
 // argument list grew past a readable positional length once OnProgress joined it).
 type repoWideUpdateParams struct {
-	typeChanged   bool
-	componentType string
-	tags          []string
-	check         bool
-	onProgress    vendorProgressFunc
+	ctx            context.Context
+	config         *schema.AtmosConfiguration
+	maxConcurrency int
+	onEvent        batch.Observer
+	typeChanged    bool
+	componentType  string
+	tags           []string
+	check          bool
+	onProgress     vendorProgressFunc
 }
 
 // runRepoWideUpdate handles the --component-less path: vendor.yaml's sources, combined with a
@@ -356,7 +379,12 @@ func runRepoWideUpdate(v *viper.Viper, p repoWideUpdateParams) (*vendoring.Updat
 		updateType = p.componentType
 	}
 
-	return vendoring.Update(nil, &vendoring.UpdateParams{
+	ctx := p.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return vendoring.UpdateContext(ctx, p.config, &vendoring.UpdateParams{
+		MaxConcurrency: p.maxConcurrency, OnEvent: p.onEvent,
 		VendorFiles:  files,
 		ExtraSources: extra,
 		Tags:         p.tags,
@@ -368,6 +396,8 @@ func runRepoWideUpdate(v *viper.Viper, p repoWideUpdateParams) (*vendoring.Updat
 
 func init() {
 	vendorUpdateParser = flags.NewStandardParser(
+		flags.WithIntFlag(concurrency.Flag, "", 0, "Maximum concurrent preparations or version checks (edition default: 4; earlier editions: 1)"),
+		flags.WithEnvVars(concurrency.Flag, concurrency.Env),
 		flags.WithStringSliceFlag("component", "c", []string{}, "Update only these components (repeatable)"),
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
 		flags.WithStringFlag("tags", "", "", "Update only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
@@ -420,102 +450,71 @@ type vendorPullParams struct {
 // unchanged: that path already pulls correctly regardless of whether the component's source
 // comes from vendor.yaml or a standalone component.yaml, so it's delegated straight through.
 //
-// When p.component is empty (a repo-wide "--pull" sweep), pull only the components update actually
-// changed instead of setting --everything=true. --everything only knows how to enumerate a
-// vendor.yaml's sources and hard-errors when one doesn't exist (internal/exec/vendor.go's
-// handleVendorConfig / ErrVendorConfigNotExist), which broke repo-wide "--pull" in a
-// component.yaml-only repo (no vendor.yaml at all) even though every updated component's own pull
-// already worked fine. Re-pulling only what changed is also strictly better behavior on its own
-// merits: there's no reason to re-pull untouched (up-to-date/skipped/failed) components after an
-// update.
-//
-// The updated results are partitioned in two:
-//   - Components declared via their own component.yaml/component.yml manifest are pulled together
-//     in a single ExecuteComponentVendorPullBatch call, producing one progress bar and one
-//     completion summary instead of one "0/1" block per component (the reported UX bug).
-//   - Everything else (vendor.yaml-declared sources, including ones reached via an import) keeps
-//     using the existing per-component pullUpdatedComponent loop: executeVendorModel's generic
-//     package-type constraint means a vendor.yaml-declared package can't be batched into the same
-//     call as a component.yaml-declared one, and batching the vendor.yaml path itself would require
-//     touching ExecuteAtmosVendorInternal's component-filtering, out of scope for this fix.
+// When p.component is empty, reconcile every selected report entry, including
+// unchanged versions whose local materialization may be absent or modified.
+// Resolve packages in report order, preserving each component's source/mixin
+// order, then run one concurrent installation batch with ordered destination writes.
 func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateReport, p vendorPullParams) error {
+	originalContext := cmd.Context()
+	ctx := originalContext
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+	defer cancel()
+	cmd.SetContext(ctx)
+	defer cmd.SetContext(originalContext)
+
 	if p.component != "" {
-		// Clear "tags" the same way pullUpdatedComponent does: it's vendor update's own flag of
-		// the same name (used, e.g., with a repo-wide "--tags foo --pull" run) and
-		// validateVendorFlags (internal/exec/vendor.go) rejects "component" combined with it.
 		if err := resetUnchangedFlag(cmd, "tags"); err != nil {
 			return err
 		}
 		return e.ExecuteVendorPullCmd(cmd, args)
 	}
-
-	batchComponentsByType, fallback := partitionPullResults(report)
-
-	// Built once and reused across every componentType batch below: --base-path/--config/
-	// --config-path/--profile must be honored on this repo-wide "--pull" path too, the same way
-	// resolveUpdateSelectors already does for --stack/--labels selector resolution.
 	info := flags.BuildConfigAndStacksInfo(cmd, viper.GetViper())
-
-	var errs []error
-	// Batch per type: DiscoverAllComponentManifests' repo-wide sweep (no explicit --type) can mix
-	// terraform/helmfile/packer component.yaml updates in one report, and
-	// ExecuteComponentVendorPullBatch only accepts a single type per call (it resolves every
-	// component's directory under that one type's base path) - forwarding a mixed batch under one
-	// type would resolve some components under the wrong components/<type>/<name> path.
-	for componentType, components := range batchComponentsByType {
-		if err := pullBatchedComponentManifests(&batchedComponentManifestsParams{
-			components:      components,
-			componentType:   componentType,
-			dryRun:          p.dryRun,
-			refreshLock:     p.refreshLock,
-			lockEnforcement: p.lockEnforcement,
-			info:            info,
-		}); err != nil {
-			errs = append(errs, err)
-		}
+	config, err := cfg.InitCliConfig(info, false)
+	if err != nil {
+		return err
 	}
-	for _, result := range fallback {
-		if err := pullUpdatedComponent(cmd, args, result.Component); err != nil {
-			errs = append(errs, err)
-		}
+	n, err := concurrency.Resolve(cmd.Flags(), &config)
+	if err != nil {
+		return err
 	}
-	return errors.Join(errs...)
+	enforcement := p.lockEnforcement
+	if enforcement == "" {
+		enforcement = e.DefaultLockEnforcement(&config)
+	}
+	opts := install.InstallOptions{Context: cmd.Context(), DryRun: p.dryRun, RefreshLock: p.refreshLock, LockEnforcement: enforcement, MaxConcurrency: n}
+	var packages []install.VendorPackage
+	collect := opts
+	collect.Collect = &packages
+	for i := range report.Results {
+		result := &report.Results[i]
+		if componentManifestBasenames[filepath.Base(result.File)] {
+			if err := e.ExecuteComponentVendorPullBatch(&config, []string{result.Component}, result.ComponentType, collect); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := setPullComponentFlags(cmd, result.Component); err != nil {
+			return err
+		}
+		plan, err := e.PlanVendorPull(cmd, args)
+		if err != nil {
+			return err
+		}
+		packages = append(packages, plan.Packages...)
+	}
+	return e.ExecuteVendorPackages(cmd.Context(), &config, packages, opts)
 }
 
 // componentManifestBasenames are the physical file basenames a component.yaml-declared source's
 // SourceUpdateResult.File can carry (see ReadAndProcessComponentVendorConfigFile's
-// findComponentConfigFile), used by partitionReportResults to distinguish it from a
+// findComponentConfigFile), used by runVendorPull to distinguish it from a
 // vendor.yaml-declared source (vendor.yaml itself, or any file it imports).
 var componentManifestBasenames = map[string]bool{
 	"component.yaml": true,
 	"component.yml":  true,
-}
-
-// partitionPullResults selects every report entry because an unchanged version
-// can still need materialization reconciliation against vendor.lock.yaml.
-func partitionPullResults(report *vendoring.UpdateReport) (batchComponentsByType map[string][]string, fallback []vendoring.SourceUpdateResult) {
-	return partitionReportResults(report, false)
-}
-
-// partitionReportResults splits report's results (optionally filtered to StatusUpdated only,
-// via updatedOnly) into components declared via their own component.yaml/component.yml manifest
-// (eligible for the batched ExecuteComponentVendorPullBatch call, grouped by ComponentType since a
-// repo-wide sweep can mix types in one report) versus everything else (vendor.yaml or an imported
-// manifest file), which keeps using the existing per-component pullUpdatedComponent loop.
-func partitionReportResults(report *vendoring.UpdateReport, updatedOnly bool) (batchComponentsByType map[string][]string, fallback []vendoring.SourceUpdateResult) {
-	batchComponentsByType = map[string][]string{}
-	for i := range report.Results {
-		result := report.Results[i]
-		if updatedOnly && result.Status != vendoring.StatusUpdated {
-			continue
-		}
-		if componentManifestBasenames[filepath.Base(result.File)] {
-			batchComponentsByType[result.ComponentType] = append(batchComponentsByType[result.ComponentType], result.Component)
-			continue
-		}
-		fallback = append(fallback, result)
-	}
-	return batchComponentsByType, fallback
 }
 
 // batchedComponentManifestsParams bundles pullBatchedComponentManifests' inputs (Options Pattern,
@@ -572,6 +571,13 @@ func pullBatchedComponentManifests(p *batchedComponentManifestsParams) error {
 // flag (shared with the pull path) continues to thread through correctly, e.g.
 // "vendor update --type packer --pull" pulls with "--type packer" too.
 func pullUpdatedComponent(cmd *cobra.Command, args []string, component string) error {
+	if err := setPullComponentFlags(cmd, component); err != nil {
+		return err
+	}
+	return e.ExecuteVendorPullCmd(cmd, args)
+}
+
+func setPullComponentFlags(cmd *cobra.Command, component string) error {
 	// "component" is a repeatable string slice on vendorUpdateCmd, and pflag's Set *appends* to a
 	// slice flag once it has been changed — a plain Set here would accumulate one component per
 	// loop iteration. Replace the slice wholesale so each pull targets exactly one component.
@@ -588,7 +594,7 @@ func pullUpdatedComponent(cmd *cobra.Command, args []string, component string) e
 	if err := resetUnchangedFlag(cmd, "tags"); err != nil {
 		return err
 	}
-	return e.ExecuteVendorPullCmd(cmd, args)
+	return nil
 }
 
 // resetUnchangedFlag clears name's value back to "" and marks it Changed=false, rather than merely

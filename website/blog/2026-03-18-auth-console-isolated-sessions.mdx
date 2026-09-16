@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [enhancement]
 ---
 
-The `atmos auth console` command now supports isolated browser sessions, allowing you to have multiple cloud provider consoles open simultaneously — one per identity — without logout conflicts.
+The [`atmos auth console`](/cli/commands/auth/console) command now supports isolated browser sessions, allowing you to have multiple cloud provider consoles open simultaneously — one per identity — without logout conflicts.
 
 <!--truncate-->
 
@@ -22,7 +22,7 @@ auth:
     isolated: true
 ```
 
-Or per-invocation with the `--isolated` flag:
+Or per-invocation with the [`--isolated`](/cli/commands/auth/console#flags) flag:
 
 ```shell
 atmos auth console --identity plat-staging/AdministratorAccess --isolated

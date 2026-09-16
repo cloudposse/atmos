@@ -1,8 +1,12 @@
 package driver
 
 import (
-	"strings"
+	"context"
+	"net"
+	"os/exec"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,7 +74,35 @@ func TestFlociHealthCheck_UsesItsOwnPort(t *testing.T) {
 		require.NoError(t, err)
 		hc := d.Defaults().HealthCheck
 		require.NotNil(t, hc)
-		assert.True(t, strings.Contains(hc.Test[1], ":"+port+"/"),
+		assert.Contains(t, hc.Test[1], "/dev/tcp/127.0.0.1/"+port+"'",
 			"%s health check should probe port %s, got %q", name, port, hc.Test[1])
 	}
+}
+
+// TestFlociHealthCheck_Readiness exercises the actual probe against listening and
+// closed ports, without requiring curl, an HTTP endpoint, or a trusted TLS cert.
+func TestFlociHealthCheck_Readiness(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Floci health checks run inside Linux containers")
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("Bash is required to execute the container health check")
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	port := listener.Addr().(*net.TCPAddr).Port
+	probe := flociHealthCheck(port).Test[1]
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, bash, "-c", probe).CombinedOutput()
+	require.NoError(t, err, "%s", output)
+
+	require.NoError(t, listener.Close())
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.Error(t, exec.CommandContext(ctx, bash, "-c", probe).Run())
+	require.NoError(t, ctx.Err(), "closed-port probe should fail without timing out")
 }

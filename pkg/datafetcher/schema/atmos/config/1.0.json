@@ -1807,7 +1807,7 @@
               "type": "null"
             }
           ],
-          "description": "Experimental controls how experimental features are handled.\nValues: \"silence\" (no output), \"disable\" (disabled), \"warn\" (default), \"error\" (exit)."
+          "description": "Experimental controls how experimental features are handled.\nValues: \"silence\" (no output), \"disable\" (disabled), \"warn\", \"warn-daily\" (default, once per feature every 24 hours), \"error\" (exit)."
         },
         "docs": {
           "anyOf": [
@@ -3813,6 +3813,20 @@
             }
           ],
           "description": "Kind specifies the dependency type: terraform, helmfile, packer, plugin\ntype, or — in the legacy inline shape — file/folder. Defaults to the\ndeclaring component's type for component dependencies."
+        },
+        "required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Required controls whether a missing or unavailable target causes an error. Nil defaults to true."
         },
         "path": {
           "anyOf": [
@@ -7871,7 +7885,7 @@
         }
       },
       "type": "object",
-      "description": "ParallelFailConfig configures failure behavior for parallel and matrix steps."
+      "description": "ParallelFailConfig configures failure behavior for parallel, matrix, and test steps."
     },
     "PlanfileStoreSpec": {
       "properties": {
@@ -11015,7 +11029,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Control step fields."
+          "description": "Control step fields for parallel, matrix, and test groups."
         },
         "max_concurrency": {
           "anyOf": [
@@ -12309,9 +12323,43 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mode controls whether Atmos runs `terraform init` before a subcommand:\n`auto` (default since 2026-09-12; a project pinned to an earlier edition gets `always`\nrestored) skips it when the init fingerprint recorded after the last successful init is\nunchanged, `always` runs it on every invocation, and `never` never runs it (the same as\n`--skip-init`)."
+        },
+        "reconfigure": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Reconfigure controls when `-reconfigure` is added to `terraform init`:\n`auto` (default) adds it only when the backend configuration changed since\nthe last init, `always` adds it on every init, and `never` never adds it.\nTakes precedence over the deprecated `init_run_reconfigure`. Unlike Mode/Upgrade, this\ndefault is NOT edition-pin-protected (see EffectiveInitReconfigure's doc comment): its\nlegacy-boolean fallback makes the standard journal mechanism unsafe to apply here."
+        },
+        "upgrade": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Upgrade controls when `-upgrade` is added to `terraform init`: `auto` (default since\n2026-09-12; a project pinned to an earlier edition gets `never` restored) adds it only\nwhen terraform/tofu reports that an upgrade is required, `always` adds it on every init,\nand `never` never adds it."
         }
       },
-      "type": "object"
+      "type": "object",
+      "description": "TerraformInit configures the `terraform init` that Atmos runs before other\nterraform subcommands (and while resolving !terraform.output)."
     },
     "TerraformLint": {
       "properties": {
@@ -12985,6 +13033,21 @@
     },
     "Vendor": {
       "properties": {
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "MaxConcurrency bounds concurrent preparation and update checks; earlier editions restore one worker."
+        },
         "base_path": {
           "anyOf": [
             {
@@ -13271,6 +13334,39 @@
               "type": "string"
             }
           ]
+        },
+        "organization": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Organization is the Azure DevOps organization name (azuredevops provider only). Together\nwith Project and Repository it addresses a repository the way GitHub's owner/repository\npair does, since Azure DevOps requires three segments: organization/project/repository."
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Project is the Azure DevOps project name (azuredevops provider only). See Organization."
+        },
+        "repository": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Repository is the repository name (azuredevops provider only). GitHub instead derives its\nowner/repository pair from the local Git remote, so this field is a no-op for that provider."
         }
       },
       "type": "object",
@@ -14508,6 +14604,21 @@
     },
     "ViewportConfig": {
       "properties": {
+        "padding": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Horizontal padding on each side, in columns."
+        },
         "height": {
           "anyOf": [
             {
@@ -16267,7 +16378,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Control step fields."
+          "description": "Control step fields for parallel, matrix, and test groups."
         },
         "max_concurrency": {
           "anyOf": [

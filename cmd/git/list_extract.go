@@ -200,6 +200,7 @@ func gitStatusIndicator(status string) string {
 	return gitStatusIndicatorWithTTY(status, isGitListTTYCached())
 }
 
+// gitStatusIndicatorWithTTY renders a themed status dot for terminals or the status text for pipes.
 func gitStatusIndicatorWithTTY(status string, isTTY bool) string {
 	if !isTTY {
 		return status
@@ -211,6 +212,6 @@ func gitStatusIndicatorWithTTY(status string, isTTY bool) string {
 	case statusDirty:
 		return theme.GetWarningStyle().Render(statusDot)
 	default:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray)).Render(statusDot)
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).Render(statusDot)
 	}
 }

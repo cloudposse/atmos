@@ -417,6 +417,29 @@ func TestTerraformExecMetadataParserFunc_UsesSuppliedOutput(t *testing.T) {
 	assert.Equal(t, "plat-use2-dev", asMap["stack"])
 }
 
+// TestTerraformExecMetadataParserFunc_ReportsFullComponentNameForNestedComponent
+// is the regression guard for spec FR-004: the single-component
+// exec-metadata parser closure is called with the full CLI argument
+// (cmd/terraform/plan.go's execComponent = args[0]) as its component, not
+// the working-directory leaf ProcessStacks derives internally — so a nested
+// (slash-containing) logical component name must already pass through here
+// unmodified, both before and after the recordExecResult/uploadStatus fix
+// (GitHub issue #3102).
+func TestTerraformExecMetadataParserFunc_ReportsFullComponentNameForNestedComponent(t *testing.T) {
+	parser := terraformExecMetadataParserFunc("foo/bar/baz", "dev")
+
+	result := parser("plan", 0, "")
+	require.NotNil(t, result)
+	wrapper, ok := result.(map[string]any)
+	require.True(t, ok)
+	components, ok := wrapper["components"].([]any)
+	require.True(t, ok)
+	require.Len(t, components, 1)
+	asMap, ok := components[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "foo/bar/baz", asMap["component"])
+}
+
 // TestTerraformNodeHooks_RecordExecResultAccumulates verifies After()
 // accumulates one execNodeResult per node call, with the correct
 // component's own full TerraformExecData entry (FR-006a's restructured
@@ -464,6 +487,23 @@ func TestTerraformNodeHooks_RecordExecResultAccumulates(t *testing.T) {
 	assert.Equal(t, "dev", node2["stack"])
 	assert.Equal(t, 1, node2["exit_code"])
 	assert.NotContains(t, node2, "version")
+}
+
+// TestRecordExecResult_ReportsFullComponentNameForNestedComponent is the
+// regression test for GitHub issue #3102: for a nested (slash-containing)
+// logical component name, recordExecResult must accumulate the component
+// entry under its full logical name (info.ComponentFromArg), never the
+// truncated working-directory leaf (info.Component) that ProcessStacks
+// splits off for path resolution.
+func TestRecordExecResult_ReportsFullComponentNameForNestedComponent(t *testing.T) {
+	nodeHooks := &terraformNodeHooks{cmd: newHookTestCmd(), subCommand: "plan"}
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", Component: "baz", ComponentFromArg: "foo/bar/baz", ComponentType: "terraform"}
+	nodeHooks.recordExecResult(info, "", nil)
+
+	require.Len(t, nodeHooks.results, 1)
+	data, ok := nodeHooks.results[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "foo/bar/baz", data["component"])
 }
 
 // TestCaptureMultiComponentExecMetadata_NoOpWithoutNodeHooks verifies the

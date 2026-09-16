@@ -7,7 +7,7 @@ tags: [security]
 ---
 
 Federal agencies, financial institutions, and healthcare organizations are often required to run
-only cryptography that's been validated against FIPS 140, the U.S. government's standard for
+only cryptography that's been validated against [FIPS](/cli/commands/version/usage) 140, the U.S. government's standard for
 approved algorithms and key sizes. For a command-line tool built on a general-purpose language
 runtime, meeting that bar has traditionally meant compiling against a separate validated crypto
 library, or simply hoping the runtime's own TLS and encryption code happens to stick to approved
@@ -34,7 +34,7 @@ variable, or config change is required.
 
 This covers the TLS and cryptography atmos itself uses for outbound connections, and it's FIPS
 140-3 *mode* — enforced by Go's runtime — not a CMVP compliance certification for the atmos
-binary itself. Declarative secrets management (`atmos secret keygen` and the age-based SOPS
+binary itself. Declarative secrets management ([`atmos secret keygen`](/cli/commands/secret/keygen) and the age-based SOPS
 backend, along with the sealed values atmos pushes to GitHub Actions secrets) relies on its own
 encryption, chosen for compatibility with those specific ecosystems, and sits outside Go's FIPS
 module boundary entirely — worth knowing if your compliance program needs FIPS coverage across

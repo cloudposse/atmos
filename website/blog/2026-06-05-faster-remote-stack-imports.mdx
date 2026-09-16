@@ -21,7 +21,7 @@ import:
   # ...dozens more, all from the same repo
 ```
 
-…Atmos previously cloned the **entire repository once for every import** and threw each clone away. A spoke with 80 imports of the hub meant ~80 clones per run — and because commands like `atmos describe affected` process stacks twice (current vs. base ref), that doubled again.
+…Atmos previously cloned the **entire repository once for every import** and threw each clone away. A spoke with 80 imports of the hub meant ~80 clones per run — and because commands like [`atmos describe affected`](/cli/commands/describe/affected) process stacks twice (current vs. base ref), that doubled again.
 
 Now Atmos clones each unique source repository **at most once per invocation** and resolves every subdir import from that single shared clone. This is automatic — no configuration required — and a single run always sees one consistent snapshot.
 
@@ -65,3 +65,5 @@ For hub-and-spoke repositories pulling a shared catalog via remote imports, this
 - Pin to an immutable `?ref=<tag>` (or a SHA) and use a longer `ttl` for maximum reuse; for mutable refs like `main`, keep `ttl` short so the catalog stays fresh.
 
 See the [imports documentation](/stacks/imports) for details.
+
+For usage and configuration, see [Imports](/cli/configuration/imports).

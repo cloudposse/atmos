@@ -71,6 +71,8 @@ atmos helm apply my-app -s dev --timeout 15m   # incident-time override wins
 
 Native Helm support is still experimental (Atmos prints a 🧪 notice when you use it), so the surface may evolve — but the release policy above is what you'll reach for to make deployments deterministic across environments.
 
+For usage and configuration, see [atmos helm apply](/cli/commands/helm/apply).
+
 ## Get Involved
 
 The full contract lives in the native Helm release lifecycle PRD in the repo, and the `atmos-helm` skill documents day-to-day usage. If you run Helm through Atmos, try declaring a `release` policy on a component and tell us where the defaults or precedence surprised you — that feedback is what shapes the feature out of experimental.

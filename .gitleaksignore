@@ -4,3 +4,4 @@
 # stages these files (including merges of main) fails the gitleaks hook.
 pkg/io/masker_test.go:private-key:272
 pkg/component/helm/secret_values_integration_test.go:private-key:25
+website/docs/cli/commands/azure/azure-aks-token.mdx:generic-api-key:84

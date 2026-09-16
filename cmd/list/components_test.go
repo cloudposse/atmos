@@ -454,6 +454,56 @@ func TestGetComponentColumns(t *testing.T) {
 	}
 }
 
+// TestResolveComponentsEvalSections verifies the evaluation-scope filter derived from the
+// resolved column set. `metadata` is always folded in (extract.UniqueComponents and the
+// enabled/locked/tags/labels filters always read it, regardless of which columns are shown).
+func TestResolveComponentsEvalSections(t *testing.T) {
+	testCases := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		opts        *ComponentsOptions
+		expectNil   bool
+		expectExact []string
+	}{
+		{
+			name: "default columns require only metadata",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{List: schema.ListConfig{}},
+			},
+			opts:        &ComponentsOptions{},
+			expectExact: []string{"metadata"},
+		},
+		{
+			name: "--columns referencing vars requires vars and metadata",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{List: schema.ListConfig{}},
+			},
+			opts:        &ComponentsOptions{Columns: []string{"Component={{ .component }}", "Region={{ .vars.region }}"}},
+			expectExact: []string{"metadata", "vars"},
+		},
+		{
+			name: "--columns referencing raw falls back to nil",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{List: schema.ListConfig{}},
+			},
+			opts:      &ComponentsOptions{Columns: []string{"Raw={{ .raw }}"}},
+			expectNil: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := resolveComponentsEvalSections(tc.atmosConfig, tc.opts)
+			if tc.expectNil {
+				assert.Nil(t, result)
+				return
+			}
+			require.NotNil(t, result)
+			assert.ElementsMatch(t, tc.expectExact, result)
+		})
+	}
+}
+
 // TestBuildComponentSorters tests sorter building.
 func TestBuildComponentSorters(t *testing.T) {
 	testCases := []struct {

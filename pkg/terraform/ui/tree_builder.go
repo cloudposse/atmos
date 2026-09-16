@@ -95,6 +95,7 @@ func buildTreeFromPlan(plan *tfjson.Plan, stack, component string) *DependencyTr
 	}
 
 	populateTreeNodes(tree, plan)
+	tree.outputChanges = countOutputChanges(plan)
 
 	// Build parent-child relationships from dependencies.
 	if plan.Config != nil && plan.Config.RootModule != nil {
@@ -133,6 +134,20 @@ func populateTreeNodes(tree *DependencyTree, plan *tfjson.Plan) {
 		}
 		tree.nodes[rc.Address] = node
 	}
+}
+
+// countOutputChanges counts plan.OutputChanges entries that represent a real change (create,
+// update, or delete), skipping no-op and read actions. This is Terraform's `outputs` diff -
+// e.g. an output value change with no resource changes at all - which populateTreeNodes never
+// sees since it only iterates plan.ResourceChanges (see issue #3114).
+func countOutputChanges(plan *tfjson.Plan) int {
+	count := 0
+	for _, oc := range plan.OutputChanges {
+		if oc != nil && (oc.Actions.Create() || oc.Actions.Update() || oc.Actions.Delete()) {
+			count++
+		}
+	}
+	return count
 }
 
 // resourceChangeAction determines the action for a resource change, handling composite

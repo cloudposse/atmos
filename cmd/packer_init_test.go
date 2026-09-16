@@ -12,7 +12,7 @@ func TestPackerInitCmd(t *testing.T) {
 
 	skipIfPackerNotInstalled(t)
 
-	workDir := "../tests/fixtures/scenarios/packer"
+	workDir := packerFixtureWorkDir(t)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.WarnLevel)
