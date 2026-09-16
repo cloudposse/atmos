@@ -30,10 +30,17 @@ references:
 
 ## Overview
 
-This skill is a decision guide. Use it to migrate an existing Terraform repository to Atmos.
-Atmos can adopt an existing repository without a reorganization. The `components/terraform/`
-layout is a recommendation. It is not a requirement. Start with the smallest change that gives
-value. Add more only when the user has a real need for it.
+Use this skill to adopt Atmos for infrastructure orchestration, general-purpose task running,
+or tool-version management. Select the migration path from the user's goal and existing tools.
+
+For Make, Just, and Task, assume the user is adopting Atmos as a task runner for application
+builds, tests, scripts, releases, and other automation. Custom commands need only `atmos.yaml`;
+do not introduce Terraform components, stacks, `.tfvars` conversion, or cloud credentials unless
+the user separately requests infrastructure orchestration. Preserve the commands behind the tasks,
+and let Atmos call the existing task runner while individual tasks are migrated.
+
+For Terraform repositories, Atmos can adopt the existing file layout. Start with the smallest
+change that gives value and add structure as needed.
 
 This skill also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos
 toolchain -- see [from-mise.md](references/from-mise.md) and
@@ -63,7 +70,7 @@ word the user uses. If the user says "OpenTofu," write "OpenTofu" in your respon
 These principles come before your normal instincts. Read them before you propose a change to the
 user's repository.
 
-1. **Migration is opt-in, not all-or-nothing.** Atmos does not require a filesystem
+1. **Terraform migration can preserve the existing layout.** Atmos does not require a filesystem
     reorganization. Point `base_path` at the user's existing layout (e.g., `base_path: "terraform"`
     or `base_path: "."`) when preserving layout lowers adoption risk. The `components/terraform/`
     convention is still the best-practice layout for new or fully migrated repos because Atmos
@@ -84,16 +91,13 @@ user's repository.
     YAML functions are type-safe, can't break YAML parsing, produce clear errors, and don't
     require enabling Gomplate. See the [atmos-yaml-functions](../atmos-yaml-functions/SKILL.md)
     and [atmos-templates](../atmos-templates/SKILL.md) skills for the boundary.
-6. **Crawl → walk → run.** Get the user to a working `atmos terraform plan` in 20 minutes; defer
-    inheritance, catalogs, and multi-account hierarchies until they have a concrete need.
-7. **Task runners are not a blocker.** Atmos custom commands and workflows can replace the
-    targets, recipes, and tasks that Make, Just, and Task provide. This doesn't have to happen all
-    at once — a Makefile, Justfile, or Taskfile can stay as a thin wrapper around `atmos` commands
-    during migration, the same incremental approach described in Principle 6. The end state turns
-    each leaf target into a custom command; a target chain usually stays a custom command too,
-    using `dependencies.commands`/`dependencies.workflows` for its prerequisites. Reserve
-    workflows for fixed, multi-step orchestration across more than one component — not every
-    dependency chain needs one.
+6. **Start with one working command.** For task-runner adoption, start with `atmos build` or
+    another existing task. For Terraform adoption, start with a plan. Add configuration structure
+    only when it serves the selected migration.
+7. **Task-runner adoption is a complete use case.** Map targets, recipes, and tasks to custom
+    commands. Preserve ordering and shared prerequisites; use workflows where they help organize
+    reusable multi-step automation. No Terraform migration is implied. Atmos can call `make`,
+    `just`, or `task` during incremental adoption, with no requirement to remove the original files.
 
 ## Decide the Migration Shape First
 
@@ -140,8 +144,9 @@ has the exact field names and steps.
   existence, not freshness.
 - **`workflows.base_path` must be set explicitly** once the user has their own `atmos.yaml`
   (`atmos workflow <name>` fails without it) -- add it the moment migration reaches its first
-  workflow. Most target chains stay a custom command (Principle 7); only fixed multi-step
-  orchestration across more than one component becomes a workflow.
+  workflow. Workflows can organize general-purpose tasks as well as infrastructure operations;
+  many target chains can stay custom commands. For task-runner adoption, a path such as
+  `workflows.base_path: "workflows"` keeps workflows separate from Terraform stacks.
 
 ## Migrating Authentication
 
@@ -167,8 +172,20 @@ before promising a user anything.
 
 ## The Minimum-Viable Migration
 
-Use this checklist when the user wants to try Atmos on an existing repository. Do not change the
-order unless the user's setup requires it.
+Choose the checklist for the user's goal.
+
+### Task Runner
+
+1. Install Atmos and create `atmos.yaml` in the existing project.
+2. Add one custom command that calls an existing task, such as `make build`, `just build`, or
+    `task build`.
+3. Run `atmos build` and confirm it produces the same result as the original command.
+4. Move task bodies into native steps as needed, preserving parameters, environments, dependency
+    order, and freshness behavior. No stack files or Terraform changes are required.
+
+### Terraform Orchestration
+
+Use this checklist when the user explicitly wants Atmos to orchestrate existing Terraform code.
 
 1. **Install Atmos.** See `atmos.tools/install`.
 2. **Create `atmos.yaml`** at the repo root, pointing `base_path` and `components.terraform.base_path`
@@ -275,6 +292,10 @@ Push back if a user or another agent proposes one of these methods during migrat
 - **"Add a Gomplate datasource for everything."** This is false. Use a YAML function first.
 - **"Adopt the full multi-account organization hierarchy on day one."** This is false. Start
   with one stack file.
+- **"Task-runner migration requires Terraform stacks or components."** Custom commands run general
+  automation from `atmos.yaml`. Keep infrastructure adoption separate from task-runner adoption.
+- **"Delete the existing task file before adopting Atmos."** Atmos can call the existing runner.
+  Migrate task bodies incrementally and preserve the source tool's ordering and freshness semantics.
 - **"Wrap atmos commands in a Makefile, Justfile, or Taskfile forever."** This is false. A
   wrapper is a good bridge while the user builds trust in Atmos, not the final state -- change
   each leaf target to a custom command (see Principle 7 and "Common Problems in Task-Runner
