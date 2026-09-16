@@ -149,15 +149,16 @@ func (m *GitHubMockServer) writeReleasesList(w http.ResponseWriter, r *http.Requ
 	page := queryInt(r, "page", 1)
 	perPage := queryInt(r, "per_page", defaultPerPage)
 
-	// Clamp page to the available page count before computing start/end: a page value beyond
-	// that range multiplied by perPage can otherwise overflow int and produce a negative start,
-	// which would panic on the releases[start:end] slice below.
+	// A page beyond the available range must serve an empty list, matching GitHub's own
+	// pagination semantics -- not silently re-serve the last page, which would let a caller
+	// walking pages past the end loop forever believing more results remain.
 	totalPages := (len(releases) + perPage - 1) / perPage
 	if totalPages < 1 {
 		totalPages = 1
 	}
 	if page > totalPages {
-		page = totalPages
+		writeJSON(w, []releaseJSON{})
+		return
 	}
 
 	start := (page - 1) * perPage

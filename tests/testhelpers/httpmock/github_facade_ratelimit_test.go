@@ -70,3 +70,22 @@ func TestGitHubMockServer_FailWithHeaders_SecondaryRateLimit(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	assert.Equal(t, "30", resp.Header.Get("Retry-After"))
 }
+
+func TestGitHubMockServer_FailWithHeaders_RegisterCopiesHeaders(t *testing.T) {
+	mock := NewGitHubMockServer(t)
+	headers := map[string]string{"Retry-After": "30"}
+	mock.FailWithHeaders("/api/v3/repos/owner/repo", http.StatusForbidden, headers)
+
+	// Mutating the caller's map after registration must not change what the mock serves:
+	// FailWithHeaders must have stored an independent copy.
+	headers["Retry-After"] = "mutated"
+	headers["X-Injected"] = "should-not-appear"
+
+	resp, err := http.Get(mock.URL() + "/api/v3/repos/owner/repo/releases/latest")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	assert.Equal(t, "30", resp.Header.Get("Retry-After"))
+	assert.Empty(t, resp.Header.Get("X-Injected"))
+}
