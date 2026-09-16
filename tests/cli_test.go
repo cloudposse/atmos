@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
@@ -32,6 +33,7 @@ import (
 	"github.com/otiai10/copy"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 	"golang.org/x/term"
 
@@ -566,6 +568,20 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	result = githubCLITokenLookupLogRegex.ReplaceAllString(result, "")
 	anonymousGitHubAccessLogRegex := regexp.MustCompile(`(?m)^.*No GitHub token resolved; using anonymous \(unauthenticated\) GitHub access \(subject to rate limits\)[^\n]*\n?`)
 	result = anonymousGitHubAccessLogRegex.ReplaceAllString(result, "")
+
+	// 16a. Drop the resource-usage summary line settings.metrics.enabled prints locally
+	// ("Completed <component> (<stack>) in ..." after each terraform plan/apply/deploy,
+	// "Total for this invocation in ..." once at the end of the whole invocation). Wall
+	// time, CPU time, and peak memory are inherently non-deterministic across
+	// runs/runners, so this line can never be part of a stable golden snapshot — strip
+	// it entirely, matching the whole-line-strip pattern already used above for other
+	// environment-dependent log lines. Anchored to ui.Info's literal "▶ " icon prefix
+	// (pkg/ui/interfaces.go: Info renders "▶ {text}") so this can only match Atmos's own
+	// summary line, never coincidental text in Terraform's own console output — the
+	// middle of the label (component/stack name) is intentionally not matched literally
+	// since internal/exec/terraform_execute_helpers_exec.go embeds it dynamically.
+	resourceMetricsSummaryLogRegex := regexp.MustCompile(`(?m)^▶ (?:Completed|Total).* in \S+ \| CPU: [^\n]*\n?`)
+	result = resourceMetricsSummaryLogRegex.ReplaceAllString(result, "")
 
 	// 16. Apply custom replacements if provided.
 	// These are test-specific patterns that don't need to be part of the global sanitization.
@@ -2734,7 +2750,7 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	return true
 }
 
-// Clean up untracked files in the working directory.
+// Clean up untracked and gitignored files in the working directory.
 func cleanDirectory(t *testing.T, workdir string) error {
 	// Find the root of the Git repository
 	repoRoot, err := findGitRepoRoot(workdir)
@@ -2769,14 +2785,92 @@ func cleanDirectory(t *testing.T, workdir string) error {
 			fullPath := filepath.Join(repoRoot, file)
 			if strings.HasPrefix(fullPath, workdirPrefix) || fullPath == workdir {
 				t.Logf("Removing untracked file: %q", fullPath)
-				if err := os.RemoveAll(fullPath); err != nil {
+				if err := removeTestOutput(fullPath); err != nil {
 					return fmt.Errorf("failed to remove %q: %w", fullPath, err)
 				}
 			}
 		}
 	}
 
+	// worktree.Status() mirrors plain `git status`: it never reports a
+	// gitignored path, even as Untracked, so it's blind to test fixtures
+	// whose own output directory is gitignored (e.g. a scaffold template
+	// with `source: "."` writing its target under a gitignored `generated/`
+	// next to it -- see tests/fixtures/scenarios/scaffold-matrix-freetext).
+	// Without this pass, `clean: true` silently leaves such directories in
+	// place between runs, letting a self-referential scaffold source
+	// accumulate its own prior output across every local `atmos test`
+	// invocation.
+	if err := removeIgnoredEntries(t, repo, repoRoot, workdir); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// removeIgnoredEntries removes entries directly under workdir that Git does
+// not track and that worktree.Status() does not surface (i.e. gitignored
+// paths). It uses the repository index -- not gitignore pattern matching --
+// as the source of truth for what's tracked, so it never deletes a
+// directory that still holds tracked content.
+func removeIgnoredEntries(t *testing.T, repo *git.Repository, repoRoot, workdir string) error {
+	idx, err := repo.Storer.Index()
+	if err != nil {
+		return fmt.Errorf("failed to read git index: %w", err)
+	}
+	tracked := make(map[string]bool, len(idx.Entries))
+	for _, e := range idx.Entries {
+		tracked[e.Name] = true
+	}
+
+	entries, err := os.ReadDir(workdir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to read workdir %q: %w", workdir, err)
+	}
+
+	for _, entry := range entries {
+		// The ".git" directory is never present in the index -- git never tracks
+		// its own metadata directory -- so without this guard it would be
+		// mistaken for a gitignored entry and deleted wholesale whenever workdir
+		// is the repository root, destroying the repository's history.
+		if entry.Name() == ".git" {
+			continue
+		}
+
+		fullPath := filepath.Join(workdir, entry.Name())
+		relPath, err := filepath.Rel(repoRoot, fullPath)
+		if err != nil {
+			return fmt.Errorf("failed to compute relative path for %q: %w", fullPath, err)
+		}
+		relPath = filepath.ToSlash(relPath)
+
+		if tracked[relPath] || hasTrackedDescendant(tracked, relPath) {
+			continue
+		}
+
+		t.Logf("Removing gitignored entry: %q", fullPath)
+		if err := removeTestOutput(fullPath); err != nil {
+			return fmt.Errorf("failed to remove %q: %w", fullPath, err)
+		}
+	}
+
+	return nil
+}
+
+// hasTrackedDescendant reports whether any tracked index path is nested
+// under relPath, meaning relPath is a directory that still holds tracked
+// content and must not be removed wholesale.
+func hasTrackedDescendant(tracked map[string]bool, relPath string) bool {
+	prefix := relPath + "/"
+	for trackedPath := range tracked {
+		if strings.HasPrefix(trackedPath, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // findGitRepo finds the Git repository root.
@@ -2821,4 +2915,49 @@ expect:
 	if err != nil {
 		t.Fatalf("Failed to unmarshal YAML: %v", err)
 	}
+}
+
+// TestRemoveIgnoredEntriesPreservesGitDir guards against a regression where
+// removeIgnoredEntries, when called with workdir equal to the repository
+// root, would treat ".git" as a gitignored entry (it's never in the git
+// index) and delete it wholesale -- destroying the repository's history.
+// It also verifies the fix didn't disable cleanup altogether: a genuinely
+// untracked/gitignored file alongside ".git" must still be removed.
+func TestRemoveIgnoredEntriesPreservesGitDir(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	repo, err := git.PlainInit(repoRoot, false)
+	require.NoError(t, err)
+
+	// Write and commit a tracked file so the index and HEAD exist.
+	trackedPath := filepath.Join(repoRoot, "tracked.txt")
+	require.NoError(t, os.WriteFile(trackedPath, []byte("tracked content\n"), 0o600))
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	_, err = worktree.Add("tracked.txt")
+	require.NoError(t, err)
+
+	_, err = worktree.Commit("initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test",
+			Email: "test@example.com",
+			When:  time.Unix(1_000_000, 0),
+		},
+	})
+	require.NoError(t, err)
+
+	// Add an untracked file directly under the repo root. It's not in the
+	// git index, so removeIgnoredEntries should treat it like a gitignored
+	// entry and remove it.
+	untrackedPath := filepath.Join(repoRoot, "untracked.txt")
+	require.NoError(t, os.WriteFile(untrackedPath, []byte("untracked content\n"), 0o600))
+
+	err = removeIgnoredEntries(t, repo, repoRoot, repoRoot)
+	require.NoError(t, err)
+
+	assert.DirExists(t, filepath.Join(repoRoot, ".git"), "removeIgnoredEntries must never delete the .git directory")
+	assert.FileExists(t, trackedPath, "tracked files must be left untouched")
+	assert.NoFileExists(t, untrackedPath, "untracked/gitignored entries must still be removed")
 }

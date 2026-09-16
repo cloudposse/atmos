@@ -23,17 +23,23 @@ import (
 const atmosProRunIDEnvVar = "ATMOS_PRO_RUN_ID"
 
 // ExecRecordInput bundles the per-invocation fields buildRecord and
-// uploadExecMetadata need beyond the process-wide metrics/gitRepo
-// dependencies — Command, Args, Flags, ExitCode, and Data — grouped to stay
-// under the linter's argument-count limit. Args MUST hold only positional
-// arguments and flags MUST hold only CLI flags — the two are kept in
-// separate fields, never combined (FR-003b).
+// uploadExecMetadata need beyond the process-wide gitRepo dependency —
+// Command, Args, Flags, ExitCode, Data, and an optional Metrics override —
+// grouped to stay under the linter's argument-count limit. Args MUST hold
+// only positional arguments and flags MUST hold only CLI flags — the two are
+// kept in separate fields, never combined (FR-003b).
 type ExecRecordInput struct {
 	Command  string
 	Args     []string
 	Flags    []string
 	ExitCode int
 	Data     any
+	// Metrics, when set, overrides buildRecord's default of
+	// process.SelfUsageSoFar() (atmos's own resource usage). Callers that
+	// shell out to a subprocess (e.g. executeMainTerraformCommand) set this
+	// to the combined subprocess-tree + self usage so the upload reflects
+	// the whole command, not just atmos's own overhead.
+	Metrics *process.ProcessMetrics
 }
 
 // buildRecord assembles the base execution-record envelope (ExecutionID,
@@ -42,8 +48,14 @@ type ExecRecordInput struct {
 // nil in.Data produces a request with Data entirely absent from the
 // marshaled JSON. Payload-size handling (FR-011) is not performed here — an
 // oversized data value is uploaded out-of-band by pro.UploadExecMetadata,
-// never truncated or dropped.
-func buildRecord(in *ExecRecordInput, metrics *process.ProcessMetrics, gitRepo git.GitRepoInterface) (*dtos.ExecUploadRequest, error) {
+// never truncated or dropped. Resource-usage metrics default to
+// process.SelfUsageSoFar() (atmos's own usage) unless in.Metrics overrides it.
+func buildRecord(in *ExecRecordInput, gitRepo git.GitRepoInterface) (*dtos.ExecUploadRequest, error) {
+	metrics := process.SelfUsageSoFar()
+	if in.Metrics != nil {
+		metrics = *in.Metrics
+	}
+
 	repoInfo, err := gitRepo.GetLocalRepoInfo()
 	if err != nil {
 		log.Debug("Failed to get local repo info for exec-metadata upload.", "error", err)
@@ -86,7 +98,7 @@ func buildRecord(in *ExecRecordInput, metrics *process.ProcessMetrics, gitRepo g
 		RepoName:      repoInfo.RepoName,
 		RepoOwner:     repoInfo.RepoOwner,
 		RepoHost:      repoInfo.RepoHost,
-		Metrics:       toResourceUsageMetrics(metrics),
+		Metrics:       toResourceUsageMetrics(&metrics),
 		Data:          dataRaw,
 	}
 
