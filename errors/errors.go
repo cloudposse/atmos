@@ -1755,6 +1755,24 @@ var (
 	ErrDuplicateVendorComponent = errors.New("duplicate component declared in vendor manifest")
 )
 
+// GitHub Enterprise Server (GHES) endpoint resolution errors.
+var (
+	// ErrInvalidGitHubEndpointURL indicates a GitHub endpoint environment variable
+	// (e.g. GITHUB_SERVER_URL, GITHUB_API_URL, ATMOS_TOOLCHAIN_GITHUB_URL) could not be
+	// parsed as an absolute HTTP(S) URL. The resolver falls back to its default rather
+	// than failing, so this error is logged at debug level, not surfaced to the user.
+	ErrInvalidGitHubEndpointURL = errors.New("invalid GitHub endpoint URL")
+)
+
+// GitHub mock test-helper errors (tests/testhelpers/httpmock).
+var (
+	// ErrMockFailWithTimesNegative indicates a test called FailWithTimes with a negative
+	// times value. -1 (unlimited failure) is reserved for FailWith/FailWithHeaders; a caller
+	// that wants an unlimited failure should call one of those instead of FailWithTimes with
+	// a negative count, which would otherwise silently behave as unlimited.
+	ErrMockFailWithTimesNegative = errors.New("httpmock: FailWithTimes called with negative times; use FailWith for an unlimited failure")
+)
+
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.
 // When Code is 0, it indicates successful completion that should exit cleanly without printing errors.

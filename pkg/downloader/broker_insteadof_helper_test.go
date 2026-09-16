@@ -96,7 +96,7 @@ func TestResolveToken_LiveAtmosProGithubToken(t *testing.T) {
 			Settings: schema.AtmosSettings{AtmosGithubToken: "atmos", GithubToken: "gh"},
 		}, "")
 
-		token, source := d.resolveToken(hostGitHub)
+		token, source := d.resolveToken(hostGitHub, hostGitHub)
 		assert.Equal(t, "live-brokered", token)
 		assert.Equal(t, "ATMOS_PRO_GITHUB_TOKEN", source)
 	})
@@ -107,7 +107,7 @@ func TestResolveToken_LiveAtmosProGithubToken(t *testing.T) {
 			Settings: schema.AtmosSettings{AtmosProGithubToken: "struct-pro"},
 		}, "")
 
-		token, source := d.resolveToken(hostGitHub)
+		token, source := d.resolveToken(hostGitHub, hostGitHub)
 		assert.Equal(t, "struct-pro", token)
 		assert.Equal(t, "ATMOS_PRO_GITHUB_TOKEN", source)
 	})
@@ -118,7 +118,7 @@ func TestResolveToken_LiveAtmosProGithubToken(t *testing.T) {
 			Settings: schema.AtmosSettings{AtmosGithubToken: "atmos", GithubToken: "gh"},
 		}, "")
 
-		token, source := d.resolveToken(hostGitHub)
+		token, source := d.resolveToken(hostGitHub, hostGitHub)
 		assert.Equal(t, "atmos", token)
 		assert.Equal(t, "ATMOS_GITHUB_TOKEN", source)
 	})

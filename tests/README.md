@@ -226,7 +226,7 @@ This is useful when:
 
 ### Writing Tests with Preconditions
 
-When writing new tests, use the helper functions from `tests/test_preconditions.go`:
+When writing new tests, use the helper functions from `tests/preconditions.go`:
 
 ```go
 import "github.com/cloudposse/atmos/tests"
@@ -272,8 +272,10 @@ func TestOCIVendoring(t *testing.T) {
 | `RequireAWSProfile(t, profile)` | Check AWS configuration | Profile not available |
 | `RequireGitRepository(t)` | Check Git repo | Not in Git repo |
 | `RequireGitRemoteWithValidURL(t)` | Check Git remotes | No valid remote URL |
-| `RequireGitHubAccess(t)` | Check GitHub connectivity | Network/rate limit issues |
-| `RequireNetworkAccess(t, url)` | Check general network | URL unreachable |
+| `RequireGitHubAccess(t)` | Check GitHub connectivity | Network/rate limit issues, or `ATMOS_TEST_OFFLINE=true` |
+| `RequireNetworkAccess(t, url)` | Check general network | URL unreachable, or `ATMOS_TEST_OFFLINE=true` |
+| `RequireLiveGitHub(t)` | Gate a canary that must reach real github.com, not the acceptance suite's local git mirror/HTTP mock | Same as `RequireGitHubAccess` |
+| `RequireLiveGitHubAuthenticated(t)` | Like `RequireLiveGitHub`, and additionally requires a real `GITHUB_TOKEN` | Same as `RequireLiveGitHub`, plus `GITHUB_TOKEN` unset |
 | `RequireExecutable(t, name, purpose)` | Check for executable | Not in PATH |
 | `RequireEnvVar(t, name, purpose)` | Check environment variable | Not set |
 | `RequireFilePath(t, path, purpose)` | Check file/directory exists | Missing path |
