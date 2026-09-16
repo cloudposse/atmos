@@ -121,6 +121,7 @@ describe:
   component:
     filter: schema
 vendor:
+  max_concurrency: 4
   base_path: ./vendor.yaml
 initialized: true
 basePathAbsolute: /absolute/path/to/repo

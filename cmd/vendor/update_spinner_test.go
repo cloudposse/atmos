@@ -1,8 +1,8 @@
 package vendor
 
 import (
+	"bytes"
 	"context"
-	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -388,47 +389,88 @@ func TestRunUpdateWithSpinner_TTY_RunsSpinnerAndReturnsResult(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = ptmx.Close() }()
 	defer func() { _ = ttyFile.Close() }()
+	require.NoError(t, pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 80}))
 
 	// bubbletea defaults to os.Stdin for input, and (since go test's own stdin isn't a terminal)
 	// falls back to opening /dev/tty directly when it isn't -- unavailable in a headless sandbox
 	// with no controlling terminal at all. Pointing stdin at the same PTY avoids that fallback,
 	// matching what a real controlling-terminal session (or the CLI acceptance test harness's
 	// own PTY, which attaches to all three of the child process's standard streams) looks like.
-	origStdin := os.Stdin
-	os.Stdin = ttyFile
-	defer func() { os.Stdin = origStdin }()
+	originalStdin, originalStderr := os.Stdin, os.Stderr
+	os.Stdin, os.Stderr = ttyFile, ttyFile
+	defer func() { os.Stdin, os.Stderr = originalStdin, originalStderr }()
 
-	origStderr := os.Stderr
-	os.Stderr = ttyFile
-	defer func() { os.Stderr = origStderr }()
-
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	rendered := make(chan struct{})
+	drained := make(chan struct{})
 	// Drain the PTY's master side so the spinner's writes never block on a full PTY buffer.
-	go func() { _, _ = io.Copy(io.Discard, ptmx) }()
+	go func() {
+		defer close(drained)
+		var output bytes.Buffer
+		chunk := make([]byte, 512)
+		observed := false
+		for {
+			n, readErr := ptmx.Read(chunk)
+			output.Write(chunk[:n])
+			visible := ansi.Strip(output.String())
+			if !observed && strings.Contains(visible, "Checking vpc") && strings.Contains(visible, "1/1") {
+				observed = true
+				close(rendered)
+			}
+			if readErr != nil {
+				return
+			}
+		}
+	}()
 
 	want := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{
 		{Component: "vpc", Status: vendoring.StatusUpToDate},
 	}}
-
 	type result struct {
 		report *vendoring.UpdateReport
 		err    error
 	}
 	resultCh := make(chan result, 1)
+	completed := false
+	defer func() {
+		cancel()
+		if !completed {
+			select {
+			case <-resultCh:
+			case <-time.After(5 * time.Second):
+				t.Error("spinner did not finish after test cancellation")
+			}
+		}
+		_ = ttyFile.Close()
+		_ = ptmx.Close()
+		<-drained
+	}()
 	go func() {
 		report, err := runUpdateWithSpinner(func(onProgress vendorProgressFunc) (*vendoring.UpdateReport, error) {
-			if onProgress != nil {
-				onProgress("vpc", 1, 1)
+			if !assert.NotNil(t, onProgress) {
+				return nil, assert.AnError
 			}
-			return want, nil
+			onProgress("vpc", 1, 1)
+			// The width-dependent progress line proves the initial WindowSizeMsg
+			// was consumed. Keep work alive until then so Bubble Tea's unjoined
+			// initial size probe cannot race with closing this test-owned PTY.
+			select {
+			case <-rendered:
+				return want, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
 		})
 		resultCh <- result{report, err}
 	}()
 
 	select {
 	case got := <-resultCh:
+		completed = true
 		require.NoError(t, got.err)
 		assert.Same(t, want, got.report)
 	case <-time.After(5 * time.Second):
-		t.Fatal("runUpdateWithSpinner did not return within 5s under a TTY stderr")
+		t.Fatal("spinner did not render progress and return its result within 5s")
 	}
 }

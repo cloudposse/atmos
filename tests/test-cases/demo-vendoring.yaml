@@ -22,8 +22,8 @@ tests:
         - "Pulling"
         - "github/stargazers"
         - "weather"
-        - "Vendored 3 components"
-        - "Vendoring from.*'vendor\\.yaml'"
+        - "Vendored 3 packages, 0 unchanged, 0 failed, 0 canceled"
+        - "Vendoring from.*vendor\\.yaml"
         - !not 'No TTY detected\. Falling back to basic output\.'
       exit_code: 0
 
@@ -45,5 +45,11 @@ tests:
       timeout: "5m"
       diff: []
       stderr:
-        - 'No TTY detected\. Falling back to basic output\.'
+        - "Pulling vendored components"
+        - "✓ github/stargazers \\(main\\)"
+        - "✓ weather \\(main\\)"
+        - "✓ ipinfo \\(main\\)"
+        - "Vendored 3 packages, 0 unchanged, 0 failed, 0 canceled"
+        # Plain output must not contain cursor movement or ANSI style sequences.
+        - !not '\x1b\['
       exit_code: 0
