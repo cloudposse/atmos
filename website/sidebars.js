@@ -78,7 +78,8 @@ module.exports = {
                         'migration/terramate',
                         'migration/makefile',
                         'migration/justfile',
-                        'migration/taskfile'
+                        'migration/taskfile',
+                        'migration/from-rain'
                     ]
                 },
             ]

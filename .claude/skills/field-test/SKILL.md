@@ -112,6 +112,27 @@ diff each accounts for.
   registration calls in its Go source and diff that list against the flags documented in the
   corresponding `.mdx`'s `<dl>` — every registered flag needs a matching `<dt>`, and every
   documented flag needs to actually be registered.
+- **Flag registration scope, for any command group's parser setup** (the `init()`-time
+  `flags.NewStandardParser(...)` + `RegisterPersistentFlags(cmd)` call). Run `<command-group>
+  --help` and count the flags shown in its own "FLAGS" section, then compare against an established
+  sibling in the same family (`terraform --help`/`vendor --help` are the reference-correct baseline
+  — they show only their own genuinely local flags, relying on cobra's normal inheritance from
+  `RootCmd` for everything global). A command group whose `--help` lists the full global set
+  (`--base-path`, `--chdir`, `--config`, `--cast`, `--ai`, `--mask`, `--no-color`, `--profile`,
+  `--profiler-*`, `--redirect-stderr`, `--settings-list-merge-strategy`, `--skill`, `--edition`,
+  `--identity`, ...) is very likely calling `flags.WithCommonFlags()` — which pulls in the entire
+  `flags.GlobalFlagsRegistry()` (already registered persistently on `RootCmd` and inherited by every
+  subcommand) as a second, separately-viper-bound local copy, not a display artifact. Confirmed this
+  exact bug in `aws cfn`/`helm`/`kubernetes` this session (fixed via `flags.WithStackFlag()` +
+  `flags.WithDryRunFlag()` instead) — grep every production `flags.WithCommonFlags()` caller across
+  `cmd/` when this pattern turns up once, since it tends to get copy-pasted between sibling command
+  families.
+- **Hooks, if the target integrates with `pkg/hooks`** — find the actual dispatch code (grep for
+  `hooks.Run`/an `eventsFor`-style function mapping verbs to before/after event names) and list
+  exactly which verbs fire which events per the CODE, not the docs. A hooks-capable command family
+  is a high-yield doc-drift target: the hooks section of its config-reference page is usually
+  written once when the first 2-3 verbs ship and never revisited as new verbs are added later, so
+  it silently goes stale (reads as an exhaustive list when it's actually just the original set).
 
 ## Phase 2 — Generate hypotheses, don't just wander
 
@@ -120,12 +141,30 @@ plausibly do:
 
 - Every flag combination that seems natural but might not be validated (two flags that should be
   mutually exclusive; two config fields whose combination is never cross-checked).
+- Any command with multiple independent bulk/multi-component selection triggers (e.g. `--all`,
+  `--affected`, `--tags`, `--labels`) — actually run EACH trigger individually, live, not just the
+  most obvious one (`--all`). A shared bulk-execution code path can handle one trigger correctly
+  while an untested one hangs or mis-dispatches: a real incident here was `--tags`/`--labels`-only
+  selection (no `--all`/`--affected`) causing infinite recursion, because per-node dispatch cleared
+  `All`/`Affected` before re-entering the component but left `Tags`/`Labels` set, so the same
+  bulk-trigger check re-fired on every single node, forever, before any node did real work — reading
+  the code alone would not have caught it; only running `--tags=x` for real did. Also test trigger
+  combinations together (`--tags` + `--labels`, `--affected` + `--tags`) and confirm a
+  plausible-but-wrong combination (e.g. `--all` + `--tags`) either composes sensibly or is rejected
+  with a clear error, not silently ignored or silently narrowed in a way nothing documents.
 - Every flag's parsed value actually reaching the code path that would use it — not just that the
   flag exists, parses, and the command exits 0. A flag can be fully registered and documented yet
   silently dropped before the logic that should consume it (e.g. the command builds a fresh/empty
   config struct instead of the one built from parsed flags). Trace the value from flag definition
   to point of use for every flag, don't just confirm the command accepts it.
 - Every place the docs/skill claim something you haven't verified against actual code.
+- If Phase 1 found a `pkg/hooks` dispatch list, don't stop at reading it — configure a real
+  `hooks:` block on the fixture (a trivial `command`-kind hook that writes a marker file or logs its
+  event name is enough) and actually run every verb the target exposes, confirming the marker
+  appears only for the verbs the dispatch code claims fire hooks, and stays silent for every other
+  verb. A code-only read tells you what the dispatch table *says*; it doesn't prove the wiring from
+  a real command invocation into that table is actually connected for a newer verb, especially one
+  added after the hooks integration was first built.
 - Any "safe-looking" command (`plan`/`preview`/`--dry-run`/`list`/`describe`) that might secretly
   mutate state or trigger side effects, if built the same way as a mutating command — Atmos has
   many of these pairs (e.g. `terraform plan` vs `apply`, `vendor diff` vs `pull`), so this is a

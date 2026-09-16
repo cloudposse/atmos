@@ -681,6 +681,7 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 		cfg.ProvisionSectionName: true,
 		// aws/cloudformation-specific sections.
 		cfg.TemplateSectionName:              true,
+		cfg.TemplatePathSectionName:          true,
 		cfg.ParametersSectionName:            true,
 		cfg.CapabilitiesSectionName:          true,
 		cfg.TagsSectionName:                  true,

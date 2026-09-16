@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -128,17 +129,31 @@ func runTree(ctx context.Context, client CloudFormationClient, stackName string,
 	return summary, nil
 }
 
+// logsOptions carries the logs-specific flags (--chart, --follow) through to
+// runLogs. --chart and --follow are mutually exclusive, rejected at the flag
+// layer (validateLogsFollowChart).
+type logsOptions struct {
+	Chart  bool
+	Follow bool
+}
+
 // runLogs renders the combined event log for a stack and every nested stack
-// beneath it, sorted chronologically. --chart renders a lightweight
-// per-resource timeline instead of a flat chronological list.
-func runLogs(ctx context.Context, client CloudFormationClient, stackName string, chart bool, summary map[string]any) (map[string]any, error) {
+// beneath it, sorted chronologically. Chart renders a lightweight per-resource
+// timeline instead of a flat chronological list. Follow continuously tails new
+// events instead of returning after one pass.
+func runLogs(ctx context.Context, client CloudFormationClient, stackName string, opts logsOptions, summary map[string]any) (map[string]any, error) {
 	root, err := buildStackTree(ctx, client, stackName, 0)
 	if err != nil {
 		return summary, err
 	}
+	names := flattenStackNames(root)
+
+	if opts.Follow {
+		return followLogs(ctx, client, stackName, names, summary)
+	}
 
 	var allEvents []cfntypes.StackEvent
-	for _, name := range flattenStackNames(root) {
+	for _, name := range names {
 		events, _, err := pollStackEvents(ctx, client, name, map[string]bool{})
 		if err != nil {
 			return summary, err
@@ -154,14 +169,107 @@ func runLogs(ctx context.Context, client CloudFormationClient, stackName string,
 	})
 	summary["event_count"] = len(allEvents)
 
-	if chart {
+	if opts.Chart {
 		renderEventChart(allEvents)
 		return summary, nil
 	}
 	for i := range allEvents {
-		printStackEvent(&allEvents[i])
+		writeLogLine(&allEvents[i])
 	}
 	return summary, nil
+}
+
+// writeLogLine renders one stack event on the data channel (stdout) — unlike
+// printStackEvent (watch's UI/stderr channel), logs is a pipeable data command
+// per docs/io-and-ui-output.md, so even FAILED events stay on stdout rather than
+// splitting across channels.
+func writeLogLine(event *cfntypes.StackEvent) {
+	line, _ := formatStackEventLine(event, false)
+	_ = data.Writeln(line)
+}
+
+// stackTreeRefreshEveryNPolls controls how often followLogs re-walks the
+// nested-stack tree to discover stacks that weren't there yet at the initial
+// walk (e.g. one created after --follow started, or one whose
+// PhysicalResourceId only became available once its own creation completed).
+// Refreshing on every single event poll would multiply ListStackResources
+// calls across the whole tree by the same cadence as event polling; new
+// nested stacks appear far less often than new events, so a slower, separate
+// cadence keeps the refresh's API cost low without giving up discovery. A
+// var (not const) so tests can shrink the cadence instead of driving
+// followLogs through eventPollInterval-length real sleeps.
+var stackTreeRefreshEveryNPolls = 10
+
+// followLogs tails new events across every stack in names (initially a
+// nested-stack tree flattened once by runLogs) until ctx is canceled,
+// periodically re-walking rootStackName's tree (see
+// stackTreeRefreshEveryNPolls) to pick up stacks discovered after the initial
+// walk. Unlike watch, it does not stop at a terminal stack status: --follow is
+// tail -f style, ended by the caller (Ctrl+C), matching this repo's existing
+// --follow convention (cmd/container, cmd/devcontainer, cmd/composition).
+func followLogs(ctx context.Context, client CloudFormationClient, rootStackName string, names []string, summary map[string]any) (map[string]any, error) {
+	seen := make(map[string]map[string]bool, len(names))
+	for _, name := range names {
+		seen[name] = make(map[string]bool)
+	}
+
+	eventCount := 0
+	pollCount := 0
+	for {
+		var batch []cfntypes.StackEvent
+		for _, name := range names {
+			events, _, err := pollStackEvents(ctx, client, name, seen[name])
+			if err != nil {
+				return summary, err
+			}
+			batch = append(batch, events...)
+		}
+		sort.Slice(batch, func(i, j int) bool {
+			return timeValue(batch[i].Timestamp).Before(timeValue(batch[j].Timestamp))
+		})
+		for i := range batch {
+			writeLogLine(&batch[i])
+			eventCount++
+		}
+		summary["event_count"] = eventCount
+
+		pollCount++
+		if pollCount%stackTreeRefreshEveryNPolls == 0 {
+			// A refresh failure (e.g. transient throttling) must not abort an
+			// otherwise-healthy follow session — already-tracked stacks keep
+			// being polled either way; only growing the tracked set is
+			// deferred to the next refresh window.
+			if refreshed, err := refreshFollowedStacks(ctx, client, rootStackName, names, seen); err == nil {
+				names = refreshed
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return summary, nil
+		case <-time.After(eventPollInterval):
+		}
+	}
+}
+
+// refreshFollowedStacks re-walks rootStackName's nested-stack tree and
+// returns names with any newly discovered stacks appended, initializing a
+// fresh, empty seen map entry for each new stack in place. Every
+// already-tracked stack's existing seen map is left untouched, so events
+// already emitted are never re-emitted after a refresh.
+func refreshFollowedStacks(ctx context.Context, client CloudFormationClient, rootStackName string, names []string, seen map[string]map[string]bool) ([]string, error) {
+	root, err := buildStackTree(ctx, client, rootStackName, 0)
+	if err != nil {
+		return names, err
+	}
+	for _, name := range flattenStackNames(root) {
+		if _, tracked := seen[name]; tracked {
+			continue
+		}
+		seen[name] = make(map[string]bool)
+		names = append(names, name)
+	}
+	return names, nil
 }
 
 // renderEventChart groups events by logical resource ID and prints each
@@ -199,7 +307,7 @@ func runWatch(ctx context.Context, client CloudFormationClient, stackName string
 	}
 	summary["final_status"] = string(status)
 	if isFailedStackStatus(status) {
-		return summary, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationChangeSetFailed, stackName, status)
+		return summary, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationOperationFailed, stackName, status)
 	}
 	return summary, nil
 }

@@ -11,7 +11,7 @@ components:
     vpc:
       metadata:
         component: vpc
-      template: template.yaml
+      path: template.yaml
       stack_name: "test-vpc"
       settings:
         aws_cloudformation:
@@ -19,4 +19,4 @@ components:
     no-stack-name:
       metadata:
         component: no-stack-name
-      template: template.yaml
+      path: template.yaml
