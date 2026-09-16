@@ -112,7 +112,13 @@ func newChangesetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "changeset",
 		Short: "Manage aws/cloudformation changesets directly",
-		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Usage() },
+		Long: "Create, inspect, execute, or delete changesets for a deployed CloudFormation stack.\n" +
+			"Use these commands to review a changeset before executing it or manage a named\n" +
+			"changeset separately from apply, deploy, and diff.",
+		Example: "  atmos aws cloudformation changeset create vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation changeset list vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation changeset execute vpc --stack plat-ue2-dev --changeset-name reviewed-change",
+		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Usage() },
 	}
 	cmd.AddCommand(newOperationCommand("create", "changeset-create", "Create a changeset and leave it for later review/execution"))
 	cmd.AddCommand(newOperationCommand("execute", "changeset-execute", "Execute a previously-created, named changeset"))
@@ -126,7 +132,12 @@ func newDriftCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "drift",
 		Short: "Detect and describe drift against a deployed stack",
-		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Usage() },
+		Long: "Detect differences between a deployed CloudFormation stack's actual resource\n" +
+			"configuration and its template. Use detect to start drift detection and\n" +
+			"describe to inspect the most recent results.",
+		Example: "  atmos aws cloudformation drift detect vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation drift describe vpc --stack plat-ue2-dev",
+		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Usage() },
 	}
 	cmd.AddCommand(newOperationCommand("detect", "drift-detect", "Run drift detection against the deployed stack"))
 	cmd.AddCommand(newOperationCommand("describe", "drift-describe", "Show the results of the most recent drift detection"))
@@ -138,7 +149,12 @@ func newGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get",
 		Short: "Fetch a deployed stack's template or policy",
-		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Usage() },
+		Long: "Fetch a deployed CloudFormation stack's template or stack policy from the\n" +
+			"CloudFormation API. To inspect the local template without contacting AWS,\n" +
+			"use render instead.",
+		Example: "  atmos aws cloudformation get template vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation get policy vpc --stack plat-ue2-dev",
+		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Usage() },
 	}
 	cmd.AddCommand(newOperationCommand("template", "get-template", "Fetch the deployed stack's template"))
 	cmd.AddCommand(newOperationCommand("policy", "get-policy", "Fetch the deployed stack's policy"))
