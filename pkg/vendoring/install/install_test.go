@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
 )
 
 // newMaterializedAtmosPackage installs a fresh local-source vendor.yaml package once (recording a
@@ -81,6 +82,24 @@ func TestFilterPending_EnforcementLevels(t *testing.T) {
 		assert.Contains(t, err.Error(), "vpc")
 		assert.Nil(t, pending, "strict mode must not return a partial pending list on failure")
 	})
+}
+
+func TestFilterPending_CleanedInstallationIsPendingWithoutDrift(t *testing.T) {
+	for _, enforcement := range []string{LockEnforcementSilent, LockEnforcementWarn, LockEnforcementStrict, ""} {
+		t.Run(enforcement, func(t *testing.T) {
+			config, pkg, _ := newMaterializedAtmosPackage(t, "vpc")
+			_, err := lockfile.Clean(config, "", false, false)
+			require.NoError(t, err)
+			var warnings []string
+			pending, err := filterPending(config, []VendorPackage{pkg}, InstallOptions{LockEnforcement: enforcement}, func(message string) {
+				warnings = append(warnings, message)
+			})
+			require.NoError(t, err)
+			require.Len(t, pending, 1)
+			assert.Equal(t, pkg.Name, pending[0].Name)
+			assert.Empty(t, warnings)
+		})
+	}
 }
 
 // TestFilterPending_StrictListsEveryDriftedPackage proves strict mode's error names every drifted
