@@ -23,6 +23,7 @@ type fakeS3DeployRunner struct {
 	manifestOutput []byte
 	manifestError  error
 	failMatch      func([]string) bool
+	outputMatch    func([]string) []byte
 	inspect        func(*testing.T, []string)
 	calls          [][]string
 	t              *testing.T
@@ -48,6 +49,9 @@ func (r *fakeS3DeployRunner) Run(args ...string) ([]byte, error) {
 	}
 	if r.failMatch != nil && r.failMatch(call) {
 		return []byte("forced failure"), errFakeS3Command
+	}
+	if r.outputMatch != nil {
+		return r.outputMatch(call), nil
 	}
 	return nil, nil
 }
@@ -271,12 +275,11 @@ func TestS3DeployerBootstrapRestampsTextMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, len(runner.calls), len(s3TextContentTypes))
 
-	var syncFound, htmlRestamp, manifestUpload bool
+	var syncCalls [][]string
+	var htmlRestamp, manifestUpload bool
 	for _, call := range runner.calls {
 		if len(call) >= 5 && call[0] == "s3" && call[1] == "sync" {
-			syncFound = true
-			assert.True(t, slices.Contains(call, "--delete"))
-			assert.Equal(t, "img/demos/*", valueAfter(call, "--exclude"))
+			syncCalls = append(syncCalls, call)
 		}
 		if len(call) >= 8 && call[0] == "s3" && call[1] == "cp" && valueAfter(call, "--include") == "*.html" {
 			htmlRestamp = true
@@ -287,9 +290,28 @@ func TestS3DeployerBootstrapRestampsTextMetadata(t *testing.T) {
 			manifestUpload = true
 		}
 	}
-	assert.True(t, syncFound)
+	require.Len(t, syncCalls, 2)
+	assert.False(t, slices.Contains(syncCalls[0], "--delete"))
+	assert.Empty(t, valueAfter(syncCalls[0], "--exclude"))
+	assert.True(t, slices.Contains(syncCalls[1], "--delete"))
+	assert.Equal(t, "img/demos/*", valueAfter(syncCalls[1], "--exclude"))
 	assert.True(t, htmlRestamp)
 	assert.True(t, manifestUpload)
+}
+
+func TestS3DeployerBootstrapWithoutProtectedPathsUsesOneSync(t *testing.T) {
+	runner := &fakeS3DeployRunner{t: t}
+	err := newS3Deployer(runner).bootstrap(t.TempDir(), "s3://example/", nil)
+	require.NoError(t, err)
+
+	var syncCalls [][]string
+	for _, call := range runner.calls {
+		if len(call) >= 2 && call[0] == "s3" && call[1] == "sync" {
+			syncCalls = append(syncCalls, call)
+		}
+	}
+	require.Len(t, syncCalls, 1)
+	assert.True(t, slices.Contains(syncCalls[0], "--delete"))
 }
 
 func TestS3DeployerValidationAndManifestErrors(t *testing.T) {
@@ -362,6 +384,31 @@ func TestDeleteRemovedBatchesRequests(t *testing.T) {
 	require.Len(t, runner.calls, 2)
 	assert.Equal(t, "delete-objects", runner.calls[0][1])
 	assert.Equal(t, "delete-objects", runner.calls[1][1])
+}
+
+func TestDeleteRemovedRejectsPerObjectErrors(t *testing.T) {
+	runner := &fakeS3DeployRunner{
+		t: t,
+		outputMatch: func(call []string) []byte {
+			if len(call) >= 2 && call[0] == "s3api" && call[1] == "delete-objects" {
+				return []byte(`{"Errors":[{"Key":"site/file.txt","Code":"AccessDenied","Message":"denied"}]}`)
+			}
+			return nil
+		},
+	}
+	location := s3DeployLocation{Bucket: "example", Prefix: "site", URI: "s3://example/site/"}
+
+	err := newS3Deployer(runner).deleteRemoved(location, []string{"file.txt"}, t.TempDir())
+	require.ErrorIs(t, err, errS3DeployPartialDelete)
+}
+
+func TestValidateS3DeleteResponse(t *testing.T) {
+	for _, output := range [][]byte{nil, []byte("  \n"), []byte(`{}`), []byte(`{"Errors":[]}`)} {
+		require.NoError(t, validateS3DeleteResponse(output))
+	}
+
+	err := validateS3DeleteResponse([]byte("not-json"))
+	require.ErrorIs(t, err, errS3DeployInvalidDelete)
 }
 
 func TestLinkOrCopyS3DeployFile(t *testing.T) {

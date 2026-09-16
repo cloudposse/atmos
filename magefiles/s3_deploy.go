@@ -42,6 +42,8 @@ var (
 	errS3DeployAWSCommand       = errors.New("mage: S3 deploy AWS command failed")
 	errS3DeployInvalidManifest  = errors.New("mage: invalid S3 deployment manifest")
 	errS3DeployUnsupportedState = errors.New("mage: unsupported S3 deployment manifest version")
+	errS3DeployInvalidDelete    = errors.New("mage: invalid S3 delete response")
+	errS3DeployPartialDelete    = errors.New("mage: S3 failed to delete one or more objects")
 )
 
 var s3TextContentTypes = map[string]string{
@@ -385,8 +387,13 @@ func (d *s3Deployer) loadManifest(s3URI, destination string) (*s3DeployManifest,
 func (d *s3Deployer) bootstrap(localDir, s3URI string, protected []s3ProtectedPattern) error {
 	fmt.Println("No remote manifest found; performing the one-time full metadata sync.")
 	args := []string{s3CommandService, "sync", localDir, s3URI, "--delete"}
-	for _, pattern := range protected {
-		args = append(args, "--exclude", pattern.Raw)
+	if len(protected) > 0 {
+		if err := d.runAWS(s3CommandService, "sync", localDir, s3URI, s3OnlyShowErrorsFlag); err != nil {
+			return err
+		}
+		for _, pattern := range protected {
+			args = append(args, "--exclude", pattern.Raw)
+		}
 	}
 	args = append(args, s3OnlyShowErrorsFlag)
 	if err := d.runAWS(args...); err != nil {
@@ -469,39 +476,6 @@ func linkOrCopyS3DeployFile(source, destination string) error {
 	return nil
 }
 
-func (d *s3Deployer) deleteRemoved(location s3DeployLocation, deleted []string, tempDir string) error {
-	for offset := 0; offset < len(deleted); offset += s3DeleteBatchSize {
-		end := min(offset+s3DeleteBatchSize, len(deleted))
-		objects := make([]map[string]string, 0, end-offset)
-		for _, relative := range deleted[offset:end] {
-			key := relative
-			if location.Prefix != "" {
-				key = location.Prefix + "/" + relative
-			}
-			objects = append(objects, map[string]string{"Key": key})
-		}
-		request := struct {
-			Objects []map[string]string `json:"Objects"`
-			Quiet   bool                `json:"Quiet"`
-		}{Objects: objects, Quiet: true}
-		data, err := json.Marshal(request)
-		if err != nil {
-			return fmt.Errorf("mage: encode S3 delete request: %w", err)
-		}
-		requestPath := filepath.Join(tempDir, fmt.Sprintf("delete-%d.json", offset/s3DeleteBatchSize))
-		if err := os.WriteFile(requestPath, data, s3FilePermissions); err != nil {
-			return fmt.Errorf("mage: write S3 delete request: %w", err)
-		}
-		if err := d.runAWS(
-			"s3api", "delete-objects", "--bucket", location.Bucket,
-			"--delete", "file://"+requestPath,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (d *s3Deployer) uploadManifest(manifestPath, s3URI string) error {
 	return d.runAWS(
 		s3CommandService, s3CommandCopy, manifestPath, s3URI+s3DeployManifestName,
@@ -510,12 +484,17 @@ func (d *s3Deployer) uploadManifest(manifestPath, s3URI string) error {
 }
 
 func (d *s3Deployer) runAWS(args ...string) error {
+	_, err := d.runAWSOutput(args...)
+	return err
+}
+
+func (d *s3Deployer) runAWSOutput(args ...string) ([]byte, error) {
 	output, err := d.runner.Run(args...)
 	if err != nil {
-		return fmt.Errorf("%w: aws %s: %w: %s", errS3DeployAWSCommand, strings.Join(args, " "), err, strings.TrimSpace(string(output)))
+		return nil, fmt.Errorf("%w: aws %s: %w: %s", errS3DeployAWSCommand, strings.Join(args, " "), err, strings.TrimSpace(string(output)))
 	}
 	if len(output) > 0 {
 		fmt.Print(string(output))
 	}
-	return nil
+	return output, nil
 }
