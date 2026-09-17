@@ -1,0 +1,15 @@
+name: Prune superseded Go caches
+description: Retain two warmup generations per exact Go cache lineage on main, with a 24-hour grace period.
+inputs:
+  github-token:
+    description: Token with actions write permission.
+    required: true
+  dry-run:
+    description: Report candidates without deleting them.
+    default: 'true'
+outputs:
+  reclaimed-bytes:
+    description: Bytes deleted, or eligible bytes in dry-run mode.
+runs:
+  using: node24
+  main: index.mjs

@@ -93,7 +93,7 @@ jobs:
           permission-actions: read
 
       - name: Download artifacts
-        uses: ./.github/actions/download-artifact-retry
+        uses: $/.github/actions/download-artifact-retry
         with:
           name: website
           path: website/build
@@ -104,7 +104,7 @@ jobs:
       # invalidates every other open PR's cached preview -- see the matching
       # comment in website-deploy-prod.yml for why an invalidation is needed at all.
       - name: Copy Website to S3 Bucket PR Folder
-        uses: ./.github/actions/s3-deploy
+        uses: $/.github/actions/s3-deploy
         with:
           local-dir: website/build
           s3-uri: s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/

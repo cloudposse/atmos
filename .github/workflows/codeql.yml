@@ -160,13 +160,10 @@ jobs:
       # two steps that follow reproduce what golang/govulncheck-action does
       # (install @latest, run with -format/-C) minus its non-retried install.
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: go.mod
-          cache: true
+        uses: $/.github/actions/setup-go-cache
 
       - name: Download Go module dependencies
-        uses: ./.github/actions/go-mod-download-retry
+        uses: $/.github/actions/go-mod-download-retry
 
       - name: Install govulncheck
         shell: bash
@@ -301,10 +298,7 @@ jobs:
       # Without this step, the action may fail intermittently with
       # "could not load export data" errors due to cache corruption
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: go.mod
-          cache: true
+        uses: $/.github/actions/setup-go-cache
 
       # Pre-populate module cache to prevent goanalysis_metalinter failures.
       # Without this, the linter may fail with "could not load export data" errors.
@@ -312,7 +306,7 @@ jobs:
       # With retry: GOPROXY no longer falls back to direct fetches (they only
       # hit blocked vanity hosts under harden-runner's block mode).
       - name: Download modules
-        uses: ./.github/actions/go-mod-download-retry
+        uses: $/.github/actions/go-mod-download-retry
 
       # The custom-gcl binary is a full golangci-lint build with the
       # lintroller plugin compiled in — several minutes of compile on every
@@ -438,18 +432,12 @@ jobs:
             api.github.com:443
             github.com:443
 
-      # Checkout is required for local composite actions
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
-        with:
-          persist-credentials: false
-
       # Remove Dependabot's auto-added semver labels
       # Dependabot PRs should only have the 'no-release' label since
       # dependency updates don't determine Atmos releases.
       - name: Clean up Dependabot labels
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
-        uses: ./.github/actions/remove-dependabot-semver-labels
+        uses: $/.github/actions/remove-dependabot-semver-labels
 
       # Check for required semver labels
       # Every PR must have exactly one: major, minor, patch, or no-release

@@ -35,7 +35,8 @@ inputs:
     default: go.mod
   cache:
     description: >-
-      Cache to restore: "true" for the full build/module cache, "race-plan" for the
+      Cache to restore: "true" for the regular build/module cache, "race" for the
+      isolated race build/module cache, "race-plan" for the
       lightweight race-planner cache, or "false" for none.
     required: false
     default: "true"
@@ -63,7 +64,7 @@ runs:
     # The cache archives (restore here, save in the warmup workflow) go
     # through @actions/cache, which picks its tar at that point.
     - name: Use GNU tar for cache archives (Windows)
-      uses: ./.github/actions/windows-gnu-tar
+      uses: $/.github/actions/windows-gnu-tar
 
     # Must run before the restore step: GITHUB_ENV written here applies to
     # every later step of the job, so `go build`/`go test` in the job use the
@@ -107,6 +108,8 @@ runs:
       run: |
         if [ "${{ inputs.cache }}" = "race-plan" ]; then
           echo "GOCACHE=$RUNNER_TEMP/race-plan-go-build" >> "$GITHUB_ENV"
+        elif [ "${{ inputs.cache }}" = "race" ]; then
+          echo "GOCACHE=$RUNNER_TEMP/race-go-build" >> "$GITHUB_ENV"
         else
           echo "GOCACHE=$HOME/.cache/go-build" >> "$GITHUB_ENV"
         fi
@@ -131,16 +134,16 @@ runs:
     # the newest entry for this OS/arch/Go version.
     - name: Restore the Go build and module caches
       id: restore
-      if: inputs.cache == 'true'
+      if: inputs.cache == 'true' || inputs.cache == 'race'
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: |
           ${{ env.GOCACHE }}
           ${{ env.GOMODCACHE }}
-        key: go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}
+        key: ${{ inputs.cache == 'race' && 'race-go-cache' || 'go-cache' }}-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}
         restore-keys: |
-          go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
-          go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-
+          ${{ inputs.cache == 'race' && 'race-go-cache' || 'go-cache' }}-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
+          ${{ inputs.cache == 'race' && 'race-go-cache' || 'go-cache' }}-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-
 
     # The race planner only needs to compile the Mage target and enumerate
     # local packages. Its own cache lineage avoids downloading the full,

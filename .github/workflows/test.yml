@@ -81,46 +81,19 @@ env:
 
 jobs:
   # ensure the code builds...
-  build:
+  build-linux:
     name: Build (${{ matrix.target }})
-    # windows-latest is the slowest target: it compiles this large dependency
-    # tree far slower than the Linux (self-hosted) and macOS runners. A cold
-    # Go cache after dependency changes used to push the job past a tight
-    # limit and get the run cancelled mid-save (see #2713's windows build
-    # being killed at 30m10s, and run 33387953802 where the post-job cache
-    # save alone ran 23+ minutes). This job no longer saves Go caches at all
-    # (setup-go-cache is restore-only; setup-go-cache-warmup.yml is the sole
-    # writer), but keep headroom for a genuinely cold compile after a Go
-    # version bump.
+    # Independent platform jobs release consumers as soon as their artifacts
+    # are ready. Share steps without introducing a reusable-workflow name prefix.
+    # Keep the native Linux cache backend shared with GitHub-hosted consumers.
     timeout-minutes: 60
     strategy:
-      fail-fast: false
       matrix:
         include:
-          # No extras=s3-cache: this leg's ci-toolchain save and Go cache
-          # restore must use the same GitHub Actions cache backend as the 10
-          # ubuntu-latest acceptance shards and the other hosted Linux jobs.
-          # With the s3-cache extra, its caches went to RunsOn's S3 where no
-          # hosted job could ever see them.
-          #
-          # "large" (4 cores/~32GB), not "terraform": the latter resolves to
-          # a 2-core i4i.large, and this leg is the critical path every
-          # acceptance shard waits on. Measured cold (run 34228937998): the
-          # `atmos build binary` step took 721s on "terraform" against ~350s
-          # on the 4-core hosted macOS/Windows legs compiling the same tree.
           - os: "runs-on=${{github.run_id}}/runner=large/tag=atmos/private=false"
             target: linux
-          - os: "windows-latest"
-            target: windows
-          - os: "macos-15"
-            target: macos
-          # Docker-backed macOS CI uses Colima. GitHub's M-series macOS runners
-          # do not support the virtualization path Colima needs, so build a
-          # separate Intel artifact for the k3s macOS jobs only.
-          - os: "macos-15-intel"
-            target: macos-intel
     runs-on: ${{ matrix.os }}
-    steps:
+    steps: &build-steps
       # Only applies to GitHub-hosted legs (windows/macos); the linux leg runs
       # on the RunsOn self-hosted runner. Harden Runner's free/community tier
       # (what this repo uses) only covers GitHub-hosted runners — self-hosted
@@ -211,19 +184,19 @@ jobs:
       # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
       - name: Guard DNS against the harden-runner post-step race
         if: matrix.target == 'windows' && ! github.event.pull_request.draft
-        uses: ./.github/actions/windows-dns-guard
+        uses: $/.github/actions/windows-dns-guard
 
       # Pinned setup-go with a restore-only Go cache (the warmup workflow is
       # the sole writer), plus Go's caches relocated to the fast work disk on
       # Windows (see the action for the measurements and the cache design).
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: ./.github/actions/setup-go-cache
+        uses: $/.github/actions/setup-go-cache
         id: go
 
       - name: Set up Atmos bootstrap
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: ./.github/actions/setup-atmos-bootstrap
+        uses: $/.github/actions/setup-atmos-bootstrap
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
@@ -256,12 +229,12 @@ jobs:
       # unit-tested Go code while the workflow remains a one-command dispatch.
       # Reuse this job's warm Go cache to compile the large test binaries once.
       - name: Pre-compile acceptance test binaries
-        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         shell: bash
         run: go tool mage acceptance:precompile "${{ matrix.target }}"
 
       - name: Verify acceptance shard plan
-        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         shell: bash
         run: go tool mage acceptance:verify "${{ matrix.target }}" "$TEST_SHARD_COUNT"
 
@@ -269,16 +242,16 @@ jobs:
       # on-disk layout is the one the consumers' binary expects) and save it
       # to atmos's ci.cache; the acceptance shards, terraform-registry-cache
       # and mock jobs restore it (never save) and run the same
-      # `atmos toolchain install`, which then skips every tool. macos-intel is
-      # skipped: its only consumer (the k3s macOS job) installs no toolchain.
+      # `atmos toolchain install`, which then skips every tool. The Intel
+      # binary is cross-compiled later and shares no native toolchain cache.
       - name: Put the freshly built atmos on PATH for the toolchain install
-        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         shell: bash
         run: echo "${GITHUB_WORKSPACE}/build" >> "$GITHUB_PATH"
 
       - name: Install the CI toolchain (atmos toolchain install from .tool-versions; saves the cache)
-        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
-        uses: ./.github/actions/ci-toolchain
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        uses: $/.github/actions/ci-toolchain
         with:
           cache: restore-and-save
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -286,7 +259,7 @@ jobs:
       # Resolve plugins from the stack into the existing Atmos toolchain cache.
       # This producer saves the cache; downstream jobs restore private copies.
       - name: Install the stack-declared Helm plugins
-        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         working-directory: tests/fixtures/scenarios/helm-plugin-install
         shell: bash
         run: atmos helm plugin install --component ci-plugins --stack dev
@@ -299,9 +272,51 @@ jobs:
           path: |
             ./build/
 
+      # The ARM runner also produces the binary consumed by Intel Colima jobs.
+      # Keep its output outside build/ so it cannot overwrite the native artifact.
+      - name: Cross-compile Intel macOS binary
+        if: matrix.target == 'macos'
+        shell: bash
+        env:
+          ATMOS_BUILD_OUTPUT: ${{ runner.temp }}/macos-intel/atmos
+        run: |
+          atmos build binary --target=macos-intel --version=test
+          file "$ATMOS_BUILD_OUTPUT" | tee "$RUNNER_TEMP/macos-intel-file.txt"
+          grep -q 'Mach-O 64-bit executable x86_64' "$RUNNER_TEMP/macos-intel-file.txt"
+
+      - name: Upload Intel macOS artifact
+        if: matrix.target == 'macos'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-artifacts-macos-intel
+          path: ${{ runner.temp }}/macos-intel/atmos
+          if-no-files-found: error
+
+  build-windows:
+    name: Build (${{ matrix.target }})
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        include:
+          - os: "windows-latest"
+            target: windows
+    runs-on: ${{ matrix.os }}
+    steps: *build-steps
+
+  build-macos:
+    name: Build (${{ matrix.target }})
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        include:
+          - os: "macos-15"
+            target: macos
+    runs-on: ${{ matrix.os }}
+    steps: *build-steps
+
   validate-affected:
     name: Validation (affected)
-    needs: [build]
+    needs: build-linux
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -322,7 +337,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Atmos (install build artifact)
-        uses: ./.github/actions/setup-atmos-install
+        uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
 
@@ -346,16 +361,14 @@ jobs:
   # that budget. Give it its own dedicated (non-sharded, 3-OS) job instead, so
   # it runs in parallel with the full shard matrix rather than serialized
   # inside one shard's critical path.
-  terraform-registry-cache:
+  terraform-registry-cache-linux:
     name: Terraform registry cache test (${{ matrix.flavor.target }})
-    needs: [build]
+    needs: build-linux
     strategy:
       fail-fast: false
       matrix:
         flavor:
           - { os: "ubuntu-latest", target: linux }
-          - { os: "windows-latest", target: windows }
-          - { os: "macos-15", target: macos }
     # windows-latest is the slowest target here too: the actual test finishes
     # within its own 15m sub-step timeout, but the post-job Go module/build
     # cache save (tar + zstd) runs after that and is much slower on Windows,
@@ -376,7 +389,7 @@ jobs:
     # Raised to 45m for real headroom above that worst case.
     timeout-minutes: ${{ matrix.flavor.target == 'windows' && 45 || 20 }}
     runs-on: ${{ matrix.flavor.os }}
-    steps:
+    steps: &terraform-registry-cache-steps
       # Draft PRs skip every Windows step in this job (no checkout), so skip
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
@@ -454,11 +467,11 @@ jobs:
       # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
       - name: Guard DNS against the harden-runner post-step race
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        uses: ./.github/actions/windows-dns-guard
+        uses: $/.github/actions/windows-dns-guard
 
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: ./.github/actions/setup-atmos-install
+        uses: $/.github/actions/setup-atmos-install
         with:
           target: ${{ matrix.flavor.target }}
           path: ${{ github.workspace }}
@@ -472,7 +485,7 @@ jobs:
       # shared concurrent use.
       - name: Set up the CI toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: ./.github/actions/ci-toolchain
+        uses: $/.github/actions/ci-toolchain
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -503,7 +516,7 @@ jobs:
 
       - name: Set up Go
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: ./.github/actions/setup-go-cache
+        uses: $/.github/actions/setup-go-cache
         id: go
 
       - name: Get dependencies
@@ -522,13 +535,37 @@ jobs:
           CGO_ENABLED: 0
         run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
 
-  # run acceptance tests
-  test:
+  terraform-registry-cache-windows:
+    name: Terraform registry cache test (${{ matrix.flavor.target }})
+    needs: build-windows
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - { os: "windows-latest", target: windows }
+    timeout-minutes: ${{ matrix.flavor.target == 'windows' && 45 || 20 }}
+    runs-on: ${{ matrix.flavor.os }}
+    steps: *terraform-registry-cache-steps
+
+  terraform-registry-cache-macos:
+    name: Terraform registry cache test (${{ matrix.flavor.target }})
+    needs: build-macos
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - { os: "macos-15", target: macos }
+    timeout-minutes: ${{ matrix.flavor.target == 'windows' && 45 || 20 }}
+    runs-on: ${{ matrix.flavor.os }}
+    steps: *terraform-registry-cache-steps
+
+  # Run the same acceptance shards independently on each platform.
+  test-linux:
     # The job `name:` context doesn't have access to workflow-level `env`, so the
     # shard count is hardcoded here - keep it in sync with env.TEST_SHARD_COUNT
     # above and the matrix.shard list below.
     name: Acceptance Tests (${{ matrix.flavor.target }}, shard ${{ matrix.shard }}/10)
-    needs: [build]
+    needs: build-linux
     strategy:
       fail-fast: false
       matrix:
@@ -575,8 +612,6 @@ jobs:
         # Windows here (see this matrix's own history).
         flavor:
           - { os: "ubuntu-latest", target: linux, jobTimeout: 50, stepTimeout: 30, coverageStepTimeout: 40 }
-          - { os: "windows-latest", target: windows, jobTimeout: 50, stepTimeout: 40 }
-          - { os: "macos-15", target: macos, jobTimeout: 40, stepTimeout: 30 }
         # tests/cli_test.go's TestCLICommands splits its ~388 CLI-driven subtests
         # across these shards by bin-packing each test case's workdir
         # (assignWorkdirsToShards, see ATMOS_TEST_SHARD/ATMOS_TEST_SHARD_COUNT
@@ -589,7 +624,7 @@ jobs:
         # budgets; shard 3 is the slow one on Windows, not shard 1.
     timeout-minutes: ${{ matrix.flavor.jobTimeout }}
     runs-on: ${{ matrix.flavor.os }}
-    steps:
+    steps: &test-steps
       # Draft PRs skip every Windows step in this job (no checkout), so skip
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
@@ -688,11 +723,11 @@ jobs:
       # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
       - name: Guard DNS against the harden-runner post-step race
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        uses: ./.github/actions/windows-dns-guard
+        uses: $/.github/actions/windows-dns-guard
 
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: ./.github/actions/setup-atmos-install
+        uses: $/.github/actions/setup-atmos-install
         with:
           target: ${{ matrix.flavor.target }}
           path: ${{ github.workspace }}
@@ -713,7 +748,7 @@ jobs:
       # GitHub cache backend for all targets including linux.
       - name: Set up the CI toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: ./.github/actions/ci-toolchain
+        uses: $/.github/actions/ci-toolchain
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -744,7 +779,7 @@ jobs:
 
       - name: Set up Go
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: ./.github/actions/setup-go-cache
+        uses: $/.github/actions/setup-go-cache
         id: go
 
       - name: Get dependencies
@@ -819,6 +854,32 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+  test-windows:
+    name: Acceptance Tests (${{ matrix.flavor.target }}, shard ${{ matrix.shard }}/10)
+    needs: build-windows
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - { os: "windows-latest", target: windows, jobTimeout: 50, stepTimeout: 40, coverageStepTimeout: 40 }
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    timeout-minutes: ${{ matrix.flavor.jobTimeout }}
+    runs-on: ${{ matrix.flavor.os }}
+    steps: *test-steps
+
+  test-macos:
+    name: Acceptance Tests (${{ matrix.flavor.target }}, shard ${{ matrix.shard }}/10)
+    needs: build-macos
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - { os: "macos-15", target: macos, jobTimeout: 40, stepTimeout: 30, coverageStepTimeout: 40 }
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    timeout-minutes: ${{ matrix.flavor.jobTimeout }}
+    runs-on: ${{ matrix.flavor.os }}
+    steps: *test-steps
+
   # magefiles/ carries the `mage` build tag (invoked only via `go tool mage`),
   # so it's silently excluded from the default `go build ./...`/`go test
   # ./...` scope every other job here uses. Run it as its own lightweight job
@@ -835,8 +896,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Test cache pruning policy
+        run: node --test .github/actions/prune-go-caches/index.test.mjs
+
       - name: Set up Go
-        uses: ./.github/actions/setup-go-cache
+        uses: $/.github/actions/setup-go-cache
 
       - name: Run magefiles unit tests with coverage
         run: go test -tags=mage -race -coverprofile=magefiles-coverage.out ./magefiles/...
@@ -890,7 +954,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        uses: ./.github/actions/setup-go-cache
+        uses: $/.github/actions/setup-go-cache
         with:
           # Planning only needs Mage and `go list`; restore its dedicated
           # nightly-warmed cache instead of the multi-gigabyte race archive.
@@ -913,8 +977,7 @@ jobs:
   # This is the same trap the govulncheck job documents (codeql.yml), but that
   # job works around it by forcing CGO_ENABLED=0; that's not an option here since
   # it would silently disable the race detector itself. Install libudev-dev
-  # instead, reusing the floci-go job's apt-get invocation below (same trap, hit
-  # there because that job also leaves CGO_ENABLED at the runner default).
+  # instead. Floci now uses CGO_ENABLED=0 and does not need these packages.
   #
   # GOFIPS140=latest (set inside the `race` command itself, .atmos.d/test.yaml)
   # is unaffected by CGO_ENABLED: Go's FIPS 140-3 module is pure Go, no cgo.
@@ -951,13 +1014,15 @@ jobs:
           persist-credentials: false
 
       # Restores the race-instrumented build cache the warmup workflow saves
-      # (its linux leg runs `go build -race ./...` with this job's env), so
+      # (its linux leg uses a separate GOCACHE with this job's env), so
       # the ~400-package -race compile is mostly incremental.
       - name: Set up Go
-        uses: ./.github/actions/setup-go-cache
+        uses: $/.github/actions/setup-go-cache
+        with:
+          cache: race
 
       - name: Set up Atmos bootstrap
-        uses: ./.github/actions/setup-atmos-bootstrap
+        uses: $/.github/actions/setup-atmos-bootstrap
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
@@ -967,7 +1032,7 @@ jobs:
       # leg is this key's writer).
       - name: Restore the Atmos toolchain cache
         continue-on-error: true
-        uses: ./actions/cache
+        uses: $/actions/cache
         with:
           mode: restore-only
 
@@ -1021,16 +1086,11 @@ jobs:
           TEST: ${{ matrix.packages }}
         run: atmos test race
 
-  # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.
-  # Keep the three historical required-check names as compatibility aliases so
-  # branch protection does not need to change. `needs.test.result` aggregates
-  # every OS/shard combination in the `test` matrix into a single verdict, so
-  # relying on it here would fail all three aliases whenever any single shard on
-  # any OS fails, not just the OS actually affected. Query the run's actual
-  # per-job results instead, so each alias only fails for its own OS's shards.
-  test-required:
+  # Preserve the historical required checks, each waiting only for its own
+  # platform. Query individual shard results to detect missing/skipped shards.
+  test-required-linux:
     name: ${{ matrix.check }}
-    needs: [test, terraform-registry-cache]
+    needs: [test-linux, terraform-registry-cache-linux]
     runs-on: ubuntu-latest
     if: ${{ always() }}
     # `gh api .../actions/runs/.../jobs` (below) hits the REST API for this
@@ -1044,8 +1104,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
-    steps:
+        check: ["Acceptance Tests (linux)"]
+        include:
+          - { check: "Acceptance Tests (linux)", target: linux }
+    steps: &required-test-steps
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
@@ -1110,19 +1172,49 @@ jobs:
         run: go tool mage ci:checkShardResults "$REPO" "$RUN_ID" "$RUN_ATTEMPT" "$CHECK"
 
       - name: Check terraform-registry-cache result
-        # terraform-registry-cache only runs a linux/windows matrix (no macos
-        # leg - see its `matrix.flavor` above), so its aggregated result must
-        # not gate the macos alias.
-        if: ${{ !cancelled() && matrix.check != 'Acceptance Tests (macos)' }}
+        # Each alias checks only its own platform's registry integration.
+        if: ${{ !cancelled() }}
         run: |
-          if [ "${{ needs.terraform-registry-cache.result }}" != "success" ]; then
-            echo "terraform-registry-cache result was '${{ needs.terraform-registry-cache.result }}'"
+          if [ "${{ needs[format('terraform-registry-cache-{0}', matrix.target)].result }}" != "success" ]; then
+            echo "terraform-registry-cache result was '${{ needs[format('terraform-registry-cache-{0}', matrix.target)].result }}'"
             exit 1
           fi
 
+  test-required-macos:
+    name: ${{ matrix.check }}
+    needs: [test-macos, terraform-registry-cache-macos]
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    permissions:
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        check: ["Acceptance Tests (macos)"]
+        include:
+          - { check: "Acceptance Tests (macos)", target: macos }
+    steps: *required-test-steps
+
+  test-required-windows:
+    name: ${{ matrix.check }}
+    needs: [test-windows, terraform-registry-cache-windows]
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    permissions:
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        check: ["Acceptance Tests (windows)"]
+        include:
+          - { check: "Acceptance Tests (windows)", target: windows }
+    steps: *required-test-steps
+
   coverage:
     name: Upload acceptance coverage to Codecov
-    needs: [build, test, magefiles]
+    needs: [build-linux, test-linux, magefiles]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # `atmos test coverage download-shards` (below) runs `gh run download`,
@@ -1147,7 +1239,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Atmos (install build artifact for linux)
-        uses: ./.github/actions/setup-atmos-install
+        uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
           path: ${{ github.workspace }}
@@ -1166,19 +1258,19 @@ jobs:
       # under the shared Linux key (it also pinned setup-go v6 while every
       # other job pins v5.6.0, silently forking the cache lineage).
       - name: Set up Go for native coverage merge
-        uses: ./.github/actions/setup-go-cache
+        uses: $/.github/actions/setup-go-cache
 
       - name: Merge native coverage data
         run: go tool mage coverage:mergeShards
 
       - name: Download magefiles coverage report artifact
-        uses: ./.github/actions/download-artifact-retry
+        uses: $/.github/actions/download-artifact-retry
         with:
           name: magefiles-coverage-linux
           path: ${{ github.workspace }}
 
       - name: Download tools/noticegen coverage report artifact
-        uses: ./.github/actions/download-artifact-retry
+        uses: $/.github/actions/download-artifact-retry
         with:
           name: noticegen-coverage-linux
           path: ${{ github.workspace }}
@@ -1214,7 +1306,7 @@ jobs:
 
   docker:
     name: "[lint] Dockerfile"
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
     # The workflow-level `permissions:` block above (added in #2487 for
     # `packages: read` on ghcr.io pulls) REPLACES — not extends — the default
@@ -1295,7 +1387,7 @@ jobs:
   # status checks configured in branch protection on main.
   floci:
     name: "[floci] ${{ matrix.demo-folder }}"
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
 
     strategy:
@@ -1331,7 +1423,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Atmos (install build artifact)
-        uses: ./.github/actions/setup-atmos-install
+        uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
 
@@ -1340,7 +1432,7 @@ jobs:
       # this key's writer).
       - name: Restore the Atmos toolchain cache
         continue-on-error: true
-        uses: ./actions/cache
+        uses: $/actions/cache
         with:
           mode: restore-only
 
@@ -1367,9 +1459,18 @@ jobs:
   # Run Go E2E tests against Floci. These cover store/secrets workflows that are
   # easier to assert directly from Go than through the demo `atmos test` runner.
   floci-go:
-    name: "[floci] go e2e"
-    needs: build
+    name: "[floci] go e2e (${{ matrix.group }})"
+    needs: build-linux
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: scaffold
+            tests: '^TestScaffold(AWSLandingZone|AWSApp)FlociE2E$'
+          - group: workflows
+            tests: '^Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|LocalGitOpsPushE2E|Scaffold(GCPLandingZone|AzureLandingZone)FlociE2E|InitFromTemplateRepoGiteaE2E|TerraformFlociTfmigrateS3History)$'
 
     services:
       floci:
@@ -1427,19 +1528,19 @@ jobs:
           persist-credentials: false
 
       - name: Set up Atmos (install build artifact)
-        uses: ./.github/actions/setup-atmos-install
+        uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
 
       - name: Set up Go
-        uses: ./.github/actions/setup-go-cache
+        uses: $/.github/actions/setup-go-cache
 
       # Restore the toolchain directory first so the install below skips
       # tools already on disk (restore-only; the build job's linux leg is
       # this key's writer).
       - name: Restore the Atmos toolchain cache
         continue-on-error: true
-        uses: ./actions/cache
+        uses: $/actions/cache
         with:
           mode: restore-only
 
@@ -1453,30 +1554,24 @@ jobs:
       - name: Verify OpenTofu
         run: tofu version
 
-      - name: Install Linux build dependencies
-        run: |
-          # The Azure mirror used by GitHub's Ubuntu runners can stall long
-          # enough to exhaust this job's timeout. Use Ubuntu's primary archive
-          # for this small, deterministic dependency install instead.
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
-
       - name: Run Floci Go E2E tests
         env:
+          CGO_ENABLED: "0"
+          GOFIPS140: latest
+          FLOCI_TEST_PATTERN: ${{ matrix.tests }}
           ATMOS_TEST_FLOCI: "true"
           FLOCI_ENDPOINT_URL: "http://localhost:4566"
           FLOCI_GCP_ENDPOINT: "http://localhost:4588"
           FLOCI_AZURE_ENDPOINT: "http://localhost:4577"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: go test ./tests -run 'Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|LocalGitOpsPushE2E|Scaffold(AWSLandingZone|GCPLandingZone|AzureLandingZone|AWSApp)FlociE2E|InitFromTemplateRepoGiteaE2E|TerraformFlociTfmigrateS3History)' -count=1 -timeout 25m -v
+        run: go test ./tests -run "$FLOCI_TEST_PATTERN" -count=1 -timeout 25m -v
 
   # Run the approachable k3s demos plus the focused native Helm lifecycle
   # scenario. Keep failure-path coverage under tests/fixtures so public examples
   # remain small, happy-path configurations.
-  k3s:
+  k3s-linux:
     name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name }}"
-    needs: build
+    needs: build-linux
     runs-on: ${{ matrix.flavor.os }}
     env:
       ATMOS_LOGS_LEVEL: Debug
@@ -1487,27 +1582,15 @@ jobs:
       matrix:
         flavor:
           - { os: ubuntu-latest, target: linux, artifact: linux }
-          - { os: "macos-15-intel", target: macos, artifact: macos-intel }
         fixture:
           - { name: demo-helmfile, path: examples/demo-helmfile }
           - { name: helm, path: examples/helm }
           - { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
-        # helm-lifecycle's watcher-based install/upgrade waits stall on the
-        # doubly-nested k3s of the macOS Colima runner (k3s -> Docker -> Colima
-        # VM), where Helm's status-watcher API watch is unreliable and every
-        # watcher-waited release burns its full timeout. The same fixture passes
-        # in ~4m on Linux and on local macOS Docker Desktop, so this is a Colima
-        # runner limitation, not a lifecycle bug. Run it on Linux only; the
-        # demo-helmfile and helm fixtures still exercise the macOS k3s path.
-        exclude:
-          - flavor: { os: "macos-15-intel", target: macos, artifact: macos-intel }
-            fixture: { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
-
     # The macOS matrix may spend up to 55 minutes starting Colima, followed by
     # two bounded 45-minute test attempts. Keep the job ceiling above those
     # nested budgets so the second retry can finish and emit diagnostics.
     timeout-minutes: 180
-    steps:
+    steps: &k3s-steps
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
@@ -1569,7 +1652,7 @@ jobs:
       # only step in the job that needs public DNS from the host, so keep it away
       # from that window.
       - name: Set up Atmos (install build artifact)
-        uses: ./.github/actions/setup-atmos-install
+        uses: $/.github/actions/setup-atmos-install
         with:
           target: ${{ matrix.flavor.artifact }}
 
@@ -1582,7 +1665,7 @@ jobs:
         # pulls with backoff (10.5m). The 55m step cap covers these ~52m of
         # nested budgets; the 180m job cap also covers both 45m test attempts.
         timeout-minutes: 55
-        uses: ./.github/actions/setup-colima
+        uses: $/.github/actions/setup-colima
 
       - name: Configure Docker Hub mirror on Linux
         if: matrix.flavor.target == 'linux'
@@ -1668,16 +1751,50 @@ jobs:
           done
           exit "${status}"
 
+  k3s-macos:
+    name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name }}"
+    needs: build-macos
+    runs-on: ${{ matrix.flavor.os }}
+    env:
+      ATMOS_LOGS_LEVEL: Debug
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - { os: "macos-15-intel", target: macos, artifact: macos-intel }
+        fixture:
+          - { name: demo-helmfile, path: examples/demo-helmfile }
+          - { name: helm, path: examples/helm }
+          - { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
+        # helm-lifecycle's watcher-based install/upgrade waits stall on the
+        # doubly-nested k3s of the macOS Colima runner (k3s -> Docker -> Colima
+        # VM), where Helm's status-watcher API watch is unreliable and every
+        # watcher-waited release burns its full timeout. The same fixture passes
+        # in ~4m on Linux and on local macOS Docker Desktop, so this is a Colima
+        # runner limitation, not a lifecycle bug. Run it on Linux only; the
+        # demo-helmfile and helm fixtures still exercise the macOS k3s path.
+        exclude:
+          - flavor: { os: "macos-15-intel", target: macos, artifact: macos-intel }
+            fixture: { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
+
+    # The macOS matrix may spend up to 55 minutes starting Colima, followed by
+    # two bounded 45-minute test attempts. Keep the job ceiling above those
+    # nested budgets so the second retry can finish and emit diagnostics.
+    timeout-minutes: 180
+    steps: *k3s-steps
+
   k3s-required:
     name: "[k3s] demo-helmfile"
-    needs: k3s
+    needs: [k3s-linux, k3s-macos]
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
-          # Pure bash conditional on needs.k3s.result; no external calls at all.
+          # Pure bash conditional on needs.k3s-linux.result; no external calls at all.
           egress-policy: block
 
       # See the matching comment on test-required's per-OS check step: a
@@ -1690,8 +1807,8 @@ jobs:
       - name: Check k3s matrix result
         if: ${{ !cancelled() }}
         run: |
-          if [ "${{ needs.k3s.result }}" != "success" ]; then
-            echo "k3s matrix result was '${{ needs.k3s.result }}'"
+          if [ "${{ needs.k3s-linux.result }}" != "success" ] || [ "${{ needs.k3s-macos.result }}" != "success" ]; then
+            echo "k3s results: linux=${{ needs.k3s-linux.result }}, macos=${{ needs.k3s-macos.result }}"
             exit 1
           fi
 
@@ -1747,7 +1864,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        uses: ./.github/actions/setup-go-cache
+        uses: $/.github/actions/setup-go-cache
 
       - name: Download Go dependencies
         shell: bash
@@ -1790,17 +1907,15 @@ jobs:
           go test -tags envtest -count=1 ./pkg/component/kubernetes/... -run TestEnvtest
 
   # run other demo tests
-  mock:
+  mock-linux:
     name: "[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}"
-    needs: build
+    needs: build-linux
     runs-on: ${{ matrix.flavor.os }}
     strategy:
       fail-fast: false
       matrix:
         flavor:
           - { os: ubuntu-latest, target: linux }
-          - { os: windows-latest, target: windows }
-          - { os: "macos-15", target: macos }
         demo-folder:
           - examples/demo-atlantis
           # - examples/demo-component-manifest
@@ -1824,7 +1939,7 @@ jobs:
           - tests/fixtures/scenarios/complete
 
     timeout-minutes: 20
-    steps:
+    steps: &mock-steps
       # Draft PRs skip every Windows step in this job (no checkout), so skip
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
@@ -1902,11 +2017,11 @@ jobs:
       # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
       - name: Guard DNS against the harden-runner post-step race
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        uses: ./.github/actions/windows-dns-guard
+        uses: $/.github/actions/windows-dns-guard
 
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: ./.github/actions/setup-atmos-install
+        uses: $/.github/actions/setup-atmos-install
         with:
           target: ${{ matrix.flavor.target }}
           path: ${{ github.workspace }}
@@ -1914,7 +2029,7 @@ jobs:
 
       - name: Set up the CI toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: ./.github/actions/ci-toolchain
+        uses: $/.github/actions/ci-toolchain
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -1968,9 +2083,49 @@ jobs:
           exit $LASTEXITCODE
 
   # run other demo tests
+  mock-windows:
+    name: "[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}"
+    needs: build-windows
+    runs-on: ${{ matrix.flavor.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - { os: windows-latest, target: windows }
+        demo-folder:
+          - examples/demo-atlantis
+          - examples/demo-component-versions
+          - examples/demo-context
+          - examples/demo-vendoring
+          - examples/config-profiles
+          - tests/fixtures/scenarios/complete
+
+    timeout-minutes: 20
+    steps: *mock-steps
+
+  mock-macos:
+    name: "[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}"
+    needs: build-macos
+    runs-on: ${{ matrix.flavor.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - { os: "macos-15", target: macos }
+        demo-folder:
+          - examples/demo-atlantis
+          - examples/demo-component-versions
+          - examples/demo-context
+          - examples/demo-vendoring
+          - examples/config-profiles
+          - tests/fixtures/scenarios/complete
+
+    timeout-minutes: 20
+    steps: *mock-steps
+
   lint:
     name: "[lint] ${{ matrix.demo-folder }}"
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -2017,7 +2172,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Atmos (install build artifact)
-        uses: ./.github/actions/setup-atmos-install
+        uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
 
@@ -2026,7 +2181,7 @@ jobs:
       # (restore-only: the build job's linux leg is this key's writer).
       - name: Restore the Atmos toolchain cache
         continue-on-error: true
-        uses: ./actions/cache
+        uses: $/actions/cache
         with:
           mode: restore-only
 
@@ -2051,7 +2206,7 @@ jobs:
 
   hooks-tflint:
     name: "[hooks-tflint] example"
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -2075,7 +2230,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Atmos (install build artifact)
-        uses: ./.github/actions/setup-atmos-install
+        uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
 
@@ -2084,7 +2239,7 @@ jobs:
       # (restore-only: the build job's linux leg is this key's writer).
       - name: Restore the Atmos toolchain cache
         continue-on-error: true
-        uses: ./actions/cache
+        uses: $/actions/cache
         with:
           mode: restore-only
 
@@ -2103,7 +2258,7 @@ jobs:
   # run other demo tests
   validate:
     name: "[validate] ${{ matrix.demo-folder }}"
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -2148,7 +2303,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Atmos (install build artifact)
-        uses: ./.github/actions/setup-atmos-install
+        uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
 
@@ -2174,7 +2329,7 @@ jobs:
   # GitHub Container Registry, leftover packages, or fork-PR token limits.
   container-step:
     name: "[container-step] example"
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
 
     services:
@@ -2207,12 +2362,12 @@ jobs:
           persist-credentials: false
 
       - name: Set up Atmos (install build artifact)
-        uses: ./.github/actions/setup-atmos-install
+        uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
 
       - name: Set up Go for the Buildx cache integration test
-        uses: ./.github/actions/setup-go-cache
+        uses: $/.github/actions/setup-go-cache
 
       - name: Verify remote Buildx registry cache
         env:

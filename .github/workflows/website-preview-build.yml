@@ -73,7 +73,7 @@ jobs:
       # INTERNAL_ERROR; received from peer") aborts it outright -- see
       # docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
       - name: Download Go modules (with retry)
-        uses: ./.github/actions/go-mod-download-retry
+        uses: $/.github/actions/go-mod-download-retry
 
       - name: Generate atmos-manifest schema
         # website/static/schemas/atmos/atmos-manifest/ is gitignored (see .gitignore) — it is

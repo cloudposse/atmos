@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check Go version and comment
-        uses: ./.github/actions/go-version-check
+        uses: $/.github/actions/go-version-check
         with:
           base-ref: ${{ github.base_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}

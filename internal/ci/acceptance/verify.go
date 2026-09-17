@@ -164,17 +164,21 @@ func verifyWorkflow(repoRoot string, shardCount int) error {
 		return fmt.Errorf("read test workflow: %w", err)
 	}
 	matches := workflowShardPattern.FindAllSubmatch(content, -1)
-	if len(matches) != 1 {
-		return fmt.Errorf("%w: could not identify exactly one explicit workflow shard matrix", errShardPlan)
+	// A single cross-platform matrix or three independently scheduled platform
+	// matrices must all route exactly the same shard indices.
+	if len(matches) != 1 && len(matches) != 3 {
+		return fmt.Errorf("%w: expected one shared or three platform shard matrices", errShardPlan)
 	}
-	values := strings.Split(string(matches[0][1]), ",")
-	if len(values) != shardCount {
-		return fmt.Errorf("%w: workflow has %d shards; expected %d", errShardPlan, len(values), shardCount)
-	}
-	for index, value := range values {
-		actual, parseErr := strconv.Atoi(strings.TrimSpace(value))
-		if parseErr != nil || actual != index+1 {
-			return fmt.Errorf("%w: workflow shard position %d contains %q", errShardPlan, index+1, strings.TrimSpace(value))
+	for _, match := range matches {
+		values := strings.Split(string(match[1]), ",")
+		if len(values) != shardCount {
+			return fmt.Errorf("%w: workflow has %d shards; expected %d", errShardPlan, len(values), shardCount)
+		}
+		for index, value := range values {
+			actual, parseErr := strconv.Atoi(strings.TrimSpace(value))
+			if parseErr != nil || actual != index+1 {
+				return fmt.Errorf("%w: workflow shard position %d contains %q", errShardPlan, index+1, strings.TrimSpace(value))
+			}
 		}
 	}
 	if !strings.Contains(string(content), "run: go test ./tests -run '^"+RegistryTest+"$'") {
@@ -185,10 +189,13 @@ func verifyWorkflow(repoRoot string, shardCount int) error {
 
 func verifyRequiredChecks(content []byte) error {
 	matches := workflowRequiredCheckPattern.FindAllSubmatch(content, -1)
-	if len(matches) != 1 {
-		return fmt.Errorf("%w: could not identify exactly one acceptance required-check matrix", errShardPlan)
+	if len(matches) != 1 && len(matches) != 3 {
+		return fmt.Errorf("%w: expected one shared or three platform required-check matrices", errShardPlan)
 	}
-	values := strings.Split(string(matches[0][1]), ",")
+	var values []string
+	for _, match := range matches {
+		values = append(values, strings.Split(string(match[1]), ",")...)
+	}
 	if len(values) != len(requiredAcceptanceChecks) {
 		return fmt.Errorf("%w: workflow has %d acceptance required checks; expected %d",
 			errShardPlan, len(values), len(requiredAcceptanceChecks))

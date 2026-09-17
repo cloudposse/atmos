@@ -100,7 +100,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up and build Atmos
-        uses: ./.github/actions/setup-atmos-build
+        uses: $/.github/actions/setup-atmos-build
         with:
           atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
@@ -178,7 +178,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up and build Atmos
-        uses: ./.github/actions/setup-atmos-build
+        uses: $/.github/actions/setup-atmos-build
         with:
           atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
@@ -186,7 +186,7 @@ jobs:
       # ~700 MB copy on a per-PR ref no other run can read. The warm-cache
       # job below is this key's single writer, on main's scope.
       - name: Restore Atmos native CI cache
-        uses: ./actions/cache
+        uses: $/actions/cache
         with:
           mode: restore-only
         env:
@@ -261,7 +261,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up and build Atmos
-        uses: ./.github/actions/setup-atmos-build
+        uses: $/.github/actions/setup-atmos-build
         with:
           atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
@@ -269,7 +269,7 @@ jobs:
       # ~700 MB copy on a per-PR ref no other run can read. The warm-cache
       # job below is this key's single writer, on main's scope.
       - name: Restore Atmos native CI cache
-        uses: ./actions/cache
+        uses: $/actions/cache
         with:
           mode: restore-only
         env:
@@ -337,12 +337,12 @@ jobs:
           persist-credentials: false
 
       - name: Set up and build Atmos
-        uses: ./.github/actions/setup-atmos-build
+        uses: $/.github/actions/setup-atmos-build
         with:
           atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
       - name: Restore and save the Atmos native CI cache
-        uses: ./actions/cache
+        uses: $/actions/cache
         with:
           mode: restore-and-save
         env:

@@ -93,7 +93,7 @@ jobs:
           go tool mage build:binary default test
           echo "$PWD/build" >> "$GITHUB_PATH"
       - name: Expose GitHub Actions runtime credentials
-        uses: ./actions/github-runtime
+        uses: $/actions/github-runtime
         with:
           mode: env
       - name: Plan and upload the planfile
@@ -151,7 +151,7 @@ jobs:
           go tool mage build:binary default test
           echo "$PWD/build" >> "$GITHUB_PATH"
       - name: Expose GitHub Actions runtime credentials
-        uses: ./actions/github-runtime
+        uses: $/actions/github-runtime
         with:
           mode: env
       - name: Deploy with automatic verification
@@ -201,7 +201,7 @@ jobs:
           go tool mage build:binary default test
           echo "$PWD/build" >> "$GITHUB_PATH"
       - name: Expose GitHub Actions runtime credentials
-        uses: ./actions/github-runtime
+        uses: $/actions/github-runtime
         with:
           mode: env
       - name: Induce drift and expect deploy to fail

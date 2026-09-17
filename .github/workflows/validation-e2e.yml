@@ -45,7 +45,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up and build Atmos
-        uses: ./.github/actions/setup-atmos-build
+        uses: $/.github/actions/setup-atmos-build
         with:
           atmos-bootstrap-version: "1.223.0"
 

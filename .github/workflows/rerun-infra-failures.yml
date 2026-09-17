@@ -102,7 +102,7 @@ jobs:
 
       - name: Classify the run's failures
         id: classify
-        uses: ./.github/actions/classify-infra-failures
+        uses: $/.github/actions/classify-infra-failures
         with:
           run-id: ${{ github.event.workflow_run.id }}
           run-attempt: ${{ github.event.workflow_run.run_attempt }}
