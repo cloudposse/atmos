@@ -25,8 +25,10 @@ The old deployment had two independent sources of unnecessary S3 writes:
     with `--metadata-directive REPLACE` on every production and preview deploy.
 
 The second operation was needed because the website depends on correct MIME and
-charset headers, but it turned a metadata requirement into a recurring full-site
-rewrite.
+charset headers. `aws s3 sync` can apply one `--content-type` value to an entire
+invocation, but it cannot selectively append `charset=utf-8` while preserving
+each file's distinct MIME type. That CLI limitation turned a metadata requirement
+into a recurring full-site rewrite.
 
 AWS Cost Explorer for the seven complete days from September 9-15, 2026 showed
 the scale of the request churn across the development and production

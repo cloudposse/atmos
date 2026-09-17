@@ -76,6 +76,11 @@ types receive explicit UTF-8 metadata, such as `text/html; charset=utf-8`. The
 manifest is uploaded only after the deployment succeeds, so a failed run cannot
 record an incomplete state as current.
 
+`aws s3 sync` cannot append `charset=utf-8` selectively while preserving each
+file's distinct MIME type: `--content-type` supplies one value for the entire
+invocation. The Mage target computes and sends the exact header for each object,
+so correct browser metadata does not require a second S3-to-S3 copy pass.
+
 All S3 operations use the repository's existing AWS SDK for Go v2 dependency.
 The target does not shell out to the AWS CLI or create temporary request files.
 SDK calls preserve typed request metadata, built-in retries, context
