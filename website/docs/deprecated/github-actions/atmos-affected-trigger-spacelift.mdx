@@ -7,7 +7,7 @@ description: Legacy GitHub Action for triggering Spacelift stacks affected by a 
 import Intro from '@site/src/components/Intro'
 
 :::warning Deprecated
-`cloudposse/github-action-atmos-affected-trigger-spacelift` is deprecated, along with the rest of the [Spacelift integration](/deprecated/spacelift) it depends on. New projects should use [Native CI](/ci) instead of routing through Spacelift.
+`cloudposse/github-action-atmos-affected-trigger-spacelift` is deprecated, along with the rest of the [Spacelift integration](/deprecated/spacelift) it depends on. Use [Atmos Pro](/pro) as the replacement for Spacelift, with [Native CI](/ci) for plan and deploy workflows.
 :::
 
 <Intro>
@@ -16,7 +16,7 @@ The [Atmos Trigger Spacelift GitHub Action](https://github.com/cloudposse/github
 
 ## Native CI Equivalent
 
-Teams moving off Spacelift can drive the same affected-stacks fan-out directly in GitHub Actions:
+Teams moving off Spacelift can use [Atmos Pro](/pro) for infrastructure coordination and run affected-stacks workflows directly in GitHub Actions:
 
 ```yaml
 - name: Detect affected
