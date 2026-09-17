@@ -16,6 +16,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const matter = require('gray-matter');
+const { getBuildTimestamp } = require('../build-timestamp');
 
 /**
  * Gets the commit SHA that last modified a file.
@@ -160,7 +161,7 @@ module.exports = function docReleaseDataPlugin(context, options) {
       const docsDir = path.join(context.siteDir, 'docs');
       const releaseMap = {};
       const unreleasedDocs = [];
-      const buildDate = new Date().toISOString();
+      const buildDate = getBuildTimestamp();
 
       // Check if docs directory exists.
       if (!fs.existsSync(docsDir)) {
