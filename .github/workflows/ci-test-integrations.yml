@@ -1,0 +1,337 @@
+name: CI Test Integrations
+run-name: CI source ${{ github.event.workflow_run.id }} attempt ${{ github.event.workflow_run.run_attempt }}
+on:
+  workflow_run:
+    workflows:
+      - CI Build Linux
+    types:
+      - completed
+cache-mode: read
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+  pull-requests: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+env:
+  ATMOS_BOOTSTRAP_VERSION: 1.223.0
+  HELMFILE_UPGRADE_NOTICE_DISABLED: 'true'
+  TEST_SHARD_COUNT: '10'
+  RACE_SHARD_COUNT: '4'
+  GOPROXY: https://proxy.golang.org
+jobs:
+  source:
+    if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      revision: ${{ steps.source.outputs.revision }}
+      event: ${{ steps.source.outputs.event }}
+      base: ${{ steps.source.outputs.base }}
+      draft: ${{ steps.source.outputs.draft }}
+      run-id: ${{ steps.source.outputs.run-id }}
+      active: ${{ steps.source.outputs.active }}
+    steps:
+      - id: source
+        uses: $/.github/actions/ci-pipeline
+        with:
+          mode: resolve
+          run-id: ${{ github.event.workflow_run.id }}
+          attempt: ${{ github.event.workflow_run.run_attempt }}
+          github-token: ${{ github.token }}
+  validate-affected:
+    name: Validation (affected)
+    needs:
+      - source
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: |
+            api.github.com:443
+            github.com:443
+            us.i.posthog.com:443
+      - name: Check out source with validation base history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - name: Set up Atmos (install build artifact)
+        uses: $/.github/actions/setup-atmos-install
+        with:
+          target: linux
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Validate affected project inputs
+        run: atmos validate --affected --base "$CI_SOURCE_BASE" --exclude 'tests/fixtures/**' --exclude '**/*.go' --exclude 'specs/**' --exclude 'README.md'
+          --format rich
+    if: ${{ needs.source.outputs.active == 'true' }}
+    env:
+      CI_SOURCE_BASE: ${{ needs.source.outputs.base }}
+      CI_SOURCE_REVISION: ${{ needs.source.outputs.revision }}
+      CI_SOURCE_EVENT: ${{ needs.source.outputs.event }}
+      CI_SOURCE_DRAFT: ${{ needs.source.outputs.draft }}
+      CI_BUILD_RUN_ID: ${{ needs.source.outputs.run-id }}
+  lint:
+    name: '[lint] ${{ matrix.demo-folder }}'
+    needs:
+      - source
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - demo-folder: quick-start-advanced
+            component: kms-key
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: s3-bucket
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: dynamodb-table
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: sns-topic
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: sqs-queue
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: app-config
+            stack: plat-ue2-dev
+    timeout-minutes: 20
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: |
+            api.github.com:443
+            github.com:443
+            raw.githubusercontent.com:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            tuf-repo.github.com:443
+            us.i.posthog.com:443
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - name: Set up Atmos (install build artifact)
+        uses: $/.github/actions/setup-atmos-install
+        with:
+          target: linux
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Restore the Atmos toolchain cache
+        continue-on-error: true
+        uses: $/actions/cache
+        with:
+          mode: restore-only
+      - name: Install OpenTofu and TFLint with Atmos toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install terraform-linters/tflint
+          atmos toolchain env --format=github
+      - name: Verify OpenTofu and TFLint
+        run: |
+          tofu version
+          tflint --version
+      - name: Lint ${{ matrix.demo-folder }}/${{ matrix.component }}
+        working-directory: examples/${{ matrix.demo-folder }}
+        run: atmos terraform lint ${{ matrix.component }} -s ${{ matrix.stack }} --identity=false
+    if: ${{ needs.source.outputs.active == 'true' }}
+    env:
+      CI_SOURCE_BASE: ${{ needs.source.outputs.base }}
+      CI_SOURCE_REVISION: ${{ needs.source.outputs.revision }}
+      CI_SOURCE_EVENT: ${{ needs.source.outputs.event }}
+      CI_SOURCE_DRAFT: ${{ needs.source.outputs.draft }}
+      CI_BUILD_RUN_ID: ${{ needs.source.outputs.run-id }}
+  hooks-tflint:
+    name: '[hooks-tflint] example'
+    needs:
+      - source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: |
+            api.github.com:443
+            github.com:443
+            raw.githubusercontent.com:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            tuf-repo.github.com:443
+            us.i.posthog.com:443
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - name: Set up Atmos (install build artifact)
+        uses: $/.github/actions/setup-atmos-install
+        with:
+          target: linux
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Restore the Atmos toolchain cache
+        continue-on-error: true
+        uses: $/actions/cache
+        with:
+          mode: restore-only
+      - name: Install OpenTofu and TFLint with Atmos toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install terraform-linters/tflint
+          atmos toolchain env --format=github
+      - name: Run the TFLint hook example
+        working-directory: examples/hooks-tflint
+        run: atmos terraform plan example -s test
+    if: ${{ needs.source.outputs.active == 'true' }}
+    env:
+      CI_SOURCE_BASE: ${{ needs.source.outputs.base }}
+      CI_SOURCE_REVISION: ${{ needs.source.outputs.revision }}
+      CI_SOURCE_EVENT: ${{ needs.source.outputs.event }}
+      CI_SOURCE_DRAFT: ${{ needs.source.outputs.draft }}
+      CI_BUILD_RUN_ID: ${{ needs.source.outputs.run-id }}
+  validate:
+    name: '[validate] ${{ matrix.demo-folder }}'
+    needs:
+      - source
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        demo-folder:
+          - demo-context
+          - emulator-aws
+          - terraform-tests
+          - backend-provisioning
+          - demo-stacks
+          - quick-start-simple
+          - custom-components
+          - sops-secrets
+          - onepassword-secrets
+          - packer-docker
+    timeout-minutes: 20
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: |
+            api.github.com:443
+            github.com:443
+            us.i.posthog.com:443
+      - name: Check out code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - name: Set up Atmos (install build artifact)
+        uses: $/.github/actions/setup-atmos-install
+        with:
+          target: linux
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Validate stacks
+        working-directory: examples/${{ matrix.demo-folder }}
+        run: atmos validate stacks
+    if: ${{ needs.source.outputs.active == 'true' }}
+    env:
+      CI_SOURCE_BASE: ${{ needs.source.outputs.base }}
+      CI_SOURCE_REVISION: ${{ needs.source.outputs.revision }}
+      CI_SOURCE_EVENT: ${{ needs.source.outputs.event }}
+      CI_SOURCE_DRAFT: ${{ needs.source.outputs.draft }}
+      CI_BUILD_RUN_ID: ${{ needs.source.outputs.run-id }}
+  container-step:
+    name: '[container-step] example'
+    needs:
+      - source
+    runs-on: ubuntu-latest
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+    timeout-minutes: 15
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: |
+            api.github.com:443
+            auth.docker.io:443
+            github.com:443
+            mirror.gcr.io:443
+            production.cloudfront.docker.com:443
+            proxy.golang.org:443
+            registry-1.docker.io:443
+            release-assets.githubusercontent.com:443
+            storage.googleapis.com:443
+            us.i.posthog.com:443
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - name: Set up Atmos (install build artifact)
+        uses: $/.github/actions/setup-atmos-install
+        with:
+          target: linux
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Set up Go for the Buildx cache integration test
+        uses: $/.github/actions/setup-go-cache
+      - name: Verify remote Buildx registry cache
+        env:
+          ATMOS_TEST_REGISTRY_CACHE: '1'
+        run: go test ./pkg/container -run '^TestDockerRuntime_RemoteRegistryCache_Integration$' -count=1
+      - name: Run container steps (run, build, bake, push, workspace, env)
+        working-directory: examples/container-step
+        run: |
+          set -euo pipefail
+          atmos workflow hello -f container-step
+          atmos workflow build-run -f container-step
+          atmos workflow bake-build-run -f container-step
+          atmos workflow push-local-registry -f container-step
+          atmos workflow workspace -f container-step
+          atmos workflow env -f container-step
+          grep -q "## .*atmos-container-step:local" "$GITHUB_STEP_SUMMARY"
+          grep -q "## .*localhost:5000/atmos-container-step:local" "$GITHUB_STEP_SUMMARY"
+          grep -q '| Digest | `sha256:' "$GITHUB_STEP_SUMMARY"
+          grep -q "<summary>.*Layers (" "$GITHUB_STEP_SUMMARY"
+          grep -q "<summary>.*Raw JSON</summary>" "$GITHUB_STEP_SUMMARY"
+      - name: Verify a failing container step propagates a non-zero exit code
+        working-directory: examples/container-step
+        run: |
+          if atmos workflow failing-check -f container-step; then
+            echo "expected the 'failing-check' workflow to fail, but it succeeded"
+            exit 1
+          fi
+          echo "failing-check correctly returned a non-zero exit code"
+    if: ${{ needs.source.outputs.active == 'true' }}
+    env:
+      CI_SOURCE_BASE: ${{ needs.source.outputs.base }}
+      CI_SOURCE_REVISION: ${{ needs.source.outputs.revision }}
+      CI_SOURCE_EVENT: ${{ needs.source.outputs.event }}
+      CI_SOURCE_DRAFT: ${{ needs.source.outputs.draft }}
+      CI_BUILD_RUN_ID: ${{ needs.source.outputs.run-id }}

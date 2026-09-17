@@ -15,74 +15,53 @@ import (
 func TestWorkflowPlatformDependencies(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join("..", "..", "..")
-	content, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "test.yml"))
+	if err := verifyWorkflow(root, 10); err != nil {
+		t.Fatal(err)
+	}
+	for _, platform := range []string{"linux", "macos", "windows"} {
+		data, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci-test-"+platform+".yml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var workflow struct {
+			On struct {
+				WorkflowRun struct {
+					Workflows []string `yaml:"workflows"`
+				} `yaml:"workflow_run"`
+			} `yaml:"on"`
+			Jobs map[string]struct {
+				Needs []string `yaml:"needs"`
+			} `yaml:"jobs"`
+		}
+		if err := yaml.Unmarshal(data, &workflow); err != nil {
+			t.Fatal(err)
+		}
+		names := map[string]string{"linux": "CI Build Linux", "macos": "CI Build macOS", "windows": "CI Build Windows"}
+		if !reflect.DeepEqual(workflow.On.WorkflowRun.Workflows, []string{names[platform]}) {
+			t.Fatal("cross-platform build barrier")
+		}
+		for _, family := range []string{"test", "mock", "terraform-registry-cache"} {
+			if !reflect.DeepEqual(workflow.Jobs[family+"-"+platform].Needs, []string{"source"}) {
+				t.Fatal("missing source dependency")
+			}
+		}
+	}
+	content, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci-test-floci.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var workflow struct {
 		Jobs map[string]struct {
-			Needs    yaml.Node `yaml:"needs"`
 			Strategy struct {
 				Matrix struct {
-					Shard   []int `yaml:"shard"`
 					Include []struct {
 						Tests string `yaml:"tests"`
 					} `yaml:"include"`
 				} `yaml:"matrix"`
 			} `yaml:"strategy"`
-		}
+		} `yaml:"jobs"`
 	}
-	// race's matrix is an expression, not a mapping. Decode only the jobs
-	// whose matrices we inspect below.
-	var document struct{ Jobs map[string]yaml.Node }
-	if err := yaml.Unmarshal(content, &document); err != nil {
-		t.Fatal(err)
-	}
-	delete(document.Jobs, "race")
-	data, err := yaml.Marshal(document)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := yaml.Unmarshal(data, &workflow); err != nil {
-		t.Fatal(err)
-	}
-	for _, platform := range []string{"linux", "macos", "windows"} {
-		for _, family := range []string{"test", "mock", "terraform-registry-cache"} {
-			job := family + "-" + platform
-			var dependency string
-			definition := workflow.Jobs[job]
-			if err := definition.Needs.Decode(&dependency); err != nil {
-				t.Fatal(err)
-			}
-			if dependency != "build-"+platform {
-				t.Fatalf("%s depends on %q", job, dependency)
-			}
-		}
-		var dependencies []string
-		job := workflow.Jobs["test-required-"+platform]
-		if err := job.Needs.Decode(&dependencies); err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(dependencies, []string{"test-" + platform, "terraform-registry-cache-" + platform}) {
-			t.Fatalf("%s required check waits on %v", platform, dependencies)
-		}
-		shards := workflow.Jobs["test-"+platform].Strategy.Matrix.Shard
-		if !reflect.DeepEqual(shards, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
-			t.Fatalf("%s shards: %v", platform, shards)
-		}
-	}
-	var coverageNeeds []string
-	coverage := workflow.Jobs["coverage"]
-	if err := coverage.Needs.Decode(&coverageNeeds); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(coverageNeeds, []string{"build-linux", "test-linux", "magefiles"}) {
-		t.Fatalf("coverage waits on unrelated jobs: %v", coverageNeeds)
-	}
-	if _, exists := workflow.Jobs["build-macos-intel"]; exists {
-		t.Fatal("dedicated Intel build must not return")
-	}
-	if err := verifyWorkflow(root, 10); err != nil {
+	if err := yaml.Unmarshal(content, &workflow); err != nil {
 		t.Fatal(err)
 	}
 
@@ -124,5 +103,47 @@ func TestWorkflowPlatformDependencies(t *testing.T) {
 	}
 	if selected == 0 {
 		t.Fatal("no Floci tests found")
+	}
+}
+
+// Cache permissions must remain read-only when workflow_run executes PR tests.
+func TestWorkflowCachePolicies(t *testing.T) {
+	t.Parallel()
+	policies := map[string]string{
+		"ci-build-linux": "write", "ci-build-macos": "write", "ci-build-windows": "write",
+		"ci-lint": "write", "setup-go-cache-warmup": "write",
+		"ci-test-linux": "read", "ci-test-macos": "read", "ci-test-windows": "read",
+		"ci-test-floci": "read", "ci-test-k3s-linux": "read", "ci-test-k3s-macos": "read",
+		"ci-test-integrations": "read", "ci-test-go": "read", "ci-test-kubernetes": "read",
+		"ci-report": "none", "ci-coverage": "none", "ci-timing-summary": "none",
+	}
+	for name, want := range policies {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			data, err := os.ReadFile(filepath.Join("..", "..", "..", ".github", "workflows", name+".yml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var workflow struct {
+				Mode string `yaml:"cache-mode"`
+				Jobs map[string]struct {
+					Mode string `yaml:"cache-mode"`
+				} `yaml:"jobs"`
+			}
+			if err := yaml.Unmarshal(data, &workflow); err != nil {
+				t.Fatal(err)
+			}
+			if workflow.Mode != want {
+				t.Errorf("cache-mode = %q, want %q", workflow.Mode, want)
+			}
+			for job, config := range workflow.Jobs {
+				if want != "write" && config.Mode != "" && config.Mode != want && config.Mode != "none" {
+					t.Errorf("%s broadens cache access to %q", job, config.Mode)
+				}
+			}
+			if name == "setup-go-cache-warmup" && workflow.Jobs["prune"].Mode != "none" {
+				t.Error("prune must disable cache service access")
+			}
+		})
 	}
 }

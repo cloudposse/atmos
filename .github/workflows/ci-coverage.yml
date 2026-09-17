@@ -1,0 +1,89 @@
+# Event-driven fan-in: each completion checks both inputs and exits if either is not ready.
+# Only default-branch tools execute here; downloaded artifacts are coverage data.
+name: CI Coverage
+run-name: CI source ${{ github.event.workflow_run.id }} attempt ${{ github.event.workflow_run.run_attempt }}
+on:
+  workflow_run:
+    workflows:
+      - CI Test Linux
+      - CI Test Go
+    types:
+      - completed
+cache-mode: none
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+jobs:
+  coverage:
+    if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - id: source
+        uses: $/.github/actions/ci-pipeline
+        with:
+          mode: coverage
+          run-id: ${{ github.event.workflow_run.id }}
+          attempt: ${{ github.event.workflow_run.run_attempt }}
+          github-token: ${{ github.token }}
+      - name: Check out trusted coverage configuration
+        if: steps.source.outputs.ready == 'true'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Set up Go
+        if: steps.source.outputs.ready == 'true'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Download native coverage shards
+        if: steps.source.outputs.ready == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: acceptance-coverage-linux-shard-*
+          run-id: ${{ steps.source.outputs.test-run-id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ci-coverage
+      - name: Merge native coverage data
+        if: steps.source.outputs.ready == 'true'
+        uses: $/.github/actions/ci-pipeline
+        with:
+          mode: merge-coverage
+          coverage-directory: ${{ runner.temp }}/ci-coverage
+      - name: Download magefiles coverage
+        if: steps.source.outputs.ready == 'true'
+        uses: $/.github/actions/download-artifact-retry
+        with:
+          name: magefiles-coverage-linux
+          run-id: ${{ steps.source.outputs.go-run-id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ci-coverage
+      - name: Download noticegen coverage
+        if: steps.source.outputs.ready == 'true'
+        uses: $/.github/actions/download-artifact-retry
+        with:
+          name: noticegen-coverage-linux
+          run-id: ${{ steps.source.outputs.go-run-id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ci-coverage
+      - name: Upload coverage to Codecov
+        if: steps.source.outputs.ready == 'true'
+        timeout-minutes: 10
+        continue-on-error: true
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: ${{ github.repository }}
+          files: ${{ runner.temp }}/ci-coverage/coverage.out,${{ runner.temp }}/ci-coverage/magefiles-coverage.out,${{ runner.temp
+            }}/ci-coverage/noticegen-coverage.out
+          disable_search: true
+          fail_ci_if_error: false
+          flags: unittests
+          use_pypi: true
+          override_commit: ${{ steps.source.outputs.head-sha }}
+          override_pr: ${{ steps.source.outputs.pr-number }}
+          override_branch: ${{ steps.source.outputs.branch }}

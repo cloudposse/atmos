@@ -35,7 +35,7 @@ var (
 // TargetFromCheckName derives the OS target ("linux") from the legacy
 // required-check name ("Acceptance Tests (linux)"). The workflow's
 // `test-required` job takes its matrix from those literal names rather than a
-// separate field so verify.go's workflowRequiredCheckPattern keeps matching.
+// separate field so the workflow and check reporter share the same target names.
 func TargetFromCheckName(check string) (string, error) {
 	if !strings.HasPrefix(check, checkNamePrefix) || !strings.HasSuffix(check, checkNameSuffix) {
 		return "", fmt.Errorf("%w: %q", errInvalidCheckName, check)

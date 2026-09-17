@@ -1,6 +1,6 @@
 name: Rerun infra failures
 
-# Re-run a `Tests` (test.yml) workflow run when, and only when, every job that
+# Re-run a legacy or split CI workflow run when, and only when, every job that
 # did not succeed is an infrastructure zombie:
 #
 #   runner-stuck-after-complete  the job's actions all succeeded, but the runner
@@ -36,8 +36,24 @@ name: Rerun infra failures
 
 on:
   workflow_run:
-    workflows: ["Tests"]
+    workflows:
+      - Tests
+      - CI Build Linux
+      - CI Build macOS
+      - CI Build Windows
+      - CI Test Linux
+      - CI Test macOS
+      - CI Test Windows
+      - CI Test Floci
+      - CI Test k3s Linux
+      - CI Test k3s macOS
+      - CI Test Integrations
+      - CI Test Go
+      - CI Test Kubernetes
+      - CI Lint Docker
     types: [completed]
+
+cache-mode: read
 
 permissions: {}
 
@@ -48,7 +64,7 @@ jobs:
     # most three attempts per run so a persistent zombie cannot loop forever.
     if: >-
       (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'cancelled')
-      && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'push')
+      && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_run')
       && github.event.workflow_run.run_attempt < 3
     # Scoped to the triggering run's id, not this workflow's own: two
     # invocations for the *same* triggering run (a duplicate workflow_run
@@ -93,6 +109,16 @@ jobs:
             google.golang.org:443
             modernc.org:443
 
+      - name: Resolve the original CI event
+        if: startsWith(github.event.workflow_run.name, 'CI ')
+        id: source
+        uses: $/.github/actions/ci-pipeline
+        with:
+          mode: resolve
+          run-id: ${{ github.event.workflow_run.id }}
+          attempt: ${{ github.event.workflow_run.run_attempt }}
+          github-token: ${{ github.token }}
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -102,6 +128,10 @@ jobs:
 
       - name: Classify the run's failures
         id: classify
+        if: >-
+          !startsWith(github.event.workflow_run.name, 'CI ') ||
+          (steps.source.outputs.active == 'true' &&
+          (steps.source.outputs.event == 'pull_request' || steps.source.outputs.event == 'push'))
         uses: $/.github/actions/classify-infra-failures
         with:
           run-id: ${{ github.event.workflow_run.id }}
@@ -115,9 +145,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.event.workflow_run.id }}
-          RUN_EVENT: ${{ github.event.workflow_run.event }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          PR_NUMBERS: ${{ join(github.event.workflow_run.pull_requests.*.number, ' ') }}
+          RUN_EVENT: ${{ steps.source.outputs.event || github.event.workflow_run.event }}
+          HEAD_SHA: ${{ steps.source.outputs.head-sha || github.event.workflow_run.head_sha }}
+          PR_NUMBERS: ${{ steps.source.outputs.pr-number || join(github.event.workflow_run.pull_requests.*.number, ' ') }}
         # ci:rerunInfraFailures (magefiles/ci_rerun.go, backed by
         # internal/ci/rerun) re-verifies every associated PR is still at the
         # run's head SHA and skips a superseded run - best-effort, not a hard

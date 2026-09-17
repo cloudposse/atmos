@@ -3,24 +3,10 @@ package acceptance
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 )
-
-var (
-	workflowShardPattern         = regexp.MustCompile(`(?m)^\s*shard:\s*\[([^]]+)]\s*$`)
-	workflowRequiredCheckPattern = regexp.MustCompile(`(?m)^\s*check:\s*\[([^]]+)]\s*$`)
-)
-
-var requiredAcceptanceChecks = []string{
-	"Acceptance Tests (linux)",
-	"Acceptance Tests (macos)",
-	"Acceptance Tests (windows)",
-}
 
 // Verify checks that the repository's packages, tests, and workflow matrix are assigned exactly once.
 func Verify(ctx context.Context, repoRoot string, target Target, shardCount int, binaryDir string) error {
@@ -153,62 +139,6 @@ func verifyExactAssignment(kind string, expected, assigned []string) error {
 	if len(missing) > 0 || len(unexpected) > 0 {
 		return fmt.Errorf("%w: %s missing=[%s] unexpected=[%s]",
 			errShardPlan, kind, strings.Join(missing, ", "), strings.Join(unexpected, ", "))
-	}
-	return nil
-}
-
-func verifyWorkflow(repoRoot string, shardCount int) error {
-	workflowPath := filepath.Join(repoRoot, ".github", "workflows", "test.yml")
-	content, err := os.ReadFile(workflowPath)
-	if err != nil {
-		return fmt.Errorf("read test workflow: %w", err)
-	}
-	matches := workflowShardPattern.FindAllSubmatch(content, -1)
-	// A single cross-platform matrix or three independently scheduled platform
-	// matrices must all route exactly the same shard indices.
-	if len(matches) != 1 && len(matches) != 3 {
-		return fmt.Errorf("%w: expected one shared or three platform shard matrices", errShardPlan)
-	}
-	for _, match := range matches {
-		values := strings.Split(string(match[1]), ",")
-		if len(values) != shardCount {
-			return fmt.Errorf("%w: workflow has %d shards; expected %d", errShardPlan, len(values), shardCount)
-		}
-		for index, value := range values {
-			actual, parseErr := strconv.Atoi(strings.TrimSpace(value))
-			if parseErr != nil || actual != index+1 {
-				return fmt.Errorf("%w: workflow shard position %d contains %q", errShardPlan, index+1, strings.TrimSpace(value))
-			}
-		}
-	}
-	if !strings.Contains(string(content), "run: go test ./tests -run '^"+RegistryTest+"$'") {
-		return fmt.Errorf("%w: %s has no dedicated workflow route", errShardPlan, RegistryTest)
-	}
-	return verifyRequiredChecks(content)
-}
-
-func verifyRequiredChecks(content []byte) error {
-	matches := workflowRequiredCheckPattern.FindAllSubmatch(content, -1)
-	if len(matches) != 1 && len(matches) != 3 {
-		return fmt.Errorf("%w: expected one shared or three platform required-check matrices", errShardPlan)
-	}
-	var values []string
-	for _, match := range matches {
-		values = append(values, strings.Split(string(match[1]), ",")...)
-	}
-	if len(values) != len(requiredAcceptanceChecks) {
-		return fmt.Errorf("%w: workflow has %d acceptance required checks; expected %d",
-			errShardPlan, len(values), len(requiredAcceptanceChecks))
-	}
-	for index, value := range values {
-		actual := strings.Trim(strings.TrimSpace(value), `"`)
-		if actual != requiredAcceptanceChecks[index] {
-			return fmt.Errorf("%w: acceptance required-check position %d contains %q",
-				errShardPlan, index+1, actual)
-		}
-	}
-	if !strings.Contains(string(content), "name: ${{ matrix.check }}") {
-		return fmt.Errorf("%w: acceptance required-check matrix does not set the job name", errShardPlan)
 	}
 	return nil
 }

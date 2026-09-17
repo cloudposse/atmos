@@ -1,321 +1,96 @@
+# Bootstrap/rollback only. Enable CI_SPLIT_WORKFLOWS after the child workflows land on main.
+# Remove this fallback after validating a PR and a merge-group run; see docs/fixes/2026-09-17-ci-workflow-split.md.
 name: Tests
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
     paths-ignore:
-      - "README.md"
-
-  # Required checks must also run against the synthetic commit created for a
-  # GitHub merge queue entry.
+      - README.md
   merge_group:
-    types: [checks_requested]
-
+    types:
+      - checks_requested
   push:
     branches:
       - main
       - release/v*
     paths-ignore:
-      - ".github/**"
-      - "docs/**"
-      - "examples/**"
-      - "test/**"
-
-  workflow_dispatch:
-
-# A newer push to the same PR supersedes the previous run: cancel it instead
-# of letting both compete for runners (30 acceptance shards each, and the org
-# macOS concurrency cap is small enough that a second run's macOS legs queue
-# for up to ~30 minutes). merge_group, push, and workflow_dispatch runs are
-# keyed by SHA and are never cancelled -- a merge-queue entry or a main-branch
-# run must always finish.
+      - .github/**
+      - docs/**
+      - examples/**
+      - test/**
+  workflow_dispatch: null
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+cache-mode: read
 
-# Grant `packages: read` so jobs that pull OCI images from ghcr.io
-# (e.g. vendor pulls in mock/acceptance tests) can authenticate with
-# the auto-generated GITHUB_TOKEN. The default PR-event scope is
-# `contents: read` only, which causes ghcr.io to reject the token with
-# `DENIED: denied` whenever credentials are sent (as happens on Windows
-# runners that have no usable Docker keychain entry for ghcr.io).
 permissions:
+  actions: read
   checks: read
   contents: read
   packages: read
   pull-requests: read
-
 env:
-  ATMOS_BOOTSTRAP_VERSION: "1.223.0"
-  # terraform/opentofu/packer/helm/helmfile/tflint versions are pinned once in
-  # .tool-versions (the source `atmos toolchain install`/`atmos toolchain env`
-  # already read from), not duplicated here -- see docs/fixes for the
-  # incident where a stale OPEN_TOFU_VERSION here (1.12.2) drifted behind
-  # .tool-versions's actual pin (1.12.5) undetected.
-  # helmfile's own `version` subcommand makes an outbound network call to GitHub to check
-  # for a newer release. On CI runners that call is a source of flakiness (e.g. "context
-  # deadline exceeded" on Windows runners) unrelated to anything this repo controls, and
-  # `TestExecuteHelmfile_Version` exercises the real binary. Disabling the notice skips the
-  # network call entirely (verified: no request is made when this is set), not just the
-  # printed message.
-  HELMFILE_UPGRADE_NOTICE_DISABLED: "true"
-  # Number of parallel shards the `test` job's acceptance suite is split into per
-  # OS (see tests/cli_test.go's testShard/testCaseShard and the `test` job's
-  # matrix.shard list below, which must stay in sync with this count).
-  TEST_SHARD_COUNT: "10"
-  # Number of parallel shards the `race` job's package list is split into
-  # (see magefiles/race_matrix.go's Test.RaceMatrix and the `race` job's
-  # hardcoded "shard N/4" name below, which must stay in sync with this
-  # count -- the job `name:` context can't read workflow `env`, same reason
-  # TEST_SHARD_COUNT above needs its own comment).
-  RACE_SHARD_COUNT: "4"
-  # No `|direct` fallback: every job here runs under harden-runner's block
-  # mode, where a direct fetch fans out to ~25 vanity-import hosts (k8s.io,
-  # go.uber.org, gopkg.in, helm.sh, ...) that are not allowlisted, so the
-  # fallback can only ever burn minutes on blocked lookups (observed: a 9+
-  # minute "Get dependencies" step after one proxy.golang.org hiccup). The
-  # transient 5xx / HTTP/2 stream resets the fallback used to paper over are
-  # handled by `atmos build deps`'s retry policy (.atmos.d/build.yaml)
-  # instead. If the retry policy ever proves insufficient, allowlist the
-  # vanity hosts rather than restoring the fallback.
-  GOPROXY: "https://proxy.golang.org"
-
+  ATMOS_BOOTSTRAP_VERSION: 1.223.0
+  HELMFILE_UPGRADE_NOTICE_DISABLED: 'true'
+  TEST_SHARD_COUNT: '10'
+  RACE_SHARD_COUNT: '4'
+  GOPROXY: https://proxy.golang.org
+  CI_SOURCE_REVISION: ${{ github.sha }}
+  CI_SOURCE_EVENT: ${{ github.event_name }}
+  CI_SOURCE_DRAFT: ${{ github.event.pull_request.draft || false }}
 jobs:
-  # ensure the code builds...
   build-linux:
-    name: Build (${{ matrix.target }})
-    # Independent platform jobs release consumers as soon as their artifacts
-    # are ready. Share steps without introducing a reusable-workflow name prefix.
-    # Keep the native Linux cache backend shared with GitHub-hosted consumers.
+    cache-mode: write
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Build (${{ matrix.target }})
     timeout-minutes: 60
     strategy:
       matrix:
         include:
-          - os: "runs-on=${{github.run_id}}/runner=large/tag=atmos/private=false"
+          - os: runs-on=${{github.run_id}}/runner=large/tag=atmos/private=false
             target: linux
     runs-on: ${{ matrix.os }}
-    steps: &build-steps
-      # Only applies to GitHub-hosted legs (windows/macos); the linux leg runs
-      # on the RunsOn self-hosted runner. Harden Runner's free/community tier
-      # (what this repo uses) only covers GitHub-hosted runners — self-hosted
-      # runners including RunsOn need a StepSecurity Enterprise license plus
-      # RunsOn-side config we're not doing here.
-      # Draft PRs skip every Windows step below (no checkout, nothing to
-      # protect), so skip Harden Runner there too: its post step would still
-      # race the agent's DNS restore, and the DNS guard (a local action) needs
-      # the checkout.
-      - name: Harden Runner
-        if: matrix.target != 'linux' && ! ( matrix.target == 'windows' && github.event.pull_request.draft )
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+    steps:
+      - uses: $/.github/actions/ci-build
         with:
-          egress-policy: block
-          # Operating-system background services on the hosted Windows and
-          # macOS images (connectivity probes, push notifications, update and
-          # settings/telemetry checks, time sync, certificate revocation for
-          # GitHub's Sectigo chain, Apple software-update and CDN hosts) are
-          # listed below their job-specific endpoints. StepSecurity Insights
-          # showed them blocked on every Windows/macOS job -- they are not
-          # implicitly allowed -- and each blocked lookup is retried by the OS
-          # for the whole job (NCSI probes every few seconds; schannel
-          # revocation checks stall TLS to github.com). Allowing them removes
-          # that churn without widening what our own steps can reach. Source:
-          # StepSecurity Insights -> Network Events; keep in sync with the
-          # other Windows/macOS legs in this file.
-          allowed-endpoints: >
-            api.github.com:443
-            get.helm.sh:443
-            github.com:443
-            raw.githubusercontent.com:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            releases.hashicorp.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            us.i.posthog.com:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
-            www.msftconnecttest.com:443
-            ipv6.msftconnecttest.com:443
-            www.msftncsi.com:443
-            ipv6.msftncsi.com:443
-            time.windows.com:443
-            client.wns.windows.com:443
-            settings-win.data.microsoft.com:443
-            *.events.data.microsoft.com:443
-            *.update.microsoft.com:443
-            ecs.office.com:443
-            pti.store.microsoft.com:443
-            login.live.com:443
-            go.microsoft.com:443
-            www.microsoft.com:443
-            ocsp.sectigo.com:80
-            ocsp.sectigo.com:443
-            crl.sectigo.com:80
-            crl.sectigo.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-
-      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d # v2.3.1
-        if: matrix.target == 'linux'
-
-      - name: Announce build target
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
-        run: echo "Building on ${{ matrix.os }}"
-
-
-      - name: Check out code into the Go module directory
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-
-      # Repairs the runner's DNS if harden-runner's Windows post step kills its
-      # agent mid-"restoring system DNS" (a race against its 10-second wait);
-      # without it the job's steps all pass but the job never reports
-      # completion and GitHub cancels it 30-40 minutes later. Windows-only,
-      # no-op elsewhere. See the action's description and
-      # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
-      - name: Guard DNS against the harden-runner post-step race
-        if: matrix.target == 'windows' && ! github.event.pull_request.draft
-        uses: $/.github/actions/windows-dns-guard
-
-      # Pinned setup-go with a restore-only Go cache (the warmup workflow is
-      # the sole writer), plus Go's caches relocated to the fast work disk on
-      # Windows (see the action for the measurements and the cache design).
-      - name: Set up Go
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/setup-go-cache
-        id: go
-
-      - name: Set up Atmos bootstrap
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/setup-atmos-bootstrap
-        with:
-          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
-
-      - name: Get dependencies
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        shell: bash
-        run: |
-          # go mod download hits the network (proxy.golang.org, falling back to
-          # a direct github.com clone for modules it doesn't index) and has no
-          # built-in retry. A transient DNS resolution failure on the hosted
-          # runner otherwise fails this whole build matrix leg and cascades into
-          # skipped downstream jobs (e.g. k3s-required's "Check k3s matrix
-          # result" gate). `atmos build deps` (.atmos.d/build.yaml) wraps it
-          # with a retry policy instead of hand-rolling a shell loop here.
-          atmos build deps
-
-      - name: Build
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        shell: bash
-        run: |
-          atmos build binary --target=${{ matrix.target }} --version=test
-
-      - name: Version
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        shell: bash
-        run: |
-          atmos build version --target=${{ matrix.target }}
-
-      # Mage keeps the cross-platform acceptance orchestration in typed,
-      # unit-tested Go code while the workflow remains a one-command dispatch.
-      # Reuse this job's warm Go cache to compile the large test binaries once.
-      - name: Pre-compile acceptance test binaries
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
-        shell: bash
-        run: go tool mage acceptance:precompile "${{ matrix.target }}"
-
-      - name: Verify acceptance shard plan
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
-        shell: bash
-        run: go tool mage acceptance:verify "${{ matrix.target }}" "$TEST_SHARD_COUNT"
-
-      # Install the toolchain once per OS with the atmos just built (so the
-      # on-disk layout is the one the consumers' binary expects) and save it
-      # to atmos's ci.cache; the acceptance shards, terraform-registry-cache
-      # and mock jobs restore it (never save) and run the same
-      # `atmos toolchain install`, which then skips every tool. The Intel
-      # binary is cross-compiled later and shares no native toolchain cache.
-      - name: Put the freshly built atmos on PATH for the toolchain install
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
-        shell: bash
-        run: echo "${GITHUB_WORKSPACE}/build" >> "$GITHUB_PATH"
-
-      - name: Install the CI toolchain (atmos toolchain install from .tool-versions; saves the cache)
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
-        uses: $/.github/actions/ci-toolchain
-        with:
-          cache: restore-and-save
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Resolve plugins from the stack into the existing Atmos toolchain cache.
-      # This producer saves the cache; downstream jobs restore private copies.
-      - name: Install the stack-declared Helm plugins
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
-        working-directory: tests/fixtures/scenarios/helm-plugin-install
-        shell: bash
-        run: atmos helm plugin install --component ci-plugins --stack dev
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          name: build-artifacts-${{ matrix.target }}
-          path: |
-            ./build/
-
-      # The ARM runner also produces the binary consumed by Intel Colima jobs.
-      # Keep its output outside build/ so it cannot overwrite the native artifact.
-      - name: Cross-compile Intel macOS binary
-        if: matrix.target == 'macos'
-        shell: bash
-        env:
-          ATMOS_BUILD_OUTPUT: ${{ runner.temp }}/macos-intel/atmos
-        run: |
-          atmos build binary --target=macos-intel --version=test
-          file "$ATMOS_BUILD_OUTPUT" | tee "$RUNNER_TEMP/macos-intel-file.txt"
-          grep -q 'Mach-O 64-bit executable x86_64' "$RUNNER_TEMP/macos-intel-file.txt"
-
-      - name: Upload Intel macOS artifact
-        if: matrix.target == 'macos'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: build-artifacts-macos-intel
-          path: ${{ runner.temp }}/macos-intel/atmos
-          if-no-files-found: error
-
+          matrix: ${{ toJSON(matrix) }}
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   build-windows:
-    name: Build (${{ matrix.target }})
+    cache-mode: write
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Build (${{ matrix.target }})
     timeout-minutes: 60
     strategy:
       matrix:
         include:
-          - os: "windows-latest"
+          - os: windows-latest
             target: windows
     runs-on: ${{ matrix.os }}
-    steps: *build-steps
-
+    steps:
+      - uses: $/.github/actions/ci-build
+        with:
+          matrix: ${{ toJSON(matrix) }}
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   build-macos:
-    name: Build (${{ matrix.target }})
+    cache-mode: write
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Build (${{ matrix.target }})
     timeout-minutes: 60
     strategy:
       matrix:
         include:
-          - os: "macos-15"
+          - os: macos-15
             target: macos
     runs-on: ${{ matrix.os }}
-    steps: *build-steps
-
+    steps:
+      - uses: $/.github/actions/ci-build
+        with:
+          matrix: ${{ toJSON(matrix) }}
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   validate-affected:
-    name: Validation (affected)
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Validation (affected)
     needs: build-linux
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -324,209 +99,46 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: >
+          allowed-endpoints: |
             api.github.com:443
             github.com:443
             us.i.posthog.com:443
-
       - name: Check out source with validation base history
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-          # `atmos validate --affected` compares HEAD to the PR merge-base.
           fetch-depth: 0
-
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Set up Atmos (install build artifact)
         uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
-
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
       - name: Validate affected project inputs
-        # editorconfig-checker is unaware of Go raw string literals, so it flags the
-        # space-indented YAML/text embedded in *_test.go fixtures as tab violations;
-        # exclude *.go since gofumpt/golangci-lint already own Go source formatting.
-        # specs/** is passed explicitly (mirrors .pre-commit-config.yaml) rather than
-        # relying solely on atmos.yaml's validate.editorconfig.exclude: older Atmos
-        # builds silently drop that list in the aggregate `validate --affected` path.
-        # Exclude README.md: it's machine-generated by cloudposse/build-harness, so its
-        # formatting isn't ours to enforce.
-        run: atmos validate --affected --exclude 'tests/fixtures/**' --exclude '**/*.go' --exclude 'specs/**' --exclude 'README.md' --format rich
-
-  # TestTerraformRegistryCache installs/removes a real cert in the OS trust
-  # store (the macOS System keychain via `sudo security`, or the Windows Root
-  # store) and takes ~8-9 minutes on its own. It used to run once per OS
-  # inside shard 1's own `test` job, serialized ahead of that shard's actual
-  # sharded work - meaning shard 1 could never finish under the <10m-per-shard
-  # target no matter how fast anything else got, since this alone ate most of
-  # that budget. Give it its own dedicated (non-sharded, 3-OS) job instead, so
-  # it runs in parallel with the full shard matrix rather than serialized
-  # inside one shard's critical path.
+        run: atmos validate --affected --exclude 'tests/fixtures/**' --exclude '**/*.go' --exclude 'specs/**' --exclude 'README.md'
+          --format rich
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   terraform-registry-cache-linux:
-    name: Terraform registry cache test (${{ matrix.flavor.target }})
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Terraform registry cache test (${{ matrix.flavor.target
+      }})
     needs: build-linux
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: "ubuntu-latest", target: linux }
-    # windows-latest is the slowest target here too: the actual test finishes
-    # within its own 15m sub-step timeout, but the post-job Go module/build
-    # cache save (tar + zstd) runs after that and is much slower on Windows,
-    # so a flat 20m job budget can expire mid-save even though the test
-    # itself already passed (see the Acceptance tests step's timeout comment
-    # below for the same Windows-is-slower pattern). 30m (raised from 20 in
-    # #2959) was still not enough: GitHub Job ID 99475416637 hit it at
-    # 30m27s even though every step had genuinely completed or nearly
-    # completed -- "Get dependencies" (normally ~5s) took ~5m, the test step
-    # itself (normally ~1m, well under its own 15m budget) took ~10.5m, and
-    # "Post Set up Go" (normally near-instant) took ~10.5m before finishing
-    # successfully; only the next step, "Post Cache Atmos toolchain"
-    # (normally ~42s), was still running when the job clock ran out. That
-    # uniform ~10x slowdown across three unrelated operations (dependency
-    # download, test execution, cache save) is the signature of a
-    # degraded/throttled runner that day, not a code regression -- see
-    # docs/fixes/2026-08-31-terraform-registry-cache-windows-runner-degradation.md.
-    # Raised to 45m for real headroom above that worst case.
+          - os: ubuntu-latest
+            target: linux
     timeout-minutes: ${{ matrix.flavor.target == 'windows' && 45 || 20 }}
     runs-on: ${{ matrix.flavor.os }}
-    steps: &terraform-registry-cache-steps
-      # Draft PRs skip every Windows step in this job (no checkout), so skip
-      # Harden Runner for them as well; see the `build` job's note.
-      - name: Harden Runner
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+    steps:
+      - uses: $/.github/actions/ci-registry-setup
         with:
-          egress-policy: block
-          # Operating-system background services on the hosted Windows and
-          # macOS images (connectivity probes, push notifications, update and
-          # settings/telemetry checks, time sync, certificate revocation for
-          # GitHub's Sectigo chain, Apple software-update and CDN hosts) are
-          # listed below their job-specific endpoints. StepSecurity Insights
-          # showed them blocked on every Windows/macOS job -- they are not
-          # implicitly allowed -- and each blocked lookup is retried by the OS
-          # for the whole job (NCSI probes every few seconds; schannel
-          # revocation checks stall TLS to github.com). Allowing them removes
-          # that churn without widening what our own steps can reach. Source:
-          # StepSecurity Insights -> Network Events; keep in sync with the
-          # other Windows/macOS legs in this file.
-          allowed-endpoints: >
-            api.github.com:443
-            checkpoint-api.hashicorp.com:443
-            get.helm.sh:443
-            github.com:443
-            raw.githubusercontent.com:443
-            registry.terraform.io:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            releases.hashicorp.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            us.i.posthog.com:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
-            www.msftconnecttest.com:443
-            ipv6.msftconnecttest.com:443
-            www.msftncsi.com:443
-            ipv6.msftncsi.com:443
-            time.windows.com:443
-            client.wns.windows.com:443
-            settings-win.data.microsoft.com:443
-            *.events.data.microsoft.com:443
-            *.update.microsoft.com:443
-            ecs.office.com:443
-            pti.store.microsoft.com:443
-            login.live.com:443
-            go.microsoft.com:443
-            www.microsoft.com:443
-            ocsp.sectigo.com:80
-            ocsp.sectigo.com:443
-            crl.sectigo.com:80
-            crl.sectigo.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-
-      - name: Check out code into the Go module directory
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-
-      # Repairs the runner's DNS if harden-runner's Windows post step kills its
-      # agent mid-"restoring system DNS" (a race against its 10-second wait);
-      # without it the job's steps all pass but the job never reports
-      # completion and GitHub cancels it 30-40 minutes later. Windows-only,
-      # no-op elsewhere. See the action's description and
-      # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
-      - name: Guard DNS against the harden-runner post-step race
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        uses: $/.github/actions/windows-dns-guard
-
-      - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/setup-atmos-install
-        with:
-          target: ${{ matrix.flavor.target }}
-          path: ${{ github.workspace }}
-          add-to-path: 'true'
-
-      # `atmos toolchain install` from .tool-versions, with the toolchain
-      # directory restored from atmos's own ci.cache (saved by the build job
-      # for this OS; consumers never save, so shards do not race for the key).
-      # Do not export ATMOS_XDG_CACHE_HOME or TF_PLUGIN_CACHE_DIR here: many
-      # tests assert XDG defaults and Terraform's plugin cache is not safe for
-      # shared concurrent use.
-      - name: Set up the CI toolchain
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/ci-toolchain
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: |
-          terraform version
-          tofu version
-          packer version
-          helm version --short
-          helmfile version
-
-      - name: Verify the stack-declared Helm plugins
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
-        working-directory: tests/fixtures/scenarios/helm-plugin-install
-        shell: bash
-        run: atmos helm plugin install --component ci-plugins --stack dev
-
-      - name: Check atmos.exe integrity
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: |
-          Write-Output "PATH=$Env:PATH"
-          Write-Output "PATHEXT=$Env:PATHEXT"
-          Get-ChildItem "${{ github.workspace }}"
-          Get-Command "${{ github.workspace }}\atmos.exe"
-          atmos version
-
-      - name: Set up Go
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/setup-go-cache
-        id: go
-
-      - name: Get dependencies
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: |
-          atmos build deps
-
+          matrix: ${{ toJSON(matrix) }}
       - name: Terraform registry cache acceptance test
         timeout-minutes: 15
-        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && !
+          (env.CI_SOURCE_DRAFT == 'true'))
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -534,314 +146,115 @@ jobs:
           ATMOS_TEST_TERRAFORM_REGISTRY_CACHE: 1
           CGO_ENABLED: 0
         run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
-
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   terraform-registry-cache-windows:
-    name: Terraform registry cache test (${{ matrix.flavor.target }})
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Terraform registry cache test (${{ matrix.flavor.target
+      }})
     needs: build-windows
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: "windows-latest", target: windows }
+          - os: windows-latest
+            target: windows
     timeout-minutes: ${{ matrix.flavor.target == 'windows' && 45 || 20 }}
     runs-on: ${{ matrix.flavor.os }}
-    steps: *terraform-registry-cache-steps
-
+    steps:
+      - uses: $/.github/actions/ci-registry-setup
+        with:
+          matrix: ${{ toJSON(matrix) }}
+      - name: Terraform registry cache acceptance test
+        timeout-minutes: 15
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && !
+          (env.CI_SOURCE_DRAFT == 'true'))
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          ATMOS_TEST_TERRAFORM_REGISTRY_CACHE: 1
+          CGO_ENABLED: 0
+        run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   terraform-registry-cache-macos:
-    name: Terraform registry cache test (${{ matrix.flavor.target }})
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Terraform registry cache test (${{ matrix.flavor.target
+      }})
     needs: build-macos
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: "macos-15", target: macos }
+          - os: macos-15
+            target: macos
     timeout-minutes: ${{ matrix.flavor.target == 'windows' && 45 || 20 }}
     runs-on: ${{ matrix.flavor.os }}
-    steps: *terraform-registry-cache-steps
-
-  # Run the same acceptance shards independently on each platform.
+    steps:
+      - uses: $/.github/actions/ci-registry-setup
+        with:
+          matrix: ${{ toJSON(matrix) }}
+      - name: Terraform registry cache acceptance test
+        timeout-minutes: 15
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && !
+          (env.CI_SOURCE_DRAFT == 'true'))
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          ATMOS_TEST_TERRAFORM_REGISTRY_CACHE: 1
+          CGO_ENABLED: 0
+        run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   test-linux:
-    # The job `name:` context doesn't have access to workflow-level `env`, so the
-    # shard count is hardcoded here - keep it in sync with env.TEST_SHARD_COUNT
-    # above and the matrix.shard list below.
-    name: Acceptance Tests (${{ matrix.flavor.target }}, shard ${{ matrix.shard }}/10)
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Acceptance Tests (${{ matrix.flavor.target
+      }}, shard ${{ matrix.shard }}/10)
     needs: build-linux
     strategy:
       fail-fast: false
       matrix:
-        # jobTimeout/stepTimeout are this job's own and its "Acceptance
-        # tests" step's per-platform timeout-minutes budgets, kept here (one
-        # pair of numbers per platform) instead of a
-        # `matrix.flavor.target == 'windows' && X || Y` ternary repeated at
-        # every timeout-minutes site: that's exactly how the job-level and
-        # step-level Windows budgets drifted out of sync before (the job
-        # budget once exactly equaled the step budget, leaving zero slack for
-        # setup/cache-save around the step -- see docs/fixes for that
-        # incident). Sharding splits the acceptance suite's runtime across
-        # parallel jobs, but each shard still pays the same fixed per-job
-        # overhead (checkout, toolchain installs, `atmos build deps`) that
-        # used to be amortized over one long-running job. Give shards real
-        # headroom above their expected fraction of the pre-sharding budgets
-        # (Linux ~90m, windows ~105m, macos ~85m for the unsharded suite -
-        # see git history on this comment) rather than dividing those numbers
-        # by the shard count exactly. Windows also distributes the tests
-        # package's non-CLI top-level tests and internal/exec's top-level
-        # tests across all shards; both binaries are compiled once in the
-        # build job, so each shard executes only its assigned tests without
-        # paying a cold compile/link penalty. Windows is also the slowest
-        # platform for this suite's post-job Go module/build cache save
-        # (much slower on Windows than Linux/macOS -- see
-        # terraform-registry-cache's own timeout comment). windows' budgets
-        # were set from 378 successful Windows shard jobs across 38 main runs
-        # (2026-08-19..09-02): whole job p50 14.8m / p95 27.4m / max 44.5m;
-        # the "Acceptance tests" step alone p50 6.8m / p95 18.8m / max 30.1m
-        # (shard 3 is consistently the slowest). jobTimeout=50 and
-        # stepTimeout=40 clear those maxima with headroom. They are
-        # deliberately not larger: the only Windows jobs that ever exceeded
-        # ~45m were ones whose steps had all finished and passed, after which
-        # the runner's end-of-job results upload stalled indefinitely (the
-        # job's log blob is never even received), and in the same 378-job
-        # sample no job ever stalled after "Complete job" and then recovered.
-        # A bigger budget therefore only lengthens how long such a dead job
-        # holds the run before failing it; it cannot rescue anything.
-        # linux's jobTimeout is 50, not 40: its "Acceptance tests with
-        # coverage" step below (linux-only) has its own coverageStepTimeout
-        # budget of 40, and a job timeout merely equal to a step's own budget
-        # leaves zero slack for checkout/toolchain setup before the step or
-        # cache-save after it -- exactly the bug already fixed once for
-        # Windows here (see this matrix's own history).
         flavor:
-          - { os: "ubuntu-latest", target: linux, jobTimeout: 50, stepTimeout: 30, coverageStepTimeout: 40 }
-        # tests/cli_test.go's TestCLICommands splits its ~388 CLI-driven subtests
-        # across these shards by bin-packing each test case's workdir
-        # (assignWorkdirsToShards, see ATMOS_TEST_SHARD/ATMOS_TEST_SHARD_COUNT
-        # below); keep this list and env.TEST_SHARD_COUNT in sync if the shard
-        # count ever changes.
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        # No per-shard overrides: shard 1 used to carry a higher budget for
-        # doing more work, but per-shard maxima over the sample above are
-        # linux 16.3m / macos 19.8m / windows 31.1m, all inside the flavor
-        # budgets; shard 3 is the slow one on Windows, not shard 1.
+          - os: ubuntu-latest
+            target: linux
+            jobTimeout: 50
+            stepTimeout: 30
+            coverageStepTimeout: 40
+        shard:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
     timeout-minutes: ${{ matrix.flavor.jobTimeout }}
     runs-on: ${{ matrix.flavor.os }}
-    steps: &test-steps
-      # Draft PRs skip every Windows step in this job (no checkout), so skip
-      # Harden Runner for them as well; see the `build` job's note.
-      - name: Harden Runner
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+    steps:
+      - uses: $/.github/actions/ci-acceptance-setup
         with:
-          # Union of core, tool-driven endpoints across the linux/windows/macos
-          # acceptance-test legs — bounded by which providers/registries the test
-          # fixtures exercise, not by arbitrary PR content, but re-verify when the
-          # acceptance suite adds a new external integration. Only sampled from a
-          # single run (MCP pagination limitation), so carries more residual risk
-          # of an untested-path endpoint than other workflows in this rollout.
-          egress-policy: block
-          # Operating-system background services on the hosted Windows and
-          # macOS images (connectivity probes, push notifications, update and
-          # settings/telemetry checks, time sync, certificate revocation for
-          # GitHub's Sectigo chain, Apple software-update and CDN hosts) are
-          # listed below their job-specific endpoints. StepSecurity Insights
-          # showed them blocked on every Windows/macOS job -- they are not
-          # implicitly allowed -- and each blocked lookup is retried by the OS
-          # for the whole job (NCSI probes every few seconds; schannel
-          # revocation checks stall TLS to github.com). Allowing them removes
-          # that churn without widening what our own steps can reach. Source:
-          # StepSecurity Insights -> Network Events; keep in sync with the
-          # other Windows/macOS legs in this file.
-          allowed-endpoints: >
-            accounts.google.com:443
-            api.bitbucket.org:443
-            api.github.com:443
-            atmos.tools:443
-            auth.docker.io:443
-            azcliprod.blob.core.windows.net:443
-            checkpoint-api.hashicorp.com:443
-            dc.services.visualstudio.com:443
-            dl.k8s.io:443
-            get.helm.sh:443
-            ghcr.io:443
-            github.com:443
-            management.azure.com:443
-            pkg-containers.githubusercontent.com:443
-            production.cloudfront.docker.com:443
-            proxy.golang.org:443
-            raw.githubusercontent.com:443
-            registry-1.docker.io:443
-            registry.opentofu.org:443
-            registry.terraform.io:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            releases.hashicorp.com:443
-            secretmanager.googleapis.com:443
-            storage.googleapis.com:443
-            sts.us-east-1.amazonaws.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            us.i.posthog.com:443
-            sum.golang.org:443
-            google.golang.org:443
-            modernc.org:443
-            www.msftconnecttest.com:443
-            ipv6.msftconnecttest.com:443
-            www.msftncsi.com:443
-            ipv6.msftncsi.com:443
-            time.windows.com:443
-            client.wns.windows.com:443
-            settings-win.data.microsoft.com:443
-            *.events.data.microsoft.com:443
-            *.update.microsoft.com:443
-            ecs.office.com:443
-            pti.store.microsoft.com:443
-            login.live.com:443
-            go.microsoft.com:443
-            www.microsoft.com:443
-            ocsp.sectigo.com:80
-            ocsp.sectigo.com:443
-            crl.sectigo.com:80
-            crl.sectigo.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-
-      - name: Check out code into the Go module directory
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-
-      # Repairs the runner's DNS if harden-runner's Windows post step kills its
-      # agent mid-"restoring system DNS" (a race against its 10-second wait);
-      # without it the job's steps all pass but the job never reports
-      # completion and GitHub cancels it 30-40 minutes later. Windows-only,
-      # no-op elsewhere. See the action's description and
-      # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
-      - name: Guard DNS against the harden-runner post-step race
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        uses: $/.github/actions/windows-dns-guard
-
-      - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/setup-atmos-install
-        with:
-          target: ${{ matrix.flavor.target }}
-          path: ${{ github.workspace }}
-          add-to-path: 'true'
-
-      # `atmos toolchain install` from .tool-versions, with the toolchain
-      # directory restored from atmos's own ci.cache (saved by the build job
-      # for this OS; consumers never save, so shards do not race for the key).
-      # Do not export ATMOS_XDG_CACHE_HOME or TF_PLUGIN_CACHE_DIR here: many
-      # tests assert XDG defaults and Terraform's plugin cache is not safe for
-      # shared concurrent use.
-      #
-      # Restore-only on the shards: ten parallel consumers must not race to
-      # save one key ("Unable to reserve cache with key ...", with "Post
-      # Cache Atmos toolchain" costing 43 s avg / 3 min max per shard for
-      # nothing). The single writer of this key per OS is the build job's
-      # ci-toolchain step (cache: restore-and-save), which runs on the
-      # GitHub cache backend for all targets including linux.
-      - name: Set up the CI toolchain
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/ci-toolchain
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: |
-          terraform version
-          tofu version
-          packer version
-          helm version --short
-          helmfile version
-
-      - name: Verify the stack-declared Helm plugins
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
-        working-directory: tests/fixtures/scenarios/helm-plugin-install
-        shell: bash
-        run: atmos helm plugin install --component ci-plugins --stack dev
-
-      - name: Check atmos.exe integrity
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: |
-          Write-Output "PATH=$Env:PATH"
-          Write-Output "PATHEXT=$Env:PATHEXT"
-          Get-ChildItem "${{ github.workspace }}"
-          Get-Command "${{ github.workspace }}\atmos.exe"
-          atmos version
-
-      - name: Set up Go
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/setup-go-cache
-        id: go
-
-      - name: Get dependencies
-        # Windows runs precompiled acceptance binaries and lets its small source
-        # package slice fetch only the modules it needs. Downloading the complete
-        # module graph in all ten Windows shards added 2-6 minutes of contention.
-        if: ${{ matrix.flavor.target != 'windows' }}
-        run: |
-          atmos build deps
-
-      - name: Verify function parser coverage
-        if: matrix.flavor.target == 'linux'
-        run: scripts/check-function-parser-coverage.sh
-
-      - name: Verify Terraform example syntax
-        if: matrix.flavor.target == 'linux'
-        run: |
-          bash scripts/test-check-terraform-example-syntax.sh
-          scripts/check-terraform-example-syntax.sh
-
-      # NOTE: The test-case YAML files (tests/test-cases/*.yaml) are validated against
-      # tests/test-cases/schema.json by the Go test `TestTestCaseSchemaValidation`, which
-      # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
-      # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
-
-      # The Mage target owns package/test allocation, precompiled suites, and
-      # native coverage collection so both workflow paths stay identical.
+          matrix: ${{ toJSON(matrix) }}
       - name: Acceptance tests with coverage
-        # coverageStepTimeout lives on the linux flavor entry above,
-        # alongside why the job-level budget needs to exceed it.
         timeout-minutes: ${{ matrix.flavor.coverageStepTimeout }}
         if: matrix.flavor.target == 'linux'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Use the GitHub token for downloading the Packer plugins
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           ATMOS_TEST_SHARD: ${{ matrix.shard }}
           ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
         run: go tool mage acceptance:run coverage linux
-
       - name: Acceptance tests
-        # windows-latest is the slowest target for this suite too (see the
-        # Build job's timeout comment above): before sharding, runs of the
-        # unsharded step were observed between 37m43s and 60m17s. Per-platform
-        # budgets (stepTimeout) live on the matrix above, alongside the measured
-        # timing data and incident history behind them.
         timeout-minutes: ${{ matrix.flavor.stepTimeout }}
-        if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
+        if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! (env.CI_SOURCE_DRAFT == 'true'))
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Use the GitHub token for downloading the Packer plugins
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           ATMOS_TEST_SHARD: ${{ matrix.shard }}
           ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
         run: go tool mage acceptance:run test "${{ matrix.flavor.target }}"
-
       - name: Upload native coverage artifact
         if: matrix.flavor.target == 'linux' && hashFiles(format('coverage/shard-{0}/covmeta.*', matrix.shard)) != ''
         timeout-minutes: 5
@@ -853,41 +266,137 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
-
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   test-windows:
-    name: Acceptance Tests (${{ matrix.flavor.target }}, shard ${{ matrix.shard }}/10)
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Acceptance Tests (${{ matrix.flavor.target
+      }}, shard ${{ matrix.shard }}/10)
     needs: build-windows
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: "windows-latest", target: windows, jobTimeout: 50, stepTimeout: 40, coverageStepTimeout: 40 }
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+          - os: windows-latest
+            target: windows
+            jobTimeout: 50
+            stepTimeout: 40
+            coverageStepTimeout: 40
+        shard:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
     timeout-minutes: ${{ matrix.flavor.jobTimeout }}
     runs-on: ${{ matrix.flavor.os }}
-    steps: *test-steps
-
+    steps:
+      - uses: $/.github/actions/ci-acceptance-setup
+        with:
+          matrix: ${{ toJSON(matrix) }}
+      - name: Acceptance tests with coverage
+        timeout-minutes: ${{ matrix.flavor.coverageStepTimeout }}
+        if: matrix.flavor.target == 'linux'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          ATMOS_TEST_SHARD: ${{ matrix.shard }}
+          ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
+        run: go tool mage acceptance:run coverage linux
+      - name: Acceptance tests
+        timeout-minutes: ${{ matrix.flavor.stepTimeout }}
+        if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! (env.CI_SOURCE_DRAFT == 'true'))
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          ATMOS_TEST_SHARD: ${{ matrix.shard }}
+          ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
+        run: go tool mage acceptance:run test "${{ matrix.flavor.target }}"
+      - name: Upload native coverage artifact
+        if: matrix.flavor.target == 'linux' && hashFiles(format('coverage/shard-{0}/covmeta.*', matrix.shard)) != ''
+        timeout-minutes: 5
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-coverage-linux-shard-${{ matrix.shard }}
+          path: coverage/shard-${{ matrix.shard }}/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   test-macos:
-    name: Acceptance Tests (${{ matrix.flavor.target }}, shard ${{ matrix.shard }}/10)
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Acceptance Tests (${{ matrix.flavor.target
+      }}, shard ${{ matrix.shard }}/10)
     needs: build-macos
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: "macos-15", target: macos, jobTimeout: 40, stepTimeout: 30, coverageStepTimeout: 40 }
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+          - os: macos-15
+            target: macos
+            jobTimeout: 40
+            stepTimeout: 30
+            coverageStepTimeout: 40
+        shard:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
     timeout-minutes: ${{ matrix.flavor.jobTimeout }}
     runs-on: ${{ matrix.flavor.os }}
-    steps: *test-steps
-
-  # magefiles/ carries the `mage` build tag (invoked only via `go tool mage`),
-  # so it's silently excluded from the default `go build ./...`/`go test
-  # ./...` scope every other job here uses. Run it as its own lightweight job
-  # (parallel to `build`, needing only the Go toolchain, not the built
-  # `atmos` binary) so it gets real CI + Codecov signal instead of running
-  # only locally.
+    steps:
+      - uses: $/.github/actions/ci-acceptance-setup
+        with:
+          matrix: ${{ toJSON(matrix) }}
+      - name: Acceptance tests with coverage
+        timeout-minutes: ${{ matrix.flavor.coverageStepTimeout }}
+        if: matrix.flavor.target == 'linux'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          ATMOS_TEST_SHARD: ${{ matrix.shard }}
+          ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
+        run: go tool mage acceptance:run coverage linux
+      - name: Acceptance tests
+        timeout-minutes: ${{ matrix.flavor.stepTimeout }}
+        if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! (env.CI_SOURCE_DRAFT == 'true'))
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          ATMOS_TEST_SHARD: ${{ matrix.shard }}
+          ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
+        run: go tool mage acceptance:run test "${{ matrix.flavor.target }}"
+      - name: Upload native coverage artifact
+        if: matrix.flavor.target == 'linux' && hashFiles(format('coverage/shard-{0}/covmeta.*', matrix.shard)) != ''
+        timeout-minutes: 5
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-coverage-linux-shard-${{ matrix.shard }}
+          path: coverage/shard-${{ matrix.shard }}/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   magefiles:
-    name: "[magefiles] unit tests"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[magefiles] unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -895,16 +404,13 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Test cache pruning policy
-        run: node --test .github/actions/prune-go-caches/index.test.mjs
-
+        run: node --test .github/actions/prune-go-caches/index.test.mjs .github/actions/ci-pipeline/*.test.mjs
       - name: Set up Go
         uses: $/.github/actions/setup-go-cache
-
       - name: Run magefiles unit tests with coverage
         run: go test -tags=mage -race -coverprofile=magefiles-coverage.out ./magefiles/...
-
       - name: Upload magefiles coverage report artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -913,15 +419,9 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
-
-      # tools/noticegen is its own module (like tools/gomodcheck), so it's
-      # also outside every other job's `go build ./...`/`go test ./...`
-      # scope. Run its tests here too, for the same reason as magefiles
-      # above.
       - name: Run tools/noticegen unit tests with coverage
         run: go test -race -coverprofile=../../noticegen-coverage.out ./...
         working-directory: tools/noticegen
-
       - name: Upload tools/noticegen coverage report artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -930,19 +430,9 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
-
-  # Computes the `race` job's shard matrix once, upstream of the matrix
-  # itself: `go list ./...` order is stable (sorted by import path), so a
-  # naive round-robin split-per-shard-job would pin the same cluster of
-  # packages to the same shard on every run. Doing the split in one place
-  # lets it shuffle the full list first (magefiles/race_matrix.go's
-  # Test.RaceMatrix, seeded from github.run_id so the assignment still
-  # varies run to run) and hand each shard its own package list directly,
-  # rather than trusting N independent jobs to recompute an identical split.
-  # Emits the same GitHub Actions matrix JSON convention `atmos describe
-  # affected`/`atmos list instances --format=matrix` use (see pkg/matrix).
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   race-plan:
-    name: "[race] plan shards"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[race] plan shards
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -952,15 +442,11 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Set up Go
         uses: $/.github/actions/setup-go-cache
         with:
-          # Planning only needs Mage and `go list`; restore its dedicated
-          # nightly-warmed cache instead of the multi-gigabyte race archive.
-          # The race shards below still restore the full warmed cache.
           cache: race-plan
-
       - name: Plan race shards
         id: plan
         env:
@@ -968,74 +454,36 @@ jobs:
         run: |
           echo "::notice title=Race shard seed::Reproduce locally with GITHUB_OUTPUT=/dev/stdout ATMOS_TEST_RACE_SHARD_SEED=${ATMOS_TEST_RACE_SHARD_SEED} RACE_SHARD_COUNT=${RACE_SHARD_COUNT} go tool mage test:racematrix"
           go tool mage test:racematrix
-
-  # `-race` requires CGO_ENABLED=1 (the detector's runtime is itself a cgo
-  # library), unlike every other Go build/test path in this repo (CGO_ENABLED=0).
-  # Enabling cgo pulls in the cgo half of github.com/bearsh/hid (transitive, via
-  # saml2aws's U2F support) on linux/amd64 -- see hid_libusb_udev_linux.go, which
-  # links against libudev -- so the compile fails without libudev-dev installed.
-  # This is the same trap the govulncheck job documents (codeql.yml), but that
-  # job works around it by forcing CGO_ENABLED=0; that's not an option here since
-  # it would silently disable the race detector itself. Install libudev-dev
-  # instead. Floci now uses CGO_ENABLED=0 and does not need these packages.
-  #
-  # GOFIPS140=latest (set inside the `race` command itself, .atmos.d/test.yaml)
-  # is unaffected by CGO_ENABLED: Go's FIPS 140-3 module is pure Go, no cgo.
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   race:
-    # RACE_SHARD_COUNT (workflow env) is the source of truth for the shard
-    # count; the "/4" here is hardcoded because the job `name:` context
-    # can't read workflow `env` (same reason the acceptance job's name below
-    # hardcodes "/10").
-    name: "[race] non-acceptance test suite (shard ${{ matrix.shard }}/4)"
-    needs: [race-plan]
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[race] non-acceptance test suite (shard ${{
+      matrix.shard }}/4)
+    needs:
+      - race-plan
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.race-plan.outputs.matrix) }}
-    # Plain hosted ubuntu-latest, not RunsOn: this is the same image lineage
-    # setup-go-cache-warmup.yml's linux leg writes the race-instrumented
-    # (-race, CGO_ENABLED=1) Go build cache on, and the same runner the 10
-    # hosted acceptance shards already use -- so this job reads that cache
-    # directly instead of relying on the ImageOS-excluded-from-key workaround
-    # RunsOn legs needed. Splitting the suite across RACE_SHARD_COUNT shards
-    # (above) gives more total cores across the matrix than one big runner
-    # would, without paying for oversized single instances.
     runs-on: ubuntu-latest
-    # Each shard now runs roughly 1/4 of the package list rather than the
-    # unsharded ~27-minute-plus suite, but every shard still pays the same
-    # fixed per-job overhead (checkout, toolchain installs, apt-get, cache
-    # restore) that used to be amortized over one long-running job -- so this
-    # is generous headroom above that fraction, not a straight 75÷4 division
-    # (the acceptance shard matrix above budgets the same way).
     timeout-minutes: 30
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
-      # Restores the race-instrumented build cache the warmup workflow saves
-      # (its linux leg uses a separate GOCACHE with this job's env), so
-      # the ~400-package -race compile is mostly incremental.
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Set up Go
         uses: $/.github/actions/setup-go-cache
         with:
           cache: race
-
       - name: Set up Atmos bootstrap
         uses: $/.github/actions/setup-atmos-bootstrap
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
-
-      # Restore the toolchain directory before the installs below so they
-      # skip every tool already on disk instead of downloading five tools
-      # from the network on every run (restore-only: the build job's linux
-      # leg is this key's writer).
       - name: Restore the Atmos toolchain cache
         continue-on-error: true
         uses: $/actions/cache
         with:
           mode: restore-only
-
       - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
         run: |
           # The DEB822 /etc/apt/sources.list.d/ubuntu.sources file (and the
@@ -1052,16 +500,7 @@ jobs:
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
-
       - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
-        # Unlike the `test`/`build` jobs, this job never ran this step, so
-        # tests needing these binaries (e.g. cmd/terraform/migrate,
-        # TestPackerValidateCmd) fell back to Atmos's own lazy/auto-install
-        # path -- unreliable here since `go test ./...` runs each shard's
-        # packages as separate concurrent processes, and nothing serializes a
-        # shared install across them. Pre-installing once, before any test
-        # process starts, removes that race entirely (see docs/fixes for the
-        # incident this closes).
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -1071,48 +510,37 @@ jobs:
           atmos toolchain install helm/helm
           atmos toolchain install helmfile/helmfile
           atmos toolchain env --format=github
-
       - name: Run atmos test race
         env:
-          # pkg/toolchain's registry lookups hit the real GitHub API with no
-          # mock seam; unauthenticated requests share this runner's IP-wide
-          # 60/hr limit across every package running here, unlike the `test`
-          # job's acceptance steps, which already set this for the same
-          # reason (see their own "Use the GitHub token" comment).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # This shard's package list, precomputed by race-plan above.
-          # racePackagesFromEnv (magefiles/test_race.go) treats a non-empty
-          # TEST the same as every other manual TEST override in this repo.
           TEST: ${{ matrix.packages }}
         run: atmos test race
-
-  # Preserve the historical required checks, each waiting only for its own
-  # platform. Query individual shard results to detect missing/skipped shards.
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   test-required-linux:
-    name: ${{ matrix.check }}
-    needs: [test-linux, terraform-registry-cache-linux]
+    cache-mode: none
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}${{ matrix.check }}
+    needs:
+      - test-linux
+      - terraform-registry-cache-linux
     runs-on: ubuntu-latest
-    if: ${{ always() }}
-    # `gh api .../actions/runs/.../jobs` (below) hits the REST API for this
-    # run's job list and needs actions:read - unlike needs.<job>.result, which
-    # is ambient but only exposes the whole matrix job's aggregated verdict.
-    # actions: read for the jobs listing; contents: read for the checkout
-    # that `go tool mage` needs.
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (always()) }}
     permissions:
       actions: read
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        check: ["Acceptance Tests (linux)"]
+        check:
+          - Acceptance Tests (linux)
         include:
-          - { check: "Acceptance Tests (linux)", target: linux }
-    steps: &required-test-steps
+          - check: Acceptance Tests (linux)
+            target: linux
+    steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: >
+          allowed-endpoints: |
             api.github.com:443
             github.com:443
             release-assets.githubusercontent.com:443
@@ -1122,45 +550,21 @@ jobs:
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
-
-      # A whole-run cancellation (e.g. superseded by a newer push to the same
-      # PR) skips the `test` matrix before it ever dispatches shard jobs, so
-      # the API query below would legitimately find 0 shards - not a real
-      # anomaly to fail loudly on. cancelled() reflects the run itself, unlike
-      # needs.test.result, which reports "skipped" for both this case and a
-      # genuine upstream (e.g. build) failure - so it can't replace this
-      # check. cancelled() is only valid in an `if:`, not inside a script, so
-      # the verification steps below are skipped via `if: ${{ !cancelled() }}`
-      # rather than early-exiting from within their run: blocks.
       - name: Skip verification (workflow run was cancelled)
         if: ${{ cancelled() }}
         run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
-
       - name: Check out code into the Go module directory
         if: ${{ !cancelled() }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
-      # cache: false on purpose - this job compiles only the mage helper; a
-      # restore would download ~1 GB it doesn't need, and setup-go's built-in
-      # save would write a thin archive for nothing.
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Set up Go
         if: ${{ !cancelled() }}
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version-file: "go.mod"
+          go-version-file: go.mod
           cache: false
-
-      # The check itself lives in internal/ci/acceptance (CheckShardResults):
-      # it lists this attempt's jobs, waits for every "Acceptance Tests
-      # (<os>, shard N/M)" job to have a conclusion - the jobs API is
-      # eventually consistent and has returned an empty conclusion for a
-      # shard that finished minutes earlier - and fails unless all succeeded.
-      # The matrix stays a literal `check: [...]` list of the legacy check
-      # names because internal/ci/acceptance/verify.go's
-      # workflowRequiredCheckPattern requires it; the target OS is derived
-      # from the name in Go.
       - name: Check per-OS test matrix result
         if: ${{ !cancelled() }}
         env:
@@ -1170,57 +574,152 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: go tool mage ci:checkShardResults "$REPO" "$RUN_ID" "$RUN_ATTEMPT" "$CHECK"
-
       - name: Check terraform-registry-cache result
-        # Each alias checks only its own platform's registry integration.
         if: ${{ !cancelled() }}
         run: |
           if [ "${{ needs[format('terraform-registry-cache-{0}', matrix.target)].result }}" != "success" ]; then
             echo "terraform-registry-cache result was '${{ needs[format('terraform-registry-cache-{0}', matrix.target)].result }}'"
             exit 1
           fi
-
   test-required-macos:
-    name: ${{ matrix.check }}
-    needs: [test-macos, terraform-registry-cache-macos]
+    cache-mode: none
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}${{ matrix.check }}
+    needs:
+      - test-macos
+      - terraform-registry-cache-macos
     runs-on: ubuntu-latest
-    if: ${{ always() }}
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (always()) }}
     permissions:
       actions: read
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        check: ["Acceptance Tests (macos)"]
+        check:
+          - Acceptance Tests (macos)
         include:
-          - { check: "Acceptance Tests (macos)", target: macos }
-    steps: *required-test-steps
-
+          - check: Acceptance Tests (macos)
+            target: macos
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: |
+            api.github.com:443
+            github.com:443
+            release-assets.githubusercontent.com:443
+            golang.org:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+      - name: Skip verification (workflow run was cancelled)
+        if: ${{ cancelled() }}
+        run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
+      - name: Check out code into the Go module directory
+        if: ${{ !cancelled() }}
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - name: Set up Go
+        if: ${{ !cancelled() }}
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Check per-OS test matrix result
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK: ${{ matrix.check }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: go tool mage ci:checkShardResults "$REPO" "$RUN_ID" "$RUN_ATTEMPT" "$CHECK"
+      - name: Check terraform-registry-cache result
+        if: ${{ !cancelled() }}
+        run: |
+          if [ "${{ needs[format('terraform-registry-cache-{0}', matrix.target)].result }}" != "success" ]; then
+            echo "terraform-registry-cache result was '${{ needs[format('terraform-registry-cache-{0}', matrix.target)].result }}'"
+            exit 1
+          fi
   test-required-windows:
-    name: ${{ matrix.check }}
-    needs: [test-windows, terraform-registry-cache-windows]
+    cache-mode: none
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}${{ matrix.check }}
+    needs:
+      - test-windows
+      - terraform-registry-cache-windows
     runs-on: ubuntu-latest
-    if: ${{ always() }}
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (always()) }}
     permissions:
       actions: read
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        check: ["Acceptance Tests (windows)"]
+        check:
+          - Acceptance Tests (windows)
         include:
-          - { check: "Acceptance Tests (windows)", target: windows }
-    steps: *required-test-steps
-
+          - check: Acceptance Tests (windows)
+            target: windows
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: |
+            api.github.com:443
+            github.com:443
+            release-assets.githubusercontent.com:443
+            golang.org:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+      - name: Skip verification (workflow run was cancelled)
+        if: ${{ cancelled() }}
+        run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
+      - name: Check out code into the Go module directory
+        if: ${{ !cancelled() }}
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - name: Set up Go
+        if: ${{ !cancelled() }}
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Check per-OS test matrix result
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK: ${{ matrix.check }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: go tool mage ci:checkShardResults "$REPO" "$RUN_ID" "$RUN_ATTEMPT" "$CHECK"
+      - name: Check terraform-registry-cache result
+        if: ${{ !cancelled() }}
+        run: |
+          if [ "${{ needs[format('terraform-registry-cache-{0}', matrix.target)].result }}" != "success" ]; then
+            echo "terraform-registry-cache result was '${{ needs[format('terraform-registry-cache-{0}', matrix.target)].result }}'"
+            exit 1
+          fi
   coverage:
-    name: Upload acceptance coverage to Codecov
-    needs: [build-linux, test-linux, magefiles]
+    cache-mode: none
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Upload acceptance coverage to Codecov
+    needs:
+      - build-linux
+      - test-linux
+      - magefiles
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # `atmos test coverage download-shards` (below) runs `gh run download`,
-    # which hits the REST API for artifacts of this run and needs actions:read
-    # - unlike actions/download-artifact, which authenticates via the ambient
-    # artifact-service token and doesn't need it.
     permissions:
       actions: read
       contents: read
@@ -1228,53 +727,39 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
-          # This job was skipped in the only sampled run (upstream test matrix
-          # had a failed shard), so there's no observed egress data to build an
-          # allowlist from yet. Stays audit until re-sampled from a green run.
           egress-policy: audit
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Set up Atmos (install build artifact for linux)
         uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
           path: ${{ github.workspace }}
           add-to-path: 'true'
-
-      # Atmos downloads all shard artifacts concurrently with per-shard retry.
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
       - name: Download linux shard coverage artifacts
         timeout-minutes: 10
         env:
           GH_TOKEN: ${{ github.token }}
         run: atmos test coverage download-shards
-
-      # The composite (restore-only) rather than raw setup-go: this thin job
-      # only runs `mage coverage:mergeShards`, and with setup-go's built-in
-      # cache it could win the save race and freeze a near-empty archive
-      # under the shared Linux key (it also pinned setup-go v6 while every
-      # other job pins v5.6.0, silently forking the cache lineage).
       - name: Set up Go for native coverage merge
         uses: $/.github/actions/setup-go-cache
-
       - name: Merge native coverage data
         run: go tool mage coverage:mergeShards
-
       - name: Download magefiles coverage report artifact
         uses: $/.github/actions/download-artifact-retry
         with:
           name: magefiles-coverage-linux
           path: ${{ github.workspace }}
-
       - name: Download tools/noticegen coverage report artifact
         uses: $/.github/actions/download-artifact-retry
         with:
           name: noticegen-coverage-linux
           path: ${{ github.workspace }}
-
       - name: Upload coverage report to Codecov
         timeout-minutes: 10
         continue-on-error: true
@@ -1284,37 +769,16 @@ jobs:
           slug: ${{ github.repository }}
           files: coverage.out,magefiles-coverage.out,noticegen-coverage.out
           disable_search: true
-          # Codecov's uploader downloads its CLI and verifies the binary's GPG
-          # signature. Transient Codecov-side issues (e.g. an empty public-key
-          # import: "gpg: no valid OpenPGP data found" / "Can't check signature:
-          # No public key") make verification exit 1, which would hard-fail this
-          # job even when every test passed. Don't let a coverage-upload/infra
-          # flake fail a green test run — the 85% coverage gate is still enforced
-          # by Codecov's own PR status check, independent of this step's exit code.
           fail_ci_if_error: false
           flags: unittests
           verbose: true
-          # Install the Codecov CLI from PyPI instead of cli.codecov.io. The
-          # default path fetches Codecov's GPG public key from Keybase
-          # (https://keybase.io/codecovsecurity/pgp_keys.asc) to verify the CLI
-          # binary; that URL is currently returning 404 ("SELF-SIGNED PUBLIC KEY
-          # NOT FOUND"), so the import yields "no valid OpenPGP data found" and
-          # the run fails with "Could not verify signature". The PyPI path avoids
-          # the broken keyserver fetch. See codecov/codecov-action#1955. Safe to
-          # remove once Codecov restores the Keybase key.
           use_pypi: true
-
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   docker:
-    name: "[lint] Dockerfile"
+    cache-mode: write
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[lint] Dockerfile
     needs: build-linux
     runs-on: ubuntu-latest
-    # The workflow-level `permissions:` block above (added in #2487 for
-    # `packages: read` on ghcr.io pulls) REPLACES — not extends — the default
-    # token scope for every job. That stripped the implicit
-    # `security-events: write` this job relied on for SARIF upload, breaking
-    # the post-merge run on main. Job-level `permissions:` also fully
-    # overrides the workflow-level set, so `contents: read` is re-listed here
-    # for actions/checkout.
     permissions:
       contents: read
       security-events: write
@@ -1323,18 +787,17 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: >
+          allowed-endpoints: |
             api.github.com:443
             check.trivy.dev:443
             get.trivy.dev:443
             github.com:443
             release-assets.githubusercontent.com:443
-
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
         id: hadolint
         with:
@@ -1342,54 +805,32 @@ jobs:
           failure-threshold: warning
           format: sarif
           output-file: hadolint.sarif
-          # https://github.com/hadolint/hadolint?tab=readme-ov-file#rules
-          # DL3008 Pin versions in apt-get install
           ignore: DL3008
-
-      # Code scanning cannot attach results to a merge queue's synthetic
-      # `refs/heads/gh-readonly-queue/...` ref: the upload fails with "ref ...
-      # not found", which (with wait-for-processing) fails this step, skips the
-      # Trivy scan below, and then fails the second upload on the missing SARIF
-      # file -- evicting the PR from the queue for a result nobody consumes.
-      # The same commit was already scanned on the PR run.
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
-        if: always() && github.event_name != 'merge_group'
+        if: always() && env.CI_SOURCE_EVENT != 'merge_group'
         with:
-          # Path to SARIF file relative to the root of the repository
           sarif_file: hadolint.sarif
-          # Optional category for the results (used to differentiate multiple results for one commit)
           category: hadolint
           wait-for-processing: true
-
-      # hadolint covers Dockerfile syntax/best-practices; this covers
-      # CIS-Docker-Benchmark-style config issues (missing USER, HEALTHCHECK,
-      # etc.) that hadolint doesn't. Reuses the Trivy binary already used for
-      # the built-image scan in build.yml.
-      - name: "Trivy config scan (Dockerfile)"
+      - name: Trivy config scan (Dockerfile)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
           scan-ref: Dockerfile
           format: sarif
           output: trivy-config.sarif
-
       - name: Upload Trivy config scan results
-        if: always() && github.event_name != 'merge_group'
+        if: always() && env.CI_SOURCE_EVENT != 'merge_group'
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
-
-  # Run the AWS-emulator demo tests against Floci (a free, LocalStack-compatible emulator;
-  # LocalStack Community Edition was EOL'd in March 2026).
-  # NOTE: the "[floci] emulator-aws" status check must be kept in sync with the required
-  # status checks configured in branch protection on main.
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   floci:
-    name: "[floci] ${{ matrix.demo-folder }}"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[floci] ${{ matrix.demo-folder }}
     needs: build-linux
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
@@ -1397,14 +838,13 @@ jobs:
           - emulator-aws
           - terraform-tests
           - backend-provisioning
-
     timeout-minutes: 30
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: >
+          allowed-endpoints: |
             api.github.com:443
             checkpoint-api.hashicorp.com:443
             github.com:443
@@ -1416,26 +856,22 @@ jobs:
             releases.hashicorp.com:443
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Set up Atmos (install build artifact)
         uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
-
-      # Restore the toolchain directory first so the installs below skip
-      # tools already on disk (restore-only; the build job's linux leg is
-      # this key's writer).
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
       - name: Restore the Atmos toolchain cache
         continue-on-error: true
         uses: $/actions/cache
         with:
           mode: restore-only
-
       - name: Install Terraform and OpenTofu with Atmos toolchain
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1443,10 +879,8 @@ jobs:
           atmos toolchain install hashicorp/terraform
           atmos toolchain install opentofu/opentofu
           atmos toolchain env --format=github
-
       - name: Verify OpenTofu
         run: tofu version
-
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
@@ -1455,49 +889,41 @@ jobs:
             echo "atmos test failed or timed out with status ${status}"
             exit "${status}"
           }
-
-  # Run Go E2E tests against Floci. These cover store/secrets workflows that are
-  # easier to assert directly from Go than through the demo `atmos test` runner.
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   floci-go:
-    name: "[floci] go e2e (${{ matrix.group }})"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[floci] go e2e (${{ matrix.group }})
     needs: build-linux
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
         include:
           - group: scaffold
-            tests: '^TestScaffold(AWSLandingZone|AWSApp)FlociE2E$'
+            tests: ^TestScaffold(AWSLandingZone|AWSApp)FlociE2E$
           - group: workflows
-            tests: '^Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|LocalGitOpsPushE2E|Scaffold(GCPLandingZone|AzureLandingZone)FlociE2E|InitFromTemplateRepoGiteaE2E|TerraformFlociTfmigrateS3History)$'
-
+            tests: ^Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|LocalGitOpsPushE2E|Scaffold(GCPLandingZone|AzureLandingZone)FlociE2E|InitFromTemplateRepoGiteaE2E|TerraformFlociTfmigrateS3History)$
     services:
       floci:
-        # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
-        image: floci/floci@sha256:d2ecc8035822b23b8587a56eab15edd825f41d3fb80d93e8e66680410beddc08 # 1.5.23
+        image: floci/floci@sha256:d2ecc8035822b23b8587a56eab15edd825f41d3fb80d93e8e66680410beddc08
         ports:
           - 4566:4566
       floci-gcp:
-        # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
-        image: floci/floci-gcp@sha256:102db655af6facdcd1ec621e108558aafc46c817eaada63236d3acf3c5e92aaa # latest
+        image: floci/floci-gcp@sha256:102db655af6facdcd1ec621e108558aafc46c817eaada63236d3acf3c5e92aaa
         ports:
           - 4588:4588
       floci-az:
-        # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
-        image: floci/floci-az@sha256:5e403a7d788c24ab2d1dc03d4803ef2d3962ca01522abba65ed86f221ae87ac0 # latest
+        image: floci/floci-az@sha256:5e403a7d788c24ab2d1dc03d4803ef2d3962ca01522abba65ed86f221ae87ac0
         env:
-          FLOCI_AZ_TLS_ENABLED: "true"
+          FLOCI_AZ_TLS_ENABLED: 'true'
         ports:
           - 4577:4577
-
     timeout-minutes: 30
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: >
+          allowed-endpoints: |
             api.github.com:443
             archive.ubuntu.com:80
             auth.docker.io:443
@@ -1521,152 +947,76 @@ jobs:
             storage.googleapis.com:443
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Set up Atmos (install build artifact)
         uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
-
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
       - name: Set up Go
         uses: $/.github/actions/setup-go-cache
-
-      # Restore the toolchain directory first so the install below skips
-      # tools already on disk (restore-only; the build job's linux leg is
-      # this key's writer).
       - name: Restore the Atmos toolchain cache
         continue-on-error: true
         uses: $/actions/cache
         with:
           mode: restore-only
-
       - name: Install OpenTofu with Atmos toolchain
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install opentofu/opentofu
           atmos toolchain env --format=github
-
       - name: Verify OpenTofu
         run: tofu version
-
       - name: Run Floci Go E2E tests
         env:
-          CGO_ENABLED: "0"
+          CGO_ENABLED: '0'
           GOFIPS140: latest
           FLOCI_TEST_PATTERN: ${{ matrix.tests }}
-          ATMOS_TEST_FLOCI: "true"
-          FLOCI_ENDPOINT_URL: "http://localhost:4566"
-          FLOCI_GCP_ENDPOINT: "http://localhost:4588"
-          FLOCI_AZURE_ENDPOINT: "http://localhost:4577"
+          ATMOS_TEST_FLOCI: 'true'
+          FLOCI_ENDPOINT_URL: http://localhost:4566
+          FLOCI_GCP_ENDPOINT: http://localhost:4588
+          FLOCI_AZURE_ENDPOINT: http://localhost:4577
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: go test ./tests -run "$FLOCI_TEST_PATTERN" -count=1 -timeout 25m -v
-
-  # Run the approachable k3s demos plus the focused native Helm lifecycle
-  # scenario. Keep failure-path coverage under tests/fixtures so public examples
-  # remain small, happy-path configurations.
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   k3s-linux:
-    name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name }}"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name
+      }}
     needs: build-linux
     runs-on: ${{ matrix.flavor.os }}
     env:
       ATMOS_LOGS_LEVEL: Debug
-      HOMEBREW_NO_AUTO_UPDATE: "1"
-      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: ubuntu-latest, target: linux, artifact: linux }
+          - os: ubuntu-latest
+            target: linux
+            artifact: linux
         fixture:
-          - { name: demo-helmfile, path: examples/demo-helmfile }
-          - { name: helm, path: examples/helm }
-          - { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
-    # The macOS matrix may spend up to 55 minutes starting Colima, followed by
-    # two bounded 45-minute test attempts. Keep the job ceiling above those
-    # nested budgets so the second retry can finish and emit diagnostics.
+          - name: demo-helmfile
+            path: examples/demo-helmfile
+          - name: helm
+            path: examples/helm
+          - name: helm-lifecycle
+            path: tests/fixtures/scenarios/helm-lifecycle
     timeout-minutes: 180
-    steps: &k3s-steps
-      - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+    steps:
+      - uses: $/.github/actions/ci-k3s-setup
         with:
-          egress-policy: block
-          # Operating-system background services on the hosted macOS image
-          # (software update, CDN, certificate revocation, time sync) are
-          # listed below the job-specific endpoints; see the `test` job's
-          # allowed-endpoints comment for the rationale.
-          allowed-endpoints: >
-            api.github.com:443
-            auth.docker.io:443
-            charts.bitnami.com:443
-            contracts.canonical.com:443
-            dl.k8s.io:443
-            download.docker.com:443
-            esm.ubuntu.com:443
-            get.helm.sh:443
-            ghcr.io:443
-            github.com:443
-            kubernetes.github.io:443
-            livepatch.canonical.com:443
-            mirror.gcr.io:443
-            pkg-containers.githubusercontent.com:443
-            production.cloudfront.docker.com:443
-            raw.githubusercontent.com:443
-            registry-1.docker.io:443
-            registry.k8s.io:443
-            cdn.registry.k8s.io:443
-            *.pkg.dev:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            repo.broadcom.com:443
-            archive.ubuntu.com:80
-            security.ubuntu.com:80
-            tuf-repo-cdn.sigstore.dev:443
-            us.i.posthog.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-
-      # The local k3s cluster is no longer started via docker-compose: `atmos test`
-      # brings it up through the native Kubernetes emulator (`atmos emulator up
-      # kubernetes`), which runs the privileged k3s container itself on the runner's
-      # Docker, and the helmfile component harvests its kubeconfig via `!emulator`.
-
-      # Download the build artifact before starting Colima. Colima's VM bring-up
-      # attaches new virtual network interfaces on the macOS host, which can
-      # transiently disrupt host DNS resolution right as it happens; this is the
-      # only step in the job that needs public DNS from the host, so keep it away
-      # from that window.
-      - name: Set up Atmos (install build artifact)
-        uses: $/.github/actions/setup-atmos-install
-        with:
-          target: ${{ matrix.flavor.artifact }}
-
+          matrix: ${{ toJSON(matrix) }}
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
-        # setup-colima is vz-only; qemu failed on this Intel runner (see
-        # docs/fixes/2026-07-01-macos-k3s-runner-research.md). Budget for brew
-        # (7m), cleanup (1.5m), two start/info attempts (14m each), diagnostics
-        # and intermediate cleanup (~4m), verification (1m), and two image
-        # pulls with backoff (10.5m). The 55m step cap covers these ~52m of
-        # nested budgets; the 180m job cap also covers both 45m test attempts.
         timeout-minutes: 55
         uses: $/.github/actions/setup-colima
-
       - name: Configure Docker Hub mirror on Linux
         if: matrix.flavor.target == 'linux'
         shell: bash
@@ -1682,12 +1032,10 @@ jobs:
           fi
           sudo systemctl restart docker
           docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -F 'https://mirror.gcr.io'
-
       - name: Write a default AWS profile to the AWS config file
         run: |
           mkdir -p ~/.aws
           echo '[default]' > ~/.aws/config
-
       - name: Run tests for ${{ matrix.fixture.name }}
         run: |
           cd "${{ matrix.fixture.path }}"
@@ -1750,60 +1098,145 @@ jobs:
             [ "${attempt}" -lt 2 ] && sleep 15
           done
           exit "${status}"
-
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   k3s-macos:
-    name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name }}"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name
+      }}
     needs: build-macos
     runs-on: ${{ matrix.flavor.os }}
     env:
       ATMOS_LOGS_LEVEL: Debug
-      HOMEBREW_NO_AUTO_UPDATE: "1"
-      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: "macos-15-intel", target: macos, artifact: macos-intel }
+          - os: macos-15-intel
+            target: macos
+            artifact: macos-intel
         fixture:
-          - { name: demo-helmfile, path: examples/demo-helmfile }
-          - { name: helm, path: examples/helm }
-          - { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
-        # helm-lifecycle's watcher-based install/upgrade waits stall on the
-        # doubly-nested k3s of the macOS Colima runner (k3s -> Docker -> Colima
-        # VM), where Helm's status-watcher API watch is unreliable and every
-        # watcher-waited release burns its full timeout. The same fixture passes
-        # in ~4m on Linux and on local macOS Docker Desktop, so this is a Colima
-        # runner limitation, not a lifecycle bug. Run it on Linux only; the
-        # demo-helmfile and helm fixtures still exercise the macOS k3s path.
+          - name: demo-helmfile
+            path: examples/demo-helmfile
+          - name: helm
+            path: examples/helm
+          - name: helm-lifecycle
+            path: tests/fixtures/scenarios/helm-lifecycle
         exclude:
-          - flavor: { os: "macos-15-intel", target: macos, artifact: macos-intel }
-            fixture: { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
-
-    # The macOS matrix may spend up to 55 minutes starting Colima, followed by
-    # two bounded 45-minute test attempts. Keep the job ceiling above those
-    # nested budgets so the second retry can finish and emit diagnostics.
+          - flavor:
+              os: macos-15-intel
+              target: macos
+              artifact: macos-intel
+            fixture:
+              name: helm-lifecycle
+              path: tests/fixtures/scenarios/helm-lifecycle
     timeout-minutes: 180
-    steps: *k3s-steps
+    steps:
+      - uses: $/.github/actions/ci-k3s-setup
+        with:
+          matrix: ${{ toJSON(matrix) }}
+      - name: Start Docker-compatible runtime on macOS
+        if: matrix.flavor.target == 'macos'
+        timeout-minutes: 55
+        uses: $/.github/actions/setup-colima
+      - name: Configure Docker Hub mirror on Linux
+        if: matrix.flavor.target == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -d -m 0755 /etc/docker
+          if sudo test -s /etc/docker/daemon.json; then
+            sudo jq '."registry-mirrors" = ((."registry-mirrors" // []) as $mirrors | if ($mirrors | index("https://mirror.gcr.io")) == null then $mirrors + ["https://mirror.gcr.io"] else $mirrors end)' \
+              /etc/docker/daemon.json | sudo tee /etc/docker/daemon.json.tmp >/dev/null
+            sudo mv /etc/docker/daemon.json.tmp /etc/docker/daemon.json
+          else
+            printf '%s\n' '{"registry-mirrors":["https://mirror.gcr.io"]}' | sudo tee /etc/docker/daemon.json >/dev/null
+          fi
+          sudo systemctl restart docker
+          docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -F 'https://mirror.gcr.io'
+      - name: Write a default AWS profile to the AWS config file
+        run: |
+          mkdir -p ~/.aws
+          echo '[default]' > ~/.aws/config
+      - name: Run tests for ${{ matrix.fixture.name }}
+        run: |
+          cd "${{ matrix.fixture.path }}"
+          run_with_timeout() {
+            python3 - "$@" <<'PY'
+          import os
+          import signal
+          import subprocess
+          import sys
 
+          timeout = int(sys.argv[1])
+          cmd = sys.argv[2:]
+          proc = subprocess.Popen(cmd, start_new_session=True)
+          try:
+              raise SystemExit(proc.wait(timeout=timeout))
+          except subprocess.TimeoutExpired:
+              print(f"{' '.join(cmd)} timed out after {timeout}s", file=sys.stderr)
+              os.killpg(proc.pid, signal.SIGTERM)
+              try:
+                  proc.wait(timeout=10)
+              except subprocess.TimeoutExpired:
+                  os.killpg(proc.pid, signal.SIGKILL)
+                  proc.wait()
+              raise SystemExit(124)
+          PY
+          }
+
+          cleanup_k3s() {
+            run_with_timeout 60 atmos emulator down kubernetes -s dev || true
+            run_with_timeout 30 docker rm -f atmos-dev-emulator-kubernetes >/dev/null 2>&1 || true
+          }
+
+          diagnose_k3s() {
+            if ! run_with_timeout 15 docker inspect atmos-dev-emulator-kubernetes >/dev/null 2>&1; then
+              return
+            fi
+
+            echo "::group::k3s workload diagnostics"
+            run_with_timeout 30 docker exec atmos-dev-emulator-kubernetes kubectl get pods,jobs,deployments -A -o wide || true
+            run_with_timeout 30 docker exec atmos-dev-emulator-kubernetes kubectl get events -A --sort-by=.lastTimestamp || true
+            run_with_timeout 30 docker exec atmos-dev-emulator-kubernetes ctr --namespace k8s.io images list || true
+            echo "::endgroup::"
+          }
+
+          # macOS k3s jobs can occasionally hang in the Docker/Colima stack.
+          # Bound each attempt so the matrix can retry instead of consuming the
+          # whole job timeout and cancelling the required aggregate check.
+          attempt_timeout=1500
+          if [ "${{ matrix.flavor.target }}" = "macos" ]; then
+            attempt_timeout=2700
+          fi
+
+          trap cleanup_k3s EXIT
+          for attempt in 1 2; do
+            run_with_timeout "${attempt_timeout}" atmos test && exit 0
+            status=$?
+            echo "atmos test failed (attempt ${attempt}/2, status ${status})" >&2
+            diagnose_k3s
+            cleanup_k3s
+            [ "${attempt}" -lt 2 ] && sleep 15
+          done
+          exit "${status}"
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   k3s-required:
-    name: "[k3s] demo-helmfile"
-    needs: [k3s-linux, k3s-macos]
+    cache-mode: none
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[k3s] demo-helmfile
+    needs:
+      - k3s-linux
+      - k3s-macos
     runs-on: ubuntu-latest
-    if: ${{ always() }}
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (always()) }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
-          # Pure bash conditional on needs.k3s-linux.result; no external calls at all.
           egress-policy: block
-
-      # See the matching comment on test-required's per-OS check step: a
-      # whole-run cancellation is not a genuine k3s failure, and cancelled()
-      # is only valid in an `if:`, not inside a script.
       - name: Skip verification (workflow run was cancelled)
         if: ${{ cancelled() }}
         run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
-
       - name: Check k3s matrix result
         if: ${{ !cancelled() }}
         run: |
@@ -1811,21 +1244,8 @@ jobs:
             echo "k3s results: linux=${{ needs.k3s-linux.result }}, macos=${{ needs.k3s-macos.result }}"
             exit 1
           fi
-
-  # Exercise the Kubernetes native component against a real kube-apiserver+etcd
-  # control plane (started by controller-runtime envtest): server-side apply,
-  # dry-run diff, delete, server-side validate, and a CRD round-trip. The
-  # control-plane binaries are provisioned on demand by the tests themselves via
-  # the Atmos toolchain (an inline registry in envtest_test.go) — there is no
-  # install step here. Windows is intentionally excluded: there is no official
-  # kube-apiserver build for it, so the tests are gated off that platform.
-  #
-  # The binaries land in the toolchain cache under the user cache dir; CI does
-  # not yet persist that across runs, so each run re-downloads the (small)
-  # tarball. Adding an actions/cache step keyed on the envtest version is an
-  # easy follow-up.
   kubernetes-e2e:
-    name: "[kubernetes] e2e tests (${{ matrix.os }})"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[kubernetes] e2e tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -1839,11 +1259,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          # Operating-system background services on the hosted macOS image
-          # (software update, CDN, certificate revocation, time sync) are
-          # listed below the job-specific endpoints; see the `test` job's
-          # allowed-endpoints comment for the rationale.
-          allowed-endpoints: >
+          allowed-endpoints: |
             api.github.com:443
             github.com:443
             proxy.golang.org:443
@@ -1857,15 +1273,13 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Set up Go
         uses: $/.github/actions/setup-go-cache
-
       - name: Download Go dependencies
         shell: bash
         run: |
@@ -1886,212 +1300,51 @@ jobs:
             sleep "$delay"
             delay=$((delay * 2))
           done
-
       - name: Run Kubernetes end-to-end tests
         env:
-          # No GOCACHE override here: setup-go-cache above restored the warm
-          # build cache into the default GOCACHE, and a previous
-          # `GOCACHE: runner.temp/go-build` override made the test compile
-          # into an empty directory — nullifying the restore entirely.
           GOTMPDIR: ${{ runner.temp }}/go-tmp
           TMPDIR: ${{ runner.temp }}/tmp
-          # Atmos builds with CGO disabled. Match that here so the
-          # toolchain's transitive CGO dependencies (e.g. bearsh/hid → libudev)
-          # are not compiled — they are unused and libudev is absent on runners.
-          CGO_ENABLED: "0"
-          # Fail loudly if the control plane can't be provisioned/started, rather
-          # than silently skipping all coverage.
-          ATMOS_ENVTEST_REQUIRED: "true"
+          CGO_ENABLED: '0'
+          ATMOS_ENVTEST_REQUIRED: 'true'
         run: |
           mkdir -p "$GOTMPDIR" "$TMPDIR"
           go test -tags envtest -count=1 ./pkg/component/kubernetes/... -run TestEnvtest
-
-  # run other demo tests
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   mock-linux:
-    name: "[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder
+      }}
     needs: build-linux
     runs-on: ${{ matrix.flavor.os }}
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: ubuntu-latest, target: linux }
+          - os: ubuntu-latest
+            target: linux
         demo-folder:
           - examples/demo-atlantis
-          # - examples/demo-component-manifest
           - examples/demo-component-versions
           - examples/demo-context
-          # - examples/demo-custom-command
-          # - examples/demo-json-validation
-          # - examples/demo-opa-validation
-          # - examples/demo-opentofu
-          # - examples/demo-project
-          # - examples/demo-stacks
-          # - examples/demo-terraform
-          # - examples/demo-terraform-overrides
-          # - examples/demo-workflows
-          # - examples/demo-yaml-anchors
-          # - examples/demo-mock-architecture
-          # - examples/demo-stack-templating
-          # - examples/demo-multi-cloud
           - examples/demo-vendoring
           - examples/config-profiles
           - tests/fixtures/scenarios/complete
-
     timeout-minutes: 20
-    steps: &mock-steps
-      # Draft PRs skip every Windows step in this job (no checkout), so skip
-      # Harden Runner for them as well; see the `build` job's note.
-      - name: Harden Runner
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+    steps:
+      - uses: $/.github/actions/ci-mock
         with:
-          egress-policy: block
-          # Operating-system background services on the hosted Windows and
-          # macOS images (connectivity probes, push notifications, update and
-          # settings/telemetry checks, time sync, certificate revocation for
-          # GitHub's Sectigo chain, Apple software-update and CDN hosts) are
-          # listed below their job-specific endpoints. StepSecurity Insights
-          # showed them blocked on every Windows/macOS job -- they are not
-          # implicitly allowed -- and each blocked lookup is retried by the OS
-          # for the whole job (NCSI probes every few seconds; schannel
-          # revocation checks stall TLS to github.com). Allowing them removes
-          # that churn without widening what our own steps can reach. Source:
-          # StepSecurity Insights -> Network Events; keep in sync with the
-          # other Windows/macOS legs in this file.
-          allowed-endpoints: >
-            api.github.com:443
-            checkpoint-api.hashicorp.com:443
-            ghcr.io:443
-            github.com:443
-            pkg-containers.githubusercontent.com:443
-            raw.githubusercontent.com:443
-            registry.terraform.io:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            releases.hashicorp.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            us.i.posthog.com:443
-            www.msftconnecttest.com:443
-            ipv6.msftconnecttest.com:443
-            www.msftncsi.com:443
-            ipv6.msftncsi.com:443
-            time.windows.com:443
-            client.wns.windows.com:443
-            settings-win.data.microsoft.com:443
-            *.events.data.microsoft.com:443
-            *.update.microsoft.com:443
-            ecs.office.com:443
-            pti.store.microsoft.com:443
-            login.live.com:443
-            go.microsoft.com:443
-            www.microsoft.com:443
-            ocsp.sectigo.com:80
-            ocsp.sectigo.com:443
-            crl.sectigo.com:80
-            crl.sectigo.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-            get.helm.sh:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            google.golang.org:443
-
-      - name: Check out code into the Go module directory
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-
-      # Repairs the runner's DNS if harden-runner's Windows post step kills its
-      # agent mid-"restoring system DNS" (a race against its 10-second wait);
-      # without it the job's steps all pass but the job never reports
-      # completion and GitHub cancels it 30-40 minutes later. Windows-only,
-      # no-op elsewhere. See the action's description and
-      # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
-      - name: Guard DNS against the harden-runner post-step race
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        uses: $/.github/actions/windows-dns-guard
-
-      - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/setup-atmos-install
-        with:
-          target: ${{ matrix.flavor.target }}
-          path: ${{ github.workspace }}
-          add-to-path: 'true'
-
-      - name: Set up the CI toolchain
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/ci-toolchain
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify OpenTofu
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: tofu version
-
-      - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
-        working-directory: ${{ matrix.demo-folder }}
-        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Retry to ride out transient registry/network failures — e.g. a 502
-          # from github.com while terraform fetches a provider signature. A
-          # genuine test failure still fails on the final attempt.
-          for attempt in 1 2 3; do
-            atmos test && exit 0
-            status=$?
-            echo "atmos test failed (attempt ${attempt}/3, status ${status})" >&2
-            [ "${attempt}" -lt 3 ] && sleep 15
-          done
-          exit "${status}"
-
-      - name: Check atmos.exe integrity
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: |
-          Write-Output "PATH=$Env:PATH"
-          Write-Output "PATHEXT=$Env:PATHEXT"
-          Get-ChildItem "${{ github.workspace }}"
-          Get-Command "${{ github.workspace }}\atmos.exe"
-          atmos version
-
-      - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
-        working-directory: ${{ matrix.demo-folder }}
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Retry to ride out transient registry/network failures (e.g. a 502
-          # from github.com during terraform provider download). A genuine test
-          # failure still fails on the final attempt.
-          for ($attempt = 1; $attempt -le 3; $attempt++) {
-            atmos test
-            if ($LASTEXITCODE -eq 0) { exit 0 }
-            Write-Output "atmos test failed (attempt $attempt/3, exit $LASTEXITCODE)"
-            if ($attempt -lt 3) { Start-Sleep -Seconds 15 }
-          }
-          exit $LASTEXITCODE
-
-  # run other demo tests
+          matrix: ${{ toJSON(matrix) }}
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   mock-windows:
-    name: "[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder
+      }}
     needs: build-windows
     runs-on: ${{ matrix.flavor.os }}
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: windows-latest, target: windows }
+          - os: windows-latest
+            target: windows
         demo-folder:
           - examples/demo-atlantis
           - examples/demo-component-versions
@@ -2099,19 +1352,23 @@ jobs:
           - examples/demo-vendoring
           - examples/config-profiles
           - tests/fixtures/scenarios/complete
-
     timeout-minutes: 20
-    steps: *mock-steps
-
+    steps:
+      - uses: $/.github/actions/ci-mock
+        with:
+          matrix: ${{ toJSON(matrix) }}
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   mock-macos:
-    name: "[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder
+      }}
     needs: build-macos
     runs-on: ${{ matrix.flavor.os }}
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: "macos-15", target: macos }
+          - os: macos-15
+            target: macos
         demo-folder:
           - examples/demo-atlantis
           - examples/demo-component-versions
@@ -2119,12 +1376,14 @@ jobs:
           - examples/demo-vendoring
           - examples/config-profiles
           - tests/fixtures/scenarios/complete
-
     timeout-minutes: 20
-    steps: *mock-steps
-
+    steps:
+      - uses: $/.github/actions/ci-mock
+        with:
+          matrix: ${{ toJSON(matrix) }}
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   lint:
-    name: "[lint] ${{ matrix.demo-folder }}"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[lint] ${{ matrix.demo-folder }}
     needs: build-linux
     runs-on: ubuntu-latest
     strategy:
@@ -2149,14 +1408,13 @@ jobs:
           - demo-folder: quick-start-advanced
             component: app-config
             stack: plat-ue2-dev
-
     timeout-minutes: 20
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: >
+          allowed-endpoints: |
             api.github.com:443
             github.com:443
             raw.githubusercontent.com:443
@@ -2165,26 +1423,22 @@ jobs:
             tuf-repo-cdn.sigstore.dev:443
             tuf-repo.github.com:443
             us.i.posthog.com:443
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Set up Atmos (install build artifact)
         uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
-
-      # Restore the toolchain directory first so the installs below skip
-      # tools already on disk instead of downloading them on every run
-      # (restore-only: the build job's linux leg is this key's writer).
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
       - name: Restore the Atmos toolchain cache
         continue-on-error: true
         uses: $/actions/cache
         with:
           mode: restore-only
-
       - name: Install OpenTofu and TFLint with Atmos toolchain
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -2192,20 +1446,16 @@ jobs:
           atmos toolchain install opentofu/opentofu
           atmos toolchain install terraform-linters/tflint
           atmos toolchain env --format=github
-
       - name: Verify OpenTofu and TFLint
         run: |
           tofu version
           tflint --version
-
       - name: Lint ${{ matrix.demo-folder }}/${{ matrix.component }}
         working-directory: examples/${{ matrix.demo-folder }}
-        # Lint reads static HCL only. Disable the quick-start stack's emulator
-        # identity because this CI job intentionally does not start the emulator.
         run: atmos terraform lint ${{ matrix.component }} -s ${{ matrix.stack }} --identity=false
-
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   hooks-tflint:
-    name: "[hooks-tflint] example"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[hooks-tflint] example
     needs: build-linux
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -2214,7 +1464,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: >
+          allowed-endpoints: |
             api.github.com:443
             github.com:443
             raw.githubusercontent.com:443
@@ -2223,26 +1473,22 @@ jobs:
             tuf-repo-cdn.sigstore.dev:443
             tuf-repo.github.com:443
             us.i.posthog.com:443
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Set up Atmos (install build artifact)
         uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
-
-      # Restore the toolchain directory first so the installs below skip
-      # tools already on disk instead of downloading them on every run
-      # (restore-only: the build job's linux leg is this key's writer).
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
       - name: Restore the Atmos toolchain cache
         continue-on-error: true
         uses: $/actions/cache
         with:
           mode: restore-only
-
       - name: Install OpenTofu and TFLint with Atmos toolchain
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -2250,14 +1496,12 @@ jobs:
           atmos toolchain install opentofu/opentofu
           atmos toolchain install terraform-linters/tflint
           atmos toolchain env --format=github
-
       - name: Run the TFLint hook example
         working-directory: examples/hooks-tflint
         run: atmos terraform plan example -s test
-
-  # run other demo tests
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   validate:
-    name: "[validate] ${{ matrix.demo-folder }}"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[validate] ${{ matrix.demo-folder }}
     needs: build-linux
     runs-on: ubuntu-latest
     strategy:
@@ -2270,81 +1514,51 @@ jobs:
           - backend-provisioning
           - demo-stacks
           - quick-start-simple
-          # Examples below use runtime Atmos YAML functions (`!terraform.state`, `!store`,
-          # `!secret`, …). They were previously excluded because the static yaml-language-server
-          # hardcodes an empty customTags list and fails them with "Unresolved tag". Atmos
-          # itself understands its own tags natively, so `atmos validate stacks` validates them.
           - custom-components
           - sops-secrets
           - onepassword-secrets
           - packer-docker
-          # quick-start-advanced and native-terraform are intentionally NOT validated here:
-          #   - quick-start-advanced: its `stacks/workflows/*.yaml` manifests use newer workflow
-          #     step types (`type: stage`/`spin`, `title:`) that the atmos-manifest JSON Schema
-          #     does not describe yet, so schema validation fails. (Functions now parse fine.)
-          #   - native-terraform: intentionally configures no `stacks.name_pattern`/`name_template`,
-          #     which `atmos validate stacks` requires, so the command cannot resolve stacks.
-          # Both are still exercised end-to-end by the floci and acceptance jobs.
-
     timeout-minutes: 20
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: >
+          allowed-endpoints: |
             api.github.com:443
             github.com:443
             us.i.posthog.com:443
-
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Set up Atmos (install build artifact)
         uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
-
-      # Dogfood Atmos to validate the example stacks instead of a third-party action.
-      # `atmos validate stacks` checks YAML syntax, validates every manifest against the
-      # Atmos manifest JSON Schema, resolves imports, and detects duplicate components —
-      # and it understands Atmos YAML tags natively (`!terraform.state`, `!store`, `!secret`).
-      #
-      # No `--schemas-atmos-manifest` override is needed: the `atmos` binary under test is built
-      # from this PR's source, so when an example doesn't set `schemas.atmos.manifest` (the
-      # common case — see examples/*/atmos.yaml), `atmos validate stacks` falls back to the
-      # schema embedded in that same binary (pkg/datafetcher/schema/atmos/manifest/1.0.json),
-      # which already reflects this PR's schema changes. Atmos ignores the `# yaml-language-server:
-      # $schema` modeline, so the committed files keep their public URL for users who copy them.
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
       - name: Validate stacks
         working-directory: examples/${{ matrix.demo-folder }}
         run: atmos validate stacks
-
-  # run container step tests against a local registry (build -> push -> run)
-  # Docker is available directly on the runner (see the k3s job), and a
-  # registry:2 service container provides a hermetic push/pull target on
-  # localhost:5000 so the full build -> push -> run cycle is exercised without
-  # GitHub Container Registry, leftover packages, or fork-PR token limits.
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   container-step:
-    name: "[container-step] example"
+    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[container-step] example
     needs: build-linux
     runs-on: ubuntu-latest
-
     services:
       registry:
         image: registry:2
         ports:
           - 5000:5000
-
     timeout-minutes: 15
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: >
+          allowed-endpoints: |
             api.github.com:443
             auth.docker.io:443
             github.com:443
@@ -2355,25 +1569,23 @@ jobs:
             release-assets.githubusercontent.com:443
             storage.googleapis.com:443
             us.i.posthog.com:443
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
       - name: Set up Atmos (install build artifact)
         uses: $/.github/actions/setup-atmos-install
         with:
           target: linux
-
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
       - name: Set up Go for the Buildx cache integration test
         uses: $/.github/actions/setup-go-cache
-
       - name: Verify remote Buildx registry cache
         env:
-          ATMOS_TEST_REGISTRY_CACHE: "1"
+          ATMOS_TEST_REGISTRY_CACHE: '1'
         run: go test ./pkg/container -run '^TestDockerRuntime_RemoteRegistryCache_Integration$' -count=1
-
       - name: Run container steps (run, build, bake, push, workspace, env)
         working-directory: examples/container-step
         run: |
@@ -2389,7 +1601,6 @@ jobs:
           grep -q '| Digest | `sha256:' "$GITHUB_STEP_SUMMARY"
           grep -q "<summary>.*Layers (" "$GITHUB_STEP_SUMMARY"
           grep -q "<summary>.*Raw JSON</summary>" "$GITHUB_STEP_SUMMARY"
-
       - name: Verify a failing container step propagates a non-zero exit code
         working-directory: examples/container-step
         run: |
@@ -2398,11 +1609,4 @@ jobs:
             exit 1
           fi
           echo "failing-check correctly returned a non-zero exit code"
-
-  # The release job used to live here, gated on `needs: [test,
-  # terraform-registry-cache, kubernetes-e2e, lint, mock, k3s, floci,
-  # floci-go, docker, validate, container-step, magefiles]`. It's now
-  # .github/workflows/release.yml, triggered by this workflow's completion
-  # instead - a release-drafter or summarization hiccup no longer shows up as
-  # a "Tests" failure on main (see docs/fixes), and the workflow_run trigger
-  # doesn't need that job list hand-maintained.
+    if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}

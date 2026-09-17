@@ -1,0 +1,168 @@
+name: CI Test Go
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths-ignore:
+      - README.md
+  merge_group:
+    types:
+      - checks_requested
+  push:
+    branches:
+      - main
+      - release/v*
+    paths-ignore:
+      - .github/**
+      - docs/**
+      - examples/**
+      - test/**
+  workflow_dispatch: null
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+cache-mode: read
+
+permissions:
+  checks: read
+  contents: read
+  packages: read
+  pull-requests: read
+  actions: read
+env:
+  ATMOS_BOOTSTRAP_VERSION: 1.223.0
+  HELMFILE_UPGRADE_NOTICE_DISABLED: 'true'
+  TEST_SHARD_COUNT: '10'
+  RACE_SHARD_COUNT: '4'
+  GOPROXY: https://proxy.golang.org
+  CI_SOURCE_REVISION: ${{ github.sha }}
+  CI_SOURCE_EVENT: ${{ github.event_name }}
+  CI_SOURCE_DRAFT: ${{ github.event.pull_request.draft || false }}
+  CI_BUILD_RUN_ID: ''
+jobs:
+  magefiles:
+    name: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && 'Split disabled / ' || '' }}[magefiles] unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - name: Test cache pruning policy
+        run: node --test .github/actions/prune-go-caches/index.test.mjs .github/actions/ci-pipeline/*.test.mjs
+      - name: Set up Go
+        uses: $/.github/actions/setup-go-cache
+      - name: Run magefiles unit tests with coverage
+        run: go test -tags=mage -race -coverprofile=magefiles-coverage.out ./magefiles/...
+      - name: Upload magefiles coverage report artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: magefiles-coverage-linux
+          path: magefiles-coverage.out
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Run tools/noticegen unit tests with coverage
+        run: go test -race -coverprofile=../../noticegen-coverage.out ./...
+        working-directory: tools/noticegen
+      - name: Upload tools/noticegen coverage report artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: noticegen-coverage-linux
+          path: noticegen-coverage.out
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+    if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' }}
+  race-plan:
+    name: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && 'Split disabled / ' || '' }}[race] plan shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - name: Set up Go
+        uses: $/.github/actions/setup-go-cache
+        with:
+          cache: race-plan
+      - name: Plan race shards
+        id: plan
+        env:
+          ATMOS_TEST_RACE_SHARD_SEED: ${{ github.run_id }}
+        run: |
+          echo "::notice title=Race shard seed::Reproduce locally with GITHUB_OUTPUT=/dev/stdout ATMOS_TEST_RACE_SHARD_SEED=${ATMOS_TEST_RACE_SHARD_SEED} RACE_SHARD_COUNT=${RACE_SHARD_COUNT} go tool mage test:racematrix"
+          go tool mage test:racematrix
+    if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' }}
+  race:
+    name: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && 'Split disabled / ' || '' }}[race] non-acceptance test suite (shard ${{
+      matrix.shard }}/4)
+    needs:
+      - race-plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.race-plan.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - name: Set up Go
+        uses: $/.github/actions/setup-go-cache
+        with:
+          cache: race
+      - name: Set up Atmos bootstrap
+        uses: $/.github/actions/setup-atmos-bootstrap
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+      - name: Restore the Atmos toolchain cache
+        continue-on-error: true
+        uses: $/actions/cache
+        with:
+          mode: restore-only
+      - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
+        run: |
+          # The DEB822 /etc/apt/sources.list.d/ubuntu.sources file (and the
+          # Azure mirror it points at) is a GitHub-hosted-runner-image thing;
+          # only rewrite the mirror if that file actually exists, so this
+          # step works across runner image variations.
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          # Chrome is preinstalled on some runner images but is not needed by
+          # this libudev-only step. Its mutable apt index intermittently
+          # returns a hash mismatch, failing the entire race suite before it
+          # reaches the tests.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
+      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install hashicorp/packer
+          atmos toolchain install helm/helm
+          atmos toolchain install helmfile/helmfile
+          atmos toolchain env --format=github
+      - name: Run atmos test race
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEST: ${{ matrix.packages }}
+        run: atmos test race
+    if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' }}
+run-name: CI revision ${{ github.sha }} base ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha ||
+  github.event.before || github.sha }}

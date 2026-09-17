@@ -31,6 +31,8 @@ concurrency:
   group: setup-go-cache-warmup
   cancel-in-progress: false
 
+cache-mode: write
+
 permissions:
   contents: read
 
@@ -263,6 +265,7 @@ jobs:
           key: race-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
 
   prune:
+    cache-mode: none
     name: Retain two successful Go cache generations
     needs: cache-warmup
     runs-on: ubuntu-latest

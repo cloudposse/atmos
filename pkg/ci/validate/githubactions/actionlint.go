@@ -41,10 +41,11 @@ func (Validator) Validate(_ context.Context, request civalidate.Request) (valida
 
 	var renderedDiagnostics bytes.Buffer
 	linter, err := actionlint.NewLinter(&renderedDiagnostics, &actionlint.LinterOptions{
-		Color:      actionlint.ColorOptionKindNever,
-		Shellcheck: "",
-		Pyflakes:   "",
-		WorkingDir: request.Root,
+		Color:          actionlint.ColorOptionKindNever,
+		Shellcheck:     "",
+		Pyflakes:       "",
+		WorkingDir:     request.Root,
+		OnRulesCreated: withSelfReferences,
 	})
 	if err != nil {
 		return validation.Report{}, err
@@ -74,6 +75,19 @@ func (Validator) Validate(_ context.Context, request civalidate.Request) (valida
 	}
 	if err != nil {
 		return validation.Report{}, err
+	}
+
+	if compatible, changed := cacheModeDiagnostics(request.Root, errors); changed {
+		errors = compatible
+		renderedDiagnostics.Reset()
+		for _, diagnostic := range errors {
+			path := diagnostic.Filepath
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(request.Root, path)
+			}
+			source, _ := os.ReadFile(path)
+			diagnostic.PrettyPrint(&renderedDiagnostics, source)
+		}
 	}
 
 	report.Diagnostics = make([]validation.Diagnostic, 0, len(errors))

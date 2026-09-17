@@ -1,0 +1,174 @@
+name: CI Test Linux
+run-name: CI source ${{ github.event.workflow_run.id }} attempt ${{ github.event.workflow_run.run_attempt }}
+on:
+  workflow_run:
+    workflows:
+      - CI Build Linux
+    types:
+      - completed
+cache-mode: read
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+  pull-requests: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+env:
+  ATMOS_BOOTSTRAP_VERSION: 1.223.0
+  HELMFILE_UPGRADE_NOTICE_DISABLED: 'true'
+  TEST_SHARD_COUNT: '10'
+  RACE_SHARD_COUNT: '4'
+  GOPROXY: https://proxy.golang.org
+jobs:
+  source:
+    if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      revision: ${{ steps.source.outputs.revision }}
+      event: ${{ steps.source.outputs.event }}
+      draft: ${{ steps.source.outputs.draft }}
+      run-id: ${{ steps.source.outputs.run-id }}
+      active: ${{ steps.source.outputs.active }}
+    steps:
+      - id: source
+        uses: $/.github/actions/ci-pipeline
+        with:
+          mode: resolve
+          run-id: ${{ github.event.workflow_run.id }}
+          attempt: ${{ github.event.workflow_run.run_attempt }}
+          github-token: ${{ github.token }}
+  terraform-registry-cache-linux:
+    name: Terraform registry cache test (${{ matrix.flavor.target }})
+    needs:
+      - source
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - os: ubuntu-latest
+            target: linux
+    timeout-minutes: ${{ matrix.flavor.target == 'windows' && 45 || 20 }}
+    runs-on: ${{ matrix.flavor.os }}
+    steps:
+      - uses: $/.github/actions/ci-registry-setup
+        with:
+          matrix: ${{ toJSON(matrix) }}
+      - name: Terraform registry cache acceptance test
+        timeout-minutes: 15
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && !
+          (env.CI_SOURCE_DRAFT == 'true'))
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          ATMOS_TEST_TERRAFORM_REGISTRY_CACHE: 1
+          CGO_ENABLED: 0
+        run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
+    if: ${{ needs.source.outputs.active == 'true' }}
+    env:
+      CI_SOURCE_REVISION: ${{ needs.source.outputs.revision }}
+      CI_SOURCE_EVENT: ${{ needs.source.outputs.event }}
+      CI_SOURCE_DRAFT: ${{ needs.source.outputs.draft }}
+      CI_BUILD_RUN_ID: ${{ needs.source.outputs.run-id }}
+  test-linux:
+    name: Acceptance Tests (${{ matrix.flavor.target }}, shard ${{ matrix.shard }}/10)
+    needs:
+      - source
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - os: ubuntu-latest
+            target: linux
+            jobTimeout: 50
+            stepTimeout: 30
+            coverageStepTimeout: 40
+        shard:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+    timeout-minutes: ${{ matrix.flavor.jobTimeout }}
+    runs-on: ${{ matrix.flavor.os }}
+    steps:
+      - uses: $/.github/actions/ci-acceptance-setup
+        with:
+          matrix: ${{ toJSON(matrix) }}
+      - name: Acceptance tests with coverage
+        timeout-minutes: ${{ matrix.flavor.coverageStepTimeout }}
+        if: matrix.flavor.target == 'linux'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          ATMOS_TEST_SHARD: ${{ matrix.shard }}
+          ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
+        run: go tool mage acceptance:run coverage linux
+      - name: Acceptance tests
+        timeout-minutes: ${{ matrix.flavor.stepTimeout }}
+        if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! (env.CI_SOURCE_DRAFT == 'true'))
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          ATMOS_TEST_SHARD: ${{ matrix.shard }}
+          ATMOS_TEST_SHARD_COUNT: ${{ env.TEST_SHARD_COUNT }}
+        run: go tool mage acceptance:run test "${{ matrix.flavor.target }}"
+      - name: Upload native coverage artifact
+        if: matrix.flavor.target == 'linux' && hashFiles(format('coverage/shard-{0}/covmeta.*', matrix.shard)) != ''
+        timeout-minutes: 5
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-coverage-linux-shard-${{ matrix.shard }}
+          path: coverage/shard-${{ matrix.shard }}/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+    if: ${{ needs.source.outputs.active == 'true' }}
+    env:
+      CI_SOURCE_REVISION: ${{ needs.source.outputs.revision }}
+      CI_SOURCE_EVENT: ${{ needs.source.outputs.event }}
+      CI_SOURCE_DRAFT: ${{ needs.source.outputs.draft }}
+      CI_BUILD_RUN_ID: ${{ needs.source.outputs.run-id }}
+  mock-linux:
+    name: '[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}'
+    needs:
+      - source
+    runs-on: ${{ matrix.flavor.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - os: ubuntu-latest
+            target: linux
+        demo-folder:
+          - examples/demo-atlantis
+          - examples/demo-component-versions
+          - examples/demo-context
+          - examples/demo-vendoring
+          - examples/config-profiles
+          - tests/fixtures/scenarios/complete
+    timeout-minutes: 20
+    steps:
+      - uses: $/.github/actions/ci-mock
+        with:
+          matrix: ${{ toJSON(matrix) }}
+    if: ${{ needs.source.outputs.active == 'true' }}
+    env:
+      CI_SOURCE_REVISION: ${{ needs.source.outputs.revision }}
+      CI_SOURCE_EVENT: ${{ needs.source.outputs.event }}
+      CI_SOURCE_DRAFT: ${{ needs.source.outputs.draft }}
+      CI_BUILD_RUN_ID: ${{ needs.source.outputs.run-id }}
