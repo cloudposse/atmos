@@ -38,10 +38,11 @@ export async function timingRoot<T extends PipelineRun>(client: GitHubClient, re
 
 /** Add exact-attempt child runs to the ordinary SHA-filtered workflow list. */
 export async function includePipelineRuns<T extends PipelineRun>(
-  client: GitHubClient, repo: string, runs: T[],
+  client: GitHubClient, repo: string, runs: T[], event?: string,
 ): Promise<{ runs: T[]; pending: boolean }> {
   const latest = new Map<string, T>();
   for (const run of runs) {
+    if (event !== undefined && run.event !== event) continue;
     if (file(run) === "test.yml") continue; // inactive bootstrap/rollback workflow
     const previous = latest.get(file(run));
     if (previous === undefined || run.id > previous.id) latest.set(file(run), run);

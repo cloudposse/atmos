@@ -14,7 +14,10 @@ func TestSplitWorkflowRejectsBrokenRoutes(t *testing.T) {
 	cases := []struct {
 		name, file, before, after string
 	}{
+		{"malformed policy", policy, "{", "["},
 		{"malformed YAML", linux, "name: CI Test Linux", "name: ["},
+		{"wrong registry target", linux, "target: linux", "target: windows"},
+		{"wrong acceptance target", linux, "target: linux\n            jobTimeout: 50", "target: windows\n            jobTimeout: 50"},
 		{"wrong count", linux, "TEST_SHARD_COUNT: '10'", "TEST_SHARD_COUNT: '9'"},
 		{"duplicate shard", linux, "          - 3\n", "          - 2\n"},
 		{"missing shard", linux, "          - 3\n", ""},
@@ -52,5 +55,15 @@ func TestSplitWorkflowRejectsBrokenRoutes(t *testing.T) {
 				t.Fatal("broken workflow passed verification")
 			}
 		})
+	}
+}
+
+func TestSplitWorkflowMissingInputs(t *testing.T) {
+	root := t.TempDir()
+	if err := verifyWorkflow(root, 10); err == nil || !strings.Contains(err.Error(), "read CI check policy") {
+		t.Fatalf("expected missing policy error, got %v", err)
+	}
+	if err := verifyPlatformWorkflow(root, "linux", 10, workflowPolicy{}); err == nil || !strings.Contains(err.Error(), "read platform workflow") {
+		t.Fatalf("expected missing workflow error, got %v", err)
 	}
 }

@@ -139,3 +139,27 @@ come from platform-specific dependencies, smaller caches, and faster test setup;
 
 Hosted cross-workflow behavior can only be validated after the default-branch
 bootstrap and activation. This change does not claim a measured 20-minute runtime.
+
+## Follow-up measurements and regression fixes
+
+The pre-activation run [35255401233](https://github.com/cloudposse/atmos/actions/runs/35255401233)
+finished Tests in 28m06s. Its slowest race job took 24m53s, including 980.219s
+reported by `pkg/toolchain`. That job missed its race compilation cache. Package
+summaries alone cannot attribute the remaining time precisely to compilation,
+queueing, or individual tests. Both race entry points now enable verbose Go test
+output to record individual test durations before changing their distribution.
+The toolchain suite includes repeated real installations into isolated temporary
+directories and tests that mutate process-wide configuration; increasing
+`-parallel` alone does not make those serial tests parallel. A follow-up can
+partition discovered top-level test names across independent processes, verify
+complete non-overlapping assignment, and balance using measured durations.
+
+The same run hit a Go allocator fatal error on Windows during the endpoint YAML
+scan. The scan now compiles its endpoint regex once, instead of at every YAML
+node, and runs apart from parallel subprocess tests to reduce allocation pressure.
+This is a mitigation that requires confirmation on hosted Windows runners.
+Endpoint validation also includes `.yaml` files. Integration lint jobs include the
+component in their names so the reporter can identify each matrix entry uniquely.
+Timing aggregation keeps push and PR roots separate even when their SHAs match;
+route validation checks actual matrix platform targets, and diagnostic rendering
+propagates errors when its workflow source cannot be read.

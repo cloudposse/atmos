@@ -1,12 +1,14 @@
 package githubactions
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/rhysd/actionlint"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -257,4 +259,12 @@ func TestValidatorCacheModePreservesOtherErrors(t *testing.T) {
 	report, err = (Validator{}).Validate(context.Background(), civalidate.Request{Root: root})
 	require.NoError(t, err)
 	assert.True(t, report.HasErrors())
+}
+
+func TestRenderWorkflowDiagnosticsMissingSource(t *testing.T) {
+	var output bytes.Buffer
+	err := renderWorkflowDiagnostics(&output, t.TempDir(), []*actionlint.Error{{Filepath: "missing.yml"}})
+	require.ErrorIs(t, err, os.ErrNotExist)
+	assert.ErrorContains(t, err, "missing.yml")
+	assert.Empty(t, output.String())
 }

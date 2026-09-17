@@ -16,7 +16,10 @@ type workflowRoute struct {
 	Name     string `yaml:"name"`
 	Strategy struct {
 		Matrix struct {
-			Shard []int `yaml:"shard"`
+			Shard  []int `yaml:"shard"`
+			Flavor []struct {
+				Target string `yaml:"target"`
+			} `yaml:"flavor"`
 		} `yaml:"matrix"`
 	} `yaml:"strategy"`
 	Steps []struct {
@@ -66,6 +69,9 @@ func verifyPlatformWorkflow(repoRoot, platform string, shardCount int, policy wo
 	if err := yaml.Unmarshal(data, &workflow); err != nil {
 		return fmt.Errorf("parse platform workflow: %w", err)
 	}
+	if err := verifyPlatformTargets(workflow.Jobs, platform); err != nil {
+		return err
+	}
 	route := workflow.Jobs["test-"+platform]
 	if workflow.Env["TEST_SHARD_COUNT"] != strconv.Itoa(shardCount) || len(route.Strategy.Matrix.Shard) != shardCount {
 		return fmt.Errorf("%w: workflow shard count differs from %d", errShardPlan, shardCount)
@@ -80,18 +86,6 @@ func verifyPlatformWorkflow(repoRoot, platform string, shardCount int, policy wo
 			return fmt.Errorf("%w: shard position %d contains %d", errShardPlan, index+1, shard)
 		}
 		expected = append(expected, fmt.Sprintf("Acceptance Tests (%s, shard %d/%d)", platform, shard, shardCount))
-	}
-	registry := workflow.Jobs["terraform-registry-cache-"+platform]
-	if registry.Name != "Terraform registry cache test (${{ matrix.flavor.target }})" {
-		return fmt.Errorf("%w: registry check name changed", errShardPlan)
-	}
-	if !slices.ContainsFunc(registry.Steps, func(step struct {
-		Run string `yaml:"run"`
-	},
-	) bool {
-		return strings.Contains(step.Run, "go test ./tests -run '^"+RegistryTest+"$'")
-	}) {
-		return fmt.Errorf("%w: %s has no dedicated workflow route", errShardPlan, RegistryTest)
 	}
 	expected = append(expected, "Terraform registry cache test ("+platform+")")
 	return verifyReporterPolicy(platform, expected, policy)
@@ -113,6 +107,28 @@ func verifyReporterPolicy(platform string, expected []string, policy workflowPol
 	}
 	if matched != 1 {
 		return fmt.Errorf("%w: expected exactly one required acceptance check", errShardPlan)
+	}
+	return nil
+}
+
+func verifyPlatformTargets(jobs map[string]workflowRoute, platform string) error {
+	for _, job := range []string{"test-" + platform, "terraform-registry-cache-" + platform} {
+		flavors := jobs[job].Strategy.Matrix.Flavor
+		if len(flavors) != 1 || flavors[0].Target != platform {
+			return fmt.Errorf("%w: %s must target %s exactly once", errShardPlan, job, platform)
+		}
+	}
+	registry := jobs["terraform-registry-cache-"+platform]
+	if registry.Name != "Terraform registry cache test (${{ matrix.flavor.target }})" {
+		return fmt.Errorf("%w: registry check name changed", errShardPlan)
+	}
+	if !slices.ContainsFunc(registry.Steps, func(step struct {
+		Run string `yaml:"run"`
+	},
+	) bool {
+		return strings.Contains(step.Run, "go test ./tests -run '^"+RegistryTest+"$'")
+	}) {
+		return fmt.Errorf("%w: %s has no dedicated workflow route", errShardPlan, RegistryTest)
 	}
 	return nil
 }

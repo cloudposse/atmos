@@ -158,9 +158,11 @@ async function timingRoot(client, repo, run) {
     return current;
 }
 /** Add exact-attempt child runs to the ordinary SHA-filtered workflow list. */
-async function includePipelineRuns(client, repo, runs) {
+async function includePipelineRuns(client, repo, runs, event) {
     const latest = new Map();
     for (const run of runs) {
+        if (event !== undefined && run.event !== event)
+            continue;
         if (file(run) === "test.yml")
             continue; // inactive bootstrap/rollback workflow
         const previous = latest.get(file(run));
@@ -494,7 +496,7 @@ async function run() {
     }
     const workflowRunResponses = await client.paginate((page) => `${encodedRepo}/actions/runs?head_sha=${encodeURIComponent(headSha)}&per_page=100&page=${page}`, unwrapProperty("workflow_runs"));
     const pipeline = splitPipeline
-        ? await includePipelineRuns(client, encodedRepo, workflowRunResponses)
+        ? await includePipelineRuns(client, encodedRepo, workflowRunResponses, rootData.event)
         : { runs: workflowRunResponses, pending: false };
     if (pipeline.pending) {
         await setResult(false, "Waiting for downstream CI workflows to be created");

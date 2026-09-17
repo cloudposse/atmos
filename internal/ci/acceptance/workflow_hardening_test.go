@@ -13,7 +13,8 @@ import (
 // Harden Runner splits on spaces, not arbitrary whitespace. A literal YAML
 // block silently turns the entire allowlist into a malformed first endpoint.
 func TestWorkflowEndpointLists(t *testing.T) {
-	t.Parallel()
+	// Keep the YAML scan apart from parallel subprocess tests on Windows.
+	endpoint := regexp.MustCompile(`^[a-zA-Z0-9.*-]+:[0-9]+$`)
 	root := filepath.Join("..", "..", "..", ".github")
 	checked := 0
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
@@ -23,7 +24,8 @@ func TestWorkflowEndpointLists(t *testing.T) {
 		if entry.IsDir() && entry.Name() == "node_modules" {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() || filepath.Ext(path) != ".yml" {
+		ext := filepath.Ext(path)
+		if entry.IsDir() || (ext != ".yml" && ext != ".yaml") {
 			return nil
 		}
 		data, err := os.ReadFile(path)
@@ -34,7 +36,7 @@ func TestWorkflowEndpointLists(t *testing.T) {
 		if err := yaml.Unmarshal(data, &document); err != nil {
 			return err
 		}
-		checked += checkEndpointNodes(t, path, &document)
+		checked += checkEndpointNodes(t, path, &document, endpoint)
 		return nil
 	})
 	if err != nil {
@@ -45,10 +47,9 @@ func TestWorkflowEndpointLists(t *testing.T) {
 	}
 }
 
-func checkEndpointNodes(t *testing.T, path string, node *yaml.Node) int {
+func checkEndpointNodes(t *testing.T, path string, node *yaml.Node, endpoint *regexp.Regexp) int {
 	t.Helper()
 	checked := 0
-	endpoint := regexp.MustCompile(`^[a-zA-Z0-9.*-]+:[0-9]+$`)
 	for index, child := range node.Content {
 		if node.Kind == yaml.MappingNode && index%2 == 0 && child.Value == "allowed-endpoints" {
 			value := node.Content[index+1].Value
@@ -59,7 +60,7 @@ func checkEndpointNodes(t *testing.T, path string, node *yaml.Node) int {
 			}
 			checked++
 		}
-		checked += checkEndpointNodes(t, path, child)
+		checked += checkEndpointNodes(t, path, child, endpoint)
 	}
 	return checked
 }

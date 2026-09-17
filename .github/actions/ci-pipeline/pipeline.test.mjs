@@ -288,3 +288,10 @@ test('a sibling build retry during aggregation prevents stale green publication'
   await report(api, child);
   assert.deepEqual(writes, []);
 });
+
+test('every suite policy has unique jobs and accepts its complete successful matrix', () => {
+  for (const definition of Object.values(policy)) {
+    assert.equal(new Set(definition.jobs).size, definition.jobs.length, definition.name);
+    assert.equal(resultForJobs({ status: 'completed' }, definition.jobs.map(done), definition.jobs), 'success');
+  }
+});

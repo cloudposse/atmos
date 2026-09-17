@@ -55,3 +55,14 @@ test("coverage timings accept either input's completion and choose the newest up
   assert.equal(result.runs.at(-1)?.id, 21);
   assert.equal(result.runs.at(-1)?.head_sha, "pr-head");
 });
+
+test("a newer push cannot replace the PR root on the same SHA", async () => {
+  const pr = run(1, "ci-build-windows.yml");
+  const push = run(5, "ci-build-windows.yml", { event: "push" });
+  const child = run(3, "ci-test-windows.yml", { event: "workflow_run", display_title: "CI source 1 attempt 1" });
+  const pushChild = run(6, "ci-test-windows.yml", { event: "workflow_run", display_title: "CI source 5 attempt 1" });
+  const result = await includePipelineRuns(client([pr, push, child, pushChild]), "/repos/o/r", [pr, push], "pull_request");
+  assert.equal(result.pending, false);
+  assert.deepEqual(result.runs.map(run => run.id), [1, 3]);
+  assert.equal(result.runs[1].event, "pull_request");
+});

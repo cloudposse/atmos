@@ -510,6 +510,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TEST: ${{ matrix.packages }}
+          # Emit individual test durations so slow packages can be split by measured cost.
+          TESTARGS: -v
         run: atmos test race
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   test-required-linux:
@@ -1376,7 +1378,7 @@ jobs:
           matrix: ${{ toJSON(matrix) }}
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   lint:
-    name: "[lint] ${{ matrix.demo-folder }}${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
+    name: "[lint] ${{ matrix.demo-folder }} (${{ matrix.component }})${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     runs-on: ubuntu-latest
     strategy:

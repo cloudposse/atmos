@@ -80,7 +80,7 @@ jobs:
       CI_SOURCE_DRAFT: ${{ needs.source.outputs.draft }}
       CI_BUILD_RUN_ID: ${{ needs.source.outputs.run-id }}
   lint:
-    name: '[lint] ${{ matrix.demo-folder }}'
+    name: '[lint] ${{ matrix.demo-folder }} (${{ matrix.component }})'
     needs:
       - source
     runs-on: ubuntu-latest

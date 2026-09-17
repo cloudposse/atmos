@@ -207,7 +207,7 @@ async function run(): Promise<void> {
     unwrapProperty<ApiWorkflowRun>("workflow_runs"),
   );
   const pipeline = splitPipeline
-    ? await includePipelineRuns(client, encodedRepo, workflowRunResponses)
+    ? await includePipelineRuns(client, encodedRepo, workflowRunResponses, rootData.event)
     : { runs: workflowRunResponses, pending: false };
   if (pipeline.pending) {
     await setResult(false, "Waiting for downstream CI workflows to be created");

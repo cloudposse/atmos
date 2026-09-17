@@ -161,6 +161,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TEST: ${{ matrix.packages }}
+          # Emit individual test durations so slow packages can be split by measured cost.
+          TESTARGS: -v
         run: atmos test race
     if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' }}
 run-name: CI revision ${{ github.sha }} base ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha ||

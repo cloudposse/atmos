@@ -429,6 +429,18 @@ func TestBuildBinary(t *testing.T) {
 		assert.Equal(t, "native", string(data))
 	})
 
+	t.Run("output directory cannot replace an existing file", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		t.Chdir(root)
+		parent := filepath.Join(root, "existing")
+		require.NoError(t, os.WriteFile(parent, []byte("preserved"), 0o600))
+		t.Setenv("ATMOS_BUILD_OUTPUT", filepath.Join(parent, "atmos"))
+		require.Error(t, Build{}.Binary("macos-intel", "test"))
+		data, err := os.ReadFile(parent)
+		require.NoError(t, err)
+		assert.Equal(t, "preserved", string(data))
+	})
+
 	t.Run("macos-intel pins GOARCH=amd64 regardless of the ambient value", func(t *testing.T) {
 		root := initGitRepoFixture(t)
 		argsFile := setUpFakePathBinary(t, "go")
