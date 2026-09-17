@@ -139,10 +139,22 @@ runs:
         name: build-artifacts-${{ fromJSON(inputs.matrix).target }}
         path: |
           ./build/
+    # Only the cross-compiler needs these objects; keep them out of every
+    # native Mac acceptance shard's archive. Module downloads are shared.
+    - name: Restore Intel macOS build cache
+      if: fromJSON(inputs.matrix).target == 'macos'
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ${{ runner.temp }}/macos-intel-go-build
+        key: intel-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          intel-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('**/go.sum') }}-
+          intel-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-
     - name: Cross-compile Intel macOS binary
       if: fromJSON(inputs.matrix).target == 'macos'
       shell: bash
       env:
+        GOCACHE: ${{ runner.temp }}/macos-intel-go-build
         ATMOS_BUILD_OUTPUT: ${{ runner.temp }}/macos-intel/atmos
       run: |
         atmos build binary --target=macos-intel --version=test

@@ -183,9 +183,10 @@ jobs:
 
       - name: Warm Intel cross-compilation on the ARM Mac
         if: matrix.target == 'macos'
+        # build:binary sets CGO/FIPS flags for the cross-compile itself.
+        # Keep the host Mage invocation identical to the real build job.
         env:
-          CGO_ENABLED: "0"
-          GOFIPS140: latest
+          GOCACHE: ${{ runner.temp }}/macos-intel-go-build
           ATMOS_BUILD_OUTPUT: ${{ runner.temp }}/macos-intel/atmos
         run: go tool mage build:binary macos-intel test
 
@@ -245,6 +246,14 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
           key: ${{ steps.go.outputs.cache-primary-key }}-${{ github.run_id }}
+
+      # Do not duplicate GOMODCACHE or add Intel objects to native Mac restores.
+      - name: Save the Intel macOS build cache
+        if: matrix.target == 'macos'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/macos-intel-go-build
+          key: intel-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
 
       - name: Save the race planner build and module caches
         if: matrix.target == 'linux'
