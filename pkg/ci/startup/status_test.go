@@ -11,6 +11,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -44,6 +45,20 @@ func initTestUI(t *testing.T) *bytes.Buffer {
 	ui.InitFormatter(ioCtx)
 
 	return stderr
+}
+
+// initTestDataWriter wires the data channel (stdout) to a captured buffer,
+// so GitHub Actions annotations written via pkg/data can be asserted on.
+func initTestDataWriter(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	stdout := &bytes.Buffer{}
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: stdout, stderr: &bytes.Buffer{}}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+
+	return stdout
 }
 
 // fakeProvider is a minimal ci provider.Provider whose Detect() result is
@@ -188,11 +203,33 @@ func TestPrintStatusLines(t *testing.T) {
 func TestPrintStatusLines_LegacyActionWarning(t *testing.T) {
 	t.Setenv("GITHUB_ACTION_REPOSITORY", "cloudposse/github-action-atmos-terraform-plan")
 	stderr := initTestUI(t)
+	stdout := initTestDataWriter(t)
 
 	printStatusLines(&schema.AtmosConfiguration{})
 
 	assert.Contains(t, stderr.String(), "Detected legacy action cloudposse/github-action-atmos-terraform-plan")
-	assert.Contains(t, stderr.String(), "https://atmos.tools/ci")
+	assert.Contains(t, stderr.String(), "migrate to Native CI for better performance — learn more at https://atmos.tools/ci")
+
+	// The same warning is also emitted as a real GitHub Actions annotation
+	// on the data channel (stdout), not just a console line.
+	assert.Contains(t, stdout.String(), "::warning")
+	assert.Contains(t, stdout.String(), "title=Deprecated GitHub Action")
+	assert.Contains(t, stdout.String(), "Detected legacy action cloudposse/github-action-atmos-terraform-plan")
+}
+
+// TestPrintStatusLines_LegacyActionWarning_PlanStorage covers the companion
+// action that doesn't match the old "github-action-atmos-*" prefix, to guard
+// against regressing back to prefix-based detection.
+func TestPrintStatusLines_LegacyActionWarning_PlanStorage(t *testing.T) {
+	t.Setenv("GITHUB_ACTION_REPOSITORY", "cloudposse/github-action-terraform-plan-storage")
+	stderr := initTestUI(t)
+	stdout := initTestDataWriter(t)
+
+	printStatusLines(&schema.AtmosConfiguration{})
+
+	assert.Contains(t, stderr.String(), "Detected legacy action cloudposse/github-action-terraform-plan-storage")
+	assert.Contains(t, stdout.String(), "::warning")
+	assert.Contains(t, stdout.String(), "Detected legacy action cloudposse/github-action-terraform-plan-storage")
 }
 
 func TestPrintStatusLines_NoLegacyActionWarningWhenUnset(t *testing.T) {
