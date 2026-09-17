@@ -2203,6 +2203,137 @@ func TestOnAfterDeploy_WithCommandError_RendersFailureSummary(t *testing.T) {
 	assert.NotContains(t, rendered, "NO_CHANGE-inactive", "must not use the no-change badge")
 }
 
+// terraformPlanWarningOutput is realistic `terraform plan` stdout containing
+// one deprecation warning with a source locator, used to exercise the
+// onAfter* → emitPlanWarningAnnotations wiring end to end.
+const terraformPlanWarningOutput = `
+Warning: Argument is deprecated
+
+  with aws_s3_bucket.this,
+  on main.tf line 12, in resource "aws_s3_bucket" "this":
+  12:   acl = "private"
+
+Use the aws_s3_bucket_acl resource instead
+
+Plan: 1 to add, 0 to change, 0 to destroy.
+`
+
+func TestOnAfterPlan_EmitsWarningAnnotation(t *testing.T) {
+	p := &Plugin{}
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: newMockProvider(),
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: terraformPlanWarningOutput,
+	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.annotateCalls, 1)
+	require.Len(t, mp.annotateCalls[0], 1)
+	ann := mp.annotateCalls[0][0]
+	assert.Equal(t, provider.AnnotationWarning, ann.Level)
+	assert.Equal(t, "main.tf", ann.Path)
+	assert.Equal(t, 12, ann.StartLine)
+	assert.Equal(t, "terraform plan: warning", ann.Title)
+}
+
+func TestOnAfterApply_EmitsWarningAnnotation(t *testing.T) {
+	p := &Plugin{}
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: newMockProvider(),
+		Command:  "apply",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: terraformPlanWarningOutput,
+	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterApply(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.annotateCalls, 1)
+	assert.Equal(t, "terraform apply: warning", mp.annotateCalls[0][0].Title)
+}
+
+func TestOnAfterDeploy_EmitsWarningAnnotationTitledApply(t *testing.T) {
+	p := &Plugin{}
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: newMockProvider(),
+		Command:  "deploy",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: terraformPlanWarningOutput,
+	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterDeploy(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.annotateCalls, 1)
+	// Deploy overrides ctx.Command to "apply" for templating/parsing; the
+	// annotation title should reflect that, not the literal "deploy".
+	assert.Equal(t, "terraform apply: warning", mp.annotateCalls[0][0].Title)
+	assert.Equal(t, "deploy", ctx.Command, "original command must be restored after the hook returns")
+}
+
+func TestOnAfterPlan_AnnotationsDisabled_SkipsWarningAnnotation(t *testing.T) {
+	p := &Plugin{}
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary:     schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:      schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:      schema.CIChecksConfig{Enabled: boolPtr(false)},
+				Annotations: schema.CIAnnotationsConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: newMockProvider(),
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: terraformPlanWarningOutput,
+	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err)
+
+	assert.Empty(t, mp.annotateCalls)
+}
+
 func TestIsCommentsEnabled(t *testing.T) {
 	tests := []struct {
 		name     string
