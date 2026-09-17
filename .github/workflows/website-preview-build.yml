@@ -104,8 +104,12 @@ jobs:
       - name: Install Dependencies and Build Website
         run: |
           node --version
+          # Match production's reproducible build so unchanged previews are no-ops.
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
           cd website
           pnpm install --frozen-lockfile
+          pnpm run test:build-timestamp
           pnpm run build:site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
