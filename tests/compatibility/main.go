@@ -255,7 +255,18 @@ func differences(expected, actual map[string]observation) []string {
 }
 
 func compare(out io.Writer, expected, actual map[string]observation) bool {
-	changed := differences(expected, actual)
+	return compareDifferences(out, expected, actual, nil, differences(expected, actual))
+}
+
+func compareMigration(out io.Writer, expected, actual map[string]observation) bool {
+	approved, changed := classifyDifferences(expected, actual)
+	return compareDifferences(out, expected, actual, approved, changed)
+}
+
+func compareDifferences(out io.Writer, expected, actual map[string]observation, approved, changed []string) bool {
+	for _, name := range approved {
+		fmt.Fprintf(out, "APPROVED %s: BoltDB support intentionally removed; unsupported-scheme rejection verified.\n", name)
+	}
 	for _, name := range changed {
 		fmt.Fprintf(out, "--- baseline/%s\n+++ candidate/%s\n", name, name)
 		a, aOK := expected[name]
@@ -286,7 +297,7 @@ func compare(out io.Writer, expected, actual map[string]observation) bool {
 			matched++
 		}
 	}
-	fmt.Fprintf(out, "%d/%d cases match; %d unapproved differences.\n", matched, len(expected), len(changed))
+	fmt.Fprintf(out, "%d/%d cases match; %d approved differences; %d unapproved differences.\n", matched, len(expected), len(approved), len(changed))
 	return len(changed) > 0
 }
 
@@ -311,9 +322,11 @@ func (r *runner) report(path, binary, digest string, expected, actual map[string
 	if err != nil {
 		return err
 	}
+	approved, unapproved := classifyDifferences(expected, actual)
 	return writeJSON(path, map[string]any{
 		"revision": revision, "corpus_sha256": digest, "platform": runtime.GOOS,
-		"candidate_sha256": binaryHash, "baseline_cases": expected, "cases": actual, "unapproved_differences": differences(expected, actual),
+		"candidate_sha256": binaryHash, "baseline_cases": expected, "cases": actual,
+		"approved_differences": approved, "unapproved_differences": unapproved,
 	})
 }
 
@@ -435,7 +448,11 @@ func execute(args []string) (int, error) {
 	if after != digest {
 		return 2, errors.New("inputs changed during comparison")
 	}
-	if compare(os.Stdout, expected.Cases, results) {
+	comparison := compare
+	if command != "baseline" {
+		comparison = compareMigration
+	}
+	if comparison(os.Stdout, expected.Cases, results) {
 		return 1, nil
 	}
 	return 0, nil

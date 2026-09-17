@@ -5,17 +5,34 @@ Candidate implementation: `d18dee6386ddd9da28c60b18b9c49eb11df453d0`.
 Environment: Go 1.27.1, macOS/arm64. Harness: Go, standard library only.
 
 The old implementation reproduced **212/212 cases** across repeated runs. The
-candidate matches **85/212 cases**; **127 cases have unapproved differences**.
-In **32 cases**, an old success becomes a candidate failure. These numbers count
+candidate matches **85/212 cases**; **3 differences are approved** for BoltDB
+removal and **124 remain unapproved**. In **32 cases**, an old success becomes a
+candidate failure; two of these are the approved BoltDB removal, leaving **30
+unapproved success-to-failure changes**. These numbers count
 cases, not distinct root causes. Warnings, errors, types, and requests are part of
 the comparison, so a difference does not necessarily mean a rendered value broke.
 
 All 13 frozen catalog-description cases, both dev/prod file-generation cases, and
 the basic docs-generation case match. That alone does **not** establish backward
-compatibility. The migration comparison is currently a failing gate, with no
-approved exceptions. Linux/Windows runs still need CI execution.
+compatibility. The migration comparison is currently a failing gate. BoltDB
+removal is the only approved exception. Linux/Windows runs still need CI execution.
 
-## Previously successful cases that now fail
+## Approved removal: BoltDB
+
+The migration review explicitly accepted dropping BoltDB support on 2026-09-16.
+No compatibility adapter is planned. The `boltdb-json` and `boltdb-plain` cases
+previously read data successfully; the candidate now rejects the unsupported
+scheme. `boltdb-missing` previously failed on a missing key and now rejects the
+scheme. All three remain tested: exit 1, an explicit unsupported-BoltDB diagnostic,
+empty stdout, and no generated files or service requests are required. Diagnostic
+wrapping and migration warnings are outside the compatibility contract for this
+removed feature. Old baseline observations remain unchanged.
+
+Users of BoltDB datasources must export their data to a supported datasource,
+such as a JSON/YAML file, before upgrading. This exception applies only to the
+three named cases; other datasource failures remain blocking.
+
+## Unapproved failures of previously successful cases
 
 | Cases | Observed difference |
 | --- | --- |
@@ -26,7 +43,6 @@ approved exceptions. Linux/Windows runs still need CI execution.
 | `prefix-contains`, `prefix-method-ip`, `prefix-method-ipnet`, `prefix-method-iszero`, `prefix-method-range`, `prefix-method-valid`, `range-contains` | Prefix/range method names or argument types are incompatible. |
 | `subpath-no-slash` | A datasource directory without a trailing slash resolves differently. |
 | `http-no-head` | A server that supports GET but returns 501 for HEAD is no longer usable. |
-| `boltdb-json`, `boltdb-plain` | Previously supported BoltDB datasource reads fail. |
 | `env-datasource` | An environment datasource read that succeeds in the old CLI fails. |
 | `ssm-value-field`, `ssm-secure`, `ssm-json`, `ssm-stringlist`, `ssm-session-token` | Existing templates accessing parameter metadata/`.Value` fail against the changed return shape. |
 | `consul-directory-fields` | Access to the old listing's key/value fields fails. |
@@ -61,10 +77,10 @@ not imply that every use of SSM, Vault, or an affected function fails.
 
 ## Review policy and reproducibility
 
-For every difference, restore the old behavior or review an explicit exception
+For every remaining difference, restore the old behavior or review an explicit exception
 with exact old/new observations, user impact, rationale, and migration guidance.
-Do not replace the old baseline with the candidate's answers. No exception
-mechanism or blanket warning suppression has been introduced.
+Do not replace the old baseline with the candidate's answers. The BoltDB rule in
+`exceptions.go` is the sole exception; no blanket warning suppression is applied.
 
 [README.md](README.md) gives reproducible commands, normalization rules, provenance,
 and uncovered paths. `baseline.json` contains the exact old observations. The
@@ -78,10 +94,11 @@ corrected basic docs fixture now succeeds in both; the old `.Env` expression is
 retained separately as a negative case. No compatibility result was waived during
 the port.
 
-## Complete difference inventory
+## Unapproved difference inventory
 
-This inventory identifies every differing case and observation field from the
-212-case comparison. It is a review checklist, not an approved exception list.
+This inventory identifies all 124 remaining differing cases and observation
+fields from the 212-case comparison. The three approved BoltDB cases are above.
+This is a review checklist, not an approved exception list.
 Exit columns show old → candidate status.
 
 | Case | Exit | Changed fields |
@@ -91,9 +108,6 @@ Exit columns show old → candidate status.
 | `bare-slice-sprig-disabled` | 0 → 1 | exit_code, stdout, stderr |
 | `bare-splitn-legacy-sprig-enabled` | 0 → 0 | stderr |
 | `bare-splitn-sprig-disabled` | 0 → 0 | stderr |
-| `boltdb-json` | 0 → 1 | exit_code, stdout, stderr |
-| `boltdb-missing` | 1 → 1 | stderr |
-| `boltdb-plain` | 0 → 1 | exit_code, stdout, stderr |
 | `coll-jq` | 1 → 0 | exit_code, stdout, stderr |
 | `consul-denied` | 1 → 1 | stderr, requests |
 | `consul-directory` | 0 → 0 | stdout, requests |

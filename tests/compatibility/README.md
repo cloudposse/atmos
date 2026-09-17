@@ -42,16 +42,16 @@ go build -trimpath -o .context/compatibility/atmos-candidate .
 ```
 
 On Windows, add `.exe` to the output/executable paths. Exit codes are `0` for
-identical observations, `1` for unapproved differences, and `2` for an invalid
+matching observations or approved exceptions, `1` for unapproved differences, and `2` for an invalid
 comparison or harness failure. The report contains both sets of observations,
-all differing case IDs, the corpus digest, and candidate binary digest. Printed
+approved and unapproved case IDs, the corpus digest, and candidate binary digest. Printed
 diffs show changed fields. `go run .` can also invoke the runner, but wraps its
 nonzero exit codes; build the runner to distinguish codes 1 and 2 directly.
 
 The checked-in snapshot was collected on macOS. CI runs `verify` on Linux, macOS,
 and Windows, using a fresh old binary on each OS instead of comparing OS-specific
 errors to a macOS snapshot. The existing required acceptance checks also require
-this compatibility job to pass. No difference is ignored or treated as success.
+this compatibility job to pass. Unapproved differences fail the job.
 
 ## Extending the baseline
 
@@ -126,13 +126,23 @@ Only these nondeterministic details are normalized:
   emits them in map iteration order. Duplicates remain significant; other stderr
   stays ordered.
 
-**There are no approved behavioral exceptions.** Exit status, stdout, stderr,
-generated files, and service requests all form the contract. New warnings,
-different errors, changed types, and extra requests fail comparison. Never copy
-candidate answers into the baseline to make it pass. Each intended difference
-needs review of its exact old/new observations, user impact, rationale, and
-migration guidance before adding a narrowly scoped exception. Documenting a
-break does not approve it. See [findings.md](findings.md) for current results.
+**BoltDB removal is the sole approved compatibility exception**, explicitly
+accepted in the migration review on 2026-09-16. The exact cases `boltdb-json`,
+`boltdb-plain`, and `boltdb-missing` remain in the corpus. The candidate must exit
+1, identify the unsupported `boltdb` scheme, and produce no stdout, generated
+files, creation notices, or service requests. Error wrapping and migration
+warnings may differ for those three cases. A crash, missing case, unrelated error,
+or successful BoltDB read fails this rejection contract. Users must export the
+data to a supported datasource, such as a JSON/YAML file, before upgrading.
+
+`exceptions.go` defines this narrow rule. It never applies to old-source
+collection, stability checks, or baseline replay; the original BoltDB behavior
+remains recorded. No BoltDB adapter will be added to restore support.
+
+For all other cases, exit status, stdout, stderr, generated files, and requests
+remain part of the strict contract. Never copy candidate answers into the
+baseline. Additional exceptions require review of the exact old/new behavior,
+impact, rationale, and migration guidance. See [findings.md](findings.md).
 
 ## Limits
 
