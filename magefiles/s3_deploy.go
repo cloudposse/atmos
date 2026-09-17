@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/gobwas/glob"
 	"github.com/magefile/mage/mg"
 )
@@ -42,45 +43,11 @@ var (
 	errS3DeployAWSCommand       = errors.New("mage: S3 deploy AWS command failed")
 	errS3DeployInvalidManifest  = errors.New("mage: invalid S3 deployment manifest")
 	errS3DeployUnsupportedState = errors.New("mage: unsupported S3 deployment manifest version")
+	errS3DeployUnsupportedGlob  = errors.New("mage: protected S3 pattern uses syntax unsupported by the AWS CLI")
 	errS3DeployInvalidDelete    = errors.New("mage: invalid S3 delete response")
 	errS3DeployPartialDelete    = errors.New("mage: S3 failed to delete one or more objects")
+	errS3DeployMissingMetadata  = errors.New("mage: S3 deploy manifest is missing file metadata")
 )
-
-var s3TextContentTypes = map[string]string{
-	".atom":        "application/xml; charset=utf-8",
-	".bash":        "text/x-shellscript; charset=utf-8",
-	".cfg":         "text/plain; charset=utf-8",
-	".css":         "text/css; charset=utf-8",
-	".csv":         "text/plain; charset=utf-8",
-	".go":          "text/plain; charset=utf-8",
-	".hcl":         "text/plain; charset=utf-8",
-	".htm":         "text/html; charset=utf-8",
-	".html":        "text/html; charset=utf-8",
-	".ini":         "text/plain; charset=utf-8",
-	".js":          "application/javascript; charset=utf-8",
-	".json":        "application/json; charset=utf-8",
-	".jsx":         "text/plain; charset=utf-8",
-	".map":         "application/json; charset=utf-8",
-	".md":          "text/markdown; charset=utf-8",
-	".mjs":         "application/javascript; charset=utf-8",
-	".py":          "text/plain; charset=utf-8",
-	".rb":          "text/plain; charset=utf-8",
-	".rego":        "text/plain; charset=utf-8",
-	".rss":         "application/xml; charset=utf-8",
-	".sh":          "text/x-shellscript; charset=utf-8",
-	".svg":         "image/svg+xml; charset=utf-8",
-	".tf":          "text/plain; charset=utf-8",
-	".tfvars":      "text/plain; charset=utf-8",
-	".toml":        "application/toml; charset=utf-8",
-	".ts":          "text/plain; charset=utf-8",
-	".tsv":         "text/plain; charset=utf-8",
-	".tsx":         "text/plain; charset=utf-8",
-	".txt":         "text/plain; charset=utf-8",
-	".webmanifest": "application/manifest+json; charset=utf-8",
-	".xml":         "application/xml; charset=utf-8",
-	".yaml":        "text/plain; charset=utf-8",
-	".yml":         "text/plain; charset=utf-8",
-}
 
 type s3DeployFile struct {
 	SHA256      string `json:"sha256"`
@@ -161,7 +128,7 @@ func (d *s3Deployer) Deploy(localDir, s3URI string, protected []s3ProtectedPatte
 	}
 
 	if state.previous == nil {
-		if err := d.bootstrap(state.localDir, state.location.URI, state.protected); err != nil {
+		if err := d.bootstrap(state); err != nil {
 			return err
 		}
 		if err := d.uploadManifest(state.manifestPath, state.location.URI); err != nil {
@@ -215,7 +182,7 @@ func (d *s3Deployer) deployIncremental(state *s3DeployState) error {
 	}
 
 	if len(changed) > 0 {
-		if err := d.uploadChanged(state.localDir, state.location.URI, changed, state.tempDir); err != nil {
+		if err := d.uploadChanged(state.localDir, state.location.URI, changed, state.manifest, state.tempDir); err != nil {
 			return err
 		}
 	}
@@ -234,6 +201,13 @@ func compileS3ProtectedPatterns(value string) ([]s3ProtectedPattern, error) {
 		if pattern == "" {
 			continue
 		}
+		// AWS CLI filters support *, ?, and character classes, but not the
+		// gobwas brace-alternation or backslash-escape extensions.
+		if strings.ContainsAny(pattern, "{}\\") {
+			return nil, fmt.Errorf("%w: %q", errS3DeployUnsupportedGlob, pattern)
+		}
+		// No separator is supplied intentionally: AWS CLI '*' filters span '/'.
+		// That also makes '*' and '**' equivalent in both matchers.
 		compiled, err := glob.Compile(pattern)
 		if err != nil {
 			return nil, fmt.Errorf("mage: compile protected S3 pattern %q: %w", pattern, err)
@@ -293,6 +267,13 @@ func s3DeployFileMetadata(path, relative string) (s3DeployFile, error) {
 	}
 	defer file.Close()
 
+	detected, err := mimetype.DetectReader(file)
+	if err != nil {
+		return s3DeployFile{}, err
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return s3DeployFile{}, err
+	}
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
 		return s3DeployFile{}, err
@@ -304,19 +285,36 @@ func s3DeployFileMetadata(path, relative string) (s3DeployFile, error) {
 	return s3DeployFile{
 		SHA256:      hex.EncodeToString(hash.Sum(nil)),
 		Size:        info.Size(),
-		ContentType: s3DeployContentType(relative),
+		ContentType: s3DeployContentType(relative, detected.String()),
 	}, nil
 }
 
-func s3DeployContentType(path string) string {
+func s3DeployContentType(path, detected string) string {
 	extension := strings.ToLower(filepath.Ext(path))
-	if contentType, ok := s3TextContentTypes[extension]; ok {
+	contentType := mime.TypeByExtension(extension)
+	if contentType == "" {
+		contentType = detected
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	mediaType, parameters, err := mime.ParseMediaType(contentType)
+	if err != nil || !s3DeployContentTypeUsesUTF8(mediaType) {
 		return contentType
 	}
-	if contentType := mime.TypeByExtension(extension); contentType != "" {
-		return contentType
-	}
-	return "application/octet-stream"
+	parameters["charset"] = "utf-8"
+	return mime.FormatMediaType(mediaType, parameters)
+}
+
+func s3DeployContentTypeUsesUTF8(mediaType string) bool {
+	return strings.HasPrefix(mediaType, "text/") ||
+		strings.HasSuffix(mediaType, "+json") ||
+		strings.HasSuffix(mediaType, "+xml") ||
+		strings.Contains(mediaType, "javascript") ||
+		mediaType == "application/json" ||
+		mediaType == "application/toml" ||
+		mediaType == "application/xml" ||
+		mediaType == "application/yaml"
 }
 
 func diffS3DeployManifests(oldManifest, newManifest s3DeployManifest, protected []s3ProtectedPattern) ([]string, []string) {
@@ -384,46 +382,37 @@ func (d *s3Deployer) loadManifest(s3URI, destination string) (*s3DeployManifest,
 	return &manifest, nil
 }
 
-func (d *s3Deployer) bootstrap(localDir, s3URI string, protected []s3ProtectedPattern) error {
-	fmt.Println("No remote manifest found; performing the one-time full metadata sync.")
-	args := []string{s3CommandService, "sync", localDir, s3URI, "--delete"}
-	if len(protected) > 0 {
-		if err := d.runAWS(s3CommandService, "sync", localDir, s3URI, s3OnlyShowErrorsFlag); err != nil {
+func (d *s3Deployer) bootstrap(state *s3DeployState) error {
+	fmt.Println("No remote manifest found; performing the one-time full metadata upload.")
+	files := make([]string, 0, len(state.manifest.Files))
+	for path := range state.manifest.Files {
+		files = append(files, path)
+	}
+	sort.Strings(files)
+	if len(files) > 0 {
+		if err := d.uploadChanged(state.localDir, state.location.URI, files, state.manifest, state.tempDir); err != nil {
 			return err
 		}
-		for _, pattern := range protected {
-			args = append(args, "--exclude", pattern.Raw)
-		}
+	}
+
+	// Every managed file was uploaded above. This size-only sync is solely a
+	// deletion reconciliation and therefore cannot re-upload those files.
+	args := []string{s3CommandService, "sync", state.localDir, state.location.URI, "--delete", "--size-only"}
+	for _, pattern := range state.protected {
+		args = append(args, "--exclude", pattern.Raw)
 	}
 	args = append(args, s3OnlyShowErrorsFlag)
-	if err := d.runAWS(args...); err != nil {
-		return err
-	}
-
-	extensions := make([]string, 0, len(s3TextContentTypes))
-	for extension := range s3TextContentTypes {
-		extensions = append(extensions, extension)
-	}
-	sort.Strings(extensions)
-	for _, extension := range extensions {
-		if err := d.runAWS(
-			s3CommandService, s3CommandCopy, s3URI, s3URI, "--recursive",
-			"--exclude", "*", "--include", "*"+extension,
-			"--metadata-directive", "REPLACE",
-			"--content-type", s3TextContentTypes[extension],
-			s3OnlyShowErrorsFlag,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
+	return d.runAWS(args...)
 }
 
-func (d *s3Deployer) uploadChanged(localDir, s3URI string, changed []string, tempDir string) error {
+func (d *s3Deployer) uploadChanged(localDir, s3URI string, changed []string, manifest s3DeployManifest, tempDir string) error {
 	groups := map[string][]string{}
 	for _, relative := range changed {
-		contentType := s3DeployContentType(relative)
-		groups[contentType] = append(groups[contentType], relative)
+		metadata, ok := manifest.Files[relative]
+		if !ok {
+			return fmt.Errorf("%w: %s", errS3DeployMissingMetadata, relative)
+		}
+		groups[metadata.ContentType] = append(groups[metadata.ContentType], relative)
 	}
 	contentTypes := make([]string, 0, len(groups))
 	for contentType := range groups {

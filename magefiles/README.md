@@ -68,11 +68,13 @@ type. On later runs, the target uploads only added or content/metadata-changed
 files and deletes only removed managed files. Files matched by
 `PROTECTED_PATTERNS` are never deleted.
 
-The first deployment bootstraps an existing bucket with one sync and one
-metadata pass for text files. Text types receive explicit UTF-8 metadata, such
-as `text/html; charset=utf-8`; binary files retain the AWS CLI's inferred
-metadata. The manifest is uploaded only after the deployment succeeds, so a
-failed run cannot record an incomplete state as current.
+The first deployment uploads every managed file once with explicit metadata,
+then runs a size-only sync to delete stale, unprotected remote objects without
+re-uploading the files. Browser-significant types are selected by extension;
+the existing `mimetype` magic-number library provides the fallback for unknown
+extensions. Textual types receive explicit UTF-8 metadata, such as
+`text/html; charset=utf-8`. The manifest is uploaded only after the deployment
+succeeds, so a failed run cannot record an incomplete state as current.
 
 ```console
 PROTECTED_PATTERNS=$'previews/**\nrobots.txt' \

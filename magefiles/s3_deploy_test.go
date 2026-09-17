@@ -70,15 +70,18 @@ func writeS3TestFile(t *testing.T, root, relative, content string) string {
 }
 
 func TestS3DeployContentType(t *testing.T) {
-	tests := map[string]string{
-		"index.html":    "text/html; charset=utf-8",
-		"assets/app.js": "application/javascript; charset=utf-8",
-		"feed.xml":      "application/xml; charset=utf-8",
-		"image.png":     "image/png",
-		"unknown.zzz":   "application/octet-stream",
+	tests := map[string]struct {
+		detected string
+		expected string
+	}{
+		"index.html":    {detected: "text/plain; charset=utf-8", expected: "text/html; charset=utf-8"},
+		"assets/app.js": {detected: "text/plain; charset=utf-8", expected: "text/javascript; charset=utf-8"},
+		"feed.xml":      {detected: "text/plain; charset=utf-8", expected: "application/xml; charset=utf-8"},
+		"image.png":     {detected: "application/octet-stream", expected: "image/png"},
+		"unknown.zzz":   {detected: "text/plain; charset=utf-8", expected: "text/plain; charset=utf-8"},
 	}
-	for path, expected := range tests {
-		assert.Equal(t, expected, s3DeployContentType(path), path)
+	for path, test := range tests {
+		assert.Equal(t, test.expected, s3DeployContentType(path, test.detected), path)
 	}
 }
 
@@ -103,16 +106,22 @@ func TestParseS3DeployURI(t *testing.T) {
 }
 
 func TestCompileS3ProtectedPatterns(t *testing.T) {
-	patterns, err := compileS3ProtectedPatterns("\n pr-* \nassets/refarch/handoffs/*\n")
+	patterns, err := compileS3ProtectedPatterns("\n pr-* \nassets/refarch/handoffs/**\n")
 	require.NoError(t, err)
 	require.Len(t, patterns, 2)
 	assert.Equal(t, "pr-*", patterns[0].Raw)
+	assert.Equal(t, "assets/refarch/handoffs/**", patterns[1].Raw)
 	assert.True(t, matchesS3ProtectedPath("pr-42/assets/app.js", patterns))
 	assert.True(t, matchesS3ProtectedPath("assets/refarch/handoffs/demo/file.pdf", patterns))
 	assert.False(t, matchesS3ProtectedPath("index.html", patterns))
 
 	_, err = compileS3ProtectedPatterns("[")
 	require.Error(t, err)
+
+	for _, pattern := range []string{"schemas/{v1,v2}/*", `literal\*`} {
+		_, err = compileS3ProtectedPatterns(pattern)
+		require.ErrorIs(t, err, errS3DeployUnsupportedGlob)
+	}
 }
 
 func TestS3DeployTargetValidatesInputsBeforeCallingAWS(t *testing.T) {
@@ -138,6 +147,7 @@ func TestS3DeployAWSCLIReportsMissingExecutable(t *testing.T) {
 func TestBuildS3DeployManifestIsContentBased(t *testing.T) {
 	root := t.TempDir()
 	path := writeS3TestFile(t, root, "nested/file.txt", "hello\n")
+	writeS3TestFile(t, root, "notes.custom", "detected text\n")
 	writeS3TestFile(t, root, s3DeployManifestName, "ignored")
 
 	first, err := buildS3DeployManifest(root)
@@ -152,6 +162,7 @@ func TestBuildS3DeployManifestIsContentBased(t *testing.T) {
 	assert.Equal(t, int64(6), first.Files["nested/file.txt"].Size)
 	assert.Equal(t, "text/plain; charset=utf-8", first.Files["nested/file.txt"].ContentType)
 	assert.NotEmpty(t, first.Files["nested/file.txt"].SHA256)
+	assert.Equal(t, "text/plain; charset=utf-8", first.Files["notes.custom"].ContentType)
 	assert.NotContains(t, first.Files, s3DeployManifestName)
 }
 
@@ -260,7 +271,7 @@ func TestS3DeployerIncrementalUploadPreservesMetadata(t *testing.T) {
 	assert.NotContains(t, deletedKeys, "site/pr-42/keep.txt")
 }
 
-func TestS3DeployerBootstrapRestampsTextMetadata(t *testing.T) {
+func TestS3DeployerBootstrapUploadsExplicitMetadata(t *testing.T) {
 	root := t.TempDir()
 	writeS3TestFile(t, root, "index.html", "hello\n")
 	protected, err := compileS3ProtectedPatterns("img/demos/*")
@@ -270,38 +281,51 @@ func TestS3DeployerBootstrapRestampsTextMetadata(t *testing.T) {
 		manifestOutput: []byte("NoSuchKey"),
 		t:              t,
 	}
+	var htmlUpload bool
+	runner.inspect = func(t *testing.T, call []string) {
+		if len(call) >= 8 && call[0] == "s3" && call[1] == "cp" && call[3] == "s3://example/" {
+			htmlUpload = true
+			assert.Equal(t, "text/html; charset=utf-8", valueAfter(call, "--content-type"))
+			data, readErr := os.ReadFile(filepath.Join(call[2], "index.html"))
+			require.NoError(t, readErr)
+			assert.Equal(t, "hello\n", string(data))
+		}
+	}
 
 	err = newS3Deployer(runner).Deploy(root, "s3://example/", protected)
 	require.NoError(t, err)
-	require.Greater(t, len(runner.calls), len(s3TextContentTypes))
 
 	var syncCalls [][]string
-	var htmlRestamp, manifestUpload bool
+	var manifestUpload bool
 	for _, call := range runner.calls {
 		if len(call) >= 5 && call[0] == "s3" && call[1] == "sync" {
 			syncCalls = append(syncCalls, call)
-		}
-		if len(call) >= 8 && call[0] == "s3" && call[1] == "cp" && valueAfter(call, "--include") == "*.html" {
-			htmlRestamp = true
-			assert.Equal(t, "REPLACE", valueAfter(call, "--metadata-directive"))
-			assert.Equal(t, "text/html; charset=utf-8", valueAfter(call, "--content-type"))
 		}
 		if len(call) >= 4 && call[0] == "s3" && call[1] == "cp" && strings.HasSuffix(call[3], s3DeployManifestName) && !strings.HasPrefix(call[2], "s3://") {
 			manifestUpload = true
 		}
 	}
-	require.Len(t, syncCalls, 2)
-	assert.False(t, slices.Contains(syncCalls[0], "--delete"))
-	assert.Empty(t, valueAfter(syncCalls[0], "--exclude"))
-	assert.True(t, slices.Contains(syncCalls[1], "--delete"))
-	assert.Equal(t, "img/demos/*", valueAfter(syncCalls[1], "--exclude"))
-	assert.True(t, htmlRestamp)
+	require.Len(t, syncCalls, 1)
+	assert.True(t, slices.Contains(syncCalls[0], "--delete"))
+	assert.True(t, slices.Contains(syncCalls[0], "--size-only"))
+	assert.Equal(t, "img/demos/*", valueAfter(syncCalls[0], "--exclude"))
+	assert.True(t, htmlUpload)
 	assert.True(t, manifestUpload)
 }
 
 func TestS3DeployerBootstrapWithoutProtectedPathsUsesOneSync(t *testing.T) {
+	root := t.TempDir()
+	writeS3TestFile(t, root, "index.html", "hello\n")
+	manifest, err := buildS3DeployManifest(root)
+	require.NoError(t, err)
+	state := &s3DeployState{
+		localDir: root,
+		location: s3DeployLocation{Bucket: "example", URI: "s3://example/"},
+		manifest: manifest,
+		tempDir:  t.TempDir(),
+	}
 	runner := &fakeS3DeployRunner{t: t}
-	err := newS3Deployer(runner).bootstrap(t.TempDir(), "s3://example/", nil)
+	err = newS3Deployer(runner).bootstrap(state)
 	require.NoError(t, err)
 
 	var syncCalls [][]string
@@ -312,6 +336,20 @@ func TestS3DeployerBootstrapWithoutProtectedPathsUsesOneSync(t *testing.T) {
 	}
 	require.Len(t, syncCalls, 1)
 	assert.True(t, slices.Contains(syncCalls[0], "--delete"))
+	assert.True(t, slices.Contains(syncCalls[0], "--size-only"))
+	assert.Empty(t, valueAfter(syncCalls[0], "--exclude"))
+}
+
+func TestUploadChangedRequiresManifestMetadata(t *testing.T) {
+	runner := &fakeS3DeployRunner{t: t}
+	err := newS3Deployer(runner).uploadChanged(
+		t.TempDir(),
+		"s3://example/",
+		[]string{"missing.txt"},
+		s3DeployManifest{Version: s3DeployManifestVersion, Files: map[string]s3DeployFile{}},
+		t.TempDir(),
+	)
+	require.ErrorIs(t, err, errS3DeployMissingMetadata)
 }
 
 func TestS3DeployerValidationAndManifestErrors(t *testing.T) {
