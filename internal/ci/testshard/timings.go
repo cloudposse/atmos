@@ -29,7 +29,13 @@ func ReadTimings(input io.Reader) (Timings, error) {
 			Test    string
 			Elapsed float64
 		}
-		if json.Unmarshal(scanner.Bytes(), &event) != nil || event.Package == "" {
+		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+			if strings.HasPrefix(strings.TrimSpace(string(scanner.Bytes())), "{") {
+				return result, fmt.Errorf("%w: parse test timing event: %w", ErrPlan, err)
+			}
+			continue
+		}
+		if event.Package == "" {
 			continue
 		}
 		if !slices.Contains([]string{"pass", "fail", "skip"}, event.Action) {

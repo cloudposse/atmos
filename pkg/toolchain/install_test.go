@@ -3,6 +3,7 @@ package toolchain
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -264,6 +265,16 @@ func TestRunInstall_Reinstall(t *testing.T) {
 	config := useLocalInstallFixture(t, map[string][]string{"terraform": {"1.11.4"}})
 	require.NoError(t, RunInstall("", false, false, true, false))
 	assertFixtureInstalled(t, config, "hashicorp", "terraform", "1.11.4")
+
+	// Overwrite the installed binary with sentinel content so the second
+	// RunInstall can only pass by replacing it, not by skipping an
+	// already-present binary (both installs write identical fixture content).
+	binaryPath := filepath.Join(config.Toolchain.InstallPath, "bin", "hashicorp", "terraform", "1.11.4", "terraform")
+	if runtime.GOOS == "windows" {
+		binaryPath += ".exe"
+	}
+	require.NoError(t, os.WriteFile(binaryPath, []byte("existing"), 0o755))
+
 	require.NoError(t, RunInstall("", false, true, true, false))
 	assertFixtureInstalled(t, config, "hashicorp", "terraform", "1.11.4")
 }

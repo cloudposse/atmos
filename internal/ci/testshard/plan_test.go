@@ -80,3 +80,10 @@ func TestReadTimings(t *testing.T) {
 	_, err = ReadTimings(strings.NewReader(strings.Repeat("x", 4*1024*1024+1)))
 	require.Error(t, err)
 }
+
+func TestReadTimingsRejectsTruncatedEvent(t *testing.T) {
+	events := `{"Action":"pass","Package":"p","Test":"TestA","Elapsed":10}
+{"Action":"pass","Package":"p","Test":`
+	_, err := ReadTimings(strings.NewReader(events))
+	require.ErrorIs(t, err, ErrPlan)
+}
