@@ -87,3 +87,41 @@ func TestBuildScriptsUseEnvironmentForInputs(t *testing.T) {
 		}
 	}
 }
+
+// Same-run consumers also supply tokens. Explicitly forwarding an empty run-id
+// overrides download-artifact's default and makes it request /runs/NaN/artifacts.
+func TestArtifactRetryRunIDFallback(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join("..", "..", "..", ".github", "actions", "download-artifact-retry", "action.yml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var action struct {
+		Runs struct {
+			Steps []struct {
+				Uses string            `yaml:"uses"`
+				With map[string]string `yaml:"with"`
+			} `yaml:"steps"`
+		} `yaml:"runs"`
+	}
+	if err := yaml.Unmarshal(data, &action); err != nil {
+		t.Fatal(err)
+	}
+	attempts := 0
+	for _, step := range action.Runs.Steps {
+		if !strings.HasPrefix(step.Uses, "actions/download-artifact@") {
+			continue
+		}
+		attempts++
+		if step.With["run-id"] != "${{ inputs.run-id || github.run_id }}" {
+			t.Errorf("attempt %d must prefer the producer ID and fall back to the current run", attempts)
+		}
+		if step.With["github-token"] != "${{ inputs.github-token }}" {
+			t.Errorf("attempt %d must preserve the caller's download credentials", attempts)
+		}
+	}
+	if attempts != 3 {
+		t.Errorf("checked %d attempts, want 3", attempts)
+	}
+}

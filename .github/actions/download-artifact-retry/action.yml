@@ -29,6 +29,9 @@ inputs:
 runs:
   using: composite
   steps:
+    # An explicit empty input overrides download-artifact's own default. With a
+    # token, it becomes parseInt('') = NaN in the REST API path. Resolve the
+    # current run here on every attempt while preserving a supplied producer ID.
     - name: Download artifact (attempt 1/3)
       id: attempt_1
       continue-on-error: true
@@ -36,7 +39,7 @@ runs:
       with:
         name: ${{ inputs.name }}
         path: ${{ inputs.path }}
-        run-id: ${{ inputs.run-id }}
+        run-id: ${{ inputs.run-id || github.run_id }}
         github-token: ${{ inputs.github-token }}
 
     - name: Wait before retry
@@ -54,7 +57,7 @@ runs:
       with:
         name: ${{ inputs.name }}
         path: ${{ inputs.path }}
-        run-id: ${{ inputs.run-id }}
+        run-id: ${{ inputs.run-id || github.run_id }}
         github-token: ${{ inputs.github-token }}
 
     - name: Wait before final retry
@@ -70,5 +73,5 @@ runs:
       with:
         name: ${{ inputs.name }}
         path: ${{ inputs.path }}
-        run-id: ${{ inputs.run-id }}
+        run-id: ${{ inputs.run-id || github.run_id }}
         github-token: ${{ inputs.github-token }}
