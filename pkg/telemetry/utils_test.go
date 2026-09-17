@@ -24,6 +24,8 @@ import (
 // TestGetTelemetryFromConfig tests the getTelemetryFromConfig function to ensure it properly
 // initializes telemetry configuration with default values and maintains consistency across calls.
 func TestGetTelemetryFromConfig(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	enabled := true
 
 	ctrl := gomock.NewController(t)
