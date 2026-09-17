@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,7 +14,6 @@ import (
 	"mime"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -27,25 +27,20 @@ import (
 type S3 mg.Namespace
 
 const (
-	s3DeployManifestName    = ".cloudposse-deploy-manifest-v1.json"
-	s3DeployManifestVersion = 1
-	s3DeleteBatchSize       = 1000
-	s3FilePermissions       = 0o600
-	s3DirectoryPermissions  = 0o755
-	s3CommandService        = "s3"
-	s3CommandCopy           = "cp"
-	s3OnlyShowErrorsFlag    = "--only-show-errors"
-	s3ErrorWithValueFormat  = "%w: %s"
+	s3DeployManifestName        = ".cloudposse-deploy-manifest-v1.json"
+	s3DeployManifestVersion     = 1
+	s3DeleteBatchSize           = 1000
+	s3ManifestContentType       = "application/json; charset=utf-8"
+	s3ErrorWithValueFormat      = "%w: %s"
+	s3ManifestNotFoundErrorCode = "NoSuchKey"
 )
 
 var (
 	errS3DeployInvalidLocalDir  = errors.New("mage: s3 deploy local directory does not exist")
 	errS3DeployInvalidURI       = errors.New("mage: invalid S3 URI")
-	errS3DeployAWSCommand       = errors.New("mage: S3 deploy AWS command failed")
+	errS3DeployAWSOperation     = errors.New("mage: S3 deploy AWS operation failed")
 	errS3DeployInvalidManifest  = errors.New("mage: invalid S3 deployment manifest")
 	errS3DeployUnsupportedState = errors.New("mage: unsupported S3 deployment manifest version")
-	errS3DeployUnsupportedGlob  = errors.New("mage: protected S3 pattern uses syntax unsupported by the AWS CLI")
-	errS3DeployInvalidDelete    = errors.New("mage: invalid S3 delete response")
 	errS3DeployPartialDelete    = errors.New("mage: S3 failed to delete one or more objects")
 	errS3DeployMissingMetadata  = errors.New("mage: S3 deploy manifest is missing file metadata")
 	errS3DeployUnsupportedFile  = errors.New("mage: S3 deploy source contains a non-regular file")
@@ -68,78 +63,98 @@ type s3DeployLocation struct {
 	URI    string
 }
 
+func (l s3DeployLocation) objectKey(relative string) string {
+	if l.Prefix == "" {
+		return relative
+	}
+	return l.Prefix + "/" + relative
+}
+
+func (l s3DeployLocation) listPrefix() string {
+	if l.Prefix == "" {
+		return ""
+	}
+	return l.Prefix + "/"
+}
+
+func (l s3DeployLocation) relativeKey(key string) (string, bool) {
+	prefix := l.listPrefix()
+	if prefix == "" {
+		return key, true
+	}
+	if !strings.HasPrefix(key, prefix) {
+		return "", false
+	}
+	return strings.TrimPrefix(key, prefix), true
+}
+
 type s3ProtectedPattern struct {
 	Raw  string
 	Glob glob.Glob
 }
 
-type s3DeployCommandRunner interface {
-	Run(args ...string) ([]byte, error)
-}
-
-type s3DeployAWSCLI struct{}
-
-func (s3DeployAWSCLI) Run(args ...string) ([]byte, error) {
-	cmd := exec.Command("aws", args...) // #nosec G204 -- command is fixed and arguments are controlled by the Mage target.
-	return cmd.CombinedOutput()
-}
-
 type s3Deployer struct {
-	runner s3DeployCommandRunner
+	client s3DeployClient
 }
 
 type s3DeployState struct {
-	localDir     string
-	location     s3DeployLocation
-	manifestPath string
-	manifest     s3DeployManifest
-	previous     *s3DeployManifest
-	protected    []s3ProtectedPattern
-	tempDir      string
+	localDir  string
+	location  s3DeployLocation
+	manifest  s3DeployManifest
+	previous  *s3DeployManifest
+	protected []s3ProtectedPattern
 }
 
-func newS3Deployer(runner s3DeployCommandRunner) *s3Deployer {
-	return &s3Deployer{runner: runner}
+func newS3Deployer(client s3DeployClient) *s3Deployer {
+	return &s3Deployer{client: client}
 }
 
 // Deploy publishes a static site with explicit metadata while avoiding writes
 // for objects whose content and Content-Type have not changed. Protected paths
 // are read from the newline-separated PROTECTED_PATTERNS environment variable.
-func (S3) Deploy(localDir, s3URI string) error {
+func (S3) Deploy(ctx context.Context, localDir, s3URI string) error {
 	protected, err := compileS3ProtectedPatterns(os.Getenv("PROTECTED_PATTERNS"))
 	if err != nil {
 		return err
 	}
-	return newS3Deployer(s3DeployAWSCLI{}).Deploy(localDir, s3URI, protected)
-}
-
-func (d *s3Deployer) Deploy(localDir, s3URI string, protected []s3ProtectedPattern) error {
 	state, err := prepareS3DeployState(localDir, s3URI, protected)
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(state.tempDir)
-
-	fmt.Printf("Managed files: %d\n", len(state.manifest.Files))
-	state.previous, err = d.loadManifest(state.location.URI, state.manifestPath)
+	client, err := loadS3DeployClient(ctx)
 	if err != nil {
 		return err
 	}
-	if err := writeS3DeployManifest(state.manifestPath, state.manifest); err != nil {
+	return newS3Deployer(client).deploy(ctx, state)
+}
+
+func (d *s3Deployer) Deploy(ctx context.Context, localDir, s3URI string, protected []s3ProtectedPattern) error {
+	state, err := prepareS3DeployState(localDir, s3URI, protected)
+	if err != nil {
 		return err
 	}
+	return d.deploy(ctx, state)
+}
+
+func (d *s3Deployer) deploy(ctx context.Context, state *s3DeployState) error {
+	fmt.Printf("Managed files: %d\n", len(state.manifest.Files))
+	previous, err := d.loadManifest(ctx, state.location)
+	if err != nil {
+		return err
+	}
+	state.previous = previous
 
 	if state.previous == nil {
-		if err := d.bootstrap(state); err != nil {
+		if err := d.bootstrap(ctx, state); err != nil {
 			return err
 		}
-		if err := d.uploadManifest(state.manifestPath, state.location.URI); err != nil {
+		if err := d.uploadManifest(ctx, state.location, state.manifest); err != nil {
 			return err
 		}
 		fmt.Printf("Bootstrapped %d managed objects.\n", len(state.manifest.Files))
 		return nil
 	}
-	return d.deployIncremental(state)
+	return d.deployIncremental(ctx, state)
 }
 
 func prepareS3DeployState(localDir, s3URI string, protected []s3ProtectedPattern) (*s3DeployState, error) {
@@ -160,22 +175,15 @@ func prepareS3DeployState(localDir, s3URI string, protected []s3ProtectedPattern
 	if err != nil {
 		return nil, err
 	}
-
-	tempDir, err := os.MkdirTemp("", "s3-deploy-")
-	if err != nil {
-		return nil, fmt.Errorf("mage: create S3 deploy temporary directory: %w", err)
-	}
 	return &s3DeployState{
-		localDir:     localDir,
-		location:     location,
-		manifestPath: filepath.Join(tempDir, s3DeployManifestName),
-		manifest:     manifest,
-		protected:    protected,
-		tempDir:      tempDir,
+		localDir:  localDir,
+		location:  location,
+		manifest:  manifest,
+		protected: protected,
 	}, nil
 }
 
-func (d *s3Deployer) deployIncremental(state *s3DeployState) error {
+func (d *s3Deployer) deployIncremental(ctx context.Context, state *s3DeployState) error {
 	changed, deleted := diffS3DeployManifests(*state.previous, state.manifest, state.protected)
 	fmt.Printf("Changed/new: %d; deleted: %d\n", len(changed), len(deleted))
 	if len(changed) == 0 && len(deleted) == 0 {
@@ -183,17 +191,13 @@ func (d *s3Deployer) deployIncremental(state *s3DeployState) error {
 		return nil
 	}
 
-	if len(changed) > 0 {
-		if err := d.uploadChanged(state.localDir, state.location.URI, changed, state.manifest, state.tempDir); err != nil {
-			return err
-		}
+	if err := d.uploadChanged(ctx, state.localDir, state.location, changed, state.manifest); err != nil {
+		return err
 	}
-	if len(deleted) > 0 {
-		if err := d.deleteRemoved(state.location, deleted, state.tempDir); err != nil {
-			return err
-		}
+	if err := d.deleteRemoved(ctx, state.location, deleted); err != nil {
+		return err
 	}
-	return d.uploadManifest(state.manifestPath, state.location.URI)
+	return d.uploadManifest(ctx, state.location, state.manifest)
 }
 
 func compileS3ProtectedPatterns(value string) ([]s3ProtectedPattern, error) {
@@ -203,13 +207,7 @@ func compileS3ProtectedPatterns(value string) ([]s3ProtectedPattern, error) {
 		if pattern == "" {
 			continue
 		}
-		// AWS CLI filters support *, ?, and character classes, but not the
-		// gobwas brace-alternation or backslash-escape extensions.
-		if strings.ContainsAny(pattern, "{}\\") {
-			return nil, fmt.Errorf("%w: %q", errS3DeployUnsupportedGlob, pattern)
-		}
-		// No separator is supplied intentionally: AWS CLI '*' filters span '/'.
-		// That also makes '*' and '**' equivalent in both matchers.
+		// No separator is supplied intentionally, so '*' matches across '/'.
 		compiled, err := glob.Compile(pattern)
 		if err != nil {
 			return nil, fmt.Errorf("mage: compile protected S3 pattern %q: %w", pattern, err)
@@ -360,146 +358,10 @@ func matchesS3ProtectedPath(path string, patterns []s3ProtectedPattern) bool {
 	return false
 }
 
-func writeS3DeployManifest(path string, manifest s3DeployManifest) error {
+func marshalS3DeployManifest(manifest s3DeployManifest) ([]byte, error) {
 	data, err := json.Marshal(manifest)
 	if err != nil {
-		return fmt.Errorf("mage: encode S3 deploy manifest: %w", err)
+		return nil, fmt.Errorf("mage: encode S3 deploy manifest: %w", err)
 	}
-	data = append(data, '\n')
-	if err := os.WriteFile(path, data, s3FilePermissions); err != nil {
-		return fmt.Errorf("mage: write S3 deploy manifest: %w", err)
-	}
-	return nil
-}
-
-func (d *s3Deployer) loadManifest(s3URI, destination string) (*s3DeployManifest, error) {
-	output, err := d.runner.Run(s3CommandService, s3CommandCopy, s3URI+s3DeployManifestName, destination, s3OnlyShowErrorsFlag)
-	if err != nil {
-		message := string(output)
-		if strings.Contains(message, "404") || strings.Contains(message, "Not Found") || strings.Contains(message, "NoSuchKey") {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("%w: read manifest: %w: %s", errS3DeployAWSCommand, err, strings.TrimSpace(message))
-	}
-	data, err := os.ReadFile(destination) // #nosec G304 -- destination is a target-owned temporary path.
-	if err != nil {
-		return nil, fmt.Errorf("mage: read downloaded S3 deploy manifest: %w", err)
-	}
-	var manifest s3DeployManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, fmt.Errorf("%w: %w", errS3DeployInvalidManifest, err)
-	}
-	if manifest.Version != s3DeployManifestVersion {
-		return nil, fmt.Errorf("%w: %d", errS3DeployUnsupportedState, manifest.Version)
-	}
-	if manifest.Files == nil {
-		return nil, errS3DeployInvalidManifest
-	}
-	return &manifest, nil
-}
-
-func (d *s3Deployer) bootstrap(state *s3DeployState) error {
-	fmt.Println("No remote manifest found; performing the one-time full metadata upload.")
-	files := make([]string, 0, len(state.manifest.Files))
-	for path := range state.manifest.Files {
-		files = append(files, path)
-	}
-	sort.Strings(files)
-	if len(files) > 0 {
-		if err := d.uploadChanged(state.localDir, state.location.URI, files, state.manifest, state.tempDir); err != nil {
-			return err
-		}
-	}
-
-	// Every managed file was uploaded above. This size-only sync is solely a
-	// deletion reconciliation and therefore cannot re-upload those files.
-	args := []string{s3CommandService, "sync", state.localDir, state.location.URI, "--delete", "--size-only"}
-	for _, pattern := range state.protected {
-		args = append(args, "--exclude", pattern.Raw)
-	}
-	args = append(args, s3OnlyShowErrorsFlag)
-	return d.runAWS(args...)
-}
-
-func (d *s3Deployer) uploadChanged(localDir, s3URI string, changed []string, manifest s3DeployManifest, tempDir string) error {
-	groups := map[string][]string{}
-	for _, relative := range changed {
-		metadata, ok := manifest.Files[relative]
-		if !ok {
-			return fmt.Errorf(s3ErrorWithValueFormat, errS3DeployMissingMetadata, relative)
-		}
-		groups[metadata.ContentType] = append(groups[metadata.ContentType], relative)
-	}
-	contentTypes := make([]string, 0, len(groups))
-	for contentType := range groups {
-		contentTypes = append(contentTypes, contentType)
-	}
-	sort.Strings(contentTypes)
-
-	for index, contentType := range contentTypes {
-		groupDir := filepath.Join(tempDir, fmt.Sprintf("group-%d", index))
-		for _, relative := range groups[contentType] {
-			source := filepath.Join(localDir, filepath.FromSlash(relative))
-			destination := filepath.Join(groupDir, filepath.FromSlash(relative))
-			if err := os.MkdirAll(filepath.Dir(destination), s3DirectoryPermissions); err != nil {
-				return fmt.Errorf("mage: create S3 deploy staging directory: %w", err)
-			}
-			if err := linkOrCopyS3DeployFile(source, destination); err != nil {
-				return err
-			}
-		}
-		if err := d.runAWS(
-			s3CommandService, s3CommandCopy, groupDir, s3URI, "--recursive",
-			"--content-type", contentType, s3OnlyShowErrorsFlag,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func linkOrCopyS3DeployFile(source, destination string) error {
-	if err := os.Link(source, destination); err == nil {
-		return nil
-	}
-	input, err := os.Open(source) // #nosec G304 -- source is constrained to the deployment directory.
-	if err != nil {
-		return fmt.Errorf("mage: open S3 deploy source: %w", err)
-	}
-	defer input.Close()
-	output, err := os.Create(destination) // #nosec G304 -- destination is a target-owned temporary path.
-	if err != nil {
-		return fmt.Errorf("mage: create S3 deploy staging file: %w", err)
-	}
-	if _, err := io.Copy(output, input); err != nil {
-		_ = output.Close()
-		return fmt.Errorf("mage: copy S3 deploy staging file: %w", err)
-	}
-	if err := output.Close(); err != nil {
-		return fmt.Errorf("mage: close S3 deploy staging file: %w", err)
-	}
-	return nil
-}
-
-func (d *s3Deployer) uploadManifest(manifestPath, s3URI string) error {
-	return d.runAWS(
-		s3CommandService, s3CommandCopy, manifestPath, s3URI+s3DeployManifestName,
-		"--content-type", "application/json; charset=utf-8", s3OnlyShowErrorsFlag,
-	)
-}
-
-func (d *s3Deployer) runAWS(args ...string) error {
-	_, err := d.runAWSOutput(args...)
-	return err
-}
-
-func (d *s3Deployer) runAWSOutput(args ...string) ([]byte, error) {
-	output, err := d.runner.Run(args...)
-	if err != nil {
-		return nil, fmt.Errorf("%w: aws %s: %w: %s", errS3DeployAWSCommand, strings.Join(args, " "), err, strings.TrimSpace(string(output)))
-	}
-	if len(output) > 0 {
-		fmt.Print(string(output))
-	}
-	return output, nil
+	return append(data, '\n'), nil
 }

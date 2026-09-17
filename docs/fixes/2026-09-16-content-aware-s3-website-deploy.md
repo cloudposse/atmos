@@ -53,19 +53,21 @@ expected to account for roughly **$70-85/month** of the avoidable run rate.
   removed files are deleted in batches; unchanged files receive no S3 write.
 - Made manifest publication the final operation. A failed upload or deletion
   leaves the old manifest in place so the next run retries the incomplete delta.
-- Parse `DeleteObjects` responses and reject per-object errors even when S3
-  returns a successful HTTP response.
+- Use the repository's existing AWS SDK for Go v2 dependency for every S3
+  operation. The target no longer shells out to the AWS CLI or writes temporary
+  delete-request files.
+- Inspect typed `DeleteObjects` responses and reject per-object errors even when
+  S3 returns a successful HTTP response.
 - Preserve remote paths matched by newline-separated `PROTECTED_PATTERNS`.
-  Patterns are restricted to syntax supported consistently by both the local
-  matcher and AWS CLI filters.
+  The same local matcher decides which manifest and bootstrap objects to retain.
 - Replaced the hand-maintained content-type table with Go's extension MIME
   database plus the repository's existing `github.com/gabriel-vasile/mimetype`
   magic-number detector for unknown extensions. Browser-significant extension
   types remain authoritative, and textual media types receive an explicit
   `charset=utf-8` parameter.
 - Changed bootstrap to upload each managed file once with explicit metadata,
-  followed by a `--size-only` sync used only to delete stale, unprotected remote
-  objects. Bootstrap no longer recursively copies S3 objects to restamp them.
+  followed by an SDK listing that deletes stale, unprotected remote objects.
+  Bootstrap no longer recursively copies S3 objects to restamp them.
 - Changed the preview workflow to use the repository's local
   `.github/actions/setup-go-cache` action before invoking Mage.
 - Added `magefiles/README.md`, cataloging all exposed Mage targets and their
@@ -75,7 +77,7 @@ expected to account for roughly **$70-85/month** of the avoidable run rate.
 
 | Deployment state | S3 reads | S3 writes |
 | --- | --- | --- |
-| First deployment | Manifest lookup plus sync listing | One PUT/file, stale deletes, and one manifest PUT |
+| First deployment | Manifest lookup plus paginated object listing | One PUT/file, stale deletes, and one manifest PUT |
 | Unchanged deployment | One manifest GET | Zero |
 | Changed deployment | One manifest GET | Only changed/new PUTs, removed-object deletes, and one manifest PUT |
 
@@ -85,11 +87,11 @@ writes; it does not weaken cache invalidation or content metadata.
 ## Validation
 
 - `go test -tags=mage ./magefiles` passes.
-- The S3 deployment implementation has **89.9% statement coverage** (240/267).
+- The S3 deployment implementation has **89.9% statement coverage** (232/258).
 - Tests cover deterministic content hashing, MIME magic fallback, browser MIME
   overrides, explicit UTF-8 metadata, unchanged zero-write behavior, protected
   paths, rejection of symlinks and other non-regular sources, bootstrap
-  behavior, deletion batching, per-object deletion errors, and AWS command
+  pagination, deletion batching, per-object deletion errors, and AWS SDK
   failures.
 - `go vet -tags=mage ./magefiles` passes.
 - `actionlint .github/workflows/website-preview-deploy.yml

@@ -69,12 +69,17 @@ files and deletes only removed managed files. Files matched by
 `PROTECTED_PATTERNS` are never deleted.
 
 The first deployment uploads every managed file once with explicit metadata,
-then runs a size-only sync to delete stale, unprotected remote objects without
-re-uploading the files. Browser-significant types are selected by extension;
-the existing `mimetype` magic-number library provides the fallback for unknown
-extensions. Textual types receive explicit UTF-8 metadata, such as
-`text/html; charset=utf-8`. The manifest is uploaded only after the deployment
-succeeds, so a failed run cannot record an incomplete state as current.
+then lists the destination and deletes stale, unprotected remote objects.
+Browser-significant types are selected by extension; the existing `mimetype`
+magic-number library provides the fallback for unknown extensions. Textual
+types receive explicit UTF-8 metadata, such as `text/html; charset=utf-8`. The
+manifest is uploaded only after the deployment succeeds, so a failed run cannot
+record an incomplete state as current.
+
+All S3 operations use the repository's existing AWS SDK for Go v2 dependency.
+The target does not shell out to the AWS CLI or create temporary request files.
+SDK calls preserve typed request metadata, built-in retries, context
+cancellation, and per-object `DeleteObjects` error handling.
 
 ```console
 PROTECTED_PATTERNS=$'previews/**\nrobots.txt' \
