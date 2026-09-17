@@ -56,7 +56,7 @@ func TestResolveAWSAuth(t *testing.T) {
 			expectedError:           nil,
 		},
 		{
-			name: "error when no source configured",
+			name: "no source configured falls back to ambient credentials",
 			input: AuthInput{
 				Identity:       "",
 				ProfilePattern: "",
@@ -64,9 +64,9 @@ func TestResolveAWSAuth(t *testing.T) {
 			context:                 defaultContext,
 			expectedUseIdentityAuth: false,
 			expectedProfile:         "",
-			expectedSource:          "",
+			expectedSource:          "ambient",
 			expectedDeprecated:      false,
-			expectedError:           errUtils.ErrMissingHelmfileAuth,
+			expectedError:           nil,
 		},
 		{
 			name: "identity only - minimal input",
@@ -106,6 +106,32 @@ func TestResolveAWSAuth(t *testing.T) {
 			expectedProfile:         "",
 			expectedSource:          "identity",
 			expectedDeprecated:      false,
+			expectedError:           nil,
+		},
+		{
+			name: "disabled identity falls back to ambient credentials",
+			input: AuthInput{
+				Identity:       "__DISABLED__",
+				ProfilePattern: "",
+			},
+			context:                 defaultContext,
+			expectedUseIdentityAuth: false,
+			expectedProfile:         "",
+			expectedSource:          "ambient",
+			expectedDeprecated:      false,
+			expectedError:           nil,
+		},
+		{
+			name: "disabled identity falls back to profile pattern",
+			input: AuthInput{
+				Identity:       "__DISABLED__",
+				ProfilePattern: "cp-{namespace}-{stage}-helm",
+			},
+			context:                 defaultContext,
+			expectedUseIdentityAuth: false,
+			expectedProfile:         "cp-test-ns-ue2-helm",
+			expectedSource:          "pattern",
+			expectedDeprecated:      true,
 			expectedError:           nil,
 		},
 		{
