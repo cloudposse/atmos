@@ -208,7 +208,7 @@ func TestPrintStatusLines_LegacyActionWarning(t *testing.T) {
 	printStatusLines(&schema.AtmosConfiguration{})
 
 	assert.Contains(t, stderr.String(), "Detected legacy action cloudposse/github-action-atmos-terraform-plan")
-	assert.Contains(t, stderr.String(), "migrate to Native CI for better performance — learn more at https://atmos.tools/deprecated/github-actions")
+	assert.Contains(t, stderr.String(), "migrate to Native CI for better performance — learn more at https://atmos.tools/ci")
 
 	// The same warning is also emitted as a real GitHub Actions annotation
 	// on the data channel (stdout), not just a console line.

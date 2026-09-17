@@ -19,13 +19,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
-// legacyActionDocsURL is the migration hub for every deprecated
-// cloudposse/github-action-atmos-* (and sibling) marketplace action. Unlike
-// https://atmos.tools/ci, this single page fans out to the correct specific
-// replacement for each one — including non-CI topics like `atmos vendor
-// update` for the component updater — so it's accurate regardless of which
-// legacy action triggered the warning.
-const legacyActionDocsURL = "https://atmos.tools/deprecated/github-actions"
+// legacyActionDocsURL is where the legacy-action warning sends people.
+// Deliberately the Native CI landing page itself, not the
+// /deprecated/github-actions migration hub — that hub's own pages open with
+// another "this is deprecated" banner, which reads as a dead end right after
+// the warning that sent you there. /ci is where the actual replacement
+// commands and workflow examples live, and it links onward to the specific
+// deprecated-action page (and to `atmos vendor update` for the component
+// updater) for anyone who wants the exact 1:1 mapping.
+const legacyActionDocsURL = "https://atmos.tools/ci"
 
 // noticesShownEnvVar marks that this process tree has already printed its
 // startup notices, so atmos child processes spawned afterward (workflow and
