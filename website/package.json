@@ -22,6 +22,7 @@
     "test:cast-player": "node --test src/components/CastPlayer/*.test.mjs",
     "test:cast-pro-artifact": "node --test src/components/CastProArtifact/*.test.mjs",
     "test:command-box": "node --test src/components/CommandBox/*.test.mjs",
+    "test:build-timestamp": "node --test plugins/build-timestamp.test.mjs",
     "test:algolia": "node --test algolia/atmos-tools.crawler.test.mjs",
     "test:algolia:live": "ALGOLIA_LIVE_RELEVANCE_TESTS=1 node --test algolia/search-relevance.test.mjs"
   },
