@@ -43,7 +43,7 @@ func TestShuffleRacePackages(t *testing.T) {
 func TestRaceShardMatrix(t *testing.T) {
 	packages := []string{
 		"github.com/cloudposse/atmos/cmd",
-		"github.com/cloudposse/atmos/pkg/toolchain",
+		"github.com/cloudposse/atmos/pkg/toolchain/installer",
 		"github.com/cloudposse/atmos/pkg/store",
 		"github.com/cloudposse/atmos/internal/exec",
 		"github.com/cloudposse/atmos/pkg/schema",
@@ -101,7 +101,7 @@ func TestTestRaceMatrix(t *testing.T) {
 		t.Chdir(root)
 		setUpFakePathBinary(t, "go")
 		t.Setenv("ATMOS_MAGEFILES_FAKE_BIN_STDOUT",
-			"github.com/cloudposse/atmos/cmd\ngithub.com/cloudposse/atmos/pkg/toolchain\ngithub.com/cloudposse/atmos/tests\n")
+			"github.com/cloudposse/atmos/cmd\ngithub.com/cloudposse/atmos/pkg/toolchain\ngithub.com/cloudposse/atmos/pkg/toolchain/installer\ngithub.com/cloudposse/atmos/tests\n")
 		t.Setenv(raceShardCountEnv, "2")
 		t.Setenv(raceShardSeedEnv, "run-123")
 
@@ -128,7 +128,7 @@ func TestTestRaceMatrix(t *testing.T) {
 		// ever sees it (same exclusion Test.Race relies on).
 		assert.ElementsMatch(t, []string{
 			"github.com/cloudposse/atmos/cmd",
-			"github.com/cloudposse/atmos/pkg/toolchain",
+			"github.com/cloudposse/atmos/pkg/toolchain/installer",
 		}, allAssigned)
 	})
 }

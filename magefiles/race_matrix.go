@@ -73,7 +73,14 @@ func (Test) RaceMatrix() error {
 // round-robin into shardCount groups, returning one raceShardEntry per
 // shard in shard order.
 func raceShardMatrix(packages []string, shardCount int, seedValue string) []raceShardEntry {
-	shuffled := shuffleRacePackages(packages, seedValue)
+	// Toolchain is distributed by test name inside every worker, not assigned whole.
+	var general []string
+	for _, pkg := range packages {
+		if pkg != raceToolchainPackage {
+			general = append(general, pkg)
+		}
+	}
+	shuffled := shuffleRacePackages(general, seedValue)
 	buckets := make([][]string, shardCount)
 	for index, pkg := range shuffled {
 		bucket := index % shardCount
