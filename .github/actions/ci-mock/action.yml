@@ -65,6 +65,20 @@ runs:
     - name: Guard DNS against the harden-runner post-step race
       if: fromJSON(inputs.matrix).flavor.target == 'windows' && ! (env.CI_SOURCE_DRAFT == 'true')
       uses: $/.github/actions/windows-dns-guard
+    - name: Set up Atmos bootstrap
+      if: ${{ ! ( fromJSON(inputs.matrix).flavor.target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
+      uses: $/.github/actions/setup-atmos-bootstrap
+      with:
+        atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+    # Runs with the pinned bootstrap atmos (still first on PATH here), not the
+    # PR-built binary installed below -- this step carries GITHUB_TOKEN, and the
+    # PR binary must never read it. Keep this before "Set up Atmos (install build
+    # artifact)".
+    - name: Set up the CI toolchain
+      if: ${{ ! ( fromJSON(inputs.matrix).flavor.target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
+      uses: $/.github/actions/ci-toolchain
+      with:
+        github-token: ${{ github.token }}
     - name: Set up Atmos (install build artifact for ${{ fromJSON(inputs.matrix).flavor.target }})
       if: ${{ ! ( fromJSON(inputs.matrix).flavor.target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
       uses: $/.github/actions/setup-atmos-install
@@ -73,11 +87,6 @@ runs:
         path: ${{ github.workspace }}
         add-to-path: 'true'
         run-id: ${{ env.CI_BUILD_RUN_ID }}
-        github-token: ${{ github.token }}
-    - name: Set up the CI toolchain
-      if: ${{ ! ( fromJSON(inputs.matrix).flavor.target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
-      uses: $/.github/actions/ci-toolchain
-      with:
         github-token: ${{ github.token }}
     - name: Verify OpenTofu
       if: ${{ ! ( fromJSON(inputs.matrix).flavor.target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}

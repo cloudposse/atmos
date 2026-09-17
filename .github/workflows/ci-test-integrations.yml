@@ -126,17 +126,19 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
-      - name: Set up Atmos (install build artifact)
-        uses: $/.github/actions/setup-atmos-install
+      - name: Set up Atmos bootstrap
+        uses: $/.github/actions/setup-atmos-bootstrap
         with:
-          target: linux
-          run-id: ${{ env.CI_BUILD_RUN_ID }}
-          github-token: ${{ github.token }}
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
       - name: Restore the Atmos toolchain cache
         continue-on-error: true
         uses: $/actions/cache
         with:
           mode: restore-only
+      # Runs with the pinned bootstrap atmos (still first on PATH here), not the
+      # PR-built binary installed below -- this step carries GITHUB_TOKEN, and the
+      # PR binary must never read it. Keep this before "Set up Atmos (install build
+      # artifact)".
       - name: Install OpenTofu and TFLint with Atmos toolchain
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -144,6 +146,12 @@ jobs:
           atmos toolchain install opentofu/opentofu
           atmos toolchain install terraform-linters/tflint
           atmos toolchain env --format=github
+      - name: Set up Atmos (install build artifact)
+        uses: $/.github/actions/setup-atmos-install
+        with:
+          target: linux
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
       - name: Verify OpenTofu and TFLint
         run: |
           tofu version
@@ -183,17 +191,19 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
-      - name: Set up Atmos (install build artifact)
-        uses: $/.github/actions/setup-atmos-install
+      - name: Set up Atmos bootstrap
+        uses: $/.github/actions/setup-atmos-bootstrap
         with:
-          target: linux
-          run-id: ${{ env.CI_BUILD_RUN_ID }}
-          github-token: ${{ github.token }}
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
       - name: Restore the Atmos toolchain cache
         continue-on-error: true
         uses: $/actions/cache
         with:
           mode: restore-only
+      # Runs with the pinned bootstrap atmos (still first on PATH here), not the
+      # PR-built binary installed below -- this step carries GITHUB_TOKEN, and the
+      # PR binary must never read it. Keep this before "Set up Atmos (install build
+      # artifact)".
       - name: Install OpenTofu and TFLint with Atmos toolchain
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -201,6 +211,12 @@ jobs:
           atmos toolchain install opentofu/opentofu
           atmos toolchain install terraform-linters/tflint
           atmos toolchain env --format=github
+      - name: Set up Atmos (install build artifact)
+        uses: $/.github/actions/setup-atmos-install
+        with:
+          target: linux
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
       - name: Run the TFLint hook example
         working-directory: examples/hooks-tflint
         run: atmos terraform plan example -s test

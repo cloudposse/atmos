@@ -116,16 +116,20 @@ runs:
       env:
         BUILD_TARGET: ${{ fromJSON(inputs.matrix).target }}
       run: go tool mage acceptance:verify "$BUILD_TARGET" "$TEST_SHARD_COUNT"
-    - name: Put the freshly built atmos on PATH for the toolchain install
-      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
-      shell: bash
-      run: echo "${GITHUB_WORKSPACE}/build" >> "$GITHUB_PATH"
+    # Runs with the pinned bootstrap atmos (still first on PATH here, from "Set up
+    # Atmos bootstrap" above), not the freshly built PR binary below -- this step
+    # carries GITHUB_TOKEN, and the PR binary must never read it. Keep this before
+    # the PATH swap.
     - name: Install the CI toolchain (atmos toolchain install from .tool-versions; saves the cache)
       if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
       uses: $/.github/actions/ci-toolchain
       with:
         cache: restore-and-save
         github-token: ${{ github.token }}
+    - name: Put the freshly built atmos on PATH for subsequent steps
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
+      shell: bash
+      run: echo "${GITHUB_WORKSPACE}/build" >> "$GITHUB_PATH"
     - name: Install the stack-declared Helm plugins
       if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
       working-directory: tests/fixtures/scenarios/helm-plugin-install
