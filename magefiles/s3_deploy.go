@@ -44,6 +44,7 @@ var (
 	errS3DeployPartialDelete    = errors.New("mage: S3 failed to delete one or more objects")
 	errS3DeployMissingMetadata  = errors.New("mage: S3 deploy manifest is missing file metadata")
 	errS3DeployUnsupportedFile  = errors.New("mage: S3 deploy source contains a non-regular file")
+	statS3DeployPath            = os.Stat
 )
 
 type s3DeployFile struct {
@@ -129,7 +130,7 @@ func (S3) Deploy(ctx context.Context, localDir, s3URI string) error {
 	return newS3Deployer(client).deploy(ctx, state)
 }
 
-func (d *s3Deployer) Deploy(ctx context.Context, localDir, s3URI string, protected []s3ProtectedPattern) error {
+func (d *s3Deployer) deployPaths(ctx context.Context, localDir, s3URI string, protected []s3ProtectedPattern) error {
 	state, err := prepareS3DeployState(localDir, s3URI, protected)
 	if err != nil {
 		return err
@@ -163,8 +164,14 @@ func prepareS3DeployState(localDir, s3URI string, protected []s3ProtectedPattern
 	if err != nil {
 		return nil, fmt.Errorf("mage: resolve S3 deploy directory: %w", err)
 	}
-	info, err := os.Stat(localDir)
-	if err != nil || !info.IsDir() {
+	info, err := statS3DeployPath(localDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf(s3ErrorWithValueFormat, errS3DeployInvalidLocalDir, localDir)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("mage: inspect S3 deploy directory %s: %w", localDir, err)
+	}
+	if !info.IsDir() {
 		return nil, fmt.Errorf(s3ErrorWithValueFormat, errS3DeployInvalidLocalDir, localDir)
 	}
 

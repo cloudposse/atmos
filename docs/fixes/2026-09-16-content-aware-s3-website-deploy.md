@@ -96,7 +96,7 @@ same destination.
 ## Validation
 
 - `go test -tags=mage ./magefiles` passes.
-- The S3 deployment implementation has **90.3% statement coverage** (242/268).
+- The S3 deployment implementation has **90.1% statement coverage** (245/272).
 - Tests cover deterministic content hashing, MIME magic fallback, browser MIME
   overrides, explicit UTF-8 metadata, unchanged zero-write behavior, protected
   paths, rejection of symlinks and other non-regular sources, bootstrap

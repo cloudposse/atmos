@@ -153,7 +153,7 @@ func TestS3DeployerUnchangedPerformsNoWrites(t *testing.T) {
 	client := newFakeS3DeployClient()
 	client.getBody = mustMarshalS3Manifest(t, manifest)
 
-	err = newS3Deployer(client).Deploy(context.Background(), root, "s3://example/site/", nil)
+	err = newS3Deployer(client).deployPaths(context.Background(), root, "s3://example/site/", nil)
 	require.NoError(t, err)
 	require.Len(t, client.getInputs, 1)
 	assert.Empty(t, client.puts)
@@ -178,7 +178,7 @@ func TestS3DeployerIncrementalUploadPreservesMetadata(t *testing.T) {
 	client := newFakeS3DeployClient()
 	client.getBody = mustMarshalS3Manifest(t, s3DeployManifest{Version: 1, Files: oldFiles})
 
-	err = newS3Deployer(client).Deploy(context.Background(), root, "s3://example/site/", protected)
+	err = newS3Deployer(client).deployPaths(context.Background(), root, "s3://example/site/", protected)
 	require.NoError(t, err)
 	require.Len(t, client.puts, 2)
 	html := findS3Put(t, client.puts, "site/index.html")
@@ -214,7 +214,7 @@ func TestS3DeployerBootstrapUsesSDKForListingAndCleanup(t *testing.T) {
 		{Contents: []s3types.Object{{Key: aws.String("site/z-stale.txt")}}},
 	}
 
-	err = newS3Deployer(client).Deploy(context.Background(), root, "s3://example/site", protected)
+	err = newS3Deployer(client).deployPaths(context.Background(), root, "s3://example/site", protected)
 	require.NoError(t, err)
 	assert.Equal(t, "site/", aws.ToString(client.listInputs[0].Prefix))
 	assert.Nil(t, client.listInputs[0].ContinuationToken)
@@ -242,9 +242,9 @@ func TestUploadChangedRequiresManifestMetadata(t *testing.T) {
 
 func TestS3DeployerValidationAndManifestErrors(t *testing.T) {
 	deployer := newS3Deployer(newFakeS3DeployClient())
-	err := deployer.Deploy(context.Background(), filepath.Join(t.TempDir(), "missing"), "s3://example/", nil)
+	err := deployer.deployPaths(context.Background(), filepath.Join(t.TempDir(), "missing"), "s3://example/", nil)
 	require.ErrorIs(t, err, errS3DeployInvalidLocalDir)
-	err = deployer.Deploy(context.Background(), t.TempDir(), "https://example", nil)
+	err = deployer.deployPaths(context.Background(), t.TempDir(), "https://example", nil)
 	require.ErrorIs(t, err, errS3DeployInvalidURI)
 
 	root := t.TempDir()
@@ -268,7 +268,7 @@ func TestS3DeployerValidationAndManifestErrors(t *testing.T) {
 			client.getBody = test.body
 			client.getErr = test.getErr
 			client.getNilOutput = test.nilOut
-			err := newS3Deployer(client).Deploy(context.Background(), root, "s3://example/", nil)
+			err := newS3Deployer(client).deployPaths(context.Background(), root, "s3://example/", nil)
 			require.ErrorIs(t, err, test.expected)
 		})
 	}
@@ -283,7 +283,7 @@ func TestS3DeployerPropagatesPutFailure(t *testing.T) {
 	}})
 	client.putErrForKey["index.html"] = errFakeS3
 
-	err := newS3Deployer(client).Deploy(context.Background(), root, "s3://example/", nil)
+	err := newS3Deployer(client).deployPaths(context.Background(), root, "s3://example/", nil)
 	require.ErrorIs(t, err, errS3DeployAWSOperation)
 }
 

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -167,6 +168,17 @@ func TestBuildS3DeployManifestErrors(t *testing.T) {
 
 	_, err = s3DeployFileMetadata(filepath.Join(t.TempDir(), "missing"), "missing")
 	require.Error(t, err)
+}
+
+func TestPrepareS3DeployStatePreservesStatErrors(t *testing.T) {
+	errStat := errors.New("stat failed")
+	original := statS3DeployPath
+	statS3DeployPath = func(string) (fs.FileInfo, error) { return nil, errStat }
+	t.Cleanup(func() { statS3DeployPath = original })
+
+	_, err := prepareS3DeployState(t.TempDir(), "s3://example", nil)
+	require.ErrorIs(t, err, errStat)
+	require.NotErrorIs(t, err, errS3DeployInvalidLocalDir)
 }
 
 func TestValidateS3DeployFileMode(t *testing.T) {
