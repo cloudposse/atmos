@@ -147,123 +147,31 @@ func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 }
 
 func TestRunInstallWithNoArgs(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-
-	// Create a .tool-versions file with some tools
-	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
-	toolVersions := &ToolVersions{
-		Tools: map[string][]string{
-			"terraform": {"1.11.4"},
-			"helm":      {"3.17.4"},
-		},
-	}
-	err := SaveToolVersions(toolVersionsPath, toolVersions)
-	require.NoError(t, err)
-
-	// Temporarily set the global toolVersionsFile variable.
-	// InstallPath MUST be isolated to a per-test temp dir: RunInstall performs a
-	// real install via NewInstaller(), and without an explicit InstallPath,
-	// GetInstallPath() falls back to the real, shared, XDG toolchain cache
-	// directory -- the exact directory CI's "atmos toolchain install --default"
-	// step populates and the whole acceptance suite depends on for the rest of
-	// the run. A test writing real downloaded binaries there races with every
-	// other concurrently-running package's test process reading from it.
-	prev := atmosConfig
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
-		VersionsFile: toolVersionsPath,
-		InstallPath:  filepath.Join(tempDir, ".atmos", "tools"),
-	}})
-	t.Cleanup(func() { SetAtmosConfig(prev) })
-
-	// Test that runInstall with no arguments doesn't error
-	// This prevents regression where the function might error when no specific tool is provided
-	err = RunInstall("", false, false, true, false)
-	assert.NoError(t, err)
+	config := useLocalInstallFixture(t, map[string][]string{"terraform": {"1.11.4"}, "helm": {"3.17.4"}})
+	require.NoError(t, RunInstall("", false, false, true, false))
+	assertFixtureInstalled(t, config, "hashicorp", "terraform", "1.11.4")
+	assertFixtureInstalled(t, config, "helm", "helm", "3.17.4")
 }
 
 // TestRunInstall_WithValidToolSpec tests RunInstall with a valid tool@version specification.
 func TestRunInstall_WithValidToolSpec(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-
-	// Create a .tool-versions file
-	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
-	toolVersions := &ToolVersions{
-		Tools: map[string][]string{},
-	}
-	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	config := useLocalInstallFixture(t, map[string][]string{})
+	require.NoError(t, RunInstall("terraform@1.11.4", false, false, true, false))
+	versions, err := LoadToolVersions(config.Toolchain.VersionsFile)
 	require.NoError(t, err)
-
-	// Set Atmos config. InstallPath MUST be isolated to a per-test temp dir: RunInstall
-	// performs a real install via NewInstaller(), and without an explicit InstallPath,
-	// GetInstallPath() falls back to the real, shared, XDG toolchain cache directory --
-	// the exact directory CI's "atmos toolchain install --default" step populates and
-	// the whole acceptance suite depends on for the rest of the run. A test writing real
-	// downloaded binaries there races with every other concurrently-running package's
-	// test process reading from it.
-	prevConfig := atmosConfig
-	installPath := filepath.Join(tempDir, ".atmos", "tools")
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
-	defer func() {
-		SetAtmosConfig(prevConfig)
-	}()
-
-	// Test installing a specific tool with version
-	err = RunInstall("terraform@1.11.4", false, false, true, false)
-	assert.NoError(t, err)
-
-	// Verify the tool was added to .tool-versions. Read back from toolVersionsPath (the
-	// path actually configured above via VersionsFile) -- NOT the bare
-	// DefaultToolVersionsFilePath constant, which is CWD-relative (the package source
-	// directory under `go test`, not this test's isolated tempDir) and can otherwise
-	// silently pick up unrelated content left behind by whatever last wrote there.
-	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
-	require.NoError(t, err)
-	assert.Contains(t, updatedToolVersions.Tools, "terraform")
-	assert.Contains(t, updatedToolVersions.Tools["terraform"], "1.11.4")
+	assert.Equal(t, []string{"1.11.4"}, versions.Tools["terraform"])
+	assertFixtureInstalled(t, config, "hashicorp", "terraform", "1.11.4")
 }
 
 // TestRunInstall_WithSetAsDefault tests RunInstall with setAsDefault flag.
 func TestRunInstall_WithSetAsDefault(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-
-	// Create a .tool-versions file with existing versions
-	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
-	toolVersions := &ToolVersions{
-		Tools: map[string][]string{
-			"terraform": {"1.11.3", "1.11.2"},
-		},
-	}
-	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	config := useLocalInstallFixture(t, map[string][]string{"terraform": {"1.11.3", "1.11.2"}})
+	require.NoError(t, RunInstall("terraform@1.11.4", true, false, true, false))
+	versions, err := LoadToolVersions(config.Toolchain.VersionsFile)
 	require.NoError(t, err)
-
-	// Set Atmos config. InstallPath MUST be isolated to a per-test temp dir: RunInstall
-	// performs a real install via NewInstaller(), and without an explicit InstallPath,
-	// GetInstallPath() falls back to the real, shared, XDG toolchain cache directory --
-	// the exact directory CI's "atmos toolchain install --default" step populates and
-	// the whole acceptance suite depends on for the rest of the run. A test writing real
-	// downloaded binaries there races with every other concurrently-running package's
-	// test process reading from it.
-	prevConfig := atmosConfig
-	installPath := filepath.Join(tempDir, ".atmos", "tools")
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
-	defer func() {
-		SetAtmosConfig(prevConfig)
-	}()
-
-	// Test installing with setAsDefault=true
-	err = RunInstall("terraform@1.11.4", true, false, true, false)
-	assert.NoError(t, err)
-
-	// Verify the new version is first (default) in .tool-versions. Read back from
-	// toolVersionsPath (see TestRunInstall_WithValidToolSpec for why not
-	// DefaultToolVersionsFilePath).
-	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
-	require.NoError(t, err)
-	assert.Contains(t, updatedToolVersions.Tools, "terraform")
-	assert.Equal(t, "1.11.4", updatedToolVersions.Tools["terraform"][0])
+	// Default selection replaces the prior pin rather than accumulating versions.
+	assert.Equal(t, []string{"1.11.4"}, versions.Tools["terraform"])
+	assertFixtureInstalled(t, config, "hashicorp", "terraform", "1.11.4")
 }
 
 // TestRunInstall_WithInvalidToolSpec tests RunInstall with an invalid tool specification.
@@ -300,49 +208,12 @@ func TestRunInstall_WithInvalidToolSpec(t *testing.T) {
 
 // TestRunInstall_WithCanonicalFormat tests RunInstall with owner/repo@version format.
 func TestRunInstall_WithCanonicalFormat(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-
-	// Create a .tool-versions file
-	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
-	toolVersions := &ToolVersions{
-		Tools: map[string][]string{},
-	}
-	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	config := useLocalInstallFixture(t, map[string][]string{})
+	require.NoError(t, RunInstall("hashicorp/terraform@1.11.4", false, false, true, false))
+	versions, err := LoadToolVersions(config.Toolchain.VersionsFile)
 	require.NoError(t, err)
-
-	// Set Atmos config. InstallPath MUST be isolated to a per-test temp dir: RunInstall
-	// performs a real install via NewInstaller(), and without an explicit InstallPath,
-	// GetInstallPath() falls back to the real, shared, XDG toolchain cache directory --
-	// the exact directory CI's "atmos toolchain install --default" step populates and
-	// the whole acceptance suite depends on for the rest of the run. A test writing real
-	// downloaded binaries there races with every other concurrently-running package's
-	// test process reading from it.
-	prevConfig := atmosConfig
-	installPath := filepath.Join(tempDir, ".atmos", "tools")
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
-	defer func() {
-		SetAtmosConfig(prevConfig)
-	}()
-
-	// Test installing with canonical owner/repo@version format
-	err = RunInstall("hashicorp/terraform@1.11.4", false, false, true, false)
-	assert.NoError(t, err)
-
-	// Verify the tool was added to .tool-versions. Read back from toolVersionsPath (see
-	// TestRunInstall_WithValidToolSpec for why not DefaultToolVersionsFilePath).
-	// Note: The tool may be registered as "terraform" or "hashicorp/terraform" depending on alias resolution.
-	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
-	require.NoError(t, err)
-	// Check for either key - the implementation may normalize to the shorter form
-	terraformKey := ""
-	if _, exists := updatedToolVersions.Tools["terraform"]; exists {
-		terraformKey = "terraform"
-	} else if _, exists := updatedToolVersions.Tools["hashicorp/terraform"]; exists {
-		terraformKey = "hashicorp/terraform"
-	}
-	assert.NotEmpty(t, terraformKey, "Tool should be registered as either 'terraform' or 'hashicorp/terraform'")
-	assert.Contains(t, updatedToolVersions.Tools[terraformKey], "1.11.4")
+	assert.Equal(t, []string{"1.11.4"}, versions.Tools["hashicorp/terraform"])
+	assertFixtureInstalled(t, config, "hashicorp", "terraform", "1.11.4")
 }
 
 // TestRunInstall_WithLatestKeyword tests RunInstall with the "latest" version keyword.
@@ -390,36 +261,11 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 
 // TestRunInstall_Reinstall tests RunInstall with reinstallFlag=true.
 func TestRunInstall_Reinstall(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-
-	// Create a .tool-versions file with existing tools
-	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
-	toolVersions := &ToolVersions{
-		Tools: map[string][]string{
-			"terraform": {"1.11.4"},
-		},
-	}
-	err := SaveToolVersions(toolVersionsPath, toolVersions)
-	require.NoError(t, err)
-
-	// Set Atmos config. InstallPath MUST be isolated to a per-test temp dir: RunInstall
-	// performs a real install via NewInstaller(), and without an explicit InstallPath,
-	// GetInstallPath() falls back to the real, shared, XDG toolchain cache directory --
-	// the exact directory CI's "atmos toolchain install --default" step populates and
-	// the whole acceptance suite depends on for the rest of the run. A test writing real
-	// downloaded binaries there races with every other concurrently-running package's
-	// test process reading from it.
-	prevConfig := atmosConfig
-	installPath := filepath.Join(tempDir, ".atmos", "tools")
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
-	defer func() {
-		SetAtmosConfig(prevConfig)
-	}()
-
-	// Test reinstalling all tools from .tool-versions
-	err = RunInstall("", false, true, true, false)
-	assert.NoError(t, err)
+	config := useLocalInstallFixture(t, map[string][]string{"terraform": {"1.11.4"}})
+	require.NoError(t, RunInstall("", false, false, true, false))
+	assertFixtureInstalled(t, config, "hashicorp", "terraform", "1.11.4")
+	require.NoError(t, RunInstall("", false, true, true, false))
+	assertFixtureInstalled(t, config, "hashicorp", "terraform", "1.11.4")
 }
 
 // TestPrintSummary tests the printSummary function with various scenarios.
@@ -718,11 +564,10 @@ func TestShowProgress(t *testing.T) {
 // See ToolInstaller interface in set_test.go for reference pattern.
 func TestRunInstallBatch(t *testing.T) {
 	tests := []struct {
-		name            string
-		toolSpecs       []string
-		reinstallFlag   bool
-		wantErr         bool
-		requiresNetwork bool
+		name          string
+		toolSpecs     []string
+		reinstallFlag bool
+		wantErr       bool
 	}{
 		{
 			name:          "empty toolSpecs",
@@ -737,20 +582,20 @@ func TestRunInstallBatch(t *testing.T) {
 			wantErr:       false,
 		},
 		{
-			name:            "single tool delegates to RunInstall",
-			toolSpecs:       []string{"terraform@1.11.4"},
-			reinstallFlag:   false,
-			wantErr:         false, // Delegates to single-tool flow.
-			requiresNetwork: true,
+			name:          "single tool delegates to RunInstall",
+			toolSpecs:     []string{"terraform@1.11.4"},
+			reinstallFlag: false,
+			wantErr:       false, // Delegates to single-tool flow.
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.requiresNetwork && testing.Short() {
-				t.Skip("Skipping test that requires network in short mode")
-			}
+			config := useLocalInstallFixture(t, map[string][]string{})
 			err := RunInstallBatch(tt.toolSpecs, tt.reinstallFlag)
+			if len(tt.toolSpecs) > 0 && err == nil {
+				assertFixtureInstalled(t, config, "hashicorp", "terraform", "1.11.4")
+			}
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -833,71 +678,35 @@ func TestRunBubbleTeaSpinner(t *testing.T) {
 
 // TestInstallOrSkipTool tests the installOrSkipTool function.
 func TestInstallOrSkipTool(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-
-	// Create mock resolver.
-	mockResolver := &mockToolResolver{
-		mapping: map[string][2]string{
-			"terraform":           {"hashicorp", "terraform"},
-			"hashicorp/terraform": {"hashicorp", "terraform"},
-		},
-	}
-
-	binDir := filepath.Join(tempDir, ".atmos", "tools", "bin")
-	installer := NewInstallerWithResolver(mockResolver, binDir)
-
-	tests := []struct {
-		name           string
-		tool           toolInfo
-		reinstallFlag  bool
-		setupBinary    bool
-		expectedResult string
+	t.Parallel()
+	cases := []struct {
+		name                string
+		existing, reinstall bool
+		want                string
 	}{
-		{
-			name:           "tool not installed - installs",
-			tool:           toolInfo{version: "1.11.4", owner: "hashicorp", repo: "terraform"},
-			reinstallFlag:  false,
-			setupBinary:    false,
-			expectedResult: resultInstalled,
-		},
-		{
-			name:           "tool already installed - skips",
-			tool:           toolInfo{version: "1.11.4", owner: "hashicorp", repo: "terraform"},
-			reinstallFlag:  false,
-			setupBinary:    true,
-			expectedResult: resultSkipped,
-		},
-		{
-			name:           "tool already installed with reinstall flag - reinstalls",
-			tool:           toolInfo{version: "1.11.4", owner: "hashicorp", repo: "terraform"},
-			reinstallFlag:  true,
-			setupBinary:    true,
-			expectedResult: resultInstalled,
-		},
+		{"missing installs", false, false, resultInstalled},
+		{"existing skips", true, false, resultSkipped},
+		{"existing reinstalls", true, true, resultInstalled},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.setupBinary {
-				// Create a mock binary.
-				binaryPath := installer.GetBinaryPath(tt.tool.owner, tt.tool.repo, tt.tool.version, "")
-				err := os.MkdirAll(filepath.Dir(binaryPath), 0o755)
-				require.NoError(t, err)
-				err = os.WriteFile(binaryPath, []byte("mock binary"), 0o755)
-				require.NoError(t, err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			config := localInstallFixture(t)
+			installer := fixtureInstaller(t, config)
+			binaryPath := installer.GetBinaryPath("hashicorp", "terraform", "1.11.4", "")
+			if tc.existing {
+				require.NoError(t, os.MkdirAll(filepath.Dir(binaryPath), 0o755))
+				require.NoError(t, os.WriteFile(binaryPath, []byte("existing"), 0o755))
 			}
-
-			result, err := installOrSkipTool(installer, tt.tool, tt.reinstallFlag, false)
-
-			// Skip case should never fail since no download is attempted.
-			if tt.expectedResult == resultSkipped {
+			result, err := installOrSkipToolWithProgress(installer, toolInfo{owner: "hashicorp", repo: "terraform", version: "1.11.4"}, tc.reinstall, false, false)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, result)
+			if tc.want == resultSkipped {
+				content, err := os.ReadFile(binaryPath)
 				require.NoError(t, err)
-				assert.Equal(t, tt.expectedResult, result)
-			} else if err == nil {
-				// Install cases may fail in CI without network - accept either success or network error.
-				// Network errors are acceptable in CI - code path is exercised either way.
-				assert.Equal(t, tt.expectedResult, result)
+				assert.Equal(t, "existing", string(content))
+			} else {
+				assertFixtureInstalled(t, config, "hashicorp", "terraform", "1.11.4")
 			}
 		})
 	}
