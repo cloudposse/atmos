@@ -44,7 +44,7 @@ env:
   CI_BUILD_RUN_ID: ''
 jobs:
   magefiles:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && 'Split disabled / ' || '' }}[magefiles] unit tests
+    name: "[magefiles] unit tests${{ vars.CI_SPLIT_WORKFLOWS != 'true' && ' (inactive)' || '' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -80,7 +80,7 @@ jobs:
           compression-level: 0
     if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' }}
   race-plan:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && 'Split disabled / ' || '' }}[race] plan shards
+    name: "[race] plan shards${{ vars.CI_SPLIT_WORKFLOWS != 'true' && ' (inactive)' || '' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -104,8 +104,7 @@ jobs:
           go tool mage test:racematrix
     if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' }}
   race:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && 'Split disabled / ' || '' }}[race] non-acceptance test suite (shard ${{
-      matrix.shard }}/4)
+    name: "[race] non-acceptance test suite (shard ${{ matrix.shard }}/4)${{ vars.CI_SPLIT_WORKFLOWS != 'true' && ' (inactive)' || '' }}"
     needs:
       - race-plan
     strategy:

@@ -44,7 +44,7 @@ env:
   CI_BUILD_RUN_ID: ''
 jobs:
   kubernetes-e2e:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && 'Split disabled / ' || '' }}[kubernetes] e2e tests (${{ matrix.os }})
+    name: "[kubernetes] e2e tests (${{ matrix.os }})${{ vars.CI_SPLIT_WORKFLOWS != 'true' && ' (inactive)' || '' }}"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -58,9 +58,11 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             github.com:443
+            raw.githubusercontent.com:443
+            sum.golang.org:443
             proxy.golang.org:443
             release-assets.githubusercontent.com:443
             storage.googleapis.com:443

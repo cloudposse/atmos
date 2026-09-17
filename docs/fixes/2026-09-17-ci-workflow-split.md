@@ -92,8 +92,7 @@ branch. Removing `test.yml` in the bootstrap PR would strand its required checks
 
 1. Merge the implementation with repository variable `CI_SPLIT_WORKFLOWS` unset
     or `false`. The existing `test.yml` pipeline remains active, using the extracted
-    actions. New direct-event jobs are skipped under distinct `Split disabled /`
-    names so they cannot satisfy the legacy required checks.
+    actions. New direct-event jobs are skipped under distinct `(inactive)` suffixes so they cannot satisfy the legacy required checks.
 2. After all child files and actions are on main, enable the repository variable:
 
     ```shell
@@ -104,13 +103,13 @@ branch. Removing `test.yml` in the bootstrap PR would strand its required checks
     check appears on the source revision, all artifacts resolve to their producer,
     coverage uploads, and the timing summary includes the children. Exercise a
     failed-job rerun before removing the fallback.
-4. After validation, remove `test.yml`, its disabled-name prefixes and Mergify
+4. After validation, remove `test.yml`, its inactive-name suffixes and Mergify
     dispatch, and the rollout guards in a cleanup PR. Keep the source resolver and
     trusted reporter: they are necessary for cross-workflow correctness.
 
 To roll back, set the variable to `false` and start a fresh source run. Avoid
 switching modes during an active merge-queue run. Disabled legacy jobs use
-`Legacy disabled /` names and cannot satisfy the split pipeline's required checks.
+`(inactive)` suffixes and cannot satisfy the split pipeline's required checks.
 No repository variables or rulesets are changed by this implementation PR.
 
 The split improves maintenance and rerun granularity. Runtime improvements still

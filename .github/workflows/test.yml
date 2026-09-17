@@ -46,7 +46,7 @@ env:
 jobs:
   build-linux:
     cache-mode: write
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Build (${{ matrix.target }})
+    name: "Build (${{ matrix.target }})${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     timeout-minutes: 60
     strategy:
       matrix:
@@ -64,7 +64,7 @@ jobs:
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   build-windows:
     cache-mode: write
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Build (${{ matrix.target }})
+    name: "Build (${{ matrix.target }})${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     timeout-minutes: 60
     strategy:
       matrix:
@@ -79,7 +79,7 @@ jobs:
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   build-macos:
     cache-mode: write
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Build (${{ matrix.target }})
+    name: "Build (${{ matrix.target }})${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     timeout-minutes: 60
     strategy:
       matrix:
@@ -93,7 +93,7 @@ jobs:
           matrix: ${{ toJSON(matrix) }}
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   validate-affected:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Validation (affected)
+    name: "Validation (affected)${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -102,7 +102,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             github.com:443
             us.i.posthog.com:443
@@ -123,8 +123,7 @@ jobs:
           --format rich
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   terraform-registry-cache-linux:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Terraform registry cache test (${{ matrix.flavor.target
-      }})
+    name: "Terraform registry cache test (${{ matrix.flavor.target }})${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     strategy:
       fail-fast: false
@@ -151,8 +150,7 @@ jobs:
         run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   terraform-registry-cache-windows:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Terraform registry cache test (${{ matrix.flavor.target
-      }})
+    name: "Terraform registry cache test (${{ matrix.flavor.target }})${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-windows
     strategy:
       fail-fast: false
@@ -179,8 +177,7 @@ jobs:
         run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   terraform-registry-cache-macos:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Terraform registry cache test (${{ matrix.flavor.target
-      }})
+    name: "Terraform registry cache test (${{ matrix.flavor.target }})${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-macos
     strategy:
       fail-fast: false
@@ -207,8 +204,7 @@ jobs:
         run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   test-linux:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Acceptance Tests (${{ matrix.flavor.target
-      }}, shard ${{ matrix.shard }}/10)
+    name: "Acceptance Tests (${{ matrix.flavor.target }}, shard ${{ matrix.shard }}/10)${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     strategy:
       fail-fast: false
@@ -271,8 +267,7 @@ jobs:
           compression-level: 0
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   test-windows:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Acceptance Tests (${{ matrix.flavor.target
-      }}, shard ${{ matrix.shard }}/10)
+    name: "Acceptance Tests (${{ matrix.flavor.target }}, shard ${{ matrix.shard }}/10)${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-windows
     strategy:
       fail-fast: false
@@ -335,8 +330,7 @@ jobs:
           compression-level: 0
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   test-macos:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Acceptance Tests (${{ matrix.flavor.target
-      }}, shard ${{ matrix.shard }}/10)
+    name: "Acceptance Tests (${{ matrix.flavor.target }}, shard ${{ matrix.shard }}/10)${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-macos
     strategy:
       fail-fast: false
@@ -399,7 +393,7 @@ jobs:
           compression-level: 0
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   magefiles:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[magefiles] unit tests
+    name: "[magefiles] unit tests${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -435,7 +429,7 @@ jobs:
           compression-level: 0
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   race-plan:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[race] plan shards
+    name: "[race] plan shards${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -459,8 +453,7 @@ jobs:
           go tool mage test:racematrix
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   race:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[race] non-acceptance test suite (shard ${{
-      matrix.shard }}/4)
+    name: "[race] non-acceptance test suite (shard ${{ matrix.shard }}/4)${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs:
       - race-plan
     strategy:
@@ -521,7 +514,7 @@ jobs:
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   test-required-linux:
     cache-mode: none
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}${{ matrix.check }}
+    name: "${{ matrix.check }}${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs:
       - test-linux
       - terraform-registry-cache-linux
@@ -543,7 +536,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             github.com:443
             release-assets.githubusercontent.com:443
@@ -586,7 +579,7 @@ jobs:
           fi
   test-required-macos:
     cache-mode: none
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}${{ matrix.check }}
+    name: "${{ matrix.check }}${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs:
       - test-macos
       - terraform-registry-cache-macos
@@ -608,7 +601,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             github.com:443
             release-assets.githubusercontent.com:443
@@ -651,7 +644,7 @@ jobs:
           fi
   test-required-windows:
     cache-mode: none
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}${{ matrix.check }}
+    name: "${{ matrix.check }}${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs:
       - test-windows
       - terraform-registry-cache-windows
@@ -673,7 +666,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             github.com:443
             release-assets.githubusercontent.com:443
@@ -716,7 +709,7 @@ jobs:
           fi
   coverage:
     cache-mode: none
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}Upload acceptance coverage to Codecov
+    name: "Upload acceptance coverage to Codecov${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs:
       - build-linux
       - test-linux
@@ -779,7 +772,7 @@ jobs:
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   docker:
     cache-mode: write
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[lint] Dockerfile
+    name: "[lint] Dockerfile${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     runs-on: ubuntu-latest
     permissions:
@@ -790,7 +783,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             check.trivy.dev:443
             get.trivy.dev:443
@@ -831,7 +824,7 @@ jobs:
           category: trivy-config
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   floci:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[floci] ${{ matrix.demo-folder }}
+    name: "[floci] ${{ matrix.demo-folder }}${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     runs-on: ubuntu-latest
     strategy:
@@ -847,7 +840,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             checkpoint-api.hashicorp.com:443
             github.com:443
@@ -894,7 +887,7 @@ jobs:
           }
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   floci-go:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[floci] go e2e (${{ matrix.group }})
+    name: "[floci] go e2e (${{ matrix.group }})${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     runs-on: ubuntu-latest
     strategy:
@@ -926,7 +919,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             archive.ubuntu.com:80
             auth.docker.io:443
@@ -989,8 +982,7 @@ jobs:
         run: go test ./tests -run "$FLOCI_TEST_PATTERN" -count=1 -timeout 25m -v
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   k3s-linux:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name
-      }}
+    name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name }}${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     runs-on: ${{ matrix.flavor.os }}
     env:
@@ -1103,8 +1095,7 @@ jobs:
           exit "${status}"
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   k3s-macos:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name
-      }}
+    name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name }}${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-macos
     runs-on: ${{ matrix.flavor.os }}
     env:
@@ -1226,7 +1217,7 @@ jobs:
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   k3s-required:
     cache-mode: none
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[k3s] demo-helmfile
+    name: "[k3s] demo-helmfile${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs:
       - k3s-linux
       - k3s-macos
@@ -1248,7 +1239,7 @@ jobs:
             exit 1
           fi
   kubernetes-e2e:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[kubernetes] e2e tests (${{ matrix.os }})
+    name: "[kubernetes] e2e tests (${{ matrix.os }})${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -1262,9 +1253,11 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             github.com:443
+            raw.githubusercontent.com:443
+            sum.golang.org:443
             proxy.golang.org:443
             release-assets.githubusercontent.com:443
             storage.googleapis.com:443
@@ -1314,8 +1307,7 @@ jobs:
           go test -tags envtest -count=1 ./pkg/component/kubernetes/... -run TestEnvtest
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   mock-linux:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder
-      }}
+    name: "[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     runs-on: ${{ matrix.flavor.os }}
     strategy:
@@ -1338,8 +1330,7 @@ jobs:
           matrix: ${{ toJSON(matrix) }}
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   mock-windows:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder
-      }}
+    name: "[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-windows
     runs-on: ${{ matrix.flavor.os }}
     strategy:
@@ -1362,8 +1353,7 @@ jobs:
           matrix: ${{ toJSON(matrix) }}
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   mock-macos:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder
-      }}
+    name: "[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-macos
     runs-on: ${{ matrix.flavor.os }}
     strategy:
@@ -1386,7 +1376,7 @@ jobs:
           matrix: ${{ toJSON(matrix) }}
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   lint:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[lint] ${{ matrix.demo-folder }}
+    name: "[lint] ${{ matrix.demo-folder }}${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     runs-on: ubuntu-latest
     strategy:
@@ -1417,7 +1407,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             github.com:443
             raw.githubusercontent.com:443
@@ -1458,7 +1448,7 @@ jobs:
         run: atmos terraform lint ${{ matrix.component }} -s ${{ matrix.stack }} --identity=false
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   hooks-tflint:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[hooks-tflint] example
+    name: "[hooks-tflint] example${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1467,7 +1457,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             github.com:443
             raw.githubusercontent.com:443
@@ -1504,7 +1494,7 @@ jobs:
         run: atmos terraform plan example -s test
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   validate:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[validate] ${{ matrix.demo-folder }}
+    name: "[validate] ${{ matrix.demo-folder }}${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     runs-on: ubuntu-latest
     strategy:
@@ -1527,7 +1517,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             github.com:443
             us.i.posthog.com:443
@@ -1547,7 +1537,7 @@ jobs:
         run: atmos validate stacks
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   container-step:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && 'Legacy disabled / ' || '' }}[container-step] example
+    name: "[container-step] example${{ vars.CI_SPLIT_WORKFLOWS == 'true' && ' (inactive)' || '' }}"
     needs: build-linux
     runs-on: ubuntu-latest
     services:
@@ -1561,7 +1551,7 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
-          allowed-endpoints: |
+          allowed-endpoints: >
             api.github.com:443
             auth.docker.io:443
             github.com:443

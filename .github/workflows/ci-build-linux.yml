@@ -44,7 +44,7 @@ env:
   CI_BUILD_RUN_ID: ''
 jobs:
   build-linux:
-    name: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && 'Split disabled / ' || '' }}Build (${{ matrix.target }})
+    name: "Build (${{ matrix.target }})${{ vars.CI_SPLIT_WORKFLOWS != 'true' && ' (inactive)' || '' }}"
     timeout-minutes: 60
     strategy:
       matrix:

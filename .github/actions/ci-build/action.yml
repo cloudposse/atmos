@@ -13,7 +13,7 @@ runs:
       uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
       with:
         egress-policy: block
-        allowed-endpoints: |
+        allowed-endpoints: >
           api.github.com:443
           get.helm.sh:443
           github.com:443
@@ -56,7 +56,9 @@ runs:
           *.pool.ntp.org:123
     - name: Announce build target
       if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
-      run: echo "Building on ${{ fromJSON(inputs.matrix).os }}"
+      env:
+        BUILD_RUNNER: ${{ fromJSON(inputs.matrix).os }}
+      run: echo "Building on $BUILD_RUNNER"
       shell: bash
     - name: Check out code into the Go module directory
       if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
@@ -91,21 +93,29 @@ runs:
     - name: Build
       if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
       shell: bash
+      env:
+        BUILD_TARGET: ${{ fromJSON(inputs.matrix).target }}
       run: |
-        atmos build binary --target=${{ fromJSON(inputs.matrix).target }} --version=test
+        atmos build binary --target="$BUILD_TARGET" --version=test
     - name: Version
       if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
       shell: bash
+      env:
+        BUILD_TARGET: ${{ fromJSON(inputs.matrix).target }}
       run: |
-        atmos build version --target=${{ fromJSON(inputs.matrix).target }}
+        atmos build version --target="$BUILD_TARGET"
     - name: Pre-compile acceptance test binaries
       if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
       shell: bash
-      run: go tool mage acceptance:precompile "${{ fromJSON(inputs.matrix).target }}"
+      env:
+        BUILD_TARGET: ${{ fromJSON(inputs.matrix).target }}
+      run: go tool mage acceptance:precompile "$BUILD_TARGET"
     - name: Verify acceptance shard plan
       if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
       shell: bash
-      run: go tool mage acceptance:verify "${{ fromJSON(inputs.matrix).target }}" "$TEST_SHARD_COUNT"
+      env:
+        BUILD_TARGET: ${{ fromJSON(inputs.matrix).target }}
+      run: go tool mage acceptance:verify "$BUILD_TARGET" "$TEST_SHARD_COUNT"
     - name: Put the freshly built atmos on PATH for the toolchain install
       if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
       shell: bash
