@@ -11,6 +11,7 @@ const lightCodeTheme = require('prism-react-renderer').themes.oneLight;
 const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
 const latestReleasePlugin = require('./plugins/fetch-latest-release');
 const rehypeDtIds = require('./plugins/rehype-dt-ids');
+const { getBuildDate } = require('./plugins/build-timestamp');
 
 const BASE_URL = '';
 const DEPLOYMENT_HOST = process.env.DEPLOYMENT_HOST || 'atmos.tools';
@@ -739,6 +740,7 @@ const config = {
 
     customFields: {
         latestRelease: 'v0.0.0', // initial placeholder
+        buildYear: getBuildDate().getUTCFullYear(),
         // Render downloads from the same revision as the deployed site, including PR casts.
         castGitRef: process.env.GITHUB_SHA || 'main',
         // Optional base URL (no trailing slash) for landing-page demo recordings.
