@@ -1036,16 +1036,91 @@ jobs:
           TEST: ${{ matrix.packages }}
         run: atmos test race
 
-  # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.
-  # Keep the three historical required-check names as compatibility aliases so
-  # branch protection does not need to change. `needs.test.result` aggregates
-  # every OS/shard combination in the `test` matrix into a single verdict, so
-  # relying on it here would fail all three aliases whenever any single shard on
-  # any OS fails, not just the OS actually affected. Query the run's actual
-  # per-job results instead, so each alias only fails for its own OS's shards.
+  template-compatibility:
+    name: Template compatibility (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+            suffix: ""
+          - os: macos-15
+            target: macos
+            suffix: ""
+          - os: windows-latest
+            target: windows
+            suffix: ".exe"
+    defaults:
+      run:
+        shell: bash
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - name: Harden Runner
+        if: runner.os == 'Linux'
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+
+      - name: Check out source and pinned baseline history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-cache
+
+      - name: Test comparison and service fixtures
+        run: go -C tests/compatibility test ./...
+
+      - name: Build candidate CLI
+        env:
+          COMPAT_BINARY: .context/compatibility/atmos-candidate${{ matrix.suffix }}
+        run: |
+          mkdir -p .context/compatibility
+          go build -trimpath -o "$COMPAT_BINARY" .
+
+      # This builds the pinned OLD tree, verifies its behavior twice, then
+      # compares both actual CLIs on this OS. No snapshot regeneration or
+      # continue-on-error: every unapproved difference fails the required gate.
+      - name: Compare old and candidate CLIs
+        env:
+          COMPAT_BINARY: .context/compatibility/atmos-candidate${{ matrix.suffix }}
+        run: |
+          go -C tests/compatibility run . verify \
+            --candidate "$GITHUB_WORKSPACE/$COMPAT_BINARY" \
+            --report "$GITHUB_WORKSPACE/.context/compatibility/report.json"
+
+      - name: Upload compatibility observations
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: template-compatibility-${{ matrix.target }}
+          path: .context/compatibility/report.json
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
+  # Keep the three historical required-check names so branch protection does
+  # not need to change. Acceptance shards are checked per OS using job results,
+  # since needs.test.result aggregates every OS/shard. Template compatibility
+  # is also required: any unapproved difference blocks all three aliases.
   test-required:
     name: ${{ matrix.check }}
-    needs: [test, terraform-registry-cache]
+    needs: [test, terraform-registry-cache, template-compatibility]
     runs-on: ubuntu-latest
     if: ${{ always() }}
     # `gh api .../actions/runs/.../jobs` (below) hits the REST API for this
@@ -1061,6 +1136,16 @@ jobs:
       matrix:
         check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
     steps:
+      - name: Require template compatibility
+        if: ${{ !cancelled() }}
+        env:
+          COMPAT_RESULT: ${{ needs.template-compatibility.result }}
+        run: |
+          if [ "$COMPAT_RESULT" != "success" ]; then
+            echo "Template compatibility has unapproved differences or could not be verified ($COMPAT_RESULT)."
+            exit 1
+          fi
+
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:

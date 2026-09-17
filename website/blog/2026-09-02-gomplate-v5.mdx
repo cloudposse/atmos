@@ -53,15 +53,13 @@ Atmos.
 ## What to Check in Your Stacks
 
 Gomplate removed functions it had deprecated in v3 and changed a few datasource behaviors between
-v3 and v5. Most stacks will need no changes, and none of what follows breaks a stack on upgrade:
-Atmos recognizes every removed function name and keeps it working; the first time a stack
-manifest uses one, Atmos logs a warning that names the exact replacement to switch to. Treat that warning
-as a to-do rather than an error — the shim serving these old names will be removed in a future
-major release of Atmos, so it is worth working through the list rather than leaving it running
-indefinitely. The two datasource behavior changes near the end of this list are different: Atmos
-can recognize the pattern in your configuration and warn about it, but it cannot reproduce
-Gomplate's old datasource behavior, so those two are worth checking before you lean on the
-affected templates. The [templates configuration reference](/cli/configuration/templates) and the
+v3 and v5. Atmos provides compatibility shims for the legacy function names listed below and
+logs migration warnings when they are used. These shims do not guarantee identical behavior:
+conversion errors, network return types, and datasource changes can break existing templates.
+Review the affected calls and test your stack catalogs before upgrading. The shims are planned
+for removal in a future major release of Atmos, so migrate the old names even when their current
+output is unchanged. Datasource warnings identify some affected patterns, but do not restore
+Gomplate's old datasource behavior. The [templates configuration reference](/cli/configuration/templates) and the
 [datasources reference](/templates/datasources) carry the same list.
 
 ### Renamed functions

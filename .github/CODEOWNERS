@@ -6,6 +6,10 @@
 # These owners will be the default owners for everything
 *             @cloudposse/engineering
 
+# Baseline observations, their source pin, and comparison rules require review.
+/tests/compatibility/          @cloudposse/engineering
+/tests/fixtures/compatibility/ @cloudposse/engineering
+
 # Cloud Posse must review any changes to Makefiles
 **/Makefile   @cloudposse/engineering
 **/Makefile.* @cloudposse/engineering
