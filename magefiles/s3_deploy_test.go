@@ -77,13 +77,20 @@ func TestS3DeployContentType(t *testing.T) {
 	}{
 		"index.html":    {detected: "text/plain; charset=utf-8", expected: "text/html; charset=utf-8"},
 		"assets/app.js": {detected: "text/plain; charset=utf-8", expected: "text/javascript; charset=utf-8"},
-		"feed.xml":      {detected: "text/plain; charset=utf-8", expected: "application/xml; charset=utf-8"},
 		"image.png":     {detected: "application/octet-stream", expected: "image/png"},
 		"unknown.zzz":   {detected: "text/plain; charset=utf-8", expected: "text/plain; charset=utf-8"},
 	}
 	for path, test := range tests {
 		assert.Equal(t, test.expected, s3DeployContentType(path, test.detected), path)
 	}
+
+	// Go augments its MIME table from the operating system. macOS registers
+	// application/xml while Ubuntu registers the equally valid text/xml.
+	assert.Contains(
+		t,
+		[]string{"application/xml; charset=utf-8", "text/xml; charset=utf-8"},
+		s3DeployContentType("feed.xml", "text/plain; charset=utf-8"),
+	)
 }
 
 func TestParseS3DeployURI(t *testing.T) {
