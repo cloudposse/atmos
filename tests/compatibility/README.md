@@ -67,8 +67,7 @@ It refuses unstable observations, unexpected old exit codes, missing generated
 files, cases that never exercise their declared service, and inputs edited during
 collection. Review the baseline diff with its fixture change. Fetch the pinned
 commit if a shallow checkout lacks it. Candidate commands cannot record a
-baseline. CODEOWNERS explicitly assigns the corpus, runner, and baseline to the
-engineering team for review.
+baseline. Review baseline changes with the same care as the comparison rules.
 
 ## Coverage
 
