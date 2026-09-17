@@ -14,12 +14,7 @@ jobs:
     if: >-
       github.actor != 'atmos-pro[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on:
-      - runs-on=${{github.run_id}}
-      - runner=terraform
-      - tag=atmos
-      - extras=s3-cache
-      - private=false
+    runs-on: ubuntu-latest
     container:
       image: ghcr.io/cloudposse/atmos:1.215.0
     permissions:
@@ -27,7 +22,6 @@ jobs:
       id-token: write
     timeout-minutes: 15
     steps:
-      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d # v2.3.1
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
