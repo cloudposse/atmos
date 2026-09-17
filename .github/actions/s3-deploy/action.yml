@@ -1,10 +1,8 @@
 name: S3 Deploy
 description: >
-  Sync a local directory to an S3 website origin, then force
-  `Content-Type: ...; charset=utf-8` on text-format objects (see deploy.sh
-  for why this second pass is needed). Shared by the prod and PR-preview
-  website deploy workflows so the sync/exclude/charset logic lives in one
-  place instead of two copies.
+  Incrementally sync a local directory to an S3 website origin using a
+  content-hash manifest. Text objects receive explicit UTF-8 Content-Type
+  metadata without rewriting unchanged objects.
 
 inputs:
   local-dir:
@@ -13,6 +11,15 @@ inputs:
   s3-uri:
     description: 'Destination S3 URI, with or without a trailing slash (e.g. s3://my-bucket/pr-123/)'
     required: true
+  protected-patterns:
+    description: >
+      Newline-separated remote-relative globs to retain when absent from the
+      local build.
+    required: false
+    default: |
+      img/demos/*
+      schemas/atmos/atmos-manifest/*.*.*/*
+      schemas/atmos/atmos-config/*.*.*/*
   cloudfront-distribution-id:
     description: >
       CloudFront distribution ID to invalidate after the sync (e.g. E2WVYUGW40ZPA8).
@@ -30,13 +37,13 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Sync to S3 and restamp charset
+    - name: Incrementally sync to S3
       shell: bash
       env:
-        DEPLOY_SCRIPT: ${{ github.action_path }}/deploy.sh
         LOCAL_DIR: ${{ inputs.local-dir }}
         S3_URI: ${{ inputs.s3-uri }}
-      run: '"$DEPLOY_SCRIPT" "$LOCAL_DIR" "$S3_URI"'
+        PROTECTED_PATTERNS: ${{ inputs.protected-patterns }}
+      run: go tool mage s3:deploy "$LOCAL_DIR" "$S3_URI"
 
     # Fire-and-forget: invalidation typically completes in under a minute and
     # there's no need to block the job on it.

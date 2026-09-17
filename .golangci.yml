@@ -96,6 +96,9 @@ linters:
             - "!**/pkg/ci/planfile/github/**"
             - "!**/pkg/ci/planfile/s3/**"
             - "!**/pkg/github/**"
+            # The S3 deployment Mage target is an AWS-specific build tool and
+            # intentionally uses the AWS SDK instead of shelling out to a CLI.
+            - "!**/magefiles/s3_deploy*.go"
             - "$test"
           deny:
             # AWS: Identity and auth-related SDKs
