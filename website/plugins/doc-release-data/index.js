@@ -21,6 +21,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const matter = require('gray-matter');
+const { getBuildTimestamp } = require('../build-timestamp');
 
 // A page that already existed at the latest stable tag is still considered released
 // as long as fewer than this fraction of its lines changed since that tag. Above this
@@ -293,7 +294,7 @@ module.exports = function docReleaseDataPlugin(context, options) {
       const docsDir = path.join(context.siteDir, 'docs');
       const releaseMap = {};
       const unreleasedDocs = [];
-      const buildDate = new Date().toISOString();
+      const buildDate = getBuildTimestamp();
 
       // Check if docs directory exists.
       if (!fs.existsSync(docsDir)) {
