@@ -85,11 +85,12 @@ writes; it does not weaken cache invalidation or content metadata.
 ## Validation
 
 - `go test -tags=mage ./magefiles` passes.
-- The S3 deployment implementation has **90.3% statement coverage** (234/259).
+- The S3 deployment implementation has **89.9% statement coverage** (240/267).
 - Tests cover deterministic content hashing, MIME magic fallback, browser MIME
   overrides, explicit UTF-8 metadata, unchanged zero-write behavior, protected
-  paths, bootstrap behavior, deletion batching, per-object deletion errors, and
-  AWS command failures.
+  paths, rejection of symlinks and other non-regular sources, bootstrap
+  behavior, deletion batching, per-object deletion errors, and AWS command
+  failures.
 - `go vet -tags=mage ./magefiles` passes.
 - `actionlint .github/workflows/website-preview-deploy.yml
   .github/workflows/website-deploy-prod.yml` passes.

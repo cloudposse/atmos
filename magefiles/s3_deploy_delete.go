@@ -62,7 +62,7 @@ func validateS3DeleteResponse(output []byte) error {
 		return fmt.Errorf("%w: %w", errS3DeployInvalidDelete, err)
 	}
 	if len(response.Errors) > 0 {
-		return fmt.Errorf("%w: %s", errS3DeployPartialDelete, strings.TrimSpace(string(output)))
+		return fmt.Errorf(s3ErrorWithValueFormat, errS3DeployPartialDelete, strings.TrimSpace(string(output)))
 	}
 	return nil
 }

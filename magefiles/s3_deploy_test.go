@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -172,6 +173,15 @@ func TestBuildS3DeployManifestErrors(t *testing.T) {
 
 	_, err = s3DeployFileMetadata(filepath.Join(t.TempDir(), "missing"), "missing")
 	require.Error(t, err)
+}
+
+func TestValidateS3DeployFileMode(t *testing.T) {
+	require.NoError(t, validateS3DeployFileMode("regular.txt", 0))
+
+	for _, mode := range []fs.FileMode{fs.ModeSymlink, fs.ModeNamedPipe, fs.ModeDevice, fs.ModeSocket} {
+		err := validateS3DeployFileMode("unsupported", mode)
+		require.ErrorIs(t, err, errS3DeployUnsupportedFile)
+	}
 }
 
 func TestWriteS3DeployManifestErrors(t *testing.T) {

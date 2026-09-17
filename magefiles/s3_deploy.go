@@ -35,6 +35,7 @@ const (
 	s3CommandService        = "s3"
 	s3CommandCopy           = "cp"
 	s3OnlyShowErrorsFlag    = "--only-show-errors"
+	s3ErrorWithValueFormat  = "%w: %s"
 )
 
 var (
@@ -47,6 +48,7 @@ var (
 	errS3DeployInvalidDelete    = errors.New("mage: invalid S3 delete response")
 	errS3DeployPartialDelete    = errors.New("mage: S3 failed to delete one or more objects")
 	errS3DeployMissingMetadata  = errors.New("mage: S3 deploy manifest is missing file metadata")
+	errS3DeployUnsupportedFile  = errors.New("mage: S3 deploy source contains a non-regular file")
 )
 
 type s3DeployFile struct {
@@ -147,7 +149,7 @@ func prepareS3DeployState(localDir, s3URI string, protected []s3ProtectedPattern
 	}
 	info, err := os.Stat(localDir)
 	if err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("%w: %s", errS3DeployInvalidLocalDir, localDir)
+		return nil, fmt.Errorf(s3ErrorWithValueFormat, errS3DeployInvalidLocalDir, localDir)
 	}
 
 	location, err := parseS3DeployURI(s3URI)
@@ -220,7 +222,7 @@ func compileS3ProtectedPatterns(value string) ([]s3ProtectedPattern, error) {
 func parseS3DeployURI(value string) (s3DeployLocation, error) {
 	parsed, err := url.Parse(value)
 	if err != nil || parsed.Scheme != "s3" || parsed.Host == "" {
-		return s3DeployLocation{}, fmt.Errorf("%w: %s", errS3DeployInvalidURI, value)
+		return s3DeployLocation{}, fmt.Errorf(s3ErrorWithValueFormat, errS3DeployInvalidURI, value)
 	}
 	prefix := strings.Trim(parsed.Path, "/")
 	normalized := "s3://" + parsed.Host + "/"
@@ -238,6 +240,13 @@ func buildS3DeployManifest(localDir string) (s3DeployManifest, error) {
 		}
 		if entry.IsDir() {
 			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if err := validateS3DeployFileMode(path, info.Mode()); err != nil {
+			return err
 		}
 		relative, err := filepath.Rel(localDir, path)
 		if err != nil {
@@ -258,6 +267,13 @@ func buildS3DeployManifest(localDir string) (s3DeployManifest, error) {
 		return s3DeployManifest{}, fmt.Errorf("mage: build S3 deploy manifest: %w", err)
 	}
 	return manifest, nil
+}
+
+func validateS3DeployFileMode(path string, mode fs.FileMode) error {
+	if !mode.IsRegular() {
+		return fmt.Errorf(s3ErrorWithValueFormat, errS3DeployUnsupportedFile, path)
+	}
+	return nil
 }
 
 func s3DeployFileMetadata(path, relative string) (s3DeployFile, error) {
@@ -410,7 +426,7 @@ func (d *s3Deployer) uploadChanged(localDir, s3URI string, changed []string, man
 	for _, relative := range changed {
 		metadata, ok := manifest.Files[relative]
 		if !ok {
-			return fmt.Errorf("%w: %s", errS3DeployMissingMetadata, relative)
+			return fmt.Errorf(s3ErrorWithValueFormat, errS3DeployMissingMetadata, relative)
 		}
 		groups[metadata.ContentType] = append(groups[metadata.ContentType], relative)
 	}
