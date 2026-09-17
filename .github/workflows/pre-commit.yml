@@ -26,12 +26,7 @@ env:
 jobs:
   pre-commit:
     name: Run pre-commit hooks
-    runs-on:
-      - runs-on=${{github.run_id}}
-      - runner=terraform
-      - tag=atmos
-      - extras=s3-cache
-      - private=false
+    runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
