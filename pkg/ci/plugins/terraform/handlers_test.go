@@ -52,6 +52,7 @@ type mockProvider struct {
 	updateRunCalls []*provider.UpdateCheckRunOptions
 	commentCalls   []*provider.PostCommentOptions
 	annotateCalls  [][]provider.Annotation
+	annotateErr    error
 	commentErr     error
 	commentResult  *provider.Comment
 	nextID         int64
@@ -60,7 +61,16 @@ type mockProvider struct {
 // Annotate implements provider.Annotator, capturing the emitted annotations.
 func (m *mockProvider) Annotate(annotations []provider.Annotation) error {
 	m.annotateCalls = append(m.annotateCalls, annotations)
-	return nil
+	return m.annotateErr
+}
+
+// nonAnnotatingProvider wraps a provider.Provider without exposing Annotate,
+// simulating a CI provider that doesn't implement provider.Annotator. Embedding
+// the interface (rather than a concrete type) promotes only its declared
+// method set, so the underlying mockProvider's Annotate method is not
+// promoted and a type assertion to provider.Annotator correctly fails.
+type nonAnnotatingProvider struct {
+	provider.Provider
 }
 
 func newMockProvider() *mockProvider {

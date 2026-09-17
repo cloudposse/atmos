@@ -95,4 +95,27 @@ func TestEmitPlanWarningAnnotations(t *testing.T) {
 
 		assert.Empty(t, mp.annotateCalls)
 	})
+
+	t.Run("provider without Annotator support is a no-op", func(t *testing.T) {
+		p := &Plugin{}
+		ctx := &plugin.HookContext{Provider: &nonAnnotatingProvider{Provider: newMockProvider()}, Command: "plan"}
+		result := &plugin.OutputResult{
+			Data: &plugin.TerraformOutputData{Warnings: []string{"Warning: x"}},
+		}
+
+		require.NotPanics(t, func() { p.emitPlanWarningAnnotations(ctx, result) })
+	})
+
+	t.Run("Annotate failure is warn-only, not fatal", func(t *testing.T) {
+		mp := newMockProvider()
+		mp.annotateErr = assert.AnError
+		p := &Plugin{}
+		ctx := &plugin.HookContext{Provider: mp, Command: "plan"}
+		result := &plugin.OutputResult{
+			Data: &plugin.TerraformOutputData{Warnings: []string{"Warning: x"}},
+		}
+
+		require.NotPanics(t, func() { p.emitPlanWarningAnnotations(ctx, result) })
+		assert.Len(t, mp.annotateCalls, 1, "Annotate should still have been called once despite returning an error")
+	})
 }
