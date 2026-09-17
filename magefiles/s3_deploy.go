@@ -50,6 +50,7 @@ type s3DeployFile struct {
 	SHA256      string `json:"sha256"`
 	Size        int64  `json:"size"`
 	ContentType string `json:"content_type"`
+	Protected   bool   `json:"protected,omitempty"`
 }
 
 type s3DeployManifest struct {
@@ -184,6 +185,7 @@ func prepareS3DeployState(localDir, s3URI string, protected []s3ProtectedPattern
 }
 
 func (d *s3Deployer) deployIncremental(ctx context.Context, state *s3DeployState) error {
+	retainProtectedS3DeployFiles(*state.previous, &state.manifest, state.protected)
 	changed, deleted := diffS3DeployManifests(*state.previous, state.manifest, state.protected)
 	fmt.Printf("Changed/new: %d; deleted: %d\n", len(changed), len(deleted))
 	if len(changed) == 0 && len(deleted) == 0 {
@@ -356,6 +358,18 @@ func matchesS3ProtectedPath(path string, patterns []s3ProtectedPattern) bool {
 		}
 	}
 	return false
+}
+
+func retainProtectedS3DeployFiles(
+	previous s3DeployManifest,
+	current *s3DeployManifest,
+	protected []s3ProtectedPattern,
+) {
+	for path, metadata := range previous.Files {
+		if _, exists := current.Files[path]; !exists && matchesS3ProtectedPath(path, protected) {
+			current.Files[path] = metadata
+		}
+	}
 }
 
 func marshalS3DeployManifest(manifest s3DeployManifest) ([]byte, error) {

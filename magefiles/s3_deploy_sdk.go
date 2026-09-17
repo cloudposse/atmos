@@ -88,7 +88,7 @@ func (d *s3Deployer) bootstrap(ctx context.Context, state *s3DeployState) error 
 		return err
 	}
 
-	stale, err := d.listStaleObjects(ctx, state.location, state.manifest, state.protected)
+	stale, err := d.listStaleObjects(ctx, state.location, &state.manifest, state.protected)
 	if err != nil {
 		return err
 	}
@@ -133,7 +133,7 @@ func (d *s3Deployer) uploadChanged(
 func (d *s3Deployer) listStaleObjects(
 	ctx context.Context,
 	location s3DeployLocation,
-	manifest s3DeployManifest,
+	manifest *s3DeployManifest,
 	protected []s3ProtectedPattern,
 ) ([]string, error) {
 	stale := make([]string, 0)
@@ -166,7 +166,7 @@ func (d *s3Deployer) listStaleObjects(
 func collectStaleS3Objects(
 	location s3DeployLocation,
 	objects []s3types.Object,
-	manifest s3DeployManifest,
+	manifest *s3DeployManifest,
 	protected []s3ProtectedPattern,
 ) []string {
 	stale := make([]string, 0)
@@ -175,9 +175,17 @@ func collectStaleS3Objects(
 		if !ok || relative == "" || relative == s3DeployManifestName {
 			continue
 		}
-		if _, managed := manifest.Files[relative]; !managed && !matchesS3ProtectedPath(relative, protected) {
-			stale = append(stale, relative)
+		if _, managed := manifest.Files[relative]; managed {
+			continue
 		}
+		if matchesS3ProtectedPath(relative, protected) {
+			manifest.Files[relative] = s3DeployFile{
+				Size:      aws.ToInt64(object.Size),
+				Protected: true,
+			}
+			continue
+		}
+		stale = append(stale, relative)
 	}
 	return stale
 }

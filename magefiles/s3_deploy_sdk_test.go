@@ -187,6 +187,9 @@ func TestS3DeployerIncrementalUploadPreservesMetadata(t *testing.T) {
 	assert.Equal(t, "new\n", string(html.body))
 	manifestPut := findS3Put(t, client.puts, "site/"+s3DeployManifestName)
 	assert.Equal(t, s3ManifestContentType, manifestPut.contentType)
+	var uploadedManifest s3DeployManifest
+	require.NoError(t, json.Unmarshal(manifestPut.body, &uploadedManifest))
+	assert.Contains(t, uploadedManifest.Files, "pr-42/keep.txt")
 	assert.Equal(t, []string{"site/removed.txt"}, deletedS3Keys(client.deleteInputs))
 }
 
@@ -219,7 +222,10 @@ func TestS3DeployerBootstrapUsesSDKForListingAndCleanup(t *testing.T) {
 	assert.Equal(t, []string{"site/stale.txt", "site/z-stale.txt"}, deletedS3Keys(client.deleteInputs))
 	html := findS3Put(t, client.puts, "site/index.html")
 	assert.Equal(t, "text/html; charset=utf-8", html.contentType)
-	findS3Put(t, client.puts, "site/"+s3DeployManifestName)
+	manifestPut := findS3Put(t, client.puts, "site/"+s3DeployManifestName)
+	var uploadedManifest s3DeployManifest
+	require.NoError(t, json.Unmarshal(manifestPut.body, &uploadedManifest))
+	assert.Equal(t, s3DeployFile{Protected: true}, uploadedManifest.Files["img/demos/demo.mp4"])
 }
 
 func TestUploadChangedRequiresManifestMetadata(t *testing.T) {
@@ -311,17 +317,17 @@ func TestListStaleObjectsRejectsInvalidPagination(t *testing.T) {
 	manifest := s3DeployManifest{Version: 1, Files: map[string]s3DeployFile{}}
 	client := newFakeS3DeployClient()
 	client.listErr = errFakeS3
-	_, err := newS3Deployer(client).listStaleObjects(context.Background(), location, manifest, nil)
+	_, err := newS3Deployer(client).listStaleObjects(context.Background(), location, &manifest, nil)
 	require.ErrorIs(t, err, errS3DeployAWSOperation)
 
 	client = newFakeS3DeployClient()
 	client.listOutputs = []*s3.ListObjectsV2Output{nil}
-	_, err = newS3Deployer(client).listStaleObjects(context.Background(), location, manifest, nil)
+	_, err = newS3Deployer(client).listStaleObjects(context.Background(), location, &manifest, nil)
 	require.ErrorIs(t, err, errS3DeployAWSOperation)
 
 	client = newFakeS3DeployClient()
 	client.listOutputs = []*s3.ListObjectsV2Output{{IsTruncated: aws.Bool(true)}}
-	_, err = newS3Deployer(client).listStaleObjects(context.Background(), location, manifest, nil)
+	_, err = newS3Deployer(client).listStaleObjects(context.Background(), location, &manifest, nil)
 	require.ErrorIs(t, err, errS3DeployAWSOperation)
 }
 

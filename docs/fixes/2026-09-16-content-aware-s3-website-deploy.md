@@ -62,6 +62,8 @@ expected to account for roughly **$70-85/month** of the avoidable run rate.
   S3 returns a successful HTTP response.
 - Preserve remote paths matched by newline-separated `PROTECTED_PATTERNS`.
   The same local matcher decides which manifest and bootstrap objects to retain.
+  Retained paths remain tracked so removing a protection pattern makes them
+  eligible for deletion again.
 - Replaced the hand-maintained content-type table with Go's extension MIME
   database plus the repository's existing `github.com/gabriel-vasile/mimetype`
   magic-number detector for unknown extensions. Browser-significant extension
@@ -86,10 +88,15 @@ expected to account for roughly **$70-85/month** of the avoidable run rate.
 CloudFront invalidation behavior is unchanged. The target optimizes S3 object
 writes; it does not weaken cache invalidation or content metadata.
 
+Deployments to a shared bucket and prefix remain serialized by the workflows'
+existing concurrency groups. In-flight runs are not cancelled, so manifest
+reads, object changes, and final manifest publication cannot interleave for the
+same destination.
+
 ## Validation
 
 - `go test -tags=mage ./magefiles` passes.
-- The S3 deployment implementation has **89.9% statement coverage** (232/258).
+- The S3 deployment implementation has **90.3% statement coverage** (242/268).
 - Tests cover deterministic content hashing, MIME magic fallback, browser MIME
   overrides, explicit UTF-8 metadata, unchanged zero-write behavior, protected
   paths, rejection of symlinks and other non-regular sources, bootstrap

@@ -197,3 +197,18 @@ func TestDiffS3DeployManifests(t *testing.T) {
 	assert.Equal(t, []string{"added.txt", "changed.txt"}, changed)
 	assert.Equal(t, []string{"removed.txt"}, deleted)
 }
+
+func TestRetainProtectedS3DeployFiles(t *testing.T) {
+	protected, err := compileS3ProtectedPatterns("img/demos/*")
+	require.NoError(t, err)
+	previous := s3DeployManifest{Version: 1, Files: map[string]s3DeployFile{
+		"img/demos/demo.mp4": {SHA256: "protected"},
+		"removed.txt":        {SHA256: "removed"},
+	}}
+	current := s3DeployManifest{Version: 1, Files: map[string]s3DeployFile{}}
+
+	retainProtectedS3DeployFiles(previous, &current, protected)
+
+	assert.Equal(t, previous.Files["img/demos/demo.mp4"], current.Files["img/demos/demo.mp4"])
+	assert.NotContains(t, current.Files, "removed.txt")
+}

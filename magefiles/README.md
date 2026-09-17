@@ -66,7 +66,9 @@ GitHub Actions variables continue to work normally.
 The manifest records each managed object's SHA-256 digest, size, and content
 type. On later runs, the target uploads only added or content/metadata-changed
 files and deletes only removed managed files. Files matched by
-`PROTECTED_PATTERNS` are never deleted.
+`PROTECTED_PATTERNS` are never deleted. Retained protected objects remain in the
+manifest, including objects discovered during bootstrap, so removing a pattern
+later makes those objects eligible for cleanup again.
 
 The first deployment uploads every managed file once with explicit metadata,
 then lists the destination and deletes stale, unprotected remote objects.
@@ -85,6 +87,11 @@ All S3 operations use the repository's existing AWS SDK for Go v2 dependency.
 The target does not shell out to the AWS CLI or create temporary request files.
 SDK calls preserve typed request metadata, built-in retries, context
 cancellation, and per-object `DeleteObjects` error handling.
+
+Callers must serialize deployments that target the same bucket and prefix. The
+checked-in workflows enforce that contract with one production concurrency
+group and one concurrency group per preview PR, with in-flight cancellation
+disabled.
 
 ```console
 PROTECTED_PATTERNS=$'previews/**\nrobots.txt' \
