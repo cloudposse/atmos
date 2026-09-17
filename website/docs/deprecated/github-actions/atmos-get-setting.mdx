@@ -20,13 +20,14 @@ The [Atmos Get Setting GitHub Action](https://github.com/cloudposse/github-actio
 - name: Read a setting
   run: |
     {
-      echo "value<<EOF"
+      delimiter="$(uuidgen)"
+      echo "value<<$delimiter"
       atmos describe component vpc -s plat-ue2-prod --query .settings.some_key
-      echo "EOF"
+      echo "$delimiter"
     } >> "$GITHUB_OUTPUT"
 ```
 
-The multiline `<<EOF` delimiter form handles any setting value safely, including ones with embedded newlines — a plain `value=$(...)` assignment can silently split into multiple `$GITHUB_OUTPUT` records if the query result isn't a single-line scalar.
+The multiline delimiter form handles any setting value safely, including ones with embedded newlines — a plain `value=$(...)` assignment can silently split into multiple `$GITHUB_OUTPUT` records if the query result isn't a single-line scalar. Generate the delimiter per-write with `uuidgen` (rather than a fixed string like `EOF`) so a setting value that happens to contain a line matching the delimiter can't prematurely close it.
 
 Use [`--query`](/cli/commands/describe/component) to pull a single value out of a component/stack, or [`atmos list settings --query`](/cli/commands/list/settings) to compare the same setting across every stack in a table.
 
