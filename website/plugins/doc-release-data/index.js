@@ -6,7 +6,12 @@
  * Release detection:
  * 1. Gets the last-modified commit for each doc file
  * 2. Checks if that commit is contained in any stable release tag
- * 3. If not in any release, marks as 'unreleased'
+ * 3. If not in any release, checks how much of the file actually changed since the
+ *    latest stable tag. A page that already existed at that tag and only picked up a
+ *    small incremental edit is still considered released — otherwise a 5-line addition
+ *    to a page that has been live for years would badge the entire page "Unreleased".
+ * 4. Only a page with no prior release, or with a substantial fraction of its content
+ *    introduced since the latest stable tag, is marked 'unreleased'.
  *
  * Key difference from blog-release-data: This plugin uses the LAST modified commit
  * (does this doc have unreleased changes?) rather than first-added commit
@@ -16,6 +21,11 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const matter = require('gray-matter');
+
+// A page that already existed at the latest stable tag is still considered released
+// as long as fewer than this fraction of its lines changed since that tag. Above this
+// threshold, enough of the page's content is new that it's fairer to call it unreleased.
+const UNRELEASED_THRESHOLD = 0.25;
 
 /**
  * Gets the commit SHA that last modified a file.
@@ -65,16 +75,139 @@ function getFirstStableRelease(sha) {
 }
 
 /**
+ * Finds the most recent stable release tag in the repo (vX.Y.Z, no suffixes).
+ * @returns {string|null} - The latest stable release tag, or null if none exist.
+ */
+function getLatestStableTag() {
+  try {
+    const tags = execSync('git tag --sort=-version:refname', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+
+    return tags.find((t) => /^v\d+\.\d+\.\d+$/.test(t)) || null;
+  } catch (e) {
+    console.warn(`[doc-release-data] Failed to find the latest stable tag: ${e.message}`);
+    return null;
+  }
+}
+
+/**
+ * Finds the absolute path to the repo root. Unlike the other git lookups in
+ * this file, a failure here (e.g. building from a source archive without git
+ * metadata) must not abort the whole Docusaurus build — callers treat a null
+ * result as "skip the stable-tag comparison" and fall back to 'unreleased'.
+ * @returns {string|null} - Absolute path to the repo root, or null if unavailable.
+ */
+function getRepoRoot() {
+  try {
+    return execSync('git rev-parse --show-toplevel', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch (e) {
+    console.warn(`[doc-release-data] Failed to determine the repo root: ${e.message}`);
+    return null;
+  }
+}
+
+/**
+ * Reports whether a file already existed at a given tag.
+ * @param {string} tag - The git tag to check.
+ * @param {string} relPath - Path to the file, relative to the repo root.
+ * @returns {boolean} - True if the file existed at that tag.
+ */
+function fileExistsAtTag(tag, relPath) {
+  try {
+    execSync(`git cat-file -e ${tag}:"${relPath}"`, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Counts the number of lines changed (inserted or deleted) in a file since a given tag.
+ * @param {string} tag - The git tag to diff against.
+ * @param {string} relPath - Path to the file, relative to the repo root.
+ * @returns {number} - Total inserted + deleted lines since that tag.
+ */
+function countChangedLinesSince(tag, relPath) {
+  try {
+    const stat = execSync(`git diff --shortstat ${tag} -- "${relPath}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+
+    let changed = 0;
+    const insertions = stat.match(/(\d+) insertion/);
+    const deletions = stat.match(/(\d+) deletion/);
+    if (insertions) changed += parseInt(insertions[1], 10);
+    if (deletions) changed += parseInt(deletions[1], 10);
+    return changed;
+  } catch (e) {
+    console.warn(`[doc-release-data] Failed to diff ${relPath} since ${tag}: ${e.message}`);
+    return Infinity; // Fail safe toward "unreleased" if the diff can't be computed.
+  }
+}
+
+/**
+ * Counts the current number of lines in a file.
+ * @param {string} filePath - Absolute path to the file.
+ * @returns {number} - Line count.
+ */
+function countLines(filePath) {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    if (content === '') return 0;
+    const lines = content.split('\n');
+    // A trailing newline adds one empty element to the split result that isn't
+    // a real physical line (e.g. "a\nb\n".split('\n') -> ["a","b",""]) — drop
+    // it so the denominator matches the file's actual line count.
+    if (lines[lines.length - 1] === '') {
+      lines.pop();
+    }
+    return lines.length;
+  } catch (e) {
+    return 0;
+  }
+}
+
+/**
  * Determines the release version for a documentation file.
  * @param {string} filePath - Absolute path to the doc file.
+ * @param {object} repoState - Shared repo-wide state for this build.
+ * @param {string} repoState.repoRoot - Absolute path to the repo root.
+ * @param {string|null} repoState.latestStableTag - The latest stable release tag.
  * @returns {string} - The release version or 'unreleased'.
  */
-function determineRelease(filePath) {
+function determineRelease(filePath, repoState) {
   const sha = getLastModifiedCommit(filePath);
   if (sha) {
     const release = getFirstStableRelease(sha);
     if (release) {
       return release;
+    }
+  }
+
+  // The last commit touching this file isn't in a stable release yet. Before calling
+  // the whole page unreleased, check whether it already existed at the latest stable
+  // tag and, if so, how much of it actually changed since then — an incremental edit
+  // to a long-lived page shouldn't badge the entire page "unreleased".
+  const { repoRoot, latestStableTag } = repoState;
+  if (repoRoot && latestStableTag) {
+    const relPath = path.relative(repoRoot, filePath);
+    if (fileExistsAtTag(latestStableTag, relPath)) {
+      const changedLines = countChangedLinesSince(latestStableTag, relPath);
+      const totalLines = countLines(filePath);
+      if (totalLines > 0 && changedLines / totalLines < UNRELEASED_THRESHOLD) {
+        return latestStableTag;
+      }
     }
   }
 
@@ -168,11 +301,17 @@ module.exports = function docReleaseDataPlugin(context, options) {
         return { releaseMap, unreleasedDocs, buildDate };
       }
 
+      // Computed once per build and shared across all files.
+      const repoState = {
+        repoRoot: getRepoRoot(),
+        latestStableTag: getLatestStableTag(),
+      };
+
       // Find all doc files recursively.
       const files = findDocFiles(docsDir);
 
       for (const filePath of files) {
-        const release = determineRelease(filePath);
+        const release = determineRelease(filePath, repoState);
         const urlPath = getDocUrlPath(filePath, docsDir);
 
         // Store both with and without trailing slash for lookup flexibility.
