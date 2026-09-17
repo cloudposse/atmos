@@ -36,7 +36,7 @@ jobs:
       publish: 'true'
       format: binary
       prerelease: 'true'
-      runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
+      runs-on: '["ubuntu-latest"]'
     # `secrets: inherit`, not an explicit map: shared-go-auto-release.yml doesn't declare a
     # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
     # (observed as a startup_failure -- "likely failed because of a workflow file issue" -- with

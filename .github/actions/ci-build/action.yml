@@ -9,8 +9,7 @@ runs:
   using: composite
   steps:
     - name: Harden Runner
-      if: fromJSON(inputs.matrix).target != 'linux' && ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT
-        == 'true') )
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && env.CI_SOURCE_DRAFT == 'true' ) }}
       uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
       with:
         egress-policy: block
@@ -55,8 +54,6 @@ runs:
           ocsp.usertrust.com:80
           ocsp.digicert.com:80
           *.pool.ntp.org:123
-    - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d # v2.3.1
-      if: fromJSON(inputs.matrix).target == 'linux'
     - name: Announce build target
       if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
       run: echo "Building on ${{ fromJSON(inputs.matrix).os }}"

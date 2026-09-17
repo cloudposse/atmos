@@ -7,7 +7,7 @@ on:
       - completed
 
 # Serialize deploys per PR. Each preview deploys to its own s3://.../pr-<N>/ prefix with
-# `aws s3 sync --delete`, so two builds of the same PR finishing close together can race
+# a shared deployment manifest, so two builds of the same PR finishing close together can race
 # (see the matching comment in website-deploy-prod.yml). Never cancel the in-flight run.
 # A workflow_run with no associated PR (manual dispatch of the build, or a fork PR) has
 # no pull_requests[0]; fall back to the run id so those never share one group. The job
@@ -59,6 +59,8 @@ jobs:
             github.com:443
             sts.us-east-2.amazonaws.com:443
             *.actions.githubusercontent.com:443
+            proxy.golang.org:443
+            storage.googleapis.com:443
             cplive-plat-ue2-dev-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
             cloudfront.amazonaws.com:443
 
@@ -76,6 +78,9 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+
+      - name: Set up Go
+        uses: $/.github/actions/setup-go-cache
 
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials

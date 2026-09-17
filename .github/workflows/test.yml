@@ -51,7 +51,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: runs-on=${{github.run_id}}/runner=large/tag=atmos/private=false
+          # Public repositories receive standard GitHub-hosted Linux runners
+          # without billed Actions minutes. Keeping Linux on the hosted cache
+          # backend also lets the acceptance shards reuse its artifacts.
+          - os: "ubuntu-latest"
             target: linux
     runs-on: ${{ matrix.os }}
     steps:

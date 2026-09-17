@@ -49,7 +49,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: runs-on=${{github.run_id}}/runner=large/tag=atmos/private=false
+          - os: ubuntu-latest
             target: linux
     runs-on: ${{ matrix.os }}
     steps:

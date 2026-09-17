@@ -91,22 +91,22 @@ GitHub does not trigger a new `workflow_run` file until it exists on the default
 branch. Removing `test.yml` in the bootstrap PR would strand its required checks.
 
 1. Merge the implementation with repository variable `CI_SPLIT_WORKFLOWS` unset
-   or `false`. The existing `test.yml` pipeline remains active, using the extracted
-   actions. New direct-event jobs are skipped under distinct `Split disabled /`
-   names so they cannot satisfy the legacy required checks.
+    or `false`. The existing `test.yml` pipeline remains active, using the extracted
+    actions. New direct-event jobs are skipped under distinct `Split disabled /`
+    names so they cannot satisfy the legacy required checks.
 2. After all child files and actions are on main, enable the repository variable:
 
-   ```shell
-   gh variable set CI_SPLIT_WORKFLOWS --repo cloudposse/atmos --body true
-   ```
+    ```shell
+    gh variable set CI_SPLIT_WORKFLOWS --repo cloudposse/atmos --body true
+    ```
 
 3. Start a fresh PR run, then validate a merge-queue run. Confirm each required
-   check appears on the source revision, all artifacts resolve to their producer,
-   coverage uploads, and the timing summary includes the children. Exercise a
-   failed-job rerun before removing the fallback.
+    check appears on the source revision, all artifacts resolve to their producer,
+    coverage uploads, and the timing summary includes the children. Exercise a
+    failed-job rerun before removing the fallback.
 4. After validation, remove `test.yml`, its disabled-name prefixes and Mergify
-   dispatch, and the rollout guards in a cleanup PR. Keep the source resolver and
-   trusted reporter: they are necessary for cross-workflow correctness.
+    dispatch, and the rollout guards in a cleanup PR. Keep the source resolver and
+    trusted reporter: they are necessary for cross-workflow correctness.
 
 To roll back, set the variable to `false` and start a fresh source run. Avoid
 switching modes during an active merge-queue run. Disabled legacy jobs use
