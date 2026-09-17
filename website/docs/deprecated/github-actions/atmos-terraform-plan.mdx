@@ -23,11 +23,12 @@ This action is intended to be used together with [Atmos Terraform Apply](/deprec
 
 ## Migrating to Native CI
 
-This isn't a drop-in swap of one action call. You still own and manage the storage either way — the same S3 bucket works with both — but the dedicated DynamoDB table, storage IAM role, and separate storage action go away in favor of config the `atmos` CLI talks to directly. Here's what actually changes:
+Native CI configures planfile storage directly in `atmos.yaml`. You can reuse the existing S3 bucket with the `aws/s3` backend; the separate storage action and metadata database are no longer required. Here's what changes:
 
 **Removed**
 - The `github-action-atmos-terraform-plan` step
-- The S3 bucket + DynamoDB table (or Azure Blob + CosmosDB) provisioned for [`github-action-terraform-plan-storage`](/deprecated/github-actions/terraform-plan-storage), and the IAM role used only to write to it
+- The separate [`github-action-terraform-plan-storage`](/deprecated/github-actions/terraform-plan-storage) action and its DynamoDB or CosmosDB metadata database
+- Storage resources used only by the retired action, including Azure Blob storage. Retain the S3 bucket and required IAM access when using `aws/s3`; remove a bucket or storage IAM role only when it is no longer needed
 - The `integrations.github.gitops` block in `atmos.yaml`
 
 **Added**
