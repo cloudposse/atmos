@@ -939,14 +939,17 @@ all — with a two-stage consequence, not a single "written fresh" one:
   `determineBaseContent` entirely. The file at the *old* path, if still
   present, is left untouched rather than removed.
 - **Every `--update` after that**: the new path now exists, so
-  `determineBaseContent` runs and looks up git history at that same
-  (new) relative path. If that's not found (only the *old* path was ever
-  committed), it falls back to a second lookup at `File.OriginalSourcePath` —
-  the file's own path as discovered in the template's source tree, before
-  `target:` templating, which is often identical to the old rendered path
-  when the entry previously had no `target:` at all (verbatim passthrough).
-  When that fallback lookup succeeds, the merge recovers the real base and
-  proceeds normally. When it *also* finds nothing (e.g. the very first
+  `determineBaseContent` runs and looks up the configured base storage at
+  that same (new) relative path — git history for `--update-strategy=tracked`
+  (the default), or the pristine re-render for `--update-strategy=rendered`
+  (see the `--update-strategy=tracked|rendered` bullet above). If that's not
+  found (only the *old* path was ever committed or rendered), it falls back
+  to a second lookup at `File.OriginalSourcePath` — the file's own path as
+  discovered in the template's source tree, before `target:` templating,
+  which is often identical to the old rendered path when the entry
+  previously had no `target:` at all (verbatim passthrough). When that
+  fallback lookup succeeds, the merge recovers the real base and proceeds
+  normally. When it *also* finds nothing (e.g. the very first
   post-migration `--update` hasn't been committed at all yet), `mergeFile`
   still returns immediately with no write, per its own "user-added, don't
   touch it" contract — but logs a warning naming both the current and
@@ -957,9 +960,10 @@ all — with a two-stage consequence, not a single "written fresh" one:
   it has no way to recover a base when the discovered source path itself
   changed too (e.g. the template's own directory was reorganized in the same
   release that introduced the new `target:`), and in that case the file is
-  still silently frozen exactly as described. See `determineBaseContent`'s
-  doc comment in `pkg/generator/engine/merge_update.go` for the full
-  rationale and scoping.
+  left unchanged with a warning rather than a real 3-way merge (still no
+  silent mutation, but also no automatic recovery of the base). See
+  `determineBaseContent`'s doc comment in
+  `pkg/generator/engine/merge_update.go` for the full rationale and scoping.
 
 **Non-goals**:
 - A per-file `when:` predicate within a single glob+matrix entry (see the
