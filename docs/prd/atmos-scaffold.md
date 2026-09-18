@@ -940,14 +940,26 @@ all — with a two-stage consequence, not a single "written fresh" one:
   present, is left untouched rather than removed.
 - **Every `--update` after that**: the new path now exists, so
   `determineBaseContent` runs and looks up git history at that same
-  (new) relative path — finds nothing, since only the *old* path was ever
-  committed — and returns `shouldSkip=true`. `mergeFile` then returns
-  immediately with no write at all, per its own "user-added, don't touch it"
-  contract. The practical effect is that the file is **silently frozen at
-  whatever content the first post-migration `--update` wrote**, forever:
-  later template changes to that file are never applied again by `--update`,
-  with no error or warning, until the merge-base ref itself advances to
-  include the new path.
+  (new) relative path. If that's not found (only the *old* path was ever
+  committed), it falls back to a second lookup at `File.OriginalSourcePath` —
+  the file's own path as discovered in the template's source tree, before
+  `target:` templating, which is often identical to the old rendered path
+  when the entry previously had no `target:` at all (verbatim passthrough).
+  When that fallback lookup succeeds, the merge recovers the real base and
+  proceeds normally. When it *also* finds nothing (e.g. the very first
+  post-migration `--update` hasn't been committed at all yet), `mergeFile`
+  still returns immediately with no write, per its own "user-added, don't
+  touch it" contract — but logs a warning naming both the current and
+  original path instead of staying silent, since this specific "no history
+  under either path" state is genuinely ambiguous between a real user-added
+  file and an as-yet-uncommitted migration. This fallback is a targeted
+  mitigation for the common case above, not a full rename-tracking system —
+  it has no way to recover a base when the discovered source path itself
+  changed too (e.g. the template's own directory was reorganized in the same
+  release that introduced the new `target:`), and in that case the file is
+  still silently frozen exactly as described. See `determineBaseContent`'s
+  doc comment in `pkg/generator/engine/merge_update.go` for the full
+  rationale and scoping.
 
 **Non-goals**:
 - A per-file `when:` predicate within a single glob+matrix entry (see the
