@@ -510,9 +510,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TEST: ${{ matrix.packages }}
-          # Emit individual test durations so slow packages can be split by measured cost.
-          TESTARGS: -v
+          ATMOS_TEST_RACE_SHARD: ${{ matrix.shard }}
+          ATMOS_TEST_RACE_REPORT_DIR: ${{ runner.temp }}/race-timings
         run: atmos test race
+      - name: Upload race test timings
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: race-timings-${{ matrix.shard }}
+          path: ${{ runner.temp }}/race-timings
+          retention-days: 7
+          if-no-files-found: warn
     if: ${{ vars.CI_SPLIT_WORKFLOWS != 'true' && (success()) }}
   test-required-linux:
     cache-mode: none
