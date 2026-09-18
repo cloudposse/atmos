@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - mixins/layer2
+
+# Final stack file - can only access its own locals.
+locals:
+  final_local: "from-final-stack"
+  shared_key: "final-value"
+  # Use our own locals in templates (tests dependency resolution).
+  computed_value: "{{ .locals.final_local }}-computed"
+  full_chain: "{{ .locals.shared_key }}-{{ .locals.final_local }}"
+
+vars:
+  stage: "final"
+  final_var: "from-final-vars"
+
+components:
+  terraform:
+    deep-chain-component:
+      metadata:
+        component: mock
+      vars:
+        # These should resolve using THIS file's locals only.
+        local_value: "{{ .locals.final_local }}"
+        computed: "{{ .locals.computed_value }}"
+        shared: "{{ .locals.shared_key }}"
+        full_chain: "{{ .locals.full_chain }}"

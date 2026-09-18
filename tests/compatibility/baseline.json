@@ -1,0 +1,3585 @@
+{
+  "revision": "4ffd8804d3500b4369e739095174000565b43973",
+  "corpus_sha256": "ae069ae86b8283ac61e54c75e61b12ef3e5296cff3fd3e9eed1e11455443295b",
+  "go_version": "go1.27.1",
+  "platform": "darwin",
+  "cases": {
+    "atmos-datasource": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/config.json"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "atmos-datasource-cached": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture|42",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/config.json"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "bare-slice-sprig-disabled": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[\"a\",\"b\"]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "bare-splitn-legacy-sprig-enabled": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[\"a\",\"b,c\"]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "bare-splitn-sprig-disabled": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[\"a\",\"b,c\"]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "bare-splitn-sprig-enabled": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:25: executing \"templates-all-atmos-sections\" at <2>: expected string; found 2\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "base64-roundtrip": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "\"hello 世界\"",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "boltdb-json": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"count\":42,\"name\":\"bolt-fixture\"}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "boltdb-missing": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at <ds \"cfg\" \"missing\">: error calling ds: Couldn't read datasource 'cfg': Key not found in store\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "boltdb-plain": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture-value",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "builtin-slice": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[\"b\",\"c\"]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-atmos-pro-template-regression": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {},
+          "component": "vpc",
+          "env": {},
+          "hooks": {},
+          "imports": [
+            "mixins/atmos-pro"
+          ],
+          "metadata": {},
+          "overrides": {},
+          "providers": {},
+          "settings": {
+            "pro": {
+              "enabled": true,
+              "pull_request": {
+                "merged": {
+                  "workflows": {
+                    "atmos-terraform-apply.yaml": {
+                      "inputs": {
+                        "component": "vpc",
+                        "github_environment": "test-dev",
+                        "stack": "test-dev"
+                      }
+                    }
+                  }
+                },
+                "opened": {
+                  "workflows": {
+                    "atmos-terraform-plan.yaml": {
+                      "inputs": {
+                        "component": "vpc",
+                        "stack": "test-dev"
+                      }
+                    }
+                  }
+                },
+                "reopened": {
+                  "workflows": {
+                    "atmos-terraform-plan.yaml": {
+                      "inputs": {
+                        "component": "vpc",
+                        "stack": "test-dev"
+                      }
+                    }
+                  }
+                },
+                "synchronize": {
+                  "workflows": {
+                    "atmos-terraform-plan.yaml": {
+                      "inputs": {
+                        "component": "vpc",
+                        "stack": "test-dev"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "vars": {
+            "cidr": "10.0.0.0/16",
+            "environment": "dev",
+            "stage": "test"
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-component-1": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {
+            "acl": "bucket-owner-full-control",
+            "bucket": "nonprod-tfstate",
+            "dynamodb_table": "nonprod-tfstate-lock",
+            "encrypt": true,
+            "key": "terraform.tfstate",
+            "region": "us-east-2",
+            "workspace_key_prefix": "mock"
+          },
+          "component": "mock",
+          "env": {},
+          "hooks": {},
+          "imports": [],
+          "metadata": {
+            "component": "mock"
+          },
+          "overrides": {},
+          "providers": {},
+          "settings": {
+            "config": {
+              "a": "component-1-a",
+              "b": "component-1-b",
+              "c": "component-1-c"
+            }
+          },
+          "vars": {
+            "bar": "component-1-b",
+            "baz": "component-1-c",
+            "foo": "component-1-a",
+            "stage": "nonprod"
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-import-context": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {},
+          "component": "service",
+          "env": {},
+          "hooks": {},
+          "imports": [
+            "catalog/v2/service"
+          ],
+          "metadata": {},
+          "overrides": {},
+          "providers": {},
+          "settings": {},
+          "vars": {
+            "catalog_version": "v2",
+            "stage": "explicit-context"
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-locals-deep-import-chain": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {},
+          "component": "mock",
+          "env": {},
+          "hooks": {},
+          "imports": [
+            "mixins/base",
+            "mixins/layer1",
+            "mixins/layer2"
+          ],
+          "metadata": {
+            "component": "mock"
+          },
+          "overrides": {},
+          "providers": {},
+          "settings": {},
+          "vars": {
+            "base_var": "from-base-vars",
+            "computed": "from-final-stack-computed",
+            "final_var": "from-final-vars",
+            "full_chain": "final-value-from-final-stack",
+            "layer1_var": "from-layer1-vars",
+            "layer2_var": "from-layer2-vars",
+            "local_value": "from-final-stack",
+            "shared": "final-value",
+            "stage": "final"
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-stack-name-template": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {},
+          "component": "c1",
+          "env": {},
+          "hooks": {},
+          "imports": [
+            "catalog/c1",
+            "mixins/region/us-east-2",
+            "mixins/stage/dev",
+            "mixins/tenant/plat",
+            "orgs/acme/_defaults",
+            "orgs/acme/plat/_defaults",
+            "orgs/acme/plat/dev/_defaults"
+          ],
+          "metadata": {},
+          "overrides": {},
+          "providers": {},
+          "settings": {},
+          "vars": {
+            "a": "a",
+            "b": "b",
+            "c": "c",
+            "d": "d",
+            "environment": "ue2",
+            "namespace": "acme",
+            "region": "us-east-2",
+            "stage": "dev",
+            "tenant": "plat"
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-template-env-vars": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {},
+          "component": "mock",
+          "env": {},
+          "hooks": {},
+          "imports": [],
+          "metadata": {
+            "component": "mock"
+          },
+          "overrides": {},
+          "providers": {},
+          "settings": {
+            "templates": {
+              "settings": {
+                "env": {
+                  "TEST_TMPL_STACK_VAR": "from-stack-manifest"
+                }
+              }
+            }
+          },
+          "vars": {
+            "foo": "from-atmos-yaml-from-stack-manifest",
+            "stage": "test"
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-test-basic-template": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {},
+          "component": "mock",
+          "env": {},
+          "hooks": {},
+          "imports": [],
+          "metadata": {
+            "component": "mock"
+          },
+          "overrides": {},
+          "providers": {},
+          "settings": {},
+          "vars": {
+            "empty_json_string": "",
+            "invalid_json": "{this is not valid json}",
+            "json_boolean": true,
+            "json_list": [
+              "item-1",
+              "item-2",
+              "item-3"
+            ],
+            "json_map": {
+              "key1": "value1",
+              "key2": "value2"
+            },
+            "json_nested": {
+              "count": 5,
+              "metadata": {
+                "env": "prod"
+              },
+              "name": "test",
+              "tags": [
+                "tag1",
+                "tag2"
+              ]
+            },
+            "json_null": null,
+            "json_number": 42,
+            "json_string": "hello-world",
+            "simple_string": "hello-world",
+            "stage": "nonprod"
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-test-real-world-scenario": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {},
+          "component": "mock",
+          "env": {},
+          "hooks": {},
+          "imports": [],
+          "metadata": {
+            "component": "mock"
+          },
+          "overrides": {},
+          "providers": {},
+          "settings": {},
+          "vars": {
+            "combined_config": {
+              "dynamic_metadata": {
+                "env": "test",
+                "version": "1.0.0"
+              },
+              "dynamic_subnets": [
+                "item-1",
+                "item-2",
+                "item-3"
+              ],
+              "static_setting": "fixed-value"
+            },
+            "security_group_rules": {
+              "key1": "value1",
+              "key2": "value2",
+              "key3": "value3"
+            },
+            "stage": "nonprod",
+            "subnet_ids": [
+              "item-1",
+              "item-2",
+              "item-3"
+            ],
+            "vpc_config": {
+              "active": true,
+              "count": 5,
+              "metadata": {
+                "env": "test",
+                "version": "1.0.0"
+              },
+              "name": "nested-test",
+              "tags": [
+                "tag1",
+                "tag2"
+              ]
+            }
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-test-template-edge-cases": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {},
+          "component": "mock",
+          "env": {},
+          "hooks": {},
+          "imports": [],
+          "metadata": {
+            "component": "mock"
+          },
+          "overrides": {},
+          "providers": {},
+          "settings": {},
+          "vars": {
+            "array_of_objects": [
+              {
+                "id": 1,
+                "name": "first"
+              },
+              {
+                "id": 2,
+                "name": "second"
+              }
+            ],
+            "empty_array": [],
+            "empty_object": {},
+            "escaped_quotes": {
+              "message": "He said \"hello\""
+            },
+            "large_nested": {
+              "level1": {
+                "level2": {
+                  "level3": {
+                    "level4": {
+                      "value": "deep"
+                    }
+                  }
+                }
+              }
+            },
+            "mixed_types_array": [
+              1,
+              "two",
+              true,
+              null,
+              {
+                "five": 5
+              }
+            ],
+            "stage": "nonprod",
+            "unicode_chars": {
+              "emoji": "🚀",
+              "text": "Hello 世界"
+            },
+            "whitespace_after": [
+              "a",
+              "b"
+            ],
+            "whitespace_before": [
+              "a",
+              "b"
+            ],
+            "whitespace_both": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-test-template-in-lists": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {},
+          "component": "mock",
+          "env": {},
+          "hooks": {},
+          "imports": [],
+          "metadata": {
+            "component": "mock"
+          },
+          "overrides": {},
+          "providers": {},
+          "settings": {},
+          "vars": {
+            "component_list_results": [
+              [
+                "item-1",
+                "item-2",
+                "item-3"
+              ],
+              {
+                "key1": "value1",
+                "key2": "value2",
+                "key3": "value3"
+              }
+            ],
+            "mixed_template_list": [
+              "static-value-start",
+              [
+                "dynamic-1",
+                "dynamic-2"
+              ],
+              "static-value-middle",
+              {
+                "dynamic": "map"
+              },
+              "static-value-end"
+            ],
+            "stage": "nonprod",
+            "template_results_list": [
+              [
+                "a",
+                "b",
+                "c"
+              ],
+              [
+                "x",
+                "y",
+                "z"
+              ],
+              {
+                "key": "value"
+              }
+            ]
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-test-template-in-maps": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {},
+          "component": "mock",
+          "env": {},
+          "hooks": {},
+          "imports": [],
+          "metadata": {
+            "component": "mock"
+          },
+          "overrides": {},
+          "providers": {},
+          "settings": {},
+          "vars": {
+            "nested_template_structure": {
+              "data": {
+                "list": [
+                  "item-1",
+                  "item-2"
+                ],
+                "map": {
+                  "key1": "val1",
+                  "key2": "val2"
+                }
+              },
+              "name": "test-structure",
+              "outputs": {
+                "from_component": [
+                  "item-1",
+                  "item-2",
+                  "item-3"
+                ]
+              },
+              "static_value": "unchanged"
+            },
+            "stage": "nonprod",
+            "template_results_map": {
+              "list_result": [
+                "a",
+                "b",
+                "c"
+              ],
+              "map_result": {
+                "x": 1,
+                "y": 2
+              },
+              "number_result": 42,
+              "string_result": "simple-string"
+            }
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-test-template-with-atmos-component": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {},
+          "component": "mock",
+          "env": {},
+          "hooks": {},
+          "imports": [],
+          "metadata": {
+            "component": "mock"
+          },
+          "overrides": {},
+          "providers": {},
+          "settings": {},
+          "vars": {
+            "component_list": [
+              "item-1",
+              "item-2",
+              "item-3"
+            ],
+            "component_map": {
+              "key1": "value1",
+              "key2": "value2",
+              "key3": "value3"
+            },
+            "component_nested": {
+              "active": true,
+              "count": 5,
+              "metadata": {
+                "env": "test",
+                "version": "1.0.0"
+              },
+              "name": "nested-test",
+              "tags": [
+                "tag1",
+                "tag2"
+              ]
+            },
+            "component_nested_path": [
+              "tag1",
+              "tag2"
+            ],
+            "component_nested_value": "test",
+            "component_string": "hello-world",
+            "stage": "nonprod"
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "catalog-test-template-with-expressions": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "backend": {},
+          "component": "mock",
+          "env": {},
+          "hooks": {},
+          "imports": [],
+          "metadata": {
+            "component": "mock"
+          },
+          "overrides": {},
+          "providers": {},
+          "settings": {},
+          "vars": {
+            "nested_template": {
+              "list": [
+                1,
+                2,
+                3
+              ],
+              "map": {
+                "a": "x",
+                "b": "y"
+              }
+            },
+            "stack_var": "nonprod",
+            "stage": "nonprod",
+            "template_list": [
+              "a",
+              "b",
+              "c"
+            ],
+            "template_map": {
+              "x": 1,
+              "y": 2,
+              "z": 3
+            },
+            "template_string": "hello-world",
+            "trimmed_template_list": [
+              "one",
+              "two"
+            ],
+            "trimmed_template_map": {
+              "key": "value"
+            }
+          }
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "coll-dict-odd": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"a\":1,\"b\":\"\"}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "coll-jq": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at : can't evaluate field JQ in type interface {}\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "coll-jsonpath": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[1,2]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "coll-merge": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"a\":1,\"b\":2}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "coll-slice": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[\"a\",2,true]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "coll-sort": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[1,2,3]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "consul-denied": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at <ds \"cfg\">: error calling ds: Couldn't read datasource 'cfg': Unexpected response code: 403 (fixture permission denied)\n",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/v1/kv/config.json?consistent=",
+          "service": "consul",
+          "token": "wrong-fixture-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "consul-directory": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[{\"key\":\"app\",\"value\":\"frontend\"},{\"key\":\"database\",\"value\":\"postgres\"}]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/v1/kv/configs/?recurse=",
+          "service": "consul",
+          "token": "compat-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "consul-directory-fields": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "app=frontend;database=postgres;",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/v1/kv/configs/?recurse=",
+          "service": "consul",
+          "token": "compat-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "consul-env-address": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"count\":42,\"name\":\"consul-fixture\"}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/v1/kv/config.json?consistent=",
+          "service": "consul",
+          "token": "compat-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "consul-json": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"count\":42,\"name\":\"consul-fixture\"}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/v1/kv/config.json?consistent=",
+          "service": "consul",
+          "token": "compat-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "consul-missing": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at <ds \"cfg\">: error calling ds: Couldn't read datasource 'cfg': Key not found in store\n",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/v1/kv/missing?consistent=",
+          "service": "consul",
+          "token": "compat-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "consul-plain": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "plain-value",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/v1/kv/plain?consistent=",
+          "service": "consul",
+          "token": "compat-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "context": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "dev",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-atoi": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int:42",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-atoi-invalid": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "0",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-bool": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "bool:true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-dict": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "map[string]interface {}|{\"count\":2,\"name\":\"test\"}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-dict-odd": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"a\":1,\"b\":\"\"}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-float": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "float64:1.25",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-float-invalid": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "0",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-has": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true|false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-int": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int:42",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-int-invalid": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "0",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-int64": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int64:42",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-int64-invalid": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "0",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "conv-slice": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[]interface {}|[\"a\",2,true]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "convert-tofloat64-bool": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "float64:1",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "convert-tofloat64-empty": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "float64:0",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "convert-tofloat64-float": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "float64:1.75",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "convert-tofloat64-negative": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "float64:-42",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "convert-tofloat64-nil": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "float64:0",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "convert-tofloat64-overflow": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "float64:1e+31",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "convert-toint64-bool": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int64:1",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "convert-toint64-empty": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int64:0",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "convert-toint64-float": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int64:1",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "convert-toint64-negative": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int64:-42",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "convert-toint64-nil": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int64:0",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "convert-toint64-overflow": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int64:9223372036854775807",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "custom-delimiters": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "HELLO",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "custom-delimiters-datasource": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "data-csv": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[[\"a\",\"b\"],[\"1\",\"2\"]]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "data-json-types": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int/bool/[]interface {}|{\"a\":[1,2],\"b\":true,\"n\":42}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "data-yaml-types": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int/bool/[]interface {}|{\"a\":[1,2],\"b\":true,\"n\":42}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "datasource-context": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "dev|fixture|HELLO",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "datasource-env": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "datasource-env|fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "datasource-exists": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true|false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "datasource-missing-key": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "<no value>",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "delimiters-invalid": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** invalid template settings\n\ninvalid 'templates.settings.delimiters' config in 'atmos.yaml': [[[] 'delimiters' must be an array with two string items: left and right delimiter the left and right delimiters must not be an empty string\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "docs-basic": {
+      "exit_code": 0,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n✓ Generated docs\n\n",
+      "requests": [],
+      "files": {
+        "README.md": "# inline override\nfixture-env\nint:42\n[\"a\",\"b\"]\n"
+      },
+      "file_notices": []
+    },
+    "docs-env-context": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** failed to render template with datasources failed to render template: failed to render template docs-generate: template: docs-generate:2:7: executing \"docs-generate\" at <.Env.COMPAT_VALUE>: map has no entry for key \"COMPAT_VALUE\"\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "docs-legacy": {
+      "exit_code": 0,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n✓ Generated docs\n\n",
+      "requests": [],
+      "files": {
+        "README.md": "true\n[\"a\",\"b\"]\n[\"a\",\"b\"]\n"
+      },
+      "file_notices": []
+    },
+    "env": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture-env",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "env-cli": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "cli-value",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "env-component": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "component-value",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "env-datasource": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "env-stack": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "stack-value",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "evaluations-1": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{{ .vars.stage }}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "evaluations-2": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "dev",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "evaluations-3": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "dev",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "file-csv": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[[\"name\",\"count\"],[\"fixture\",\"42\"]]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "file-json": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int/bool/[]interface {}|{\"count\":42,\"enabled\":true,\"items\":[\"a\",\"b\"],\"name\":\"fixture\",\"nested\":{\"value\":\"child\"}}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "file-not-found": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at <ds \"cfg\">: error calling ds: Couldn't read datasource 'cfg': Can't stat <SANDBOX>/fixtures/data/missing.json: stat <SANDBOX>/fixtures/data/missing.json: no such file or directory\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "file-path": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int/bool/[]interface {}|{\"count\":42,\"enabled\":true,\"items\":[\"a\",\"b\"],\"name\":\"fixture\",\"nested\":{\"value\":\"child\"}}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "file-space-uri": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "file-toml": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"count\":42,\"enabled\":true,\"name\":\"fixture\"}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "file-yaml": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int/bool/[]interface {}|{\"count\":42,\"enabled\":true,\"items\":[\"a\",\"b\"],\"name\":\"fixture\",\"nested\":{\"value\":\"child\"}}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "filepath-join": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "\"a/b/c\"",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "generate-files-dev": {
+      "exit_code": 0,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "✓ Generated components/terraform/demo (7 created)\n",
+      "requests": [],
+      "files": {
+        "components/terraform/demo/README.md": "# demo\n\n> **Note:** This component was generated by `atmos terraform generate files`.\n> Do not edit these files directly. Modify the stack configuration instead.\n\n## Source\n\n- **Stack:** `dev`\n- **Catalog:** `stacks/catalog/demo.yaml`\n\n## Regenerate\n\n```bash\natmos terraform generate files demo -s dev\n```\n",
+        "components/terraform/demo/config.json": "{\n  \"app\": \"myapp-dev\",\n  \"app_version\": \"1.0.0-dev\",\n  \"stage\": \"dev\"\n}",
+        "components/terraform/demo/locals.tf": "locals {\n  app_name    = \"myapp-dev\"\n  environment = \"dev\"\n}\n",
+        "components/terraform/demo/outputs.tf": "output \"app_name\" {\n  description = \"The application name\"\n  value       = var.app_name\n}\n\noutput \"app_version\" {\n  description = \"The application version\"\n  value       = var.app_version\n}\n\noutput \"features\" {\n  description = \"List of enabled features\"\n  value       = var.features\n}\n",
+        "components/terraform/demo/terraform.tfvars": "app_name    = \"myapp-dev\"\napp_version = \"1.0.0-dev\"\n",
+        "components/terraform/demo/variables.tf": "variable \"stage\" {\n  type        = string\n  description = \"Stage (environment) name\"\n}\n\nvariable \"app_name\" {\n  type        = string\n  description = \"Application name\"\n}\n\nvariable \"app_version\" {\n  type        = string\n  description = \"Application version\"\n}\n\nvariable \"features\" {\n  type        = list(string)\n  description = \"List of enabled features\"\n  default     = []\n}\n",
+        "components/terraform/demo/versions.tf": "terraform {\n  required_version = \">= 1.0.0\"\n}\n"
+      },
+      "file_notices": [
+        "✓ Created components/terraform/demo/README.md\n",
+        "✓ Created components/terraform/demo/config.json\n",
+        "✓ Created components/terraform/demo/locals.tf\n",
+        "✓ Created components/terraform/demo/outputs.tf\n",
+        "✓ Created components/terraform/demo/terraform.tfvars\n",
+        "✓ Created components/terraform/demo/variables.tf\n",
+        "✓ Created components/terraform/demo/versions.tf\n"
+      ]
+    },
+    "generate-files-prod": {
+      "exit_code": 0,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "✓ Generated components/terraform/demo (7 created)\n",
+      "requests": [],
+      "files": {
+        "components/terraform/demo/README.md": "# demo\n\n> **Note:** This component was generated by `atmos terraform generate files`.\n> Do not edit these files directly. Modify the stack configuration instead.\n\n## Source\n\n- **Stack:** `prod`\n- **Catalog:** `stacks/catalog/demo.yaml`\n\n## Regenerate\n\n```bash\natmos terraform generate files demo -s prod\n```\n",
+        "components/terraform/demo/config.json": "{\n  \"app\": \"myapp\",\n  \"app_version\": \"2.0.0\",\n  \"stage\": \"prod\"\n}",
+        "components/terraform/demo/locals.tf": "locals {\n  app_name    = \"myapp\"\n  environment = \"prod\"\n}\n",
+        "components/terraform/demo/outputs.tf": "output \"app_name\" {\n  description = \"The application name\"\n  value       = var.app_name\n}\n\noutput \"app_version\" {\n  description = \"The application version\"\n  value       = var.app_version\n}\n\noutput \"features\" {\n  description = \"List of enabled features\"\n  value       = var.features\n}\n",
+        "components/terraform/demo/terraform.tfvars": "app_name    = \"myapp\"\napp_version = \"2.0.0\"\n",
+        "components/terraform/demo/variables.tf": "variable \"stage\" {\n  type        = string\n  description = \"Stage (environment) name\"\n}\n\nvariable \"app_name\" {\n  type        = string\n  description = \"Application name\"\n}\n\nvariable \"app_version\" {\n  type        = string\n  description = \"Application version\"\n}\n\nvariable \"features\" {\n  type        = list(string)\n  description = \"List of enabled features\"\n  default     = []\n}\n",
+        "components/terraform/demo/versions.tf": "terraform {\n  required_version = \">= 1.0.0\"\n}\n"
+      },
+      "file_notices": [
+        "✓ Created components/terraform/demo/README.md\n",
+        "✓ Created components/terraform/demo/config.json\n",
+        "✓ Created components/terraform/demo/locals.tf\n",
+        "✓ Created components/terraform/demo/outputs.tf\n",
+        "✓ Created components/terraform/demo/terraform.tfvars\n",
+        "✓ Created components/terraform/demo/variables.tf\n",
+        "✓ Created components/terraform/demo/versions.tf\n"
+      ]
+    },
+    "gomplate-disabled": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "HELLO",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "gomplate-disabled-error": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31: function \"strings\" not defined\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "http-authorized": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": "compatibility",
+          "method": "GET",
+          "path": "/protected/config.json"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "http-get-only": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/get-only/config.json"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "http-headers-query": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "accept": "application/json",
+          "fixture_header": "compatibility",
+          "method": "GET",
+          "path": "/config.json?version=1"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "http-json": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int/bool/[]interface {}|{\"count\":42,\"enabled\":true,\"items\":[\"a\",\"b\"],\"name\":\"fixture\",\"nested\":{\"value\":\"child\"}}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/config.json"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "http-no-head": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/no-head/config.json"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "http-not-found": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at <ds \"cfg\">: error calling ds: Couldn't read datasource 'cfg': Unexpected HTTP status 404 on GET from <HTTP>/missing.json: fixture not found\n",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/missing.json"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "http-redirect": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/redirect/config.json"
+        },
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/config.json"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "http-repeated-read": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture|42",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/config.json"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "http-subpath": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/configs/config.json"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "http-timeout": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/slow/config.json"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "http-unauthorized": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:15: executing \"templates-all-atmos-sections\" at <ds \"cfg\">: error calling ds: Couldn't read datasource 'cfg': Unexpected HTTP status 401 on GET from <HTTP>/protected/config.json: fixture unauthorized\n",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/protected/config.json"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "http-yaml": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "int/bool/[]interface {}|{\"count\":42,\"enabled\":true,\"items\":[\"a\",\"b\"],\"name\":\"fixture\",\"nested\":{\"value\":\"child\"}}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "accept": null,
+          "fixture_header": null,
+          "method": "GET",
+          "path": "/config.yaml"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "include-text": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "plain datasource contents ",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "inline-datasource": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-chain-prior": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.1",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-as16": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[0 0 0 0 0 0 0 0 0 0 255 255 192 0 2 1]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-as4": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[192 0 2 1]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-bitlen": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "32",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-compare": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "-1",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-ipaddr": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.1",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-is4": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-is4in6": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-is6": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-isglobalunicast": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-isinterfacelocalmulticast": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-islinklocalmulticast": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-islinklocalunicast": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-isloopback": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-ismulticast": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-isprivate": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-isunspecified": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-isvalid": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-iszero": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-less": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-next": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.2",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-prior": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.0",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-string": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.1",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-stringexpanded": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.1",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-method-unmap": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.1",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-prefix-method": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.0/24",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-v6-mapped": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true|192.0.2.1|[0 0 0 0 0 0 0 0 0 0 255 255 192 0 2 1]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ip-v6-zone": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "eth0|fe80::1%eth1|fe80::1%eth0",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "malformed-datasource": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at <ds \"cfg\">: error calling ds: Unable to unmarshal array {\"name\":\n* yaml: line 1: did not find expected node content\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "math-add": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "6",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "math-div": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "3.5",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "missing-key": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "<no value>",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "net-ip": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "netaddr.IP:192.0.2.1|[192 0 2 1]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "net-ip-invalid": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:17: executing \"templates-all-atmos-sections\" at <net.ParseIP>: error calling ParseIP: ParseIP(\"invalid\"): unable to parse IP\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "net-prefix": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "netaddr.IPPrefix:192.0.2.0/24",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "net-range": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "netaddr.IPRange:192.0.2.1-192.0.2.3",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "parse-error": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31: missing value for if\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "permissive-json-as-yaml": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"invalid JSON\":null}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-contains": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-invalid": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:17: executing \"templates-all-atmos-sections\" at <net.ParseIPPrefix>: error calling ParseIPPrefix: netaddr.ParseIPPrefix(\"invalid\"): no '/'\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-method-bits": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "24",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-method-ip": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.1",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-method-ipnet": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.1/24",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-method-issingleip": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-method-isvalid": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-method-iszero": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-method-masked": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.0/24",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-method-range": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.0-192.0.2.255",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-method-string": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.1/24",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-method-valid": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "prefix-overlaps": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "range-contains": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "range-invalid": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:17: executing \"templates-all-atmos-sections\" at <net.ParseIPRange>: error calling ParseIPRange: no hyphen in range \"invalid\"\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "range-method-from": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.1",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "range-method-isvalid": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "range-method-iszero": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "false",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "range-method-prefixes": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[192.0.2.1/32 192.0.2.2/31]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "range-method-string": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.1-192.0.2.3",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "range-method-to": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "192.0.2.3",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "range-method-valid": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "range-overlaps": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "regexp-replace": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "\"bxc\"",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "s3-corrupt-checksum": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"count\":42,\"name\":\"s3-fixture\"}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "method": "HEAD",
+          "path": "/compat-bucket/corrupt.json",
+          "range": null,
+          "service": "s3",
+          "valid_signature": true
+        },
+        {
+          "method": "GET",
+          "path": "/compat-bucket/corrupt.json",
+          "range": null,
+          "service": "s3",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "s3-directory": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[\"config.json\"]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/compat-bucket?delimiter=%2F&list-type=2&max-keys=1000",
+          "range": null,
+          "service": "s3",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "s3-missing": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at <ds \"cfg\">: error calling ds: Couldn't read datasource 'cfg': failed to retrieve attributes for missing.json: blob (key \"missing.json\") (code=NotFound): NotFound: Not Found status code: 404, request id: fixture-request, host id:\n",
+      "requests": [
+        {
+          "method": "HEAD",
+          "path": "/compat-bucket/missing.json",
+          "range": null,
+          "service": "s3",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "s3-object": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"count\":42,\"name\":\"s3-fixture\"}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "method": "HEAD",
+          "path": "/compat-bucket/config.json",
+          "range": null,
+          "service": "s3",
+          "valid_signature": true
+        },
+        {
+          "method": "GET",
+          "path": "/compat-bucket/config.json",
+          "range": null,
+          "service": "s3",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "settings-component-datasource": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "sprig-collisions": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true|true|a|[\"a\",\"b\"]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "sprig-dict-odd": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"a\":1,\"b\":\"\"}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "sprig-disabled-aliases": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "true|true|[\"a\",\"b\"]|[\"a\",\"b,c\"]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "sprig-disabled-error": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31: function \"upper\" not defined\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "sprig-functions": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "HELLO|fallback|5",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "sprig-int-invalid": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "0",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "ssm-denied": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at <ds \"cfg\">: error calling ds: Couldn't read datasource 'cfg': Error reading aws+smp from AWS using GetParameter with input { Name: \"/compat/denied\", WithDecryption: true }: AccessDeniedException: fixture access denied status code: 400, request id: fixture-request\n",
+      "requests": [
+        {
+          "body": {
+            "Name": "/compat/denied",
+            "WithDecryption": true
+          },
+          "method": "POST",
+          "service": "ssm",
+          "session_token": null,
+          "target": "AmazonSSM.GetParameter",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "ssm-directory": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[\"a\",\"b\"]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "body": {
+            "Path": "/compat/list/"
+          },
+          "method": "POST",
+          "service": "ssm",
+          "session_token": null,
+          "target": "AmazonSSM.GetParametersByPath",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "ssm-invalid-credentials": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:15: executing \"templates-all-atmos-sections\" at <ds \"cfg\">: error calling ds: Couldn't read datasource 'cfg': Error reading aws+smp from AWS using GetParameter with input { Name: \"/compat/string\", WithDecryption: true }: AccessDeniedException: fixture access denied status code: 400, request id: fixture-request\n",
+      "requests": [
+        {
+          "body": {
+            "Name": "/compat/string",
+            "WithDecryption": true
+          },
+          "method": "POST",
+          "service": "ssm",
+          "session_token": null,
+          "target": "AmazonSSM.GetParameter",
+          "valid_signature": false
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "ssm-json": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"count\":42,\"enabled\":true,\"items\":[\"a\",\"b\"]}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "body": {
+            "Name": "/compat/json",
+            "WithDecryption": true
+          },
+          "method": "POST",
+          "service": "ssm",
+          "session_token": null,
+          "target": "AmazonSSM.GetParameter",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "ssm-json-type": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"ARN\":\"arn:aws:ssm:us-east-1:123456789012:parameter/compat/json\",\"DataType\":\"text\",\"LastModifiedDate\":null,\"Name\":\"/compat/json\",\"Selector\":null,\"SourceResult\":null,\"Type\":\"String\",\"Value\":\"{\\\"count\\\":42,\\\"enabled\\\":true,\\\"items\\\":[\\\"a\\\",\\\"b\\\"]}\",\"Version\":1}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "body": {
+            "Name": "/compat/json",
+            "WithDecryption": true
+          },
+          "method": "POST",
+          "service": "ssm",
+          "session_token": null,
+          "target": "AmazonSSM.GetParameter",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "ssm-missing": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at <ds \"cfg\">: error calling ds: Couldn't read datasource 'cfg': Error reading aws+smp from AWS using GetParameter with input { Name: \"/compat/missing\", WithDecryption: true }: ParameterNotFound: fixture parameter not found\n",
+      "requests": [
+        {
+          "body": {
+            "Name": "/compat/missing",
+            "WithDecryption": true
+          },
+          "method": "POST",
+          "service": "ssm",
+          "session_token": null,
+          "target": "AmazonSSM.GetParameter",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "ssm-secure": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture-secret-value",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "body": {
+            "Name": "/compat/secure",
+            "WithDecryption": true
+          },
+          "method": "POST",
+          "service": "ssm",
+          "session_token": null,
+          "target": "AmazonSSM.GetParameter",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "ssm-session-token": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture-value",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "body": {
+            "Name": "/compat/string",
+            "WithDecryption": true
+          },
+          "method": "POST",
+          "service": "ssm",
+          "session_token": "compat-session-token",
+          "target": "AmazonSSM.GetParameter",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "ssm-string": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"ARN\":\"arn:aws:ssm:us-east-1:123456789012:parameter/compat/string\",\"DataType\":\"text\",\"LastModifiedDate\":null,\"Name\":\"/compat/string\",\"Selector\":null,\"SourceResult\":null,\"Type\":\"String\",\"Value\":\"fixture-value\",\"Version\":1}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "body": {
+            "Name": "/compat/string",
+            "WithDecryption": true
+          },
+          "method": "POST",
+          "service": "ssm",
+          "session_token": null,
+          "target": "AmazonSSM.GetParameter",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "ssm-stringlist": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "a,b,c",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "body": {
+            "Name": "/compat/stringlist",
+            "WithDecryption": true
+          },
+          "method": "POST",
+          "service": "ssm",
+          "session_token": null,
+          "target": "AmazonSSM.GetParameter",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "ssm-value-field": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture-value",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "body": {
+            "Name": "/compat/string",
+            "WithDecryption": true
+          },
+          "method": "POST",
+          "service": "ssm",
+          "session_token": null,
+          "target": "AmazonSSM.GetParameter",
+          "valid_signature": true
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "strings-replace": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "\"bxnxnx\"",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "strings-sort": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[\"a\",\"b\"]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "strings-split": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[\"a\",\"b\"]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "strings-trim": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "\"abc\"",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "subpath-no-slash": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "subpath-trailing-slash": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "fixture",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "templates-disabled": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{{ .vars.stage }}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "tmpl-inline": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31: function \"tmpl\" not defined\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "tmpl-inline-datasource": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31: function \"tmpl\" not defined\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "unknown-datasource": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at <ds \"missing\">: error calling ds: Undefined datasource 'missing'\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "unknown-function": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31: function \"functionDoesNotExist\" not defined\n",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    },
+    "vault-denied": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at <ds \"cfg\">: error calling ds: Couldn't read datasource 'cfg': Error making API request.\n\nURL: GET <HTTP>/v1/secret/config Code: 403. Errors:\n\n  • fixture permission denied\n",
+      "requests": [
+        {
+          "method": "GET",
+          "namespace": null,
+          "path": "/v1/secret/config",
+          "service": "vault",
+          "token": "invalid-fixture-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "vault-directory": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "[\"config\"]",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "method": "GET",
+          "namespace": null,
+          "path": "/v1/secret?list=true",
+          "service": "vault",
+          "token": "compat-vault-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "vault-kv1": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"count\":42,\"name\":\"vault-fixture\"}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "method": "GET",
+          "namespace": null,
+          "path": "/v1/secret/config",
+          "service": "vault",
+          "token": "compat-vault-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "vault-kv2-raw": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"data\":{\"name\":\"vault-v2-fixture\"},\"metadata\":{\"created_time\":\"2020-01-01T00:00:00Z\",\"destroyed\":false,\"version\":1}}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "method": "GET",
+          "namespace": null,
+          "path": "/v1/kv/data/config",
+          "service": "vault",
+          "token": "compat-vault-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "vault-missing": {
+      "exit_code": 1,
+      "stdout": {
+        "text": ""
+      },
+      "stderr": "\n# Error\n\n**Error:** template: templates-all-atmos-sections:31:14: executing \"templates-all-atmos-sections\" at <ds \"cfg\">: error calling ds: Couldn't read datasource 'cfg': no value found for path /secret/missing\n",
+      "requests": [
+        {
+          "method": "GET",
+          "namespace": null,
+          "path": "/v1/secret/missing",
+          "service": "vault",
+          "token": "compat-vault-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "vault-namespace": {
+      "exit_code": 0,
+      "stdout": {
+        "json": {
+          "result": "{\"count\":42,\"name\":\"vault-fixture\"}",
+          "stage": "dev"
+        }
+      },
+      "stderr": "",
+      "requests": [
+        {
+          "method": "GET",
+          "namespace": "compat-namespace",
+          "path": "/v1/secret/config",
+          "service": "vault",
+          "token": "compat-vault-token"
+        }
+      ],
+      "files": {},
+      "file_notices": []
+    },
+    "yaml-output": {
+      "exit_code": 0,
+      "stdout": {
+        "text": "result: dev\nstage: dev\n\n"
+      },
+      "stderr": "",
+      "requests": [],
+      "files": {},
+      "file_notices": []
+    }
+  }
+}

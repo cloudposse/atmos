@@ -1,0 +1,45 @@
+{
+  "stacks": {
+    "base_path": "stacks",
+    "included_paths": [
+      "deploy/**/*"
+    ]
+  },
+  "docs": {
+    "generate": {
+      "basic": {
+        "base-dir": ".",
+        "input": [
+          "input.yaml",
+          {
+            "name": "inline override"
+          }
+        ],
+        "template": "basic.gotmpl",
+        "output": "README.md"
+      },
+      "legacy": {
+        "base-dir": ".",
+        "input": [
+          "input.yaml",
+          {
+            "name": "inline override"
+          }
+        ],
+        "template": "legacy.gotmpl",
+        "output": "README.md"
+      },
+      "env-context": {
+        "base-dir": ".",
+        "input": [
+          "input.yaml",
+          {
+            "name": "inline override"
+          }
+        ],
+        "template": "env-context.gotmpl",
+        "output": "README.md"
+      }
+    }
+  }
+}

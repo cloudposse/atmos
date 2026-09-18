@@ -1,0 +1,15 @@
+vars:
+  stage: test
+
+components:
+  terraform:
+    env-test:
+      metadata:
+        component: mock
+      settings:
+        templates:
+          settings:
+            env:
+              TEST_TMPL_STACK_VAR: "from-stack-manifest"
+      vars:
+        foo: '{{ env "TEST_TMPL_ENV_VAR" }}-{{ env "TEST_TMPL_STACK_VAR" }}'
