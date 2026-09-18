@@ -22,7 +22,7 @@ export class GitHub {
         await this.sleep(1000 * 2 ** attempt);
         continue;
       }
-      throw new Error(`GitHub ${method} ${path}: ${response.status}`);
+      throw Object.assign(new Error(`GitHub ${method} ${path}: ${response.status}`), { status: response.status });
     }
   }
 

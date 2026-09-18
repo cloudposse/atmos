@@ -19,9 +19,9 @@ test('keeps newest two per exact lineage and protects recent generations and oth
 });
 
 test('recognizes all warmup cache families without combining them', () => {
-  const caches = ['go-cache', 'race-go-cache', 'race-plan-go-cache'].flatMap((prefix, i) =>
+  const caches = ['go-cache', 'race-go-cache', 'race-plan-go-cache', 'intel-go-cache'].flatMap((prefix, i) =>
     [1, 2, 3].map(n => entry(i * 10 + n, n, { key: `${lineage.replace('go-cache', prefix)}-${i * 10 + n}` })));
-  assert.deepEqual(pruneCandidates(caches, now).map(c => c.id), [3, 13, 23]);
+  assert.deepEqual(pruneCandidates(caches, now).map(c => c.id), [3, 13, 23, 33]);
 });
 
 test('inventories every page before deletion and tolerates an already evicted entry', async () => {

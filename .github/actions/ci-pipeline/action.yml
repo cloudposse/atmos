@@ -2,7 +2,7 @@ name: CI pipeline coordination
 description: Resolve immutable source runs and publish CI results without executing test code.
 inputs:
   mode:
-    description: resolve, report, coverage, or merge-coverage
+    description: resolve, report, coverage, merge-coverage, or check-shards
     required: true
   github-token:
     description: Read token for resolution, checks-write token only for the trusted reporter.
@@ -15,6 +15,12 @@ inputs:
     default: ''
   coverage-directory:
     description: Directory containing downloaded coverage data.
+    default: ''
+  target:
+    description: Acceptance platform to verify in check-shards mode.
+    default: ''
+  shard-count:
+    description: Number of expected acceptance shards in check-shards mode.
     default: ''
 outputs:
   active:
