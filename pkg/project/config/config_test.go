@@ -175,7 +175,7 @@ func TestLoadUserValues(t *testing.T) {
 		Kind:       ScaffoldKind,
 		Metadata:   manifest.Metadata{Name: "test-template"},
 	}
-	err = SaveProjectRecord(tempDir, template, SourceEmbedded, "", map[string]interface{}{
+	err = SaveProjectRecord(tempDir, template, ProjectRecordProvenance{Source: SourceEmbedded}, map[string]interface{}{
 		"project_name": "test-project",
 		"author":       "Test User",
 		"license":      "MIT",
@@ -465,7 +465,7 @@ func TestPersistenceFlow(t *testing.T) {
 		"enable_logging":      true,
 	}
 
-	require.NoError(t, SaveProjectRecord(tempDir, template, SourceEmbedded, "abc123", cmdValues))
+	require.NoError(t, SaveProjectRecord(tempDir, template, ProjectRecordProvenance{Source: SourceEmbedded, BaseRef: "abc123"}, cmdValues))
 
 	recordPath := filepath.Join(tempDir, ScaffoldConfigDir, ScaffoldConfigFileName)
 	assert.FileExists(t, recordPath)
@@ -539,7 +539,7 @@ func TestPersistenceWithScaffoldConfig(t *testing.T) {
 	assert.Equal(t, []string{"us-west-2", "eu-west-1"}, mergedValues["regions"])
 	assert.Equal(t, true, mergedValues["enable_monitoring"])
 
-	require.NoError(t, SaveProjectRecord(tempDir, projectConfig, "", "", mergedValues))
+	require.NoError(t, SaveProjectRecord(tempDir, projectConfig, ProjectRecordProvenance{}, mergedValues))
 
 	// The questionnaire snapshot rides along in the record.
 	record, err := LoadProjectRecord(tempDir)
