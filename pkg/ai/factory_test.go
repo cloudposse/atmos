@@ -14,12 +14,15 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/claudecode"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/codexcli"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/copilotcli"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/deepseek"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/gemini"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/geminicli"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/github"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/grok"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/ollama"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/openai"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/openrouter"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/zai"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -135,6 +138,45 @@ func TestNewClient(t *testing.T) {
 					DefaultProvider: "ollama",
 					Providers: map[string]*schema.AIProviderConfig{
 						"ollama": {},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "OpenRouter provider",
+			atmosConfig: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "openrouter",
+					Providers: map[string]*schema.AIProviderConfig{
+						"openrouter": {},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "DeepSeek provider",
+			atmosConfig: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "deepseek",
+					Providers: map[string]*schema.AIProviderConfig{
+						"deepseek": {},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "Z.AI provider",
+			atmosConfig: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "zai",
+					Providers: map[string]*schema.AIProviderConfig{
+						"zai": {},
 					},
 				},
 			},
