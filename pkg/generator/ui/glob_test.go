@@ -266,6 +266,88 @@ spec:
 	}
 }
 
+// TestExecuteWithSetup_FilesGlobMatrixWithLiteralDotFileTextCollides is a
+// regression test for a real bug: validateDirectoryMatrixTargetsDifferentiate
+// used to accept any target: containing the raw substring ".file." anywhere,
+// even outside a template action. Here target: renders to a literal output
+// filename containing ".file." as plain text (not a genuine .file.Path/
+// .file.RelPath reference), so it must still be rejected up front -- exactly
+// like the no-differentiation case -- instead of silently passing the check
+// and colliding on the first two matched files' writes.
+func TestExecuteWithSetup_FilesGlobMatrixWithLiteralDotFileTextCollides(t *testing.T) {
+	ui := createTestUI(t)
+	tempDir := t.TempDir()
+
+	scaffoldYAML := `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test-template
+spec:
+  files:
+    - path: "components/**"
+      target: "environments/{{ .matrix.env }}/output.file.txt"
+      matrix:
+        env: [dev]
+`
+
+	embedsConfig := &templates.Configuration{
+		Name: "test-template",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: scaffoldYAML, Permissions: 0o644},
+			{Path: "components/vpc/main.tf", Content: "vpc", Permissions: 0o644},
+			{Path: "components/eks/main.tf", Content: "eks", Permissions: 0o644},
+		},
+	}
+
+	err := ui.executeWithSetup(embedsConfig, tempDir, false, false, true, "", nil, []string{"{{", "}}"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixTargetMissingFileContext)
+
+	// Zero writes -- not even the first matched file's output -- since the
+	// check runs before the file-processing loop starts.
+	_, statErr := os.Stat(filepath.Join(tempDir, "environments"))
+	assert.True(t, os.IsNotExist(statErr), "no output should be written when the upfront check rejects the scaffold")
+}
+
+// TestExecuteWithSetup_FilesGlobMatrixWithInvalidFileFieldCollides is another
+// regression case for the same substring-match bug: target: references
+// ".file.Unknown", which lexically contains ".file." but is not one of
+// FileContext's two real fields (Path, RelPath) and can never actually
+// differentiate matched files. The upfront check must reject this the same
+// way it rejects a target with no .file reference at all.
+func TestExecuteWithSetup_FilesGlobMatrixWithInvalidFileFieldCollides(t *testing.T) {
+	ui := createTestUI(t)
+	tempDir := t.TempDir()
+
+	scaffoldYAML := `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test-template
+spec:
+  files:
+    - path: "components/**"
+      target: "environments/{{ .matrix.env }}/{{ .file.Unknown }}"
+      matrix:
+        env: [dev]
+`
+
+	embedsConfig := &templates.Configuration{
+		Name: "test-template",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: scaffoldYAML, Permissions: 0o644},
+			{Path: "components/vpc/main.tf", Content: "vpc", Permissions: 0o644},
+			{Path: "components/eks/main.tf", Content: "eks", Permissions: 0o644},
+		},
+	}
+
+	err := ui.executeWithSetup(embedsConfig, tempDir, false, false, true, "", nil, []string{"{{", "}}"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixTargetMissingFileContext)
+
+	_, statErr := os.Stat(filepath.Join(tempDir, "environments"))
+	assert.True(t, os.IsNotExist(statErr), "no output should be written when the upfront check rejects the scaffold")
+}
+
 // TestProcessFileEntry_MatrixExpansionCachedPerSpecPath is a regression test
 // for a real bug: without caching, a directory-level glob entry matching N
 // files calls engine.ExpandMatrix N independent times with identical inputs

@@ -179,7 +179,14 @@ func FileOutputPath(file tmpl.File, spec config.FileSpec) string {
 // colliding write, not the first). Called before any file in the run is
 // written, so this specific misconfiguration fails cleanly with zero
 // partial output.
-func validateDirectoryMatrixTargetsDifferentiate(fileSpecs map[string]config.FileSpec) error {
+//
+// activeDelimiters must be the same delimiter pair the run's actual
+// rendering uses (see executeWithSetup's ResolveDelimiters call) so
+// TargetReferencesFileContext parses spec.Target's template actions with
+// the scaffold's real delimiters instead of always assuming the default
+// "{{"/"}}"  -- a scaffold with custom delimiters would otherwise see every
+// target: parsed as plain text with no actions at all.
+func validateDirectoryMatrixTargetsDifferentiate(fileSpecs map[string]config.FileSpec, activeDelimiters []string) error {
 	matchCounts := make(map[string]int, len(fileSpecs))
 	specByPath := make(map[string]config.FileSpec, len(fileSpecs))
 	for _, spec := range fileSpecs {
@@ -195,7 +202,19 @@ func validateDirectoryMatrixTargetsDifferentiate(fileSpecs map[string]config.Fil
 			continue
 		}
 		spec := specByPath[path]
-		if strings.Contains(spec.Target, ".file.") {
+		// Parses spec.Target's own AST and checks for a genuine .file.Path/
+		// .file.RelPath field-access node, rather than a raw
+		// strings.Contains(spec.Target, ".file.") substring search -- which
+		// would also accept a target that merely contains that literal text
+		// outside any template action (e.g. an output filename like
+		// "output.file.txt"), or an invalid field like ".file.Unknown" that
+		// can never actually differentiate matched files. See
+		// engine.TargetReferencesFileContext's doc comment.
+		referencesFile, err := engine.TargetReferencesFileContext(spec.Target, activeDelimiters)
+		if err != nil {
+			return err
+		}
+		if referencesFile {
 			continue
 		}
 		return errUtils.Build(errUtils.ErrScaffoldMatrixTargetMissingFileContext).
@@ -1503,8 +1522,13 @@ func (ui *InitUI) writeOneOutput(
 	// Use the templating processor to handle file processing. The engine
 	// File's Path is outputTemplate (spec.Target when set, else file.Path
 	// unchanged), so ProcessFile re-renders and writes the same path this
-	// function just resolved above.
+	// function just resolved above. OriginalSourcePath is captured before
+	// Path is overwritten -- it's the file's own path as discovered in the
+	// template's source tree, which determineBaseContent falls back to as a
+	// merge-base candidate when spec.Target has changed since the file was
+	// last generated (see File.OriginalSourcePath's doc comment).
 	engineFile := toEngineFile(file)
+	engineFile.OriginalSourcePath = engineFile.Path
 	engineFile.Path = outputTemplate
 	err := ui.processor.ProcessFile(engineFile, targetPath, force, update, scaffoldConfig, values)
 
@@ -1600,6 +1624,12 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		return fmt.Errorf("failed to decode scaffold hooks: %w", err)
 	}
 
+	// Resolved once, up front, with the same precedence ProcessFile's own
+	// extractDelimiters uses (scaffoldConfig.Spec.Delimiters wins), so this
+	// preflight check, the actual file-body rendering below, and README
+	// rendering all agree on which delimiters a template action uses.
+	activeDelimiters := ResolveDelimiters(delimiters, scaffoldConfig)
+
 	// Resolved before hooks run (not just before writing) so a scaffold with
 	// this specific misconfiguration fails with zero side effects at all --
 	// not even a pre-generate hook -- rather than a partially-generated
@@ -1607,7 +1637,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// for why this check can't wait until a colliding file is actually
 	// reached mid-run.
 	fileSpecs := FileSpecByPath(scaffoldConfig, embedsConfig.Files)
-	if err := validateDirectoryMatrixTargetsDifferentiate(fileSpecs); err != nil {
+	if err := validateDirectoryMatrixTargetsDifferentiate(fileSpecs, activeDelimiters); err != nil {
 		return err
 	}
 
@@ -1631,10 +1661,6 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// real cause(s) via errors.Join instead of only carrying the generic
 	// ErrScaffoldGeneration sentinel.
 	var failureErrs []error
-	// Resolve once, with the same precedence ProcessFile's own extractDelimiters
-	// uses (scaffoldConfig.Spec.Delimiters wins), so this preflight path-skip
-	// check and the actual file-body rendering below never disagree.
-	activeDelimiters := ResolveDelimiters(delimiters, scaffoldConfig)
 	// Tracks every rendered output path across the whole loop (not just
 	// matrix entries) so two files -- matrixed or not -- can never silently
 	// clobber one another's write.
