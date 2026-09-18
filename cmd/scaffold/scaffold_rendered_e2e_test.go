@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +39,18 @@ func requireGitBinaryForRenderedE2E(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git binary not found on PATH; required by go-getter's git clone")
 	}
+}
+
+// readRenderedFile reads a file rendered from the fixture git repo and
+// normalizes CRLF to LF: on Windows runners, Git's core.autocrlf=true
+// rewrites the fixture's LF line endings to CRLF on checkout, which is a
+// checkout-environment detail unrelated to what these tests assert about
+// rendered/merge behavior.
+func readRenderedFile(t *testing.T, path string) string {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return strings.ReplaceAll(string(content), "\r\n", "\n")
 }
 
 func renderedE2EFileURI(path string) string {
@@ -127,9 +140,7 @@ func TestScaffoldGenerate_UpdateStrategyRendered_EndToEnd(t *testing.T) {
 	staticPath := filepath.Join(targetDir, "static.txt")
 	updatePath := filepath.Join(targetDir, "update.txt")
 
-	v1Update, err := os.ReadFile(updatePath)
-	require.NoError(t, err)
-	assert.Equal(t, "v1 content\n", string(v1Update))
+	assert.Equal(t, "v1 content\n", readRenderedFile(t, updatePath))
 
 	firstRecord, err := config.LoadProjectRecord(targetDir)
 	require.NoError(t, err)
@@ -155,9 +166,7 @@ func TestScaffoldGenerate_UpdateStrategyRendered_EndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hand-edited content\n", string(finalStatic), "the hand-edit must survive the rendered-mode update")
 
-	finalUpdate, err := os.ReadFile(updatePath)
-	require.NoError(t, err)
-	assert.Equal(t, "v2 content\n", string(finalUpdate), "the template's own v1->v2 change must be applied")
+	assert.Equal(t, "v2 content\n", readRenderedFile(t, updatePath), "the template's own v1->v2 change must be applied")
 
 	_, gitStatErr = os.Stat(filepath.Join(targetDir, ".git"))
 	assert.True(t, os.IsNotExist(gitStatErr), "rendered mode must never require the target to become a git repository")
@@ -222,9 +231,7 @@ func TestScaffoldGenerate_UpdateStrategyRendered_DryRun_EndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hand-edited content\n", string(finalStatic), "--dry-run must never write to the target directory")
 
-	finalUpdate, err := os.ReadFile(updatePath)
-	require.NoError(t, err)
-	assert.Equal(t, "v1 content\n", string(finalUpdate), "--dry-run must never write to the target directory")
+	assert.Equal(t, "v1 content\n", readRenderedFile(t, updatePath), "--dry-run must never write to the target directory")
 
 	// The dry-run preview must never persist a new project record either.
 	record, err := config.LoadProjectRecord(targetDir)

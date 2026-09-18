@@ -3,6 +3,7 @@ package storage
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -97,6 +98,13 @@ func TestRenderedBaseStorage_LoadBase_RejectsPathTraversal(t *testing.T) {
 		{name: "traversal after a real segment", filePath: "nested/../../secret.txt"},
 		{name: "traversal-only path", filePath: ".."},
 		{name: "absolute path", filePath: "/etc/passwd"},
+		// Windows-rooted paths must be rejected everywhere, not only when
+		// actually running on Windows: filepath.IsAbs alone is native-OS-only
+		// (it doesn't consider a Windows-rooted path absolute when running on
+		// Unix, or a Unix-rooted path absolute when running on Windows), but
+		// filePath here can originate from a manifest authored on either OS.
+		{name: "windows-rooted path (backslash)", filePath: `\Windows\System32\config`},
+		{name: "windows-rooted path (drive letter)", filePath: `C:\Windows\System32\config`},
 	}
 
 	for _, tt := range tests {
@@ -115,15 +123,30 @@ func TestRenderedBaseStorage_LoadBase_RejectsPathTraversal(t *testing.T) {
 
 func TestRenderedBaseStorage_LoadBase_RootUnreadable(t *testing.T) {
 	// A root that isn't a directory at all (e.g. a plain file in its place)
-	// surfaces as a real read error, not a "not found" result -- distinct
-	// from a missing individual file within a valid root.
+	// surfaces as a real read error on Unix (ENOTDIR), not a "not found"
+	// result -- distinct from a missing individual file within a valid root.
+	//
+	// On Windows, the same on-disk condition (a path component that's a file
+	// rather than a directory) surfaces as ERROR_PATH_NOT_FOUND, which Go's
+	// os package maps to os.ErrNotExist -- indistinguishable, at the
+	// os.ReadFile error-value level, from a genuinely missing file. That's a
+	// real Windows syscall-mapping difference, not a LoadBase bug, so this
+	// precondition can't hold the same way on both OSes; assert whichever
+	// outcome each OS actually produces.
 	root := t.TempDir()
 	blockingFile := filepath.Join(root, "blocking")
 	require.NoError(t, os.WriteFile(blockingFile, []byte("x"), 0o644))
 
 	storage := NewRenderedBaseStorage(blockingFile)
 
-	_, found, err := storage.LoadBase("config.yaml")
+	content, found, err := storage.LoadBase("config.yaml")
+
+	if runtime.GOOS == "windows" {
+		require.NoError(t, err)
+		assert.False(t, found)
+		assert.Empty(t, content)
+		return
+	}
 
 	require.Error(t, err)
 	assert.False(t, found)
