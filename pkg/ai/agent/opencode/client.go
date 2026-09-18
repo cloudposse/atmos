@@ -137,8 +137,12 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 
 	// Point opencode at a temp config containing the pass-through MCP servers, cleaned up
 	// after the subprocess exits. Writing per-call keeps multi-turn sessions correct and
-	// leaves no state behind.
-	cleanup := c.applyMCPConfig(cmd)
+	// leaves no state behind. If MCP config can't be applied we fail instead of silently
+	// running without the servers, env values, and auth wrappers the user configured.
+	cleanup, err := c.applyMCPConfig(cmd)
+	if err != nil {
+		return "", err
+	}
 	defer cleanup()
 
 	var stdout, stderr bytes.Buffer
@@ -283,18 +287,19 @@ func (c *Client) writeTempMCPConfig() (string, error) {
 }
 
 // applyMCPConfig writes a temp MCP config (when servers are configured) and points the
-// subprocess at it via OPENCODE_CONFIG. It returns a cleanup func the caller must defer.
-func (c *Client) applyMCPConfig(cmd *exec.Cmd) func() {
+// subprocess at it via OPENCODE_CONFIG. It returns a cleanup func the caller must defer, and
+// an error if the config could not be written — callers must not run opencode in that case,
+// since the configured MCP servers, env values, and auth wrappers would be silently missing.
+func (c *Client) applyMCPConfig(cmd *exec.Cmd) (func(), error) {
 	if !c.hasMCPServers {
-		return func() {}
+		return func() {}, nil
 	}
 	configPath, err := c.writeTempMCPConfig()
 	if err != nil {
-		ui.Warning(fmt.Sprintf("Failed to write MCP config: %s", err))
-		return func() {}
+		return func() {}, err
 	}
 	cmd.Env = append(cmd.Env, ConfigEnvVar+"="+configPath)
-	return func() { removeTempConfig(configPath) }
+	return func() { removeTempConfig(configPath) }, nil
 }
 
 // removeTempConfig removes a generated temp config file, ignoring a missing file.

@@ -3,6 +3,7 @@ package opencode
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -257,6 +258,32 @@ func TestSendMessage_WithMCP(t *testing.T) {
 	out, err := c.SendMessage(t.Context(), "hi")
 	require.NoError(t, err)
 	assert.Equal(t, "ok", out)
+}
+
+// TestSendMessage_MCPConfigError verifies that when the MCP config can't be written, SendMessage
+// fails (and never runs opencode) instead of silently proceeding without the configured servers.
+func TestSendMessage_MCPConfigError(t *testing.T) {
+	// Force os.CreateTemp to fail by pointing every temp-dir env var at a nonexistent directory
+	// (TMPDIR on Unix, TMP/TEMP on Windows).
+	bogus := filepath.Join(t.TempDir(), "does-not-exist")
+	t.Setenv("TMPDIR", bogus)
+	t.Setenv("TMP", bogus)
+	t.Setenv("TEMP", bogus)
+
+	// If the subprocess somehow ran, this canned stdout would make it look successful — so a
+	// failure here proves we bailed out before cmd.Run().
+	t.Setenv(fakeStdoutEnv, "should-not-be-returned\n")
+
+	c := &Client{
+		binaryPath:    testExecutable(t),
+		model:         ProviderName,
+		hasMCPServers: true,
+		mcpServers:    map[string]schema.MCPServerConfig{"aws-docs": {Command: "uvx", Args: []string{"docs@latest"}}},
+	}
+	out, err := c.SendMessage(t.Context(), "hi")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMCPConfigWriteFailed)
+	assert.Empty(t, out)
 }
 
 func TestSendMessageWithHistory(t *testing.T) {
