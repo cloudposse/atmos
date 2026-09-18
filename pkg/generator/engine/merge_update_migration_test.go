@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // commitFile creates a git repository under a fresh temp dir, writes relPath
@@ -162,4 +165,56 @@ func TestProcessFileUpdate_MigrationFallbackAlsoMissingStillSkips(t *testing.T) 
 	result, err := os.ReadFile(newFullPath)
 	require.NoError(t, err)
 	assert.Equal(t, oursContent, string(result), "should stay untouched when no base is found under either path")
+}
+
+// erroringOriginalPathLoader is a baseContentLoader test double that reports
+// "not found" for every path except one, where it returns a genuine error --
+// simulating a git/storage read failure (as opposed to "no base exists here")
+// specifically for the fallback lookup at File.OriginalSourcePath.
+type erroringOriginalPathLoader struct {
+	errorPath string
+	err       error
+}
+
+func (e *erroringOriginalPathLoader) LoadBase(filePath string) (string, bool, error) {
+	if filePath == e.errorPath {
+		return "", false, e.err
+	}
+	return "", false, nil
+}
+
+// TestDetermineBaseContent_OriginalPathLookupErrorPropagates is a regression
+// test for CodeRabbit finding #3 on PR #3187: when the fallback lookup at
+// File.OriginalSourcePath (added to recover the merge base after a target:
+// migration) fails with a genuine storage/read error -- not merely "no base
+// found at that path" -- determineBaseContentMigrationFallback must propagate
+// that error as an `--update` failure, exactly like the primary current-path
+// lookup does a few lines above. Before this fix, a non-nil error here was
+// treated identically to "found=false": the file was silently left unchanged
+// with only a warning, hiding a real failure to read the merge base.
+func TestDetermineBaseContent_OriginalPathLookupErrorPropagates(t *testing.T) {
+	const (
+		relativePath = "environments/dev/vpc/main.tf"
+		originalPath = "components/vpc/main.tf"
+	)
+
+	wantErr := errors.New("simulated storage read failure")
+
+	processor := NewProcessor()
+	processor.targetPath = t.TempDir()
+	processor.baseStorage = &erroringOriginalPathLoader{errorPath: originalPath, err: wantErr}
+
+	file := File{
+		Path:               relativePath,
+		OriginalSourcePath: originalPath,
+	}
+	existingPath := filepath.Join(processor.targetPath, relativePath)
+
+	content, shouldSkip, err := processor.determineBaseContent(file, existingPath)
+
+	require.Error(t, err, "a genuine storage error at the original path must propagate, not be swallowed as 'no base found'")
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+	assert.ErrorIs(t, err, wantErr)
+	assert.False(t, shouldSkip, "shouldSkip must not be set on the error path")
+	assert.Empty(t, content)
 }

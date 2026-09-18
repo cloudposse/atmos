@@ -371,24 +371,41 @@ func (p *Processor) determineBaseContentMigrationFallback(file File, relativePat
 	}
 
 	migratedBase, migratedFound, migErr := p.baseStorage.LoadBase(file.OriginalSourcePath)
-	if migErr == nil && migratedFound {
+	switch {
+	case migErr != nil:
+		// The fallback lookup itself failed (e.g. a real git/storage read
+		// error) -- this is not "no base exists at the original path", so it
+		// must not be folded into the "treat as user-added" case below.
+		// Propagate a proper contextual error, mirroring how the primary
+		// current-path lookup above handles its own LoadBase error.
+		return "", false, errUtils.Build(errUtils.ErrThreeWayMerge).
+			WithCause(migErr).
+			WithExplanationf("Failed to load the merge base for `%s` at its original path", file.Path).
+			WithHint("Verify the merge base is available: for `--update-strategy=tracked`, check the base ref exists (`git show <base-ref>`); for `--update-strategy=rendered`, check the pristine re-render of the recorded ref succeeded").
+			WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
+			WithContext("file_path", file.Path).
+			WithContext("relative_path", relativePath).
+			WithContext("original_path", file.OriginalSourcePath).
+			WithExitCode(2).
+			Err()
+	case migratedFound:
 		log.Warn(
 			"scaffold --update: recovered merge base from the file's original path; target: appears to have changed since this file was last generated",
 			"current_path", relativePath,
 			"original_path", file.OriginalSourcePath,
 		)
 		return migratedBase, false, nil
+	default:
+		// Nothing found under either the current or the original path. Still
+		// treated as user-added (never silently mutated), but this is now an
+		// ambiguous case -- possibly a genuine migration with no git history
+		// under either path yet (e.g. the first `--update` after target:
+		// changed hasn't been committed) -- so warn instead of staying silent.
+		log.Warn(
+			"scaffold --update: no merge base found at this file's current or original path; treating it as user-added and leaving it untouched -- if target: changed recently, future template updates will not be applied to this file automatically",
+			"current_path", relativePath,
+			"original_path", file.OriginalSourcePath,
+		)
+		return "", true, nil
 	}
-
-	// Nothing found under either the current or the original path. Still
-	// treated as user-added (never silently mutated), but this is now an
-	// ambiguous case -- possibly a genuine migration with no git history
-	// under either path yet (e.g. the first `--update` after target:
-	// changed hasn't been committed) -- so warn instead of staying silent.
-	log.Warn(
-		"scaffold --update: no merge base found at this file's current or original path; treating it as user-added and leaving it untouched -- if target: changed recently, future template updates will not be applied to this file automatically",
-		"current_path", relativePath,
-		"original_path", file.OriginalSourcePath,
-	)
-	return "", true, nil
 }
