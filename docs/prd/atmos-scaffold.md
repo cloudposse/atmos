@@ -67,6 +67,22 @@ and `pkg/generator/` for the source of truth on current behavior.
   registry reference, pulled via the same `pkg/oci` client `atmos vendor
   pull` and JIT component-source provisioning use. See "Phase 3: Remote
   Templates" below.
+- `--update-strategy=tracked|rendered` — controls where `--update`'s 3-way
+  merge *base* comes from, independently of `--merge-strategy`/`--merge-driver`.
+  `tracked` (default, unchanged) reads it from the target's own Git history at
+  `--base-ref`. `rendered` instead re-renders the template at the ref that
+  produced what's currently on disk (recorded in `.atmos/scaffold.yaml`, along
+  with that generation's own answers), so `--update` works with no dependency
+  on the target being a Git repository at all. `rendered` needs two separate
+  things: the template itself must carry a `scaffold.yaml` (so the old ref's
+  fields can be resolved), and the target must already carry a prior
+  generation's `.atmos/scaffold.yaml` record (a different file, at a
+  different path — so that generation's own answers are recoverable). Plain
+  `--set`-only templates aren't supported yet, since there's no persisted
+  record of what values a prior generation used. See
+  [PR #2989](https://github.com/cloudposse/atmos/pull/2989) for the base-ref
+  pinning this builds on and [PR #3047](https://github.com/cloudposse/atmos/pull/3047)
+  for the conflict-marker correctness fixes it depends on.
 
 **Still not implemented** (see "Future Enhancements" below):
 - ❌ Remote-template caching/version pinning beyond a single `--ref`
@@ -213,8 +229,9 @@ atmos scaffold
     --force, -f                 # Overwrite existing files
     --dry-run                   # Preview without writing (with --update, drives the real merge and reports would-create/would-update/conflicts; skips only the disk write)
     --set key=value             # Set template variables
-    --update                    # Update an existing target directory via a 3-way merge (requires a git base; see --base-ref)
-    --base-ref                  # Git ref to use as the 3-way merge base with --update (defaults to HEAD)
+    --update                    # Update an existing target directory via a 3-way merge
+    --update-strategy           # Where --update's merge base comes from: tracked (default, needs a git base; see --base-ref) or rendered (no git dependency; see the "--update-strategy" note above)
+    --base-ref                  # Git ref to use as the 3-way merge base with --update-strategy=tracked (defaults to HEAD)
     --merge-strategy            # Conflict resolution for --update: manual (default), ours, theirs
     --max-changes               # Change threshold (not implemented — no CLI flag; internal default is hardcoded)
 
@@ -938,12 +955,22 @@ skill's OCI auth documentation rather than duplicating it here. A
 `source:` exactly like a git source; `source:` is a freeform string with no
 scheme-specific schema.
 
-`--git`, `--base-ref`, and `--update` behave the same regardless of source
-type, OCI included: `--git` only initializes a git repository in the
-*generated output directory* after generation completes, and `--update`'s
-3-way-merge base is always read from that output directory's own git history
-(`pkg/generator/engine/merge_update.go`'s `SetupGitStorage`), never by
-re-fetching or re-checking-out the template source at a ref.
+`--git` and `--base-ref` behave the same regardless of source type, OCI
+included: `--git` only initializes a git repository in the *generated output
+directory* after generation completes, and `--base-ref` only ever means
+"a ref in that output directory's own git history."
+
+`--update`'s merge base depends on `--update-strategy`, and here OCI and git
+sources genuinely differ under `rendered`. `tracked` (the default) behaves
+identically across source types: the base is always read from the output
+directory's own git history (`pkg/generator/engine/merge_update.go`'s
+`SetupGitStorage`), never by re-fetching or re-checking-out the template
+source at a ref. `rendered` re-fetches the template source at the exact ref
+recorded from the original generation — a resolved commit SHA for git
+sources, a resolved manifest digest for OCI sources (`oci.PinDigest`,
+`Configuration.ResolvedRef`) — rather than whatever mutable branch/tag the
+source string names, so a later re-render reconstructs the same content even
+if the tag has since moved.
 
 ## CLI Usage Examples
 
