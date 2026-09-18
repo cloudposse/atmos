@@ -74,6 +74,11 @@ func (Build) Binary(target, version string) error {
 	if err != nil {
 		return err
 	}
+	// CI can produce multiple architectures without overwriting the native
+	// binary used by the rest of the build job. The default path is unchanged.
+	if output := os.Getenv("ATMOS_BUILD_OUTPUT"); output != "" {
+		targetConfig.Output = output
+	}
 
 	baseEnv := buildBaseEnv(root)
 
@@ -88,8 +93,12 @@ func (Build) Binary(target, version string) error {
 	if err := runGoModDownload(root, baseEnv); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(root, buildOutputDir), directoryPermissions); err != nil {
-		return fmt.Errorf("mage: mkdir %s: %w", buildOutputDir, err)
+	output := targetConfig.Output
+	if !filepath.IsAbs(output) {
+		output = filepath.Join(root, output)
+	}
+	if err := os.MkdirAll(filepath.Dir(output), directoryPermissions); err != nil { //nolint:gosec // The local build caller intentionally chooses the output path, including outside the repo.
+		return fmt.Errorf("mage: mkdir output directory: %w", err)
 	}
 
 	buildEnv := append([]string{}, baseEnv...)

@@ -27,6 +27,12 @@ on:
       - ".github/workflows/setup-go-cache-warmup.yml"
       - ".github/actions/setup-go-cache/**"
 
+concurrency:
+  group: setup-go-cache-warmup
+  cancel-in-progress: false
+
+cache-mode: write
+
 permissions:
   contents: read
 
@@ -39,6 +45,7 @@ env:
 
 jobs:
   cache-warmup:
+    if: github.ref == 'refs/heads/main'
     name: Cache warmup (${{ matrix.target }})
     # Real compiles now (see the build steps below), not just a module
     # download: a genuinely cold day (Go version bump) rebuilds everything.
@@ -58,12 +65,6 @@ jobs:
             target: windows
           - os: macos-latest
             target: macos
-          # Build (macos-intel) uses this Intel runner and has no other warm
-          # source, so without a nightly warmup here its Go build cache is
-          # always cold — risking the 30m build timeout that a warm ARM
-          # `macos` cache comfortably avoids.
-          - os: macos-15-intel
-            target: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
       - name: Harden Runner
@@ -136,13 +137,12 @@ jobs:
       # its agent before it has restored the runner's DNS settings.
       - name: Guard DNS against the harden-runner post-step race
         if: matrix.target == 'windows'
-        uses: ./.github/actions/windows-dns-guard
+        uses: $/.github/actions/windows-dns-guard
 
-      # Restores yesterday's entry (making today's compiles incremental) and
-      # pins GOCACHE/GOMODCACHE so the save step below archives the same
-      # paths the restore populated.
+      # Reuse module downloads and pin cache paths. Rebuild object caches below
+      # so each saved generation contains only the current graph and flags.
       - name: Set up Go
-        uses: ./.github/actions/setup-go-cache
+        uses: $/.github/actions/setup-go-cache
         id: go
 
       - name: Set up Atmos
@@ -152,7 +152,7 @@ jobs:
           install-wrapper: false
 
       - name: Get deps
-        uses: ./.github/actions/go-mod-download-retry
+        uses: $/.github/actions/go-mod-download-retry
 
       # Keep the race planner's small GOCACHE namespace separate from the
       # full build/race cache below. Consumers restore this before running
@@ -166,6 +166,11 @@ jobs:
           ATMOS_TEST_RACE_SHARD_SEED: ${{ github.run_id }}
         run: go tool mage test:racematrix
 
+      # Build a fresh generation so superseded object files do not accumulate
+      # indefinitely in every restore. Module downloads remain reusable.
+      - name: Clear superseded Go build objects
+        run: go clean -cache
+
       # Warm the same cache namespaces the real jobs compile in. Flags must
       # match the real invocations or Go's action IDs differ and the warm
       # entries go unused: atmos builds with CGO_ENABLED=0 + GOFIPS140=latest
@@ -176,17 +181,31 @@ jobs:
           GOFIPS140: latest
         run: go build ./...
 
+      - name: Warm Intel cross-compilation on the ARM Mac
+        if: matrix.target == 'macos'
+        env:
+          CGO_ENABLED: "0"
+          GOFIPS140: latest
+          ATMOS_BUILD_OUTPUT: ${{ runner.temp }}/macos-intel/atmos
+        run: go tool mage build:binary macos-intel test
+
       # The same precompile the Build job runs, so the large test binaries'
       # compilation (coverage-instrumented on their own action-ID namespace)
-      # is warm too. macos-intel skips it exactly like the Build job does
-      # (its only consumer, the k3s macOS job, runs no acceptance shards).
+      # is warm too. Intel consumers only need the CLI cross-compiled above.
       - name: Warm the acceptance test binaries
-        if: matrix.target != 'macos-intel'
         run: go tool mage acceptance:precompile "${{ matrix.target }}"
+
+      # Match Floci's pure-Go test namespace so both groups reuse this compile.
+      - name: Warm Floci test compilation
+        if: matrix.target == 'linux'
+        env:
+          CGO_ENABLED: "0"
+          GOFIPS140: latest
+        run: go test -c -o "${RUNNER_TEMP}/floci.test" ./tests
 
       # The race job compiles ~400 packages with -race and CGO_ENABLED=1
       # (its checks need cgo; see the race job in test.yml), a third distinct
-      # cache namespace, and is the slowest single job in the Tests workflow.
+      # cache namespace. Keep those objects out of regular job restores.
       # Warm it on the linux leg only — that is the only OS the race job runs
       # on. libudev-dev mirrors the race job's own build-deps step.
       - name: Install Linux build dependencies (libudev-dev for the race-namespace warm)
@@ -212,12 +231,13 @@ jobs:
         env:
           CGO_ENABLED: "1"
           GOFIPS140: latest
+          GOCACHE: ${{ runner.temp }}/race-go-build
         run: go build -race ./...
 
       # The one and only save of the go-cache-* lineage. The run id makes the
       # key unique so every warmup lands a fresh entry (GitHub cache keys are
       # immutable); consumers pick the newest via restore-keys. Old entries
-      # age out through GitHub's 7-day-unused eviction.
+      # are pruned after successful saves, retaining two per cache lineage.
       - name: Save the Go build and module caches
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -234,3 +254,27 @@ jobs:
             ${{ runner.temp }}/race-plan-go-build
             ${{ env.GOMODCACHE }}
           key: race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+
+      - name: Save the race build and module caches
+        if: matrix.target == 'linux'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ${{ runner.temp }}/race-go-build
+            ${{ env.GOMODCACHE }}
+          key: race-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+
+  prune:
+    cache-mode: none
+    name: Retain two successful Go cache generations
+    needs: cache-warmup
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: $/.github/actions/prune-go-caches
+        with:
+          github-token: ${{ github.token }}
+          dry-run: 'false'

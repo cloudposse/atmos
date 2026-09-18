@@ -1,0 +1,162 @@
+# Keep execution timeouts and dependency policy in the calling workflow.
+name: ci-build
+description: Shared build steps for standalone CI workflows.
+inputs:
+  matrix:
+    description: JSON platform and fixture matrix for this job.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Harden Runner
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && env.CI_SOURCE_DRAFT == 'true' ) }}
+      uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      with:
+        egress-policy: block
+        allowed-endpoints: >
+          api.github.com:443
+          get.helm.sh:443
+          github.com:443
+          raw.githubusercontent.com:443
+          rekor.sigstore.dev:443
+          release-assets.githubusercontent.com:443
+          releases.hashicorp.com:443
+          tuf-repo-cdn.sigstore.dev:443
+          us.i.posthog.com:443
+          proxy.golang.org:443
+          sum.golang.org:443
+          storage.googleapis.com:443
+          google.golang.org:443
+          modernc.org:443
+          www.msftconnecttest.com:443
+          ipv6.msftconnecttest.com:443
+          www.msftncsi.com:443
+          ipv6.msftncsi.com:443
+          time.windows.com:443
+          client.wns.windows.com:443
+          settings-win.data.microsoft.com:443
+          *.events.data.microsoft.com:443
+          *.update.microsoft.com:443
+          ecs.office.com:443
+          pti.store.microsoft.com:443
+          login.live.com:443
+          go.microsoft.com:443
+          www.microsoft.com:443
+          ocsp.sectigo.com:80
+          ocsp.sectigo.com:443
+          crl.sectigo.com:80
+          crl.sectigo.com:443
+          *.apple.com:443
+          *.aaplimg.com:443
+          *.mzstatic.com:443
+          *.icloud.com:443
+          *.apple-dns.net:443
+          ocsp.usertrust.com:80
+          ocsp.digicert.com:80
+          *.pool.ntp.org:123
+    - name: Announce build target
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
+      env:
+        BUILD_RUNNER: ${{ fromJSON(inputs.matrix).os }}
+      run: echo "Building on $BUILD_RUNNER"
+      shell: bash
+    - name: Check out code into the Go module directory
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      with:
+        persist-credentials: false
+        ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+    - name: Guard DNS against the harden-runner post-step race
+      if: fromJSON(inputs.matrix).target == 'windows' && ! (env.CI_SOURCE_DRAFT == 'true')
+      uses: $/.github/actions/windows-dns-guard
+    - name: Set up Go
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
+      uses: $/.github/actions/setup-go-cache
+      id: go
+    - name: Set up Atmos bootstrap
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
+      uses: $/.github/actions/setup-atmos-bootstrap
+      with:
+        atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+    - name: Get dependencies
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
+      shell: bash
+      run: |
+        # go mod download hits the network (proxy.golang.org, falling back to
+        # a direct github.com clone for modules it doesn't index) and has no
+        # built-in retry. A transient DNS resolution failure on the hosted
+        # runner otherwise fails this whole build matrix leg and cascades into
+        # skipped downstream jobs (e.g. k3s-required's "Check k3s matrix
+        # result" gate). `atmos build deps` (.atmos.d/build.yaml) wraps it
+        # with a retry policy instead of hand-rolling a shell loop here.
+        atmos build deps
+    - name: Build
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
+      shell: bash
+      env:
+        BUILD_TARGET: ${{ fromJSON(inputs.matrix).target }}
+      run: |
+        atmos build binary --target="$BUILD_TARGET" --version=test
+    - name: Version
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
+      shell: bash
+      env:
+        BUILD_TARGET: ${{ fromJSON(inputs.matrix).target }}
+      run: |
+        atmos build version --target="$BUILD_TARGET"
+    - name: Pre-compile acceptance test binaries
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
+      shell: bash
+      env:
+        BUILD_TARGET: ${{ fromJSON(inputs.matrix).target }}
+      run: go tool mage acceptance:precompile "$BUILD_TARGET"
+    - name: Verify acceptance shard plan
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
+      shell: bash
+      env:
+        BUILD_TARGET: ${{ fromJSON(inputs.matrix).target }}
+      run: go tool mage acceptance:verify "$BUILD_TARGET" "$TEST_SHARD_COUNT"
+    # Runs with the pinned bootstrap atmos (still first on PATH here, from "Set up
+    # Atmos bootstrap" above), not the freshly built PR binary below -- this step
+    # carries GITHUB_TOKEN, and the PR binary must never read it. Keep this before
+    # the PATH swap.
+    - name: Install the CI toolchain (atmos toolchain install from .tool-versions; saves the cache)
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
+      uses: $/.github/actions/ci-toolchain
+      with:
+        cache: restore-and-save
+        github-token: ${{ github.token }}
+    - name: Put the freshly built atmos on PATH for subsequent steps
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
+      shell: bash
+      run: echo "${GITHUB_WORKSPACE}/build" >> "$GITHUB_PATH"
+    - name: Install the stack-declared Helm plugins
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true') ) }}
+      working-directory: tests/fixtures/scenarios/helm-plugin-install
+      shell: bash
+      run: atmos helm plugin install --component ci-plugins --stack dev
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      if: ${{ ! ( fromJSON(inputs.matrix).target == 'windows' && (env.CI_SOURCE_DRAFT == 'true')  ) }}
+      with:
+        overwrite: true
+        name: build-artifacts-${{ fromJSON(inputs.matrix).target }}
+        path: |
+          ./build/
+    - name: Cross-compile Intel macOS binary
+      if: fromJSON(inputs.matrix).target == 'macos'
+      shell: bash
+      env:
+        ATMOS_BUILD_OUTPUT: ${{ runner.temp }}/macos-intel/atmos
+      run: |
+        atmos build binary --target=macos-intel --version=test
+        file "$ATMOS_BUILD_OUTPUT" | tee "$RUNNER_TEMP/macos-intel-file.txt"
+        grep -q 'Mach-O 64-bit executable x86_64' "$RUNNER_TEMP/macos-intel-file.txt"
+    - name: Upload Intel macOS artifact
+      if: fromJSON(inputs.matrix).target == 'macos'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        overwrite: true
+        name: build-artifacts-macos-intel
+        path: ${{ runner.temp }}/macos-intel/atmos
+        if-no-files-found: error

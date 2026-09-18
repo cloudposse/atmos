@@ -1,0 +1,61 @@
+name: CI Build macOS
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths-ignore:
+      - README.md
+  merge_group:
+    types:
+      - checks_requested
+  push:
+    branches:
+      - main
+      - release/v*
+    paths-ignore:
+      - .github/**
+      - docs/**
+      - examples/**
+      - test/**
+  workflow_dispatch: null
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+cache-mode: write
+
+permissions:
+  checks: read
+  contents: read
+  packages: read
+  pull-requests: read
+  actions: read
+env:
+  ATMOS_BOOTSTRAP_VERSION: 1.223.0
+  HELMFILE_UPGRADE_NOTICE_DISABLED: 'true'
+  TEST_SHARD_COUNT: '10'
+  RACE_SHARD_COUNT: '4'
+  GOPROXY: https://proxy.golang.org
+  CI_SOURCE_REVISION: ${{ github.sha }}
+  CI_SOURCE_EVENT: ${{ github.event_name }}
+  CI_SOURCE_DRAFT: ${{ github.event.pull_request.draft || false }}
+  CI_BUILD_RUN_ID: ''
+jobs:
+  build-macos:
+    name: "Build (${{ matrix.target }})${{ vars.CI_SPLIT_WORKFLOWS != 'true' && ' (inactive)' || '' }}"
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        include:
+          - os: macos-15
+            target: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: $/.github/actions/ci-build
+        with:
+          matrix: ${{ toJSON(matrix) }}
+    if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' }}
+run-name: CI revision ${{ github.sha }} base ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha ||
+  github.event.before || github.sha }}

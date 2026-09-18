@@ -28,16 +28,10 @@ jobs:
             api.github.com:443
             github.com:443
 
-      - name: Checkout repository
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-          # Checkout the base branch (not the PR head) for security.
-          # We only need the action definition from .github/actions/pr-sizer/
-          ref: ${{ github.base_ref }}
-
+      # pull_request_target resolves this action at the trusted workflow commit.
+      # The action uses only API metadata, so no checkout is needed.
       - name: PR Size Labeler
-        uses: ./.github/actions/pr-sizer
+        uses: $/.github/actions/pr-sizer
         with:
           xs_label: "size/xs"
           xs_max_size: "10"

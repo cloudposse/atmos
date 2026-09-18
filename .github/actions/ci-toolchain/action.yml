@@ -36,7 +36,7 @@ runs:
     - name: Restore the Atmos toolchain cache
       if: inputs.cache != 'none'
       continue-on-error: true
-      uses: ./actions/cache
+      uses: $/actions/cache
       with:
         mode: ${{ inputs.cache }}
 

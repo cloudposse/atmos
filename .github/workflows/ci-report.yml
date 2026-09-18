@@ -1,0 +1,63 @@
+# Trusted API-only reporter: no checkout, test artifacts, PR scripts, or PR binaries.
+# Every delivery reconciles all platforms, so coalesced pending events lose no results.
+name: CI Report
+on:
+  workflow_run:
+    workflows:
+      - CI Build Linux
+      - CI Build macOS
+      - CI Build Windows
+      - CI Test Go
+      - CI Test Linux
+      - CI Test macOS
+      - CI Test Windows
+      - CI Test Floci
+      - CI Test k3s Linux
+      - CI Test k3s macOS
+      - CI Test Integrations
+    types:
+      - in_progress
+      - completed
+cache-mode: none
+
+permissions: {}
+jobs:
+  source:
+    if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      active: ${{ steps.source.outputs.active }}
+      revision: ${{ steps.source.outputs.revision }}
+    steps:
+      - id: source
+        uses: $/.github/actions/ci-pipeline
+        with:
+          mode: resolve
+          run-id: ${{ github.event.workflow_run.id }}
+          attempt: ${{ github.event.workflow_run.run_attempt }}
+          github-token: ${{ github.token }}
+  report:
+    needs:
+      - source
+    if: ${{ needs.source.outputs.active == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ci-report-${{ needs.source.outputs.revision }}
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      checks: write
+    steps:
+      - uses: $/.github/actions/ci-pipeline
+        with:
+          mode: report
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}

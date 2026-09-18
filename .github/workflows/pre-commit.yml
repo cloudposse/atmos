@@ -38,15 +38,12 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Atmos
-        uses: ./.github/actions/setup-atmos-bootstrap
+        uses: $/.github/actions/setup-atmos-bootstrap
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: go.mod
-          cache: true
+        uses: $/.github/actions/setup-go-cache
 
       - name: Install Go tools
         run: |
@@ -68,7 +65,7 @@ jobs:
       # fetches (they only hit blocked vanity hosts under harden-runner's block
       # mode), so transient proxy errors are handled by retrying instead.
       - name: Download Go module dependencies
-        uses: ./.github/actions/go-mod-download-retry
+        uses: $/.github/actions/go-mod-download-retry
 
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0

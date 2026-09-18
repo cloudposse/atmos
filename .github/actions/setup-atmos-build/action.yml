@@ -15,10 +15,10 @@ runs:
     # this previously pinned setup-go v6 while the rest of the repo pins
     # v5.6.0, silently forking the cache lineage.
     - name: Set up Go
-      uses: ./.github/actions/setup-go-cache
+      uses: $/.github/actions/setup-go-cache
 
     - name: Set up Atmos bootstrap
-      uses: ./.github/actions/setup-atmos-bootstrap
+      uses: $/.github/actions/setup-atmos-bootstrap
       with:
         atmos-version: ${{ inputs.atmos-bootstrap-version }}
 

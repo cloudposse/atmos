@@ -4,6 +4,7 @@ package githubactions
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,10 +42,11 @@ func (Validator) Validate(_ context.Context, request civalidate.Request) (valida
 
 	var renderedDiagnostics bytes.Buffer
 	linter, err := actionlint.NewLinter(&renderedDiagnostics, &actionlint.LinterOptions{
-		Color:      actionlint.ColorOptionKindNever,
-		Shellcheck: "",
-		Pyflakes:   "",
-		WorkingDir: request.Root,
+		Color:          actionlint.ColorOptionKindNever,
+		Shellcheck:     "",
+		Pyflakes:       "",
+		WorkingDir:     request.Root,
+		OnRulesCreated: withSelfReferences,
 	})
 	if err != nil {
 		return validation.Report{}, err
@@ -74,6 +76,14 @@ func (Validator) Validate(_ context.Context, request civalidate.Request) (valida
 	}
 	if err != nil {
 		return validation.Report{}, err
+	}
+
+	if compatible, changed := cacheModeDiagnostics(request.Root, errors); changed {
+		errors = compatible
+		renderedDiagnostics.Reset()
+		if err := renderWorkflowDiagnostics(&renderedDiagnostics, request.Root, errors); err != nil {
+			return validation.Report{}, err
+		}
 	}
 
 	report.Diagnostics = make([]validation.Diagnostic, 0, len(errors))
@@ -118,4 +128,20 @@ func workflowFileCount(dir string) (int, error) {
 		return nil
 	})
 	return count, err
+}
+
+// renderWorkflowDiagnostics reads the original YAML so annotations retain their source context.
+func renderWorkflowDiagnostics(output *bytes.Buffer, root string, diagnostics []*actionlint.Error) error {
+	for _, diagnostic := range diagnostics {
+		path := diagnostic.Filepath
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(root, path)
+		}
+		source, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read workflow diagnostic source %s: %w", path, err)
+		}
+		diagnostic.PrettyPrint(output, source)
+	}
+	return nil
 }

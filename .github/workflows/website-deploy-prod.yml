@@ -104,10 +104,10 @@ jobs:
       # INTERNAL_ERROR; received from peer") aborts it outright -- see
       # docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
       - name: Download Go modules (with retry)
-        uses: ./.github/actions/go-mod-download-retry
+        uses: $/.github/actions/go-mod-download-retry
 
       - name: Publish atmos-manifest schema
-        uses: ./.github/actions/publish-atmos-schema
+        uses: $/.github/actions/publish-atmos-schema
         with:
           schema-name: atmos-manifest
           subcommand: stack schema
@@ -115,7 +115,7 @@ jobs:
           release-tag: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
 
       - name: Publish atmos-config schema
-        uses: ./.github/actions/publish-atmos-schema
+        uses: $/.github/actions/publish-atmos-schema
         with:
           schema-name: atmos-config
           subcommand: config schema
@@ -144,7 +144,7 @@ jobs:
       # role already has cloudfront:CreateInvalidation on this distribution
       # (infra-live github-actions-iam-policy.tf).
       - name: Copy Website to S3 Bucket
-        uses: ./.github/actions/s3-deploy
+        uses: $/.github/actions/s3-deploy
         with:
           local-dir: website/build
           s3-uri: s3://${{ env.S3_BUCKET_NAME }}/

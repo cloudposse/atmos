@@ -33,7 +33,7 @@ jobs:
           persist-credentials: false
 
       - name: Check modified CLAUDE.md size
-        uses: ./.github/actions/check-claude-md-size
+        uses: $/.github/actions/check-claude-md-size
         with:
           file-patterns: 'CLAUDE.md'
           max-size: 40000
@@ -57,7 +57,7 @@ jobs:
           persist-credentials: false
 
       - name: Check modified agent files
-        uses: ./.github/actions/check-claude-md-size
+        uses: $/.github/actions/check-claude-md-size
         with:
           file-patterns: '.claude/agents/*.md'
           max-size: 25000

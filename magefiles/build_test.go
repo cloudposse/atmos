@@ -412,6 +412,35 @@ func TestBuildBinary(t *testing.T) {
 		assert.Equal(t, "windows", readFakeBinEnv(t, argsFile)["GOOS"])
 	})
 
+	t.Run("cross-compilation output does not overwrite the native binary", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		t.Chdir(root)
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "build"), 0o755))
+		native := filepath.Join(root, "build", "atmos")
+		require.NoError(t, os.WriteFile(native, []byte("native"), 0o755))
+		output := filepath.Join(t.TempDir(), "intel", "atmos")
+		t.Setenv("ATMOS_BUILD_OUTPUT", output)
+		argsFile := setUpFakePathBinary(t, "go")
+		require.NoError(t, Build{}.Binary("macos-intel", "test"))
+		assert.Contains(t, readFakeBinArgs(t, argsFile), output)
+		assert.DirExists(t, filepath.Dir(output))
+		data, err := os.ReadFile(native)
+		require.NoError(t, err)
+		assert.Equal(t, "native", string(data))
+	})
+
+	t.Run("output directory cannot replace an existing file", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		t.Chdir(root)
+		parent := filepath.Join(root, "existing")
+		require.NoError(t, os.WriteFile(parent, []byte("preserved"), 0o600))
+		t.Setenv("ATMOS_BUILD_OUTPUT", filepath.Join(parent, "atmos"))
+		require.Error(t, Build{}.Binary("macos-intel", "test"))
+		data, err := os.ReadFile(parent)
+		require.NoError(t, err)
+		assert.Equal(t, "preserved", string(data))
+	})
+
 	t.Run("macos-intel pins GOARCH=amd64 regardless of the ambient value", func(t *testing.T) {
 		root := initGitRepoFixture(t)
 		argsFile := setUpFakePathBinary(t, "go")
