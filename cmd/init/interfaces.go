@@ -3,6 +3,7 @@ package initcmd
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 
 import (
+	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
@@ -17,6 +18,15 @@ type InitUI interface {
 	SetConflictStrategy(strategy merge.ConflictStrategy)
 	SetMergeDriver(driver merge.Driver)
 	SetSkipHooks(skip func(string) bool)
+	// SetUpdateStrategy selects where --update's 3-way merge base comes from
+	// (engine.UpdateStrategyTracked, the default: the target's own git
+	// history; engine.UpdateStrategyRendered: a pristine template
+	// re-render, see SetRenderedBaseSource).
+	SetUpdateStrategy(strategy engine.UpdateStrategy)
+	// SetRenderedBaseSource supplies the pristine "old ref" template
+	// configuration and its originally-recorded answers that
+	// engine.UpdateStrategyRendered re-renders as the merge base.
+	SetRenderedBaseSource(cfg *templates.Configuration, values map[string]interface{})
 	PromptForTemplate(templateType string, templates interface{}) (string, error)
 	ExecuteWithBaseRef(embedsConfig *templates.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}) error
 	ExecuteWithInteractiveFlowAndBaseRefResult(embedsConfig *templates.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}) (string, error)
