@@ -136,6 +136,18 @@ func TestResolveTargetPath_NonEmptyTargetPathIsPassthrough(t *testing.T) {
 	assert.True(t, gotUseDefaults)
 }
 
+// TestExecuteWithBaseRef_EmptyTargetPathErrors covers ExecuteWithDelimiters's
+// defensive validation directly: an empty targetPath must be rejected before
+// any generation work starts, with a hint pointing at the interactive flow.
+func TestExecuteWithBaseRef_EmptyTargetPathErrors(t *testing.T) {
+	ui := createTestUI(t)
+
+	err := ui.ExecuteWithBaseRef(&templates.Configuration{Name: "demo"}, "", false, false, false, "", nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTargetDirRequired)
+}
+
 func TestNewInitUI(t *testing.T) {
 	ui := createTestUI(t)
 

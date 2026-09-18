@@ -246,6 +246,23 @@ func TestValidateRenderedPath_PathTraversalRejected(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
 }
 
+// TestValidateRenderedPath_RejectsRootedPathRegardlessOfOS proves the guard
+// rejects a path rooted by *either* OS's convention even when running on the
+// other OS: filepath.IsAbs alone is native-OS-only (it doesn't consider a
+// Windows-rooted path absolute on Unix, or a Unix-rooted path absolute on
+// Windows), but a rendered path can originate from a template or scaffold
+// run on either OS.
+func TestValidateRenderedPath_RejectsRootedPathRegardlessOfOS(t *testing.T) {
+	for _, path := range []string{"/etc/passwd", `\Windows\System32\config`, `C:\Windows\System32\config`} {
+		t.Run(path, func(t *testing.T) {
+			err := validateRenderedPath(path, path)
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+		})
+	}
+}
+
 func TestValidateRenderedPath_UnrenderedMarkerInPath(t *testing.T) {
 	err := validateRenderedPath("foo/{{ .Config.missing }}/bar", "foo/{{ .Config.missing }}/bar")
 
@@ -255,12 +272,12 @@ func TestValidateRenderedPath_UnrenderedMarkerInPath(t *testing.T) {
 
 // TestHandleExistingFile_UpdateRenderErrorBeforeMerge covers the branch where
 // re-rendering file.Content during --update fails before mergeFile is ever
-// reached. The gitStorage field only needs to be non-nil to pass
+// reached. The baseStorage field only needs to be non-nil to pass
 // handleExistingFile's own precondition check; it's never dereferenced
 // before the render error.
 func TestHandleExistingFile_UpdateRenderErrorBeforeMerge(t *testing.T) {
 	processor := NewProcessor()
-	processor.gitStorage = &storage.GitBaseStorage{}
+	processor.baseStorage = &storage.GitBaseStorage{}
 
 	dir := t.TempDir()
 	fullPath := filepath.Join(dir, "file.txt")
