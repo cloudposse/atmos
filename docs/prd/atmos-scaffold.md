@@ -811,10 +811,6 @@ time.
 **Non-goals**:
 - Changes to field types or the interactive prompt form.
 
-Directory-level `matrix` — stamping a whole per-combination subtree from one entry
-— was originally scoped out here, but is now shipped; see "Glob `path:` and
-Directory-Level Matrix" below.
-
 `--set` values for a `multiselect` field are still comma-split automatically, so a
 multiselect-sourced axis keeps working non-interactively without needing a template
 expression at all — free-text and computed axes are for the cases a fixed
@@ -826,14 +822,12 @@ expression at all — free-text and computed axes are for the cases a fixed
 (`github.com/bmatcuk/doublestar/v4`, already a project dependency, wrapped by
 `pkg/utils.PathMatch`/`pkg/utils.WildcardRelPath`) — no new matching engine.
 
-**Motivation**: two things were previously impossible without listing every file
-in a directory individually in `spec.files[]`:
-1. Skipping (or gating) an entire directory, recursively, with one `when:`-gated
-   entry.
-2. Duplicating an entire directory's files once per matrix combination (e.g. one
+**Motivation**: a glob `path:` lets one `spec.files[]` entry act on an entire
+directory at once, instead of requiring one entry per file:
+1. Skip (or gate) an entire directory, recursively, with one `when:`-gated entry.
+2. Duplicate an entire directory's files once per matrix combination (e.g. one
    `components/` tree instance per environment), with every duplicated file
-   getting the same `.matrix.<axis>` values a single-file matrix entry already
-   gets.
+   getting the same `.matrix.<axis>` values a single-file matrix entry gets.
 
 **`path:` may be a glob pattern**, not just a literal path — `*`, `?`, `[...]`,
 `**` (any depth, including zero), and `{a,b}` (brace expansion), matched against

@@ -18,7 +18,7 @@ by hand as the directory grew.
 
 ## The Problem
 
-`matrix:` already expands a single declared file into one generated file per selected value —
+The `matrix:` field already expands a single declared file into one generated file per selected value —
 pick three environments, get three files, from one template file. But real templates aren't
 single files; they're whole directories. A `components/` tree with a dozen resources that needs
 to exist under every environment couldn't be matrixed as a unit — only file by file, one
@@ -29,8 +29,8 @@ duplicated across every file the directory contained.
 
 ## The Fix
 
-[`spec.files[].path`](/cli/commands/scaffold/generate#glob-paths-and-directory-level-matrix) can
-now be a glob pattern instead of a literal path — `*`, `?`, `[...]`, `**` for any depth, and
+The [`spec.files[].path`](/cli/commands/scaffold/generate#glob-paths-and-directory-level-matrix)
+field can now be a glob pattern instead of a literal path — `*`, `?`, `[...]`, `**` for any depth, and
 `{a,b}` brace expansion — matched against every file the template discovers. One entry now covers
 an entire directory:
 
@@ -41,7 +41,7 @@ spec:
       when: "answers.include_legacy_docs"
 ```
 
-`when:` still evaluates exactly as it does for a single file — it just now applies to every file
+The `when:` field still evaluates exactly as it does for a single file — it just now applies to every file
 the glob matches, at any depth, recursively, with no per-file repetition. When more than one
 entry's `path:` matches the same file, the *last* one declared wins, the same precedence
 `.gitignore`/`CODEOWNERS` use: write broad patterns first, specific overrides after.
