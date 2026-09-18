@@ -439,6 +439,37 @@ func TestValidateFileMatrixSkipsFilesWithoutMatrix(t *testing.T) {
 	assert.NotEmpty(t, scaffoldConfig.Spec.Files[1].Matrix)
 }
 
+// TestLoadScaffoldConfigRejectsMalformedFilePathGlob is a regression test:
+// a malformed glob pattern (an unclosed `[` character class here) used to be
+// indistinguishable from "no discovered file happens to match it" at
+// generation time -- pkg/generator/ui's FileSpecByPath treated the match
+// error identically to a plain non-match, silently and permanently
+// disabling that entry's when:/matrix:/target: with zero signal, even
+// though `atmos scaffold validate` reported the manifest as valid.
+// validateFilePathPatterns now catches this at load time instead.
+func TestLoadScaffoldConfigRejectsMalformedFilePathGlob(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+		"    - path: \"docs/legacy/[**\"\n      when: \"never\"\n"
+
+	_, err := LoadScaffoldConfigFromContent(content)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldFilePathPatternInvalid)
+	assert.True(t, errUtils.HasContext(err, "file_path", "docs/legacy/[**"))
+}
+
+// TestLoadScaffoldConfigAcceptsGlobFilePath proves a well-formed glob
+// pattern (which is the common case now that spec.files[].path supports
+// globs) is not rejected by the same check.
+func TestLoadScaffoldConfigAcceptsGlobFilePath(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+		"    - path: \"docs/legacy/**\"\n      when: \"always\"\n"
+
+	scaffoldConfig, err := LoadScaffoldConfigFromContent(content)
+	require.NoError(t, err)
+	require.Len(t, scaffoldConfig.Spec.Files, 1)
+	assert.Equal(t, "docs/legacy/**", scaffoldConfig.Spec.Files[0].Path)
+}
+
 func TestLoadScaffoldConfigAcceptsValidFileMatrix(t *testing.T) {
 	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
 		"    - path: deploy.yaml\n      target: \"deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml\"\n" +

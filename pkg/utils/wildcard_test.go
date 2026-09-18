@@ -218,6 +218,17 @@ func TestWildcardRelPath(t *testing.T) {
 			path:    "components/vpc/main.tf",
 			want:    "vpc/main.tf",
 		},
+		{
+			// Regression case: a backslash-authored pattern must behave
+			// identically to its forward-slash equivalent, regardless of the
+			// OS running this test -- filepath.ToSlash alone is a no-op for
+			// backslashes on macOS/Linux, since it only replaces the *host*
+			// OS's own separator character.
+			name:    "backslash-authored glob strips its literal base the same as forward-slash",
+			pattern: `components\**`,
+			path:    "components/vpc/main.tf",
+			want:    "vpc/main.tf",
+		},
 	}
 
 	for _, tt := range tests {
@@ -225,6 +236,28 @@ func TestWildcardRelPath(t *testing.T) {
 			got := WildcardRelPath(tt.pattern, tt.path)
 			if got != tt.want {
 				t.Errorf("WildcardRelPath() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeGlobPattern(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		want    string
+	}{
+		{name: "no backslashes is unchanged", pattern: "components/**", want: "components/**"},
+		{name: "backslash directory separators become forward slashes", pattern: `components\vpc\main.tf`, want: "components/vpc/main.tf"},
+		{name: "mixed separators are all normalized", pattern: `components\vpc/main.tf`, want: "components/vpc/main.tf"},
+		{name: "empty pattern stays empty", pattern: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeGlobPattern(tt.pattern)
+			if got != tt.want {
+				t.Errorf("NormalizeGlobPattern() = %q, want %q", got, tt.want)
 			}
 		})
 	}

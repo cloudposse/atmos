@@ -178,10 +178,12 @@ type FileSpec struct {
 	// May be a literal path or a glob pattern (doublestar syntax: *, ?,
 	// [...], ** for any depth including zero, {a,b} -- see
 	// pkg/utils.PathMatch), letting one entry gate or multiply an entire
-	// directory at once, e.g. "docs/legacy/**" or "components/**". Always
-	// use forward slashes regardless of the authoring OS -- discovered
-	// paths are always forward-slash-normalized, so a backslash pattern
-	// silently fails to match on any OS. When more than one spec.files[]
+	// directory at once, e.g. "docs/legacy/**" or "components/**". A
+	// backslash in the pattern is always treated as a directory-separator
+	// alias for forward slash (see pkg/utils.NormalizeGlobPattern),
+	// regardless of the OS that authored the pattern or the OS evaluating
+	// it, since discovered paths are always forward-slash-normalized.
+	// When more than one spec.files[]
 	// entry's path matches the same discovered file, the *last* matching
 	// entry in declaration order wins -- the same precedence convention as
 	// .gitignore/CODEOWNERS: write broad patterns first, specific overrides
@@ -211,12 +213,18 @@ type FileSpec struct {
 	// list from nested/structured answer data (e.g.
 	// '{{ collectKeys answers.environments }}'). Requires Target, since
 	// Path alone can't serve as the output path for more than one file.
-	// When Path is a glob matching several files, Matrix expands each
-	// matched file independently -- every matched file gets one output per
-	// combination, so Target must differentiate matched files (typically
-	// via .file.RelPath) or two matched files will render to the same
-	// output path, a hard error (ErrScaffoldDuplicateOutputPath), not a
-	// silent overwrite.
+	// When Path is a glob matching several files, every matched file gets
+	// one output per resolved combination, so Target must reference
+	// .file.Path or .file.RelPath to differentiate them -- checked
+	// deterministically before any file in the run is written
+	// (ErrScaffoldMatrixTargetMissingFileContext), not merely by a
+	// duplicate-output-path guard that would otherwise only fire once a
+	// second matched file's write collides with the first's (by which point
+	// the first has already been written to disk). Matrix itself is
+	// resolved once per Path, not once per matched file, so every file the
+	// same glob entry matches sees the identical resolved combination(s)
+	// even if an axis expression uses a non-deterministic template
+	// function.
 	Matrix MatrixAxes `yaml:"matrix,omitempty" json:"matrix,omitempty" jsonschema:"description=Axes to expand this file into one output per resolved combination; each axis's value is a literal list of strings; a dot-path string into answers.*; or a Go-template expression computing the list"`
 	// Target overrides the rendered output path for this file. Without
 	// Matrix it's optional, rendered once like Path -- letting authors keep

@@ -837,12 +837,20 @@ in a directory individually in `spec.files[]`:
 
 **`path:` may be a glob pattern**, not just a literal path — `*`, `?`, `[...]`,
 `**` (any depth, including zero), and `{a,b}` (brace expansion), matched against
-every discovered file's path via `doublestar`. Always use forward slashes
-regardless of the authoring OS; discovered paths are always forward-slash
-normalized, so a backslash-based pattern silently fails to match (not an error,
-just never matches). A single-level glob (`docs/*`) and a recursive one
-(`docs/**`) both fall out of doublestar's own semantics — no separate
-"recursive: true" flag exists or is needed.
+every discovered file's path via `doublestar`. A backslash in the pattern is
+always normalized to a forward slash before matching, regardless of the OS
+that authored the pattern or the OS evaluating it (`pkg/utils.NormalizeGlobPattern`)
+— discovered paths are always forward-slash normalized, so treating backslash as
+anything other than a directory-separator alias would make a pattern's behavior
+depend on which OS happened to run it. A single-level glob (`docs/*`) and a
+recursive one (`docs/**`) both fall out of doublestar's own semantics — no
+separate "recursive: true" flag exists or is needed.
+
+A malformed pattern (an unclosed `[` character class or `{` brace-expansion
+group) is rejected at scaffold-load time (`ErrScaffoldFilePathPatternInvalid`,
+caught by `atmos scaffold validate` too) rather than silently and permanently
+never matching anything — the failure mode a pattern-match error would
+otherwise be indistinguishable from.
 
 **Precedence when multiple entries match the same file**: the *last* matching
 entry in declaration order wins — the same convention `.gitignore`/`CODEOWNERS`
@@ -874,16 +882,28 @@ spec:
 ```
 
 **Directory-level `matrix`** (feature 2) combines a glob `path:` with `matrix:`
-and `target:` exactly as a single-file matrix entry does — `matrix:` still
-expands once per spec entry, but since a glob entry can match many discovered
-files, every matched file gets its own full set of combinations. `target:` must
-then differentiate *which* matched file an output came from, or two matched
-files render to the same output path per combination — a hard error
-(`ErrScaffoldDuplicateOutputPath`, the same pre-existing global collision guard
-that already protects single-file matrix entries), not a silent overwrite. Two
-new template variables make this possible, available identically in `target:`
-and the file's own content, regardless of whether `path:` is a glob or a literal
-and regardless of whether `matrix:` is set:
+and `target:` exactly as a single-file matrix entry does — `matrix:` is
+resolved once per spec **path** (cached, not recomputed per matched file), so
+every file a glob entry matches sees the identical resolved combination(s)
+even when an axis expression uses a non-deterministic template function (e.g.
+Sprig's `randAlphaNum`) — without this, each matched file would independently
+re-execute the axis expression and could resolve a *different* value for what
+was meant to be one shared combination. Since a glob entry can match many
+discovered files, every matched file still gets its own full set of outputs
+per combination, so `target:` must differentiate *which* matched file an
+output came from. This is checked deterministically **before any file in the
+run is written** (`ErrScaffoldMatrixTargetMissingFileContext`): `.matrix.<axis>`
+and `.Config.*` are identical across every file one entry matches for a given
+combination, and `.file.*` (below) is the only template data that varies per
+matched file, so a `target:` that never references it is guaranteed — not
+merely likely — to collide. This is a stronger guarantee than the pre-existing
+global duplicate-output-path guard (`ErrScaffoldDuplicateOutputPath`, which
+still protects every other collision class), which would otherwise only catch
+this specific mistake once a *second* matched file's write collides with the
+first's — by which point the first has already been written to disk. Two
+new template variables make target differentiation possible, available
+identically in `target:` and the file's own content, regardless of whether
+`path:` is a glob or a literal and regardless of whether `matrix:` is set:
 - **`.file.Path`** — the currently matched file's own discovered path.
 - **`.file.RelPath`** — `.file.Path` with the matching entry's glob literal
   prefix stripped (e.g. `"vpc/main.tf"` for path `"components/**"` matching
@@ -911,17 +931,29 @@ differentiation), so this stays out of scope. To exclude one specific file from
 a glob+matrix entry's own `when:`, declare a second, more specific entry after
 the broad one instead (shadowing it via the last-wins precedence above).
 
-**Migration caveat for `--update`'s 3-way merge**: the merge base is looked up
-by rendered output path, relative to the target directory (see
-`determineBaseContent` in `pkg/generator/engine/merge_update.go`, which loads
-the base from git history at that same relative path). Introducing, or
-changing, a glob+`.file.RelPath`-based `target:` on a template that existing
-projects already generated from changes every affected file's rendered output
-path — the same "breaking migration" class as changing any existing `target:`
-at all. A later `--update` won't find git history at the new path, so each
-moved file is treated as newly added (written fresh, not merged) rather than
-3-way-merged against its prior content; the file at the old path, if still
-present, is left untouched rather than removed.
+**Migration caveat for `--update`'s 3-way merge**: `ProcessFile` only ever
+reaches the 3-way-merge base lookup (`determineBaseContent` in
+`pkg/generator/engine/merge_update.go`) when the newly-rendered target path
+*already exists on disk* — otherwise it takes the plain new-file write path
+(`writeNewFile`), bypassing the merge base entirely. Introducing, or changing,
+a glob+`.file.RelPath`-based `target:` on a template that existing projects
+already generated from changes every affected file's rendered output path —
+the same "breaking migration" class as changing any existing `target:` at
+all — with a two-stage consequence, not a single "written fresh" one:
+- **The first `--update` after the change**: the new path doesn't exist yet,
+  so the file is written fresh via `writeNewFile`, bypassing
+  `determineBaseContent` entirely. The file at the *old* path, if still
+  present, is left untouched rather than removed.
+- **Every `--update` after that**: the new path now exists, so
+  `determineBaseContent` runs and looks up git history at that same
+  (new) relative path — finds nothing, since only the *old* path was ever
+  committed — and returns `shouldSkip=true`. `mergeFile` then returns
+  immediately with no write at all, per its own "user-added, don't touch it"
+  contract. The practical effect is that the file is **silently frozen at
+  whatever content the first post-migration `--update` wrote**, forever:
+  later template changes to that file are never applied again by `--update`,
+  with no error or warning, until the merge-base ref itself advances to
+  include the new path.
 
 **Non-goals**:
 - A per-file `when:` predicate within a single glob+matrix entry (see the

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -139,7 +140,7 @@ func FileSpecByPath(scaffoldConfig *config.ScaffoldConfig, files []tmpl.File) ma
 			continue
 		}
 		for _, spec := range scaffoldConfig.Spec.Files {
-			matched, err := u.PathMatch(spec.Path, file.Path)
+			matched, err := u.PathMatch(u.NormalizeGlobPattern(spec.Path), file.Path)
 			if err != nil || !matched {
 				continue
 			}
@@ -161,6 +162,51 @@ func FileOutputPath(file tmpl.File, spec config.FileSpec) string {
 		return spec.Target
 	}
 	return file.Path
+}
+
+// validateDirectoryMatrixTargetsDifferentiate returns an error if any
+// spec.files[] entry declares matrix: and its path (literal or glob)
+// matches more than one discovered file, but its target: never references
+// .file.Path or .file.RelPath. This isn't a heuristic guess: .matrix.<axis>
+// and .Config.* are identical across every file one entry matches for the
+// same resolved combination, and .file.* is the *only* template data that
+// varies per matched file (see engine.FileContext) -- so a target: that
+// never references it is guaranteed, not merely likely, to render every
+// matched file to the same output path for a given combination. Without
+// this check that collision would only surface mid-run, once the second
+// matched file's write is reached, after the first one has already been
+// written to disk (checkDuplicateRenderedPath only prevents the *second*
+// colliding write, not the first). Called before any file in the run is
+// written, so this specific misconfiguration fails cleanly with zero
+// partial output.
+func validateDirectoryMatrixTargetsDifferentiate(fileSpecs map[string]config.FileSpec) error {
+	matchCounts := make(map[string]int, len(fileSpecs))
+	specByPath := make(map[string]config.FileSpec, len(fileSpecs))
+	for _, spec := range fileSpecs {
+		if len(spec.Matrix) == 0 {
+			continue
+		}
+		matchCounts[spec.Path]++
+		specByPath[spec.Path] = spec
+	}
+
+	for path, count := range matchCounts {
+		if count < 2 {
+			continue
+		}
+		spec := specByPath[path]
+		if strings.Contains(spec.Target, ".file.") {
+			continue
+		}
+		return errUtils.Build(errUtils.ErrScaffoldMatrixTargetMissingFileContext).
+			WithExplanationf("spec.files[] entry `%s` matches %d files but its target does not reference .file.Path or .file.RelPath", path, count).
+			WithHint("Add {{ .file.RelPath }} (or {{ .file.Path }}) to target: so each matched file renders to a distinct output path").
+			WithContext("file_path", path).
+			WithContext("matched_file_count", strconv.Itoa(count)).
+			WithExitCode(2).
+			Err()
+	}
+	return nil
 }
 
 // truncateString truncates a string to the specified length and adds "..." if truncated.
@@ -1139,13 +1185,14 @@ func (ui *InitUI) processFileEntry(
 	mergedValues map[string]interface{},
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
+	matrixExpansions map[string]matrixExpansionResult,
 ) (successCount, errorCount int, failedPaths []string, err error) {
 	outputTemplate := FileOutputPath(file, spec)
 
 	if len(spec.Matrix) == 0 {
 		return ui.processSingleFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
 	}
-	return ui.processMatrixedFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
+	return ui.processMatrixedFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths, matrixExpansions)
 }
 
 // processSingleFileEntry renders and writes file's one non-matrix output,
@@ -1183,6 +1230,20 @@ func (ui *InitUI) processSingleFileEntry(
 	}
 }
 
+// matrixExpansionResult caches one spec.files[] entry's resolved matrix rows
+// (or expansion error), keyed by spec.Path in executeWithSetup's per-run
+// matrixExpansions map. Without this cache, a directory-level glob entry
+// matching N discovered files would call engine.ExpandMatrix N independent
+// times with identical inputs -- redundant, but also unsafe: an axis
+// expression can use a non-deterministic template function (e.g. Sprig's
+// randAlphaNum/uuidv4/now), and re-executing it fresh per matched file would
+// resolve a *different* value for what the scaffold author intended as one
+// shared combination applied uniformly across the whole matched directory.
+type matrixExpansionResult struct {
+	rows []map[string]string
+	err  error
+}
+
 // processMatrixedFileEntry renders and writes one output per matrix
 // combination that survives spec.When. Each combination is bound into a
 // shallow-cloned copy of mergedValues under engine.MatrixKey, which
@@ -1190,7 +1251,10 @@ func (ui *InitUI) processSingleFileEntry(
 // so path and content templates see .matrix.<axis> directly. An expansion
 // error counts as one failure for the whole entry; err joins every failed
 // combination's own error so callers can preserve the real cause(s)
-// alongside the generic "Failed to generate N files" summary.
+// alongside the generic "Failed to generate N files" summary. matrixExpansions
+// caches spec.Matrix's resolution per spec.Path (see matrixExpansionResult)
+// so every file a directory-level glob entry matches sees the exact same
+// resolved rows.
 //
 //nolint:revive // argument-limit: needs the same full context processFileEntry received
 func (ui *InitUI) processMatrixedFileEntry(
@@ -1203,8 +1267,15 @@ func (ui *InitUI) processMatrixedFileEntry(
 	mergedValues map[string]interface{},
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
+	matrixExpansions map[string]matrixExpansionResult,
 ) (successCount, errorCount int, failedPaths []string, err error) {
-	rows, expandErr := engine.ExpandMatrix(spec.Matrix, mergedValues, ui.processor.RenderAnswersListExpression, activeDelimiters)
+	expansion, cached := matrixExpansions[spec.Path]
+	if !cached {
+		rows, expandErr := engine.ExpandMatrix(spec.Matrix, mergedValues, ui.processor.RenderAnswersListExpression, activeDelimiters)
+		expansion = matrixExpansionResult{rows: rows, err: expandErr}
+		matrixExpansions[spec.Path] = expansion
+	}
+	rows, expandErr := expansion.rows, expansion.err
 	if expandErr != nil {
 		ui.writeOutput(fileStatusFormat,
 			ui.errorStyle.Render(ui.xMark),
@@ -1529,6 +1600,17 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		return fmt.Errorf("failed to decode scaffold hooks: %w", err)
 	}
 
+	// Resolved before hooks run (not just before writing) so a scaffold with
+	// this specific misconfiguration fails with zero side effects at all --
+	// not even a pre-generate hook -- rather than a partially-generated
+	// project. See validateDirectoryMatrixTargetsDifferentiate's doc comment
+	// for why this check can't wait until a colliding file is actually
+	// reached mid-run.
+	fileSpecs := FileSpecByPath(scaffoldConfig, embedsConfig.Files)
+	if err := validateDirectoryMatrixTargetsDifferentiate(fileSpecs); err != nil {
+		return err
+	}
+
 	// Run pre-generate hooks before any file is written: nothing has run yet
 	// (status: success), and a hook failure aborts before any write happens,
 	// so no rollback is needed. Skipped in dry-run: hooks can run arbitrary
@@ -1553,11 +1635,16 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// uses (scaffoldConfig.Spec.Delimiters wins), so this preflight path-skip
 	// check and the actual file-body rendering below never disagree.
 	activeDelimiters := ResolveDelimiters(delimiters, scaffoldConfig)
-	fileSpecs := FileSpecByPath(scaffoldConfig, embedsConfig.Files)
 	// Tracks every rendered output path across the whole loop (not just
 	// matrix entries) so two files -- matrixed or not -- can never silently
 	// clobber one another's write.
 	seenRenderedPaths := make(map[string]string)
+	// Caches ExpandMatrix's result per spec.Path (not per discovered file),
+	// so a directory-level glob entry matching N files resolves its
+	// combination(s) exactly once and reuses the same rows for every matched
+	// file -- see matrixExpansionResult's doc comment for why recomputing
+	// per file is unsafe, not just wasteful.
+	matrixExpansions := make(map[string]matrixExpansionResult)
 	for _, file := range embedsConfig.Files {
 		// Skip the scaffold.yaml as it's only used for schema definition
 		if file.Path == config.ScaffoldConfigFileName {
@@ -1573,7 +1660,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 
 		spec := fileSpecs[file.Path]
 		entrySuccess, entryErrors, entryFailedPaths, entryErr := ui.processFileEntry(
-			file, spec, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths,
+			file, spec, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths, matrixExpansions,
 		)
 		successCount += entrySuccess
 		errorCount += entryErrors

@@ -39,6 +39,23 @@ func hasGlobMeta(pattern string) bool {
 	return strings.ContainsAny(pattern, "*?[{")
 }
 
+// NormalizeGlobPattern converts every backslash in pattern to a forward
+// slash, unconditionally -- not just on Windows. A spec.files[].path glob
+// is always matched against discovered file paths, which are always
+// forward-slash-normalized regardless of OS (see
+// pkg/generator/templates/embeds.go), so a backslash in an author-written
+// pattern always means "directory separator", never doublestar's own
+// backslash escape character. filepath.ToSlash is insufficient here: it
+// only replaces the *host* OS's own separator character, so a
+// backslash-authored pattern would silently fail to match on any OS other
+// than the one whose separator happens to be backslash (Windows) --
+// normalizing explicitly, independent of which OS Atmos itself runs on,
+// keeps a pattern's meaning the same regardless of which OS authored it or
+// which OS evaluates it.
+func NormalizeGlobPattern(pattern string) string {
+	return strings.ReplaceAll(pattern, `\`, "/")
+}
+
 // WildcardRelPath returns path with pattern's literal (non-glob) base
 // directory prefix stripped, letting a caller that matched path against a
 // directory-level glob (e.g. "components/**") recover the matched file's
@@ -56,11 +73,15 @@ func WildcardRelPath(pattern, path string) string {
 	defer perf.Track(nil, "utils.WildcardRelPath")()
 
 	path = filepath.ToSlash(path)
-	if pattern == "" || !hasGlobMeta(pattern) {
+	if pattern == "" {
+		return path
+	}
+	pattern = NormalizeGlobPattern(pattern)
+	if !hasGlobMeta(pattern) {
 		return path
 	}
 
-	base, _ := doublestar.SplitPattern(filepath.ToSlash(pattern))
+	base, _ := doublestar.SplitPattern(pattern)
 	if base == "." || base == "" {
 		return path
 	}

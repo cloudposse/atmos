@@ -321,7 +321,7 @@ func TestProcessFileEntry_DryRunMatrixExpansion(t *testing.T) {
 	}
 
 	successCount, errorCount, failedPaths, err := ui.processFileEntry(
-		file, spec, targetDir, false, false, scaffoldConfig, mergedValues, []string{"{{", "}}"}, make(map[string]string),
+		file, spec, targetDir, false, false, scaffoldConfig, mergedValues, []string{"{{", "}}"}, make(map[string]string), make(map[string]matrixExpansionResult),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, 4, successCount, "all four surviving matrix rows must be counted, matching the real run")
@@ -413,7 +413,7 @@ func TestProcessMatrixedFileEntry_ZeroRowsWritesSkipLine(t *testing.T) {
 	scaffoldConfig := &config.ScaffoldConfig{}
 
 	successCount, errorCount, failedPaths, entryErr := ui.processMatrixedFileEntry(
-		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, mergedValues, []string{"{{", "}}"}, make(map[string]string),
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, mergedValues, []string{"{{", "}}"}, make(map[string]string), make(map[string]matrixExpansionResult),
 	)
 
 	assert.Equal(t, 0, successCount)
@@ -447,7 +447,7 @@ func TestProcessMatrixedFileEntry_DedupesFailedPathPerEntry(t *testing.T) {
 	scaffoldConfig := &config.ScaffoldConfig{}
 
 	successCount, errorCount, failedPaths, entryErr := ui.processMatrixedFileEntry(
-		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string),
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string), make(map[string]matrixExpansionResult),
 	)
 
 	assert.Equal(t, 1, successCount)
@@ -525,7 +525,7 @@ func TestProcessMatrixedFileEntry_ExpansionErrorReturnsFailedPath(t *testing.T) 
 	scaffoldConfig := &config.ScaffoldConfig{}
 
 	successCount, errorCount, failedPaths, entryErr := ui.processMatrixedFileEntry(
-		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string),
+		file, spec, spec.Target, targetDir, false, false, scaffoldConfig, map[string]interface{}{}, []string{"{{", "}}"}, make(map[string]string), make(map[string]matrixExpansionResult),
 	)
 
 	assert.Equal(t, 0, successCount)
