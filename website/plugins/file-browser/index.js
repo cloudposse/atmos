@@ -9,6 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const matter = require('gray-matter');
+const { getBuildTimestamp } = require('../build-timestamp');
 
 // File names recognized as an item's primary content — the ones treated as
 // its "readme" for description/title/tags extraction and index-page preview.
@@ -661,7 +662,7 @@ function scanExamples(sourceDir, options) {
     examples,
     featured,
     tags,
-    generatedAt: new Date().toISOString(),
+    generatedAt: getBuildTimestamp(),
     totalFiles,
     totalExamples: examples.length,
   };

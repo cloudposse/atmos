@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/scaffoldhooks"
+	"github.com/cloudposse/atmos/pkg/generator/source"
 	tmpl "github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -427,16 +428,19 @@ func (m spinnerModel) View() string {
 
 // InitUI handles the user interface for the init command.
 type InitUI struct {
-	checkmark    string
-	xMark        string
-	grayStyle    lipgloss.Style
-	successStyle lipgloss.Style
-	errorStyle   lipgloss.Style
-	output       strings.Builder
-	processor    *engine.Processor
-	ioCtx        iolib.Context
-	term         terminal.Terminal
-	skipHooks    func(string) bool
+	checkmark          string
+	xMark              string
+	grayStyle          lipgloss.Style
+	successStyle       lipgloss.Style
+	errorStyle         lipgloss.Style
+	output             strings.Builder
+	processor          *engine.Processor
+	ioCtx              iolib.Context
+	term               terminal.Terminal
+	skipHooks          func(string) bool
+	updateStrategy     engine.UpdateStrategy
+	renderedBaseConfig *tmpl.Configuration
+	renderedBaseValues map[string]interface{}
 }
 
 // NewInitUI creates a new InitUI instance.
@@ -536,6 +540,47 @@ func (ui *InitUI) ExecuteWithBaseRef(embedsConfig *tmpl.Configuration, targetPat
 	return ui.ExecuteWithDelimiters(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues, []string{"{{", "}}"})
 }
 
+// setupUpdateBase configures the Processor's 3-way merge base for --update,
+// per ui.updateStrategy: UpdateStrategyRendered renders a pristine old-ref
+// copy of the template (see renderPristineBase) and points the merge base at
+// it; UpdateStrategyTracked (the default) sets up git-history-backed storage
+// when baseRef is known. Delimiters is forwarded to renderPristineBase so the
+// old-ref render resolves the same active delimiters as this run's own
+// files, rather than falling back to the "{{"/"}}" default whenever the old
+// scaffold.yaml didn't set spec.delimiters. The returned cleanup is always
+// safe to call (a no-op under UpdateStrategyTracked) and must be deferred by
+// the caller.
+func (ui *InitUI) setupUpdateBase(targetPath, baseRef string, delimiters []string) (cleanup func(), err error) {
+	if ui.updateStrategy == engine.UpdateStrategyRendered {
+		// ui.renderedBaseConfig is only ever populated by SetRenderedBaseSource,
+		// called by the CLI layer after resolving the target's recorded
+		// provenance (source.ResolveRenderedBase). A caller that flips
+		// updateStrategy to Rendered without also calling SetRenderedBaseSource
+		// first (e.g. a "confirm update instead" retry that turns update=true
+		// on after the fact) would otherwise reach renderPristineBase with a
+		// nil config and panic dereferencing its Files field.
+		if ui.renderedBaseConfig == nil {
+			return func() {}, errUtils.Build(errUtils.ErrRenderedBaseNotConfigured).
+				WithExplanation("Internal error: rendered update-strategy was selected but no base source was resolved").
+				WithHint("This is an atmos bug -- please report it").
+				Err()
+		}
+		renderedTempDir, cleanupRenderedBase, err := ui.renderPristineBase(ui.renderedBaseConfig, ui.renderedBaseValues, delimiters)
+		if err != nil {
+			return func() {}, fmt.Errorf("failed to render the update-strategy=rendered base: %w", err)
+		}
+		ui.processor.SetupRenderedBaseStorage(targetPath, renderedTempDir)
+		return cleanupRenderedBase, nil
+	}
+
+	if baseRef != "" {
+		if err := ui.processor.SetupGitStorage(targetPath, baseRef); err != nil {
+			return func() {}, fmt.Errorf("failed to setup git storage: %w", err)
+		}
+	}
+	return func() {}, nil
+}
+
 // ExecuteWithDelimiters runs the initialization process with UI and custom delimiters.
 //
 //nolint:revive // argument-limit: public API maintains compatibility
@@ -553,11 +598,16 @@ func (ui *InitUI) ExecuteWithDelimiters(embedsConfig *tmpl.Configuration, target
 		return err
 	}
 
-	// Setup git storage for update mode
-	if update && baseRef != "" {
-		if err := ui.processor.SetupGitStorage(targetPath, baseRef); err != nil {
-			return fmt.Errorf("failed to setup git storage: %w", err)
+	// Setup the 3-way merge base for update mode. UpdateStrategyRendered's
+	// base comes from a pristine re-render of the template (no baseRef/git
+	// dependency, see renderPristineBase); UpdateStrategyTracked (the
+	// default) is today's existing git-history-backed behavior.
+	if update {
+		cleanupUpdateBase, err := ui.setupUpdateBase(targetPath, baseRef, delimiters)
+		if err != nil {
+			return err
 		}
+		defer cleanupUpdateBase()
 	}
 
 	ui.writeOutput("Generating %s in %s\n\n", embedsConfig.Name, targetPath)
@@ -1372,6 +1422,19 @@ func generationSummaryLine(dryRun bool, successCount, errorCount int) string {
 //
 //nolint:gocognit,revive,cyclop,funlen // complex orchestration function with multiple setup phases
 func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
+	// Reject a rendered-strategy generation up front when embedsConfig's
+	// source can never yield a project record a later rendered update could
+	// actually reconstruct from (e.g. an embedded template, or a git/oci
+	// source whose ref failed to resolve) -- see
+	// source.ValidateRenderedSource's doc comment. Checked before any
+	// prompt, directory creation, or hook runs, so a doomed rendered request
+	// fails immediately instead of only surfacing at the next update.
+	if ui.updateStrategy == engine.UpdateStrategyRendered {
+		if err := source.ValidateRenderedSource(embedsConfig.Source, embedsConfig.ResolvedRef); err != nil {
+			return err
+		}
+	}
+
 	// Find the scaffold.yaml file in the configuration
 	var scaffoldConfigFile *tmpl.File
 	for i := range embedsConfig.Files {
@@ -1504,7 +1567,37 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// --update against that same directory would wrongly treat it as an
 	// existing project instead of a fresh generate.
 	if !ui.processor.DryRun {
-		if err := config.SaveProjectRecord(targetPath, scaffoldConfig, embedsConfig.Source, baseRef, mergedValues); err != nil {
+		// RenderedRef and BaseRef are mutually exclusive (see
+		// ScaffoldSpec.RenderedRef): each is only ever set under the update
+		// strategy it belongs to, even though embedsConfig.ResolvedRef is
+		// populated for any git:: or oci:// fetch regardless of strategy, and
+		// baseRef can arrive non-empty here regardless of strategy too (e.g.
+		// a caller's own "offer update instead" retry-base-ref resolution).
+		// Gating both defends this write site directly rather than relying on
+		// every caller to pass an empty baseRef under rendered.
+		provenance := config.ProjectRecordProvenance{Source: embedsConfig.Source}
+		if ui.updateStrategy == engine.UpdateStrategyRendered {
+			provenance.RenderedRef = embedsConfig.ResolvedRef
+			if provenance.RenderedRef == "" && !source.IsPinnableSource(embedsConfig.Source) {
+				// Local/file, S3, and plain HTTP sources have no immutable ref
+				// to pin (see source.IsPinnableSource), so Resolve legitimately
+				// left ResolvedRef empty here -- that's expected, not a
+				// resolution failure. Recording the documented marker instead
+				// of leaving RenderedRef empty keeps SaveProjectRecord from
+				// dropping the field, so a later --update-strategy=rendered
+				// update doesn't wrongly fail with "no recorded
+				// rendered-strategy history", and a later
+				// --update-strategy=tracked run's CheckNotSwitchedFromRendered
+				// still detects the strategy switch instead of silently
+				// treating the record as if it were never generated under
+				// rendered at all. An unresolved git/oci ref (a genuine
+				// resolution failure) intentionally does not get this marker.
+				provenance.RenderedRef = source.UnpinnedRenderedRefMarker
+			}
+		} else {
+			provenance.BaseRef = baseRef
+		}
+		if err := config.SaveProjectRecord(targetPath, scaffoldConfig, provenance, mergedValues); err != nil {
 			return fmt.Errorf("failed to save project record: %w", err)
 		}
 
