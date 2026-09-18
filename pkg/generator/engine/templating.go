@@ -15,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
+	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
@@ -506,8 +507,12 @@ func validateRenderedPath(renderedPath, originalPath string) error {
 	// Clean the path to normalize it.
 	cleaned := filepath.Clean(renderedPath)
 
-	// Reject absolute paths.
-	if filepath.IsAbs(cleaned) {
+	// Reject absolute paths -- checked against both this OS's native
+	// convention and the other OS's, since a rendered path can come from a
+	// template authored (or a scaffold run) on a different OS than this
+	// one: filepath.IsAbs alone doesn't consider a Unix-rooted path absolute
+	// on Windows, or a Windows-rooted path absolute on Unix.
+	if filepath.IsAbs(cleaned) || storage.IsRootedOnAnyOS(cleaned) {
 		return errUtils.Build(errUtils.ErrPathTraversal).
 			WithExplanationf("Absolute path not allowed: `%s`", renderedPath).
 			WithHint("File paths must be relative to the target directory").

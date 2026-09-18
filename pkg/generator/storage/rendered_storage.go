@@ -48,7 +48,7 @@ func (s *RenderedBaseStorage) LoadBase(filePath string) (string, bool, error) {
 	// entirely. Reject that here rather than relying on every caller to
 	// have already sanitized filePath.
 	cleanPath := filepath.Clean(filePath)
-	if filepath.IsAbs(cleanPath) || isRootedOnAnyOS(cleanPath) || cleanPath == ".." || strings.HasPrefix(cleanPath, ".."+string(filepath.Separator)) {
+	if filepath.IsAbs(cleanPath) || IsRootedOnAnyOS(cleanPath) || cleanPath == ".." || strings.HasPrefix(cleanPath, ".."+string(filepath.Separator)) {
 		return "", false, errUtils.Build(errUtils.ErrPathTraversal).
 			WithExplanationf("Rendered base path escapes the render root: `%s`", filePath).
 			WithContext("file_path", filePath).
@@ -77,15 +77,15 @@ func (s *RenderedBaseStorage) LoadBase(filePath string) (string, bool, error) {
 	return string(content), true, nil
 }
 
-// isRootedOnAnyOS reports whether path is rooted under *any* OS's
+// IsRootedOnAnyOS reports whether path is rooted under *any* OS's
 // convention, not just the OS this binary is running on. filepath.IsAbs is
 // insufficient here: on Windows it doesn't consider "/etc/passwd" absolute
 // (Windows requires a drive letter or UNC prefix), and on Unix it doesn't
-// consider "C:\Windows\System32" or "\etc\passwd" absolute. Since filePath
-// can originate from an untrusted scaffold manifest that may be authored on
-// a different OS than whatever runs LoadBase, the traversal guard must
-// reject a path rooted by either convention regardless of runtime GOOS.
-func isRootedOnAnyOS(path string) bool {
+// consider "C:\Windows\System32" or "\etc\passwd" absolute. A path-traversal
+// guard fed an untrusted scaffold manifest (which may be authored on a
+// different OS than whatever runs the guard) must reject a path rooted by
+// either convention regardless of runtime GOOS.
+func IsRootedOnAnyOS(path string) bool {
 	if path == "" {
 		return false
 	}

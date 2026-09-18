@@ -246,6 +246,23 @@ func TestValidateRenderedPath_PathTraversalRejected(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
 }
 
+// TestValidateRenderedPath_RejectsRootedPathRegardlessOfOS proves the guard
+// rejects a path rooted by *either* OS's convention even when running on the
+// other OS: filepath.IsAbs alone is native-OS-only (it doesn't consider a
+// Windows-rooted path absolute on Unix, or a Unix-rooted path absolute on
+// Windows), but a rendered path can originate from a template or scaffold
+// run on either OS.
+func TestValidateRenderedPath_RejectsRootedPathRegardlessOfOS(t *testing.T) {
+	for _, path := range []string{"/etc/passwd", `\Windows\System32\config`, `C:\Windows\System32\config`} {
+		t.Run(path, func(t *testing.T) {
+			err := validateRenderedPath(path, path)
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+		})
+	}
+}
+
 func TestValidateRenderedPath_UnrenderedMarkerInPath(t *testing.T) {
 	err := validateRenderedPath("foo/{{ .Config.missing }}/bar", "foo/{{ .Config.missing }}/bar")
 
