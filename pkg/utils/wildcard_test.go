@@ -165,3 +165,67 @@ func TestMatchWildcard(t *testing.T) {
 		})
 	}
 }
+
+func TestWildcardRelPath(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		path    string
+		want    string
+	}{
+		{
+			name:    "empty pattern returns path unchanged",
+			pattern: "",
+			path:    "components/vpc/main.tf",
+			want:    "components/vpc/main.tf",
+		},
+		{
+			// Regression case: doublestar.SplitPattern always splits off the
+			// final path segment regardless of whether it's a glob, so an
+			// ungated call would incorrectly strip "components/" here.
+			name:    "literal path with no glob metacharacter is unaffected",
+			pattern: "components/main.tf",
+			path:    "components/main.tf",
+			want:    "components/main.tf",
+		},
+		{
+			name:    "literal path with no directory is unaffected",
+			pattern: "main.tf",
+			path:    "main.tf",
+			want:    "main.tf",
+		},
+		{
+			name:    "recursive double-star glob strips its literal base",
+			pattern: "components/**",
+			path:    "components/vpc/main.tf",
+			want:    "vpc/main.tf",
+		},
+		{
+			name:    "single-level glob strips its literal base",
+			pattern: "components/*/main.tf",
+			path:    "components/vpc/main.tf",
+			want:    "vpc/main.tf",
+		},
+		{
+			name:    "glob at the root has no base to strip",
+			pattern: "**",
+			path:    "components/vpc/main.tf",
+			want:    "components/vpc/main.tf",
+		},
+		{
+			name:    "brace expansion glob strips its literal base",
+			pattern: "components/{vpc,vpc2}/main.tf",
+			path:    "components/vpc/main.tf",
+			want:    "vpc/main.tf",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := WildcardRelPath(tt.pattern, tt.path)
+			if got != tt.want {
+				t.Errorf("WildcardRelPath() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

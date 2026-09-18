@@ -302,4 +302,181 @@ tests:
         - "path traversal not allowed"
       file_not_exists:
         - "generated/path-traversal/regions"
+
+  # --- scaffold-glob-skip: a "**" glob path: + when: skipping a whole directory recursively ---
+
+  - name: "scaffold-glob-skip generate with include_legacy_docs=true generates the whole directory"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-glob-skip fixture with include_legacy_docs=true, verifying every file under docs/legacy/ (at any depth) is generated via a single glob entry"
+    workdir: "fixtures/scenarios/scaffold-glob-skip"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/with-legacy-docs"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "include_legacy_docs=true"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Generated"
+      file_exists:
+        - "generated/with-legacy-docs/docs/legacy/intro.md"
+        - "generated/with-legacy-docs/docs/legacy/nested/deep.md"
+        - "generated/with-legacy-docs/docs/current.md"
+
+  # Leaving include_legacy_docs at its default (false) skips every file
+  # under docs/legacy/ recursively via the single glob entry's when:,
+  # without listing intro.md and nested/deep.md individually.
+  - name: "scaffold-glob-skip generate with defaults skips the whole directory recursively"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-glob-skip fixture with defaults, verifying docs/legacy/ is skipped recursively while docs/current.md still generates"
+    workdir: "fixtures/scenarios/scaffold-glob-skip"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/defaults-only"
+      - "--defaults"
+      - "--force"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Generated"
+      file_not_exists:
+        - "generated/defaults-only/docs/legacy"
+      file_exists:
+        - "generated/defaults-only/docs/current.md"
+
+  # Wrong input: "bogus" is not a valid boolean for a confirm field, so this
+  # must fail validation rather than silently treating it as false.
+  - name: "scaffold-glob-skip generate with invalid include_legacy_docs value fails"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-glob-skip fixture with a non-boolean include_legacy_docs, verifying the validation error"
+    workdir: "fixtures/scenarios/scaffold-glob-skip"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/invalid-option"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "include_legacy_docs=bogus"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 2
+      stderr:
+        - "invalid boolean field value"
+        - '"include_legacy_docs"'
+      file_not_exists:
+        - "generated/invalid-option/docs"
+
+  # --- scaffold-glob-matrix: a "**" glob path: + matrix duplicating a whole directory ---
+
+  - name: "scaffold-glob-matrix generate with environments set"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-glob-matrix fixture with environments set, verifying every file under components/ is duplicated once per selected environment"
+    workdir: "fixtures/scenarios/scaffold-glob-matrix"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/with-answers"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "environments=dev,staging"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Generated"
+      file_exists:
+        - "generated/with-answers/environments/dev/vpc/main.tf"
+        - "generated/with-answers/environments/dev/eks/main.tf"
+        - "generated/with-answers/environments/staging/vpc/main.tf"
+        - "generated/with-answers/environments/staging/eks/main.tf"
+      file_not_exists:
+        - "generated/with-answers/environments/prod"
+        - "generated/with-answers/components/vpc/main.tf"
+      file_contains:
+        "generated/with-answers/environments/dev/vpc/main.tf":
+          - 'environment: "dev"'
+          - 'source: "vpc/main.tf"'
+
+  # Leaving environments at its default (unselected) resolves the axis to
+  # zero values -- matrix mirrors when:'s existing silent-skip semantics
+  # rather than erroring, and generates none of components/'s duplicated files.
+  - name: "scaffold-glob-matrix generate with defaults generates no files"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-glob-matrix fixture with no environments, verifying the directory-level matrix entry is skipped"
+    workdir: "fixtures/scenarios/scaffold-glob-matrix"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/defaults-only"
+      - "--defaults"
+      - "--force"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Generated"
+      file_not_exists:
+        - "generated/defaults-only/environments"
+
+  # Wrong input: "bogus" is not one of environments' declared options, so
+  # this must fail validation rather than silently generating
+  # environments/bogus/*.
+  - name: "scaffold-glob-matrix generate with invalid environments option fails"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-glob-matrix fixture with an unsupported environments option, verifying the validation error"
+    workdir: "fixtures/scenarios/scaffold-glob-matrix"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/invalid-option"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "environments=bogus"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 2
+      stderr:
+        - 'field has unsupported option: field "environments"'
+        - 'option "bogus"'
+      file_not_exists:
+        - "generated/invalid-option/environments"
         - "../../../etc.yaml"

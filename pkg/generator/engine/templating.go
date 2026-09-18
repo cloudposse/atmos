@@ -121,6 +121,14 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 		templateData["matrix"] = row
 	}
 
+	// A directory-level spec.files entry's current matched file travels
+	// through userValues under FileContextKey the same way (see
+	// pkg/generator/ui's file-generation loop), letting both target: and
+	// content read .file.Path/.file.RelPath.
+	if fileCtx, ok := userValues[FileContextKey].(FileContext); ok {
+		templateData["file"] = fileCtx
+	}
+
 	funcs := buildTemplateFuncMap(userValues)
 
 	// Parse and execute template with custom delimiters

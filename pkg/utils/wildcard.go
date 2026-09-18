@@ -2,6 +2,7 @@ package utils
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
 
@@ -29,4 +30,39 @@ func MatchWildcard(pattern, str string) (bool, error) {
 	str = filepath.ToSlash(str)
 
 	return doublestar.PathMatch(pattern, str)
+}
+
+// hasGlobMeta reports whether pattern contains a doublestar glob
+// metacharacter (`*`, `?`, `[`, or `{`, matching the character set
+// MatchWildcard's own doc comment describes).
+func hasGlobMeta(pattern string) bool {
+	return strings.ContainsAny(pattern, "*?[{")
+}
+
+// WildcardRelPath returns path with pattern's literal (non-glob) base
+// directory prefix stripped, letting a caller that matched path against a
+// directory-level glob (e.g. "components/**") recover the matched file's
+// position relative to that glob's static root (e.g. "vpc/main.tf").
+//
+// Returns path unchanged whenever pattern has no glob metacharacter at all:
+// doublestar.SplitPattern always splits off the pattern's final path
+// segment regardless of whether that segment (or anything else in the
+// pattern) is actually a glob -- e.g. SplitPattern("components/main.tf")
+// returns ("components", "main.tf"), not (".", "components/main.tf") --
+// so calling it unconditionally would incorrectly strip the directory off
+// an entirely ordinary, non-glob path. Guarding on hasGlobMeta first keeps
+// RelPath == Path for every literal (non-glob) spec.
+func WildcardRelPath(pattern, path string) string {
+	defer perf.Track(nil, "utils.WildcardRelPath")()
+
+	path = filepath.ToSlash(path)
+	if pattern == "" || !hasGlobMeta(pattern) {
+		return path
+	}
+
+	base, _ := doublestar.SplitPattern(filepath.ToSlash(pattern))
+	if base == "." || base == "" {
+		return path
+	}
+	return strings.TrimPrefix(path, base+"/")
 }

@@ -17,6 +17,28 @@ import (
 // namespace the workflow matrix step's own {{ .matrix.<axis> }} uses.
 const MatrixKey = "Matrix"
 
+// FileContextKey is the reserved answers key the current discovered file's
+// own path travels under, mirroring MatrixKey: ProcessTemplateWithDelimiters
+// hoists it onto the template root as "file", so a directory-level spec.files
+// entry (path: a glob matching many discovered files) can write
+// {{ .file.RelPath }} in its target: to differentiate one matched file's
+// output from another's -- see FileContext.
+const FileContextKey = "File"
+
+// FileContext is the per-file template data hoisted under FileContextKey.
+// Path is the file's own path as discovered in the template's source tree.
+// RelPath is Path with the matching spec.files[] entry's glob literal-prefix
+// stripped (see pkg/utils.WildcardRelPath) -- equal to Path when that
+// entry's path has no glob metacharacter, since there's no literal prefix to
+// strip. This is what lets a single directory-level matrix entry (e.g.
+// path: "components/**") preserve each matched file's own relative position
+// under a combination-specific target, e.g.
+// target: "environments/{{ .matrix.env }}/{{ .file.RelPath }}".
+type FileContext struct {
+	Path    string
+	RelPath string
+}
+
 // answersPrefix is the required prefix for a dynamic matrix axis source, a
 // root reference into the answers map -- see resolveMatrixAxis.
 const answersPrefix = "answers."

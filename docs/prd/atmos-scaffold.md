@@ -809,14 +809,127 @@ successfully, can only be checked once real answers are available, at generation
 time.
 
 **Non-goals**:
-- Directory-level `matrix` — stamping a whole per-combination subtree from one
-  entry. The `path`/`target` split could extend to this, but doesn't today.
 - Changes to field types or the interactive prompt form.
+
+Directory-level `matrix` — stamping a whole per-combination subtree from one entry
+— was originally scoped out here, but is now shipped; see "Glob `path:` and
+Directory-Level Matrix" below.
 
 `--set` values for a `multiselect` field are still comma-split automatically, so a
 multiselect-sourced axis keeps working non-interactively without needing a template
 expression at all — free-text and computed axes are for the cases a fixed
 `options:` list can't cover.
+
+### Glob `path:` and Directory-Level Matrix
+
+**Status**: Implemented and shipped. Reuses the existing `doublestar` glob engine
+(`github.com/bmatcuk/doublestar/v4`, already a project dependency, wrapped by
+`pkg/utils.PathMatch`/`pkg/utils.WildcardRelPath`) — no new matching engine.
+
+**Motivation**: two things were previously impossible without listing every file
+in a directory individually in `spec.files[]`:
+1. Skipping (or gating) an entire directory, recursively, with one `when:`-gated
+   entry.
+2. Duplicating an entire directory's files once per matrix combination (e.g. one
+   `components/` tree instance per environment), with every duplicated file
+   getting the same `.matrix.<axis>` values a single-file matrix entry already
+   gets.
+
+**`path:` may be a glob pattern**, not just a literal path — `*`, `?`, `[...]`,
+`**` (any depth, including zero), and `{a,b}` (brace expansion), matched against
+every discovered file's path via `doublestar`. Always use forward slashes
+regardless of the authoring OS; discovered paths are always forward-slash
+normalized, so a backslash-based pattern silently fails to match (not an error,
+just never matches). A single-level glob (`docs/*`) and a recursive one
+(`docs/**`) both fall out of doublestar's own semantics — no separate
+"recursive: true" flag exists or is needed.
+
+**Precedence when multiple entries match the same file**: the *last* matching
+entry in declaration order wins — the same convention `.gitignore`/`CODEOWNERS`
+use (write broad patterns first, specific overrides after). This is the opposite
+of many readers' first intuition ("the more specific one always wins, regardless
+of order"), and a wrong-order mistake fails *silently*: a shadowed entry simply
+never triggers, with nothing to warn the author their earlier, more specific
+entry is unreachable. Order entries broad-to-specific:
+
+```yaml
+spec:
+  files:
+    - path: "docs/legacy/**"
+      when: "answers.include_legacy_docs"
+    - path: "docs/legacy/keep-this.md"
+      when: "always"
+```
+
+**Directory-wide skip** (feature 1) needs nothing beyond glob matching itself —
+`when:` is evaluated per matched file exactly as it already is for a literal
+path, so a glob entry with `when:` naturally gates every file nested under that
+directory:
+
+```yaml
+spec:
+  files:
+    - path: "docs/legacy/**"
+      when: "answers.include_legacy_docs"
+```
+
+**Directory-level `matrix`** (feature 2) combines a glob `path:` with `matrix:`
+and `target:` exactly as a single-file matrix entry does — `matrix:` still
+expands once per spec entry, but since a glob entry can match many discovered
+files, every matched file gets its own full set of combinations. `target:` must
+then differentiate *which* matched file an output came from, or two matched
+files render to the same output path per combination — a hard error
+(`ErrScaffoldDuplicateOutputPath`, the same pre-existing global collision guard
+that already protects single-file matrix entries), not a silent overwrite. Two
+new template variables make this possible, available identically in `target:`
+and the file's own content, regardless of whether `path:` is a glob or a literal
+and regardless of whether `matrix:` is set:
+- **`.file.Path`** — the currently matched file's own discovered path.
+- **`.file.RelPath`** — `.file.Path` with the matching entry's glob literal
+  prefix stripped (e.g. `"vpc/main.tf"` for path `"components/**"` matching
+  `"components/vpc/main.tf"`). Equal to `.file.Path` when the matching entry's
+  `path:` has no glob metacharacter, since there's no literal prefix to strip.
+
+```yaml
+spec:
+  files:
+    - path: "components/**"
+      target: "environments/{{ .matrix.env }}/{{ .file.RelPath }}"
+      matrix:
+        env: [dev, staging, production]
+```
+
+A `components/` tree containing `vpc/main.tf` and `eks/main.tf` produces six
+outputs: `environments/dev/vpc/main.tf`, `environments/dev/eks/main.tf`, and the
+same pair under `staging/` and `production/`.
+
+**Scoping decision**: `.file.Path`/`.file.RelPath` are Go-template-only — they
+are *not* added to the CEL `when:` environment alongside `answers`/`matrix`.
+Neither feature above needs per-file `when:` filtering (a directory-wide skip
+only needs answers-level `when:`; directory duplication only needs `target:`
+differentiation), so this stays out of scope. To exclude one specific file from
+a glob+matrix entry's own `when:`, declare a second, more specific entry after
+the broad one instead (shadowing it via the last-wins precedence above).
+
+**Migration caveat for `--update`'s 3-way merge**: the merge base is looked up
+by rendered output path, relative to the target directory (see
+`determineBaseContent` in `pkg/generator/engine/merge_update.go`, which loads
+the base from git history at that same relative path). Introducing, or
+changing, a glob+`.file.RelPath`-based `target:` on a template that existing
+projects already generated from changes every affected file's rendered output
+path — the same "breaking migration" class as changing any existing `target:`
+at all. A later `--update` won't find git history at the new path, so each
+moved file is treated as newly added (written fresh, not merged) rather than
+3-way-merged against its prior content; the file at the old path, if still
+present, is left untouched rather than removed.
+
+**Non-goals**:
+- A per-file `when:` predicate within a single glob+matrix entry (see the
+  scoping decision above).
+- A static "unreachable spec.files entry" lint flagging a shadowed
+  glob/literal-path combination at load time. This is fully computable without
+  real answers (glob patterns and discovered paths are both known at load time),
+  and would be valuable, but isn't implemented yet.
 
 ### Update Flow (with 3-Way Merge)
 

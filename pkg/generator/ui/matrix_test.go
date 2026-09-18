@@ -310,7 +310,7 @@ func TestProcessFileEntry_DryRunMatrixExpansion(t *testing.T) {
 		IsTemplate:  true,
 		Permissions: 0o644,
 	}
-	spec := FileSpecByPath(scaffoldConfig)["deploy.yaml"]
+	spec := FileSpecByPath(scaffoldConfig, []templates.File{file})["deploy.yaml"]
 
 	mergedValues := map[string]interface{}{
 		"regions_by_env": map[string]interface{}{

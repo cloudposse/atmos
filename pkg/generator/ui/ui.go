@@ -31,6 +31,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/terminal"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // UI layout constants.
@@ -115,17 +116,35 @@ func toEngineFile(file tmpl.File) engine.File {
 	}
 }
 
-// FileSpecByPath indexes a scaffold config's spec.files overlay by declared
-// path, for O(1) lookup during the file-generation loop. Files not listed in
-// the overlay generate unconditionally with no Target/Matrix override --
+// FileSpecByPath resolves, for every discovered file, which spec.files[]
+// overlay entry (if any) applies to it, for O(1) lookup by path during the
+// file-generation loop. spec.files[].path may be a literal path or a glob
+// pattern (doublestar syntax: *, ?, [...], **, {a,b} -- see
+// pkg/utils.PathMatch), matched against every discovered file's path, so
+// one entry can gate or multiply an entire directory at once (see
+// docs/prd/atmos-scaffold.md, "Dynamic File Generation (matrix)"). When
+// multiple entries match the same file, the *last* matching entry in
+// declaration order wins -- the same precedence convention as .gitignore/
+// CODEOWNERS (write broad patterns first, specific overrides after; a
+// wrong-order override is a silent no-op, not an error). Files not matched
+// by any entry generate unconditionally with no Target/Matrix override --
 // FileSpec's zero-value When already evaluates to true (see
 // condition.Condition.Evaluate). Exported so the `--dry-run` preview
 // (cmd/scaffold) can gate its file list with the exact same spec.When
 // evaluation real generation uses, instead of a second, divergent copy.
-func FileSpecByPath(scaffoldConfig *config.ScaffoldConfig) map[string]config.FileSpec {
-	specByPath := make(map[string]config.FileSpec, len(scaffoldConfig.Spec.Files))
-	for _, f := range scaffoldConfig.Spec.Files {
-		specByPath[f.Path] = f
+func FileSpecByPath(scaffoldConfig *config.ScaffoldConfig, files []tmpl.File) map[string]config.FileSpec {
+	specByPath := make(map[string]config.FileSpec, len(files))
+	for _, file := range files {
+		if file.IsDirectory {
+			continue
+		}
+		for _, spec := range scaffoldConfig.Spec.Files {
+			matched, err := u.PathMatch(spec.Path, file.Path)
+			if err != nil || !matched {
+				continue
+			}
+			specByPath[file.Path] = spec
+		}
 	}
 	return specByPath
 }
@@ -1153,7 +1172,7 @@ func (ui *InitUI) processSingleFileEntry(
 			ui.grayStyle.Render(skippedText))
 		return 0, 0, nil, nil
 	}
-	success, failed, causeErr := ui.writeOneOutput(file, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
+	success, failed, causeErr := ui.writeOneOutput(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, nil, activeDelimiters, seenRenderedPaths)
 	switch {
 	case success:
 		return 1, 0, nil, nil
@@ -1236,9 +1255,10 @@ func (ui *InitUI) processMatrixedFileEntry(
 
 // processMatrixRow renders and writes a single matrix combination (row),
 // gated by spec.When -- split out of processMatrixedFileEntry's loop to
-// keep that function within this repo's function-length limit. Row is
-// bound into mergedValues under engine.MatrixKey, same as
-// processMatrixedFileEntry's own doc comment describes.
+// keep that function within this repo's function-length limit. Row (and,
+// when file is one of several files a directory-level glob spec.Path
+// matched, file's own context) is bound in by writeOneOutput's single
+// clone point -- see mergedValuesWithContext.
 //
 //nolint:revive // argument-limit: needs the same full context processMatrixedFileEntry received
 func (ui *InitUI) processMatrixRow(
@@ -1253,14 +1273,9 @@ func (ui *InitUI) processMatrixRow(
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
 ) (success, failed bool, causeErr error) {
-	iterValues := make(map[string]interface{}, len(mergedValues)+1)
-	for k, v := range mergedValues {
-		iterValues[k] = v
-	}
-	iterValues[engine.MatrixKey] = row
-
 	if !spec.When.Evaluate(condition.Context{Answers: mergedValues, Matrix: row}) {
-		renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, iterValues, activeDelimiters)
+		values := mergedValuesWithContext(mergedValues, row, file, spec)
+		renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, values, activeDelimiters)
 		if pathErr != nil {
 			renderedPath = outputTemplate
 		}
@@ -1271,7 +1286,7 @@ func (ui *InitUI) processMatrixRow(
 		return false, false, nil
 	}
 
-	return ui.writeOneOutput(file, outputTemplate, targetPath, force, update, scaffoldConfig, iterValues, activeDelimiters, seenRenderedPaths)
+	return ui.writeOneOutput(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, row, activeDelimiters, seenRenderedPaths)
 }
 
 // checkDuplicateRenderedPath reports whether renderedPath was already
@@ -1341,22 +1356,53 @@ func (ui *InitUI) reportWriteResult(err error, renderedPath string, existedBefor
 	}
 }
 
-// writeOneOutput renders outputTemplate against values, applies the skip
-// and duplicate-output-path guards, and writes via ProcessFile -- shared by
-// both the single-file and per-combination matrix paths. See
+// mergedValuesWithContext returns a single shallow clone of mergedValues
+// with the current matrix row (if any -- nil for a non-matrix entry) and
+// the current discovered file's own path exposed under
+// engine.MatrixKey/engine.FileContextKey, letting Target/Path and Content
+// templates reference .matrix.<axis> and .file.Path/.file.RelPath. This is
+// the single point both writeOneOutput and processMatrixRow's own
+// skip-line display rendering use -- mergedValues itself is never mutated
+// in place, since it's the shared per-run answers map, read again by
+// scaffoldhooks.Run after every file in this run has been processed.
+func mergedValuesWithContext(mergedValues map[string]interface{}, row map[string]string, file tmpl.File, spec config.FileSpec) map[string]interface{} {
+	values := make(map[string]interface{}, len(mergedValues)+2)
+	for k, v := range mergedValues {
+		values[k] = v
+	}
+	if row != nil {
+		values[engine.MatrixKey] = row
+	}
+	values[engine.FileContextKey] = engine.FileContext{
+		Path:    file.Path,
+		RelPath: u.WildcardRelPath(spec.Path, file.Path),
+	}
+	return values
+}
+
+// writeOneOutput renders outputTemplate against mergedValues (plus row and
+// file's own context, folded in once via mergedValuesWithContext), applies
+// the skip and duplicate-output-path guards, and writes via ProcessFile --
+// shared by both the single-file and per-combination matrix paths. See
 // reportWriteResult for what success/failed mean; causeErr is the
 // underlying error when failed is true, for callers that want to preserve
 // it instead of a generic message.
+//
+//nolint:revive // argument-limit: needs the same full context processFileEntry received
 func (ui *InitUI) writeOneOutput(
 	file tmpl.File,
+	spec config.FileSpec,
 	outputTemplate string,
 	targetPath string,
 	force, update bool,
 	scaffoldConfig *config.ScaffoldConfig,
-	values map[string]interface{},
+	mergedValues map[string]interface{},
+	row map[string]string,
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
 ) (success, failed bool, causeErr error) {
+	values := mergedValuesWithContext(mergedValues, row, file, spec)
+
 	// Process the file path as a template first to check if it should be skipped.
 	renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, values, activeDelimiters)
 	if pathErr != nil {
@@ -1507,7 +1553,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// uses (scaffoldConfig.Spec.Delimiters wins), so this preflight path-skip
 	// check and the actual file-body rendering below never disagree.
 	activeDelimiters := ResolveDelimiters(delimiters, scaffoldConfig)
-	fileSpecs := FileSpecByPath(scaffoldConfig)
+	fileSpecs := FileSpecByPath(scaffoldConfig, embedsConfig.Files)
 	// Tracks every rendered output path across the whole loop (not just
 	// matrix entries) so two files -- matrixed or not -- can never silently
 	// clobber one another's write.
