@@ -228,6 +228,16 @@ func TestDetectCLIProvider(t *testing.T) {
 			expected: "copilot-cli",
 		},
 		{
+			name: "opencode found returns opencode",
+			lookup: func(bin string) (string, error) {
+				if bin == "opencode" {
+					return "/usr/local/bin/opencode", nil
+				}
+				return "", errNotFound
+			},
+			expected: "opencode",
+		},
+		{
 			name: "gemini found returns gemini-cli",
 			lookup: func(bin string) (string, error) {
 				if bin == "gemini" {
@@ -306,6 +316,7 @@ func TestIsCLIProvider(t *testing.T) {
 		{"claude-code is CLI", "claude-code", true},
 		{"codex-cli is CLI", "codex-cli", true},
 		{"copilot-cli is CLI", "copilot-cli", true},
+		{"opencode is CLI", "opencode", true},
 		{"gemini-cli is CLI", "gemini-cli", true},
 		{"anthropic is not CLI", "anthropic", false},
 		{"openai is not CLI", "openai", false},
