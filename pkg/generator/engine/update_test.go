@@ -317,9 +317,9 @@ func TestProcessorSetupGitStorageInvalidBaseRef(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidBaseRef)
 	// A failed SetupGitStorage call must not leave the Processor's state
-	// half-mutated: targetPath/gitStorage should remain at their zero values.
+	// half-mutated: targetPath/baseStorage should remain at their zero values.
 	assert.Empty(t, processor.targetPath)
-	assert.Nil(t, processor.gitStorage)
+	assert.Nil(t, processor.baseStorage)
 }
 
 func TestProcessorMergeFileReadError(t *testing.T) {
@@ -397,7 +397,7 @@ func TestProcessorMergeFile_DetermineBaseContentErrorPropagates(t *testing.T) {
 
 	repo, err := git.PlainOpen(testRepo.tmpDir)
 	require.NoError(t, err)
-	testRepo.processor.gitStorage = storage.NewGitBaseStorage(repo, "nonexistent-ref")
+	testRepo.processor.baseStorage = storage.NewGitBaseStorage(repo, "nonexistent-ref")
 
 	templateFile := File{Path: "config.yaml", Content: "name: template\n", Permissions: 0o644}
 	err = testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
@@ -640,7 +640,7 @@ func TestProcessorDetermineBaseContent_LoadBaseError(t *testing.T) {
 
 	repo, err := git.PlainOpen(testRepo.tmpDir)
 	require.NoError(t, err)
-	testRepo.processor.gitStorage = storage.NewGitBaseStorage(repo, "nonexistent-ref")
+	testRepo.processor.baseStorage = storage.NewGitBaseStorage(repo, "nonexistent-ref")
 
 	_, shouldSkip, err := testRepo.processor.determineBaseContent(File{Path: "config.yaml"}, testRepo.configPath)
 
