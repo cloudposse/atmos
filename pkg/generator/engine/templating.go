@@ -56,14 +56,23 @@ func (e *FileSkippedError) Error() string {
 	return fmt.Sprintf("file skipped: %s (rendered as: %s)", e.Path, e.RenderedPath)
 }
 
+// baseContentLoader is the "read this file's content at the merge base"
+// contract a 3-way merge needs, independent of where that base actually
+// comes from. *storage.GitBaseStorage (base tracked via the target's own git
+// history) and *storage.RenderedBaseStorage (base from a pristine template
+// re-render, see SetupRenderedBaseStorage) both satisfy it.
+type baseContentLoader interface {
+	LoadBase(filePath string) (string, bool, error)
+}
+
 // Processor handles template processing for scaffold and init commands.
 // It provides template rendering with Gomplate and Sprig functions,
 // file path templating, and intelligent file merging capabilities.
 type Processor struct {
-	merger     *merge.ThreeWayMerger
-	gitStorage *storage.GitBaseStorage
-	targetPath string // Target directory for file generation
-	DryRun     bool   // When true, compute rendering/merge but skip writing to disk
+	merger      *merge.ThreeWayMerger
+	baseStorage baseContentLoader
+	targetPath  string // Target directory for file generation
+	DryRun      bool   // When true, compute rendering/merge but skip writing to disk
 }
 
 // NewProcessor creates a new template processor with default settings.
@@ -498,8 +507,12 @@ func validateRenderedPath(renderedPath, originalPath string) error {
 	// Clean the path to normalize it.
 	cleaned := filepath.Clean(renderedPath)
 
-	// Reject absolute paths.
-	if filepath.IsAbs(cleaned) {
+	// Reject absolute paths -- checked against both this OS's native
+	// convention and the other OS's, since a rendered path can come from a
+	// template authored (or a scaffold run) on a different OS than this
+	// one: filepath.IsAbs alone doesn't consider a Unix-rooted path absolute
+	// on Windows, or a Windows-rooted path absolute on Unix.
+	if filepath.IsAbs(cleaned) || storage.IsRootedOnAnyOS(cleaned) {
 		return errUtils.Build(errUtils.ErrPathTraversal).
 			WithExplanationf("Absolute path not allowed: `%s`", renderedPath).
 			WithHint("File paths must be relative to the target directory").
@@ -555,12 +568,17 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 
 	// Handle update mode (3-way merge)
 	if update {
-		// Require git storage for meaningful 3-way merge.
-		// Without git, we would use template content as base, making merge a no-op.
-		if p.gitStorage == nil {
+		// Require base storage for a meaningful 3-way merge (either git
+		// history or a pristine template re-render). Without it, we would use
+		// template content as base, making merge a no-op. Processor doesn't
+		// track which --update-strategy set this up (or failed to), so the
+		// message can't name one specifically -- it must stay accurate for
+		// either.
+		if p.baseStorage == nil {
 			return errUtils.Build(errUtils.ErrThreeWayMerge).
-				WithExplanation("`--update` requires a git repository to compute a 3-way merge base").
-				WithHint("Run inside a git repository and/or pass `--base-ref`").
+				WithExplanation("`--update` has no merge base configured for this file").
+				WithHint("Under `--update-strategy=tracked` (the default): run inside a git repository and/or pass `--base-ref`").
+				WithHint("Under `--update-strategy=rendered`: the project needs a prior generation's `.atmos/scaffold.yaml` record").
 				WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
 				WithContext("file_path", file.Path).
 				WithExitCode(2).
