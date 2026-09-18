@@ -98,8 +98,22 @@ type ScaffoldSpec struct {
 	// project records; ignored in template manifests.
 	Source string `yaml:"source,omitempty" json:"source,omitempty" jsonschema:"description=Where the template came from (written to project records)"`
 	// BaseRef records the git ref used as the three-way merge base when the
-	// project was generated. Written to project records.
-	BaseRef string `yaml:"baseRef,omitempty" json:"baseRef,omitempty" jsonschema:"description=Git ref used as the three-way merge base"`
+	// project was generated under --update-strategy=tracked. Written to
+	// project records. Mutually exclusive with RenderedRef in practice: a
+	// given record should carry at most one of the two, whichever update
+	// strategy last generated it -- see RenderedRef's own comment.
+	BaseRef string `yaml:"baseRef,omitempty" json:"baseRef,omitempty" jsonschema:"description=Git ref used as the three-way merge base (tracked strategy)"`
+	// RenderedRef records the resolved, immutable ref of the template source
+	// fetched for --update-strategy=rendered -- a commit SHA for a git::
+	// source, a manifest digest for an oci:// source (never the user's --ref
+	// string, which may name a mutable branch or tag; the actual resolved
+	// ref is what makes a later re-render of "the before state"
+	// reproducible). Written only by rendered-mode generations/updates.
+	// A record with RenderedRef set but BaseRef empty means the project was
+	// last managed with rendered; the reverse means tracked -- callers use
+	// this to detect a strategy switch and fail loudly instead of silently
+	// misinterpreting the other strategy's provenance field.
+	RenderedRef string `yaml:"renderedRef,omitempty" json:"renderedRef,omitempty" jsonschema:"description=Resolved immutable ref of the template source: a commit SHA for git, a manifest digest for OCI (rendered strategy)"`
 	// Delimiters optionally overrides the Go template delimiters used when
 	// rendering template files (exactly two entries: left and right).
 	Delimiters []string `yaml:"delimiters,omitempty" json:"delimiters,omitempty" jsonschema:"description=Template delimiters as a two-element list,minItems=2,maxItems=2"`
