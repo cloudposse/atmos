@@ -3,7 +3,6 @@ package storage
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -121,18 +120,19 @@ func TestRenderedBaseStorage_LoadBase_RejectsPathTraversal(t *testing.T) {
 	}
 }
 
+// TestRenderedBaseStorage_LoadBase_RootUnreadable is a regression test for a
+// silent-update-drop bug: a root that isn't a directory at all (e.g. a plain
+// file in its place) must surface as a real read error, not a "not found"
+// result, on every OS. On Unix, os.ReadFile through a non-directory path
+// component fails with ENOTDIR directly, which is already a real error. On
+// Windows, the same condition surfaces as ERROR_PATH_NOT_FOUND, which Go's os
+// package maps to os.ErrNotExist -- indistinguishable, at the os.ReadFile
+// error-value level, from a genuinely missing file, which is why LoadBase
+// explicitly os.Stats s.root itself whenever the read comes back
+// ErrNotExist. Without that check, determineBaseContent would treat every
+// requested base file as user-added and mergeFile would drop the template's
+// update with no error at all.
 func TestRenderedBaseStorage_LoadBase_RootUnreadable(t *testing.T) {
-	// A root that isn't a directory at all (e.g. a plain file in its place)
-	// surfaces as a real read error on Unix (ENOTDIR), not a "not found"
-	// result -- distinct from a missing individual file within a valid root.
-	//
-	// On Windows, the same on-disk condition (a path component that's a file
-	// rather than a directory) surfaces as ERROR_PATH_NOT_FOUND, which Go's
-	// os package maps to os.ErrNotExist -- indistinguishable, at the
-	// os.ReadFile error-value level, from a genuinely missing file. That's a
-	// real Windows syscall-mapping difference, not a LoadBase bug, so this
-	// precondition can't hold the same way on both OSes; assert whichever
-	// outcome each OS actually produces.
 	root := t.TempDir()
 	blockingFile := filepath.Join(root, "blocking")
 	require.NoError(t, os.WriteFile(blockingFile, []byte("x"), 0o644))
@@ -141,14 +141,29 @@ func TestRenderedBaseStorage_LoadBase_RootUnreadable(t *testing.T) {
 
 	content, found, err := storage.LoadBase("config.yaml")
 
-	if runtime.GOOS == "windows" {
-		require.NoError(t, err)
-		assert.False(t, found)
-		assert.Empty(t, content)
-		return
-	}
+	require.Error(t, err)
+	assert.False(t, found)
+	assert.Empty(t, content)
+	assert.ErrorIs(t, err, errUtils.ErrReadFile)
+}
+
+// TestRenderedBaseStorage_LoadBase_RootDeleted covers the other half of the
+// same silent-update-drop bug: the render root existed at setup time but was
+// deleted (or never materialized) before LoadBase runs. Unlike the
+// non-directory-root case above, a missing root reliably surfaces as
+// os.ErrNotExist on every OS (the read fails one directory level up), so
+// this exercises the os.Stat(s.root) validation path directly, without
+// needing a Windows runner.
+func TestRenderedBaseStorage_LoadBase_RootDeleted(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.RemoveAll(root))
+
+	storage := NewRenderedBaseStorage(root)
+
+	content, found, err := storage.LoadBase("config.yaml")
 
 	require.Error(t, err)
 	assert.False(t, found)
+	assert.Empty(t, content)
 	assert.ErrorIs(t, err, errUtils.ErrReadFile)
 }

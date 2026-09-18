@@ -61,8 +61,18 @@ func (s *RenderedBaseStorage) LoadBase(filePath string) (string, bool, error) {
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			// File doesn't exist in the pristine render -- this is not an
-			// error, just means no base version (e.g. a user-added file).
+			// os.ErrNotExist here is ambiguous: it covers both "the render
+			// root is fine but this individual file is genuinely absent"
+			// (e.g. a user-added file -- not an error) and "the render root
+			// itself was deleted out from under us, or -- on Windows, where
+			// a bad path component surfaces as ErrNotExist rather than Unix's
+			// ENOTDIR -- is a plain file standing in for a directory". The
+			// latter must not be reported as "missing base file", or
+			// determineBaseContent silently treats every file as user-added
+			// and mergeFile drops the template's update with no error at all.
+			if rootErr := s.validateRoot(); rootErr != nil {
+				return "", false, rootErr
+			}
 			return "", false, nil
 		}
 		return "", false, errUtils.Build(errUtils.ErrReadFile).
@@ -75,6 +85,28 @@ func (s *RenderedBaseStorage) LoadBase(filePath string) (string, bool, error) {
 	}
 
 	return string(content), true, nil
+}
+
+// validateRoot returns ErrReadFile when s.root doesn't exist or isn't a
+// directory, nil when it's a valid directory.
+func (s *RenderedBaseStorage) validateRoot() error {
+	info, err := os.Stat(s.root)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrReadFile).
+			WithCause(err).
+			WithExplanationf("Rendered base render root is unavailable: `%s`", s.root).
+			WithContext("render_root", s.root).
+			WithExitCode(2).
+			Err()
+	}
+	if !info.IsDir() {
+		return errUtils.Build(errUtils.ErrReadFile).
+			WithExplanationf("Rendered base render root is not a directory: `%s`", s.root).
+			WithContext("render_root", s.root).
+			WithExitCode(2).
+			Err()
+	}
+	return nil
 }
 
 // IsRootedOnAnyOS reports whether path is rooted under *any* OS's
