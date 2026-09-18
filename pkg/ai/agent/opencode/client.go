@@ -114,9 +114,13 @@ func (c *Client) buildArgs(message string) []string {
 	if c.model != "" && c.model != ProviderName {
 		args = append(args, "-m", c.model)
 	}
-	// Tool/permission prompts can't be answered without a TTY. Auto-approve when MCP servers
-	// are configured (their tools need approval) or the user opted into full_auto.
-	if c.hasMCPServers || c.fullAuto {
+	// opencode allows tool calls (built-in and MCP) by default, so they run non-interactively
+	// without any approval flag. We pass --auto ONLY when the user explicitly opts in via
+	// full_auto: --auto blanket-approves every permission that isn't explicitly denied (file,
+	// shell, network) and overrides any `ask` rules in the user's opencode config, so we must
+	// not enable it implicitly just because MCP servers are configured. Explicit `deny` rules
+	// are always still enforced by opencode even under --auto.
+	if c.fullAuto {
 		args = append(args, "--auto")
 	}
 	return args

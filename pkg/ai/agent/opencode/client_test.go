@@ -104,9 +104,11 @@ func TestBuildArgs(t *testing.T) {
 			want:     []string{"run", "hello", "--auto"},
 		},
 		{
-			name:          "MCP servers force --auto",
+			// MCP servers alone must NOT enable --auto: opencode allows tools by default, and
+			// --auto would override the user's `ask` permission rules (see buildArgs comment).
+			name:          "MCP servers alone do not add --auto",
 			hasMCPServers: true,
-			want:          []string{"run", "hello", "--auto"},
+			want:          []string{"run", "hello"},
 		},
 	}
 	for _, tt := range tests {
@@ -133,8 +135,13 @@ func TestExtractResult(t *testing.T) {
 // an `mcp` map whose entries carry type "local", a combined command array, and environment.
 func TestWriteTempMCPConfig(t *testing.T) {
 	c := &Client{
+		toolchainPATH: "/opt/atmos/toolchain/bin",
 		mcpServers: map[string]schema.MCPServerConfig{
-			"aws-docs": {Command: "uvx", Args: []string{"awslabs.aws-documentation-mcp-server@latest"}},
+			"aws-docs": {
+				Command: "uvx",
+				Args:    []string{"awslabs.aws-documentation-mcp-server@latest"},
+				Env:     map[string]string{"AWS_REGION": "us-east-1"},
+			},
 		},
 	}
 	path, err := c.writeTempMCPConfig()
@@ -149,9 +156,10 @@ func TestWriteTempMCPConfig(t *testing.T) {
 	var cfg struct {
 		Schema string `json:"$schema"`
 		MCP    map[string]struct {
-			Type    string   `json:"type"`
-			Command []string `json:"command"`
-			Enabled bool     `json:"enabled"`
+			Type        string            `json:"type"`
+			Command     []string          `json:"command"`
+			Enabled     bool              `json:"enabled"`
+			Environment map[string]string `json:"environment"`
 		} `json:"mcp"`
 	}
 	require.NoError(t, json.Unmarshal(data, &cfg))
@@ -165,6 +173,11 @@ func TestWriteTempMCPConfig(t *testing.T) {
 	require.NotEmpty(t, srv.Command)
 	assert.Equal(t, "uvx", srv.Command[0])
 	assert.Equal(t, "awslabs.aws-documentation-mcp-server@latest", srv.Command[len(srv.Command)-1])
+	// The generated environment must carry the server's own env plus the injected toolchain
+	// PATH, or credential- and toolchain-dependent MCP servers would fail at runtime.
+	require.NotNil(t, srv.Environment)
+	assert.Equal(t, "us-east-1", srv.Environment["AWS_REGION"])
+	assert.Contains(t, srv.Environment["PATH"], "/opt/atmos/toolchain/bin")
 }
 
 // TestWriteTempMCPConfig_AuthWrapped confirms servers with an identity are wrapped with

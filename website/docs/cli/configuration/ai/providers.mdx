@@ -160,7 +160,7 @@ In addition to `model`, CLI providers support:
   <dd>Budget cap per invocation in USD (Claude Code only).</dd>
 
   <dt>`full_auto`</dt>
-  <dd>Enable automatic tool approval (Codex CLI, Copilot CLI, and opencode). For Codex, this passes `--full-auto` (or `--dangerously-bypass-approvals-and-sandbox` when MCP servers are configured). For Copilot, this passes `--allow-all-tools`. For opencode, this passes `--auto`. In all cases it is implied automatically when MCP servers are configured.</dd>
+  <dd>Enable automatic tool approval (Codex CLI, Copilot CLI, and opencode). For Codex, this passes `--full-auto` (or `--dangerously-bypass-approvals-and-sandbox` when MCP servers are configured). For Copilot, this passes `--allow-all-tools` (implied automatically when MCP servers are configured). For opencode, this passes `--auto`, which blanket-approves every permission not explicitly denied; because opencode already allows tool calls by default, this is **only** enabled when you set `full_auto: true` (never implicitly from MCP config), so your opencode `permission` rules are respected.</dd>
 
   <dt>`allowed_tools`</dt>
   <dd>List of tools Claude Code is allowed to use (Claude Code only).</dd>
