@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	gen "github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/source"
@@ -107,10 +108,32 @@ If no target directory is specified, you will be prompted for one.`,
 			return err
 		}
 
+		// Reject an invalid --update-strategy/--merge-driver/--merge-strategy value
+		// before doing any work; BindFlagsToViper alone doesn't enforce the
+		// WithValidValues constraints registered below (that only happens inside
+		// Parse()), so this command validates explicitly.
+		if err := scaffoldGenerateParser.ValidateFlagValues(cmd); err != nil {
+			return err
+		}
+
 		// Get flag values with proper precedence: flag > env > config > default
 		force := v.GetBool("force")
 		update := v.GetBool("update")
 		baseRef := v.GetString("base-ref")
+		updateStrategy := v.GetString("update-strategy")
+		// --base-ref only means anything for the default tracked strategy
+		// (the target's own git history); rendered's base ref instead comes
+		// from the target's own recorded scaffold.yaml, so an explicit
+		// --base-ref alongside --update-strategy=rendered is a contradiction
+		// rather than a value to silently ignore.
+		if baseRef != "" && updateStrategy == "rendered" {
+			return errUtils.Build(errUtils.ErrMutuallyExclusiveFlags).
+				WithExplanation("`--base-ref` and `--update-strategy=rendered` conflict").
+				WithHint("`--update-strategy=rendered`'s base ref comes from the target's own recorded scaffold.yaml, not `--base-ref`").
+				WithHint("Drop `--base-ref`, or use `--update-strategy=tracked` (the default) instead").
+				WithExitCode(2).
+				Err()
+		}
 		// Only pre-resolve here when target is already the real, final
 		// target directory (i.e. it was given positionally). When target is
 		// "" the interactive flow still has to prompt for one -- see
@@ -119,7 +142,19 @@ If no target directory is specified, you will be prompted for one.`,
 		// here would read .atmos/scaffold/metadata.yaml from the wrong
 		// (empty/cwd) path and permanently overwrite baseRef with "HEAD",
 		// discarding any pin at the directory the user goes on to pick.
-		if update && target != "" {
+		//
+		// Skipped entirely under rendered: this resolution (and its "HEAD"
+		// fallback) is tracked-mode-specific bookkeeping for the target's
+		// own git history. Its result flows through to SaveProjectRecord's
+		// spec.baseRef -- the same project-record field ResolveRenderedBase
+		// uses (spec.renderedRef) to tell whether a project was last
+		// managed with tracked or rendered. Running this under rendered
+		// would populate spec.baseRef with a value meaningless for that
+		// strategy, corrupting that distinction.
+		if update && target != "" && updateStrategy != "rendered" {
+			if err := source.CheckNotSwitchedFromRendered(target); err != nil {
+				return err
+			}
 			resolvedBaseRef, err := defaultBaseRef(baseRef, target)
 			if err != nil {
 				return err
@@ -182,6 +217,7 @@ If no target directory is specified, you will be prompted for one.`,
 			git:            gitEnabled,
 			mergeStrategy:  mergeStrategy,
 			mergeDriver:    mergeDriver,
+			updateStrategy: updateStrategy,
 			skipHooks:      skipHooks,
 		})
 	},
@@ -203,6 +239,7 @@ type scaffoldGenerateOptions struct {
 	git            bool
 	mergeStrategy  string
 	mergeDriver    string
+	updateStrategy string
 	skipHooks      func(string) bool
 }
 
@@ -257,6 +294,8 @@ func init() {
 		flags.WithValidValues("merge-driver", "auto", "text"),
 		flags.WithStringFlag("merge-strategy", "", "", "Conflict resolution strategy for --update: manual (surface conflicts, default; theirs if --force is set), ours (keep your version), theirs (use the template's version)"),
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
+		flags.WithStringFlag("update-strategy", "", "tracked", "Where --update's 3-way merge base comes from: tracked (the target's own git history at --base-ref, default), rendered (a pristine re-render of the template at the ref that produced what's currently on disk, using its recorded answers; requires a prior generation's scaffold.yaml record, no git dependency)"),
+		flags.WithValidValues("update-strategy", "tracked", "rendered"),
 		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
 		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
 		// hooks for this invocation; --skip-hooks=name1,name2 skips only the
@@ -276,6 +315,7 @@ func init() {
 		flags.WithEnvVars("no-git", "ATMOS_SCAFFOLD_NO_GIT"),
 		flags.WithEnvVars("merge-driver", "ATMOS_SCAFFOLD_MERGE_DRIVER"),
 		flags.WithEnvVars("merge-strategy", "ATMOS_SCAFFOLD_MERGE_STRATEGY"),
+		flags.WithEnvVars("update-strategy", "ATMOS_SCAFFOLD_UPDATE_STRATEGY"),
 		flags.WithEnvVars("skip-hooks", "ATMOS_SCAFFOLD_SKIP_HOOKS"),
 	)
 
@@ -370,6 +410,26 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 		return err
 	}
 	scaffoldUI.SetMergeDriver(mergeDriver)
+
+	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if err != nil {
+		return err
+	}
+	scaffoldUI.SetUpdateStrategy(updateStrategy)
+
+	// Only resolve here when target is already the real, final target
+	// directory (positional). The no-target interactive flow resolves this
+	// itself once the real directory is known -- see
+	// resolveInteractiveBaseRef, mirroring --base-ref's own split
+	// resolution above.
+	if opts.update && updateStrategy == engine.UpdateStrategyRendered && absTargetDir != "" {
+		renderedBase, err := source.ResolveRenderedBase(absTargetDir, opts.sourceOverride)
+		if err != nil {
+			return err
+		}
+		defer renderedBase.Cleanup()
+		scaffoldUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
+	}
 
 	// Select template (interactive or by name)
 	selectedConfig, err := selectGenerateTemplate(opts, configs, scaffoldUI)
@@ -649,6 +709,13 @@ func executeTemplateGeneration(
 	}
 	if offer {
 		if confirmed, cErr := scaffoldUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {
+			renderedCleanup, prepErr := prepareRenderedRetryBase(scaffoldUI, opts, targetDir)
+			if renderedCleanup != nil {
+				defer renderedCleanup()
+			}
+			if prepErr != nil {
+				return prepErr
+			}
 			err = scaffoldUI.ExecuteWithBaseRef(selectedConfig, targetDir, opts.force, true, opts.useDefaults, retryBaseRef, opts.templateValues)
 		}
 	}
@@ -656,6 +723,43 @@ func executeTemplateGeneration(
 		return err
 	}
 	return maybeInitGeneratedGitRepository(targetDir, selectedConfig, opts)
+}
+
+// prepareRenderedRetryBase resolves and wires the rendered update-strategy's
+// base config before a "confirm update instead" retry. Note that
+// executeScaffoldGenerate's normal opts.update-gated
+// ResolveRenderedBase/SetRenderedBaseSource setup only runs when --update
+// was passed up front; the retry flips update=true only after the initial
+// (non-update) attempt already failed with ErrTargetDirectoryNotEmpty, so
+// that setup never ran for this call. Without it, the retry's
+// ExecuteWithBaseRef would reach setupUpdateBase's rendered branch with no
+// base source ever configured. Returns a nil cleanup when the strategy isn't
+// rendered or resolution failed -- callers must nil-check before deferring
+// it.
+func prepareRenderedRetryBase(scaffoldUI ScaffoldUI, opts *scaffoldGenerateOptions, targetDir string) (cleanup func(), err error) {
+	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if err != nil {
+		return nil, err
+	}
+	if updateStrategy != engine.UpdateStrategyRendered {
+		// Tracked-strategy retries skip executeScaffoldGenerate's normal
+		// opts.update-gated strategy-switch check for the same reason they
+		// skip the rendered base setup above: that check only runs when
+		// --update was passed up front, and this retry flips update=true
+		// only after the fact. Run it here so a target last managed with
+		// --update-strategy=rendered still gets flagged instead of silently
+		// retried against stale or absent git history.
+		if err := source.CheckNotSwitchedFromRendered(targetDir); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	renderedBase, err := source.ResolveRenderedBase(targetDir, opts.sourceOverride)
+	if err != nil {
+		return nil, err
+	}
+	scaffoldUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
+	return renderedBase.Cleanup, nil
 }
 
 // shouldOfferScaffoldUpdate mirrors cmd/init's shouldOfferUpdate: offer a
@@ -668,12 +772,28 @@ func executeTemplateGeneration(
 // executeTemplateWithoutTargetDir). Returns the base ref to retry with (the
 // caller's --base-ref, defaulting to HEAD or a pinned metadata ref) alongside
 // the decision.
+//
+// Under --update-strategy=rendered the retry base ref is always "": tracked's
+// defaultBaseRef resolution (reading .atmos/scaffold/metadata.yaml) is
+// tracked-mode-specific bookkeeping that has no meaning for rendered, and its
+// non-empty result would otherwise flow unchanged into the retry's
+// executeWithSetup call, which sets spec.baseRef from whatever baseRef it's
+// given regardless of strategy -- the same project-record pollution
+// CheckNotSwitchedFromRendered exists to guard against, just reached through
+// this offer-a-retry path instead of an explicit --update.
 func shouldOfferScaffoldUpdate(err error, opts *scaffoldGenerateOptions, targetDir string) (offer bool, baseRef string, resolveErr error) {
 	if err == nil || opts.force || opts.update || !opts.interactive || opts.dryRun {
 		return false, "", nil
 	}
 	if !errors.Is(err, errUtils.ErrTargetDirectoryNotEmpty) {
 		return false, "", nil
+	}
+	updateStrategy, resolveErr := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if resolveErr != nil {
+		return false, "", resolveErr
+	}
+	if updateStrategy == engine.UpdateStrategyRendered {
+		return true, "", nil
 	}
 	resolvedBaseRef, resolveErr := defaultBaseRef(opts.baseRef, targetDir)
 	if resolveErr != nil {
@@ -723,7 +843,10 @@ func executeTemplateWithoutTargetDir(
 		// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory.
 		scaffoldUI.SetSkipHooks(opts.skipHooks)
 
-		targetDir, baseRef, templateValues, useDefaults, err := resolveInteractiveBaseRef(selectedConfig, opts, scaffoldUI)
+		targetDir, baseRef, templateValues, useDefaults, cleanup, err := resolveInteractiveBaseRef(selectedConfig, opts, scaffoldUI)
+		if cleanup != nil {
+			defer cleanup()
+		}
 		if err != nil {
 			return targetDir, err
 		}
@@ -745,6 +868,13 @@ func executeTemplateWithoutTargetDir(
 		}
 		if offer {
 			if confirmed, cErr := scaffoldUI.ConfirmUpdateInstead(finalTargetDir); cErr == nil && confirmed {
+				renderedCleanup, prepErr := prepareRenderedRetryBase(scaffoldUI, opts, finalTargetDir)
+				if renderedCleanup != nil {
+					defer renderedCleanup()
+				}
+				if prepErr != nil {
+					return finalTargetDir, prepErr
+				}
 				return scaffoldUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, finalTargetDir, opts.force, true, useDefaults, retryBaseRef, templateValues)
 			}
 		}
@@ -782,21 +912,53 @@ func resolveInteractiveBaseRef(
 	selectedConfig *templates.Configuration,
 	opts *scaffoldGenerateOptions,
 	scaffoldUI ScaffoldUI,
-) (targetDir, baseRef string, templateValues map[string]interface{}, useDefaults bool, err error) {
+) (targetDir, baseRef string, templateValues map[string]interface{}, useDefaults bool, cleanup func(), err error) {
 	targetDir, templateValues, useDefaults, err = scaffoldUI.ResolveTargetPath(selectedConfig, "", opts.update, opts.useDefaults, opts.templateValues)
 	if err != nil {
-		return targetDir, "", nil, false, err
+		return targetDir, "", nil, false, nil, err
 	}
 
 	if !opts.update {
-		return targetDir, opts.baseRef, templateValues, useDefaults, nil
+		return targetDir, opts.baseRef, templateValues, useDefaults, nil, nil
 	}
 
+	// engine.UpdateStrategyRendered's base ref comes from the target's own
+	// recorded scaffold.yaml (see source.ResolveRenderedBase), not
+	// --base-ref -- mirrored here for the no-positional-target flow the same
+	// way executeScaffoldGenerate already handles it for the
+	// positional-target flow, since targetDir only becomes known at this
+	// point in this flow.
+	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if err != nil {
+		return targetDir, "", nil, false, nil, err
+	}
+	if updateStrategy == engine.UpdateStrategyRendered {
+		var renderedBase *source.RenderedBase
+		renderedBase, err = source.ResolveRenderedBase(targetDir, opts.sourceOverride)
+		if err != nil {
+			return targetDir, "", nil, false, nil, err
+		}
+		cleanup = renderedBase.Cleanup
+		scaffoldUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
+	}
+
+	// Skipped under rendered for the same reason as executeScaffoldGenerate's
+	// positional flow: this resolution's result flows through to
+	// spec.baseRef, the same project-record field ResolveRenderedBase's
+	// spec.renderedRef counterpart uses to detect a tracked/rendered
+	// strategy switch.
+	if updateStrategy == engine.UpdateStrategyRendered {
+		return targetDir, "", templateValues, useDefaults, cleanup, nil
+	}
+
+	if err = source.CheckNotSwitchedFromRendered(targetDir); err != nil {
+		return targetDir, "", nil, false, cleanup, err
+	}
 	baseRef, err = defaultBaseRef(opts.baseRef, targetDir)
 	if err != nil {
-		return targetDir, "", nil, false, err
+		return targetDir, "", nil, false, cleanup, err
 	}
-	return targetDir, baseRef, templateValues, useDefaults, nil
+	return targetDir, baseRef, templateValues, useDefaults, cleanup, nil
 }
 
 // reloadLocalTemplateFiles re-loads selectedConfig.Files from disk with
