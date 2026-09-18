@@ -761,6 +761,32 @@ func TestPinDigest_InvalidReference(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidImageReference))
 }
 
+// TestPinDigest_MalformedDigest asserts a syntactically invalid digest (too
+// short, wrong algorithm prefix, missing "sha256:" entirely, etc.) is
+// rejected here rather than silently accepted and only failing later --
+// PinDigest is exported, so a public caller (or a corrupted persisted
+// rendered record reaching it) can pass an unvalidated digest string.
+func TestPinDigest_MalformedDigest(t *testing.T) {
+	tests := []struct {
+		name   string
+		digest string
+	}{
+		{name: "missing algorithm prefix", digest: strings.Repeat("a", 64)},
+		{name: "too short", digest: "sha256:abc"},
+		{name: "empty", digest: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pinned, err := PinDigest("registry.example.com/org/repo:v1", tt.digest)
+
+			require.Error(t, err)
+			assert.Empty(t, pinned)
+			assert.True(t, errors.Is(err, errUtils.ErrInvalidImageReference))
+		})
+	}
+}
+
 // TestProcessImageWithFS_Success exercises the full pull->extract success
 // path against a real (in-process) registry: manifest resolution, artifact
 // type check, layer retrieval, and extraction all succeed and the layer's

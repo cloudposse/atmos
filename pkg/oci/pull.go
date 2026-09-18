@@ -120,7 +120,16 @@ func PinDigest(imageName, digest string) (string, error) {
 	if err != nil {
 		return "", errors.Join(errUtils.ErrInvalidImageReference, err)
 	}
-	return ref.Context().Digest(digest).Name(), nil
+	// name.Repository.Digest only stores the supplied string; it never
+	// validates it. Route through name.NewDigest so a malformed digest
+	// (an unpinnable manifest reference, or a corrupted persisted rendered
+	// record reaching this exported function) fails here with a clear error
+	// instead of later in ProcessImage's name.ParseReference call.
+	pinned, err := name.NewDigest(ref.Context().Name() + "@" + digest)
+	if err != nil {
+		return "", errors.Join(errUtils.ErrInvalidImageReference, err)
+	}
+	return pinned.Name(), nil
 }
 
 // ProcessImage pulls an OCI image and extracts its layers to the specified
