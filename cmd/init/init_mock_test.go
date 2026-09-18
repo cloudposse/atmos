@@ -12,7 +12,32 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/manifest"
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
+
+const initRetryTestScaffoldYAML = `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: retry-rendered
+spec:
+  fields:
+    - name: project_name
+      type: input
+      default: demo
+`
+
+// writeLocalInitRenderedRetryTemplate creates a minimal on-disk scaffold
+// template (a local directory source, so source.ResolveRenderedBase's
+// Hydrate call resolves it without needing git or network access) and
+// returns its directory.
+func writeLocalInitRenderedRetryTemplate(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scaffold.yaml"), []byte(initRetryTestScaffoldYAML), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file.txt"), []byte("hello"), 0o600))
+	return dir
+}
 
 // These tests exercise the retry-as-update confirmation flow in
 // runInitTargetedFlow/runInitInteractiveFlow, and resolveInteractiveInitBaseRef's
@@ -50,6 +75,108 @@ func TestRunInitTargetedFlow_OffersUpdateAndRetriesOnConfirm(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "/tmp/target", targetDir)
+}
+
+// TestRunInitTargetedFlow_RenderedStrategyRetryWiresBaseSource mirrors
+// cmd/scaffold's TestExecuteTemplateGeneration_RenderedStrategyRetryWiresBaseSource:
+// under --update-strategy=rendered, the initial (non-update) attempt fails
+// with ErrTargetDirectoryNotEmpty before executeInit's own opts.update-gated
+// ResolveRenderedBase setup ever ran (that setup requires opts.update to
+// already be true). Confirming the "update instead" offer used to retry with
+// update=true directly, reaching setupUpdateBase's rendered branch with no
+// base source ever configured -- a nil pointer panic. This asserts the retry
+// now resolves and wires SetRenderedBaseSource before the retry
+// ExecuteWithBaseRef call, using a real target dir with a real recorded
+// project record and a real (local-directory) template source.
+func TestRunInitTargetedFlow_RenderedStrategyRetryWiresBaseSource(t *testing.T) {
+	templateDir := writeLocalInitRenderedRetryTemplate(t)
+	targetDir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "retry-rendered"}}
+	require.NoError(t, config.SaveProjectRecord(targetDir, sampleConfig,
+		config.ProjectRecordProvenance{Source: templateDir, RenderedRef: "irrelevant-for-local-source"}, nil))
+
+	selectedConfig := &templates.Configuration{Name: "test"}
+	opts := &initOptions{
+		targetDir:      targetDir,
+		interactive:    true,
+		updateStrategy: "rendered",
+		templateVars:   map[string]interface{}{},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockInitUI(ctrl)
+
+	gomock.InOrder(
+		mockUI.EXPECT().
+			ExecuteWithBaseRef(selectedConfig, targetDir, false, false, false, "", opts.templateVars).
+			Return(errUtils.ErrTargetDirectoryNotEmpty),
+		mockUI.EXPECT().
+			ConfirmUpdateInstead(targetDir).
+			Return(true, nil),
+		mockUI.EXPECT().
+			SetRenderedBaseSource(gomock.Any(), gomock.Any()).
+			Do(func(cfg *templates.Configuration, values map[string]interface{}) {
+				require.NotNil(t, cfg)
+				assert.NotEmpty(t, cfg.Files, "the old ref's template must be fully hydrated before the retry")
+			}),
+		// The retry base ref is "" under rendered mode: shouldOfferUpdate's
+		// tracked-only defaultBaseRef resolution is skipped, since a non-empty
+		// value here would otherwise flow unchanged into executeWithSetup's
+		// spec.baseRef write regardless of strategy.
+		mockUI.EXPECT().
+			ExecuteWithBaseRef(selectedConfig, targetDir, false, true, false, "", opts.templateVars).
+			Return(nil),
+	)
+
+	resultDir, err := runInitTargetedFlow(mockUI, selectedConfig, opts)
+
+	require.NoError(t, err)
+	assert.Equal(t, targetDir, resultDir)
+}
+
+// TestRunInitTargetedFlow_TrackedStrategyRetryRejectsSwitchFromRendered
+// covers a target last generated under --update-strategy=rendered
+// (spec.renderedRef set, spec.baseRef empty) whose initial (non-update)
+// attempt fails with ErrTargetDirectoryNotEmpty, offering the same
+// "confirm update instead" retry as
+// TestRunInitTargetedFlow_RenderedStrategyRetryWiresBaseSource -- but this
+// time the retry itself defaults to --update-strategy=tracked. Before this
+// fix, prepareRenderedRetryBase returned immediately for a non-rendered
+// strategy without ever calling source.CheckNotSwitchedFromRendered, so the
+// retry's ExecuteWithBaseRef call would have gone on to attempt a tracked
+// 3-way merge against a target that was deliberately generated with no
+// git-history dependency. It must instead fail loudly here, before that
+// retry ExecuteWithBaseRef call ever happens.
+func TestRunInitTargetedFlow_TrackedStrategyRetryRejectsSwitchFromRendered(t *testing.T) {
+	targetDir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "retry-tracked"}}
+	require.NoError(t, config.SaveProjectRecord(targetDir, sampleConfig,
+		config.ProjectRecordProvenance{Source: "embedded", RenderedRef: "abc123"}, nil))
+
+	selectedConfig := &templates.Configuration{Name: "test"}
+	opts := &initOptions{
+		targetDir:    targetDir,
+		interactive:  true,
+		templateVars: map[string]interface{}{},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockInitUI(ctrl)
+
+	// The retry's own ExecuteWithBaseRef call must never happen: the
+	// strategy-switch check must reject the retry first.
+	mockUI.EXPECT().
+		ExecuteWithBaseRef(selectedConfig, targetDir, false, false, false, "", opts.templateVars).
+		Return(errUtils.ErrTargetDirectoryNotEmpty).
+		Times(1)
+	mockUI.EXPECT().
+		ConfirmUpdateInstead(targetDir).
+		Return(true, nil)
+
+	_, err := runInitTargetedFlow(mockUI, selectedConfig, opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUpdateStrategySwitchedToTracked)
 }
 
 func TestRunInitTargetedFlow_DeclinesUpdateOffer(t *testing.T) {
