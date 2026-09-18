@@ -435,3 +435,42 @@ spec:
 	_, statErr := os.Stat(filepath.Join(tempDir, "docs", "legacy", "a.md"))
 	assert.True(t, os.IsNotExist(statErr), "the backslash-authored pattern must match and skip docs/legacy/a.md, same as its forward-slash equivalent would")
 }
+
+// TestExecuteWithSetup_FilesGlobMatrixMalformedTargetPropagatesParseError
+// covers validateDirectoryMatrixTargetsDifferentiate's own error path: a
+// syntactically malformed target: (here, an unclosed "{{") makes
+// engine.TargetReferencesFileContext itself fail to parse, and that parse
+// error must propagate as the run's error -- not be swallowed, and not be
+// misreported as "target doesn't reference .file.*".
+func TestExecuteWithSetup_FilesGlobMatrixMalformedTargetPropagatesParseError(t *testing.T) {
+	ui := createTestUI(t)
+	tempDir := t.TempDir()
+
+	scaffoldYAML := `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test-template
+spec:
+  files:
+    - path: "components/**"
+      target: "environments/{{ .file.RelPath"
+      matrix:
+        env: [dev]
+`
+
+	embedsConfig := &templates.Configuration{
+		Name: "test-template",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: scaffoldYAML, Permissions: 0o644},
+			{Path: "components/vpc/main.tf", Content: "vpc", Permissions: 0o644},
+			{Path: "components/eks/main.tf", Content: "eks", Permissions: 0o644},
+		},
+	}
+
+	err := ui.executeWithSetup(embedsConfig, tempDir, false, false, true, "", nil, []string{"{{", "}}"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldExpressionFailed)
+
+	_, statErr := os.Stat(filepath.Join(tempDir, "environments"))
+	assert.True(t, os.IsNotExist(statErr), "no output should be written when the target: itself fails to parse")
+}
