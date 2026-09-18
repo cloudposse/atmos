@@ -64,6 +64,11 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 			Err()
 	}
 
+	// Never send the API key in cleartext over http (except to a local loopback endpoint).
+	if err := base.ValidateProviderBaseURL(config.BaseURL, true); err != nil {
+		return nil, err
+	}
+
 	// Create OpenAI client with OpenRouter's base URL and timeout.
 	requestTimeout := base.DefaultRequestTimeout
 	if atmosConfig != nil && atmosConfig.AI.TimeoutSeconds > 0 {

@@ -150,7 +150,7 @@ func TestNewClient(t *testing.T) {
 					Enabled:         true,
 					DefaultProvider: "openrouter",
 					Providers: map[string]*schema.AIProviderConfig{
-						"openrouter": {},
+						"openrouter": {ApiKey: "test-key"},
 					},
 				},
 			},
@@ -163,7 +163,7 @@ func TestNewClient(t *testing.T) {
 					Enabled:         true,
 					DefaultProvider: "deepseek",
 					Providers: map[string]*schema.AIProviderConfig{
-						"deepseek": {},
+						"deepseek": {ApiKey: "test-key"},
 					},
 				},
 			},
@@ -176,7 +176,7 @@ func TestNewClient(t *testing.T) {
 					Enabled:         true,
 					DefaultProvider: "zai",
 					Providers: map[string]*schema.AIProviderConfig{
-						"zai": {},
+						"zai": {ApiKey: "test-key"},
 					},
 				},
 			},

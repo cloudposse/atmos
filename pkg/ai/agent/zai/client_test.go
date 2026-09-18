@@ -1,4 +1,3 @@
-//nolint:dupl // Test files across OpenAI-compatible providers share similar setup by design for isolation and clarity.
 package zai
 
 import (
@@ -11,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -185,4 +185,17 @@ func TestClientSendMethods(t *testing.T) {
 	response, err = client.SendMessageWithSystemPromptAndTools(ctx, "system", "memory", messages, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "hello from zai", response.Content)
+}
+
+func TestNewClient_RejectsInsecureBaseURL(t *testing.T) {
+	client, err := NewClient(&schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"zai": {ApiKey: "test-key", BaseURL: "http://api.example.com/v1"},
+			},
+		},
+	})
+	assert.ErrorIs(t, err, errUtils.ErrAIInsecureBaseURL)
+	assert.Nil(t, client)
 }
