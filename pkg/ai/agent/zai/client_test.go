@@ -199,3 +199,67 @@ func TestNewClient_RejectsInsecureBaseURL(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAIInsecureBaseURL)
 	assert.Nil(t, client)
 }
+
+func TestClientErrorResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":{"message":"boom"}}`))
+	}))
+	t.Cleanup(server.Close)
+
+	// TimeoutSeconds > 0 also exercises the request-timeout override branch in NewClient.
+	client, err := NewClient(&schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled:        true,
+			TimeoutSeconds: 30,
+			Providers: map[string]*schema.AIProviderConfig{
+				"zai": {ApiKey: "test-key", BaseURL: server.URL},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	messages := []types.Message{{Role: types.RoleUser, Content: "hi"}}
+
+	_, err = client.SendMessage(ctx, "hi")
+	require.ErrorIs(t, err, errUtils.ErrAISendMessage)
+
+	_, err = client.SendMessageWithHistory(ctx, messages)
+	require.ErrorIs(t, err, errUtils.ErrAISendMessage)
+
+	_, err = client.SendMessageWithTools(ctx, "hi", nil)
+	require.ErrorIs(t, err, errUtils.ErrAISendMessage)
+
+	_, err = client.SendMessageWithToolsAndHistory(ctx, messages, nil)
+	require.ErrorIs(t, err, errUtils.ErrAISendMessage)
+
+	_, err = client.SendMessageWithSystemPromptAndTools(ctx, "sys", "mem", messages, nil)
+	require.ErrorIs(t, err, errUtils.ErrAISendMessage)
+}
+
+func TestClientEmptyChoices(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"x","object":"chat.completion","created":0,"model":"m","choices":[]}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(&schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"zai": {ApiKey: "test-key", BaseURL: server.URL},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	_, err = client.SendMessage(ctx, "hi")
+	require.ErrorIs(t, err, errUtils.ErrAINoResponseChoices)
+
+	_, err = client.SendMessageWithHistory(ctx, []types.Message{{Role: types.RoleUser, Content: "hi"}})
+	require.ErrorIs(t, err, errUtils.ErrAINoResponseChoices)
+}
