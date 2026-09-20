@@ -1,0 +1,66 @@
+name: Update Plugin Version
+
+# Fires when a new atmos container image lands on GHCR — that's what the job
+# below runs from, and triggering off the image itself (rather than
+# `release: published`) avoids racing the separate, slower image build/push
+# step: `container:` pins an image tag at job start, before any step runs, so
+# the tag has to already exist.
+#
+# The actual version stamped into the plugin manifests comes from a live
+# `atmos version track update`/`apply` inside that container, not from this
+# event's payload — see the `version.dependencies.atmos` and `version.files`
+# (json manager) entries in atmos.yaml. See #2895.
+on:
+  registry_package:
+    types: [published]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-plugin-version:
+    if: >-
+      github.event.registry_package.package_type == 'container' &&
+      github.event.registry_package.name == 'atmos' &&
+      !contains(github.event.registry_package.package_version.version, '-')
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ github.event.registry_package.package_version.version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Update plugin manifests from the resolved atmos version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos version track update
+          atmos version track apply
+          echo "PLUGIN_VERSION=$(atmos version track get atmos)" >> "$GITHUB_ENV"
+
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: github-app
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Create or update PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.github-app.outputs.token }}
+          branch: "chore/update-plugin-version"
+          title: "chore: bump Claude Code plugin version to ${{ env.PLUGIN_VERSION }}"
+          delete-branch: true
+          sign-commits: true
+          add-paths: |
+            agent-skills/.claude-plugin/plugin.json
+            .claude-plugin/marketplace.json
+            versions.lock.yaml
+          commit-message: |
+            chore: bump Claude Code plugin version to ${{ env.PLUGIN_VERSION }}
+          base: main
+          labels: "no-release"

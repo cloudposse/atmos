@@ -1,6 +1,6 @@
 {
   "name": "atmos",
-  "version": "1.0.0",
+  "version": "1.229.0",
   "description": "Atmos skills for AI coding assistants: Terraform/OpenTofu/Helmfile/Packer/Ansible orchestration, stacks, remote imports, components, immutable vendoring and Component Updater PRs, containers, emulators, Native CI, SBOM provenance, Atmos Pro, Auth, GitOps, secrets, cache, hooks, shared steps, workflows, version tracks, casts, YAML functions, AI/MCP, and modernization.",
   "author": {
     "name": "Cloud Posse",
