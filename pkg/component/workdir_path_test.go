@@ -701,6 +701,40 @@ func TestProvisionAndResolveComponentPath_LocalComponentWorkdirProvisionedEarly(
 	assert.FileExists(t, filepath.Join(got, "main.tf"))
 }
 
+// TestProvisionAndResolveComponentPath_NonTerraformWorkdirNotProvisioned is the negative-path
+// counterpart to the test above: the early workdir provisioning is gated to Terraform, because
+// ProvisionWorkdir builds a terraform-specific workdir. A LOCAL non-Terraform (e.g. Helmfile)
+// component with provision.workdir.enabled must NOT be resolved through a terraform workdir — it
+// falls back to its source directory and leaves WorkdirPathKey unset.
+func TestProvisionAndResolveComponentPath_NonTerraformWorkdirNotProvisioned(t *testing.T) {
+	basePath := t.TempDir()
+	sourceDir := filepath.Join(basePath, "components", "helmfile", "nginx")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent: "nginx",
+		Stack:          "dev",
+		ComponentSection: map[string]any{
+			"component":       "nginx",
+			"atmos_component": "nginx",
+			"atmos_stack":     "dev",
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+		},
+	}
+
+	got, exists, err := ProvisionAndResolveComponentPath(
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.HelmfileComponentType, sourceDir,
+	)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, sourceDir, got, "non-Terraform component must resolve to its source dir, not a terraform workdir")
+	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey]
+	assert.False(t, hasWorkdir, "WorkdirPathKey must not be set for a non-Terraform component")
+}
+
 func TestSourceMisplacedUnderMetadata(t *testing.T) {
 	tests := []struct {
 		name    string

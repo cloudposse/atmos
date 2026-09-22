@@ -40,9 +40,13 @@ JIT-`source:` components were unaffected because their workdir is set before gen
 ## Changes
 
 - `pkg/component/workdir_path.go` — `ProvisionAndResolveComponentPath` now calls
-  `provWorkdir.ProvisionWorkdir(...)` **up front**, before the no-source short-circuit and before any
-  file generation, and (in the no-source branch) resolves the `metadata.component` subpath onto the
-  freshly provisioned workdir and returns it. `ProvisionWorkdir` is self-gating: it no-ops unless
+  `provWorkdir.ProvisionWorkdir(...)` **up front** (gated to `cfg.TerraformComponentType`), before the
+  no-source short-circuit and before any file generation, and (in the no-source branch) resolves the
+  `metadata.component` subpath onto the freshly provisioned workdir and returns it. The Terraform gate
+  matters because this helper is shared by Helmfile/Packer/Ansible while `ProvisionWorkdir` builds a
+  terraform-specific workdir path (and the `before.terraform.init` hook that also runs it fires only
+  for Terraform) — so an unconditional call would resolve a local non-Terraform component through a
+  terraform workdir. `ProvisionWorkdir` is otherwise self-gating: it no-ops unless
   `provision.workdir.enabled: true` and the component has no JIT source, and it no-ops when
   `WorkdirPathKey` is already set — so the existing `before.terraform.init` run of the same
   provisioner remains a safe, idempotent skip (and the `-reconfigure` signal it records persists on
