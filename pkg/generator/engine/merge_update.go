@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -292,6 +293,22 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 // rendered) template content as base would make base identical to "theirs",
 // silently turning the merge into a no-op that keeps the user's file and
 // drops template updates. Such cases return an error instead.
+//
+// Migration-aware fallback: "no history at the current rendered path" is
+// genuinely ambiguous -- it means either a real user-added file, or a
+// spec.files[] entry whose target: changed since the file was last
+// generated (e.g. adopting a glob+.file.RelPath-based target on an entry
+// that previously rendered verbatim to its own discovered path -- see
+// File.OriginalSourcePath's doc comment for the full scenario). There is no
+// principled way to *know* which case this is without new bookkeeping (a
+// persisted rename record in the project record, keyed per spec entry) that
+// is out of scope here. Instead, when OriginalSourcePath differs from the
+// current path, this also tries the base lookup there -- the one concrete,
+// recoverable signal already available without new bookkeeping, and exactly
+// right for the common "previously no target:, verbatim passthrough" case.
+// If that also finds nothing, the file is still treated as user-added (never
+// silently mutated), but a warning is logged instead of staying silent, so a
+// real migration doesn't look identical to an intentional user-added file.
 func (p *Processor) determineBaseContent(file File, existingPath string) (string, bool, error) {
 	if p.baseStorage == nil {
 		// Callers guard against this, but never silently degrade.
@@ -335,8 +352,60 @@ func (p *Processor) determineBaseContent(file File, existingPath string) (string
 		// Use the loaded version as base.
 		return base, false, nil
 	default:
-		// File doesn't exist at the base. This is a user-added file - skip
-		// merge, don't touch it.
+		return p.determineBaseContentMigrationFallback(file, relativePath)
+	}
+}
+
+// determineBaseContentMigrationFallback is determineBaseContent's "not found
+// at the current rendered path" branch, split out to stay within this repo's
+// function-length limit. See determineBaseContent's own doc comment for the
+// migration-aware fallback this implements.
+func (p *Processor) determineBaseContentMigrationFallback(file File, relativePath string) (string, bool, error) {
+	if file.OriginalSourcePath == "" || file.OriginalSourcePath == relativePath {
+		// No original-source-path signal to fall back to (a caller that
+		// never populates it, e.g. direct engine tests), or it's identical
+		// to the current path (target: never changed this file's output
+		// path in the first place) -- either way, there's no alternate
+		// candidate to try, so this is today's plain "user-added" case.
+		return "", true, nil
+	}
+
+	migratedBase, migratedFound, migErr := p.baseStorage.LoadBase(file.OriginalSourcePath)
+	switch {
+	case migErr != nil:
+		// The fallback lookup itself failed (e.g. a real git/storage read
+		// error) -- this is not "no base exists at the original path", so it
+		// must not be folded into the "treat as user-added" case below.
+		// Propagate a proper contextual error, mirroring how the primary
+		// current-path lookup above handles its own LoadBase error.
+		return "", false, errUtils.Build(errUtils.ErrThreeWayMerge).
+			WithCause(migErr).
+			WithExplanationf("Failed to load the merge base for `%s` at its original path", file.Path).
+			WithHint("Verify the merge base is available: for `--update-strategy=tracked`, check the base ref exists (`git show <base-ref>`); for `--update-strategy=rendered`, check the pristine re-render of the recorded ref succeeded").
+			WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
+			WithContext("file_path", file.Path).
+			WithContext("relative_path", relativePath).
+			WithContext("original_path", file.OriginalSourcePath).
+			WithExitCode(2).
+			Err()
+	case migratedFound:
+		log.Warn(
+			"scaffold --update: recovered merge base from the file's original path; target: appears to have changed since this file was last generated",
+			"current_path", relativePath,
+			"original_path", file.OriginalSourcePath,
+		)
+		return migratedBase, false, nil
+	default:
+		// Nothing found under either the current or the original path. Still
+		// treated as user-added (never silently mutated), but this is now an
+		// ambiguous case -- possibly a genuine migration with no git history
+		// under either path yet (e.g. the first `--update` after target:
+		// changed hasn't been committed) -- so warn instead of staying silent.
+		log.Warn(
+			"scaffold --update: no merge base found at this file's current or original path; treating it as user-added and leaving it untouched -- if target: changed recently, future template updates will not be applied to this file automatically",
+			"current_path", relativePath,
+			"original_path", file.OriginalSourcePath,
+		)
 		return "", true, nil
 	}
 }
