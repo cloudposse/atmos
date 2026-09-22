@@ -308,6 +308,73 @@ environments:
 environment (`us-east-1` and `us-west-2`) — `when:` then prunes the Cartesian product down to each
 environment's actual regions.
 
+## Glob Paths and Directory-Level Matrix
+
+`spec.files[].path` may be a glob pattern instead of a literal path — `*`, `?`, `[...]`, `**` (any
+depth, including zero), and `{a,b}` (brace expansion), matched against every discovered file's
+path. This lets one entry gate or multiply an entire directory at once, instead of listing every
+file individually. A backslash in the pattern is always treated as a forward-slash directory
+separator, regardless of which OS authored or evaluates it — discovered paths are always
+forward-slash-normalized. A malformed pattern (an unclosed `[` or `{`) fails `atmos scaffold
+validate` and scaffold generation immediately, rather than silently and permanently matching
+nothing.
+
+Skip (or gate) an entire directory, recursively, with one `when:`-gated entry:
+
+```yaml title="scaffold.yaml"
+spec:
+  files:
+    - path: "docs/legacy/**"
+      when: "answers.include_legacy_docs"
+```
+
+When more than one entry's `path:` matches the same discovered file, the **last** matching entry
+in declaration order wins — the same precedence convention `.gitignore`/`CODEOWNERS` use. Order
+entries broad-to-specific, and place a more specific override *after* a broad glob it should
+shadow:
+
+```yaml title="scaffold.yaml"
+spec:
+  files:
+    - path: "docs/legacy/**"
+      when: "answers.include_legacy_docs"
+    - path: "docs/legacy/keep-this.md"
+      when: "always"
+```
+
+Combine a glob `path:` with `matrix:` and `target:` to duplicate an entire directory's files once
+per matrix combination, exactly like a single-file matrix entry — every matched file gets the same
+`.matrix.<axis>` values a single-file entry would (resolved once per `path:`, not once per matched
+file, so every matched file sees the identical combination even if an axis expression uses a
+non-deterministic function). Since a glob can match many files, `target:` must differentiate
+*which* matched file an output came from, using two new template variables available everywhere
+`.matrix.<axis>` is (`target:` and the file's own content), regardless of whether `path:` is a
+glob or `matrix:` is even set:
+
+- **`.file.Path`** — the currently matched file's own discovered path.
+- **`.file.RelPath`** — `.file.Path` with the matching entry's glob literal prefix stripped.
+  Equal to `.file.Path` when the entry's `path:` has no glob metacharacter.
+
+```yaml title="scaffold.yaml"
+spec:
+  files:
+    - path: "components/**"
+      target: "environments/{{ .matrix.env }}/{{ .file.RelPath }}"
+      matrix:
+        env: [dev, staging, production]
+```
+
+A `components/` directory containing `vpc/main.tf` and `eks/main.tf` produces six generated files:
+`environments/dev/vpc/main.tf`, `environments/dev/eks/main.tf`, and the same pair under `staging/`
+and `production/`. A `target:` that doesn't differentiate matched files (e.g. omitting
+`.file.RelPath`) fails immediately, before any file in the run is written — this is checked
+deterministically, not just caught after a collision happens mid-run.
+
+`.file.Path`/`.file.RelPath` are available in Go templates only — they aren't exposed to CEL
+`when:` alongside `answers`/`matrix`. To exclude one specific file from a glob+matrix entry's own
+`when:`, declare a second, more specific entry after the broad one instead, per the precedence
+rule above.
+
 ## Generation Hooks
 
 Generation hooks run after answers are validated and before or after files are written:

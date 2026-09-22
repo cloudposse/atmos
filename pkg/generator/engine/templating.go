@@ -39,6 +39,30 @@ type File struct {
 	Content     string      // File content, processed as template if IsTemplate is true
 	IsTemplate  bool        // Whether to process Content as a Go template
 	Permissions os.FileMode // Unix file permissions to apply when creating the file
+
+	// OriginalSourcePath is the file's own path as discovered in the
+	// template's source tree, before any spec.files[].target: templating
+	// (see pkg/generator/ui's toEngineFile/writeOneOutput, which populate
+	// this from the tmpl.File the discovery walk produced -- Path above is
+	// overwritten with the target: template string, so this is the only
+	// place that original discovered path survives). Empty for any caller
+	// that doesn't distinguish source discovery from output-path
+	// templating (e.g. most direct engine tests).
+	//
+	// determineBaseContent uses this as a secondary merge-base candidate:
+	// when a spec.files[] entry's target: changes (e.g. adopting a
+	// glob+.file.RelPath-based target on a file that previously rendered
+	// verbatim to its own discovered path), the first `--update` after the
+	// change writes the new path fresh via writeNewFile since it doesn't
+	// exist yet -- but every `--update` after that finds the new path on
+	// disk and looks for its merge base in git history, where only the OLD
+	// path (often identical to OriginalSourcePath, when the entry
+	// previously had no target: at all) was ever committed. Without this
+	// fallback that lookup finds nothing and permanently, silently treats
+	// the file as user-added -- freezing its content at whatever the first
+	// post-migration update wrote, with no further template updates ever
+	// applied and no warning. See determineBaseContent's own doc comment.
+	OriginalSourcePath string
 }
 
 // FileSkippedError represents when a file is intentionally skipped during processing.
@@ -119,6 +143,14 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 	// workflow matrix step's own {{ .matrix.<axis> }} uses.
 	if row, ok := userValues[MatrixKey].(map[string]string); ok {
 		templateData["matrix"] = row
+	}
+
+	// A directory-level spec.files entry's current matched file travels
+	// through userValues under FileContextKey the same way (see
+	// pkg/generator/ui's file-generation loop), letting both target: and
+	// content read .file.Path/.file.RelPath.
+	if fileCtx, ok := userValues[FileContextKey].(FileContext); ok {
+		templateData["file"] = fileCtx
 	}
 
 	funcs := buildTemplateFuncMap(userValues)

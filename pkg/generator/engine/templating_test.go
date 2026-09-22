@@ -207,6 +207,48 @@ func TestProcessTemplateWithoutMatrixLeavesRootUnset(t *testing.T) {
 	}
 }
 
+// TestProcessTemplateHoistsFileContextOntoRoot verifies the current
+// discovered file's own path, stashed under the reserved FileContextKey, is
+// exposed to both the target path and file content as .file.Path/.file.RelPath
+// -- not nested under .Config -- mirroring TestProcessTemplateHoistsMatrixOntoRoot.
+func TestProcessTemplateHoistsFileContextOntoRoot(t *testing.T) {
+	processor := NewProcessor()
+
+	userValues := map[string]interface{}{
+		"project_name": "test-project",
+		FileContextKey: FileContext{Path: "components/vpc/main.tf", RelPath: "vpc/main.tf"},
+	}
+
+	result, err := processor.ProcessTemplate(
+		`{{.Config.project_name}}/{{.file.RelPath}} (from {{.file.Path}})`,
+		"/tmp/test", nil, userValues)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := "test-project/vpc/main.tf (from components/vpc/main.tf)"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+// TestProcessTemplateWithoutFileContextLeavesRootUnset verifies templates
+// that never see a file context don't get a stray "file" key.
+func TestProcessTemplateWithoutFileContextLeavesRootUnset(t *testing.T) {
+	processor := NewProcessor()
+
+	result, err := processor.ProcessTemplate(`{{if .file}}has-file{{else}}no-file{{end}}`,
+		"/tmp/test", nil, map[string]interface{}{"project_name": "test-project"})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	expected := "no-file"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
 // TestTemplateFilenameProcessing tests that file paths with templates are processed correctly.
 func TestTemplateFilenameProcessing(t *testing.T) {
 	processor := NewProcessor()
