@@ -4277,7 +4277,7 @@
         {
           "type": "object",
           "patternProperties": {
-            "^[a-zA-Z0-9/_-]+$": {
+            "^[a-zA-Z0-9/_:-]+$": {
               "$ref": "#/definitions/secret_provider"
             }
           },
@@ -4450,7 +4450,7 @@
         {
           "type": "object",
           "patternProperties": {
-            "^[a-zA-Z0-9/_-]+$": {
+            "^[a-zA-Z0-9/_:-]+$": {
               "$ref": "#/definitions/auth_provider"
             }
           },
@@ -4530,7 +4530,7 @@
         {
           "type": "object",
           "patternProperties": {
-            "^[a-zA-Z0-9/_-]+$": {
+            "^[a-zA-Z0-9/_:-]+$": {
               "$ref": "#/definitions/auth_identity"
             }
           },
