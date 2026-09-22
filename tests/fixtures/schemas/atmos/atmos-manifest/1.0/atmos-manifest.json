@@ -2891,7 +2891,7 @@
         {
           "type": "object",
           "patternProperties": {
-            "^[a-zA-Z0-9/_-]+$": {
+            "^[a-zA-Z0-9/_:-]+$": {
               "$ref": "#/definitions/secret_provider"
             }
           },
@@ -3068,7 +3068,7 @@
         {
           "type": "object",
           "patternProperties": {
-            "^[a-zA-Z0-9/_-]+$": {
+            "^[a-zA-Z0-9/_:-]+$": {
               "$ref": "#/definitions/auth_provider"
             }
           },
@@ -3122,6 +3122,13 @@
               "type": "object",
               "additionalProperties": true,
               "description": "Provider-specific configuration"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "User-defined tags for categorizing and filtering providers (atmos auth list/logout --tags)."
             }
           },
           "required": [
@@ -3141,7 +3148,7 @@
         {
           "type": "object",
           "patternProperties": {
-            "^[a-zA-Z0-9/_-]+$": {
+            "^[a-zA-Z0-9/_:-]+$": {
               "$ref": "#/definitions/auth_identity"
             }
           },
@@ -3168,6 +3175,10 @@
             "default": {
               "type": "boolean",
               "description": "Whether this is the default identity"
+            },
+            "required": {
+              "type": "boolean",
+              "description": "Whether this identity is automatically authenticated without prompting. Required identities are authenticated before commands run."
             },
             "provider": {
               "type": "string",
@@ -3230,11 +3241,16 @@
             },
             "session": {
               "$ref": "#/definitions/auth_session"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "User-defined tags for categorizing and filtering identities (atmos auth list/login --tags)."
             }
           },
-          "required": [
-            "kind"
-          ]
+          "required": []
         }
       ]
     },
