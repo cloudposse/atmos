@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -31,6 +32,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/terminal"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // UI layout constants.
@@ -115,17 +117,35 @@ func toEngineFile(file tmpl.File) engine.File {
 	}
 }
 
-// FileSpecByPath indexes a scaffold config's spec.files overlay by declared
-// path, for O(1) lookup during the file-generation loop. Files not listed in
-// the overlay generate unconditionally with no Target/Matrix override --
+// FileSpecByPath resolves, for every discovered file, which spec.files[]
+// overlay entry (if any) applies to it, for O(1) lookup by path during the
+// file-generation loop. spec.files[].path may be a literal path or a glob
+// pattern (doublestar syntax: *, ?, [...], **, {a,b} -- see
+// pkg/utils.PathMatch), matched against every discovered file's path, so
+// one entry can gate or multiply an entire directory at once (see
+// docs/prd/atmos-scaffold.md, "Dynamic File Generation (matrix)"). When
+// multiple entries match the same file, the *last* matching entry in
+// declaration order wins -- the same precedence convention as .gitignore/
+// CODEOWNERS (write broad patterns first, specific overrides after; a
+// wrong-order override is a silent no-op, not an error). Files not matched
+// by any entry generate unconditionally with no Target/Matrix override --
 // FileSpec's zero-value When already evaluates to true (see
 // condition.Condition.Evaluate). Exported so the `--dry-run` preview
 // (cmd/scaffold) can gate its file list with the exact same spec.When
 // evaluation real generation uses, instead of a second, divergent copy.
-func FileSpecByPath(scaffoldConfig *config.ScaffoldConfig) map[string]config.FileSpec {
-	specByPath := make(map[string]config.FileSpec, len(scaffoldConfig.Spec.Files))
-	for _, f := range scaffoldConfig.Spec.Files {
-		specByPath[f.Path] = f
+func FileSpecByPath(scaffoldConfig *config.ScaffoldConfig, files []tmpl.File) map[string]config.FileSpec {
+	specByPath := make(map[string]config.FileSpec, len(files))
+	for _, file := range files {
+		if file.IsDirectory {
+			continue
+		}
+		for _, spec := range scaffoldConfig.Spec.Files {
+			matched, err := u.PathMatch(u.NormalizeGlobPattern(spec.Path), file.Path)
+			if err != nil || !matched {
+				continue
+			}
+			specByPath[file.Path] = spec
+		}
 	}
 	return specByPath
 }
@@ -142,6 +162,70 @@ func FileOutputPath(file tmpl.File, spec config.FileSpec) string {
 		return spec.Target
 	}
 	return file.Path
+}
+
+// validateDirectoryMatrixTargetsDifferentiate returns an error if any
+// spec.files[] entry declares matrix: and its path (literal or glob)
+// matches more than one discovered file, but its target: never references
+// .file.Path or .file.RelPath. This isn't a heuristic guess: .matrix.<axis>
+// and .Config.* are identical across every file one entry matches for the
+// same resolved combination, and .file.* is the *only* template data that
+// varies per matched file (see engine.FileContext) -- so a target: that
+// never references it is guaranteed, not merely likely, to render every
+// matched file to the same output path for a given combination. Without
+// this check that collision would only surface mid-run, once the second
+// matched file's write is reached, after the first one has already been
+// written to disk (checkDuplicateRenderedPath only prevents the *second*
+// colliding write, not the first). Called before any file in the run is
+// written, so this specific misconfiguration fails cleanly with zero
+// partial output.
+//
+// activeDelimiters must be the same delimiter pair the run's actual
+// rendering uses (see executeWithSetup's ResolveDelimiters call) so
+// TargetReferencesFileContext parses spec.Target's template actions with
+// the scaffold's real delimiters instead of always assuming the default
+// "{{"/"}}"  -- a scaffold with custom delimiters would otherwise see every
+// target: parsed as plain text with no actions at all.
+func validateDirectoryMatrixTargetsDifferentiate(fileSpecs map[string]config.FileSpec, activeDelimiters []string) error {
+	matchCounts := make(map[string]int, len(fileSpecs))
+	specByPath := make(map[string]config.FileSpec, len(fileSpecs))
+	for _, spec := range fileSpecs {
+		if len(spec.Matrix) == 0 {
+			continue
+		}
+		matchCounts[spec.Path]++
+		specByPath[spec.Path] = spec
+	}
+
+	for path, count := range matchCounts {
+		if count < 2 {
+			continue
+		}
+		spec := specByPath[path]
+		// Parses spec.Target's own AST and checks for a genuine .file.Path/
+		// .file.RelPath field-access node, rather than a raw
+		// strings.Contains(spec.Target, ".file.") substring search -- which
+		// would also accept a target that merely contains that literal text
+		// outside any template action (e.g. an output filename like
+		// "output.file.txt"), or an invalid field like ".file.Unknown" that
+		// can never actually differentiate matched files. See
+		// engine.TargetReferencesFileContext's doc comment.
+		referencesFile, err := engine.TargetReferencesFileContext(spec.Target, activeDelimiters)
+		if err != nil {
+			return err
+		}
+		if referencesFile {
+			continue
+		}
+		return errUtils.Build(errUtils.ErrScaffoldMatrixTargetMissingFileContext).
+			WithExplanationf("spec.files[] entry `%s` matches %d files but its target does not reference .file.Path or .file.RelPath", path, count).
+			WithHint("Add {{ .file.RelPath }} (or {{ .file.Path }}) to target: so each matched file renders to a distinct output path").
+			WithContext("file_path", path).
+			WithContext("matched_file_count", strconv.Itoa(count)).
+			WithExitCode(2).
+			Err()
+	}
+	return nil
 }
 
 // truncateString truncates a string to the specified length and adds "..." if truncated.
@@ -1120,13 +1204,14 @@ func (ui *InitUI) processFileEntry(
 	mergedValues map[string]interface{},
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
+	matrixExpansions map[string]matrixExpansionResult,
 ) (successCount, errorCount int, failedPaths []string, err error) {
 	outputTemplate := FileOutputPath(file, spec)
 
 	if len(spec.Matrix) == 0 {
 		return ui.processSingleFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
 	}
-	return ui.processMatrixedFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
+	return ui.processMatrixedFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths, matrixExpansions)
 }
 
 // processSingleFileEntry renders and writes file's one non-matrix output,
@@ -1153,7 +1238,7 @@ func (ui *InitUI) processSingleFileEntry(
 			ui.grayStyle.Render(skippedText))
 		return 0, 0, nil, nil
 	}
-	success, failed, causeErr := ui.writeOneOutput(file, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
+	success, failed, causeErr := ui.writeOneOutput(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, nil, activeDelimiters, seenRenderedPaths)
 	switch {
 	case success:
 		return 1, 0, nil, nil
@@ -1164,6 +1249,20 @@ func (ui *InitUI) processSingleFileEntry(
 	}
 }
 
+// matrixExpansionResult caches one spec.files[] entry's resolved matrix rows
+// (or expansion error), keyed by spec.Path in executeWithSetup's per-run
+// matrixExpansions map. Without this cache, a directory-level glob entry
+// matching N discovered files would call engine.ExpandMatrix N independent
+// times with identical inputs -- redundant, but also unsafe: an axis
+// expression can use a non-deterministic template function (e.g. Sprig's
+// randAlphaNum/uuidv4/now), and re-executing it fresh per matched file would
+// resolve a *different* value for what the scaffold author intended as one
+// shared combination applied uniformly across the whole matched directory.
+type matrixExpansionResult struct {
+	rows []map[string]string
+	err  error
+}
+
 // processMatrixedFileEntry renders and writes one output per matrix
 // combination that survives spec.When. Each combination is bound into a
 // shallow-cloned copy of mergedValues under engine.MatrixKey, which
@@ -1171,7 +1270,10 @@ func (ui *InitUI) processSingleFileEntry(
 // so path and content templates see .matrix.<axis> directly. An expansion
 // error counts as one failure for the whole entry; err joins every failed
 // combination's own error so callers can preserve the real cause(s)
-// alongside the generic "Failed to generate N files" summary.
+// alongside the generic "Failed to generate N files" summary. matrixExpansions
+// caches spec.Matrix's resolution per spec.Path (see matrixExpansionResult)
+// so every file a directory-level glob entry matches sees the exact same
+// resolved rows.
 //
 //nolint:revive // argument-limit: needs the same full context processFileEntry received
 func (ui *InitUI) processMatrixedFileEntry(
@@ -1184,8 +1286,15 @@ func (ui *InitUI) processMatrixedFileEntry(
 	mergedValues map[string]interface{},
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
+	matrixExpansions map[string]matrixExpansionResult,
 ) (successCount, errorCount int, failedPaths []string, err error) {
-	rows, expandErr := engine.ExpandMatrix(spec.Matrix, mergedValues, ui.processor.RenderAnswersListExpression, activeDelimiters)
+	expansion, cached := matrixExpansions[spec.Path]
+	if !cached {
+		rows, expandErr := engine.ExpandMatrix(spec.Matrix, mergedValues, ui.processor.RenderAnswersListExpression, activeDelimiters)
+		expansion = matrixExpansionResult{rows: rows, err: expandErr}
+		matrixExpansions[spec.Path] = expansion
+	}
+	rows, expandErr := expansion.rows, expansion.err
 	if expandErr != nil {
 		ui.writeOutput(fileStatusFormat,
 			ui.errorStyle.Render(ui.xMark),
@@ -1236,9 +1345,10 @@ func (ui *InitUI) processMatrixedFileEntry(
 
 // processMatrixRow renders and writes a single matrix combination (row),
 // gated by spec.When -- split out of processMatrixedFileEntry's loop to
-// keep that function within this repo's function-length limit. Row is
-// bound into mergedValues under engine.MatrixKey, same as
-// processMatrixedFileEntry's own doc comment describes.
+// keep that function within this repo's function-length limit. Row (and,
+// when file is one of several files a directory-level glob spec.Path
+// matched, file's own context) is bound in by writeOneOutput's single
+// clone point -- see mergedValuesWithContext.
 //
 //nolint:revive // argument-limit: needs the same full context processMatrixedFileEntry received
 func (ui *InitUI) processMatrixRow(
@@ -1253,14 +1363,9 @@ func (ui *InitUI) processMatrixRow(
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
 ) (success, failed bool, causeErr error) {
-	iterValues := make(map[string]interface{}, len(mergedValues)+1)
-	for k, v := range mergedValues {
-		iterValues[k] = v
-	}
-	iterValues[engine.MatrixKey] = row
-
 	if !spec.When.Evaluate(condition.Context{Answers: mergedValues, Matrix: row}) {
-		renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, iterValues, activeDelimiters)
+		values := mergedValuesWithContext(mergedValues, row, file, spec)
+		renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, values, activeDelimiters)
 		if pathErr != nil {
 			renderedPath = outputTemplate
 		}
@@ -1271,7 +1376,7 @@ func (ui *InitUI) processMatrixRow(
 		return false, false, nil
 	}
 
-	return ui.writeOneOutput(file, outputTemplate, targetPath, force, update, scaffoldConfig, iterValues, activeDelimiters, seenRenderedPaths)
+	return ui.writeOneOutput(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, row, activeDelimiters, seenRenderedPaths)
 }
 
 // checkDuplicateRenderedPath reports whether renderedPath was already
@@ -1341,22 +1446,53 @@ func (ui *InitUI) reportWriteResult(err error, renderedPath string, existedBefor
 	}
 }
 
-// writeOneOutput renders outputTemplate against values, applies the skip
-// and duplicate-output-path guards, and writes via ProcessFile -- shared by
-// both the single-file and per-combination matrix paths. See
+// mergedValuesWithContext returns a single shallow clone of mergedValues
+// with the current matrix row (if any -- nil for a non-matrix entry) and
+// the current discovered file's own path exposed under
+// engine.MatrixKey/engine.FileContextKey, letting Target/Path and Content
+// templates reference .matrix.<axis> and .file.Path/.file.RelPath. This is
+// the single point both writeOneOutput and processMatrixRow's own
+// skip-line display rendering use -- mergedValues itself is never mutated
+// in place, since it's the shared per-run answers map, read again by
+// scaffoldhooks.Run after every file in this run has been processed.
+func mergedValuesWithContext(mergedValues map[string]interface{}, row map[string]string, file tmpl.File, spec config.FileSpec) map[string]interface{} {
+	values := make(map[string]interface{}, len(mergedValues)+2)
+	for k, v := range mergedValues {
+		values[k] = v
+	}
+	if row != nil {
+		values[engine.MatrixKey] = row
+	}
+	values[engine.FileContextKey] = engine.FileContext{
+		Path:    file.Path,
+		RelPath: u.WildcardRelPath(spec.Path, file.Path),
+	}
+	return values
+}
+
+// writeOneOutput renders outputTemplate against mergedValues (plus row and
+// file's own context, folded in once via mergedValuesWithContext), applies
+// the skip and duplicate-output-path guards, and writes via ProcessFile --
+// shared by both the single-file and per-combination matrix paths. See
 // reportWriteResult for what success/failed mean; causeErr is the
 // underlying error when failed is true, for callers that want to preserve
 // it instead of a generic message.
+//
+//nolint:revive // argument-limit: needs the same full context processFileEntry received
 func (ui *InitUI) writeOneOutput(
 	file tmpl.File,
+	spec config.FileSpec,
 	outputTemplate string,
 	targetPath string,
 	force, update bool,
 	scaffoldConfig *config.ScaffoldConfig,
-	values map[string]interface{},
+	mergedValues map[string]interface{},
+	row map[string]string,
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
 ) (success, failed bool, causeErr error) {
+	values := mergedValuesWithContext(mergedValues, row, file, spec)
+
 	// Process the file path as a template first to check if it should be skipped.
 	renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, values, activeDelimiters)
 	if pathErr != nil {
@@ -1386,8 +1522,13 @@ func (ui *InitUI) writeOneOutput(
 	// Use the templating processor to handle file processing. The engine
 	// File's Path is outputTemplate (spec.Target when set, else file.Path
 	// unchanged), so ProcessFile re-renders and writes the same path this
-	// function just resolved above.
+	// function just resolved above. OriginalSourcePath is captured before
+	// Path is overwritten -- it's the file's own path as discovered in the
+	// template's source tree, which determineBaseContent falls back to as a
+	// merge-base candidate when spec.Target has changed since the file was
+	// last generated (see File.OriginalSourcePath's doc comment).
 	engineFile := toEngineFile(file)
+	engineFile.OriginalSourcePath = engineFile.Path
 	engineFile.Path = outputTemplate
 	err := ui.processor.ProcessFile(engineFile, targetPath, force, update, scaffoldConfig, values)
 
@@ -1483,6 +1624,23 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		return fmt.Errorf("failed to decode scaffold hooks: %w", err)
 	}
 
+	// Resolved once, up front, with the same precedence ProcessFile's own
+	// extractDelimiters uses (scaffoldConfig.Spec.Delimiters wins), so this
+	// preflight check, the actual file-body rendering below, and README
+	// rendering all agree on which delimiters a template action uses.
+	activeDelimiters := ResolveDelimiters(delimiters, scaffoldConfig)
+
+	// Resolved before hooks run (not just before writing) so a scaffold with
+	// this specific misconfiguration fails with zero side effects at all --
+	// not even a pre-generate hook -- rather than a partially-generated
+	// project. See validateDirectoryMatrixTargetsDifferentiate's doc comment
+	// for why this check can't wait until a colliding file is actually
+	// reached mid-run.
+	fileSpecs := FileSpecByPath(scaffoldConfig, embedsConfig.Files)
+	if err := validateDirectoryMatrixTargetsDifferentiate(fileSpecs, activeDelimiters); err != nil {
+		return err
+	}
+
 	// Run pre-generate hooks before any file is written: nothing has run yet
 	// (status: success), and a hook failure aborts before any write happens,
 	// so no rollback is needed. Skipped in dry-run: hooks can run arbitrary
@@ -1503,15 +1661,16 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// real cause(s) via errors.Join instead of only carrying the generic
 	// ErrScaffoldGeneration sentinel.
 	var failureErrs []error
-	// Resolve once, with the same precedence ProcessFile's own extractDelimiters
-	// uses (scaffoldConfig.Spec.Delimiters wins), so this preflight path-skip
-	// check and the actual file-body rendering below never disagree.
-	activeDelimiters := ResolveDelimiters(delimiters, scaffoldConfig)
-	fileSpecs := FileSpecByPath(scaffoldConfig)
 	// Tracks every rendered output path across the whole loop (not just
 	// matrix entries) so two files -- matrixed or not -- can never silently
 	// clobber one another's write.
 	seenRenderedPaths := make(map[string]string)
+	// Caches ExpandMatrix's result per spec.Path (not per discovered file),
+	// so a directory-level glob entry matching N files resolves its
+	// combination(s) exactly once and reuses the same rows for every matched
+	// file -- see matrixExpansionResult's doc comment for why recomputing
+	// per file is unsafe, not just wasteful.
+	matrixExpansions := make(map[string]matrixExpansionResult)
 	for _, file := range embedsConfig.Files {
 		// Skip the scaffold.yaml as it's only used for schema definition
 		if file.Path == config.ScaffoldConfigFileName {
@@ -1527,7 +1686,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 
 		spec := fileSpecs[file.Path]
 		entrySuccess, entryErrors, entryFailedPaths, entryErr := ui.processFileEntry(
-			file, spec, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths,
+			file, spec, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths, matrixExpansions,
 		)
 		successCount += entrySuccess
 		errorCount += entryErrors
