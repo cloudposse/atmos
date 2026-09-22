@@ -130,7 +130,7 @@ export const roadmapConfig = {
       "icon": "RiRobot2Line",
       "title": "Atmos AI Assistant",
       "tagline": "AI-powered infrastructure management",
-      "description": "An intelligent assistant built directly into Atmos CLI with support for 7 AI providers, persistent sessions, tool execution, specialized agents, and IDE integration via MCP and LSP.",
+      "description": "An intelligent assistant built directly into Atmos CLI with support for many AI providers, persistent sessions, tool execution, specialized agents, and IDE integration via MCP and LSP.",
       "benefits": "Get instant answers about your infrastructure. AI can inspect configurations, validate files, and provide best practice recommendations.",
       "status": "shipped",
       "quarter": "q1-2026",
@@ -709,6 +709,7 @@ export const roadmapConfig = {
       status: 'in-progress',
       milestones: [
         { label: 'Multi-provider AI support (7 providers)', status: 'shipped', quarter: 'q1-2026', docs: '/cli/configuration/ai/providers', changelog: 'introducing-atmos-ai', description: 'Support for Anthropic Claude, OpenAI GPT, Google Gemini, xAI Grok, Ollama (local), AWS Bedrock, and Azure OpenAI.', benefits: 'Choose the right AI for your needs—cloud, local, or enterprise. Switch providers mid-conversation.' },
+        { label: 'OpenRouter, DeepSeek, and Z.AI providers', status: 'shipped', quarter: 'q3-2026', docs: '/cli/configuration/ai/providers', changelog: 'more-ai-providers', description: 'First-class OpenAI-compatible API providers for OpenRouter (route across hundreds of models), DeepSeek, and Z.AI (Zhipu GLM), each with sensible default model, API-key env var, and endpoint.', benefits: 'Pick cheaper or non-US models by name without hand-copying base URLs. Switch models on OpenRouter by changing one slug.' },
         { label: 'Interactive AI chat (`atmos ai chat`)', status: 'shipped', quarter: 'q1-2026', docs: '/cli/commands/ai/chat', changelog: 'introducing-atmos-ai', description: 'Interactive terminal chat with persistent sessions, markdown rendering, and conversation history.', benefits: 'Have natural conversations about your infrastructure. Context is preserved across sessions.' },
         { label: 'Session management with SQLite storage', status: 'shipped', quarter: 'q1-2026', docs: '/cli/configuration/ai/sessions', changelog: 'introducing-atmos-ai', description: 'SQLite-backed persistent sessions with full CRUD operations, auto-compact, and retention policies.', benefits: 'Resume conversations days or weeks later with full context. Sessions are provider-aware.' },
         { label: 'Tool execution with permission controls', status: 'shipped', quarter: 'q1-2026', docs: '/cli/configuration/ai/tools', changelog: 'introducing-atmos-ai', description: 'AI can execute read-only Atmos commands with three-tier permission system (allowed/restricted/blocked).', benefits: 'AI can inspect your infrastructure automatically. Granular control over what tools AI can use.' },

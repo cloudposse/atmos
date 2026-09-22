@@ -9,6 +9,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/claudecode"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/codexcli"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/copilotcli"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/deepseek"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/gemini"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/geminicli"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/github"
@@ -16,4 +17,6 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/ollama"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/openai"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/opencode"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/openrouter"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/zai"
 )
