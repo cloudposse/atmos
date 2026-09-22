@@ -116,6 +116,23 @@ path-templating sentinel-skip behavior). This overlay does not declare *which* f
 exist — the template's file tree does that; it only gates whether an already-discovered
 file gets written.
 
+`path:` may be a glob pattern (doublestar syntax) instead of a literal path, matched
+against every discovered file:
+
+```yaml
+- path: "docs/legacy/**"          # *, ?, [...], ** (any depth incl. zero), {a,b}
+  when: "answers.include_legacy_docs == true"
+```
+
+- Always forward slashes; a backslash in the pattern is normalized to `/` regardless
+  of authoring/runtime OS (`pkg/utils.NormalizeGlobPattern`).
+- A malformed pattern (unclosed `[`/`{`) fails scaffold load and
+  `atmos scaffold validate` (`ErrScaffoldFilePathPatternInvalid`) — not just a silent
+  permanent non-match at generation time.
+- When multiple entries' `path:` match the same file, the **last** declared entry
+  wins (`.gitignore`/`CODEOWNERS` precedence: write broad patterns first, specific
+  overrides after — a wrong-order override is a silent no-op, not a load error).
+
 ### `spec.files[].matrix` — dynamic file generation
 
 ```yaml
@@ -142,6 +159,23 @@ Each axis's value is one of:
 `when:` gets a `matrix` CEL variable alongside `answers`, evaluated once per resolved
 combination to prune ones that don't apply. The resolved combination is also available
 as `.matrix.<axis>` in `target:` and the file's own rendered content.
+
+When `path:` is a glob matching more than one file, `matrix:` is resolved once per
+`path:` (cached, not recomputed per matched file — so a non-deterministic axis
+expression, e.g. Sprig's `randAlphaNum`, still resolves the same value across every
+matched file for one combination) and every matched file gets its own output per
+combination. Two additional template variables, available in `target:` and content
+alongside `.matrix.<axis>` regardless of whether `path:` is a glob:
+
+- `.file.Path` — the currently matched file's own discovered path.
+- `.file.RelPath` — `.file.Path` with the matching entry's glob literal prefix
+  stripped (equal to `.file.Path` when `path:` has no glob metacharacter).
+
+`target:` must reference `.file.Path` or `.file.RelPath` whenever its `path:` matches
+more than one file, or every matched file renders to the same output path for a given
+combination — checked deterministically before any file in the run is written
+(`ErrScaffoldMatrixTargetMissingFileContext`), not only once a collision is reached
+mid-run. `.file.*` is Go-template-only; it is not exposed to CEL `when:`.
 
 ## `spec.hooks` — step-backed hooks
 

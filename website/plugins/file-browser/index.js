@@ -137,6 +137,7 @@ const TAGS_MAP = {
   'mcp-with-aws': ['DX', 'Automation'],
   scaffolding: ['Scaffold', 'Init'],
   'scaffolding-matrix': ['Scaffold'],
+  'scaffolding-directory-matrix': ['Scaffold'],
 };
 
 // Display labels for the `metadata.category` slug used by SKILL.md front matter
@@ -255,6 +256,13 @@ const DOCS_MAP = {
   'scaffolding-matrix': [
     { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
     { label: 'Dynamic File Generation (matrix)', url: '/cli/commands/scaffold/generate#dynamic-file-generation' },
+  ],
+  'scaffolding-directory-matrix': [
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
+    {
+      label: 'Glob Paths and Directory-Level Matrix',
+      url: '/cli/commands/scaffold/generate#glob-paths-and-directory-level-matrix',
+    },
   ],
   'stack-names': [
     { label: 'Stack Names', url: '/stacks/name' },
