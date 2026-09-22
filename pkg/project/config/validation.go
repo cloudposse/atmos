@@ -9,6 +9,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/perf"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // isMissingValue reports whether value is considered absent for required-field
@@ -480,6 +481,32 @@ func defaultDelimiters(delimiters []string) []string {
 		return []string{defaultLeftDelimiter, defaultRightDelimiter}
 	}
 	return delimiters
+}
+
+// validateFilePathPatterns statically confirms every spec.files[] entry's
+// path is a syntactically valid glob pattern (doublestar syntax), regardless
+// of whether it also declares matrix:. A malformed pattern (an unclosed `[`
+// character class or `{` brace-expansion group, for example) is otherwise
+// indistinguishable from "no discovered file happens to match it" at
+// generation time -- pkg/generator/ui's FileSpecByPath treats a match error
+// identically to a plain non-match, so without this check a typo silently
+// and permanently disables that entry's when:/matrix:/target: with zero
+// signal, even though `atmos scaffold validate` would otherwise report the
+// manifest as valid.
+func validateFilePathPatterns(scaffoldConfig *ScaffoldConfig) error {
+	for i := range scaffoldConfig.Spec.Files {
+		file := &scaffoldConfig.Spec.Files[i]
+		if _, err := u.PathMatch(u.NormalizeGlobPattern(file.Path), ""); err != nil {
+			return errUtils.Build(errUtils.ErrScaffoldFilePathPatternInvalid).
+				WithCause(err).
+				WithExplanationf("Invalid glob pattern in spec.files[].path: `%s`", file.Path).
+				WithHint("Check for an unclosed `[` character class or `{` brace-expansion group").
+				WithContext("file_path", file.Path).
+				WithExitCode(2).
+				Err()
+		}
+	}
+	return nil
 }
 
 // validateFileMatrix statically validates each spec.files[] entry's matrix
