@@ -122,8 +122,9 @@ func (ui *InitUI) renderPristineBase(oldConfig *tmpl.Configuration, oldValues ma
 // ui.processFileEntry, joining any per-file failures into a single error.
 func (ui *InitUI) renderPristineBaseFiles(oldConfig *tmpl.Configuration, oldScaffoldConfig *config.ScaffoldConfig, mergedOldValues map[string]interface{}, tempDir string, delimiters []string) error {
 	activeDelimiters := ResolveDelimiters(delimiters, oldScaffoldConfig)
-	fileSpecs := FileSpecByPath(oldScaffoldConfig)
+	fileSpecs := FileSpecByPath(oldScaffoldConfig, oldConfig.Files)
 	seenRenderedPaths := make(map[string]string)
+	matrixExpansions := make(map[string]matrixExpansionResult)
 
 	var failureErrs []error
 	for _, file := range oldConfig.Files {
@@ -132,7 +133,7 @@ func (ui *InitUI) renderPristineBaseFiles(oldConfig *tmpl.Configuration, oldScaf
 		}
 
 		spec := fileSpecs[file.Path]
-		_, _, _, entryErr := ui.processFileEntry(file, spec, tempDir, true, false, oldScaffoldConfig, mergedOldValues, activeDelimiters, seenRenderedPaths)
+		_, _, _, entryErr := ui.processFileEntry(file, spec, tempDir, true, false, oldScaffoldConfig, mergedOldValues, activeDelimiters, seenRenderedPaths, matrixExpansions)
 		if entryErr != nil {
 			failureErrs = append(failureErrs, entryErr)
 		}
