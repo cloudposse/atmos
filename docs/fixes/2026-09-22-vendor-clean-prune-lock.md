@@ -14,8 +14,7 @@ Since v1.229.0 (#3169, "`vendor clean` now preserves lockfile entries for future
 was no supported path to remove a vendored source that uses the native lock:
 
 1. `vendor clean --component other` removes files but keeps `other` in `vendor.lock.yaml` (intentional).
-2. Deleting `other` from `vendor.yaml` and running `vendor pull --refresh-lock` vendors the remaining
-   sources but leaves the orphan `other` artifact in the lock.
+2. Deleting `other` from `vendor.yaml` and running `vendor pull --refresh-lock` vendors the remaining sources but leaves the orphan `other` artifact in the lock.
 3. `vendor verify` then fails: `other`'s recorded files are reported as `missing`.
 
 The issue offered three candidate fixes. Auto-pruning on `--refresh-lock` was rejected because
