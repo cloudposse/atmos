@@ -221,11 +221,38 @@ func ProvisionAndResolveComponentPath(
 	// a source — that was the legacy helmfile/packer behavior). The fallback is
 	// a local component dir, not a workdir, so stat failures wrap
 	// ErrInvalidComponent rather than ErrWorkdirProvision.
+	// Provision an isolated workdir for LOCAL components (no JIT source) up front — before any
+	// backend.tf.json / varfile generation — so those generated files land in the per-run workdir
+	// rather than the shared source component directory. Without this, the workdir provisioner only
+	// ran at the before.terraform.init hook (i.e. after generation), so generated files were written
+	// to the source dir and concurrent `atmos terraform plan --all` runs raced on the same source
+	// backend.tf.json ("JSON data ends prematurely"). See #3192.
+	//
+	// ProvisionWorkdir is a self-gating no-op unless `provision.workdir.enabled: true` AND the
+	// component has no JIT source (source components get their workdir from AutoProvisionSource
+	// below), and it also no-ops when WorkdirPathKey is already set — so the later
+	// before.terraform.init run of the same provisioner is idempotent.
+	if err := provWorkdir.ProvisionWorkdir(ctx, atmosConfig, info.ComponentSection, info.AuthContext, writers); err != nil {
+		return "", false, errors.Join(errUtils.ErrWorkdirProvision, err)
+	}
+
 	if !provSource.HasSource(info.ComponentSection) {
 		// A common footgun: declaring the JIT source under `metadata` instead of at the top level.
 		// `metadata.source` is silently ignored (not a schema field), so the component then fails to
 		// resolve with a confusing "does not exist" error. Warn so the misconfiguration is actionable.
 		warnIfSourceMisplacedUnderMetadata(info)
+
+		// A local workdir may have just been provisioned above; if so, resolve the
+		// metadata.component subpath onto it and use it instead of the source dir.
+		workdirPath, subpathErr := ApplyWorkdirSubpathToSection(info)
+		if subpathErr != nil {
+			return "", false, subpathErr
+		}
+		if workdirPath != "" {
+			exists, err := componentDirExists(workdirPath, "workdir path", errUtils.ErrWorkdirProvision)
+			return workdirPath, exists, err
+		}
+
 		exists, err := componentDirExists(fallbackComponentPath, "check component path", errUtils.ErrInvalidComponent)
 		return fallbackComponentPath, exists, err
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -648,6 +649,56 @@ func TestProvisionAndResolveComponentPath_NoSourceMissingDir(t *testing.T) {
 	require.NoError(t, err, "missing dir is not an error — caller decides what to do")
 	assert.False(t, exists)
 	assert.Equal(t, missingDir, got)
+}
+
+// TestProvisionAndResolveComponentPath_LocalComponentWorkdirProvisionedEarly is the
+// regression test for #3192: a LOCAL component (no JIT source) with
+// `provision.workdir.enabled: true` must have its isolated workdir provisioned HERE —
+// before backend.tf.json / varfile generation — so those generated files land in the
+// per-run workdir rather than in the shared source component directory. Previously the
+// workdir provisioner only ran at the before.terraform.init hook (after generation), so
+// generated files were written to the source dir, and concurrent `atmos terraform plan
+// --all` runs raced on the same source backend.tf.json ("JSON data ends prematurely").
+func TestProvisionAndResolveComponentPath_LocalComponentWorkdirProvisionedEarly(t *testing.T) {
+	basePath := t.TempDir()
+	// A local component source on disk (no JIT `source:` declared).
+	sourceDir := filepath.Join(basePath, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent: "vpc",
+		Stack:          "dev",
+		ComponentSection: map[string]any{
+			"component":       "vpc",
+			"atmos_component": "vpc",
+			"atmos_stack":     "dev",
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+		},
+	}
+
+	got, exists, err := ProvisionAndResolveComponentPath(
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, sourceDir,
+	)
+	require.NoError(t, err)
+	assert.True(t, exists, "provisioned workdir must exist on disk")
+
+	// The resolved path must be the isolated workdir, NOT the shared source component dir.
+	workdirRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType)
+	assert.Truef(t, strings.HasPrefix(got, workdirRoot),
+		"resolved path %q must be under the workdir root %q, not the source dir", got, workdirRoot)
+	assert.NotEqual(t, sourceDir, got, "must not resolve to the shared source directory")
+
+	// WorkdirPathKey must be set so downstream backend/varfile writes target the workdir.
+	wp, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	require.True(t, ok, "WorkdirPathKey must be set after early workdir provisioning")
+	assert.True(t, strings.HasPrefix(wp, workdirRoot))
+
+	// The local component files must have been synced into the workdir.
+	assert.FileExists(t, filepath.Join(got, "main.tf"))
 }
 
 func TestSourceMisplacedUnderMetadata(t *testing.T) {
