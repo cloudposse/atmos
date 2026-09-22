@@ -215,6 +215,28 @@ func ProvisionAndResolveComponentPath(
 ) (string, bool, error) {
 	defer perf.Track(atmosConfig, "component.ProvisionAndResolveComponentPath")()
 
+	// Provision an isolated workdir for LOCAL Terraform components (no JIT source) up front — before
+	// any backend.tf.json / varfile generation — so those generated files land in the per-run workdir
+	// rather than the shared source component directory. Without this, the workdir provisioner only
+	// ran at the before.terraform.init hook (i.e. after generation), so generated files were written
+	// to the source dir and concurrent `atmos terraform plan --all` runs raced on the same source
+	// backend.tf.json ("JSON data ends prematurely"). See #3192.
+	//
+	// Gated to Terraform: ProvisionWorkdir (workdir.Service.Provision) builds a terraform-specific
+	// workdir path and reads the terraform components base path, and the before-init hook that also
+	// runs it fires only for Terraform. This helper is shared by Helmfile/Packer/Ansible, so an
+	// unconditional call would resolve a local non-Terraform component through a terraform workdir.
+	//
+	// ProvisionWorkdir is otherwise a self-gating no-op unless `provision.workdir.enabled: true` AND
+	// the component has no JIT source (source components get their workdir from AutoProvisionSource
+	// below), and it also no-ops when WorkdirPathKey is already set — so the later before.terraform.init
+	// run of the same provisioner is idempotent.
+	if componentType == cfg.TerraformComponentType {
+		if err := provWorkdir.ProvisionWorkdir(ctx, atmosConfig, info.ComponentSection, info.AuthContext, writers); err != nil {
+			return "", false, errors.Join(errUtils.ErrWorkdirProvision, err)
+		}
+	}
+
 	// Short-circuit components without a JIT source: only the fallback dir is
 	// relevant, so do the stat here rather than up front (a non-ENOENT stat
 	// failure on the fallback must not abort JIT for components that DO declare
@@ -226,6 +248,18 @@ func ProvisionAndResolveComponentPath(
 		// `metadata.source` is silently ignored (not a schema field), so the component then fails to
 		// resolve with a confusing "does not exist" error. Warn so the misconfiguration is actionable.
 		warnIfSourceMisplacedUnderMetadata(info)
+
+		// A local workdir may have just been provisioned above; if so, resolve the
+		// metadata.component subpath onto it and use it instead of the source dir.
+		workdirPath, subpathErr := ApplyWorkdirSubpathToSection(info)
+		if subpathErr != nil {
+			return "", false, subpathErr
+		}
+		if workdirPath != "" {
+			exists, err := componentDirExists(workdirPath, "workdir path", errUtils.ErrWorkdirProvision)
+			return workdirPath, exists, err
+		}
+
 		exists, err := componentDirExists(fallbackComponentPath, "check component path", errUtils.ErrInvalidComponent)
 		return fallbackComponentPath, exists, err
 	}
