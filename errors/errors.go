@@ -1474,6 +1474,7 @@ var (
 	ErrAINotEnabled                 = errors.New("AI features are not enabled")
 	ErrAIDisabledInConfiguration    = errors.New("AI features are disabled in configuration")
 	ErrAIAPIKeyNotFound             = errors.New("API key not found in environment variable")
+	ErrAIInsecureBaseURL            = errors.New("insecure base_url: an API key would be sent in cleartext over http")
 	ErrAINoStackFilesFound          = errors.New("no stack files found")
 	ErrAIUnsupportedProvider        = errors.New("unsupported AI provider")
 	ErrAIClientNil                  = errors.New("AI client cannot be nil")
