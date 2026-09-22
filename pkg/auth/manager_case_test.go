@@ -58,6 +58,32 @@ func TestResolveIdentityName_CaseSensitivity(t *testing.T) {
 			expectedFound:    true,
 		},
 		{
+			// Regression for cloudposse/atmos#3185: namespaced identity names containing ':'
+			// are opaque map keys and must resolve at runtime, matching the relaxed manifest schema.
+			name: "namespaced identity with colon - exact match",
+			identities: map[string]types.Identity{
+				"example/prod:terraform_applier": nil,
+			},
+			identityCaseMap: map[string]string{
+				"example/prod:terraform_applier": "example/prod:terraform_applier",
+			},
+			inputName:        "example/prod:terraform_applier",
+			expectedResolved: "example/prod:terraform_applier",
+			expectedFound:    true,
+		},
+		{
+			name: "namespaced identity with colon - case insensitive match",
+			identities: map[string]types.Identity{
+				"example/prod:terraform_applier": nil,
+			},
+			identityCaseMap: map[string]string{
+				"example/prod:terraform_applier": "Example/Prod:Terraform_Applier",
+			},
+			inputName:        "Example/Prod:Terraform_Applier",
+			expectedResolved: "example/prod:terraform_applier",
+			expectedFound:    true,
+		},
+		{
 			name: "not found",
 			identities: map[string]types.Identity{
 				"admin": nil,
