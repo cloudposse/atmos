@@ -735,6 +735,70 @@ func TestProvisionAndResolveComponentPath_NonTerraformWorkdirNotProvisioned(t *t
 	assert.False(t, hasWorkdir, "WorkdirPathKey must not be set for a non-Terraform component")
 }
 
+// TestProvisionAndResolveComponentPath_TerraformWorkdirProvisionError exercises the error return
+// when the up-front workdir provisioning fails (here: a workdir-enabled local component missing the
+// required atmos_stack). The failure must surface wrapped in ErrWorkdirProvision.
+func TestProvisionAndResolveComponentPath_TerraformWorkdirProvisionError(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent: "vpc",
+		Stack:          "dev",
+		ComponentSection: map[string]any{
+			"component":       "vpc",
+			"atmos_component": "vpc",
+			// atmos_stack intentionally omitted → workdir provisioning fails.
+			"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+		},
+	}
+
+	_, exists, err := ProvisionAndResolveComponentPath(
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info,
+		cfg.TerraformComponentType, filepath.Join(basePath, "components", "terraform", "vpc"),
+	)
+
+	require.Error(t, err)
+	assert.False(t, exists)
+	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
+		"workdir provisioning failure must wrap ErrWorkdirProvision")
+}
+
+// TestProvisionAndResolveComponentPath_LocalWorkdirSubpathError exercises the subpath-resolution
+// error return: after the workdir is provisioned, an absolute metadata.component
+// (BaseComponentPath) is rejected by ApplyWorkdirSubpathToSection (metadata.component must be a
+// relative subpath), and the error must propagate wrapped in ErrWorkdirProvision.
+func TestProvisionAndResolveComponentPath_LocalWorkdirSubpathError(t *testing.T) {
+	basePath := t.TempDir()
+	sourceDir := filepath.Join(basePath, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+
+	// t.TempDir() is absolute, so this is an absolute metadata.component subpath — rejected.
+	absSubpath := filepath.Join(t.TempDir(), "abs-subpath")
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:    "vpc",
+		Stack:             "dev",
+		BaseComponentPath: absSubpath,
+		ComponentSection: map[string]any{
+			"component":       "vpc",
+			"atmos_component": "vpc",
+			"atmos_stack":     "dev",
+			"provision":       map[string]any{"workdir": map[string]any{"enabled": true}},
+		},
+	}
+
+	_, exists, err := ProvisionAndResolveComponentPath(
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, sourceDir,
+	)
+
+	require.Error(t, err)
+	assert.False(t, exists)
+	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
+		"absolute metadata.component subpath must wrap ErrWorkdirProvision")
+}
+
 func TestSourceMisplacedUnderMetadata(t *testing.T) {
 	tests := []struct {
 		name    string
