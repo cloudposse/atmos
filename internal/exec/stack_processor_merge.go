@@ -751,9 +751,20 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 		comp[cfg.SourceSectionName] = finalComponentSource
 
-		// Merge the component's provision section, layering the atmos.yaml settings.provision
-		// global default below the stack-processed sections (see mergeComponentProvision and #3197).
-		finalComponentProvision, err := mergeComponentProvision(atmosConfig, mergeConfig, opts, result)
+		// Merge provision from global, base component, component, and overrides levels.
+		// Priority (lowest to highest): global → base component → component → overrides.
+		// The global layer (`opts.GlobalProvisionSection`) is the stack-level `terraform.provision`
+		// (or `helmfile.provision`, etc.) block, which is where a global provision default belongs -
+		// consistent with global `vars`, `metadata`, and `secrets`. See #3197.
+		finalComponentProvision, err := m.Merge(
+			mergeConfig,
+			[]map[string]any{
+				opts.GlobalProvisionSection,
+				result.BaseComponentProvisionSection,
+				result.ComponentProvision,
+				result.ComponentOverridesProvision,
+			},
+		)
 		if err != nil {
 			return nil, nil, err
 		}
