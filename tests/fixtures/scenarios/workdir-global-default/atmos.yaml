@@ -1,0 +1,27 @@
+# Test fixture for the global workdir default (settings.provision.workdir.enabled).
+# See issue #3197: settings.provision.workdir.enabled must be honored as a global
+# default, with component-level provision.workdir taking precedence.
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{.vars.stage}}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Global default: enable workdir provisioning for every component unless a
+# component overrides it. This is the documented global default.
+settings:
+  provision:
+    workdir:
+      enabled: true
