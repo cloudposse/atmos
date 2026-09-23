@@ -442,6 +442,35 @@ func TestGetConfigurationSummary_OrderFollowsFields(t *testing.T) {
 	assert.Equal(t, []string{"mid", "3", "default"}, rows[2])
 }
 
+// TestGetConfigurationSummary_ComputedFieldSourceIsAlwaysComputed proves a
+// type: computed field's summary row always reports source "computed",
+// overriding whatever (if anything) valueSources says for it -- since its
+// value is always derived by ComputeFields, never actually sourced from a
+// flag or default.
+func TestGetConfigurationSummary_ComputedFieldSourceIsAlwaysComputed(t *testing.T) {
+	projectConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "region", Type: "input"},
+				{Name: "derived", Type: fieldTypeComputed, Value: "{{ answers.region }}"},
+			},
+		},
+	}
+	merged := map[string]interface{}{
+		"region":  "us-east-1",
+		"derived": "us-east-1",
+	}
+	// "flag" here is deliberately wrong for a computed field, to prove
+	// GetConfigurationSummary ignores valueSources entirely for it.
+	valueSources := map[string]string{"derived": "flag"}
+
+	rows, _ := GetConfigurationSummary(projectConfig, merged, valueSources)
+
+	require.Len(t, rows, 2)
+	assert.Equal(t, []string{"region", "us-east-1", "default"}, rows[0])
+	assert.Equal(t, []string{"derived", "us-east-1", "computed"}, rows[1])
+}
+
 func TestPersistenceFlow(t *testing.T) {
 	tempDir := t.TempDir()
 

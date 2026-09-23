@@ -94,6 +94,63 @@ spec:
 	assert.Equal(t, 2, errUtils.GetExitCode(err))
 }
 
+// TestExecuteWithSetup_ComputedFieldOverrideRejected proves a --set-style
+// cmdTemplateValues entry targeting a type: computed field is rejected by
+// buildSetupValues (via config.RejectComputedFieldOverrides) before the
+// setup form even runs, rather than being silently overwritten later by
+// ComputeFields.
+func TestExecuteWithSetup_ComputedFieldOverrideRejected(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+	configuration := &templates.Configuration{
+		Name: "computed-override",
+		Files: []templates.File{{Path: "scaffold.yaml", Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: computed-override
+spec:
+  fields:
+    - name: region
+      type: input
+    - name: derived
+      type: computed
+      value: "{{ answers.region }}"
+`}},
+	}
+
+	err := ui.executeWithSetup(configuration, targetDir, false, false, true, "", map[string]interface{}{"derived": "us-east-1"}, []string{"{{", "}}"})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrScaffoldComputedFieldNotSettable), err)
+	assert.Equal(t, 2, errUtils.GetExitCode(err))
+}
+
+// TestExecuteWithSetup_ComputedFieldRenderErrorReturnsError proves a
+// computed field whose expression fails to render (an undefined template
+// function, here) surfaces as a wrapped error from RunSetupForm rather than
+// silently leaving the field unset or panicking.
+func TestExecuteWithSetup_ComputedFieldRenderErrorReturnsError(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+	configuration := &templates.Configuration{
+		Name: "computed-render-error",
+		Files: []templates.File{{Path: "scaffold.yaml", Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: computed-render-error
+spec:
+  fields:
+    - name: derived
+      type: computed
+      value: "{{ undefinedTemplateFunc answers.region }}"
+`}},
+	}
+
+	err := ui.executeWithSetup(configuration, targetDir, false, false, true, "", nil, []string{"{{", "}}"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to compute derived fields")
+	assert.True(t, errors.Is(err, errUtils.ErrScaffoldExpressionFailed), err)
+}
+
 // createTestUI creates a UI instance with I/O for testing.
 func createTestUI(t *testing.T) *InitUI {
 	t.Helper()
