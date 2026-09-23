@@ -680,28 +680,30 @@ func TestSetDefaultStepWorkingDirectory_BareVsDotVsAbsolute(t *testing.T) {
 // rather than ComponentPath(ctx).
 func TestApplyDefaultWorkingDirectory(t *testing.T) {
 	anchor := filepath.Join(t.TempDir(), "target")
-
-	emptyStep := &schema.WorkflowStep{Type: "shell"}
-	ApplyDefaultWorkingDirectory(emptyStep, anchor)
-	assert.Equal(t, anchor, emptyStep.WorkingDirectory, "an empty working_directory defaults to anchorDir")
-
-	bareStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: "sub"}
-	ApplyDefaultWorkingDirectory(bareStep, anchor)
-	assert.Equal(t, filepath.Join(anchor, "sub"), bareStep.WorkingDirectory,
-		"a bare (non-dot-prefixed) working_directory anchors under anchorDir")
-
-	dotStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: "."}
-	ApplyDefaultWorkingDirectory(dotStep, anchor)
-	assert.Equal(t, ".", dotStep.WorkingDirectory, "a dot-prefixed working_directory is left as-is")
-
 	absDir := t.TempDir()
-	absStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: absDir}
-	ApplyDefaultWorkingDirectory(absStep, anchor)
-	assert.Equal(t, absDir, absStep.WorkingDirectory, "an absolute working_directory is left as-is")
 
-	atmosStep := &schema.WorkflowStep{Type: AtmosStepType}
-	ApplyDefaultWorkingDirectory(atmosStep, anchor)
-	assert.Empty(t, atmosStep.WorkingDirectory, "type: atmos steps are exempt from defaulting")
+	tests := []struct {
+		name string
+		step *schema.WorkflowStep
+		want string
+	}{
+		{"empty working_directory defaults to anchorDir", &schema.WorkflowStep{Type: "shell"}, anchor},
+		{
+			"bare (non-dot-prefixed) working_directory anchors under anchorDir",
+			&schema.WorkflowStep{Type: "shell", WorkingDirectory: "sub"},
+			filepath.Join(anchor, "sub"),
+		},
+		{"dot-prefixed working_directory is left as-is", &schema.WorkflowStep{Type: "shell", WorkingDirectory: "."}, "."},
+		{"absolute working_directory is left as-is", &schema.WorkflowStep{Type: "shell", WorkingDirectory: absDir}, absDir},
+		{"type: atmos steps are exempt from defaulting", &schema.WorkflowStep{Type: AtmosStepType}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ApplyDefaultWorkingDirectory(tt.step, anchor)
+			assert.Equal(t, tt.want, tt.step.WorkingDirectory)
+		})
+	}
 }
 
 func TestStepsSummary(t *testing.T) {
