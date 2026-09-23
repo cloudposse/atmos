@@ -401,6 +401,10 @@ func verifyStepsHookTypes(name string, hook *Hook) error {
 	return nil
 }
 
+// stepVariables builds the step Variables for a kind: step/kind: steps lifecycle hook run: OS
+// environment (via NewVariables' default), the standard ATMOS_* variables, the hook's own env:
+// overrides, and the component working-directory anchor used by setDefaultStepWorkingDirectory
+// and by any other relative step field.
 func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	vars := runnerstep.NewVariables()
 	vars.SetAtmosConfig(ctx.AtmosConfig)
