@@ -9,6 +9,14 @@ anchored a step's `working_directory`, so they silently ran in the process's own
 scaffold's target/output directory whenever the two differed. Hooks now default to the scaffold's target
 path, matching how component/stack lifecycle hooks already default to the component's directory.
 
+This is not a behavior change for the common case. Before this fix, an unset (or bare-relative)
+`working_directory` resolved against the process's cwd; after, it resolves against the scaffold's
+target path instead. Whenever `target` itself resolves to the same absolute directory as the
+invoking shell's cwd -- e.g. `atmos scaffold generate <template> .`, or any equivalent path -- both
+resolve to that identical directory, so existing hooks that already worked continue to behave
+exactly as before. The fix only changes behavior for the previously-broken case: a `target` whose
+absolute path differs from cwd.
+
 ## Context
 
 `atmos scaffold generate <template> <target>` lets `target` differ from the invoking shell's cwd. The
