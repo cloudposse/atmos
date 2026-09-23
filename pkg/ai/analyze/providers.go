@@ -16,6 +16,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/grok"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/ollama"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/openai"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/opencode"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/openrouter"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/zai"
 )
