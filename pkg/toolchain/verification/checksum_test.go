@@ -425,6 +425,10 @@ func TestRenderArgsCorrectsCosignWorkflowRef(t *testing.T) {
 		"terraform-linters/tflint",
 		"--certificate-github-workflow-ref",
 		"refs/tags/{{.Version}}",
+		// An unrelated non-URL option whose value happens to contain the version segment must NOT be
+		// rewritten - the path correction is scoped to --certificate-github-workflow-ref only. See #3209.
+		"--key",
+		"/keys/{{.Version}}/public.pem",
 	}
 
 	rendered, err := renderArgs(args, req)
@@ -437,6 +441,8 @@ func TestRenderArgsCorrectsCosignWorkflowRef(t *testing.T) {
 	assert.Equal(t, "terraform-linters/tflint", rendered[3], "workflow-repository must be untouched")
 	assert.Equal(t, "refs/tags/v0.64.0", rendered[5],
 		"certificate-github-workflow-ref must carry the v-prefixed release tag (#3209)")
+	assert.Equal(t, "/keys/0.64.0/public.pem", rendered[7],
+		"a non-URL --key path must not be version-corrected (scoped to workflow-ref only)")
 }
 
 func TestVerifyChecksumCosignVerifiesChecksumSidecar(t *testing.T) {

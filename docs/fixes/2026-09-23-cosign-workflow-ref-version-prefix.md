@@ -40,9 +40,11 @@ latent and exposed by the upstream registry change.
   counterpart of `replaceVersionSegmentInURL`. It rewrites `/`-delimited version segments in a bare
   value (e.g. `refs/tags/0.64.0` -> `refs/tags/v0.64.0`) using the effective release tag, and leaves
   URL-shaped values to `replaceVersionSegmentInURL`.
-- `pkg/toolchain/verification/signature.go`: `renderArgs` now applies both correctors to each
-  rendered arg (URL first, then non-URL), so cosign args like `--certificate-github-workflow-ref`
-  carry the `v`-prefixed release tag consistent with `--certificate-identity`.
+- `pkg/toolchain/verification/signature.go`: `renderArgs` applies the URL corrector to every arg and
+  the non-URL corrector **only to the `--certificate-github-workflow-ref` value** (identified by its
+  preceding flag). Scoping it to that one option avoids rewriting a literal version segment in an
+  unrelated non-URL option (e.g. a `--key /keys/0.64.0/public.pem` path). The previous arg is tracked
+  in a local variable rather than indexing `args[i-1]` (avoids a gosec G602 false positive).
 - `pkg/toolchain/verification/checksum_test.go`: `TestReplaceVersionSegmentInPath` (unit cases incl.
   bare ref, no-version, URL-passthrough, and no-op guards) and `TestRenderArgsCorrectsCosignWorkflowRef`
   (reproduces #3209: both the identity URL and the bare workflow-ref render with the `v`-prefixed tag).

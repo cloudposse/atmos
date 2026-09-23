@@ -155,6 +155,11 @@ func handleCosignSidecarError(policy Policy, result *Result, cleanup func(), err
 	return nil, nil, fmt.Errorf("%w: %w", ErrSignatureRequired, err)
 }
 
+// cosignCertificateWorkflowRefFlag is the Cosign flag whose value is a bare, non-URL git ref
+// (e.g. `refs/tags/v0.64.0`) that must match the signing certificate's GitHub workflow ref. It is
+// the one option whose non-URL value needs the effective-release-tag correction in renderArgs. See #3209.
+const cosignCertificateWorkflowRefFlag = "--certificate-github-workflow-ref"
+
 // cosignURLSidecarFlags are legacy Cosign flags whose URL values are fetched
 // by Cosign itself. Downloading them through Atmos instead keeps retries,
 // authentication, and macOS transport behavior under our control.
@@ -440,22 +445,28 @@ func runner(req *Request) CommandRunner {
 func renderArgs(args []string, req *Request) ([]string, error) {
 	rendered := make([]string, len(args))
 	effectiveVersion := effectiveReleaseVersionFromAssetURL(req.AssetURL, req.Version)
+	prevArg := ""
 	for i, arg := range args {
 		value := arg
 		if strings.Contains(arg, "{{") {
-			rendered, err := renderTemplateString(arg, req.Tool, req.Version, assetNameFromURL(req.AssetURL), nil)
+			r, err := renderTemplateString(arg, req.Tool, req.Version, assetNameFromURL(req.AssetURL), nil)
 			if err != nil {
 				return nil, err
 			}
-			value = rendered
+			value = r
 		}
-		// Correct the version segment for URL args (e.g. `--certificate-identity`), then for bare,
-		// non-URL args (e.g. cosign `--certificate-github-workflow-ref refs/tags/{{.Version}}`),
-		// which the URL-only correction never reaches. Both use the effective release tag so a
-		// v-prefixed-tag tool's cosign workflow-ref matches its certificate. See #3209.
+		// Correct the version segment for URL args (e.g. `--certificate-identity`).
 		value = replaceVersionSegmentInURL(value, req.Version, effectiveVersion)
-		value = replaceVersionSegmentInPath(value, req.Version, effectiveVersion)
+		// The bare `--certificate-github-workflow-ref` value (e.g. `refs/tags/{{.Version}}`) is not a
+		// URL, so the correction above never reaches it; render the version v-stripped while the real
+		// release tag is v-prefixed and cosign rejects the certificate workflow-ref. Correct only that
+		// option's value - applying the path correction to every non-URL arg could rewrite a literal
+		// version segment in an unrelated option (e.g. a `--key /keys/0.64.0/public.pem` path). See #3209.
+		if prevArg == cosignCertificateWorkflowRefFlag {
+			value = replaceVersionSegmentInPath(value, req.Version, effectiveVersion)
+		}
 		rendered[i] = value
+		prevArg = arg
 	}
 	return rendered, nil
 }
