@@ -420,15 +420,17 @@ func processSimpleComponentsIndexed(
 			return nil, err
 		}
 
-		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
-			err := checkSettingsAndDependenciesIndexed(
-				&affected, atmosConfig, componentName, stackName, componentType,
-				&componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
-				includeSpaceliftAdminStacks, includeSettings,
-			)
-			if err != nil {
-				return nil, err
-			}
+		// Always run the settings/dependencies check, even when there is no settings section: a
+		// component can declare file/folder dependencies (dependencies.components) without any
+		// settings, and those must still be checked. The settings-equality comparison inside is
+		// guarded on the settings section being present. See #3204.
+		settingsSection, _ := componentSection[cfg.SettingsSectionName].(map[string]any)
+		if err := checkSettingsAndDependenciesIndexed(
+			&affected, atmosConfig, componentName, stackName, componentType,
+			&componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
+			includeSpaceliftAdminStacks, includeSettings,
+		); err != nil {
+			return nil, err
 		}
 	}
 
@@ -790,8 +792,11 @@ func checkSettingsAndDependenciesIndexed(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 ) error {
-	// Check settings section changes.
-	if !isEqual(remoteStacks, stackName, componentType, componentName, settingsSection, cfg.SettingsSectionName) {
+	// Check settings section changes. Only when a settings section is present - a component may
+	// declare file/folder dependencies (dependencies.components) with no settings at all, and the
+	// dependency check below must still run for it. See #3204.
+	if len(settingsSection) > 0 &&
+		!isEqual(remoteStacks, stackName, componentType, componentName, settingsSection, cfg.SettingsSectionName) {
 		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, componentType,
 			componentSection, affectedReasonStackSettings, includeSpaceliftAdminStacks, currentStacks, includeSettings)
 		if err != nil {
@@ -799,7 +804,8 @@ func checkSettingsAndDependenciesIndexed(
 		}
 	}
 
-	// Check settings.depends_on using indexed version.
+	// Check file/folder dependencies (dependencies.components and legacy settings.depends_on),
+	// independent of whether a settings section is present.
 	return checkDependencyChangesIndexed(
 		affected, atmosConfig, componentName, stackName, componentType,
 		componentSection, settingsSection, filesIndex,

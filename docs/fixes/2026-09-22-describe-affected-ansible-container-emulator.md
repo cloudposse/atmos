@@ -49,6 +49,19 @@ metadata, dependencies) can mark it affected.
   `buildNormalizedBasePaths` include the `ansible` and `container` base paths.
 - `internal/exec/describe_affected_deleted.go`: `deletableComponentTypes` now lists all eight types,
   so the deleted path stays in sync with the added/modified path.
+- `internal/exec/stack_utils.go`: `BuildComponentPath` now resolves `ansible` and `container`
+  component paths (previously the default branch returned an empty path), so added/modified and
+  deleted results for those types carry a real `component_path`. `emulator` stays on the default
+  (empty) branch - it has no filesystem source tree. (CodeRabbit review.)
+- `internal/exec/describe_affected_changed_files_index.go`: `indexChangedFile` now indexes each
+  changed file under **every** containing base path instead of only the first match. When one
+  component type's base path is nested under another's (e.g. `terraform=components`,
+  `ansible=components/ansible`), a file could previously be indexed only under the parent type and
+  hidden from the nested type's `getRelevantFiles`. (CodeRabbit review.)
+- `internal/exec/describe_affected_components.go`: file/folder dependency checks
+  (`dependencies.components` / legacy `settings.depends_on`) now run even when a component has no
+  `settings` section; only the settings-equality comparison remains gated on a settings section
+  being present. (CodeRabbit review.)
 
 ## Validation
 

@@ -680,6 +680,59 @@ func TestDetectDeletedComponents_ComponentPath(t *testing.T) {
 	assert.Equal(t, expectedEksPath, componentPaths["eks"])
 }
 
+// TestDetectDeletedComponents_ComponentPathNewTypes verifies BuildComponentPath resolves the
+// component path for deleted ansible and container components, and leaves it empty for emulator
+// (no filesystem source tree). See #3204.
+func TestDetectDeletedComponents_ComponentPathNewTypes(t *testing.T) {
+	t.Parallel()
+
+	basePath := "project"
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Ansible:   schema.Ansible{BasePath: filepath.Join("components", "ansible")},
+			Container: schema.ContainerComponentsConfig{BasePath: filepath.Join("components", "container")},
+		},
+	}
+
+	remoteStacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.AnsibleComponentType: map[string]any{
+					"webserver": map[string]any{"vars": map[string]any{"playbook": "site.yml"}},
+				},
+				cfg.ContainerComponentType: map[string]any{
+					"app": map[string]any{"vars": map[string]any{"image": "app:1.0"}},
+				},
+				cfg.EmulatorComponentType: map[string]any{
+					"gcs": map[string]any{"vars": map[string]any{"port": "8080"}},
+				},
+			},
+		},
+	}
+	currentStacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.AnsibleComponentType:   map[string]any{},
+				cfg.ContainerComponentType: map[string]any{},
+				cfg.EmulatorComponentType:  map[string]any{},
+			},
+		},
+	}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	require.NoError(t, err)
+	require.Len(t, deleted, 3)
+
+	paths := make(map[string]string)
+	for _, d := range deleted {
+		paths[d.Component] = d.ComponentPath
+	}
+	assert.Equal(t, filepath.Join(basePath, "components", "ansible", "webserver"), paths["webserver"])
+	assert.Equal(t, filepath.Join(basePath, "components", "container", "app"), paths["app"])
+	assert.Empty(t, paths["gcs"], "emulator components have no filesystem source path")
+}
+
 // TestIsAbstractComponent tests the isAbstractComponent helper.
 func TestIsAbstractComponent(t *testing.T) {
 	t.Parallel()

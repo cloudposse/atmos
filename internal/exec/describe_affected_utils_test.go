@@ -1959,9 +1959,15 @@ func TestProcessComponentsIndexedVarsEnvChanges(t *testing.T) {
 				atmosConfig, filesIndex, patternCache, false, false, false,
 			)
 
-			assert.NoError(t, err)
-			// Should detect both vars and env changes.
-			assert.GreaterOrEqual(t, len(affected), 1)
+			require.NoError(t, err)
+			// Both vars and env changed; appendToAffected merges the reasons into one entry, so
+			// assert that entry's AffectedAll carries both stack.vars and stack.env.
+			require.NotEmpty(t, affected)
+			assert.Equal(t, tt.componentName, affected[0].Component)
+			assert.Contains(t, affected[0].AffectedAll, affectedReasonStackVars,
+				"vars change must be reported for %s", tt.componentType)
+			assert.Contains(t, affected[0].AffectedAll, affectedReasonStackEnv,
+				"env change must be reported for %s", tt.componentType)
 		})
 	}
 }
@@ -2045,6 +2051,44 @@ func TestProcessSimpleComponentsIndexed_SkipsAndSettings(t *testing.T) {
 		assert.Equal(t, "app", affected[0].Component)
 		assert.Equal(t, cfg.ContainerComponentType, affected[0].ComponentType)
 	})
+}
+
+// TestProcessSimpleComponentsIndexed_FileDependencyWithoutSettings verifies that a component's
+// top-level file dependency is checked even when the component has no settings section. Before the
+// fix the dependency check was gated behind a settings section, so a changed dependency file went
+// unreported for a settings-less component. See #3204.
+func TestProcessSimpleComponentsIndexed_FileDependencyWithoutSettings(t *testing.T) {
+	t.Parallel()
+
+	// Absolute dependency file path; newChangedFilesIndex uses absolute inputs as-is.
+	depFile := filepath.Join(t.TempDir(), "shared", "config.yaml")
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: "/test"}
+	atmosConfig.Components.Ansible.BasePath = "components/ansible"
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{depFile}, "")
+	patternCache := newComponentPathPatternCache()
+	stackName := "dev"
+
+	// Same vars and same dependency declaration in BASE and HEAD (so neither the vars nor the
+	// dependencies section differs); no settings section at all. The only thing that can mark the
+	// component affected is the changed dependency file.
+	compBody := map[string]any{
+		"vars":         map[string]any{"playbook": "site.yml"},
+		"dependencies": map[string]any{"files": []any{depFile}},
+	}
+	section := map[string]any{"webserver": compBody}
+	remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+		cfg.AnsibleComponentType: map[string]any{"webserver": compBody},
+	}}}
+	current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.AnsibleComponentType: section}}}
+
+	affected, err := processSimpleComponentsIndexed(
+		cfg.AnsibleComponentType, stackName, section, &remote, &current,
+		atmosConfig, filesIndex, patternCache, false, false, false,
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, affected, "a changed file dependency must be detected even without a settings section")
+	assert.Equal(t, "webserver", affected[0].Component)
 }
 
 // TestProcessComponentsSourceAndProvisionChanges tests that source and provision section changes
