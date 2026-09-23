@@ -15,6 +15,11 @@ commands:
       GOBIN: '{{ env "PWD" }}/../../.context/bin'
     steps:
       - type: workdir
+        name: concurrent-vendoring-fixture
+        source: fixtures/concurrent-vendoring
+        path: "../../.context/cast-fixtures/concurrent-vendoring"
+        reset: true
+      - type: workdir
         name: native-terraform-fixture
         source: fixtures/native-terraform
         path: "../../.context/cast-fixtures/native-terraform"

@@ -79,7 +79,7 @@ Important shared fields:
 - `script` and `interpreter`: Inline script body and runtime for `type: script`.
 - `working_directory`: Directory for the subprocess or script.
 - `env`: Map of environment variables layered onto the step.
-- `output`: Output mode: `raw`, `log`, `viewport`, or `none`.
+- `output`: Output mode: `raw`, `log`, `viewport`, or `none`; `test` groups instead use `failures` or `all`.
 - `retry`: Retry policy around the whole step.
 - `identity`: Atmos identity used when the step runs.
 - `when`: Declarative condition for whether the step runs.
@@ -89,13 +89,13 @@ Important shared fields:
 
 ## Step Types
 
-Use the docs at `website/docs/workflows/workflows/workflow/steps/type.mdx` and
-the type-specific files under `website/docs/workflows/workflows/workflow/steps/type/`
-as the canonical reference. Current canonical step types include:
+Use [atmos.tools/workflows/steps/type](https://atmos.tools/workflows/steps/type) and its
+type-specific subpages (e.g. `atmos.tools/workflows/steps/type/shell`) as the canonical
+reference. Current canonical step types include:
 
 - Command and integration: `atmos`, `shell`, `script`, `exec`, `container`,
   `emulator`, `http`, `archive`, `require`, `workdir`, `cast`, `store`.
-- Orchestration: `parallel`, `matrix`, `wait`, `wait-all`, `cancel`.
+- Orchestration: `test`, `parallel`, `matrix`, `wait`, `wait-all`, `cancel`.
 - Interactive: `input`, `confirm`, `choose`, `filter`, `file`, `write`.
 - UI and output: `toast`, `markdown`, `spin`, `table`, `pager`, `format`,
   `join`, `style`, `log`, `junit`, `hint`, `alert`, `say`, `title`, `clear`,
@@ -106,6 +106,9 @@ document and configure the canonical names unless compatibility requires an alia
 
 If code and docs disagree, inspect the registered step handlers under
 `pkg/runner/step/` and schema constants in `pkg/schema/task.go`.
+
+For smoke tests and integration checks, use [atmos-tests](../atmos-tests/SKILL.md)
+for test groups, assertions, parallel dependencies, and matrix cases.
 
 ## Environment
 
@@ -186,7 +189,7 @@ steps:
     script: |
       from pathlib import Path
 
-      text = Path("website/static/casts/examples/sops-secrets.cast").read_text()
+      text = Path("path/to/your.cast").read_text()
       if "All proofs passed" not in text:
           raise SystemExit("cast validation failed")
 ```

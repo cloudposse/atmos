@@ -20,7 +20,9 @@
         "prompt": ""
       },
       "init": {
-        "pass_vars": false
+        "pass_vars": false,
+        "mode": "auto",
+        "upgrade": "auto"
       },
       "plan": {
         "skip_planfile": false
@@ -226,7 +228,8 @@
     },
     "provision": {
       "workdir": {}
-    }
+    },
+    "metrics": {}
   },
   "describe": {
     "settings": {},
@@ -239,6 +242,7 @@
   },
   "secrets": {},
   "vendor": {
+    "max_concurrency": 4,
     "base_path": "",
     "list": {
       "format": "",

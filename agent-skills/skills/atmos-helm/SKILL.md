@@ -14,7 +14,7 @@ local, remote-repository, or OCI — through the **Helm Go SDK**, in-process. No
 binary is required. This is a different component type than `components.helmfile`; see
 [Native Helm vs. Helmfile](#native-helm-vs-helmfile) below before choosing one.
 
-This feature is **experimental** (`IsExperimental() == true` in `cmd/helm/helm.go`).
+This feature is **experimental**.
 
 ## Related Skills
 
@@ -44,6 +44,14 @@ first-class GitOps delivery targets. Use **Helmfile** ([atmos-helmfile](../atmos
 for existing `helmfile.yaml` projects, multi-release releases files, or `helm-secrets`/other Helm CLI
 plugins. `atmos helm plugin` manages plugins **for Helmfile components** (native Helm does not run Helm
 CLI subcommand plugins).
+
+Declare Helmfile plugins in the component's stack configuration; Atmos ensures them before running
+Helmfile. See [Helmfile plugin configuration](../atmos-helmfile/SKILL.md#helm-plugins) for declarations
+and optional cache warming. Do not add a plugin installation prerequisite to native Helm commands.
+
+When maintaining plugin support, extend the existing generic installer in `pkg/helm/plugin`.
+Let Helm run each plugin's installation hooks. Keep plugin requirements with the consuming component
+or engine; a built-in alias such as `diff` does not justify a separate downloader or shell wrapper.
 
 ## Component Shape
 

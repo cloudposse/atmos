@@ -25,6 +25,9 @@ func LoadScaffoldConfigFromContent(content string) (*ScaffoldConfig, error) {
 	if err := validateFieldDefinitions(scaffoldConfig); err != nil {
 		return nil, err
 	}
+	if err := validateFilePathPatterns(scaffoldConfig); err != nil {
+		return nil, err
+	}
 	if err := validateFileMatrix(scaffoldConfig); err != nil {
 		return nil, err
 	}
@@ -95,11 +98,25 @@ func LoadUserValues(targetPath string) (map[string]interface{}, error) {
 //   - metadata identifies the template (name, version) at generation time
 //   - spec.fields snapshots the questionnaire so the project is self-describing
 //   - spec.values holds the answers
-//   - spec.source and spec.baseRef record provenance for future updates
+//   - spec.source and spec.baseRef/spec.renderedRef record provenance for
+//     future updates (whichever of the latter two matches the active
+//     --update-strategy; see ScaffoldSpec.RenderedRef)
 //
+// ProjectRecordProvenance groups SaveProjectRecord's update-provenance
+// fields (grouped into a struct, rather than three separate parameters, to
+// stay under revive's argument-limit). BaseRef and RenderedRef are mutually
+// exclusive in practice -- see ScaffoldSpec.RenderedRef's doc comment --
+// callers should only ever populate the one matching the active
+// --update-strategy.
+type ProjectRecordProvenance struct {
+	Source      string
+	BaseRef     string
+	RenderedRef string
+}
+
 // The record is marshaled directly to YAML (never through viper) so field
 // name casing is preserved exactly.
-func SaveProjectRecord(targetPath string, templateConfig *ScaffoldConfig, source, baseRef string, values map[string]interface{}) error {
+func SaveProjectRecord(targetPath string, templateConfig *ScaffoldConfig, provenance ProjectRecordProvenance, values map[string]interface{}) error {
 	defer perf.Track(nil, "config.SaveProjectRecord")()
 
 	// Reject nil configs and configs without a name: LoadProjectRecord will
@@ -118,11 +135,14 @@ func SaveProjectRecord(targetPath string, templateConfig *ScaffoldConfig, source
 		record.Spec.Fields = templateConfig.Spec.Fields
 		record.Spec.Delimiters = templateConfig.Spec.Delimiters
 	}
-	if source != "" {
-		record.Spec.Source = source
+	if provenance.Source != "" {
+		record.Spec.Source = provenance.Source
 	}
-	if baseRef != "" {
-		record.Spec.BaseRef = baseRef
+	if provenance.BaseRef != "" {
+		record.Spec.BaseRef = provenance.BaseRef
+	}
+	if provenance.RenderedRef != "" {
+		record.Spec.RenderedRef = provenance.RenderedRef
 	}
 	record.Spec.Values = values
 

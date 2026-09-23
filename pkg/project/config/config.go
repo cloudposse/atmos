@@ -98,8 +98,22 @@ type ScaffoldSpec struct {
 	// project records; ignored in template manifests.
 	Source string `yaml:"source,omitempty" json:"source,omitempty" jsonschema:"description=Where the template came from (written to project records)"`
 	// BaseRef records the git ref used as the three-way merge base when the
-	// project was generated. Written to project records.
-	BaseRef string `yaml:"baseRef,omitempty" json:"baseRef,omitempty" jsonschema:"description=Git ref used as the three-way merge base"`
+	// project was generated under --update-strategy=tracked. Written to
+	// project records. Mutually exclusive with RenderedRef in practice: a
+	// given record should carry at most one of the two, whichever update
+	// strategy last generated it -- see RenderedRef's own comment.
+	BaseRef string `yaml:"baseRef,omitempty" json:"baseRef,omitempty" jsonschema:"description=Git ref used as the three-way merge base (tracked strategy)"`
+	// RenderedRef records the resolved, immutable ref of the template source
+	// fetched for --update-strategy=rendered -- a commit SHA for a git::
+	// source, a manifest digest for an oci:// source (never the user's --ref
+	// string, which may name a mutable branch or tag; the actual resolved
+	// ref is what makes a later re-render of "the before state"
+	// reproducible). Written only by rendered-mode generations/updates.
+	// A record with RenderedRef set but BaseRef empty means the project was
+	// last managed with rendered; the reverse means tracked -- callers use
+	// this to detect a strategy switch and fail loudly instead of silently
+	// misinterpreting the other strategy's provenance field.
+	RenderedRef string `yaml:"renderedRef,omitempty" json:"renderedRef,omitempty" jsonschema:"description=Resolved immutable ref of the template source: a commit SHA for git, a manifest digest for OCI (rendered strategy)"`
 	// Delimiters optionally overrides the Go template delimiters used when
 	// rendering template files (exactly two entries: left and right).
 	Delimiters []string `yaml:"delimiters,omitempty" json:"delimiters,omitempty" jsonschema:"description=Template delimiters as a two-element list,minItems=2,maxItems=2"`
@@ -161,7 +175,20 @@ func DecodeHooks(raw map[string]any) (map[string]hooks.Hook, error) {
 type FileSpec struct {
 	// Path is the file's path as discovered in the template's file tree
 	// (matched against the file's original, pre-template-rendering path).
-	Path string `yaml:"path" json:"path" jsonschema:"description=File path as discovered in the template's file tree"`
+	// May be a literal path or a glob pattern (doublestar syntax: *, ?,
+	// [...], ** for any depth including zero, {a,b} -- see
+	// pkg/utils.PathMatch), letting one entry gate or multiply an entire
+	// directory at once, e.g. "docs/legacy/**" or "components/**". A
+	// backslash in the pattern is always treated as a directory-separator
+	// alias for forward slash (see pkg/utils.NormalizeGlobPattern),
+	// regardless of the OS that authored the pattern or the OS evaluating
+	// it, since discovered paths are always forward-slash-normalized.
+	// When more than one spec.files[]
+	// entry's path matches the same discovered file, the *last* matching
+	// entry in declaration order wins -- the same precedence convention as
+	// .gitignore/CODEOWNERS: write broad patterns first, specific overrides
+	// after. A wrong-order override is a silent no-op, not an error.
+	Path string `yaml:"path" json:"path" jsonschema:"description=File path as discovered in the template's file tree; may be a glob pattern (*, ?, [...], **, {a,b}) matching many files at once; when multiple entries match the same file, the last one declared wins"`
 	// When gates generation of this file. Evaluated against the collected
 	// answers (as the `answers` CEL variable) and, when Matrix is set, once
 	// per resolved combination (as the `matrix` CEL variable) to prune
@@ -170,7 +197,12 @@ type FileSpec struct {
 	// to a predicate/CEL string or a list (implicit all) -- the {all:/any:/not:}
 	// map form is deliberately excluded here (see the comment on
 	// FieldDefinition.When for why) even though pkg/condition itself parses
-	// it; use CEL's &&/||/! instead.
+	// it; use CEL's &&/||/! instead. When Path is a glob, When is evaluated
+	// identically for every matched file (or combination) -- it has no
+	// per-file variable to filter by which specific matched file it's
+	// currently gating; exclude one specific file from a glob's own When by
+	// declaring a second, more specific entry after the broad one instead
+	// (see Path's last-wins precedence above).
 	When condition.Condition `yaml:"when,omitempty" json:"when,omitempty" jsonschema:"description=Condition (predicate/CEL string or a list treated as 'all'; use CEL &&/||/! instead of the all/any/not map form) gating whether this file (or with matrix a specific combination) is generated,oneof_type=string;array"`
 	// Matrix declares axes to expand this file into one generated file per
 	// resolved combination -- the Cartesian product of every axis's values,
@@ -181,13 +213,31 @@ type FileSpec struct {
 	// list from nested/structured answer data (e.g.
 	// '{{ collectKeys answers.environments }}'). Requires Target, since
 	// Path alone can't serve as the output path for more than one file.
+	// When Path is a glob matching several files, every matched file gets
+	// one output per resolved combination, so Target must reference
+	// .file.Path or .file.RelPath to differentiate them -- checked
+	// deterministically before any file in the run is written
+	// (ErrScaffoldMatrixTargetMissingFileContext), not merely by a
+	// duplicate-output-path guard that would otherwise only fire once a
+	// second matched file's write collides with the first's (by which point
+	// the first has already been written to disk). Matrix itself is
+	// resolved once per Path, not once per matched file, so every file the
+	// same glob entry matches sees the identical resolved combination(s)
+	// even if an axis expression uses a non-deterministic template
+	// function.
 	Matrix MatrixAxes `yaml:"matrix,omitempty" json:"matrix,omitempty" jsonschema:"description=Axes to expand this file into one output per resolved combination; each axis's value is a literal list of strings; a dot-path string into answers.*; or a Go-template expression computing the list"`
 	// Target overrides the rendered output path for this file. Without
 	// Matrix it's optional, rendered once like Path -- letting authors keep
 	// Path a plain on-disk name while controlling dynamic naming from a
 	// normal YAML string. With Matrix it's required and rendered once per
 	// resolved combination, available as .matrix.<axis> in both Target and
-	// the file's own content.
+	// the file's own content. The currently matched file's own discovered
+	// path is also always available (regardless of Matrix, and whether
+	// Path is a glob or a literal) as .file.Path, and as .file.RelPath with
+	// Path's own glob literal-prefix stripped (equal to .file.Path when
+	// Path has no glob metacharacter) -- e.g.
+	// target: "environments/{{ .matrix.env }}/{{ .file.RelPath }}" for a
+	// directory-level matrix entry with path: "components/**".
 	Target string `yaml:"target,omitempty" json:"target,omitempty" jsonschema:"description=Output path template overriding Path; required when matrix is set; optional otherwise"`
 }
 

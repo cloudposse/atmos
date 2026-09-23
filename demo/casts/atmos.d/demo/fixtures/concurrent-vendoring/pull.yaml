@@ -1,0 +1,91 @@
+commands:
+  - name: casts generate demo fixtures concurrent-vendoring pull
+    description: Record concurrent downloads and ordered installation using local HTTP sources
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: serve
+        working_directory: "../../.context/cast-fixtures/concurrent-vendoring"
+        command: python3 serve.py start
+        output: none
+      - type: cast
+        name: pull
+        working_directory: "../../.context/cast-fixtures/concurrent-vendoring"
+        title: Concurrent vendoring
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/demo/fixtures/concurrent-vendoring/pull.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# Prepare four packages at once; install in declaration order"
+          - type: simulate
+            text: &pull atmos vendor pull --max-concurrency 4
+          - type: shell
+            command: *pull
+          - type: simulate
+            text: "# Receipts make the next pull a fast unchanged check"
+          - type: simulate
+            text: &unchanged atmos vendor pull
+          - type: shell
+            command: *unchanged
+          - type: shell
+            command: cp vendor.lock.yaml vendor.lock.before-clean.yaml
+            output: none
+          - type: simulate
+            text: "# Clean removes vendored files and preserves the lockfile"
+          - type: simulate
+            text: &clean atmos vendor clean
+          - type: shell
+            command: *clean
+          - type: shell
+            command: cp vendor.lock.yaml vendor.lock.after-clean.yaml
+            output: none
+          - type: simulate
+            text: "# Reinstall from the retained lock without drift warnings"
+          - type: simulate
+            text: &restore atmos vendor pull --lock-enforcement warn
+          - type: shell
+            command: *restore
+      - type: shell
+        name: stop
+        when: always
+        working_directory: "../../.context/cast-fixtures/concurrent-vendoring"
+        command: python3 serve.py stop
+        output: none
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          from cast_checks import load_text, strip_ansi, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/demo/fixtures/concurrent-vendoring/pull.cast")
+          plain = strip_ansi(text)
+          for expected in ["--max-concurrency 4", "4 active", "8 packages", "8 unchanged", "vpc (1.0.0)", "downloading", "%"]:
+              assert expected in plain, f"Missing {expected!r}"
+          import re
+          assert re.search(r"vpc \(1\.0\.0\) · downloading \d+%", plain), "Missing compact download percentage"
+          assert re.search(r"\b[1-9]\d*% 0/8 complete", plain), "Overall progress must advance before the first installation completes"
+          assert "→" not in plain, "Destination arrows must not appear in package labels"
+          assert "vpc@" not in plain, "Versions must use parenthesized suffixes"
+          assert "Vendoring from vendor.yaml" in plain, "The manifest should render as inline code"
+          assert "Vendoring from 'vendor.yaml'" not in plain
+          assert "vpc (1.0.0) (unchanged)" in plain, "Unchanged results must preserve compact labels"
+          assert "atmos vendor clean" in plain
+          assert "✓ Removed components/terraform/vpc/" in plain, "Clean must show success icons and relative paths"
+          from pathlib import Path
+          fixture = Path("../../.context/cast-fixtures/concurrent-vendoring")
+          assert (fixture / "vendor.lock.after-clean.yaml").read_bytes() == (fixture / "vendor.lock.before-clean.yaml").read_bytes(), "Clean must preserve the lockfile byte-for-byte"
+          restored = plain.split("atmos vendor pull --lock-enforcement warn", 1)[1]
+          assert "Vendor lock drift detected" not in restored, "A fully cleaned installation must not report drift"
+          assert "Vendored 8 packages, 0 unchanged, 0 failed" in restored
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

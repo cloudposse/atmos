@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,12 +18,12 @@ func TestPackerPathResolution(t *testing.T) {
 	_ = NewTestKit(t)
 	skipIfPackerNotInstalled(t)
 
-	stacksPath := "../tests/fixtures/scenarios/packer"
-
-	// Skip if packer fixtures directory doesn't exist.
-	if _, err := os.Stat(stacksPath); os.IsNotExist(err) {
-		t.Skipf("Skipping test: %s directory not found", stacksPath)
-	}
+	// Use a private copy of the fixture (see packerFixtureWorkDir in
+	// packer_fixture_test.go): this test runs real "packer validate"
+	// commands against it, so sharing the tracked fixture directory with
+	// other packer cmd tests races on the same generated var-file under
+	// -shuffle=on -parallel=4.
+	stacksPath := packerFixtureWorkDir(t)
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
@@ -87,12 +86,9 @@ func TestPackerPathResolutionWithCurrentDir(t *testing.T) {
 	_ = NewTestKit(t)
 	skipIfPackerNotInstalled(t)
 
-	stacksPath := "../tests/fixtures/scenarios/packer"
-
-	// Skip if packer fixtures directory doesn't exist.
-	if _, err := os.Stat(stacksPath); os.IsNotExist(err) {
-		t.Skipf("Skipping test: %s directory not found", stacksPath)
-	}
+	// Use a private copy of the fixture (see packerFixtureWorkDir in
+	// packer_fixture_test.go) for the same reason as TestPackerPathResolution.
+	stacksPath := packerFixtureWorkDir(t)
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)

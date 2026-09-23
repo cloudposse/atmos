@@ -213,3 +213,50 @@ func TestPrepareBranchResetsLocalBranchAtBase(t *testing.T) {
 	require.NoError(t, PrepareBranch(ctx, PrepareBranchOptions{Workdir: workdir, Base: "main", Branch: "atmos/component-updater/all"}))
 	assert.Equal(t, "atmos/component-updater/all", strings.TrimSpace(runGitCommand(t, workdir, "branch", "--show-current")))
 }
+
+// TestGithubRepositoryPath_SCPStylePort pins CodeRabbit thread PRRT_kwDOEW4XoM6h6mmi: an
+// SCP-style remote (git@host:org/repo.git) carries no port of its own, so the comparison must
+// use the portless hostname (endpoints.Hostname()) rather than endpoints.Host, which keeps a
+// non-default port. Without this, a GHES remote configured with a port (e.g.
+// "https://ghe.example.com:8443") would never match its own SCP-style remote.
+func TestGithubRepositoryPath_SCPStylePort(t *testing.T) {
+	t.Run("SCP-style remote matches a GHES host configured with a non-default port", func(t *testing.T) {
+		t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com:8443")
+
+		path, ok := githubRepositoryPath("git@ghe.example.com:org/repo.git")
+		require.True(t, ok, "expected the SCP-style remote to match the configured GHES host")
+		assert.Equal(t, "org/repo.git", path)
+	})
+
+	t.Run("SCP-style remote for an unrelated host is still rejected", func(t *testing.T) {
+		t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com:8443")
+
+		_, ok := githubRepositoryPath("git@some-other-host.example.com:org/repo.git")
+		assert.False(t, ok, "expected an unrelated host not to match the configured GHES host")
+	})
+
+	t.Run("URL-style remote still requires the port to match", func(t *testing.T) {
+		t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com:8443")
+
+		_, ok := githubRepositoryPath("https://ghe.example.com:9999/org/repo.git")
+		assert.False(t, ok, "expected a URL-style remote on a different port not to match")
+
+		path, ok := githubRepositoryPath("https://ghe.example.com:8443/org/repo.git")
+		require.True(t, ok, "expected a URL-style remote on the configured port to match")
+		assert.Equal(t, "org/repo.git", path)
+	})
+
+	t.Run("no port is unchanged", func(t *testing.T) {
+		t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+
+		path, ok := githubRepositoryPath("git@ghe.example.com:org/repo.git")
+		require.True(t, ok)
+		assert.Equal(t, "org/repo.git", path)
+	})
+
+	t.Run("public github.com SCP-style remote is unaffected", func(t *testing.T) {
+		path, ok := githubRepositoryPath("git@github.com:cloudposse/atmos.git")
+		require.True(t, ok)
+		assert.Equal(t, "cloudposse/atmos.git", path)
+	})
+}

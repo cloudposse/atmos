@@ -21,6 +21,7 @@ toolchain-aware automation around Terraform, Helm, Kubernetes, and other compone
 |---|---|
 | Store output hooks | [atmos-stores](../atmos-stores/SKILL.md) |
 | Shared step fields and `kind: step` payloads | [atmos-steps](../atmos-steps/SKILL.md) |
+| Post-deployment smoke tests and integration checks | [atmos-tests](../atmos-tests/SKILL.md) |
 | Git hooks and GitOps repositories | [atmos-git](../atmos-git/SKILL.md) |
 | Tool installation for hook commands | [atmos-toolchain](../atmos-toolchain/SKILL.md) |
 | CI summaries and Atmos Pro upload | [atmos-ci](../atmos-ci/SKILL.md) and [atmos-pro](../atmos-pro/SKILL.md) |
@@ -123,7 +124,8 @@ recordings use, instead of one of the named kinds above:
   configure it with `with:`, exactly like a workflow step.
 - `kind: steps` runs an ordered list of registered step types, provided as a YAML list under `with:`.
 
-Both run strictly in order -- there is no concurrent execution within a step-backed hook.
+Hook step lists run in order. A `type: test` group can contain `parallel` or
+`matrix` checks; see [atmos-tests](../atmos-tests/SKILL.md).
 
 The hook envelope owns `events`, `when`, `env`, `retry`, and `on_failure`; `with:` is
 decoded and validated as the step's own configuration. `kind: step` supplies the one

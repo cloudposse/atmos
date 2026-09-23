@@ -17,6 +17,8 @@ components:
             prompt: ""
         init:
             pass_vars: false
+            mode: auto
+            upgrade: auto
         plan:
             skip_planfile: false
         plugin_cache: true
@@ -104,6 +106,9 @@ describe:
     provenance: true
     component:
         filter: schema
+vendor:
+    max_concurrency: 4
+    base_path: ""
 initialized: true
 basePathAbsolute: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation/stacks

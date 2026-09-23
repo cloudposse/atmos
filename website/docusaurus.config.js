@@ -11,6 +11,7 @@ const lightCodeTheme = require('prism-react-renderer').themes.oneLight;
 const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
 const latestReleasePlugin = require('./plugins/fetch-latest-release');
 const rehypeDtIds = require('./plugins/rehype-dt-ids');
+const { getBuildDate } = require('./plugins/build-timestamp');
 
 const BASE_URL = '';
 const DEPLOYMENT_HOST = process.env.DEPLOYMENT_HOST || 'atmos.tools';
@@ -674,7 +675,8 @@ const config = {
                     {
                         label: 'Changelog',
                         position: 'right',
-                        to: '/changelog'
+                        to: '/changelog',
+                        activeBaseRegex: '^/(changelog|roadmap)(/|$)',
                     },
                     {
                         to: '/pro',
@@ -738,6 +740,9 @@ const config = {
 
     customFields: {
         latestRelease: 'v0.0.0', // initial placeholder
+        buildYear: getBuildDate().getUTCFullYear(),
+        // Render downloads from the same revision as the deployed site, including PR casts.
+        castGitRef: process.env.GITHUB_SHA || 'main',
         // Optional base URL (no trailing slash) for landing-page demo recordings.
         // The videos are published by `atmos demo publish` to the same docs-origin
         // bucket under /img/demos/, so DemoVideo serves them same-origin from that

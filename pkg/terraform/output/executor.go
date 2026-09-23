@@ -51,6 +51,8 @@ type RunnerFactory func(workdir, executable string) (TerraformRunner, error)
 
 // DescribeComponentParams contains parameters for describing a component.
 type DescribeComponentParams struct {
+	// SecretsMaskOnly preserves credential-free secret inspection for nested lookups.
+	SecretsMaskOnly      bool
 	AtmosConfig          *schema.AtmosConfiguration // Optional: Use provided config instead of initializing new one.
 	Component            string
 	Stack                string
@@ -74,6 +76,8 @@ type StaticRemoteStateGetter interface {
 
 // OutputOptions configures behavior for terraform output retrieval.
 type OutputOptions struct {
+	// SecretsMaskOnly preserves inspection mode and bypasses the execution output cache.
+	SecretsMaskOnly bool
 	// QuietMode suppresses terraform init/workspace output (sends to io.Discard).
 	// Use this when formatting output for scripts to avoid polluting stdout/stderr.
 	// If an error occurs, captured stderr is included in the error message.
@@ -297,10 +301,11 @@ func (e *Executor) GetOutputWithOptions(
 		}
 	}
 
+	maskOnly := opts != nil && opts.SecretsMaskOnly
 	stackSlug := stackComponentKey(stack, component)
 
 	// Check cache first.
-	if !skipCache {
+	if !skipCache && !maskOnly {
 		if result := resolveOutputFromCache(atmosConfig, stackSlug, component, stack, output); result != nil {
 			return result.value, result.exists, result.err
 		}
@@ -320,6 +325,7 @@ func (e *Executor) GetOutputWithOptions(
 	}
 
 	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
+		SecretsMaskOnly:      maskOnly,
 		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
@@ -335,7 +341,9 @@ func (e *Executor) GetOutputWithOptions(
 	// Check for static remote state backend.
 	if e.staticRemoteStateGetter != nil {
 		if staticOutputs := e.staticRemoteStateGetter.GetStaticRemoteStateOutputs(&sections); staticOutputs != nil {
-			terraformOutputsCache.Store(stackSlug, staticOutputs)
+			if !maskOnly {
+				terraformOutputsCache.Store(stackSlug, staticOutputs)
+			}
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
 				outputLookupFailed(message)
@@ -360,7 +368,9 @@ func (e *Executor) GetOutputWithOptions(
 	}
 
 	// Cache the result.
-	terraformOutputsCache.Store(stackSlug, outputs)
+	if !maskOnly {
+		terraformOutputsCache.Store(stackSlug, outputs)
+	}
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
@@ -559,27 +569,20 @@ func (e *Executor) execute(
 		}
 	}
 
-	// Step 9: Clean workspace and run terraform init (skipped when SkipInit is set).
-	// SkipInit is used when the component was just applied and .terraform/ state
-	// is already correct — re-initializing would require auth credentials that
+	// Steps 9-10: Decide whether terraform init needs to run at all ("smart
+	// init" — see pkg/terraform/autoinit), run it with the right flags when it
+	// does, and ensure the workspace is selected. Skipped entirely when
+	// SkipInit is set: the component was just applied and .terraform/ state is
+	// already correct — re-initializing would require auth credentials that
 	// may not be available in PostRunE context.
 	skipInit := opts != nil && opts.SkipInit
-	if !skipInit {
-		workspaceMgr := &defaultWorkspaceManager{}
-		workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
-
-		if err := e.runInit(ctx, runner, config, component, stack, stderrCapture, pluginCache); err != nil {
-			return nil, err
-		}
-
-		// Step 10: Ensure workspace exists and is selected.
-		if err := workspaceMgr.EnsureWorkspace(ctx, runner, config.Workspace, config.BackendType, component, stack, stderrCapture); err != nil {
-			return nil, err
-		}
+	if err := e.ensureInitialized(ctx, atmosConfig, runner, config, component, stack, stderrCapture, pluginCache, environMap, skipInit); err != nil {
+		return nil, err
 	}
 
-	// Step 11: Execute terraform output.
-	outputMeta, err := e.runOutput(ctx, runner, component, stack, stderrCapture)
+	// Step 11: Execute terraform output, recovering automatically if
+	// terraform/tofu reports afterward that init was in fact required.
+	outputMeta, err := e.runOutputWithInitRecovery(ctx, atmosConfig, runner, config, component, stack, stderrCapture, pluginCache, environMap, skipInit)
 	if err != nil {
 		return nil, err
 	}

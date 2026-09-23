@@ -39,6 +39,30 @@ type File struct {
 	Content     string      // File content, processed as template if IsTemplate is true
 	IsTemplate  bool        // Whether to process Content as a Go template
 	Permissions os.FileMode // Unix file permissions to apply when creating the file
+
+	// OriginalSourcePath is the file's own path as discovered in the
+	// template's source tree, before any spec.files[].target: templating
+	// (see pkg/generator/ui's toEngineFile/writeOneOutput, which populate
+	// this from the tmpl.File the discovery walk produced -- Path above is
+	// overwritten with the target: template string, so this is the only
+	// place that original discovered path survives). Empty for any caller
+	// that doesn't distinguish source discovery from output-path
+	// templating (e.g. most direct engine tests).
+	//
+	// determineBaseContent uses this as a secondary merge-base candidate:
+	// when a spec.files[] entry's target: changes (e.g. adopting a
+	// glob+.file.RelPath-based target on a file that previously rendered
+	// verbatim to its own discovered path), the first `--update` after the
+	// change writes the new path fresh via writeNewFile since it doesn't
+	// exist yet -- but every `--update` after that finds the new path on
+	// disk and looks for its merge base in git history, where only the OLD
+	// path (often identical to OriginalSourcePath, when the entry
+	// previously had no target: at all) was ever committed. Without this
+	// fallback that lookup finds nothing and permanently, silently treats
+	// the file as user-added -- freezing its content at whatever the first
+	// post-migration update wrote, with no further template updates ever
+	// applied and no warning. See determineBaseContent's own doc comment.
+	OriginalSourcePath string
 }
 
 // FileSkippedError represents when a file is intentionally skipped during processing.
@@ -56,14 +80,23 @@ func (e *FileSkippedError) Error() string {
 	return fmt.Sprintf("file skipped: %s (rendered as: %s)", e.Path, e.RenderedPath)
 }
 
+// baseContentLoader is the "read this file's content at the merge base"
+// contract a 3-way merge needs, independent of where that base actually
+// comes from. *storage.GitBaseStorage (base tracked via the target's own git
+// history) and *storage.RenderedBaseStorage (base from a pristine template
+// re-render, see SetupRenderedBaseStorage) both satisfy it.
+type baseContentLoader interface {
+	LoadBase(filePath string) (string, bool, error)
+}
+
 // Processor handles template processing for scaffold and init commands.
 // It provides template rendering with Gomplate and Sprig functions,
 // file path templating, and intelligent file merging capabilities.
 type Processor struct {
-	merger     *merge.ThreeWayMerger
-	gitStorage *storage.GitBaseStorage
-	targetPath string // Target directory for file generation
-	DryRun     bool   // When true, compute rendering/merge but skip writing to disk
+	merger      *merge.ThreeWayMerger
+	baseStorage baseContentLoader
+	targetPath  string // Target directory for file generation
+	DryRun      bool   // When true, compute rendering/merge but skip writing to disk
 }
 
 // NewProcessor creates a new template processor with default settings.
@@ -110,6 +143,14 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 	// workflow matrix step's own {{ .matrix.<axis> }} uses.
 	if row, ok := userValues[MatrixKey].(map[string]string); ok {
 		templateData["matrix"] = row
+	}
+
+	// A directory-level spec.files entry's current matched file travels
+	// through userValues under FileContextKey the same way (see
+	// pkg/generator/ui's file-generation loop), letting both target: and
+	// content read .file.Path/.file.RelPath.
+	if fileCtx, ok := userValues[FileContextKey].(FileContext); ok {
+		templateData["file"] = fileCtx
 	}
 
 	funcs := buildTemplateFuncMap(userValues)
@@ -498,8 +539,12 @@ func validateRenderedPath(renderedPath, originalPath string) error {
 	// Clean the path to normalize it.
 	cleaned := filepath.Clean(renderedPath)
 
-	// Reject absolute paths.
-	if filepath.IsAbs(cleaned) {
+	// Reject absolute paths -- checked against both this OS's native
+	// convention and the other OS's, since a rendered path can come from a
+	// template authored (or a scaffold run) on a different OS than this
+	// one: filepath.IsAbs alone doesn't consider a Unix-rooted path absolute
+	// on Windows, or a Windows-rooted path absolute on Unix.
+	if filepath.IsAbs(cleaned) || storage.IsRootedOnAnyOS(cleaned) {
 		return errUtils.Build(errUtils.ErrPathTraversal).
 			WithExplanationf("Absolute path not allowed: `%s`", renderedPath).
 			WithHint("File paths must be relative to the target directory").
@@ -555,12 +600,17 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 
 	// Handle update mode (3-way merge)
 	if update {
-		// Require git storage for meaningful 3-way merge.
-		// Without git, we would use template content as base, making merge a no-op.
-		if p.gitStorage == nil {
+		// Require base storage for a meaningful 3-way merge (either git
+		// history or a pristine template re-render). Without it, we would use
+		// template content as base, making merge a no-op. Processor doesn't
+		// track which --update-strategy set this up (or failed to), so the
+		// message can't name one specifically -- it must stay accurate for
+		// either.
+		if p.baseStorage == nil {
 			return errUtils.Build(errUtils.ErrThreeWayMerge).
-				WithExplanation("`--update` requires a git repository to compute a 3-way merge base").
-				WithHint("Run inside a git repository and/or pass `--base-ref`").
+				WithExplanation("`--update` has no merge base configured for this file").
+				WithHint("Under `--update-strategy=tracked` (the default): run inside a git repository and/or pass `--base-ref`").
+				WithHint("Under `--update-strategy=rendered`: the project needs a prior generation's `.atmos/scaffold.yaml` record").
 				WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
 				WithContext("file_path", file.Path).
 				WithExitCode(2).

@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -42,6 +43,13 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterPlan")()
 
 	result := p.parseOutputWithError(ctx)
+
+	// Annotations -- warn-only. Inline `::warning` per Terraform warning
+	// diagnostic. Emitted first so it survives the fatal planfile-upload path
+	// below, and any other later failure in this hook.
+	if isAnnotationsEnabled(ctx.Config) {
+		p.emitPlanWarningAnnotations(ctx, result)
+	}
 
 	// Summary -- warn-only.
 	var renderedSummary string
@@ -106,6 +114,13 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 
 	result := p.parseOutputWithError(ctx)
 
+	// Annotations -- warn-only. Inline `::warning` per Terraform warning
+	// diagnostic. Emitted first, ahead of summary/output/check, so it
+	// survives any later failure in this hook.
+	if isAnnotationsEnabled(ctx.Config) {
+		p.emitPlanWarningAnnotations(ctx, result)
+	}
+
 	// Summary -- warn-only.
 	var renderedSummary string
 	if isSummaryEnabled(ctx.Config) {
@@ -154,6 +169,13 @@ func (p *Plugin) onAfterTest(ctx *plugin.HookContext) error {
 
 	result := p.parseOutputWithError(ctx)
 
+	// Annotations -- warn-only. Inline `::error file:line` per failing
+	// assertion. Emitted first, ahead of summary/output/check, so it survives
+	// any later failure in this hook.
+	if isAnnotationsEnabled(ctx.Config) {
+		p.emitTestAnnotations(ctx, result)
+	}
+
 	// Summary -- warn-only.
 	var renderedSummary string
 	if isSummaryEnabled(ctx.Config) {
@@ -170,11 +192,6 @@ func (p *Plugin) onAfterTest(ctx *plugin.HookContext) error {
 			log.Warn("CI output failed", "error", err)
 		}
 		p.writeJUnitReport(ctx, result)
-	}
-
-	// Annotations -- warn-only. Inline `::error file:line` per failing assertion.
-	if isAnnotationsEnabled(ctx.Config) {
-		p.emitTestAnnotations(ctx, result)
 	}
 
 	// Check -- warn-only.
@@ -234,6 +251,13 @@ func (p *Plugin) onAfterDeploy(ctx *plugin.HookContext) error {
 	defer func() { ctx.Command = originalCommand }()
 
 	result := p.parseOutputWithError(ctx)
+
+	// Annotations -- warn-only. Inline `::warning` per Terraform warning
+	// diagnostic. Emitted first, ahead of summary/output/check, so it
+	// survives any later failure in this hook.
+	if isAnnotationsEnabled(ctx.Config) {
+		p.emitPlanWarningAnnotations(ctx, result)
+	}
 
 	// Summary -- warn-only.
 	var renderedSummary string
@@ -1067,16 +1091,18 @@ func formatResourceCount(count int) string {
 }
 
 // getGitHubActionsRunURL constructs the GitHub Actions run URL from environment variables.
+// The presence check on the raw GITHUB_SERVER_URL env var (rather than RepoEndpoints, which
+// always resolves to a default) is what detects "not running in GitHub Actions"; the actual
+// host value comes from RepoEndpoints so a GitHub Enterprise Server host is honored.
 func getGitHubActionsRunURL() string {
-	serverURL := os.Getenv("GITHUB_SERVER_URL")
 	repo := os.Getenv("GITHUB_REPOSITORY")
 	runID := os.Getenv("GITHUB_RUN_ID")
 
-	if serverURL == "" || repo == "" || runID == "" {
+	if os.Getenv("GITHUB_SERVER_URL") == "" || repo == "" || runID == "" {
 		return ""
 	}
 
-	return serverURL + "/" + repo + "/actions/runs/" + runID
+	return ghtoken.RepoEndpoints().ServerURL + "/" + repo + "/actions/runs/" + runID
 }
 
 // logCheckRunError logs check run errors at an appropriate level.

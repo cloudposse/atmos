@@ -754,7 +754,7 @@ func TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError(t *testing.T
 
 	recoverableErr := fmt.Errorf("%w for component `vpc` in stack `dev`", errUtils.ErrTerraformStateNotProvisioned)
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return(nil, recoverableErr).
 		Times(1)
 
@@ -801,7 +801,7 @@ func TestExecuteDescribeStacks_OnErrorWarn_DegradesRecoverableError_Strict(t *te
 
 	recoverableErr := fmt.Errorf("%w for component `vpc` in stack `dev`", errUtils.ErrTerraformStateNotProvisioned)
 	mockStateGetter.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), "dev", "vpc", "bucket_name", false, gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return(nil, recoverableErr).
 		Times(1)
 

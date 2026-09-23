@@ -10,9 +10,9 @@ on:
       - released
 
 # Serialize deploys. The merge queue can land several PRs on main minutes apart, and
-# each push triggers a deploy that runs `aws s3 sync --delete` against the ONE shared
-# origin prefix. Two runs in flight at once race: run A uploads its hashed bundles and
-# index.html, then run B's --delete removes A's bundles (they are not in B's build)
+# each push triggers a content-aware deploy against the ONE shared origin prefix. Two
+# runs in flight at once race: run A uploads its hashed bundles and index.html, then
+# run B's manifest delta removes A's bundles (they are not in B's build)
 # while A's index.html still references them -- the site goes blank until the next
 # deploy. Only the newest pending run is kept per group; the in-flight run is never
 # cancelled because aborting mid-sync would leave a half-uploaded site.
@@ -125,8 +125,13 @@ jobs:
       - name: Install Dependencies and Build Website
         run: |
           node --version
+          # Wall-clock plugin data changes content-hashed bundles and thousands
+          # of HTML references, defeating the incremental S3 uploader.
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
           cd website
           pnpm install --frozen-lockfile
+          pnpm run test:build-timestamp
           pnpm run build:site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

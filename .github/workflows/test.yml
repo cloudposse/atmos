@@ -51,7 +51,6 @@ env:
   # already read from), not duplicated here -- see docs/fixes for the
   # incident where a stale OPEN_TOFU_VERSION here (1.12.2) drifted behind
   # .tool-versions's actual pin (1.12.5) undetected.
-  HELM_DIFF_VERSION: "v3.15.10"
   # helmfile's own `version` subcommand makes an outbound network call to GitHub to check
   # for a newer release. On CI runners that call is a source of flakiness (e.g. "context
   # deadline exceeded" on Windows runners) unrelated to anything this repo controls, and
@@ -98,18 +97,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # No extras=s3-cache: this leg's ci-toolchain save and Go cache
-          # restore must use the same GitHub Actions cache backend as the 10
-          # ubuntu-latest acceptance shards and the other hosted Linux jobs.
-          # With the s3-cache extra, its caches went to RunsOn's S3 where no
-          # hosted job could ever see them.
-          #
-          # "large" (4 cores/~32GB), not "terraform": the latter resolves to
-          # a 2-core i4i.large, and this leg is the critical path every
-          # acceptance shard waits on. Measured cold (run 34228937998): the
-          # `atmos build binary` step took 721s on "terraform" against ~350s
-          # on the 4-core hosted macOS/Windows legs compiling the same tree.
-          - os: "runs-on=${{github.run_id}}/runner=large/tag=atmos/private=false"
+          # Public repositories receive standard GitHub-hosted Linux runners
+          # without billed Actions minutes. Keeping Linux on the hosted cache
+          # backend also lets the acceptance shards reuse its artifacts.
+          - os: "ubuntu-latest"
             target: linux
           - os: "windows-latest"
             target: windows
@@ -122,17 +113,14 @@ jobs:
             target: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
-      # Only applies to GitHub-hosted legs (windows/macos); the linux leg runs
-      # on the RunsOn self-hosted runner. Harden Runner's free/community tier
-      # (what this repo uses) only covers GitHub-hosted runners — self-hosted
-      # runners including RunsOn need a StepSecurity Enterprise license plus
-      # RunsOn-side config we're not doing here.
+      # All matrix legs use GitHub-hosted runners, which are covered by Harden
+      # Runner's free/community tier for public repositories.
       # Draft PRs skip every Windows step below (no checkout, nothing to
       # protect), so skip Harden Runner there too: its post step would still
       # race the agent's DNS restore, and the DNS guard (a local action) needs
       # the checkout.
       - name: Harden Runner
-        if: matrix.target != 'linux' && ! ( matrix.target == 'windows' && github.event.pull_request.draft )
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
@@ -189,9 +177,6 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
-
-      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d # v2.3.1
-        if: matrix.target == 'linux'
 
       - name: Announce build target
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
@@ -283,6 +268,14 @@ jobs:
         with:
           cache: restore-and-save
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Resolve plugins from the stack into the existing Atmos toolchain cache.
+      # This producer saves the cache; downstream jobs restore private copies.
+      - name: Install the stack-declared Helm plugins
+        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        working-directory: tests/fixtures/scenarios/helm-plugin-install
+        shell: bash
+        run: atmos helm plugin install --component ci-plugins --stack dev
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -478,9 +471,11 @@ jobs:
           helm version --short
           helmfile version
 
-      - name: Install helm-diff plugin
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: helm plugin install https://github.com/databus23/helm-diff --version ${{ env.HELM_DIFF_VERSION }}
+      - name: Verify the stack-declared Helm plugins
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
+        working-directory: tests/fixtures/scenarios/helm-plugin-install
+        shell: bash
+        run: atmos helm plugin install --component ci-plugins --stack dev
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -717,9 +712,11 @@ jobs:
           helm version --short
           helmfile version
 
-      - name: Install helm-diff plugin
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: helm plugin install https://github.com/databus23/helm-diff --version ${{ env.HELM_DIFF_VERSION }}
+      - name: Verify the stack-declared Helm plugins
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft ) }}
+        working-directory: tests/fixtures/scenarios/helm-plugin-install
+        shell: bash
+        run: atmos helm plugin install --component ci-plugins --stack dev
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
