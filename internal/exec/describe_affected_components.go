@@ -792,10 +792,12 @@ func checkSettingsAndDependenciesIndexed(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 ) error {
-	// Check settings section changes. Only when a settings section is present - a component may
-	// declare file/folder dependencies (dependencies.components) with no settings at all, and the
-	// dependency check below must still run for it. See #3204.
-	if len(settingsSection) > 0 &&
+	// Check settings section changes when a settings section is present - guarding on presence
+	// (not emptiness), so an explicitly emptied `settings: {}` in HEAD (populated in BASE) is still
+	// compared and reported. A component with no settings section at all skips this comparison, but
+	// the dependency check below still runs (dependencies.components can be declared without
+	// settings). See #3204.
+	if settingsSection != nil &&
 		!isEqual(remoteStacks, stackName, componentType, componentName, settingsSection, cfg.SettingsSectionName) {
 		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, componentType,
 			componentSection, affectedReasonStackSettings, includeSpaceliftAdminStacks, currentStacks, includeSettings)

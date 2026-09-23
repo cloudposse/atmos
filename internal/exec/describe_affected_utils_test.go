@@ -2023,6 +2023,38 @@ func TestProcessSimpleComponentsIndexed_SkipsAndSettings(t *testing.T) {
 		assert.Empty(t, affected, "a non-map component section must be skipped")
 	})
 
+	t.Run("explicitly emptied settings section is detected", func(t *testing.T) {
+		t.Parallel()
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		// HEAD empties the settings section (`settings: {}`); BASE had it populated. Emptying a
+		// present section is a change and must be reported, so the guard checks presence, not
+		// emptiness. Vars are unchanged so settings is the only possible reason.
+		section := map[string]any{
+			"app": map[string]any{
+				"vars":     map[string]any{"image": "app:1.0"},
+				"settings": map[string]any{},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"app": map[string]any{
+					"vars":     map[string]any{"image": "app:1.0"},
+					"settings": map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
+				},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, false,
+		)
+		require.NoError(t, err)
+		require.NotEmpty(t, affected, "emptying a populated settings section must be reported")
+		assert.Equal(t, "app", affected[0].Component)
+		assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+	})
+
 	t.Run("component with settings section and vars change is detected", func(t *testing.T) {
 		t.Parallel()
 		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
