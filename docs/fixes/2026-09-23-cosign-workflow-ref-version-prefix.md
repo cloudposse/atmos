@@ -12,27 +12,43 @@ Error: expected GitHub Workflow Ref not found in certificate
   --certificate-github-workflow-ref refs/tags/0.64.0   (should be refs/tags/v0.64.0)
 ```
 
-The version-segment correction in `renderArgs` now applies to non-URL cosign args too, so the
-rendered `--certificate-github-workflow-ref` carries the tool's actual `v`-prefixed release tag.
-Fixes cloudposse/atmos#3209.
+`renderArgs` now aligns the bare (non-URL) cosign `--certificate-github-workflow-ref` value with the
+tool's **actual downloaded asset tag**, the same way the existing URL correction already aligns
+`--certificate-identity`. This handles the case where Atmos's rendered `{{.Version}}` disagrees with
+the tag of the asset it fetched. Fixes cloudposse/atmos#3209.
+
+This is a targeted, symptomatic fix. The underlying divergence between Atmos's version formatting and
+the aqua registry's canonical tag format is tracked separately in #3211.
 
 ## Context
 
-Atmos resolves aqua package metadata live from the **unpinned** upstream `aquaproj/aqua-registry`
-`main` branch. On 2026-09-23 upstream added `--certificate-github-workflow-ref refs/tags/{{.Version}}`
-to the tflint (10:59 UTC) and gum (07:05 UTC) cosign configs. CI runs before those commits passed;
-runs after them failed - which is why it "worked yesterday" and broke today, with no Atmos code
-change involved. It is not a cold cache: both the last passing run and the failing runs got a
-toolchain cache hit and both executed cosign.
+The trigger was an upstream change to the **unpinned** `aquaproj/aqua-registry` `main` branch that
+Atmos resolves package metadata from: on 2026-09-23 upstream **added** a
+`--certificate-github-workflow-ref refs/tags/{{.Version}}` assertion to the tflint (10:59 UTC) and
+gum (07:05 UTC) cosign configs. CI runs before those commits passed; runs after them failed - which
+is why it "worked yesterday" and broke today, with no Atmos code change involved. It is not a cold
+cache: both the last passing run and the failing runs got a toolchain cache hit and both executed
+cosign.
 
-The upstream template uses `{{.Version}}` for both `--certificate-identity` (a URL) and
-`--certificate-github-workflow-ref` (a bare ref). In `pkg/toolchain/verification`, `{{.Version}}`
-renders v-stripped (`0.64.0`) while the tool's real release tag is `v`-prefixed. `renderArgs`
-corrected the version segment via `replaceVersionSegmentInURL`, which only rewrites URL-shaped
-values (those with a host). So `--certificate-identity` was corrected to `v0.64.0`, but the bare
-`--certificate-github-workflow-ref refs/tags/0.64.0` was left v-stripped and no longer matched the
-signing certificate's `refs/tags/v0.64.0`. cosign then rejected a valid signature. The defect was
-latent and exposed by the upstream registry change.
+Note: the upstream template is not itself wrong. `{{.Version}}` is meant to be the tool's actual
+release tag, and tflint's registry entry has no `version_prefix` (per aqua semantics that means the
+tag is used as-is, `v` and all). The failure comes from **Atmos rendering `{{.Version}}` v-stripped
+(`0.64.0`) while the real release tag - and the asset Atmos actually downloaded - is `v0.64.0`**.
+That divergence originates in Atmos's version handling (`normalizeGitHubVersion` strips the `v` when
+registry metadata is unavailable; the download fallback re-adds it on a 404), not in the aqua
+template. The new `--certificate-github-workflow-ref` assertion simply made a previously-harmless
+divergence fatal.
+
+`renderArgs` already realigned URL args (`--certificate-identity`) to the downloaded asset tag via
+`replaceVersionSegmentInURL`, which only rewrites URL-shaped values (those with a host). The bare
+`--certificate-github-workflow-ref refs/tags/0.64.0` is not a URL, so it was left v-stripped and no
+longer matched the signing certificate's `refs/tags/v0.64.0`; cosign then rejected a valid signature.
+
+This fix does not attempt to establish which exact resolution/download path produced the v-stripped
+version in the reported live run; it aligns the workflow-ref with the downloaded asset tag so the
+mismatch cannot break verification. The canonical fix - making the aqua registry `version_prefix` and
+the real tag the single source of truth for `{{.Version}}`, and removing the `v`-prefix heuristics -
+is #3211.
 
 ## Changes
 
@@ -65,6 +81,9 @@ All listed tests pass; `atmos lint --changed` reports 0 issues.
 
 ## Follow-ups
 
-- #3209 also notes a broader hardening: pin the aqua registry to a reviewed ref instead of tracking
+- **#3211** - the canonical fix: make the aqua registry `version_prefix` and the real release tag the
+  single source of truth for `{{.Version}}`, and remove the `v`-prefix heuristics
+  (`normalizeGitHubVersion` stripping `v` when metadata is unavailable; the 404 download fallback that
+  guesses a prefix). Once that lands, this PR's workflow-ref alignment becomes a no-op safety net.
+- Broader hardening (noted on #3209): pin the aqua registry to a reviewed ref instead of tracking
   upstream `main` unpinned, so an upstream registry change cannot silently break toolchain installs.
-  Tracked in that issue for a separate change.
