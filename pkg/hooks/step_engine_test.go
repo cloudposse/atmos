@@ -672,6 +672,36 @@ func TestSetDefaultStepWorkingDirectory_BareVsDotVsAbsolute(t *testing.T) {
 	assert.Equal(t, absDir, absStep.WorkingDirectory, "an absolute working_directory is left as-is")
 }
 
+// TestApplyDefaultWorkingDirectory verifies the exported, ExecContext-independent entry point
+// that setDefaultStepWorkingDirectory delegates to -- the same empty/bare/dot/absolute/atmos-type
+// rules apply, anchored at an arbitrary caller-supplied directory (e.g. a scaffold's target path)
+// rather than ComponentPath(ctx).
+func TestApplyDefaultWorkingDirectory(t *testing.T) {
+	anchor := filepath.Join(t.TempDir(), "target")
+
+	emptyStep := &schema.WorkflowStep{Type: "shell"}
+	ApplyDefaultWorkingDirectory(emptyStep, anchor)
+	assert.Equal(t, anchor, emptyStep.WorkingDirectory, "an empty working_directory defaults to anchorDir")
+
+	bareStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: "sub"}
+	ApplyDefaultWorkingDirectory(bareStep, anchor)
+	assert.Equal(t, filepath.Join(anchor, "sub"), bareStep.WorkingDirectory,
+		"a bare (non-dot-prefixed) working_directory anchors under anchorDir")
+
+	dotStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: "."}
+	ApplyDefaultWorkingDirectory(dotStep, anchor)
+	assert.Equal(t, ".", dotStep.WorkingDirectory, "a dot-prefixed working_directory is left as-is")
+
+	absDir := t.TempDir()
+	absStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: absDir}
+	ApplyDefaultWorkingDirectory(absStep, anchor)
+	assert.Equal(t, absDir, absStep.WorkingDirectory, "an absolute working_directory is left as-is")
+
+	atmosStep := &schema.WorkflowStep{Type: AtmosStepType}
+	ApplyDefaultWorkingDirectory(atmosStep, anchor)
+	assert.Empty(t, atmosStep.WorkingDirectory, "type: atmos steps are exempt from defaulting")
+}
+
 func TestStepsSummary(t *testing.T) {
 	tests := []struct {
 		name   string

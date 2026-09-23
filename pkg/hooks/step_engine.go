@@ -421,39 +421,51 @@ func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	return vars
 }
 
-// atmosStepType is the step type that re-invokes the atmos binary itself
+// AtmosStepType is the step type that re-invokes the atmos binary itself
 // (pkg/runner/step.AtmosHandler). It must keep inheriting the ambient process
 // working directory rather than defaulting to the component directory: the
 // nested atmos process resolves its own atmos.yaml/stacks relative to that
 // directory, and a component subdirectory won't necessarily contain (or sit
 // under) the project's config root.
-const atmosStepType = "atmos"
+const AtmosStepType = "atmos"
 
 // setDefaultStepWorkingDirectory gives lifecycle steps the same component directory as command
-// hooks. An empty working_directory defaults to the component directory outright. A non-empty,
-// BARE value (no "./"/"../" prefix, not absolute -- e.g. "foo", "foo/bar") has no anchor of its
-// own, so it's resolved relative to the component directory too, rather than falling through to
-// exec.Cmd.Dir's default of the ambient process CWD. A dot-prefixed value ("./foo", ".", "..",
-// "../foo") is left as-is: exec.Cmd.Dir already resolves it against CWD, matching the "here means
-// CWD" convention runtime sources use elsewhere (docs/prd/base-path-resolution-semantics.md). An
-// absolute value is always left as-is.
+// hooks, anchoring at ComponentPath(ctx). See ApplyDefaultWorkingDirectory for the anchor-agnostic
+// empty/bare/dot/absolute defaulting convention this delegates to.
 func setDefaultStepWorkingDirectory(ctx *ExecContext, step *schema.WorkflowStep) {
-	if step == nil || step.Type == atmosStepType {
+	if step == nil {
+		return
+	}
+	ApplyDefaultWorkingDirectory(step, ComponentPath(ctx))
+}
+
+// ApplyDefaultWorkingDirectory applies the shared empty/bare/dot/absolute working-directory
+// defaulting convention (docs/prd/base-path-resolution-semantics.md) to step, anchoring an empty
+// or bare-relative step.WorkingDirectory at anchorDir. An empty working_directory defaults to
+// anchorDir outright. A non-empty, BARE value (no "./"/"../" prefix, not absolute -- e.g. "foo",
+// "foo/bar") has no anchor of its own, so it's resolved relative to anchorDir too, rather than
+// falling through to exec.Cmd.Dir's default of the ambient process CWD. A dot-prefixed value
+// ("./foo", ".", "..", "../foo") is left as-is: exec.Cmd.Dir already resolves it against CWD,
+// matching the "here means CWD" convention runtime sources use elsewhere. An absolute value is
+// always left as-is. Steps of type: atmos are exempt: a nested atmos invocation must keep
+// resolving its own atmos.yaml/stacks against the ambient process cwd.
+func ApplyDefaultWorkingDirectory(step *schema.WorkflowStep, anchorDir string) {
+	if step == nil || step.Type == AtmosStepType {
 		return
 	}
 	if step.WorkingDirectory == "" {
-		step.WorkingDirectory = ComponentPath(ctx)
+		step.WorkingDirectory = anchorDir
 		return
 	}
-	if isBareRelativePath(step.WorkingDirectory) {
-		step.WorkingDirectory = filepath.Join(ComponentPath(ctx), step.WorkingDirectory)
+	if IsBareRelativePath(step.WorkingDirectory) {
+		step.WorkingDirectory = filepath.Join(anchorDir, step.WorkingDirectory)
 	}
 }
 
-// isBareRelativePath reports whether path is a BARE relative value -- not absolute, and not
+// IsBareRelativePath reports whether path is a BARE relative value -- not absolute, and not
 // dot-prefixed ("./foo", "../foo", ".", "..") -- per the value classification in
 // docs/prd/base-path-resolution-semantics.md.
-func isBareRelativePath(path string) bool {
+func IsBareRelativePath(path string) bool {
 	if filepath.IsAbs(path) {
 		return false
 	}
