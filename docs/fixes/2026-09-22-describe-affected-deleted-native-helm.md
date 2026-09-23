@@ -63,4 +63,6 @@ All listed tests pass; `atmos lint --changed` reports 0 issues.
 
 ## Follow-ups
 
-None.
+- #3203 - extend `describe affected` to also evaluate `ansible`, `container`, and `emulator`
+  component types (across both the added/modified and deleted paths), matching the full
+  eight-type canonical set that `describe component` and `describe dependents` already use.
