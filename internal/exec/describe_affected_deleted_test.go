@@ -326,9 +326,9 @@ func TestDetectDeletedComponents_EntireStackDeletedNativeHelm(t *testing.T) {
 }
 
 // TestDetectDeletedComponents_AllProvisionableTypes verifies deletions are detected for every
-// component type describe-affected evaluates in its added/modified path: terraform, helmfile,
-// packer, kubernetes, and native helm. Regression coverage for #3199, where native helm (and
-// kubernetes) were omitted from the deletion-detection loops.
+// component type describe-affected evaluates: the full eight-type canonical set (terraform,
+// helmfile, packer, ansible, container, emulator, kubernetes, helm). Regression coverage for
+// #3199 (native helm/kubernetes originally omitted) and #3203 (ansible/container/emulator added).
 func TestDetectDeletedComponents_AllProvisionableTypes(t *testing.T) {
 	t.Parallel()
 
@@ -338,6 +338,9 @@ func TestDetectDeletedComponents_AllProvisionableTypes(t *testing.T) {
 		cfg.TerraformComponentType,
 		cfg.HelmfileComponentType,
 		cfg.PackerComponentType,
+		cfg.AnsibleComponentType,
+		cfg.ContainerComponentType,
+		cfg.EmulatorComponentType,
 		cfg.KubernetesComponentType,
 		cfg.HelmComponentType,
 	}

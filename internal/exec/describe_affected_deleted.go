@@ -13,16 +13,16 @@ import (
 // detection. It must mirror the component types handled in the added/modified path
 // (processStackAffected in describe_affected_utils_parallel.go); otherwise a deleted component of a
 // type present there but missing here goes unreported. Native `helm` and `kubernetes` were
-// originally omitted, so deleted native Helm releases were never reported. See #3199.
-//
-// `ansible`, `container`, and `emulator` are intentionally absent here: they are not handled by the
-// added/modified path either, so adding them to only this deleted path would recreate the
-// added-vs-deleted asymmetry #3199 fixed. Extending describe-affected to those three types across
-// both paths is tracked in #3203.
+// originally omitted (#3199), and `ansible`, `container`, and `emulator` were added alongside the
+// added/modified path in #3203, giving the full eight-type canonical set that `describe component`
+// and `describe dependents` also use.
 var deletableComponentTypes = []string{
 	cfg.TerraformComponentType,
 	cfg.HelmfileComponentType,
 	cfg.PackerComponentType,
+	cfg.AnsibleComponentType,
+	cfg.ContainerComponentType,
+	cfg.EmulatorComponentType,
 	cfg.KubernetesComponentType,
 	cfg.HelmComponentType,
 }

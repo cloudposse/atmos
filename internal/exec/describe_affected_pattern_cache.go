@@ -62,6 +62,16 @@ func (c *componentPathPatternCache) getComponentPathPattern(
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath, component)
 	case cfg.HelmComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath, component)
+	case cfg.AnsibleComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath, component)
+	case cfg.ContainerComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Container.BasePath, component)
+	case cfg.EmulatorComponentType:
+		// Emulator components are stack-defined services with no filesystem source tree
+		// (see getComponentBasePath in describe_stacks.go), so there is no component folder to
+		// match changed files against. Return an empty pattern; isComponentFolderChangedIndexed
+		// treats it as "never changed by a file edit".
+		return "", nil
 	default:
 		// Unknown component type - return pattern without caching.
 		return "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)

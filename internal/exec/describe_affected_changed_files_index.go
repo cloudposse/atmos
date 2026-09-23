@@ -117,6 +117,19 @@ func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath))
 	}
 
+	// Add Ansible base path if configured.
+	if atmosConfig.Components.Ansible.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath))
+	}
+
+	// Add container base path if configured.
+	if atmosConfig.Components.Container.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Container.BasePath))
+	}
+
+	// Emulator components are stack-defined services with no filesystem source tree, so there is
+	// no base path to index for them (see getComponentBasePath in describe_stacks.go).
+
 	// Add stacks base path if configured.
 	if atmosConfig.Stacks.BasePath != "" {
 		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath))
@@ -197,8 +210,13 @@ func (idx *changedFilesIndex) getRelevantFiles(componentType string, atmosConfig
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath)
 	case cfg.HelmComponentType:
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath)
+	case cfg.AnsibleComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath)
+	case cfg.ContainerComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Container.BasePath)
 	default:
-		// Unknown component type - return all files as fallback.
+		// Unknown component type (or a type with no filesystem source, e.g. emulator) -
+		// return all files as fallback.
 		return idx.allFiles
 	}
 

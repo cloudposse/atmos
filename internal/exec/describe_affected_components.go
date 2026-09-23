@@ -336,92 +336,31 @@ func processTerraformComponentsIndexed(
 	return affected, nil
 }
 
-// processHelmfileComponentsIndexed processes Helmfile components using the files index.
-//
-//nolint:cyclop,dupl,funlen // Similar structure to processPackerComponentsIndexed but for different component type
-func processHelmfileComponentsIndexed(
-	stackName string,
-	helmfileSection map[string]any,
-	remoteStacks *map[string]any,
-	currentStacks *map[string]any,
-	atmosConfig *schema.AtmosConfiguration,
-	filesIndex *changedFilesIndex,
-	patternCache *componentPathPatternCache,
-	includeSpaceliftAdminStacks bool,
-	includeSettings bool,
-	excludeLocked bool,
-) ([]schema.Affected, error) {
-	var affected []schema.Affected
-
-	for componentName, compSection := range helmfileSection {
-		componentSection, ok := compSection.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
-		if hasMetadata {
-			if shouldSkipComponent(metadataSection, componentName, excludeLocked) {
-				continue
-			}
-
-			if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, metadataSection, sectionNameMetadata) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-					&componentSection, affectedReasonStackMetadata, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		// Resolve the component folder for path matching.
-		component := GetComponentFolder(&componentSection, componentName)
-
-		changed, err := isComponentFolderChangedIndexed(component, cfg.HelmfileComponentType, atmosConfig, filesIndex, patternCache)
-		if err != nil {
-			return nil, err
-		}
-		if changed {
-			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-				&componentSection, affectedReasonComponent, false, nil, includeSettings)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// Check the comparable component sections (vars, env, source, provision, ...) via the
-		// shared section table. `metadata` is handled above; `settings` is handled below
-		// because it also drives dependency checks.
-		err = checkComponentSections(
-			&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-			&componentSection, remoteStacks, currentStacks,
-			false, includeSettings,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
-			err := checkSettingsAndDependenciesIndexed(
-				&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-				&componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
-				includeSpaceliftAdminStacks, includeSettings,
-			)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return affected, nil
+// simpleAffectedComponentTypes are the non-Terraform component types whose affected-detection has no
+// type-specific logic, so they all share processSimpleComponentsIndexed. Terraform, Kubernetes, and
+// Helm are handled by dedicated processors (Spacelift/Atlantis, Kubernetes manifests, Helm values
+// files) and are intentionally absent here. See #3203.
+var simpleAffectedComponentTypes = []string{
+	cfg.HelmfileComponentType,
+	cfg.PackerComponentType,
+	cfg.AnsibleComponentType,
+	cfg.ContainerComponentType,
+	cfg.EmulatorComponentType,
 }
 
-// processPackerComponentsIndexed processes Packer components using the files index.
+// processSimpleComponentsIndexed processes a non-Terraform component type whose affected-detection
+// has no type-specific logic. For each component it compares metadata, checks whether the
+// component's source folder changed (a no-op for types with no filesystem source, e.g. emulator),
+// compares the shared component sections (vars, env, source, provision, ...), and checks
+// settings/dependencies. Terraform, Kubernetes, and Helm have dedicated processors with extra logic
+// (Spacelift/Atlantis wiring, Kubernetes manifests, Helm values files); every other
+// affected-eligible type (helmfile, packer, ansible, container, emulator) routes here. See #3203.
 //
-//nolint:cyclop,dupl,funlen // Similar structure to processHelmfileComponentsIndexed but for different component type
-func processPackerComponentsIndexed(
+//nolint:funlen // Straightforward per-component checks; splitting would reduce readability.
+func processSimpleComponentsIndexed(
+	componentType string,
 	stackName string,
-	packerSection map[string]any,
+	section map[string]any,
 	remoteStacks *map[string]any,
 	currentStacks *map[string]any,
 	atmosConfig *schema.AtmosConfiguration,
@@ -433,7 +372,7 @@ func processPackerComponentsIndexed(
 ) ([]schema.Affected, error) {
 	var affected []schema.Affected
 
-	for componentName, compSection := range packerSection {
+	for componentName, compSection := range section {
 		componentSection, ok := compSection.(map[string]any)
 		if !ok {
 			continue
@@ -445,8 +384,8 @@ func processPackerComponentsIndexed(
 				continue
 			}
 
-			if !isEqual(remoteStacks, stackName, cfg.PackerComponentType, componentName, metadataSection, sectionNameMetadata) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
+			if !isEqual(remoteStacks, stackName, componentType, componentName, metadataSection, sectionNameMetadata) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, componentType,
 					&componentSection, affectedReasonStackMetadata, false, nil, includeSettings)
 				if err != nil {
 					return nil, err
@@ -457,12 +396,12 @@ func processPackerComponentsIndexed(
 		// Resolve the component folder for path matching.
 		component := GetComponentFolder(&componentSection, componentName)
 
-		changed, err := isComponentFolderChangedIndexed(component, cfg.PackerComponentType, atmosConfig, filesIndex, patternCache)
+		changed, err := isComponentFolderChangedIndexed(component, componentType, atmosConfig, filesIndex, patternCache)
 		if err != nil {
 			return nil, err
 		}
 		if changed {
-			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, componentType,
 				&componentSection, affectedReasonComponent, false, nil, includeSettings)
 			if err != nil {
 				return nil, err
@@ -473,7 +412,7 @@ func processPackerComponentsIndexed(
 		// shared section table. `metadata` is handled above; `settings` is handled below
 		// because it also drives dependency checks.
 		err = checkComponentSections(
-			&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
+			&affected, atmosConfig, componentName, stackName, componentType,
 			&componentSection, remoteStacks, currentStacks,
 			false, includeSettings,
 		)
@@ -483,7 +422,7 @@ func processPackerComponentsIndexed(
 
 		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
 			err := checkSettingsAndDependenciesIndexed(
-				&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
+				&affected, atmosConfig, componentName, stackName, componentType,
 				&componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
 				includeSpaceliftAdminStacks, includeSettings,
 			)
