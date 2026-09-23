@@ -118,6 +118,8 @@ func runHook(name string, hook *hooks.Hook, answers map[string]any, targetPath s
 	}
 }
 
+// runStep builds and executes the single step a kind: step hook decodes to, anchoring its
+// working_directory at targetPath before running it through the shared step executor.
 func runStep(name string, hook *hooks.Hook, answers map[string]any, targetPath string) error {
 	ws, err := hooks.StepFromHook(hook)
 	if err != nil {
@@ -135,6 +137,8 @@ func runStep(name string, hook *hooks.Hook, answers map[string]any, targetPath s
 	return nil
 }
 
+// runSteps builds and executes, in order, the step list a kind: steps hook decodes to, anchoring
+// each step's working_directory at targetPath before running it through the shared step executor.
 func runSteps(name string, hook *hooks.Hook, answers map[string]any, targetPath string) error {
 	steps, err := hooks.StepsFromHook(hook)
 	if err != nil {
