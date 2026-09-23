@@ -251,6 +251,162 @@ func TestDetectDeletedComponents_MultipleComponentTypes(t *testing.T) {
 	assert.True(t, componentTypes[cfg.PackerComponentType])
 }
 
+// TestDetectDeletedComponents_NativeHelmComponentDeleted is the regression test for #3199: a
+// deleted native `helm` component must be reported the same way Terraform, Helmfile, and Packer
+// deletions are. Before the fix, the deletion-detection loops omitted the `helm` component type,
+// so a deleted native Helm release produced no affected item (added Helm components were already
+// detected by the separate added/modified path, which is why the omission was easy to miss).
+func TestDetectDeletedComponents_NativeHelmComponentDeleted(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	remoteStacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType: map[string]any{
+					"hello": map[string]any{
+						"vars": map[string]any{"name": "hello"},
+					},
+				},
+			},
+		},
+	}
+
+	currentStacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType: map[string]any{},
+			},
+		},
+	}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	require.NoError(t, err)
+	require.Len(t, deleted, 1)
+	assert.Equal(t, "hello", deleted[0].Component)
+	assert.Equal(t, cfg.HelmComponentType, deleted[0].ComponentType)
+	assert.Equal(t, "dev", deleted[0].Stack)
+	assert.Equal(t, affectedReasonDeleted, deleted[0].Affected)
+	assert.Equal(t, deletionTypeComponent, deleted[0].DeletionType)
+	assert.True(t, deleted[0].Deleted)
+}
+
+// TestDetectDeletedComponents_EntireStackDeletedNativeHelm verifies that when an entire stack
+// containing a native helm component is deleted, the helm component is reported with the stack
+// deletion type. Regression coverage for #3199.
+func TestDetectDeletedComponents_EntireStackDeletedNativeHelm(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	remoteStacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType: map[string]any{
+					"hello": map[string]any{
+						"vars": map[string]any{"name": "hello"},
+					},
+				},
+			},
+		},
+	}
+
+	// Stack doesn't exist in HEAD.
+	currentStacks := map[string]any{}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	require.NoError(t, err)
+	require.Len(t, deleted, 1)
+	assert.Equal(t, "hello", deleted[0].Component)
+	assert.Equal(t, cfg.HelmComponentType, deleted[0].ComponentType)
+	assert.Equal(t, affectedReasonDeletedStack, deleted[0].Affected)
+	assert.Equal(t, deletionTypeStack, deleted[0].DeletionType)
+	assert.True(t, deleted[0].Deleted)
+}
+
+// TestDetectDeletedComponents_AllProvisionableTypes verifies deletions are detected for every
+// component type describe-affected evaluates in its added/modified path: terraform, helmfile,
+// packer, kubernetes, and native helm. Regression coverage for #3199, where native helm (and
+// kubernetes) were omitted from the deletion-detection loops.
+func TestDetectDeletedComponents_AllProvisionableTypes(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	types := []string{
+		cfg.TerraformComponentType,
+		cfg.HelmfileComponentType,
+		cfg.PackerComponentType,
+		cfg.KubernetesComponentType,
+		cfg.HelmComponentType,
+	}
+
+	remoteComponents := map[string]any{}
+	currentComponents := map[string]any{}
+	for _, ct := range types {
+		remoteComponents[ct] = map[string]any{
+			ct + "-comp": map[string]any{
+				"vars": map[string]any{"enabled": true},
+			},
+		}
+		currentComponents[ct] = map[string]any{}
+	}
+
+	remoteStacks := map[string]any{"dev": map[string]any{"components": remoteComponents}}
+	currentStacks := map[string]any{"dev": map[string]any{"components": currentComponents}}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	require.NoError(t, err)
+	require.Len(t, deleted, len(types))
+
+	got := make(map[string]bool)
+	for _, d := range deleted {
+		got[d.ComponentType] = true
+		assert.True(t, d.Deleted)
+		assert.Equal(t, deletionTypeComponent, d.DeletionType)
+	}
+	for _, ct := range types {
+		assert.True(t, got[ct], "deleted %s component must be detected", ct)
+	}
+}
+
+// TestDetectDeletedComponents_EntireStackDeletedSkipsAbstractAndMalformed covers the entire-stack
+// deletion path (processAllComponentsAsDeleted): within a deleted stack, abstract components and
+// malformed (non-map) component sections are skipped, while a real component is still reported.
+func TestDetectDeletedComponents_EntireStackDeletedSkipsAbstractAndMalformed(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	remoteStacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformComponentType: map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{"cidr": "10.0.0.0/16"},
+					},
+					"abstract-base": map[string]any{
+						"metadata": map[string]any{"type": "abstract"},
+						"vars":     map[string]any{"enabled": true},
+					},
+					"malformed": "not-a-map",
+				},
+			},
+		},
+	}
+
+	// Entire stack is gone in HEAD.
+	currentStacks := map[string]any{}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	require.NoError(t, err)
+	// Only the real "vpc" component is reported; abstract and malformed are skipped.
+	require.Len(t, deleted, 1)
+	assert.Equal(t, "vpc", deleted[0].Component)
+	assert.Equal(t, deletionTypeStack, deleted[0].DeletionType)
+}
+
 // TestDetectDeletedComponents_NoComponentsSection tests when HEAD stack has no components section.
 // When a stack exists but lacks a components section, all BASE components are deleted with
 // deletion_type: "component" (not "stack") since the stack itself still exists.

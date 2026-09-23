@@ -9,6 +9,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// deletableComponentTypes is the set of component types describe-affected evaluates for deletion
+// detection. It must mirror the component types handled in the added/modified path
+// (processStackAffected in describe_affected_utils_parallel.go); otherwise a deleted component of a
+// type present there but missing here goes unreported. Native `helm` and `kubernetes` were
+// originally omitted, so deleted native Helm releases were never reported. See #3199.
+var deletableComponentTypes = []string{
+	cfg.TerraformComponentType,
+	cfg.HelmfileComponentType,
+	cfg.PackerComponentType,
+	cfg.KubernetesComponentType,
+	cfg.HelmComponentType,
+}
+
 // detectDeletedComponents detects components and stacks that exist in BASE (remoteStacks)
 // but have been deleted in HEAD (currentStacks).
 // This enables CI/CD pipelines to identify resources that need terraform destroy.
@@ -98,7 +111,7 @@ func processAllComponentsAsDeleted(
 	var deleted []schema.Affected
 
 	// Process each component type.
-	for _, componentType := range []string{cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType} {
+	for _, componentType := range deletableComponentTypes {
 		componentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any)
 		if !ok {
 			continue
@@ -164,7 +177,7 @@ func processDeletedComponentsInStack(
 	var deleted []schema.Affected
 
 	// Process each component type.
-	for _, componentType := range []string{cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType} {
+	for _, componentType := range deletableComponentTypes {
 		remoteTypeSection, ok := remoteComponentsSection[componentType].(map[string]any)
 		if !ok {
 			continue
