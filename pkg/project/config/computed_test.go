@@ -242,3 +242,62 @@ func TestValidateComputedFieldOrdering(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateOptionsNotComputed(t *testing.T) {
+	tests := []struct {
+		name    string
+		fields  []FieldDefinition
+		wantErr bool
+	}{
+		{
+			name: "no computed fields at all",
+			fields: []FieldDefinition{
+				{Name: "regions", Type: "multiselect", Options: []string{"a", "b"}},
+				{Name: "picked", Type: "select", Options: "answers.regions"},
+			},
+		},
+		{
+			name: "options dot-path references a regular field",
+			fields: []FieldDefinition{
+				{Name: "regions", Type: "multiselect", Options: []string{"a", "b"}},
+				{Name: "picked", Type: "select", Options: "answers.regions"},
+				{Name: "derived", Type: fieldTypeComputed, Value: "{{ answers.regions }}"},
+			},
+		},
+		{
+			name: "options dot-path references a computed field",
+			fields: []FieldDefinition{
+				{Name: "derived", Type: fieldTypeComputed, Value: "expr"},
+				{Name: "picked", Type: "select", Options: "answers.derived"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "options template expression references a computed field",
+			fields: []FieldDefinition{
+				{Name: "derived", Type: fieldTypeComputed, Value: "expr"},
+				{Name: "picked", Type: "select", Options: "{{ splitList \",\" answers.derived }}"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "non-string options (a static list) is untouched",
+			fields: []FieldDefinition{
+				{Name: "derived", Type: fieldTypeComputed, Value: "expr"},
+				{Name: "picked", Type: "select", Options: []string{"a", "b"}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateOptionsNotComputed(tt.fields)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrScaffoldFieldOptionsInvalid)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}

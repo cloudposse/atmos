@@ -327,6 +327,22 @@ func TestLoadScaffoldConfigRejectsComputedFieldForwardReference(t *testing.T) {
 	assert.Contains(t, cockroachErrors.GetAllDetails(err)[0], "second")
 }
 
+// TestLoadScaffoldConfigRejectsOptionsReferencingComputedField proves
+// validateOptionsNotComputed (computed_test.go unit-tests it in isolation)
+// is wired into the real load path: a select field's options: dot-path
+// can't reference a computed field, since options: is resolved before any
+// computed field has a value.
+func TestLoadScaffoldConfigRejectsOptionsReferencingComputedField(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  fields:\n" +
+		"    - name: derived\n      type: computed\n      value: \"literal\"\n" +
+		"    - name: picked\n      type: select\n      options: \"answers.derived\"\n"
+
+	_, err := LoadScaffoldConfigFromContent(content)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrScaffoldFieldOptionsInvalid), err)
+	assert.Contains(t, cockroachErrors.GetAllDetails(err)[0], "derived")
+}
+
 // TestLoadScaffoldConfigRejectsInvalidFileMatrix covers matrix
 // configurations LoadScaffoldConfigFromContent rejects. Most are caught by
 // the generated JSON Schema inside manifest.Load before validateFileMatrix's
