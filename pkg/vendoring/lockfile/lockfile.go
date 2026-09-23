@@ -107,6 +107,22 @@ type Drift struct {
 type CleanReport struct {
 	Removed   []string
 	Conflicts []Drift
+	// Forgotten lists the component names whose lock entries were removed (or, in a dry run, would
+	// be removed) because CleanOptions.PruneLock was set. Empty when PruneLock is false.
+	Forgotten []string
+}
+
+// CleanOptions configures a vendor clean operation.
+type CleanOptions struct {
+	// Force deletes lock-owned files even when they were modified since vendoring.
+	Force bool
+	// DryRun reports what would be removed/forgotten without changing the filesystem or the lock.
+	DryRun bool
+	// PruneLock also removes the selected artifacts' entries from the lock file. Without it, lock
+	// entries are preserved for future reinstalls (the default since #3169); with it, a source
+	// permanently removed from vendor.yaml no longer leaves an orphan entry that `vendor verify`
+	// reports as missing. See #3196.
+	PruneLock bool
 }
 
 // Path returns the absolute vendor lock path for the given Atmos configuration.
@@ -824,22 +840,22 @@ func Clean(config *schema.AtmosConfiguration, component string, force, dryRun bo
 func CleanSelected(config *schema.AtmosConfiguration, components []string, force, dryRun bool) (*CleanReport, error) {
 	defer perf.Track(config, "lockfile.CleanSelected")()
 
-	return CleanSelectedContext(context.Background(), config, components, force, dryRun)
+	return CleanSelectedContext(context.Background(), config, components, CleanOptions{Force: force, DryRun: dryRun})
 }
 
 // CleanSelectedContext coordinates cleanup with materialization and honors cancellation while waiting.
-func CleanSelectedContext(ctx context.Context, config *schema.AtmosConfiguration, components []string, force, dryRun bool) (*CleanReport, error) {
+func CleanSelectedContext(ctx context.Context, config *schema.AtmosConfiguration, components []string, opts CleanOptions) (*CleanReport, error) {
 	defer perf.Track(config, "lockfile.CleanSelectedContext")()
 	var report *CleanReport
 	err := WithMutation(ctx, config, func() error {
 		var err error
-		report, err = cleanSelectedUnlocked(config, components, force, dryRun)
+		report, err = cleanSelectedUnlocked(config, components, opts)
 		return err
 	})
 	return report, err
 }
 
-func cleanSelectedUnlocked(config *schema.AtmosConfiguration, components []string, force, dryRun bool) (*CleanReport, error) {
+func cleanSelectedUnlocked(config *schema.AtmosConfiguration, components []string, opts CleanOptions) (*CleanReport, error) {
 	lock, err := Load(config)
 	if err != nil {
 		return nil, err
@@ -849,16 +865,47 @@ func cleanSelectedUnlocked(config *schema.AtmosConfiguration, components []strin
 	if err != nil {
 		return nil, err
 	}
-	if err := validateCleanArtifacts(config, selected, remainingOwners, force, report); err != nil {
+	if err := validateCleanArtifacts(config, selected, remainingOwners, opts.Force, report); err != nil {
 		return nil, err
 	}
 	if len(report.Conflicts) > 0 {
 		return report, nil
 	}
-	if err := removeCleanArtifacts(config, selected, remainingOwners, dryRun, report); err != nil {
+	if err := removeCleanArtifacts(config, selected, remainingOwners, opts.DryRun, report); err != nil {
 		return nil, err
 	}
+	if opts.PruneLock {
+		if err := pruneSelectedLockEntries(config, lock, selected, opts.DryRun, report); err != nil {
+			return nil, err
+		}
+	}
 	return report, nil
+}
+
+// pruneSelectedLockEntries removes the selected artifacts' entries from the lock (restoring the
+// permanent-removal path for sources deleted from vendor.yaml; see #3196). It only touches the
+// artifacts already selected by the same component filter as the file cleanup, so it never prunes
+// entries the caller did not target (e.g. component.yaml artifacts sharing the lock). In a dry run
+// it records the would-be-forgotten names without writing the lock.
+func pruneSelectedLockEntries(config *schema.AtmosConfiguration, lock *LockFile, selected map[string]Artifact, dryRun bool, report *CleanReport) error {
+	if len(selected) == 0 {
+		return nil
+	}
+	forgotten := map[string]struct{}{}
+	for id, artifact := range selected {
+		forgotten[artifact.Name] = struct{}{}
+		if !dryRun {
+			delete(lock.Artifacts, id)
+		}
+	}
+	for name := range forgotten {
+		report.Forgotten = append(report.Forgotten, name)
+	}
+	sort.Strings(report.Forgotten)
+	if dryRun {
+		return nil
+	}
+	return Save(config, lock)
 }
 
 // selectCleanArtifacts partitions lock's artifacts into the selected set (matching components,
