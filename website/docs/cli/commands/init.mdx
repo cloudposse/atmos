@@ -96,6 +96,11 @@ Conditions use `when:` predicates or CEL over earlier `answers`. Generation hook
 `kind: step` and ordered `kind: steps`; see [scaffold templates](/cli/commands/scaffold/usage) for the
 complete authoring model, including `--skip-hooks` and answer templating.
 
+An unset (or bare-relative) `working_directory:` on a hook step defaults to the generated
+project's target directory, so `terraform fmt -recursive` above runs against the generated files
+even when the target differs from the directory `atmos` was launched from. Set
+`working_directory: "."` to opt back into running the hook in the original working directory.
+
 ## Updating an Initialized Project
 
 `init` records the selected source, base revision, and answers in `.atmos/scaffold.yaml`. Re-run
