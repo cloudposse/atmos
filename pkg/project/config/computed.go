@@ -135,6 +135,54 @@ func validateComputedFieldOrdering(fields []FieldDefinition) error {
 	return nil
 }
 
+// validateOptionsNotComputed statically rejects a select/multiselect
+// field's string-valued options: (the answers.<path> dot-path form, or a
+// Go-template expression -- valueReferencesAnswer matches both shapes
+// identically) when it references a type: computed field's name. Options
+// resolution always runs before ComputeFields, for both the interactive
+// dynamicOptionsFunc path and the non-interactive
+// validateSelectValue/validateMultiSelectValue path (see
+// resolveFieldOptionsFromAnswers), so a computed field's value can never
+// exist yet at that point -- there is no timing under which this
+// combination could work. Left unrejected, this permanently and silently
+// disables option validation for the field (an empty resolved options list
+// is treated by validateSelectValue/validateMultiSelectValue as "no
+// constraint", not an error) and, interactively, presents the user with
+// zero selectable choices, always. A matrix: axis referencing a computed
+// field is unaffected by any of this -- matrix expansion runs on the final
+// merged answers, after ComputeFields.
+func validateOptionsNotComputed(fields []FieldDefinition) error {
+	var computedNames []string
+	for i := range fields {
+		if fields[i].Type == fieldTypeComputed {
+			computedNames = append(computedNames, fields[i].Name)
+		}
+	}
+	if len(computedNames) == 0 {
+		return nil
+	}
+
+	for i := range fields {
+		field := &fields[i]
+		source, ok := field.Options.(string)
+		if !ok {
+			continue
+		}
+		for _, computedName := range computedNames {
+			if !valueReferencesAnswer(source, computedName) {
+				continue
+			}
+			return errUtils.Build(errUtils.ErrScaffoldFieldOptionsInvalid).
+				WithExplanationf("Field %q declares `options:` referencing computed field %q", field.Name, computedName).
+				WithHint("options: is resolved before computed fields are evaluated, so a computed field's value is never available here -- use a static list, or reference a regular field instead").
+				WithContext("field_name", field.Name).
+				WithContext("referenced_field", computedName).
+				Err()
+		}
+	}
+	return nil
+}
+
 // RejectComputedFieldOverrides returns an error if overrides (the --set
 // flags supplied on the command line) supplies a value for any type:
 // computed field. Computed fields are always derived by ComputeFields;
