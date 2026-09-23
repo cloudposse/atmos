@@ -441,15 +441,21 @@ func renderArgs(args []string, req *Request) ([]string, error) {
 	rendered := make([]string, len(args))
 	effectiveVersion := effectiveReleaseVersionFromAssetURL(req.AssetURL, req.Version)
 	for i, arg := range args {
+		value := arg
 		if strings.Contains(arg, "{{") {
-			value, err := renderTemplateString(arg, req.Tool, req.Version, assetNameFromURL(req.AssetURL), nil)
+			rendered, err := renderTemplateString(arg, req.Tool, req.Version, assetNameFromURL(req.AssetURL), nil)
 			if err != nil {
 				return nil, err
 			}
-			rendered[i] = replaceVersionSegmentInURL(value, req.Version, effectiveVersion)
-		} else {
-			rendered[i] = replaceVersionSegmentInURL(arg, req.Version, effectiveVersion)
+			value = rendered
 		}
+		// Correct the version segment for URL args (e.g. `--certificate-identity`), then for bare,
+		// non-URL args (e.g. cosign `--certificate-github-workflow-ref refs/tags/{{.Version}}`),
+		// which the URL-only correction never reaches. Both use the effective release tag so a
+		// v-prefixed-tag tool's cosign workflow-ref matches its certificate. See #3209.
+		value = replaceVersionSegmentInURL(value, req.Version, effectiveVersion)
+		value = replaceVersionSegmentInPath(value, req.Version, effectiveVersion)
+		rendered[i] = value
 	}
 	return rendered, nil
 }
