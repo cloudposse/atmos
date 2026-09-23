@@ -33,6 +33,7 @@ func newVendorCleanTestCmd() *cobra.Command {
 	c.Flags().String("labels", "", "")
 	c.Flags().Bool("force", false, "")
 	c.Flags().Bool("dry-run", false, "")
+	c.Flags().Bool("prune-lock", false, "")
 	c.Flags().String("base-path", "", "")
 	c.Flags().StringSlice("config", nil, "")
 	c.Flags().StringSlice("config-path", nil, "")
@@ -93,6 +94,49 @@ func TestVendorCleanCmd_RemovesLockOwnedFiles(t *testing.T) {
 	loaded, err := lockfile.Load(config)
 	require.NoError(t, err)
 	assert.Contains(t, loaded.Artifacts, "artifact-mock", "clean must preserve the artifact's lock entry")
+	assert.Equal(t, lockBefore, readFile(t, "vendor.lock.yaml"))
+}
+
+// TestVendorCleanCmd_PruneLockForgetsEntry is the #3196 fix: `vendor clean --prune-lock` removes
+// the files AND forgets the lock entry, so a source removed from vendor.yaml leaves no orphan that
+// vendor verify reports as missing.
+func TestVendorCleanCmd_PruneLockForgetsEntry(t *testing.T) {
+	filePath := writeCleanLockFixture(t)
+	stderr := setupVendorUICapture(t)
+
+	cmd := newVendorCleanTestCmd()
+	require.NoError(t, cmd.Flags().Set("prune-lock", "true"))
+	err := vendorCleanCmd.RunE(cmd, nil)
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, filePath)
+	assert.Contains(t, plainOutput(stderr.String()), "✓ Removed vendor/owned.txt")
+	assert.Contains(t, plainOutput(stderr.String()), "✓ Forgot lock entry mock")
+
+	config := &schema.AtmosConfiguration{BasePath: "."}
+	loaded, err := lockfile.Load(config)
+	require.NoError(t, err)
+	assert.NotContains(t, loaded.Artifacts, "artifact-mock", "--prune-lock must forget the artifact's lock entry")
+}
+
+// TestVendorCleanCmd_PruneLockDryRunKeepsEntry proves --prune-lock --dry-run reports the
+// would-be-forgotten entry without writing the lock.
+func TestVendorCleanCmd_PruneLockDryRunKeepsEntry(t *testing.T) {
+	writeCleanLockFixture(t)
+	stderr := setupVendorUICapture(t)
+	lockBefore := readFile(t, "vendor.lock.yaml")
+
+	cmd := newVendorCleanTestCmd()
+	require.NoError(t, cmd.Flags().Set("prune-lock", "true"))
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	err := vendorCleanCmd.RunE(cmd, nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, plainOutput(stderr.String()), "Would forget lock entry mock")
+	config := &schema.AtmosConfiguration{BasePath: "."}
+	loaded, err := lockfile.Load(config)
+	require.NoError(t, err)
+	assert.Contains(t, loaded.Artifacts, "artifact-mock", "dry run must not write the lock")
 	assert.Equal(t, lockBefore, readFile(t, "vendor.lock.yaml"))
 }
 

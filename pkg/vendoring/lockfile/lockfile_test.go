@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
@@ -246,6 +247,95 @@ func TestCleanRetainsPathsOwnedByUnselectedArtifact(t *testing.T) {
 	loaded, err := Load(config)
 	require.NoError(t, err)
 	require.Equal(t, lock.Artifacts, loaded.Artifacts, "selective cleanup must preserve both receipts")
+}
+
+// twoArtifactLock writes a lock with two independently-targeted artifacts ("first", "second") and
+// their materialized files, returning the config plus each target dir. Used by the prune-lock tests.
+func twoArtifactLock(t *testing.T) (*schema.AtmosConfiguration, string, string) {
+	t.Helper()
+	base := t.TempDir()
+	first := filepath.Join(base, "vendor-first")
+	second := filepath.Join(base, "vendor-second")
+	require.NoError(t, os.MkdirAll(first, 0o755))
+	require.NoError(t, os.MkdirAll(second, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(first, "a.txt"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(second, "b.txt"), []byte("b"), 0o644))
+
+	firstFiles, err := Inventory(first)
+	require.NoError(t, err)
+	secondFiles, err := Inventory(second)
+	require.NoError(t, err)
+
+	config := &schema.AtmosConfiguration{BasePath: base}
+	lock := New()
+	lock.Artifacts["id-first"] = Artifact{Name: "first", Kind: "source", Target: first, Files: firstFiles, Order: 1}
+	lock.Artifacts["id-second"] = Artifact{Name: "second", Kind: "source", Target: second, Files: secondFiles, Order: 2}
+	require.NoError(t, Save(config, lock))
+	return config, first, second
+}
+
+// TestCleanSelected_PreservesEntryWithoutPruneLock guards the #3169 default: a plain clean removes
+// files but keeps the lock entry (for future reinstalls).
+func TestCleanSelected_PreservesEntryWithoutPruneLock(t *testing.T) {
+	config, _, second := twoArtifactLock(t)
+
+	report, err := CleanSelected(config, []string{"second"}, false, false)
+	require.NoError(t, err)
+	assert.NoFileExists(t, filepath.Join(second, "b.txt"), "selected files must be removed")
+	assert.Empty(t, report.Forgotten, "without PruneLock, no entries are forgotten")
+
+	loaded, err := Load(config)
+	require.NoError(t, err)
+	assert.Contains(t, loaded.Artifacts, "id-second", "lock entry must be preserved by default")
+	assert.Contains(t, loaded.Artifacts, "id-first")
+}
+
+// TestCleanSelected_PruneLockRemovesSelectedEntry is the #3196 fix: with PruneLock, cleaning a
+// component also forgets its lock entry, so a source removed from vendor.yaml leaves no orphan.
+// Only the selected component's entry is removed — unselected entries are preserved.
+func TestCleanSelected_PruneLockRemovesSelectedEntry(t *testing.T) {
+	config, first, second := twoArtifactLock(t)
+
+	report, err := CleanSelectedContext(context.Background(), config, []string{"second"}, CleanOptions{PruneLock: true})
+	require.NoError(t, err)
+	assert.NoFileExists(t, filepath.Join(second, "b.txt"))
+	assert.Equal(t, []string{"second"}, report.Forgotten)
+
+	loaded, err := Load(config)
+	require.NoError(t, err)
+	assert.NotContains(t, loaded.Artifacts, "id-second", "PruneLock must forget the cleaned entry")
+	assert.Contains(t, loaded.Artifacts, "id-first", "PruneLock must not touch unselected entries")
+	assert.FileExists(t, filepath.Join(first, "a.txt"), "unselected component's files must remain")
+}
+
+// TestCleanSelected_PruneLockDryRunKeepsEntry verifies a dry run reports the would-be-forgotten
+// entry without writing the lock or removing files.
+func TestCleanSelected_PruneLockDryRunKeepsEntry(t *testing.T) {
+	config, _, second := twoArtifactLock(t)
+
+	report, err := CleanSelectedContext(context.Background(), config, []string{"second"}, CleanOptions{PruneLock: true, DryRun: true})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"second"}, report.Forgotten, "dry run still reports what would be forgotten")
+	assert.FileExists(t, filepath.Join(second, "b.txt"), "dry run must not remove files")
+
+	loaded, err := Load(config)
+	require.NoError(t, err)
+	assert.Contains(t, loaded.Artifacts, "id-second", "dry run must not write the lock")
+}
+
+// TestCleanSelected_PruneLockNoMatchIsNoop verifies PruneLock with a selector matching no artifact
+// forgets nothing and leaves every entry intact (covers the empty-selection guard).
+func TestCleanSelected_PruneLockNoMatchIsNoop(t *testing.T) {
+	config, _, _ := twoArtifactLock(t)
+
+	report, err := CleanSelectedContext(context.Background(), config, []string{"does-not-exist"}, CleanOptions{PruneLock: true})
+	require.NoError(t, err)
+	assert.Empty(t, report.Forgotten)
+
+	loaded, err := Load(config)
+	require.NoError(t, err)
+	assert.Contains(t, loaded.Artifacts, "id-first")
+	assert.Contains(t, loaded.Artifacts, "id-second")
 }
 
 func TestCleanRejectsLockTargetOutsideProject(t *testing.T) {
