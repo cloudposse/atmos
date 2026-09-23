@@ -598,6 +598,8 @@ func (ui *InitUI) colorSource(source string) string {
 		return styles.Command.Render("scaffold")
 	case "flag":
 		return styles.PackageName.Render("flag")
+	case "computed":
+		return styles.PackageName.Render("computed")
 	default:
 		return styles.Muted.Render("default")
 	}
@@ -1087,6 +1089,15 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 		return nil, nil, err
 	}
 
+	// Derive every type: computed field's value from the now-final answers
+	// (user-supplied and defaulted alike). Runs after validation, not before,
+	// so a computed field's expression always sees fully-validated answers,
+	// and before the summary below, so a computed field's value is visible
+	// in it like any other field's.
+	if err := config.ComputeFields(scaffoldConfig, mergedValues, ui.processor.RenderAnswersExpression); err != nil {
+		return nil, nil, fmt.Errorf("failed to compute derived fields: %w", err)
+	}
+
 	// Show configuration summary after any user input
 	// Get configuration summary data and display it
 	rows, header := config.GetConfigurationSummary(scaffoldConfig, mergedValues, valueSources)
@@ -1106,6 +1117,13 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 // targetPath, and the command-line-supplied values (highest priority),
 // tracking which source each field ultimately came from for display.
 func buildSetupValues(scaffoldConfig *config.ScaffoldConfig, targetPath string, cmdTemplateValues map[string]interface{}) (map[string]interface{}, map[string]string, error) {
+	// Reject --set (or any other command-line-supplied) values targeting a
+	// type: computed field immediately, rather than letting ComputeFields
+	// silently overwrite them later with no explanation.
+	if err := config.RejectComputedFieldOverrides(scaffoldConfig, cmdTemplateValues); err != nil {
+		return nil, nil, err
+	}
+
 	// Load existing user values from the scaffold template directory
 	userValues, err := config.LoadUserValues(targetPath)
 	if err != nil {

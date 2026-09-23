@@ -27,7 +27,7 @@ spec:
 
 ```yaml
 - name: component_name        # required; used as the template variable (.Config.component_name)
-  type: input                 # input|text|string|select|multiselect|confirm|bool|boolean
+  type: input                 # input|text|string|select|multiselect|confirm|bool|boolean|computed
   label: Component name       # short prompt label (falls back to name if omitted)
   description: ...            # longer help text shown with the prompt
   required: true
@@ -42,6 +42,44 @@ spec:
 
 Field name uniqueness is enforced — a duplicate `name` fails to load
 (`ErrDuplicateScaffoldFieldName`) rather than silently dropping an answer.
+
+### `type: computed` — derived fields
+
+A `computed` field is never prompted for and can't be set with `--set`
+(`ErrScaffoldComputedFieldNotSettable`) — it's always derived from other
+answers via a `value:` Go-template expression, evaluated with the same
+`answers.*` binding `options:`'s dynamic form uses:
+
+```yaml
+- name: regions
+  type: multiselect
+  options: [us-east-1, us-west-2, eu-west-1]
+- name: primary_region_select
+  type: select
+  options: answers.regions
+  when: "size(answers.regions) > 1"
+- name: primary_region
+  type: computed
+  value: "{{ ternary answers.primary_region_select (index answers.regions 0) (gt (len answers.regions) 1) }}"
+```
+
+Rules, enforced at scaffold-load time (`ErrScaffoldComputedFieldInvalid`):
+
+- `value:` is required on a `computed` field, and only valid on a `computed` field.
+- `required:` and `default:` are both rejected on a `computed` field — it's always
+  self-supplied, and `value:` already determines its value.
+- A `computed` field may reference any regular field's answer, or an
+  **earlier-declared** `computed` field's own result — computed fields are evaluated
+  once, in `spec.fields[]` declaration order, after every regular field's answer is
+  final (prompted, `--set`, or defaulted). A `computed` field that references a
+  *later*-declared `computed` field simply sees no value at that point (same posture
+  as an `options:` dot-path forward reference).
+- Because computed fields are only evaluated after the interactive form completes, a
+  regular field's `when:` cannot depend on a computed field's result — only the
+  reverse (a computed field depending on a regular field) works.
+- The resolved value lands in `.Config.<name>` exactly like any other field, so it's
+  usable everywhere `.Config` is (file content, `target:`, `matrix:` axes, `options:`
+  expressions, and other computed fields).
 
 ### `options:` — static, label/value, or dynamic
 

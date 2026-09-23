@@ -55,9 +55,11 @@ defaults, persisted `spec.values`, and repeated `--set key=value` flags, so auto
 same rules as an interactive run.
 
 Supported field types are `input`, `text`, `string`, `select`, `multiselect`, `confirm`, `bool`,
-and `boolean`. Required fields reject missing or blank text and empty multiselect values; `false`
-is a valid boolean answer. Select values must come from `options`, and text fields can use
-`validation.pattern` with an optional `validation.message`.
+`boolean`, and `computed`. Required fields reject missing or blank text and empty multiselect
+values; `false` is a valid boolean answer. Select values must come from `options`, and text fields
+can use `validation.pattern` with an optional `validation.message`. A `computed` field is never
+prompted for — see [Computed Fields](/cli/commands/scaffold/generate#computed-fields) in the
+`generate` reference.
 
 ## Conditions and Files
 

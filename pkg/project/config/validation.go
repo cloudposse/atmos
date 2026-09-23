@@ -99,6 +99,12 @@ func ValidateFieldValues(scaffoldConfig *ScaffoldConfig, values map[string]inter
 	var invalid []string
 	for i := range scaffoldConfig.Spec.Fields {
 		field := &scaffoldConfig.Spec.Fields[i]
+		if field.Type == fieldTypeComputed {
+			// Computed fields are never user-supplied (ValidateFieldValues
+			// runs before ComputeFields derives them), so there's nothing of
+			// the user's to validate here.
+			continue
+		}
 		if !field.When.Evaluate(condition.Context{Answers: values}) {
 			continue
 		}
@@ -154,6 +160,57 @@ func validateFieldDefinitions(scaffoldConfig *ScaffoldConfig) error {
 		if err := validateFieldOptionsList(field); err != nil {
 			return err
 		}
+		if err := validateComputedFieldDefinition(field); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateComputedFieldDefinition statically validates a `type: computed`
+// field's shape at scaffold-load time: it must declare a non-empty `value:`
+// expression and must not declare `required:` (meaningless for a field
+// that's always self-supplied, never prompted or --set) or `default:`
+// (redundant with `value:`, and ambiguous about which wins). Conversely, a
+// non-computed field must not declare `value:` -- it's silently ignored by
+// every other field type today, which would be confusing rather than an
+// error surfaced only much later.
+func validateComputedFieldDefinition(field *FieldDefinition) error {
+	if field.Type != fieldTypeComputed {
+		if field.Value != "" {
+			return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+				WithExplanationf("Field %q declares `value:` but its type is %q, not `computed`", field.Name, field.Type).
+				WithHint("Either set `type: computed`, or remove `value:` and use `default:` instead").
+				WithContext("field_name", field.Name).
+				WithExitCode(2).
+				Err()
+		}
+		return nil
+	}
+
+	if field.Value == "" {
+		return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+			WithExplanationf("Field %q has `type: computed` but no `value:` expression", field.Name).
+			WithHint("Add a `value:` Go-template expression computing this field from answers.*").
+			WithContext("field_name", field.Name).
+			WithExitCode(2).
+			Err()
+	}
+	if field.Required {
+		return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+			WithExplanationf("Field %q is `type: computed` and cannot also be `required:`", field.Name).
+			WithHint("A computed field is always self-supplied; remove `required:`").
+			WithContext("field_name", field.Name).
+			WithExitCode(2).
+			Err()
+	}
+	if field.Default != nil {
+		return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+			WithExplanationf("Field %q is `type: computed` and cannot also declare `default:`", field.Name).
+			WithHint("Remove `default:`; `value:` already determines the field's value").
+			WithContext("field_name", field.Name).
+			WithExitCode(2).
+			Err()
 	}
 	return nil
 }

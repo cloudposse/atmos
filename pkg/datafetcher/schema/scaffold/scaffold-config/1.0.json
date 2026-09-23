@@ -89,7 +89,7 @@
                 "type": "string"
               },
               "required": {
-                "description": "Whether a value must be provided",
+                "description": "Whether a value must be provided (not valid on a computed field)",
                 "type": "boolean"
               },
               "type": {
@@ -102,7 +102,8 @@
                   "multiselect",
                   "confirm",
                   "bool",
-                  "boolean"
+                  "boolean",
+                  "computed"
                 ],
                 "type": "string"
               },
@@ -120,6 +121,10 @@
                   }
                 },
                 "type": "object"
+              },
+              "value": {
+                "description": "Go-template expression computing this field's value from answers.* (only valid when type: computed)",
+                "type": "string"
               },
               "when": {
                 "additionalProperties": false,
