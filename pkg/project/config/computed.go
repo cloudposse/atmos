@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/condition"
@@ -53,6 +54,83 @@ func ComputeFields(scaffoldConfig *ScaffoldConfig, values map[string]interface{}
 			return fmt.Errorf("computed field %q: %w", field.Name, err)
 		}
 		values[field.Name] = value
+	}
+	return nil
+}
+
+// valueReferencesAnswer reports whether a computed field's Value expression
+// textually references answers.<name> as a token -- the same
+// token-scanning approach pkg/condition's celMentionsIdentifier uses for
+// CEL When expressions, adapted to the "answers.<name>" shape a Go-template
+// Value expression uses instead of CEL's bare "<name>". A plain
+// substring/token check is safe here specifically because a computed
+// field's own name is never ambiguous the way a general answers.* dot-path
+// reference can be (see validateFieldOptionsSource's doc comment on why
+// options: dot-paths deliberately skip this check): the full set of
+// declared computed field names is always statically known at load time,
+// with no --set-only or spec.values-only namesake to confuse it with.
+func valueReferencesAnswer(expr, name string) bool {
+	prefix := "answers." + name
+	for _, token := range strings.FieldsFunc(expr, isNotIdentifierRune) {
+		if token == prefix || strings.HasPrefix(token, prefix+".") {
+			return true
+		}
+	}
+	return false
+}
+
+// isNotIdentifierRune reports whether r can't be part of a dotted
+// identifier token (the same delimiter rule pkg/condition's
+// celMentionsIdentifier uses), extracted to its own function so the
+// FieldsFunc closure doesn't inflate valueReferencesAnswer's own
+// cyclomatic complexity.
+func isNotIdentifierRune(r rune) bool {
+	return r != '_' &&
+		r != '.' &&
+		(r < '0' || r > '9') &&
+		(r < 'A' || r > 'Z') &&
+		(r < 'a' || r > 'z')
+}
+
+// validateComputedFieldOrdering statically rejects a computed field whose
+// Value expression references itself or a computed field declared after it
+// in spec.fields[] -- ComputeFields evaluates computed fields once, in
+// declaration order, so such a reference would otherwise silently resolve
+// to a missing map key (nil) at render time instead of erroring, and a nil
+// interpolated directly into file content renders as the literal string
+// "<no value>" rather than failing loudly. Referencing an earlier-declared
+// computed field, or any regular field regardless of order, is unaffected
+// -- see ComputeFields' own doc comment for why those are always safe.
+func validateComputedFieldOrdering(fields []FieldDefinition) error {
+	for i := range fields {
+		field := &fields[i]
+		if field.Type != fieldTypeComputed {
+			continue
+		}
+		for j := i; j < len(fields); j++ {
+			later := &fields[j]
+			if later.Type != fieldTypeComputed {
+				continue
+			}
+			if !valueReferencesAnswer(field.Value, later.Name) {
+				continue
+			}
+			if j == i {
+				return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+					WithExplanationf("Field %q references itself in its own `value:` expression", field.Name).
+					WithHint("A computed field can't reference its own not-yet-computed value; remove the self-reference").
+					WithContext("field_name", field.Name).
+					WithExitCode(2).
+					Err()
+			}
+			return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+				WithExplanationf("Field %q references computed field %q, which is declared after it", field.Name, later.Name).
+				WithHintf("Declare %q before %q -- a computed field can only reference an earlier-declared computed field", later.Name, field.Name).
+				WithContext("field_name", field.Name).
+				WithContext("referenced_field", later.Name).
+				WithExitCode(2).
+				Err()
+		}
 	}
 	return nil
 }

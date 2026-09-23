@@ -71,9 +71,11 @@ Rules, enforced at scaffold-load time (`ErrScaffoldComputedFieldInvalid`):
 - A `computed` field may reference any regular field's answer, or an
   **earlier-declared** `computed` field's own result — computed fields are evaluated
   once, in `spec.fields[]` declaration order, after every regular field's answer is
-  final (prompted, `--set`, or defaulted). A `computed` field that references a
-  *later*-declared `computed` field simply sees no value at that point (same posture
-  as an `options:` dot-path forward reference).
+  final (prompted, `--set`, or defaulted). Unlike an `options:` dot-path forward
+  reference, a `computed` field's own name is always statically known at load time, so
+  referencing itself or a *later*-declared `computed` field is a load-time error rather
+  than silently resolving to no value — the alternative would be a nil silently
+  interpolated into generated file content as the literal string `<no value>`.
 - Because computed fields are only evaluated after the interactive form completes, a
   regular field's `when:` cannot depend on a computed field's result — only the
   reverse (a computed field depending on a regular field) works.

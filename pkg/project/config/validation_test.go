@@ -311,6 +311,22 @@ func TestLoadScaffoldConfigRejectsInvalidComputedFieldDefinition(t *testing.T) {
 	assert.Contains(t, cockroachErrors.GetAllDetails(err)[0], "derived")
 }
 
+// TestLoadScaffoldConfigRejectsComputedFieldForwardReference proves
+// validateComputedFieldOrdering (computed_test.go unit-tests it in
+// isolation) is wired into the real load path: a computed field
+// referencing a later-declared computed field must fail to load rather
+// than silently resolving to "<no value>" at render time.
+func TestLoadScaffoldConfigRejectsComputedFieldForwardReference(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  fields:\n" +
+		"    - name: first\n      type: computed\n      value: \"{{ answers.second }}\"\n" +
+		"    - name: second\n      type: computed\n      value: \"literal\"\n"
+
+	_, err := LoadScaffoldConfigFromContent(content)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrScaffoldComputedFieldInvalid), err)
+	assert.Contains(t, cockroachErrors.GetAllDetails(err)[0], "second")
+}
+
 // TestLoadScaffoldConfigRejectsInvalidFileMatrix covers matrix
 // configurations LoadScaffoldConfigFromContent rejects. Most are caught by
 // the generated JSON Schema inside manifest.Load before validateFileMatrix's

@@ -136,9 +136,10 @@ snippet. `primary_region` derives it once, and `.Config.primary_region` is then 
 and `default:` are both rejected on a `computed` field, since it's always self-supplied. Computed
 fields evaluate once, in `spec.fields[]` declaration order, after every regular field's answer is
 already final — a computed field can reference any regular field regardless of order, but only an
-**earlier-declared** computed field's own result. Because that evaluation happens after the
-interactive form completes, a regular field's own `when:` can never depend on a computed field —
-only the reverse works.
+**earlier-declared** computed field's own result. Referencing itself or a later-declared computed
+field fails at scaffold-load time rather than silently rendering as `<no value>`. Because that
+evaluation happens after the interactive form completes, a regular field's own `when:` can never
+depend on a computed field — only the reverse works.
 
 ## Dynamic and Label/Value Options
 
