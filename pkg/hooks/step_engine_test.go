@@ -633,6 +633,8 @@ func TestSetDefaultStepWorkingDirectory_ExcludesAtmosStepType(t *testing.T) {
 	explicitStep := &schema.WorkflowStep{Type: "atmos", WorkingDirectory: explicitDir}
 	setDefaultStepWorkingDirectory(ctx, explicitStep)
 	assert.Equal(t, explicitDir, explicitStep.WorkingDirectory, "an explicit working_directory is never overwritten")
+
+	assert.NotPanics(t, func() { setDefaultStepWorkingDirectory(ctx, nil) }, "a nil step is a no-op")
 }
 
 // TestSetDefaultStepWorkingDirectory_BareVsDotVsAbsolute verifies the value-classification rule
