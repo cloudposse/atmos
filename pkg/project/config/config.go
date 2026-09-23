@@ -327,10 +327,12 @@ type FieldDefinition struct {
 	// computed field once, in Fields declaration order, after every regular
 	// field's answer is already final -- so a computed field may reference
 	// any regular field regardless of declaration order, but may only
-	// reference an earlier-declared computed field (a later one hasn't been
-	// evaluated yet). Because ComputeFields runs after the interactive form
-	// completes, a regular field's own When can never depend on a computed
-	// field's result -- only the reverse.
+	// reference an earlier-declared computed field. Referencing itself or a
+	// later-declared computed field is rejected at load time
+	// (validateComputedFieldOrdering), rather than silently resolving to no
+	// value at render time. Because ComputeFields runs after the interactive
+	// form completes, a regular field's own When can never depend on a
+	// computed field's result -- only the reverse.
 	Value string `yaml:"value,omitempty" json:"value,omitempty" jsonschema:"description=Go-template expression computing this field's value from answers.* (only valid when type: computed)"`
 	// When gates whether this field is prompted for, evaluated against
 	// answers collected from fields declared earlier in Fields (as the

@@ -170,3 +170,75 @@ func TestValidateComputedFieldDefinition(t *testing.T) {
 		})
 	}
 }
+
+func TestValueReferencesAnswer(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+		want bool
+	}{
+		{name: "direct reference", expr: "{{ answers.regions }}", want: true},
+		{name: "nested field selection", expr: "{{ answers.regions.foo }}", want: true},
+		{name: "function argument", expr: "{{ ternary answers.other answers.regions (gt 1 0) }}", want: true},
+		{name: "no reference", expr: "{{ answers.other }}", want: false},
+		{name: "prefix collision is not a match", expr: "{{ answers.regionsx }}", want: false},
+		{name: "literal string containing the name is not a match", expr: `{{ printf "regions" }}`, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := valueReferencesAnswer(tt.expr, "regions")
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestValidateComputedFieldOrdering(t *testing.T) {
+	tests := []struct {
+		name    string
+		fields  []FieldDefinition
+		wantErr bool
+	}{
+		{
+			name: "earlier computed field reference is fine",
+			fields: []FieldDefinition{
+				{Name: "first", Type: fieldTypeComputed, Value: "expr-first"},
+				{Name: "second", Type: fieldTypeComputed, Value: "{{ answers.first }}"},
+			},
+		},
+		{
+			name: "regular field reference regardless of order is fine",
+			fields: []FieldDefinition{
+				{Name: "computed_field", Type: fieldTypeComputed, Value: "{{ answers.later_regular }}"},
+				{Name: "later_regular", Type: "input"},
+			},
+		},
+		{
+			name: "later computed field reference is rejected",
+			fields: []FieldDefinition{
+				{Name: "first", Type: fieldTypeComputed, Value: "{{ answers.second }}"},
+				{Name: "second", Type: fieldTypeComputed, Value: "expr-second"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "self-reference is rejected",
+			fields: []FieldDefinition{
+				{Name: "selfref", Type: fieldTypeComputed, Value: "{{ answers.selfref }}"},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateComputedFieldOrdering(tt.fields)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrScaffoldComputedFieldInvalid)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
