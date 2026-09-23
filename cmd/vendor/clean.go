@@ -94,6 +94,10 @@ var vendorCleanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		pruneLock, err := cmd.Flags().GetBool("prune-lock")
+		if err != nil {
+			return err
+		}
 		ctx := cmd.Context()
 		if ctx == nil {
 			ctx = context.Background()
@@ -109,7 +113,11 @@ var vendorCleanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		report, err := lockfile.CleanSelectedContext(ctx, &config, components, force, dryRun)
+		report, err := lockfile.CleanSelectedContext(ctx, &config, components, lockfile.CleanOptions{
+			Force:     force,
+			DryRun:    dryRun,
+			PruneLock: pruneLock,
+		})
 		if err != nil {
 			return err
 		}
@@ -119,6 +127,13 @@ var vendorCleanCmd = &cobra.Command{
 				ui.Infof("Would remove %s", path)
 			} else {
 				ui.Successf("Removed %s", path)
+			}
+		}
+		for _, name := range report.Forgotten {
+			if dryRun {
+				ui.Infof("Would forget lock entry %s", name)
+			} else {
+				ui.Successf("Forgot lock entry %s", name)
 			}
 		}
 		if len(report.Conflicts) > 0 {
@@ -141,6 +156,7 @@ func init() {
 		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
 		flags.WithBoolFlag("force", "", false, "Delete modified lock-owned files"),
 		flags.WithBoolFlag("dry-run", "", false, "Show files that would be removed"),
+		flags.WithBoolFlag("prune-lock", "", false, "Also remove the cleaned components' entries from the vendor lock file (so a source removed from vendor.yaml no longer leaves an orphan entry)"),
 	)
 	vendorCleanParser.RegisterFlags(vendorCleanCmd)
 	if err := vendorCleanParser.BindToViper(viper.GetViper()); err != nil {
