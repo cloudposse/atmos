@@ -118,9 +118,10 @@ is its configuration. For `kind: steps`, `with:` is an ordered step list. The en
 A step's `working_directory:` defaults to (or, if bare-relative, resolves under) the scaffold's
 target directory, also exposed as `{{ .TargetPath }}`, so the `format`/`verify` hooks above run
 against the generated project. Set `working_directory: "."` to run a step in the directory
-`atmos` was launched from instead. A `type: atmos` step is exempt from this default -- it always
-keeps running in the directory `atmos` was launched from, since the nested `atmos` invocation must
-resolve its own config there.
+`atmos` was launched from instead. A `type: atmos` step is exempt from this default -- it keeps
+running in the directory `atmos` was launched from when `working_directory:` is unset, since the
+nested `atmos` invocation must resolve its own config there, but an explicit `working_directory:`
+on that step is still honored.
 
 Use `--skip-hooks` or `--skip-hooks=name1,name2` when inspecting an untrusted template or
 diagnosing generation. See [lifecycle hooks](/stacks/hooks) for the broader stack-hook kinds and
