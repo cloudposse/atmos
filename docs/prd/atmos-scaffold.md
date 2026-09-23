@@ -388,7 +388,9 @@ spec:
   # unset/bare-relative working_directory defaults to (or resolves under)
   # the scaffold's target directory (also exposed as {{ .TargetPath }});
   # use working_directory: "." to opt back into the directory atmos was
-  # launched from.
+  # launched from. Exception: a type: atmos step always keeps running in
+  # the directory atmos was launched from, since it must resolve its own
+  # atmos.yaml/stacks there.
   hooks:
     format:
       events:

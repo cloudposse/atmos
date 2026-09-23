@@ -185,7 +185,10 @@ anchor to the scaffold's target/output directory (`atmos scaffold generate <temp
 `target`) instead of a component's working directory -- there is no component in a scaffold run.
 An unset or bare-relative `working_directory:` defaults to/anchors under `target`; the target
 directory is also exposed to hook templates as `{{ .TargetPath }}`. Use `working_directory: "."`
-to opt back into running the hook in the directory Atmos was launched from.
+to opt back into running the hook in the directory Atmos was launched from. This default excludes
+`type: atmos` steps: a nested `atmos` invocation must keep resolving its own atmos.yaml/stacks
+against the directory Atmos was launched from, so it keeps the ambient cwd unless
+`working_directory:` is set explicitly.
 
 ## Operational Guidance
 

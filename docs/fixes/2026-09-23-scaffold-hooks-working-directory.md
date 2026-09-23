@@ -41,7 +41,10 @@ Filed as [cloudposse/atmos#3205](https://github.com/cloudposse/atmos/issues/3205
   defaulting convention out of `setDefaultStepWorkingDirectory` into a new exported,
   `ExecContext`-independent `ApplyDefaultWorkingDirectory(step, anchorDir)`. Exported `AtmosStepType` and
   `IsBareRelativePath` so `scaffoldhooks` (which already imports `pkg/hooks`) can reuse them instead of
-  duplicating the classification logic.
+  duplicating the classification logic. `ApplyDefaultWorkingDirectory` explicitly exempts
+  `type: atmos` steps from this new default: `AtmosHandler` leaves `cmd.Dir` unset when
+  `working_directory` isn't set, so a nested `atmos` invocation keeps resolving its own
+  atmos.yaml/stacks against the ambient process cwd rather than the scaffold's target directory.
 - `pkg/generator/scaffoldhooks/scaffoldhooks.go`: replaced `Run`'s five positional parameters plus the
   new `targetPath` with a `RunInput` struct (to stay within revive's `argument-limit`). `runStep`/
   `runSteps` now call `hooks.ApplyDefaultWorkingDirectory(step, targetPath)` before executing, and

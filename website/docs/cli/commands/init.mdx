@@ -99,7 +99,9 @@ complete authoring model, including `--skip-hooks` and answer templating.
 An unset (or bare-relative) `working_directory:` on a hook step defaults to the generated
 project's target directory, so `terraform fmt -recursive` above runs against the generated files
 even when the target differs from the directory `atmos` was launched from. Set
-`working_directory: "."` to opt back into running the hook in the original working directory.
+`working_directory: "."` to opt back into running the hook in the original working directory. A
+`type: atmos` step is exempt from this default and always keeps running in the directory `atmos`
+was launched from, since the nested `atmos` invocation must resolve its own config there.
 
 ## Updating an Initialized Project
 
