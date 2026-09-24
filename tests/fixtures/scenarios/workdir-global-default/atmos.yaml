@@ -1,0 +1,23 @@
+# Test fixture for the global workdir default. See issue #3197.
+#
+# The global default for workdir provisioning is declared in the stack configuration under the
+# toolchain section (`terraform.provision`), NOT in `settings.provision`, consistent with how
+# global `vars`, `metadata`, and `secrets` are declared. Component-level `provision.workdir`
+# takes precedence over the stack-level default.
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{.vars.stage}}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
