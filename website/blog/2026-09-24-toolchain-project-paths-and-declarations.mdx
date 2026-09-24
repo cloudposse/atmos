@@ -1,0 +1,46 @@
+---
+slug: toolchain-project-paths-and-declarations
+title: "Consistent Toolchain Paths and Stable Version Declarations"
+authors: [osterman]
+tags: [enhancement, bugfix]
+---
+
+Running a command from a subdirectory could change where Atmos looked for toolchain files. Automatically installing a missing dependency could also modify the project's `.tool-versions`. This update fixes both: [toolchain paths](/cli/configuration/toolchain#configuration-options) now resolve from the configured project base, and automatic installs leave declared versions unchanged.
+
+<!--truncate-->
+
+## The Problem
+
+Relative toolchain paths could follow the directory where you invoked Atmos. A command run from a component directory could therefore look for a different version manifest or use a different installation directory than the same command run from the project base.
+
+Automatic installation also used the declaration-writing behavior of an explicit install command. Running an infrastructure command could leave a change in `.tool-versions`, even though you had not asked to change the project's dependencies.
+
+## The Fix
+
+| Behavior | Before | Now |
+| --- | --- | --- |
+| Relative toolchain paths | Could resolve from the invocation directory. | Resolve from the configured project base, including the default `.tool-versions` path. |
+| Automatic dependency installation | Could add entries to `.tool-versions`. | Installs the dependency without rewriting declarations. |
+| Atmos version switching | Could use earlier toolchain settings instead of the active project configuration. | Uses the active configuration, including selected profiles and project lockfile settings. |
+
+For example, with `/work/infra` as the configured project base, Atmos reads `/work/infra/.tool-versions` even when invoked from `/work/infra/components/vpc`. A configured `install_path: .tools` resolves to `/work/infra/.tools` from either directory. The same rule applies to relative `versions_file` and `lock_file` settings.
+
+Binaries still use shared XDG cache storage by default. When Atmos installs a version of itself outside a project, it now keeps installation metadata there too, without creating project files in the current directory.
+
+## How to Use It
+
+Existing projects get the path and declaration fixes without adding configuration. Continue running your usual Atmos commands; when they need to install a tool automatically, the project's declarations remain unchanged. Use explicit [toolchain management commands](/cli/commands/toolchain/install) when you intend to add or change those declarations.
+
+Automatic installs can still update **resolved artifact metadata** in the existing `toolchain.lock.yaml`: they record missing version or platform entries after successful installation, preserve matching entries, and fail on checksum mismatches. The distinction is between declaring a dependency and recording the artifact used to satisfy it. See [automatic installation and lockfiles](/cli/configuration/toolchain#automatic-installation-and-lockfiles) for details.
+
+For CI that must prohibit lockfile writes, [frozen mode](/cli/configuration/toolchain#frozen-installs-in-ci) requires complete entries for the current platform, including on binary cache hits.
+
+### Compatibility
+
+If you relied on toolchain paths relative to the invocation directory, adjust them relative to the project base or use absolute paths. These behavior fixes apply to every [config edition](/cli/configuration/edition); pinning an older edition does not restore the earlier path or declaration-writing behavior.
+
+The existing lockfile defaults still depend on your edition. Editions before `2026-08-05` retain `use_lock_file: false`; set it explicitly to enable ordinary lockfile use. Frozen mode remains opt-in and requires verification regardless of that setting.
+
+## Get Involved
+
+Try running your existing commands from a project subdirectory and check that automatic installs leave `.tool-versions` unchanged. Share any unexpected behavior in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).
