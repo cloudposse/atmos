@@ -379,7 +379,7 @@ func buildToolList(installer *Installer, toolVersions *ToolVersions) []toolInfo 
 			continue
 		}
 		for _, version := range versions {
-			toolList = append(toolList, toolInfo{version, owner, repo})
+			toolList = append(toolList, toolInfo{name: toolName, version: version, owner: owner, repo: repo})
 		}
 	}
 	return toolList
@@ -431,10 +431,15 @@ func recordBatchToolVersion(tool toolInfo, opts BatchInstallOptions) error {
 	if opts.SkipToolVersionsUpdate || (config != nil && config.Toolchain.FrozenLockFile) {
 		return nil
 	}
-	return updateToolVersionsFile(tool.owner+"/"+tool.repo, tool.version, false)
+	name := tool.name
+	if name == "" {
+		name = tool.owner + "/" + tool.repo
+	}
+	return updateToolVersionsFile(name, tool.version, false)
 }
 
 type toolInfo struct {
+	name                 string // Original declaration name, which may be an alias.
 	version, owner, repo string
 }
 
@@ -610,6 +615,7 @@ func installMultipleToolsWithOptions(toolSpecs []string, opts BatchInstallOption
 		}
 
 		toolList = append(toolList, toolInfo{
+			name:    tool,
 			version: version,
 			owner:   owner,
 			repo:    repo,

@@ -2,10 +2,10 @@ package github
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,11 +20,8 @@ func TestHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
 	}
-	if marker := os.Getenv("HELPER_READY_FILE"); marker != "" {
-		if err := os.WriteFile(marker, []byte("ready"), 0o600); err != nil {
-			os.Exit(2)
-		}
-		time.Sleep(time.Minute)
+	if os.Getenv("HELPER_WAIT_FOR_STDIN") == "1" {
+		_, _ = io.Copy(io.Discard, os.Stdin)
 	}
 	fmt.Fprint(os.Stdout, os.Getenv("HELPER_STDOUT"))
 	if os.Getenv("HELPER_EXIT_CODE") == "1" {

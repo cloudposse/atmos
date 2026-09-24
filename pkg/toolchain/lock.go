@@ -152,7 +152,7 @@ func resolveLockTargets(toolVersions *ToolVersions, toolNames []string) ([]toolI
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to resolve tool '%s': %w", errUtils.ErrInvalidToolSpec, name, err)
 		}
-		targets = append(targets, toolInfo{version, owner, repo})
+		targets = append(targets, toolInfo{name: resolvedKey, version: version, owner: owner, repo: repo})
 	}
 	return targets, nil
 }

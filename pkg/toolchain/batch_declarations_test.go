@@ -61,6 +61,45 @@ func TestBatchInstallDeclarationPolicy(t *testing.T) {
 	}
 }
 
+func TestExplicitInstallPreservesAliasDeclarations(t *testing.T) {
+	setupTestIO(t)
+	for _, mode := range []string{"single", "sequential batch", "concurrent batch"} {
+		for _, cached := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/cached=%t", mode, cached), func(t *testing.T) {
+				config, manifest, specs := batchDeclarationFixture(t)
+				config.Toolchain.Aliases = map[string]string{"first": "owner/first", "second": "owner/second"}
+				if cached {
+					require.NoError(t, RunAutomaticInstallBatch(specs, false))
+				}
+				require.NoError(t, os.WriteFile(manifest, []byte("first 0.5.0\nsecond 0.5.0\n"), 0o644))
+				aliasSpecs := []string{"first@1.0.0", "second@1.0.0"}
+				if mode == "single" {
+					for _, spec := range aliasSpecs {
+						require.NoError(t, RunInstallBatchWithOptions([]string{spec}, BatchInstallOptions{}))
+					}
+				} else {
+					concurrency := 1
+					if mode == "concurrent batch" {
+						concurrency = 2
+					}
+					require.NoError(t, RunInstallBatchWithOptions(aliasSpecs, BatchInstallOptions{MaxConcurrency: concurrency}))
+				}
+				versions, err := LoadToolVersions(manifest)
+				require.NoError(t, err)
+				require.Equal(t, map[string][]string{
+					"first": {"0.5.0", "1.0.0"}, "second": {"0.5.0", "1.0.0"},
+				}, versions.Tools, "single and batch installs must append under the original aliases without changing defaults")
+				installer := NewInstaller()
+				for _, repo := range []string{"first", "second"} {
+					binary, err := installer.FindBinaryPath("owner", repo, "1.0.0")
+					require.NoError(t, err, "installation must still use canonical tool identities")
+					require.FileExists(t, binary)
+				}
+			})
+		}
+	}
+}
+
 // batchDeclarationFixture serves two tools without relying on public registries.
 func batchDeclarationFixture(t *testing.T) (*schema.AtmosConfiguration, string, []string) {
 	t.Helper()
