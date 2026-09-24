@@ -1,37 +1,44 @@
 ---
 slug: toolchain-frozen-installs
-title: "Automatic Toolchain Installs Without Changing Project Declarations"
+title: "Consistent Toolchain Behavior Across Project Directories"
 authors: [osterman]
 tags: [feature, bugfix]
 ---
 
-Running a command that needs a missing tool should not rewrite your project's declared dependencies. Automatic [toolchain installations](/cli/configuration/toolchain) now leave `.tool-versions` unchanged, preserve existing artifact checksums, and support an opt-in frozen lockfile mode for CI.
+Working from a component directory should not mean setting up your tools again or finding new toolchain files scattered through your checkout. Your project's tool versions and settings should follow you as you move around it. Atmos [toolchain installations](/cli/configuration/toolchain) now resolve configured paths consistently from the project base, install missing tools without changing your version declarations, and keep standalone Atmos bootstrap files in XDG storage.
 
 <!--truncate-->
 
 ## The Problem
 
-Automatic installation could update the version declaration file as a side effect of running a command. Relative toolchain paths could also depend on the invocation directory, and Atmos self-bootstrap could leave project files in an unrelated working directory.
+Developers run commands from the repository root, component directories, and scripts. When toolchain paths depend on the current working directory, those entry points can look for different installations or write files in different places—even though they belong to the same project.
 
-A version declaration and an artifact lock serve different purposes: one expresses the versions you intend to use; the other records the resolved downloads and checksums.
+Automatic installation also made simply running a command look like a dependency change. Atmos version switching could leave project files in a directory that had no project at all. Together, these behaviors made users manage where commands ran and clean up files afterward.
 
 ## The Fix
 
-Automatic installation now preserves declarations. When lockfiles are enabled, installation honors existing artifact entries and fails on checksum mismatch. Missing version or platform entries are recorded after successful installation. Matching entries are preserved without rewriting the lockfile.
+Configured relative toolchain paths now resolve from the project's base path. Running from a subdirectory uses the same configured installation, version declarations, and artifact lockfile. Binaries continue to use shared XDG cache storage by default, so each working directory does not need its own installation.
 
-Project-driven Atmos self-bootstrap uses the project's toolchain configuration and lockfile. Outside a project, bootstrap stores installation metadata under the XDG cache directory without creating project files in the current directory.
+When a command needs a missing tool, Atmos installs it without changing the versions your project declares. Atmos version switching follows the active project's toolchain settings too; outside a project, it keeps binaries and installation metadata in XDG storage.
+
+For CI, opt-in frozen mode requires the artifacts to be recorded in advance and leaves the lockfile unchanged. Ordinary installs honor existing checksums and record missing version or platform entries after successful installation.
 
 These changes use the existing files. The declaration file remains `.tool-versions`, and the artifact lockfile remains `toolchain.lock.yaml`. The `.tool-versions.lock` sidecar coordinates concurrent access; it is not another dependency declaration.
 
 ## How to Use It
 
-Populate your artifact lockfile with [toolchain install](/cli/commands/toolchain/install) before enabling frozen mode:
+Keep project declarations and the artifact lockfile under the configured project base while using the default shared binary storage:
 
 ```yaml title="atmos.yaml"
 toolchain:
+  versions_file: .tool-versions
   use_lock_file: true
   lock_file: toolchain.lock.yaml
 ```
+
+With that configuration, those paths stay the same when you run Atmos from a project subdirectory. Tools are installed when a command needs them; changing directories alone does not trigger installation.
+
+Populate the artifact lockfile with [toolchain install](/cli/commands/toolchain/install), then enable frozen mode in CI:
 
 ```shell
 atmos toolchain install
@@ -53,4 +60,4 @@ Frozen mode requires a complete version and platform entry, including the artifa
 
 ## Get Involved
 
-Try frozen mode in your CI workflow and share feedback in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions). See the [toolchain configuration reference](/cli/configuration/toolchain) for path and lockfile settings.
+Try running your usual commands from a project subdirectory and share feedback in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions). See the [toolchain configuration reference](/cli/configuration/toolchain) for path and lockfile settings.
