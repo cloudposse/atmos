@@ -232,7 +232,7 @@ current schema.
   base path, and automatic installation preserves declarations and matching artifact
   entries; these behavior changes ship independently of edition pins because
   `KindBehavior` resolution is not implemented. See
-  [toolchain installation changes](https://atmos.tools/changelog/toolchain-frozen-installs)
+  [PR #3215](https://github.com/cloudposse/atmos/pull/3215)
   and the migration section in `docs/prd/toolchain-lock-file.md`.
 
   **Not gatable:** the auth credential realm isolation change (2026-02-10,
