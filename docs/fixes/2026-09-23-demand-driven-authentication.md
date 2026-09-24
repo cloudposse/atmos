@@ -54,6 +54,9 @@ needed the same evaluation boundary as the normal output path.
   rebinding; disabled or absent authentication cannot retain a prior account.
 - AWS access-denied responses remain authorization errors, not missing
   credentials. Authentication classification preserves remediation hints.
+- Added direct unit coverage for store parsing/query/default behavior, lazy secret
+  identities, provider context mapping, recovery policy, deferred-merge demand
+  boundaries, and TUI selection. Coverage targets and ignore rules are unchanged.
 
 ## Validation
 
@@ -83,6 +86,12 @@ needed the same evaluation boundary as the normal output path.
   suites, focused exec tests, website build, and patch-scoped lint. Rechecked the
   workspace binary against the stopped demo emulator, including explicit
   environment selection with YAML-function processing disabled.
+- Coverage follow-up: `go test ./pkg/deferred ./pkg/store/authbridge -count=1
+  -coverprofile=.context/deferred-coverage.out` passed with 99.8% and 100.0%
+  statement coverage respectively. The same packages passed `go test -race`.
+  Focused exec and command coverage tests passed. Combining their profiles with
+  the prior Codecov report projects 89.36% patch coverage (865/968 lines); this
+  local projection is not a replacement for Codecov's post-push calculation.
 
 ## Follow-ups
 
