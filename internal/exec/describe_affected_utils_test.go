@@ -2055,6 +2055,38 @@ func TestProcessSimpleComponentsIndexed_SkipsAndSettings(t *testing.T) {
 		assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
 	})
 
+	t.Run("settings-less unchanged component is NOT flagged", func(t *testing.T) {
+		t.Parallel()
+		// Regression guard: a component with no `settings` section in EITHER ref, and identical vars,
+		// must not be reported. The settings comparison is intentionally guarded on the local settings
+		// section being present (`settingsSection != nil`). Removing that guard would call
+		// isEqual(..., nil, "settings"), which returns false whenever the remote has no settings
+		// section (see isEqual in describe_affected_utils_2.go) - flagging every settings-less
+		// component as affected. Most components have no settings section, so that would be a broad
+		// false positive. See the CodeRabbit thread on #3204.
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{
+			"app": map[string]any{
+				"vars": map[string]any{"image": "app:1.0"},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"app": map[string]any{
+					"vars": map[string]any{"image": "app:1.0"},
+				},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected, "an unchanged component with no settings section must not be reported as affected")
+	})
+
 	t.Run("component with settings section and vars change is detected", func(t *testing.T) {
 		t.Parallel()
 		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
