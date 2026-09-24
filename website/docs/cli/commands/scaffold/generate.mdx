@@ -403,6 +403,14 @@ step hook uses its envelope `type:` plus step-specific `with:` data; a steps hoo
 ordered `with:` list. The shared envelope supplies `events`, `when`, `env`, `retry`, and
 `on_failure`. Use `answers` in hook CEL and `{{ .Answers.<field> }}` inside a step template.
 
+An unset or bare-relative `working_directory:` on a step defaults to (or resolves under) the
+scaffold's target directory -- also available as `{{ .TargetPath }}` -- so `terraform fmt
+-recursive` above formats the generated project, not wherever `atmos` happened to be launched
+from. Use `working_directory: "."` to opt back into the directory `atmos` was launched from. A
+`type: atmos` step is exempt from this default: it keeps running in the directory `atmos` was
+launched from when `working_directory:` is unset, since the nested `atmos` invocation must resolve
+its own config there, but an explicit `working_directory:` on that step is still honored.
+
 Use `--skip-hooks` to skip all hooks or `--skip-hooks=prepare,validate` to skip named hooks. The
 stack-level [hooks reference](/stacks/hooks) documents additional stack-only kinds such as scanners,
 stores, Git, and CI integrations.
