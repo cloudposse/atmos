@@ -114,6 +114,8 @@ func executeStreamingOrShell(atmosConfig *schema.AtmosConfiguration, info *schem
 		StderrCapture: stderrCapture,
 	}
 
+	execOpts.RenderConfig.AtmosConfig = atmosConfig
+
 	ctx := shellCommandContext(req.shellOpts...)
 	err := dispatchStreamingExecutor(ctx, req.subCommand, info.DryRun, execOpts)
 	if errors.Is(err, errUtils.ErrStreamingNotSupported) {
