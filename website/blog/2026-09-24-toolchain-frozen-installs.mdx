@@ -1,25 +1,27 @@
 ---
 slug: toolchain-frozen-installs
-title: "Consistent Toolchain Behavior Across Project Directories"
+title: "The Right Tool Versions for Every Project"
 authors: [osterman]
 tags: [feature, bugfix]
 ---
 
-Working from a component directory should not mean setting up your tools again or finding new toolchain files scattered through your checkout. Your project's tool versions and settings should follow you as you move around it. Atmos [toolchain installations](/cli/configuration/toolchain) now resolve configured paths consistently from the project base, install missing tools without changing your version declarations, and keep standalone Atmos bootstrap files in XDG storage.
+Different projects need different versions of Terraform, Helm, and other tools. Moving between them should not require reinstalling tools, changing a global default, or remembering which version to run. Declare what each project needs, and let the toolchain select it when you work in that project. Atmos [toolchain management](/cli/configuration/toolchain) brings that workflow to your infrastructure commands; this update makes it more consistent across projects, local development, and CI.
 
 <!--truncate-->
 
 ## The Problem
 
-Developers run commands from the repository root, component directories, and scripts. When toolchain paths depend on the current working directory, those entry points can look for different installations or write files in different places—even though they belong to the same project.
+Tools such as [asdf](https://asdf-vm.com/guide/introduction.html) and [mise](https://mise.jdx.dev/) make project-specific tool versions part of the development environment. You commit the versions a project needs, keep multiple versions installed on the same machine, and use the appropriate ones for the project at hand. Teammates can use the same declarations to set up their tools.
 
-Automatic installation also made simply running a command look like a dependency change. Atmos version switching could leave project files in a directory that had no project at all. Together, these behaviors made users manage where commands ran and clean up files afterward.
+Infrastructure projects need that same experience. A Terraform upgrade in one repository should not force another repository to upgrade, and running a project's commands should not require manually managing executable paths.
+
+Atmos already supports declared tool versions and automatic installation for execution dependencies. But paths tied to the invocation directory and installs that modified declarations made that workflow unpredictable. Using the environment could change the very configuration that defined it.
 
 ## The Fix
 
-Configured relative toolchain paths now resolve from the project's base path. Running from a subdirectory uses the same configured installation, version declarations, and artifact lockfile. Binaries continue to use shared XDG cache storage by default, so each working directory does not need its own installation.
+Your project declares its tools; Atmos resolves and installs them as needed when running its commands. This update keeps those declarations stable during automatic installation and resolves configured toolchain paths from the project base, so the same project settings apply when you work from a subdirectory.
 
-When a command needs a missing tool, Atmos installs it without changing the versions your project declares. Atmos version switching follows the active project's toolchain settings too; outside a project, it keeps binaries and installation metadata in XDG storage.
+Installed binaries continue to use shared XDG cache storage by default. Projects can select different versions while reusing installations of the same version. Atmos version switching follows the active project's toolchain settings too; outside a project, it keeps binaries and installation metadata in XDG storage.
 
 For CI, opt-in frozen mode requires the artifacts to be recorded in advance and leaves the lockfile unchanged. Ordinary installs honor existing checksums and record missing version or platform entries after successful installation.
 
@@ -60,4 +62,4 @@ Frozen mode requires a complete version and platform entry, including the artifa
 
 ## Get Involved
 
-Try running your usual commands from a project subdirectory and share feedback in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions). See the [toolchain configuration reference](/cli/configuration/toolchain) for path and lockfile settings.
+Try declaring the tools your infrastructure projects need and share feedback in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions). See the [toolchain configuration reference](/cli/configuration/toolchain) for path and lockfile settings.
