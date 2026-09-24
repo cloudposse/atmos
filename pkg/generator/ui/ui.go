@@ -1647,7 +1647,14 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// commands (git operations, notifications, ...) that are real side
 	// effects a preview must never trigger.
 	if !ui.processor.DryRun {
-		if err := scaffoldhooks.Run(scaffoldHooks, hooks.BeforeScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
+		if err := scaffoldhooks.Run(scaffoldhooks.RunInput{
+			HooksMap:   scaffoldHooks,
+			Event:      hooks.BeforeScaffoldGenerate,
+			Answers:    mergedValues,
+			Status:     "success",
+			SkipHooks:  ui.skipHooks,
+			TargetPath: targetPath,
+		}); err != nil {
 			return fmt.Errorf("pre-generate hook failed: %w", err)
 		}
 	}
@@ -1709,7 +1716,14 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		// elsewhere in Atmos. Skipped in dry-run, same as the pre-generate
 		// hooks above.
 		if !ui.processor.DryRun {
-			if hookErr := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "failure", ui.skipHooks); hookErr != nil {
+			if hookErr := scaffoldhooks.Run(scaffoldhooks.RunInput{
+				HooksMap:   scaffoldHooks,
+				Event:      hooks.AfterScaffoldGenerate,
+				Answers:    mergedValues,
+				Status:     "failure",
+				SkipHooks:  ui.skipHooks,
+				TargetPath: targetPath,
+			}); hookErr != nil {
 				log.Warn("Post-generate hook failed", "error", hookErr)
 			}
 		}
@@ -1763,7 +1777,14 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		// Run post-generate hooks after the project record is saved, so a hook
 		// (e.g. `git add .`) sees the generated .atmos/scaffold.yaml record too.
 		// Skipped in dry-run, same as the pre-generate hooks above.
-		if err := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
+		if err := scaffoldhooks.Run(scaffoldhooks.RunInput{
+			HooksMap:   scaffoldHooks,
+			Event:      hooks.AfterScaffoldGenerate,
+			Answers:    mergedValues,
+			Status:     "success",
+			SkipHooks:  ui.skipHooks,
+			TargetPath: targetPath,
+		}); err != nil {
 			return fmt.Errorf("post-generate hook failed: %w", err)
 		}
 	}
