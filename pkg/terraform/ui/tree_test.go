@@ -1431,7 +1431,7 @@ func TestRenderAttributeChanges_MultilineOnlyAddition(t *testing.T) {
 	// independent of whether the terminal the test runs under supports color.
 	result := ansi.Strip(b.String())
 	assert.Contains(t, result, "script")
-	assert.Contains(t, result, "script (none) →\n")
+	assert.Contains(t, result, "script (none)  →\n")
 	assert.Contains(t, result, "┃   line1")
 	assert.NotContains(t, result, "...", "long lines must wrap without losing content")
 	assert.Equal(t, 150, strings.Count(result, "a"))

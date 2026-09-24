@@ -62,14 +62,24 @@ func assertTreeLayout(t *testing.T, rows []string, width int) {
 func assertKMSPolicyContent(t *testing.T, rows []string) {
 	t.Helper()
 	start := -1
+	var scalarHeader string
 	for i, row := range rows {
+		if strings.Contains(row, "bypass_policy_lockout_safety_check") {
+			scalarHeader = row
+		}
 		if strings.Contains(row, "policy ") {
 			start = i
 			break
 		}
 	}
 	require.NotEqual(t, -1, start)
-	require.Contains(t, rows[start], "policy (none) →")
+	require.NotEmpty(t, scalarHeader)
+	for _, marker := range []string{"(none)", "→"} {
+		require.Contains(t, rows[start], marker)
+		scalarColumn := ansi.StringWidth(strings.SplitN(scalarHeader, marker, 2)[0])
+		documentColumn := ansi.StringWidth(strings.SplitN(rows[start], marker, 2)[0])
+		assert.Equal(t, scalarColumn, documentColumn, "%s must align across scalar and document headers", marker)
+	}
 	require.NotContains(t, rows[start], "{")
 	start++
 	column := ansi.StringWidth(strings.SplitN(rows[start], "{", 2)[0])
@@ -103,7 +113,7 @@ func TestRenderAttributeDocuments_BelowHeaderOnWideTerminal(t *testing.T) {
 			renderAttributeChanges(&b, []*AttributeChange{{Key: "value", After: tt.value}}, "│   ", &RenderConfig{Width: 240})
 			rows := strings.Split(strings.TrimSuffix(ansi.Strip(b.String()), "\n"), "\n")
 			require.GreaterOrEqual(t, len(rows), 3)
-			assert.Equal(t, "     │   value (none) →", rows[0])
+			assert.Equal(t, "     │   value (none)  →", rows[0])
 			assert.Equal(t, "     │     "+tt.firstLine, rows[1])
 			assertTreeLayout(t, rows, 240)
 		})
@@ -118,6 +128,29 @@ func TestRenderAttributeDocuments_SingleLineValuesStayInline(t *testing.T) {
 		rows := strings.Split(strings.TrimSuffix(ansi.Strip(b.String()), "\n"), "\n")
 		require.Len(t, rows, 1)
 		assert.Contains(t, rows[0], "→  "+fmt.Sprint(value))
+	}
+}
+
+func TestRenderAttributeDocuments_HeaderAlignmentAndNarrowFallback(t *testing.T) {
+	t.Parallel()
+	for _, width := range []int{60, 120} {
+		var b strings.Builder
+		renderAttributeChanges(&b, []*AttributeChange{
+			{Key: "a_long_attribute_name", Before: "a relatively long old value", After: "new"},
+			{Key: "policy", After: "a:\n  b: true"},
+		}, "│   ", &RenderConfig{Width: width})
+		output := ansi.Strip(b.String())
+		rows := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
+		assertTreeLayout(t, rows, width)
+		if width == 60 {
+			assert.Contains(t, output, "     │   policy (none)  →\n     │     a:")
+			continue
+		}
+		require.GreaterOrEqual(t, len(rows), 4)
+		scalarArrow := ansi.StringWidth(strings.SplitN(rows[0], "→", 2)[0])
+		documentArrow := ansi.StringWidth(strings.SplitN(rows[1], "→", 2)[0])
+		assert.Equal(t, scalarArrow, documentArrow, "old-value padding must also match")
+		assert.Equal(t, "     │     a:", rows[2], "content indentation stays independent of the header columns")
 	}
 }
 

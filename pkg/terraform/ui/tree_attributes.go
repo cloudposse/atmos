@@ -76,7 +76,7 @@ func renderOneAttributeChange(b *strings.Builder, fc *formattedAttributeChange, 
 		return
 	}
 	if len(fc.after.lines) > 1 {
-		renderCompactAttribute(b, fc, ctx, info)
+		renderCompactAttribute(b, fc, ctx, info, widths)
 		return
 	}
 	key := padAttributeColumn(fc.change.Key, widths.Key)
@@ -84,7 +84,7 @@ func renderOneAttributeChange(b *strings.Builder, fc *formattedAttributeChange, 
 	prefix := ctx.Indent + ctx.Bar + info.KeyStyle.Render(key) + spaceChar +
 		ctx.Config.DimStyle.Render(old+"  →  ")
 	if ctx.Config.Width-ansi.StringWidth(prefix) < minAttributeContentWidth {
-		renderCompactAttribute(b, fc, ctx, info)
+		renderCompactAttribute(b, fc, ctx, info, widths)
 		return
 	}
 	continuation := ctx.Indent + ctx.Bar + strings.Repeat(spaceChar, ansi.StringWidth(prefix)-ansi.StringWidth(ctx.Indent+ctx.Bar))
@@ -109,14 +109,20 @@ func renderArrowValue(b *strings.Builder, lines []string, prefix, continuation s
 
 // renderCompactAttribute places multiline additions beneath their header at any width,
 // and single-line additions there when the arrow's column leaves too little room.
+// Headers retain the shared key/old-value columns whenever the header itself fits.
 // Oversized old/new comparisons become full, untruncated diffs.
-func renderCompactAttribute(b *strings.Builder, fc *formattedAttributeChange, ctx attrRenderContext, info *attrStyleInfo) {
+func renderCompactAttribute(b *strings.Builder, fc *formattedAttributeChange, ctx attrRenderContext, info *attrStyleInfo, widths attributeWidths) {
 	if fc.change.Before != nil || fc.change.Sensitive {
 		renderAttributeDiff(b, fc, ctx, info)
 		return
 	}
 	prefix := ctx.Indent + ctx.Bar
-	header := info.KeyStyle.Render(fc.change.Key) + ctx.Config.DimStyle.Render(" (none) →")
+	key := padAttributeColumn(fc.change.Key, widths.Key)
+	old := padAttributeColumn(fc.oldVal, widths.OldVal)
+	header := info.KeyStyle.Render(key) + spaceChar + ctx.Config.DimStyle.Render(old+"  →")
+	if ansi.StringWidth(prefix+header) > ctx.Config.Width {
+		header = info.KeyStyle.Render(fc.change.Key) + ctx.Config.DimStyle.Render(" (none)  →")
+	}
 	writeWrappedAttributeLine(b, header, prefix, prefix, ctx.Config.Width)
 	indent := prefix + twoSpaceIndent
 	lines := fc.after.displayLines(ctx.Config)
