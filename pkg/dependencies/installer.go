@@ -142,17 +142,20 @@ func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOptio
 	toolsDir := toolchain.GetInstallPath()
 	if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
 		toolsDir = atmosConfig.Toolchain.InstallPath
+		if atmosConfig.BasePathAbsolute != "" && !filepath.IsAbs(toolsDir) {
+			toolsDir = filepath.Join(atmosConfig.BasePathAbsolute, toolsDir)
+		}
 	}
 	binDir := filepath.Join(toolsDir, "bin")
 
 	// Create toolchain installer with correct binDir for binary path detection.
-	tcInstaller := toolchain.NewInstallerWithBinDir(binDir)
+	tcInstaller := toolchain.NewInstaller(toolchain.WithBinDir(binDir), toolchain.WithAtmosConfig(atmosConfig))
 
 	inst := &Installer{
 		atmosConfig:            atmosConfig,
 		resolver:               tcInstaller.GetResolver(),
-		installFunc:            toolchain.RunInstall,
-		batchInstallFunc:       toolchain.RunInstallBatch,
+		installFunc:            func(spec string, _, _, _, _ bool) error { return toolchain.RunAutomaticInstall(spec) },
+		batchInstallFunc:       toolchain.RunAutomaticInstallBatch,
 		fileExistsFunc:         fileExists,
 		binaryPathFinder:       tcInstaller, // Uses FindBinaryPath() for proper binary detection.
 		versionLister:          aqua.NewAquaRegistry(),
@@ -582,6 +585,9 @@ func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map
 	toolsDir := toolchain.GetInstallPath()
 	if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
 		toolsDir = atmosConfig.Toolchain.InstallPath
+		if atmosConfig.BasePathAbsolute != "" && !filepath.IsAbs(toolsDir) {
+			toolsDir = filepath.Join(atmosConfig.BasePathAbsolute, toolsDir)
+		}
 	}
 	binDir := filepath.Join(toolsDir, "bin")
 

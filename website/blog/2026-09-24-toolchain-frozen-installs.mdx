@@ -1,0 +1,56 @@
+---
+slug: toolchain-frozen-installs
+title: "Automatic Toolchain Installs Without Changing Project Declarations"
+authors: [osterman]
+tags: [feature, bugfix]
+---
+
+Running a command that needs a missing tool should not rewrite your project's declared dependencies. Automatic [toolchain installations](/cli/configuration/toolchain) now leave `.tool-versions` unchanged, preserve existing artifact checksums, and support an opt-in frozen lockfile mode for CI.
+
+<!--truncate-->
+
+## The Problem
+
+Automatic installation could update the version declaration file as a side effect of running a command. Relative toolchain paths could also depend on the invocation directory, and Atmos self-bootstrap could leave project files in an unrelated working directory.
+
+A version declaration and an artifact lock serve different purposes: one expresses the versions you intend to use; the other records the resolved downloads and checksums.
+
+## The Fix
+
+Automatic installation now preserves declarations. When lockfiles are enabled, installation honors existing artifact entries and fails on checksum mismatch. Missing version or platform entries are recorded after successful installation. Matching entries are preserved without rewriting the lockfile.
+
+Project-driven Atmos self-bootstrap uses the project's toolchain configuration and lockfile. Outside a project, bootstrap stores installation metadata under the XDG cache directory without creating project files in the current directory.
+
+These changes use the existing files. The declaration file remains `.tool-versions`, and the artifact lockfile remains `toolchain.lock.yaml`. The `.tool-versions.lock` sidecar coordinates concurrent access; it is not another dependency declaration.
+
+## How to Use It
+
+Populate your artifact lockfile with [toolchain install](/cli/commands/toolchain/install) before enabling frozen mode:
+
+```yaml title="atmos.yaml"
+toolchain:
+  use_lock_file: true
+  lock_file: toolchain.lock.yaml
+```
+
+```shell
+atmos toolchain install
+ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE=true atmos toolchain install
+```
+
+You can also enable frozen mode in configuration:
+
+```yaml title="atmos.yaml"
+toolchain:
+  use_lock_file: true
+  lock_file: toolchain.lock.yaml
+  frozen_lock_file: true
+```
+
+Frozen mode requires a complete version and platform entry, including the artifact URL and checksum, even when the binary is already installed. It prohibits artifact lockfile writes and rejects lockfile refreshes. Prepare entries for every CI platform before enabling it.
+
+**Migration:** Relative `install_path`, `versions_file`, and `lock_file` paths now resolve against the configured project base path. If you relied on paths relative to the invocation directory, set an absolute path or adjust your configuration. Automatic installs no longer add declarations; use intentional management commands to change them. These behavior fixes apply independently of the config edition pin; frozen mode defaults to disabled.
+
+## Get Involved
+
+Try frozen mode in your CI workflow and share feedback in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions). See the [toolchain configuration reference](/cli/configuration/toolchain) for path and lockfile settings.

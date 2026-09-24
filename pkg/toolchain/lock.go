@@ -41,6 +41,10 @@ type lockOutcome struct {
 func RunLock(toolNames []string, opts LockOptions) error {
 	defer perf.Track(nil, "toolchain.Lock")()
 
+	if config := GetAtmosConfig(); config != nil && config.Toolchain.FrozenLockFile {
+		return errUtils.ErrFrozenLockfile
+	}
+
 	if opts.MaxConcurrency < 1 {
 		return fmt.Errorf("%w: max concurrency must be at least 1", errUtils.ErrInvalidFlagValue)
 	}

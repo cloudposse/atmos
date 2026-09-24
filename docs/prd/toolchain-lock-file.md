@@ -12,6 +12,26 @@
 
 Add native lock file support for the Atmos toolchain to provide deterministic, cryptographically verifiable tool installations. While `.tool-versions` (ASDF format) is useful for version tracking, a native lock file enables stronger guarantees around reproducibility, security, and multi-platform support.
 
+## Installation Policy and Migration (2026-09-24)
+
+Automatic installation preserves `.tool-versions`; intentional management commands own
+changes to declared dependencies. With lockfiles enabled, installation honors existing
+artifact checksums, preserves matching entries, and records missing version/platform
+entries after successful installation. `toolchain.frozen_lock_file` (or
+`ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE`) defaults to false. When enabled, it requires complete
+artifact URL/checksum entries even for cached binaries and prohibits lockfile writes.
+
+Relative `install_path`, `versions_file`, and `lock_file` values now resolve against the
+configured project base path instead of the invocation directory. Projects relying on
+the old interpretation must adjust those paths or use absolute paths. Project-driven
+Atmos bootstrap uses the project configuration and lockfile; outside a project,
+bootstrap metadata lives under XDG without creating project files in CWD.
+
+The path interpretation and automatic-install behavior changes apply independently of
+config edition pins. They cannot be represented by a value-default journal entry;
+`KindBehavior` gating is not yet implemented. The editions PRD records this candidate.
+No additional user-facing configuration or dependency file is introduced.
+
 ## Motivation
 
 ### Current Limitations of `.tool-versions`

@@ -65,7 +65,7 @@ func ProxyDir(config *schema.AtmosConfiguration) string {
 
 	installPath := GetInstallPath()
 	if config != nil && config.Toolchain.InstallPath != "" {
-		installPath = config.Toolchain.InstallPath
+		installPath = configuredProjectPath(config, config.Toolchain.InstallPath)
 	}
 	return filepath.Join(installPath, "bin", "proxy")
 }
@@ -114,7 +114,7 @@ func resolveAbsPath(path, context string) (string, error) {
 // back to the default path when unset.
 func resolveVersionsFilePath(config *schema.AtmosConfiguration) string {
 	if config.Toolchain.VersionsFile != "" {
-		return config.Toolchain.VersionsFile
+		return configuredProjectPath(config, config.Toolchain.VersionsFile)
 	}
 	return DefaultToolVersionsFilePath
 }
@@ -123,7 +123,7 @@ func resolveVersionsFilePath(config *schema.AtmosConfiguration) string {
 // back to the default install path when unset.
 func resolveInstallPath(config *schema.AtmosConfiguration) string {
 	if config.Toolchain.InstallPath != "" {
-		return config.Toolchain.InstallPath
+		return configuredProjectPath(config, config.Toolchain.InstallPath)
 	}
 	return GetInstallPath()
 }
@@ -432,7 +432,7 @@ func resolveProxyBinary(name string, proxy schema.ToolchainProxy) (string, error
 	if err == nil {
 		return binary, nil
 	}
-	if installErr := RunInstall(proxy.Tool+"@"+version, false, false, false, true); installErr != nil {
+	if installErr := RunAutomaticInstall(proxy.Tool + "@" + version); installErr != nil {
 		return "", fmt.Errorf("install toolchain proxy %q: %w", name, installErr)
 	}
 	binary, err = installer.FindBinaryPath(owner, repo, version)
