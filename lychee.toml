@@ -48,7 +48,10 @@ exclude = [
   "127\\.0\\.0\\.1",
   "example\\.com",
   "cpco\\.io",
-  "cloudposse\\.com.*utm_",
+  # The public Cloud Posse site repeatedly resets/refuses CI connections across
+  # the homepage and support/office-hours links; these return 200 outside CI.
+  # Limit the exception to this host, preserving checks on other subdomains.
+  "^https?://cloudposse\\.com(/|$)",
   # Private GitHub org (not accessible to CI)
   "github\\.com/cloudposse-corp",
   "slack\\.cloudposse\\.com",
