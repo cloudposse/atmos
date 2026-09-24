@@ -113,10 +113,11 @@ func resolveAbsPath(path, context string) (string, error) {
 // resolveVersionsFilePath returns the configured tool-versions file, falling
 // back to the default path when unset.
 func resolveVersionsFilePath(config *schema.AtmosConfiguration) string {
-	if config.Toolchain.VersionsFile != "" {
-		return configuredProjectPath(config, config.Toolchain.VersionsFile)
+	path := DefaultToolVersionsFilePath
+	if config != nil && config.Toolchain.VersionsFile != "" {
+		path = config.Toolchain.VersionsFile
 	}
-	return DefaultToolVersionsFilePath
+	return configuredProjectPath(config, path)
 }
 
 // resolveInstallPath returns the configured toolchain install path, falling

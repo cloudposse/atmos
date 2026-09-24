@@ -44,10 +44,7 @@ func GetAtmosConfig() *schema.AtmosConfiguration {
 func GetToolVersionsFilePath() string {
 	defer perf.Track(nil, "toolchain.GetToolVersionsFilePath")()
 
-	if atmosConfig == nil || atmosConfig.Toolchain.VersionsFile == "" {
-		return DefaultToolVersionsFilePath
-	}
-	return projectPath(atmosConfig.Toolchain.VersionsFile)
+	return resolveVersionsFilePath(atmosConfig)
 }
 
 // GetInstallPath returns the path where tools are installed.

@@ -22,7 +22,8 @@ entries after successful installation. `toolchain.frozen_lock_file` (or
 artifact URL/checksum entries even for cached binaries and prohibits lockfile writes.
 
 Relative `install_path`, `versions_file`, and `lock_file` values now resolve against the
-configured project base path instead of the invocation directory. Projects relying on
+configured project base path instead of the invocation directory, including the default
+`.tool-versions` path when `versions_file` is omitted. Projects relying on
 the old interpretation must adjust those paths or use absolute paths. Project-driven
 Atmos bootstrap uses the project configuration and lockfile; outside a project,
 bootstrap metadata lives under XDG without creating project files in CWD.

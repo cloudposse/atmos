@@ -29,36 +29,31 @@ These changes use the existing files. The declaration file remains `.tool-versio
 
 ## How to Use It
 
-Keep project declarations and the artifact lockfile under the configured project base while using the default shared binary storage:
+Existing projects do not need a new toolchain configuration block to get these fixes. Atmos reads `.tool-versions` from the project base by default and stores binaries in shared XDG cache storage. Automatic installations leave your declarations unchanged. Tools are installed when a command needs them; changing directories alone does not trigger installation.
+
+Lockfile use is enabled by default for current config editions. Its default location is `<install_path>/toolchain.lock.yaml`. To commit a lockfile with your project and use it in CI, override just its location:
 
 ```yaml title="atmos.yaml"
 toolchain:
-  versions_file: .tool-versions
-  use_lock_file: true
   lock_file: toolchain.lock.yaml
 ```
 
-With that configuration, those paths stay the same when you run Atmos from a project subdirectory. Tools are installed when a command needs them; changing directories alone does not trigger installation.
-
-Populate the artifact lockfile with [toolchain install](/cli/commands/toolchain/install), then enable frozen mode in CI:
+Generate it with [toolchain lock](/cli/commands/toolchain/lock), commit it, then enable frozen mode for CI installations:
 
 ```shell
-atmos toolchain install
+atmos toolchain lock
 ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE=true atmos toolchain install
 ```
 
-You can also enable frozen mode in configuration:
+Frozen mode is opt-in. It requires a complete version and platform entry, including the artifact URL and checksum, even when the binary is already installed. It prohibits artifact lockfile writes and rejects lockfile refreshes. Prepare entries for every CI platform before enabling it.
 
-```yaml title="atmos.yaml"
-toolchain:
-  use_lock_file: true
-  lock_file: toolchain.lock.yaml
-  frozen_lock_file: true
-```
+### Compatibility and Config Editions
 
-Frozen mode requires a complete version and platform entry, including the artifact URL and checksum, even when the binary is already installed. It prohibits artifact lockfile writes and rejects lockfile refreshes. Prepare entries for every CI platform before enabling it.
+Projects pinned to a [config edition](/cli/configuration/edition) before `2026-08-05` retain `use_lock_file: false` as their default. Set `toolchain.use_lock_file: true` explicitly to enable ordinary lockfile use for those projects. Frozen mode requires lockfile verification regardless of that setting and defaults to disabled for every edition.
 
-**Migration:** Relative `install_path`, `versions_file`, and `lock_file` paths now resolve against the configured project base path. If you relied on paths relative to the invocation directory, set an absolute path or adjust your configuration. Automatic installs no longer add declarations; use intentional management commands to change them. These behavior fixes apply independently of the config edition pin; frozen mode defaults to disabled.
+Relative `install_path`, `versions_file`, and `lock_file` paths, including the default `.tool-versions` path, now resolve against the configured project base. If you relied on paths relative to the invocation directory, set an absolute path or adjust your configuration. Automatic installs no longer add declarations; use intentional management commands to change them.
+
+These path and installation behavior changes apply to every edition. Config editions currently preserve earlier default values, but cannot restore these earlier behaviors; an older edition pin does not provide that backward compatibility.
 
 ## Get Involved
 

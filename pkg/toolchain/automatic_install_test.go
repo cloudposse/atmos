@@ -82,3 +82,31 @@ func TestReadMissingToolVersionsDoesNotCreateFiles(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, entries)
 }
+
+func TestDefaultToolVersionsFromProjectSubdirectory(t *testing.T) {
+	project := t.TempDir()
+	component := filepath.Join(project, "components", "example")
+	require.NoError(t, os.MkdirAll(component, 0o755))
+	t.Chdir(component)
+	manifest := filepath.Join(project, ".tool-versions")
+	require.NoError(t, os.WriteFile(manifest, []byte("owner/tool 1.2.3\n"), 0o644))
+	previous := GetAtmosConfig()
+	t.Cleanup(func() { SetAtmosConfig(previous) })
+	config := &schema.AtmosConfiguration{BasePathAbsolute: project}
+	SetAtmosConfig(config)
+
+	// Omitting versions_file must resolve the same project declaration for
+	// direct toolchain commands and the environment inherited by proxies.
+	require.Equal(t, manifest, GetToolVersionsFilePath())
+	require.Equal(t, manifest, resolveVersionsFilePath(config))
+	versions, err := LoadToolVersions(GetToolVersionsFilePath())
+	require.NoError(t, err)
+	require.Equal(t, []string{"1.2.3"}, versions.Tools["owner/tool"])
+	entries, err := os.ReadDir(component)
+	require.NoError(t, err)
+	require.Empty(t, entries)
+
+	// Without a project base, preserve the standalone CWD-relative default.
+	SetAtmosConfig(nil)
+	require.Equal(t, DefaultToolVersionsFilePath, GetToolVersionsFilePath())
+}
