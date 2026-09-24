@@ -792,12 +792,20 @@ func checkSettingsAndDependenciesIndexed(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 ) error {
-	// Check settings section changes when a settings section is present - guarding on presence
-	// (not emptiness), so an explicitly emptied `settings: {}` in HEAD (populated in BASE) is still
-	// compared and reported. A component with no settings section at all skips this comparison, but
-	// the dependency check below still runs (dependencies.components can be declared without
-	// settings). See #3204.
-	if settingsSection != nil &&
+	// Check settings section changes when EITHER ref has a settings section: HEAD
+	// (settingsSection != nil, which also covers an explicitly emptied `settings: {}`) or BASE (the
+	// remote component has the key). This detects a settings section that was added, modified,
+	// emptied, or removed. When neither ref has one, skip: comparing a nil local against an absent
+	// remote via isEqual returns false (isEqual yields false whenever the remote section is absent),
+	// which would falsely flag every settings-less component. The dependency check below still runs
+	// regardless (dependencies.components can be declared without settings). See #3204.
+	settingsLocator := remoteComponentLocator{
+		remoteStacks:  remoteStacks,
+		stackName:     stackName,
+		componentType: componentType,
+		componentName: componentName,
+	}
+	if (settingsSection != nil || settingsLocator.sectionPresent(cfg.SettingsSectionName)) &&
 		!isEqual(remoteStacks, stackName, componentType, componentName, settingsSection, cfg.SettingsSectionName) {
 		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, componentType,
 			componentSection, affectedReasonStackSettings, includeSpaceliftAdminStacks, currentStacks, includeSettings)
