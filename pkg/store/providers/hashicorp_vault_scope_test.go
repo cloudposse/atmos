@@ -56,7 +56,9 @@ func TestVaultStore_SecretScopes(t *testing.T) {
 					neighbor := path + "-other"
 					fake.data = map[string]map[string]any{path: value, neighbor: value}
 					require.NoError(t, s.Delete(scope.stack, scope.component, "TOKEN"))
-					assert.Equal(t, map[string]map[string]any{neighbor: value}, fake.data)
+					assert.Equal(t, map[string]map[string]any{path: value, neighbor: value}, fake.data)
+					assert.False(t, fake.metadata[path].DeletionTime.IsZero())
+					assert.True(t, fake.metadata[neighbor].DeletionTime.IsZero())
 					has, err := s.Has(scope.stack, scope.component, "TOKEN")
 					require.NoError(t, err)
 					assert.False(t, has)
