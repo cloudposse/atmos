@@ -43,6 +43,8 @@ func TestDeferredAuthPipeline(t *testing.T) {
 				ctrl := gomock.NewController(t)
 				factory := authdeferred.NewMockAuthFactory(ctrl)
 				setDeferredAuthFactory(&ac, factory)
+				manager := ac.AuthManager.(auth.AuthManager)
+				ac.AuthManager = nil // The call needs only the manager argument, not a parallel resolver.
 				oldOutputs := componentFuncOutputsExecutor
 				t.Cleanup(func() { componentFuncOutputsExecutor = oldOutputs })
 				componentFuncOutputsExecutor = NewMockComponentFuncOutputsExecutor(ctrl)
@@ -53,7 +55,8 @@ func TestDeferredAuthPipeline(t *testing.T) {
 				}
 				opts, collector := ErrorOptionsFromMode(mode)
 				opts.EvaluationPaths = [][]string{{"vars", field}}
-				result, err := ExecuteDescribeStacksWithEvalSections(&ac, "dev", nil, nil, nil, false, true, true, false, nil, nil, false, nil, nil, opts, []string{"vars"})
+				result, err := ExecuteDescribeStacksWithEvalSections(&ac, "dev", nil, nil, nil, false, true, true, false, nil, manager, nil, nil, opts, []string{"vars"})
+				require.Nil(t, ac.AuthManager, "binding the handle must not mutate caller configuration")
 				if field != "literal" && mode == "strict" {
 					require.ErrorIs(t, err, errUtils.ErrEmulatorNotRunning)
 					return
@@ -72,6 +75,27 @@ func TestDeferredAuthPipeline(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestDeferredManagerOwnsDisabledPolicy(t *testing.T) {
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "list-deferred-auth"))
+	ClearFindStacksMapCache()
+	ac, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	ctrl := gomock.NewController(t)
+	manager := authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true, Factory: authdeferred.NewMockAuthFactory(ctrl)})
+	awsIdentity.ClearIdentityCache()
+	getter := awsIdentity.NewMockGetter(ctrl)
+	t.Cleanup(awsIdentity.SetGetter(getter))
+	getter.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any(), nil).
+		Return(&awsIdentity.CallerIdentity{Account: "123456789012"}, nil).Times(1)
+	opts, _ := ErrorOptionsFromMode("strict")
+	opts.EvaluationPaths = [][]string{{"vars", "account"}}
+	result, err := ExecuteDescribeStacksWithEvalSections(&ac, "dev", nil, nil, nil, false, true, true, false, nil, manager, nil, nil, opts, []string{"vars"})
+	require.NoError(t, err)
+	vars := result["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)["example"].(map[string]any)["vars"].(map[string]any)
+	require.Equal(t, "123456789012", vars["account"], "disabling Atmos auth must not skip a requested function")
+	require.Nil(t, ac.AuthManager)
 }
 
 func TestDeferredAuthInheritedAndOverridden(t *testing.T) {
@@ -103,7 +127,7 @@ func TestDeferredAuthInheritedAndOverridden(t *testing.T) {
 func TestDeferredAuthExplicitAndFatalErrors(t *testing.T) {
 	ac := templatingEnabledConfig()
 	assert.False(t, authdeferred.ConfigureAuth(ac, "local"))
-	assert.Nil(t, ac.DeferredAuth)
+	assert.Nil(t, ac.AuthManager)
 	authdeferred.ConfigureAuth(ac, "")
 	for _, value := range []string{`{{ fail "invalid expression" }}`, `{{ .vars.malformed `} {
 		info := &schema.ConfigAndStacksInfo{Stack: "dev"}
@@ -196,7 +220,7 @@ func TestDeferredAuthDoesNotEnableTerraformDefaults(t *testing.T) {
 }
 
 func setDeferredAuthFactory(ac *schema.AtmosConfiguration, factory authdeferred.AuthFactory) {
-	ac.DeferredAuth = authdeferred.NewAuthResolver(authdeferred.AuthOptions{Disabled: authdeferred.AuthDisabled(ac), Factory: factory})
+	ac.AuthManager = authdeferred.NewManager(authdeferred.AuthOptions{Disabled: authdeferred.AuthDisabled(ac.AuthManager), Factory: factory})
 }
 
 func unavailableAuth(err error) error {

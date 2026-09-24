@@ -4,6 +4,7 @@ package exec
 
 import (
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -48,7 +49,7 @@ func (d *defaultOutputGetter) GetOutput(
 	// atmos.Component() instead of always reusing the enclosing component's credentials verbatim.
 	resolvedAuthContext := authContext
 	var resolvedAuthManager any
-	if atmosConfig.DeferredAuth != nil {
+	if authdeferred.IsDeferred(atmosConfig.AuthManager) {
 		parent, _ := authManager.(auth.AuthManager)
 		manager, err := deferredTargetAuth(atmosConfig, component, stack, parent)
 		if err != nil {

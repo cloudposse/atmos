@@ -110,7 +110,7 @@ stacks:
 	ac, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 	factory := authdeferred.NewMockAuthFactory(gomock.NewController(t))
-	ac.DeferredAuth = authdeferred.NewAuthResolver(authdeferred.AuthOptions{Factory: factory})
+	ac.AuthManager = authdeferred.NewManager(authdeferred.AuthOptions{Factory: factory})
 	return &ac, factory, filepath.Join(dir, "components", "terraform", "target", "cached.tfstate")
 }
 

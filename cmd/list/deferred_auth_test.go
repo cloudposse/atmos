@@ -9,6 +9,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -24,7 +25,10 @@ func TestDeferredDefersDefaultAuthentication(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
 	manager, err := createAuthManagerForList(cmd, config, true, true)
 	require.NoError(t, err)
-	require.Nil(t, manager)
+	require.True(t, authdeferred.IsDeferred(manager))
+	require.Same(t, manager, config.AuthManager)
+	require.Nil(t, manager.GetStackInfo())
+	require.Empty(t, manager.GetChain())
 }
 
 func TestDeferredStackInventoryFormats(t *testing.T) {

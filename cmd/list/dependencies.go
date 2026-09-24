@@ -9,7 +9,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
-	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependency"
@@ -34,7 +33,6 @@ type DependenciesOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	Skip             []string
-	AuthDisabled     bool
 	// Tags filters top-level entries by metadata.tags (any-match).
 	Tags []string
 	// LabelsRaw is the raw --labels flag value (comma-separated key=value or
@@ -92,8 +90,6 @@ targets are missing or disabled. See https://atmos.tools/stacks/dependencies/com
 // DependenciesOptions struct. Extracted so the mapping can be unit-tested
 // without driving the whole cobra command.
 func parseDependenciesOptions(cmd *cobra.Command, v *viper.Viper, args []string) *DependenciesOptions {
-	identityName := getIdentityFromCommand(cmd)
-
 	var component string
 	if len(args) > 0 {
 		component = args[0]
@@ -108,7 +104,6 @@ func parseDependenciesOptions(cmd *cobra.Command, v *viper.Viper, args []string)
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
-		AuthDisabled:     identityName == cfg.IdentityFlagDisabledValue,
 		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
 		LabelsRaw:        v.GetString("labels"),
 	}
@@ -165,14 +160,13 @@ func executeListDependenciesCmd(cmd *cobra.Command, args []string, opts *Depende
 }
 
 // dependenciesDescribeContext bundles the config/auth state shared by every
-// describe-stacks call this command makes, so ExecuteDescribeStacksWithAuthDisabled
+// describe-stacks call this command makes, so ExecuteDescribeStacks
 // can be invoked more than once (lightweight structural pass, then an optional
 // closure-scoped resolved pass) without redoing config/auth setup each time.
 type dependenciesDescribeContext struct {
-	atmosConfig  schema.AtmosConfiguration
-	authManager  auth.AuthManager
-	authDisabled bool
-	skip         []string
+	atmosConfig schema.AtmosConfiguration
+	authManager auth.AuthManager
+	skip        []string
 }
 
 // delims returns the configured template delimiters ("{{"/"}}" unless
@@ -203,10 +197,9 @@ func newDependenciesDescribeContext(cmd *cobra.Command, args []string, opts *Dep
 	}
 
 	return &dependenciesDescribeContext{
-		atmosConfig:  atmosConfig,
-		authManager:  authManager,
-		authDisabled: opts.AuthDisabled || authdeferred.AuthDisabled(&atmosConfig),
-		skip:         skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager, &atmosConfig),
+		atmosConfig: atmosConfig,
+		authManager: authManager,
+		skip:        opts.Skip,
 	}, nil
 }
 
@@ -214,7 +207,7 @@ func newDependenciesDescribeContext(cmd *cobra.Command, args []string, opts *Dep
 // means every stack) and optionally to a set of component names within it
 // (nil = all), with the given template/YAML-function evaluation enabled.
 func (c *dependenciesDescribeContext) describeStacks(filterByStack string, components []string, processTemplates, processFunctions bool) (map[string]any, error) {
-	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
+	stacksMap, err := e.ExecuteDescribeStacks(
 		&c.atmosConfig,
 		filterByStack,
 		components,
@@ -226,7 +219,6 @@ func (c *dependenciesDescribeContext) describeStacks(filterByStack string, compo
 		false, // includeEmptyStacks
 		c.skip,
 		c.authManager,
-		c.authDisabled,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)

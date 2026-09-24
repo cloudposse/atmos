@@ -37,6 +37,7 @@ func TestExecuteListDependenciesCmd_ScopedEvaluationAvoidsUnrelatedStack(t *test
 	chdirToDependenciesScopedFixture(t)
 
 	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
 	opts := &DependenciesOptions{
 		Format:           "json",
 		Direction:        "both",
@@ -44,7 +45,6 @@ func TestExecuteListDependenciesCmd_ScopedEvaluationAvoidsUnrelatedStack(t *test
 		Component:        "child",
 		ProcessTemplates: true,
 		ProcessFunctions: true,
-		AuthDisabled:     true,
 	}
 
 	err := executeListDependenciesCmd(cmd, []string{"child"}, opts)
@@ -58,13 +58,13 @@ func TestExecuteListDependenciesCmd_ScopedEvaluationSkipsUnusedValue(t *testing.
 	chdirToDependenciesScopedFixture(t)
 
 	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
 	opts := &DependenciesOptions{
 		Format:           "json",
 		Direction:        "both",
 		Stack:            "app-b",
 		ProcessTemplates: true,
 		ProcessFunctions: true,
-		AuthDisabled:     true,
 	}
 
 	err := executeListDependenciesCmd(cmd, []string{}, opts)
@@ -86,12 +86,12 @@ func TestExecuteListDependenciesCmd_UnboundedSkipsUnusedValues(t *testing.T) {
 	chdirToDependenciesScopedFixture(t)
 
 	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
 	opts := &DependenciesOptions{
 		Format:           "json",
 		Direction:        "both",
 		ProcessTemplates: true,
 		ProcessFunctions: true,
-		AuthDisabled:     true,
 	}
 
 	err := executeListDependenciesCmd(cmd, []string{}, opts)

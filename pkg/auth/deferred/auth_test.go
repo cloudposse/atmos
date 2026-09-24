@@ -16,7 +16,7 @@ import (
 func TestAuthCacheIncludesStackAndConfiguration(t *testing.T) {
 	ac := &schema.AtmosConfiguration{}
 	factory := NewMockAuthFactory(gomock.NewController(t))
-	ac.DeferredAuth = NewAuthResolver(AuthOptions{Factory: factory})
+	ac.AuthManager = NewManager(AuthOptions{Factory: factory})
 	failure := errors.Join(errUtils.ErrAuthenticationUnavailable, errUtils.ErrExpiredCredentials)
 	for _, stack := range []string{"dev", "prod"} {
 		factory.EXPECT().Create(ac, gomock.Any(), stack).Return(nil, failure).Times(2)
@@ -36,7 +36,7 @@ func TestResolveAuthClearsStaleContext(t *testing.T) {
 		t.Run(map[bool]string{false: "no manager", true: "disabled"}[disabled], func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			factory := NewMockAuthFactory(ctrl)
-			ac := &schema.AtmosConfiguration{DeferredAuth: NewAuthResolver(AuthOptions{Factory: factory, Disabled: disabled})}
+			ac := &schema.AtmosConfiguration{AuthManager: NewManager(AuthOptions{Factory: factory, Disabled: disabled})}
 			info := &schema.ConfigAndStacksInfo{AuthManager: types.NewMockAuthManager(ctrl), AuthContext: &schema.AuthContext{}}
 			if !disabled {
 				factory.EXPECT().Create(ac, gomock.Any(), "").Return(nil, nil)
@@ -46,4 +46,27 @@ func TestResolveAuthClearsStaleContext(t *testing.T) {
 			require.Nil(t, info.AuthContext)
 		})
 	}
+}
+
+func TestResolveAuthNoopAndDefaultFactory(t *testing.T) {
+	require.NoError(t, ResolveAuth(nil, nil))
+	require.NoError(t, ResolveAuth(&schema.AtmosConfiguration{}, nil))
+	ac := &schema.AtmosConfiguration{}
+	ConfigureAuth(ac, "")
+	require.NoError(t, ResolveAuth(ac, nil))
+	info := &schema.ConfigAndStacksInfo{}
+	require.NoError(t, ResolveAuth(ac, info))
+	require.Nil(t, info.AuthManager, "no configured identity needs no authentication")
+}
+
+func TestDeferredAuthRejectsUnserializableIdentity(t *testing.T) {
+	factory := NewMockAuthFactory(gomock.NewController(t))
+	ac := &schema.AtmosConfiguration{
+		AuthManager: NewManager(AuthOptions{Factory: factory}),
+		Auth: schema.AuthConfig{Identities: map[string]schema.Identity{
+			"invalid": {Kind: "aws/user", Credentials: map[string]any{"unsupported": make(chan int)}},
+		}},
+	}
+	err := ResolveAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev"})
+	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
 }

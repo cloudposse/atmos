@@ -1,3 +1,4 @@
+// Package deferred composes store lookups with their deferred dependencies.
 package deferred
 
 import (
@@ -6,7 +7,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -16,7 +17,18 @@ import (
 // List/describe store calls return errors to the value walker instead of exiting the
 // process, so an unavailable identity can affect one value without aborting output.
 func ReadStore(ac *schema.AtmosConfiguration, input, stack string, info *schema.ConfigAndStacksInfo) (any, error) {
-	defer perf.Track(ac, "deferred.ReadStore")()
+	return NewRead(ac, input, stack, info).Resolve()
+}
+
+// NewRead defers parsing and evaluation of a YAML store reference.
+func NewRead(ac *schema.AtmosConfiguration, input, stack string, info *schema.ConfigAndStacksInfo) deferred.Resolver[any] {
+	return deferred.Func[any](func() (any, error) {
+		return readStore(ac, input, stack, info)
+	})
+}
+
+func readStore(ac *schema.AtmosConfiguration, input, stack string, info *schema.ConfigAndStacksInfo) (any, error) {
+	defer perf.Track(ac, "store.deferred.ReadStore")()
 
 	getKey := strings.HasPrefix(input, u.AtmosYamlFuncStoreGet+" ")
 	tag := u.AtmosYamlFuncStore
@@ -52,7 +64,7 @@ func readDeferredStore(ac *schema.AtmosConfiguration, p *storeParams, info *sche
 	if ac.StoresConfig[p.storeName].Secret {
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrStoreIsSecret, p.storeName)
 	}
-	if err := authdeferred.ResolveStoreAuth(ac, info, p.storeName); err != nil {
+	if err := ResolveStoreAuth(ac, info, p.storeName); err != nil {
 		return nil, err
 	}
 	var value any
@@ -98,6 +110,13 @@ type StoreOptions struct{ Name, Stack, Component, Key string }
 
 // LookupStore retrieves a template's requested value using the same deferred identity policy.
 func LookupStore(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, opts StoreOptions) (any, error) {
-	defer perf.Track(ac, "deferred.LookupStore")()
-	return readDeferredStore(ac, &storeParams{storeName: opts.Name, stack: opts.Stack, component: opts.Component, key: opts.Key}, info, false)
+	return NewValue(ac, info, opts).Resolve()
+}
+
+// NewValue defers a store read and its credential dependency until requested.
+func NewValue(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, opts StoreOptions) deferred.Resolver[any] {
+	return deferred.Func[any](func() (any, error) {
+		defer perf.Track(ac, "store.deferred.NewValue.Resolve")()
+		return readDeferredStore(ac, &storeParams{storeName: opts.Name, stack: opts.Stack, component: opts.Component, key: opts.Key}, info, false)
+	})
 }

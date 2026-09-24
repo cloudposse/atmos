@@ -26,7 +26,6 @@ import (
 )
 
 type DescribeComponentParams struct {
-	DeferredAuth         schema.DeferredAuthResolver
 	Component            string
 	Stack                string
 	ProcessTemplates     bool
@@ -98,7 +97,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	if err != nil {
 		return err
 	}
-	atmosConfig.DeferredAuth = describeComponentParams.DeferredAuth
+	atmosConfig.AuthManager = describeComponentParams.AuthManager
 	errOptions.EvaluationPaths = deferred.PathsForQuery(query)
 
 	// The --provenance flag overrides the `describe.provenance` config default

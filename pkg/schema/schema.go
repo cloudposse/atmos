@@ -17,18 +17,11 @@ import (
 
 type AtmosSectionMapType = map[string]any
 
-// DeferredAuthResolver resolves credentials only when a list/describe value needs them.
-// Resolve populates the supplied stack info or returns an error before backend access.
-type DeferredAuthResolver interface {
-	Resolve(*AtmosConfiguration, *ConfigAndStacksInfo) error
-	Disabled() bool
-}
-
 // DeferredEvaluationContext holds invocation-local evaluated values, independently
 // of the authentication implementation. The resolver identifies the invocation.
 type DeferredEvaluationContext struct {
-	Resolver DeferredAuthResolver
-	Values   sync.Map
+	Manager any
+	Values  sync.Map
 }
 
 // DescribeSettings contains settings for the describe command output.
@@ -115,9 +108,10 @@ type ConfigMetadata struct {
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
-	// DeferredAuth is invocation-local and is never loaded from or serialized to configuration.
-	DeferredAuth DeferredAuthResolver `yaml:"-" json:"-" mapstructure:"-"`
-	// DeferredEvaluation is owned by pkg/deferred, not the authentication resolver.
+	// AuthManager carries the same invocation-local manager passed by the caller.
+	// Like ConfigAndStacksInfo.AuthManager, any avoids the auth/schema import cycle.
+	AuthManager any `yaml:"-" json:"-" mapstructure:"-"`
+	// DeferredEvaluation is owned by pkg/stack/deferred, not the authentication resolver.
 	DeferredEvaluation *DeferredEvaluationContext `yaml:"-" json:"-" mapstructure:"-"`
 	// ListEvaluationPaths carries the fields consumed by this list invocation.
 	ListEvaluationPaths           [][]string         `yaml:"-" json:"-" mapstructure:"-"`

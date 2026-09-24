@@ -1,11 +1,8 @@
 package deferred
 
 import (
-	"fmt"
-
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -13,56 +10,26 @@ import (
 )
 
 func ResolveStoreAuth(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, name string) error {
-	defer perf.Track(ac, "auth.deferred.ResolveStoreAuth")()
+	defer perf.Track(ac, "store.deferred.ResolveStoreAuth")()
 
 	s, ok := ac.Stores[name].(store.IdentityAwareStore)
-	if !ok || ac.DeferredAuth == nil {
+	if !ok || !authdeferred.IsDeferred(ac.AuthManager) {
 		return nil
 	}
 	// Stores are shared between components. Even the same identity name can resolve
 	// to different credentials or endpoints under a different effective auth config.
 	s.ResetAuthContext()
-	if AuthDisabled(ac) || (info != nil && info.AuthDisabled) {
+	if authdeferred.AuthDisabled(ac.AuthManager) || (info != nil && info.AuthDisabled) {
 		return nil
 	}
-	copyInfo := schema.ConfigAndStacksInfo{}
-	if info != nil {
-		copyInfo = *info
-	}
-	copyInfo.AuthManager = nil
-	copyInfo.AuthContext = nil
-	copyConfig := *ac
 	identity := ac.StoresConfig[name].Identity
-	if identity != "" {
-		merged, err := deferredStoreIdentity(ac, &copyInfo, identity)
-		if err != nil {
-			return err
-		}
-		copyConfig.Auth = *merged
-		copyInfo.ComponentSection = nil
-	}
-	if err := ResolveAuth(&copyConfig, &copyInfo); err != nil {
+	resolved, err := authdeferred.Credentials(ac, info, identity).Resolve()
+	if err != nil {
 		return err
 	}
-	manager, _ := copyInfo.AuthManager.(auth.AuthManager)
+	manager, _ := resolved.AuthManager.(auth.AuthManager)
 	injectDeferredStoreContext(s, manager, identity)
 	return nil
-}
-
-func deferredStoreIdentity(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, identity string) (*schema.AuthConfig, error) {
-	merged, err := auth.MergeComponentAuthFromConfig(&ac.Auth, info.ComponentSection, ac, cfg.AuthSectionName)
-	if err != nil {
-		return nil, err
-	}
-	if _, exists := merged.Identities[identity]; !exists {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrIdentityNotFound, identity)
-	}
-	for key := range merged.Identities {
-		config := merged.Identities[key]
-		config.Default = key == identity
-		merged.Identities[key] = config
-	}
-	return merged, nil
 }
 
 func injectDeferredStoreContext(s store.IdentityAwareStore, manager auth.AuthManager, identity string) {

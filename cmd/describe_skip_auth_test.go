@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -131,7 +132,7 @@ func TestDescribeStacks_SkipsAuthWhenTemplatesAndFunctionsDisabled(t *testing.T)
 	mockExec := exec.NewMockDescribeStacksExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ *schema.AtmosConfiguration, args *exec.DescribeStacksArgs) error {
-			assert.Nil(t, args.AuthManager, "AuthManager must be nil when both templates and functions are disabled")
+			assert.True(t, authdeferred.IsDeferred(args.AuthManager), "unused authentication stays deferred")
 			assert.False(t, args.ProcessTemplates, "ProcessTemplates must be false")
 			assert.False(t, args.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
 			return nil
@@ -169,8 +170,8 @@ func TestDescribeStacks_DefersAuthWhenTemplatesEnabledEvenIfFunctionsDisabled(t 
 	mockExec := exec.NewMockDescribeStacksExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ac *schema.AtmosConfiguration, args *exec.DescribeStacksArgs) error {
-			assert.NotNil(t, ac.DeferredAuth)
-			assert.Nil(t, args.AuthManager)
+			assert.NotNil(t, ac.AuthManager)
+			assert.True(t, authdeferred.IsDeferred(args.AuthManager), "unused authentication stays deferred")
 			assert.True(t, args.ProcessTemplates)
 			return nil
 		},
@@ -284,7 +285,7 @@ func TestDescribeDependents_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	mockExec := exec.NewMockDescribeDependentsExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any()).DoAndReturn(
 		func(props *exec.DescribeDependentsExecProps) error {
-			assert.Nil(t, props.AuthManager, "AuthManager must be nil when --process-functions=false")
+			assert.True(t, authdeferred.IsDeferred(props.AuthManager), "unused authentication stays deferred")
 			assert.False(t, props.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
 			return nil
 		},
@@ -388,7 +389,7 @@ func TestDescribeAffected_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	mockExec := exec.NewMockDescribeAffectedExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any()).DoAndReturn(
 		func(args *exec.DescribeAffectedCmdArgs) error {
-			assert.Nil(t, args.AuthManager, "AuthManager must be nil when ProcessYamlFunctions=false")
+			assert.True(t, authdeferred.IsDeferred(args.AuthManager), "unused authentication stays deferred")
 			assert.False(t, args.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
 			return nil
 		},
@@ -547,7 +548,7 @@ func TestDescribeComponent_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
 	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
 		func(params exec.DescribeComponentParams) error {
-			assert.Nil(t, params.AuthManager, "AuthManager must be nil when --process-functions=false")
+			assert.True(t, authdeferred.IsDeferred(params.AuthManager), "unused authentication stays deferred")
 			assert.False(t, params.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
 			return nil
 		},
@@ -574,7 +575,7 @@ func TestDescribeComponent_SkipsImplicitAuthWhenFunctionsEnabled(t *testing.T) {
 	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
 	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
 		func(params exec.DescribeComponentParams) error {
-			assert.Nil(t, params.AuthManager, "AuthManager must be nil without an explicit --identity")
+			assert.True(t, authdeferred.IsDeferred(params.AuthManager), "unused authentication stays deferred")
 			assert.True(t, params.ProcessYamlFunctions, "ProcessYamlFunctions must remain enabled")
 			return nil
 		},
@@ -618,8 +619,8 @@ func TestDescribeComponent_DefersConfiguredStoreIdentityAuthentication(t *testin
 	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
 	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
 		func(params exec.DescribeComponentParams) error {
-			assert.Nil(t, params.AuthManager, "the store identity has not been consumed yet")
-			assert.NotNil(t, params.DeferredAuth, "identity-backed stores need the deferred resolver")
+			assert.True(t, authdeferred.IsDeferred(params.AuthManager), "unused authentication stays deferred")
+			assert.NotNil(t, params.AuthManager, "identity-backed stores need the deferred resolver")
 			assert.True(t, params.ProcessYamlFunctions)
 			return nil
 		},

@@ -7,6 +7,10 @@
 Move demand-driven authentication to `pkg/auth/deferred`, while keeping value
 selection, evaluation, recovery, and evaluated-value caching in `pkg/deferred`.
 
+The subsequent [subsystem-owned resolution refactor](2026-09-24-subsystem-owned-deferred-resolution.md)
+moves store/secret adapters to their owning packages and makes the common
+deferred-value contract independent of those implementations.
+
 ## Context
 
 The initial demand-driven implementation put authentication resolution and its

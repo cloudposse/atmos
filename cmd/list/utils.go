@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -237,7 +236,7 @@ func createAuthManagerForList(
 ) (auth.AuthManager, error) {
 	identityName := getIdentityFromCommand(cmd)
 	if authdeferred.ConfigureAuth(atmosConfig, identityName) {
-		return nil, nil
+		return atmosConfig.AuthManager.(auth.AuthManager), nil
 	}
 
 	authManager, err := listAuthManagerFactory.CreateWithStackScan(
@@ -250,45 +249,8 @@ func createAuthManagerForList(
 		return nil, err
 	}
 
+	atmosConfig.AuthManager = authManager
 	return authManager, nil
-}
-
-func skipCredentialBackedYAMLFunctionsForInventory(skip []string, authManager auth.AuthManager, configs ...*schema.AtmosConfiguration) []string {
-	if len(configs) > 0 && configs[0].DeferredAuth != nil && !authdeferred.AuthDisabled(configs[0]) {
-		return skip
-	}
-	if authManager != nil {
-		return skip
-	}
-
-	merged := append([]string{}, skip...)
-	for _, functionName := range []string{
-		u.AtmosYamlFuncTerraformState,
-		u.AtmosYamlFuncTerraformOutput,
-		u.AtmosYamlFuncStore,
-		u.AtmosYamlFuncStoreGet,
-		u.AtmosYamlFuncSecret,
-		u.AtmosYamlFuncAwsAccountID,
-		u.AtmosYamlFuncAwsCallerIdentityArn,
-		u.AtmosYamlFuncAwsCallerIdentityUserID,
-		u.AtmosYamlFuncAwsRegion,
-		u.AtmosYamlFuncAwsOrganizationID,
-	} {
-		name := strings.TrimPrefix(functionName, "!")
-		if !containsString(merged, name) {
-			merged = append(merged, name)
-		}
-	}
-	return merged
-}
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
 }
 
 // setDefaultCSVDelimiter sets the delimiter to comma if CSV format is used and delimiter is default TSV.

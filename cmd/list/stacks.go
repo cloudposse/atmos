@@ -10,7 +10,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
-	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -280,7 +279,7 @@ func executeAndExtractStacks(
 	errOpts e.DescribeStacksErrorOptions,
 ) ([]map[string]any, map[string]any, error) {
 	defer perf.Track(nil, "list.stacks.executeAndExtractStacks")()
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager, atmosConfig)
+	skip := opts.Skip
 
 	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
 	if err != nil {
@@ -327,7 +326,6 @@ func executeAndExtractStacks(
 		false, // includeEmptyStacks
 		skip,
 		authManager,
-		authdeferred.AuthDisabled(atmosConfig),
 		opts.Tags,
 		labels,
 		errOpts,
@@ -373,7 +371,6 @@ func newScopedDescribeFunc(atmosConfig *schema.AtmosConfiguration, describeDeps 
 			false, // includeEmptyStacks
 			describeDeps.skip,
 			describeDeps.authManager,
-			authdeferred.AuthDisabled(atmosConfig),
 			nil, // tagsFilter: closure scoping owns selection.
 			nil, // labelsFilter: closure scoping owns selection.
 			describeDeps.errOpts,
@@ -599,7 +596,7 @@ func renderStacksTreeFormat(
 	// Re-process stacks with provenance tracking enabled. Honor the
 	// caller-supplied template/function flags so tree output is consistent with
 	// non-tree runs of the same command invocation.
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager, atmosConfig)
+	skip := opts.Skip
 	errOpts.EvaluationPaths = make([][]string, 0)
 	stacksMap, err := e.ExecuteDescribeStacksWithEvalSections(
 		atmosConfig, "", nil, nil, nil,
@@ -609,7 +606,6 @@ func renderStacksTreeFormat(
 		false, // includeEmptyStacks
 		skip,
 		authManager,
-		authdeferred.AuthDisabled(atmosConfig),
 		nil, nil,
 		errOpts,
 		resolveStacksEvalSections(atmosConfig, opts),

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -19,9 +20,9 @@ func TestResolveStoreAuthClearsPreviousIdentity(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			s, err := providers.NewSSMStore(providers.SSMStoreOptions{Region: "us-east-1"}, "")
 			require.NoError(t, err)
-			factory := NewMockAuthFactory(ctrl)
+			factory := authdeferred.NewMockAuthFactory(ctrl)
 			ac := &schema.AtmosConfiguration{Stores: store.StoreRegistry{"remote": s}}
-			ac.DeferredAuth = NewAuthResolver(AuthOptions{Factory: factory, Disabled: scenario == "disabled"})
+			ac.AuthManager = authdeferred.NewManager(authdeferred.AuthOptions{Factory: factory, Disabled: scenario == "disabled"})
 			info := &schema.ConfigAndStacksInfo{Stack: "dev", AuthDisabled: scenario == "component disabled"}
 			prior := types.NewMockAuthManager(ctrl)
 			info.AuthManager = prior
@@ -47,9 +48,9 @@ func TestResolveStoreAuthClearsPreviousIdentity(t *testing.T) {
 func TestResolveStoreAuthRebindsSameIdentityWithDifferentConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := store.NewMockIdentityAwareStore(ctrl)
-	factory := NewMockAuthFactory(ctrl)
+	factory := authdeferred.NewMockAuthFactory(ctrl)
 	ac := &schema.AtmosConfiguration{Stores: store.StoreRegistry{"remote": s}}
-	ac.DeferredAuth = NewAuthResolver(AuthOptions{Factory: factory})
+	ac.AuthManager = authdeferred.NewManager(authdeferred.AuthOptions{Factory: factory})
 	for _, profile := range []string{"account-one", "account-two"} {
 		info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentSection: map[string]any{
 			"auth": map[string]any{"identities": map[string]any{
@@ -80,13 +81,13 @@ func TestResolveStoreAuthPreservesConfiguredIdentityWithoutContext(t *testing.T)
 			ctrl := gomock.NewController(t)
 			s, err := providers.NewSSMStore(providers.SSMStoreOptions{Region: "us-east-1"}, "configured")
 			require.NoError(t, err)
-			factory := NewMockAuthFactory(ctrl)
+			factory := authdeferred.NewMockAuthFactory(ctrl)
 			ac := &schema.AtmosConfiguration{
 				Stores:       store.StoreRegistry{"remote": s},
 				StoresConfig: map[string]store.StoreConfig{"remote": {Identity: "configured"}},
 				Auth:         schema.AuthConfig{Identities: map[string]schema.Identity{"configured": {Kind: "aws/user"}}},
 			}
-			ac.DeferredAuth = NewAuthResolver(AuthOptions{Factory: factory})
+			ac.AuthManager = authdeferred.NewManager(authdeferred.AuthOptions{Factory: factory})
 			if withManager {
 				manager := types.NewMockAuthManager(ctrl)
 				manager.EXPECT().GetStackInfo().Return(nil).AnyTimes()

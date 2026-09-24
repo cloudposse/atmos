@@ -10,9 +10,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
+	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
 )
 
 func TestDeferredStoreFailedAuthStopsRead(t *testing.T) {
@@ -25,7 +25,7 @@ func TestDeferredStoreFailedAuthStopsRead(t *testing.T) {
 	factory.EXPECT().Create(gomock.Any(), gomock.Any(), "dev").Return(nil, unavailableAuth(errUtils.ErrExpiredCredentials)).Times(1)
 	s.EXPECT().ResetAuthContext().Times(2)
 	for range 2 {
-		_, err := deferred.ReadStore(ac, "!store.get remote key | default fallback", "dev", &schema.ConfigAndStacksInfo{Stack: "dev"})
+		_, err := storedeferred.ReadStore(ac, "!store.get remote key | default fallback", "dev", &schema.ConfigAndStacksInfo{Stack: "dev"})
 		require.ErrorIs(t, err, errUtils.ErrAuthenticationUnavailable)
 	}
 }
@@ -49,7 +49,7 @@ func TestDeferredStoreSuccessfulAuthIsNotRepeated(t *testing.T) {
 	}).Times(2)
 	s.EXPECT().GetKey("key").Return("resolved", nil).Times(2)
 	for range 2 {
-		value, err := deferred.ReadStore(ac, "!store.get remote key", "dev", &schema.ConfigAndStacksInfo{Stack: "dev"})
+		value, err := storedeferred.ReadStore(ac, "!store.get remote key", "dev", &schema.ConfigAndStacksInfo{Stack: "dev"})
 		require.NoError(t, err)
 		assert.Equal(t, "resolved", value)
 	}
@@ -62,13 +62,13 @@ func TestDeferredStoreDisabledAndLocal(t *testing.T) {
 	authdeferred.ConfigureAuth(ac, "false")
 	setDeferredAuthFactory(ac, authdeferred.NewMockAuthFactory(ctrl))
 	s.EXPECT().ResetAuthContext()
-	require.NoError(t, authdeferred.ResolveStoreAuth(ac, &schema.ConfigAndStacksInfo{}, "remote"))
+	require.NoError(t, storedeferred.ResolveStoreAuth(ac, &schema.ConfigAndStacksInfo{}, "remote"))
 	authdeferred.ConfigureAuth(ac, "")
 	setDeferredAuthFactory(ac, authdeferred.NewMockAuthFactory(ctrl))
 	local := store.NewMockStore(ctrl)
 	ac.Stores["local"] = local
 	local.EXPECT().GetKey("key").Return("local value", nil)
-	value, err := deferred.ReadStore(ac, "!store.get local key", "dev", nil)
+	value, err := storedeferred.ReadStore(ac, "!store.get local key", "dev", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "local value", value)
 }

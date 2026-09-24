@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -238,7 +239,7 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	componentName, stackName string,
 ) (auth.AuthManager, error) {
 	componentAuthManager := p.authManager
-	if p.atmosConfig.DeferredAuth != nil {
+	if authdeferred.IsDeferred(p.atmosConfig.AuthManager) {
 		return componentAuthManager, nil
 	}
 	if p.authDisabled || !shouldResolvePerComponentAuth(p.processTemplates, p.processYamlFunctions) {
@@ -1153,7 +1154,7 @@ func processComponentSectionTemplates(
 		true,
 	)
 	if err != nil {
-		if atmosConfig.DeferredAuth != nil && canDegradeValue(atmosConfig, err) && len(warnings) > 0 && warnings[0] != nil {
+		if authdeferred.IsDeferred(atmosConfig.AuthManager) && canDegradeValue(atmosConfig, err) && len(warnings) > 0 && warnings[0] != nil {
 			converted, renderErr := renderDeferredTemplateValues(templateInput, &deferredTemplateOptions{
 				config: atmosConfig, info: info, settings: &settingsSectionStruct,
 				templateContext: componentTemplateContext, onWarning: warnings[0],

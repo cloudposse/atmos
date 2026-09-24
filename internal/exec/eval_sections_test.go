@@ -192,7 +192,7 @@ func TestExecuteDescribeStacksWithEvalSections_SkipsUnrequiredSection(t *testing
 			false, // processTemplates
 			true,  // processYamlFunctions
 			false, // includeEmptyStacks
-			nil, nil, false, nil, nil,
+			nil, nil, nil, nil,
 			DescribeStacksErrorOptions{
 				OnError:   OnErrorWarn,
 				OnWarning: func(w DegradationWarning) { warnings = append(warnings, w) },
@@ -222,7 +222,7 @@ func TestExecuteDescribeStacksWithEvalSections_SkipsUnrequiredSection(t *testing
 		var warnings []DegradationWarning
 		_, err := ExecuteDescribeStacksWithEvalSections(
 			&atmosConfig, "", nil, nil, nil, false,
-			false, true, false, nil, nil, false, nil, nil,
+			false, true, false, nil, nil, nil, nil,
 			DescribeStacksErrorOptions{
 				OnError:   OnErrorWarn,
 				OnWarning: func(w DegradationWarning) { warnings = append(warnings, w) },
@@ -256,7 +256,7 @@ func TestExecuteDescribeStacksWithEvalSections_SkipsUnrequiredSection(t *testing
 		var warnings []DegradationWarning
 		_, err := ExecuteDescribeStacksWithEvalSections(
 			&atmosConfig, "", nil, nil, nil, false,
-			false, true, false, nil, nil, false, nil, nil,
+			false, true, false, nil, nil, nil, nil,
 			DescribeStacksErrorOptions{
 				OnError:   OnErrorWarn,
 				OnWarning: func(w DegradationWarning) { warnings = append(warnings, w) },

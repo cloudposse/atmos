@@ -92,7 +92,7 @@ func TestReadStoreFailedConfiguredIdentityStopsBackend(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := store.NewMockIdentityAwareStore(ctrl)
 	factory := authdeferred.NewMockAuthFactory(ctrl)
-	ac := &schema.AtmosConfiguration{Stores: store.StoreRegistry{"remote": s}, DeferredAuth: authdeferred.NewAuthResolver(authdeferred.AuthOptions{Factory: factory})}
+	ac := &schema.AtmosConfiguration{Stores: store.StoreRegistry{"remote": s}, AuthManager: authdeferred.NewManager(authdeferred.AuthOptions{Factory: factory})}
 	s.EXPECT().ResetAuthContext()
 	factory.EXPECT().Create(ac, gomock.Any(), "dev").Return(nil, errUtils.ErrAuthenticationUnavailable)
 	_, err := ReadStore(ac, "!store.get remote key | default fallback", "dev", &schema.ConfigAndStacksInfo{Stack: "dev"})

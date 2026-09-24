@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -108,7 +109,7 @@ func processTagTerraformOutputWithContext(
 		// Propagate AuthDisabled downstream even when no AuthManager was created (mirrors
 		// !terraform.state): the wrapper's stack info tells the output getter to skip resolving
 		// the target component's own auth section.
-		if atmosConfig.DeferredAuth != nil || (authManager == nil && stackInfo.AuthDisabled) {
+		if authdeferred.IsDeferred(atmosConfig.AuthManager) || (authManager == nil && stackInfo.AuthDisabled) {
 			authManager = &authContextWrapper{stackInfo: stackInfo}
 		}
 	}

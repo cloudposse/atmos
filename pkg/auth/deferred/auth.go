@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -28,18 +29,18 @@ func (defaultAuthFactory) Create(ac *schema.AtmosConfiguration, config *schema.A
 	return auth.CreateAndAuthenticateManagerWithAtmosConfigForStack("", config, cfg.IdentityFlagSelectValue, ac, stack)
 }
 
-// Entries exist only after resolution: absence means deferred, a manager means
-// authenticated, and err means failed. Disabled is an explicit resolver policy.
-type deferredAuthResult struct {
-	manager auth.AuthManager
-	err     error
-}
-
-type deferredAuthResolver struct {
-	mu       sync.Mutex
-	disabled bool
-	factory  AuthFactory
-	results  map[string]deferredAuthResult
+// Results are created on demand and memoize either an authenticated manager or
+// a failure. Disabled remains an explicit policy, not an absent manager.
+type Manager struct {
+	mu          sync.Mutex
+	disabled    bool
+	factory     AuthFactory
+	results     map[string]deferred.Resolver[auth.AuthManager]
+	config      *schema.AtmosConfiguration
+	baseMu      sync.Mutex
+	baseManager auth.AuthManager
+	baseError   error
+	baseReady   bool
 }
 
 // ConfigureAuth defers implicit authentication and records explicit disable.
@@ -49,25 +50,30 @@ func ConfigureAuth(ac *schema.AtmosConfiguration, identity string) bool {
 
 	identity = cfg.NormalizeIdentityValue(identity)
 	if identity != "" && identity != cfg.IdentityFlagDisabledValue {
-		ac.DeferredAuth = nil
+		ac.AuthManager = nil
 		return false
 	}
-	ac.DeferredAuth = NewAuthResolver(AuthOptions{Disabled: identity == cfg.IdentityFlagDisabledValue})
+	ac.AuthManager = NewManager(AuthOptions{Disabled: identity == cfg.IdentityFlagDisabledValue, Config: ac})
 	return true
 }
 
 // AuthDisabled distinguishes explicit disable from deferred credentials.
-func AuthDisabled(ac *schema.AtmosConfiguration) bool {
-	defer perf.Track(ac, "auth.deferred.AuthDisabled")()
-
-	return ac != nil && ac.DeferredAuth != nil && ac.DeferredAuth.Disabled()
+func AuthDisabled(manager any) bool {
+	policy, ok := manager.(interface{ Disabled() bool })
+	return ok && policy.Disabled()
 }
 
 // Disabled reports an explicit request not to use Atmos authentication.
-func (r *deferredAuthResolver) Disabled() bool { return r.disabled }
+func (r *Manager) Disabled() bool { return r.disabled }
 
-func (r *deferredAuthResolver) Resolve(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
-	defer perf.Track(ac, "auth.deferred.deferredAuthResolver.Resolve")()
+// IsDeferred reports the manager's evaluation policy, without resolving credentials.
+func IsDeferred(manager any) bool {
+	_, ok := manager.(*Manager)
+	return ok
+}
+
+func (r *Manager) Resolve(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(ac, "auth.deferred.Manager.Resolve")()
 
 	if info == nil {
 		return nil
@@ -91,41 +97,51 @@ func (r *deferredAuthResolver) Resolve(ac *schema.AtmosConfiguration, info *sche
 	r.mu.Lock()
 	result, found := r.results[key]
 	if !found {
-		result.manager, result.err = r.factory.Create(ac, config, info.Stack)
+		result = deferred.Once(deferred.Func[auth.AuthManager](func() (auth.AuthManager, error) {
+			return r.factory.Create(ac, config, info.Stack)
+		}))
 		r.results[key] = result
 	}
+	// Authentication may update shared credential files or process state; keep
+	// different effective identities serialized as well as memoizing each result.
+	manager, err := result.Resolve()
 	r.mu.Unlock()
-	if result.err != nil {
-		return result.err
+	if err != nil {
+		return err
 	}
-	propagateAuth(info, result.manager)
+	propagateAuth(info, manager)
 	return nil
 }
 
 func ResolveAuth(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(ac, "auth.deferred.ResolveAuth")()
 
-	if ac == nil || ac.DeferredAuth == nil {
+	if ac == nil {
 		return nil
 	}
-	return ac.DeferredAuth.Resolve(ac, info)
+	manager, ok := ac.AuthManager.(*Manager)
+	if !ok {
+		return nil
+	}
+	return manager.Resolve(ac, info)
 }
 
 // AuthOptions supplies invocation-local dependencies and the explicit disable policy.
 type AuthOptions struct {
 	Disabled bool
 	Factory  AuthFactory
+	Config   *schema.AtmosConfiguration
 }
 
-// NewAuthResolver creates an invocation-scoped resolver with an empty result cache.
-func NewAuthResolver(opts AuthOptions) schema.DeferredAuthResolver {
-	defer perf.Track(nil, "auth.deferred.NewAuthResolver")()
+// NewManager creates an invocation-scoped resolver with an empty result cache.
+func NewManager(opts AuthOptions) *Manager {
+	defer perf.Track(nil, "auth.deferred.NewManager")()
 
 	factory := opts.Factory
 	if factory == nil {
 		factory = defaultAuthFactory{}
 	}
-	return &deferredAuthResolver{disabled: opts.Disabled, factory: factory, results: make(map[string]deferredAuthResult)}
+	return &Manager{disabled: opts.Disabled, factory: factory, config: opts.Config, results: make(map[string]deferred.Resolver[auth.AuthManager])}
 }
 
 func propagateAuth(info *schema.ConfigAndStacksInfo, manager auth.AuthManager) {

@@ -9,6 +9,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -100,7 +101,8 @@ func TestCreateAuthManagerForList_EvaluationPolicy(t *testing.T) {
 			assert.Equal(t, tc.wantCalls, calls)
 			assert.Equal(t, tc.wantIdentity, gotIdentity)
 			if tc.wantCalls == 0 {
-				assert.Nil(t, got)
+				assert.True(t, authdeferred.IsDeferred(got))
+				assert.Equal(t, tc.identity == "false", authdeferred.AuthDisabled(got))
 			} else {
 				assert.Same(t, sentinel, got)
 			}

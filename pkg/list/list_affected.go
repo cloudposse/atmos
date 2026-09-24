@@ -114,6 +114,11 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 	}
 
 	// Get format flag.
+	if authManager == nil {
+		authManager, _ = atmosConfig.AuthManager.(auth.AuthManager)
+	}
+	atmosConfig.AuthManager = authManager
+
 	formatFlag, err := opts.Cmd.Flags().GetString("format")
 	if err != nil {
 		return fmt.Errorf("failed to get format flag: %w", err)

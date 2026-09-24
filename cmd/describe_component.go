@@ -140,7 +140,7 @@ type resolveAuthManagerParams struct {
 // is actually read, preserving describe component's non-eager inspection behavior.
 func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
 	if authdeferred.ConfigureAuth(p.atmosConfig, p.identityName) {
-		return nil, nil
+		return p.atmosConfig.AuthManager.(auth.AuthManager), nil
 	}
 	needsStoreAuth := p.processYamlFunctions && hasIdentityBackedStore(p.atmosConfig)
 	// Environment selection is just as explicit as --identity.
@@ -275,7 +275,6 @@ func getRunnableDescribeComponentCmd(
 		}
 
 		return g.newDescribeComponentExec.ExecuteDescribeComponentCmd(e.DescribeComponentParams{
-			DeferredAuth:         atmosConfig.DeferredAuth,
 			Component:            component,
 			Stack:                f.stack,
 			ProcessTemplates:     f.processTemplates,

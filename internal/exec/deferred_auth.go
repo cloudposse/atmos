@@ -2,13 +2,13 @@ package exec
 
 import (
 	"maps"
-	"strings"
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
+	stackdeferred "github.com/cloudposse/atmos/pkg/stack/deferred"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -37,12 +37,12 @@ func deferredTargetAuthAndCache(ac *schema.AtmosConfiguration, component, stack 
 		}
 	}
 	if GetComponentRemoteStateBackendStaticType(&section) != nil {
-		return nil, deferred.CacheFor(ac, info), nil
+		return nil, stackdeferred.CacheFor(ac, info), nil
 	}
 	if err := authdeferred.ResolveAuth(ac, info); err != nil {
 		return nil, nil, err
 	}
-	cache := deferred.CacheFor(ac, info)
+	cache := stackdeferred.CacheFor(ac, info)
 	if info.AuthDisabled {
 		return &authContextWrapper{stackInfo: info}, cache, nil
 	}
@@ -76,16 +76,16 @@ func resolvedTargetAuthContext(ac *schema.AtmosConfiguration, manager auth.AuthM
 			return info.AuthContext
 		}
 	}
-	if ac.DeferredAuth != nil {
+	if authdeferred.IsDeferred(ac.AuthManager) {
 		return nil
 	}
 	return fallback
 }
 
 // Only actual credential consumers call this hook. Terraform references resolve
-// their target's identity separately, and masked secrets never read a backend.
+// their target's identity separately. Secret and store adapters own their dependencies.
 func prepareDeferredYAMLAuth(ac *schema.AtmosConfiguration, input string, skip []string, info *schema.ConfigAndStacksInfo) error {
-	if ac.DeferredAuth == nil {
+	if !authdeferred.IsDeferred(ac.AuthManager) {
 		return nil
 	}
 	for _, tag := range []string{
@@ -95,10 +95,6 @@ func prepareDeferredYAMLAuth(ac *schema.AtmosConfiguration, input string, skip [
 		if input == tag && !skipFunc(skip, tag) {
 			return authdeferred.ResolveAuth(ac, info)
 		}
-	}
-	if strings.HasPrefix(input, u.AtmosYamlFuncSecret+" ") && !skipFunc(skip, u.AtmosYamlFuncSecret) &&
-		info != nil && !info.SecretsMaskOnly {
-		return authdeferred.PrepareSecretAuth(ac, input, info)
 	}
 	return nil
 }

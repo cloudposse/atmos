@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -155,7 +156,7 @@ func resolveAuthManagerForNestedComponent(
 	stack string,
 	parentAuthManager auth.AuthManager,
 ) (auth.AuthManager, error) {
-	if atmosConfig.DeferredAuth != nil {
+	if authdeferred.IsDeferred(atmosConfig.AuthManager) {
 		return deferredTargetAuth(atmosConfig, component, stack, parentAuthManager)
 	}
 	// Get component configuration WITHOUT processing templates/functions.

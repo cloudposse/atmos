@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -158,8 +157,8 @@ func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsO
 	// resolution must be skipped rather than silently attempting real authentication.
 	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
 	errOpts.EvaluationPaths = [][]string{{"settings"}}
-	stacksMap, err := e.ExecuteDescribeStacksWithOptions(&atmosConfig, "", nil, nil, nil, false,
-		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager, authdeferred.AuthDisabled(&atmosConfig),
+	stacksMap, err := e.ExecuteDescribeStacksScoped(&atmosConfig, "", nil, nil, nil, false,
+		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager, nil, nil,
 		errOpts)
 	if err != nil {
 		return "", nil, &listerrors.DescribeStacksError{Cause: err}

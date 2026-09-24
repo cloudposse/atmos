@@ -1,57 +1,16 @@
 package deferred
 
 import (
-	"crypto/sha256"
-	"encoding/json"
 	"sync"
 
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ValueCache holds successfully resolved values for one target and effective configuration.
-// Its lifetime is limited to the authentication resolver's invocation.
+// Its owner determines the lifetime and supplies the configuration-specific key.
 type ValueCache struct {
 	values sync.Map
-}
-
-// Protect lazy initialization on a shared configuration; cached values themselves
-// remain invocation-local and use their own concurrent maps.
-var evaluationContextMu sync.Mutex
-
-func evaluationContext(ac *schema.AtmosConfiguration) *schema.DeferredEvaluationContext {
-	evaluationContextMu.Lock()
-	defer evaluationContextMu.Unlock()
-	if ac.DeferredEvaluation == nil || ac.DeferredEvaluation.Resolver != ac.DeferredAuth {
-		ac.DeferredEvaluation = &schema.DeferredEvaluationContext{Resolver: ac.DeferredAuth}
-	}
-	return ac.DeferredEvaluation
-}
-
-// CacheFor returns an invocation-local cache for the target's raw configuration,
-// including inherited auth. Callers must resolve authentication before loading values.
-// Unsupported configuration values safely disable caching without affecting evaluation.
-func CacheFor(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) *ValueCache {
-	defer perf.Track(ac, "deferred.CacheFor")()
-
-	if ac == nil {
-		return nil
-	}
-	if ac.DeferredAuth == nil || info == nil {
-		return nil
-	}
-	encoded, err := json.Marshal(struct {
-		BasePath, ConfigPath, Stack, Component string
-		Auth                                   schema.AuthConfig
-		Section                                map[string]any
-		Disabled                               bool
-	}{ac.BasePath, ac.CliConfigPath, info.Stack, info.Component, ac.Auth, info.ComponentSection, ac.DeferredAuth.Disabled() || info.AuthDisabled})
-	if err != nil {
-		return nil
-	}
-	cache, _ := evaluationContext(ac).Values.LoadOrStore(sha256.Sum256(encoded), &ValueCache{})
-	return cache.(*ValueCache)
 }
 
 // Load retrieves a resolved value; a nil cache means caching is disabled.

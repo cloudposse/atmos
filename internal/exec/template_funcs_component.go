@@ -59,7 +59,7 @@ func componentFunc(
 	stack string,
 ) (any, error) {
 	maskOnly := configAndStacksInfo != nil && configAndStacksInfo.SecretsMaskOnly
-	authDisabled := authdeferred.AuthDisabled(atmosConfig) || (configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled)
+	authDisabled := authdeferred.AuthDisabled(atmosConfig.AuthManager) || (configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled)
 	functionName := fmt.Sprintf("atmos.Component(%s, %s)", component, stack)
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
@@ -85,7 +85,7 @@ func componentFunc(
 	// Inspection must neither consume resolved secrets nor cache display placeholders.
 	var existingSections any
 	var found bool
-	if !maskOnly && atmosConfig.DeferredAuth == nil {
+	if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
 		existingSections, found = componentFuncSyncMap.Load(stackSlug)
 	}
 	if found && existingSections != nil {
@@ -110,7 +110,7 @@ func componentFunc(
 	// even for a target that authenticates independently.
 	var resolvedAuthMgr auth.AuthManager
 	var valueCache *deferred.ValueCache
-	if atmosConfig.DeferredAuth != nil {
+	if authdeferred.IsDeferred(atmosConfig.AuthManager) {
 		var err error
 		resolvedAuthMgr, valueCache, err = deferredTargetAuthAndCache(atmosConfig, component, stack, &authContextWrapper{stackInfo: configAndStacksInfo})
 		if err != nil {
@@ -172,7 +172,7 @@ func componentFunc(
 
 	// Cache the result
 	valueCache.Store("atmos.Component", sections)
-	if !maskOnly && atmosConfig.DeferredAuth == nil {
+	if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
 		componentFuncSyncMap.Store(stackSlug, sections)
 	}
 

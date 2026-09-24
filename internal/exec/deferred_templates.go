@@ -1,6 +1,7 @@
 package exec
 
 import (
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -19,7 +20,7 @@ type deferredTemplateOptions struct {
 }
 
 func canDegradeValue(ac *schema.AtmosConfiguration, err error) bool {
-	return deferred.CanRecover(err, ac.DeferredAuth != nil, isRecoverableInWarnMode)
+	return deferred.CanRecover(err, authdeferred.IsDeferred(ac.AuthManager), isRecoverableInWarnMode)
 }
 
 func renderDeferredTemplateValues(input map[string]any, opts *deferredTemplateOptions) (map[string]any, error) {

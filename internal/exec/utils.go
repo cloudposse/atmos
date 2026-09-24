@@ -19,6 +19,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/env"
@@ -1039,7 +1040,7 @@ func processStacks(
 			true,
 		)
 		var componentSectionConverted schema.AtmosSectionMapType
-		if err != nil && atmosConfig.DeferredAuth != nil && onWarning != nil && canDegradeValue(atmosConfig, err) {
+		if err != nil && authdeferred.IsDeferred(atmosConfig.AuthManager) && onWarning != nil && canDegradeValue(atmosConfig, err) {
 			componentSectionConverted, err = renderDeferredTemplateValues(templateInput, &deferredTemplateOptions{
 				config: atmosConfig, info: &configAndStacksInfo, settings: &settingsSectionStruct,
 				templateContext: componentTemplateContext, onWarning: onWarning,

@@ -159,7 +159,6 @@ func executeListMetadataCmd(cmd *cobra.Command, args []string, opts *MetadataOpt
 
 	// Convert cmd-level options to pkg-level options.
 	pkgOpts := &list.MetadataOptions{
-		DeferredAuth:     atmosConfig.DeferredAuth,
 		Format:           opts.Format,
 		Columns:          opts.Columns,
 		Sort:             opts.Sort,

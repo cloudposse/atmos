@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/git"
@@ -44,12 +45,11 @@ var defaultInstanceColumns = []column.Config{
 
 // InstancesCommandOptions contains options for the list instances command.
 type InstancesCommandOptions struct {
-	DeferredAuth schema.DeferredAuthResolver
-	Info         *schema.ConfigAndStacksInfo
-	Cmd          *cobra.Command
-	Args         []string
-	ShowImports  bool
-	ColumnsFlag  []string
+	Info        *schema.ConfigAndStacksInfo
+	Cmd         *cobra.Command
+	Args        []string
+	ShowImports bool
+	ColumnsFlag []string
 	// Format selects the output format (table, json, yaml, csv, tsv, tree, matrix).
 	// Authoritative source — must reach this struct via viper so ATMOS_FORMAT
 	// is honored. Do not re-read from cmd.Flags() inside the impl.
@@ -67,12 +67,7 @@ type InstancesCommandOptions struct {
 	Delimiter   string
 	Query       string
 	AuthManager auth.AuthManager
-	// AuthDisabled is true when the caller did not request an identity or
-	// explicitly used --identity=false. It prevents per-component auth
-	// auto-detection while still allowing templates and YAML functions that do
-	// not require credentials to run.
-	AuthDisabled bool
-	OutputFile   string
+	OutputFile  string
 	// ProcessTemplates toggles Go template processing of stack manifests
 	// (controls the `processTemplates` parameter of `ExecuteDescribeStacks`).
 	// Default true for parity with `describe affected` / `describe stacks`.
@@ -705,7 +700,6 @@ type scopedStacksProcessor interface {
 		includeEmptyStacks bool,
 		skip []string,
 		authManager auth.AuthManager,
-		authDisabled bool,
 		tagsFilter []string,
 		labelsFilter map[string]string,
 	) (map[string]any, error)
@@ -730,7 +724,6 @@ type evalSectionsStacksProcessor interface {
 		includeEmptyStacks bool,
 		skip []string,
 		authManager auth.AuthManager,
-		authDisabled bool,
 		tagsFilter []string,
 		labelsFilter map[string]string,
 		evalSections []string,
@@ -760,6 +753,10 @@ func executeDescribeStacksForInstances(
 	labelsFilter map[string]string,
 	evalSections []string,
 ) (map[string]any, error) {
+	// Adapt legacy callers to the manager-owned policy before selecting a processor.
+	if authDisabled && !authdeferred.AuthDisabled(authManager) {
+		authManager = authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true})
+	}
 	if evalSections != nil {
 		if processor, ok := stacksProcessor.(evalSectionsStacksProcessor); ok {
 			return processor.ExecuteDescribeStacksWithEvalSections(
@@ -770,7 +767,6 @@ func executeDescribeStacksForInstances(
 				false, // includeEmptyStacks
 				skip,
 				authManager,
-				authDisabled,
 				tagsFilter,
 				labelsFilter,
 				evalSections,
@@ -788,7 +784,6 @@ func executeDescribeStacksForInstances(
 				false, // includeEmptyStacks
 				skip,
 				authManager,
-				authDisabled,
 				tagsFilter,
 				labelsFilter,
 			)
@@ -885,7 +880,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		log.Error(errUtils.ErrFailedToInitConfig.Error(), "error", err)
 		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
-	atmosConfig.DeferredAuth = opts.DeferredAuth
+	atmosConfig.AuthManager = opts.AuthManager
 
 	// Read flags from the options struct (populated via viper, so env vars
 	// like ATMOS_FORMAT / ATMOS_UPLOAD are honored). Reading from
@@ -964,7 +959,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		// Honor the caller-supplied template/function flags so tree output is
 		// consistent with non-tree runs of the same command invocation, matching
 		// the behavior of `list stacks --format=tree`.
-		stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
+		stacksMap, err := e.ExecuteDescribeStacks(
 			&atmosConfig, "", nil, nil, nil,
 			false, // ignoreMissingFiles
 			opts.ProcessTemplates,
@@ -972,7 +967,6 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 			false, // includeEmptyStacks
 			opts.Skip,
 			opts.AuthManager,
-			opts.AuthDisabled,
 		)
 		if err != nil {
 			log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
@@ -1009,7 +1003,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	// For non-tree formats, process instances normally. The single call threads
 	// every relevant option through one canonical path: --skip bypasses named
 	// YAML functions, opts.Stack applies the glob filter post-describe, and
-	// --identity=false (opts.AuthDisabled) short-circuits per-component auth.
+	// the manager's --identity=false policy short-circuits per-component auth.
 	// Without closure flags, --tags/--labels also scope the describe pass
 	// (early-skip): excluded components never evaluate templates/functions/auth.
 	// With closure flags, the whole flow goes through the shared scoped closure
@@ -1041,7 +1035,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 			opts.ProcessFunctions,
 			opts.Skip,
 			opts.Stack,
-			opts.AuthDisabled,
+			authdeferred.AuthDisabled(opts.AuthManager),
 			opts.Tags,
 			labels,
 			evalSections,
@@ -1199,7 +1193,7 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 	// Get stacksMap to extract component_path from component_info. Honor the
 	// caller-supplied template/function flags so matrix output stays consistent
 	// with non-matrix runs of the same command invocation.
-	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
+	stacksMap, err := e.ExecuteDescribeStacks(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -1207,7 +1201,6 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 		false, // includeEmptyStacks
 		opts.Skip,
 		opts.AuthManager,
-		opts.AuthDisabled,
 	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
@@ -1279,7 +1272,6 @@ func processInstancesScopedClosure(atmosConfig *schema.AtmosConfiguration, opts 
 			false, // includeEmptyStacks
 			opts.Skip,
 			opts.AuthManager,
-			opts.AuthDisabled,
 			nil, // tagsFilter: closure scoping owns selection.
 			nil, // labelsFilter: closure scoping owns selection.
 		)

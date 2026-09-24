@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -146,6 +147,10 @@ func getRunnableDescribeAffectedCmd(
 			}
 			props.AuthManager = authManager
 		}
+		if props.AuthManager == nil {
+			props.AuthManager, _ = props.CLIConfig.AuthManager.(auth.AuthManager)
+		}
+		props.CLIConfig.AuthManager = props.AuthManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 

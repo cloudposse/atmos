@@ -6,14 +6,15 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/cloudposse/atmos/pkg/deferred"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/secrets"
+	secretdeferred "github.com/cloudposse/atmos/pkg/secrets/deferred"
+	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 )
@@ -321,22 +322,22 @@ func processSimpleTags(
 		return res, true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncSecret, skip) {
-		res, err := secrets.Resolve(atmosConfig, input, currentStack, stackInfo)
+		res, err := secretdeferred.NewValue(atmosConfig, input, currentStack, stackInfo).Resolve()
 		if err != nil {
 			return nil, true, err
 		}
 		return res, true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncStoreGet, skip) {
-		if atmosConfig.DeferredAuth != nil {
-			value, err := deferred.ReadStore(atmosConfig, input, currentStack, stackInfo)
+		if authdeferred.IsDeferred(atmosConfig.AuthManager) {
+			value, err := storedeferred.ReadStore(atmosConfig, input, currentStack, stackInfo)
 			return value, true, err
 		}
 		return processTagStoreGet(atmosConfig, input, currentStack), true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncStore, skip) {
-		if atmosConfig.DeferredAuth != nil {
-			value, err := deferred.ReadStore(atmosConfig, input, currentStack, stackInfo)
+		if authdeferred.IsDeferred(atmosConfig.AuthManager) {
+			value, err := storedeferred.ReadStore(atmosConfig, input, currentStack, stackInfo)
 			return value, true, err
 		}
 		return processTagStore(atmosConfig, input, currentStack), true, nil

@@ -103,7 +103,7 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 		args.IncludeEmptyStacks,
 		args.Skip,
 		args.AuthManager,
-		authdeferred.AuthDisabled(atmosConfig),
+		authdeferred.AuthDisabled(atmosConfig.AuthManager),
 		errOptions,
 	)
 	if err != nil {
@@ -396,18 +396,17 @@ func ExecuteDescribeStacksScoped(
 	includeEmptyStacks bool,
 	skip []string,
 	authManager auth.AuthManager,
-	authDisabled bool,
 	tagsFilter []string,
 	labelsFilter map[string]string,
 	errOptions DescribeStacksErrorOptions,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksScoped")()
 
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled, false, false, tagsFilter, labelsFilter, errOptions, nil)
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authdeferred.AuthDisabled(authManager), false, false, tagsFilter, labelsFilter, errOptions, nil)
 }
 
 // ExecuteDescribeStacksWithEvalSections is the most general opt-in describe-stacks entry point:
-// authDisabled + tags/labels early-skip scope + graceful error-mode degradation + the
+// manager-owned authentication policy + tags/labels early-skip scope + graceful error-mode degradation + the
 // evaluation-sections gate, all in one call.
 //
 // The evalSections parameter is DELIBERATELY separate from `sections`: `sections` only trims the
@@ -433,7 +432,6 @@ func ExecuteDescribeStacksWithEvalSections(
 	includeEmptyStacks bool,
 	skip []string,
 	authManager auth.AuthManager,
-	authDisabled bool,
 	tagsFilter []string,
 	labelsFilter map[string]string,
 	errOptions DescribeStacksErrorOptions,
@@ -444,7 +442,7 @@ func ExecuteDescribeStacksWithEvalSections(
 	return executeDescribeStacks(
 		atmosConfig, filterByStack, components, componentTypes, sections,
 		ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks,
-		skip, authManager, authDisabled, false, false, tagsFilter, labelsFilter, errOptions,
+		skip, authManager, authdeferred.AuthDisabled(authManager), false, false, tagsFilter, labelsFilter, errOptions,
 		evalSections,
 	)
 }
@@ -471,6 +469,16 @@ func executeDescribeStacks(
 	evalSections []string,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
+
+	// Bind the caller's handle without mutating configuration shared by other passes.
+	config := *atmosConfig
+	atmosConfig = &config
+	if authManager == nil {
+		authManager, _ = atmosConfig.AuthManager.(auth.AuthManager)
+	} else {
+		atmosConfig.AuthManager = authManager
+	}
+	authDisabled = authDisabled || authdeferred.AuthDisabled(authManager)
 
 	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
