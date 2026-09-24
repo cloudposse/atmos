@@ -524,6 +524,82 @@ spec:
 	})
 }
 
+// workingDirectoryMarkerHandler records the resolved working directory every step executes in,
+// so tests can assert scaffold hooks anchor to the scaffold's target directory by default.
+type workingDirectoryMarkerHandler struct {
+	runnerstep.BaseHandler
+	dirs *[]string
+}
+
+func (h *workingDirectoryMarkerHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *workingDirectoryMarkerHandler) Execute(_ context.Context, step *schema.WorkflowStep, _ *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	*h.dirs = append(*h.dirs, step.WorkingDirectory)
+	return runnerstep.NewStepResult(step.WorkingDirectory), nil
+}
+
+// TestExecuteWithSetup_HooksDefaultWorkingDirectoryToTargetPath verifies that a scaffold hook's
+// working_directory defaults to the scaffold's target directory rather than the process's own
+// cwd (the bug: hooks like `terraform fmt -recursive` silently ran in the directory atmos was
+// launched from whenever the scaffold target differed from it), mirroring how component/stack
+// lifecycle hooks already default to the component's working directory. It also verifies the
+// documented override values (a bare-relative path, and a dot-prefixed path) still behave per
+// the existing working-directory convention.
+func TestExecuteWithSetup_HooksDefaultWorkingDirectoryToTargetPath(t *testing.T) {
+	// runCase registers a unique working-directory-capturing hook, generates the scaffold
+	// against a fresh target directory, and returns (capturedWorkingDirectory, targetDir).
+	runCase := func(t *testing.T, hookType, withBlock string) (string, string) {
+		t.Helper()
+		dirs := &[]string{}
+		runnerstep.Register(&workingDirectoryMarkerHandler{
+			BaseHandler: runnerstep.NewBaseHandler(hookType, runnerstep.CategoryOutput, false),
+			dirs:        dirs,
+		})
+
+		scaffoldYAML := "apiVersion: atmos/v1\n" +
+			"kind: AtmosScaffoldConfig\n" +
+			"metadata:\n" +
+			"  name: test-template\n" +
+			"spec:\n" +
+			"  hooks:\n" +
+			"    format:\n" +
+			"      events:\n" +
+			"        - after.scaffold.generate\n" +
+			"      kind: step\n" +
+			"      type: " + hookType + "\n" +
+			withBlock
+		embedsConfig := &templates.Configuration{
+			Name: "test-template",
+			Files: []templates.File{
+				{Path: "scaffold.yaml", Content: scaffoldYAML, Permissions: 0o644},
+				{Path: "README.md", Content: "hello", Permissions: 0o644},
+			},
+		}
+
+		ui := createTestUI(t)
+		targetDir := filepath.Join(t.TempDir(), "target")
+		err := ui.executeWithSetup(embedsConfig, targetDir, false, false, true, "", map[string]interface{}{}, []string{"{{", "}}"})
+		require.NoError(t, err)
+		require.Len(t, *dirs, 1)
+		return (*dirs)[0], targetDir
+	}
+
+	t.Run("unset working_directory defaults to the target path", func(t *testing.T) {
+		got, targetDir := runCase(t, "working-dir-marker-default", "")
+		assert.Equal(t, targetDir, got)
+	})
+
+	t.Run("bare relative working_directory resolves under the target path", func(t *testing.T) {
+		got, targetDir := runCase(t, "working-dir-marker-bare", "      with:\n        working_directory: sub\n")
+		assert.Equal(t, filepath.Join(targetDir, "sub"), got)
+	})
+
+	t.Run("dot-prefixed working_directory opts back into the process cwd", func(t *testing.T) {
+		got, _ := runCase(t, "working-dir-marker-dot", "      with:\n        working_directory: \".\"\n")
+		assert.Equal(t, ".", got)
+	})
+}
+
 // TestExecuteWithSetup_DryRunHasNoPersistentSideEffects reproduces a bug
 // where `--dry-run` (routed through executeWithSetup with DryRun set, same
 // as a real run) suppressed only individual file writes -- it still created
