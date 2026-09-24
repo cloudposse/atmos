@@ -408,7 +408,7 @@ S3 bucket 'acme-ue1-dev-tfstate' already exists (idempotent)
 
 ## Global Defaults
 
-There is no `settings.provision.backend` in `atmos.yaml` today. Backend provisioning is opted in per component or per toolchain because it has stronger side effects (creating cloud resources). For workdir defaults, see [Settings: Provision Defaults](/cli/configuration/settings/provision).
+Backend provisioning is opted in per component or per toolchain because it has stronger side effects (creating cloud resources). Like the [workdir default](/stacks/components/provision/workdir#global-defaults), a stack-wide default belongs in the toolchain section (`terraform.provision`) of a shared stack manifest, not in `atmos.yaml` settings.
 
 ## Related
 
