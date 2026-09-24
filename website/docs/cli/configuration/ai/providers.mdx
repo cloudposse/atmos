@@ -13,7 +13,7 @@ import TabItem from '@theme/TabItem'
 
 <Intro>
 The `ai.providers` section configures connections to AI model providers. Atmos supports **API providers**
-(Anthropic, OpenAI, Gemini, GitHub Models, Grok, Ollama, Bedrock, Azure OpenAI) and **CLI providers** (Claude Code, OpenAI Codex, GitHub Copilot, Gemini CLI) that reuse your existing subscription.
+(Anthropic, OpenAI, Gemini, GitHub Models, Grok, OpenRouter, DeepSeek, Z.AI, Ollama, Bedrock, Azure OpenAI) and **CLI providers** (Claude Code, OpenAI Codex, GitHub Copilot, opencode, Gemini CLI) that reuse your existing subscription.
 </Intro>
 
 <Experimental />
@@ -75,6 +75,15 @@ Each provider in the `providers` map supports the following settings:
   <dt>**xAI (Grok)** — `grok-4-latest`</dt>
   <dd>API Key authentication. OpenAI-compatible, real-time knowledge.</dd>
 
+  <dt>**OpenRouter** — `deepseek/deepseek-chat`</dt>
+  <dd>API Key authentication (`OPENROUTER_API_KEY`). OpenAI-compatible router across hundreds of models — set `model` to a provider-prefixed slug (e.g. `anthropic/claude-sonnet-4-5`, `openai/gpt-4o`) to switch models without changing providers.</dd>
+
+  <dt>**DeepSeek** — `deepseek-chat`</dt>
+  <dd>API Key authentication (`DEEPSEEK_API_KEY`). OpenAI-compatible. Low-cost; use `deepseek-reasoner` for the reasoning model.</dd>
+
+  <dt>**Z.AI (GLM)** — `glm-5.3`</dt>
+  <dd>API Key authentication (`ZAI_API_KEY`). OpenAI-compatible endpoint for Zhipu GLM models.</dd>
+
   <dt>**Ollama (Local)** — `llama4`</dt>
   <dd>No authentication (local). Privacy, offline use, zero API costs.</dd>
 
@@ -92,7 +101,7 @@ CLI providers invoke a locally installed AI tool as a subprocess. No API key nee
 :::note Bring your own CLI tool
 Atmos assumes you already have one of these CLI tools installed and authenticated — the same
 assumption it makes about `terraform` or `tofu`. Atmos does not install `claude`, `codex`,
-`copilot`, or `gemini`, or drive their login flows, on your behalf.
+`copilot`, `opencode`, or `gemini`, or drive their login flows, on your behalf.
 :::
 
 <dl>
@@ -104,6 +113,9 @@ assumption it makes about `terraform` or `tofu`. Atmos does not install `claude`
 
   <dt>**GitHub Copilot** — `copilot-cli`</dt>
   <dd>GitHub Copilot subscription. Full MCP support. Authenticates via `copilot /login` or `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN`.</dd>
+
+  <dt>**opencode** — `opencode`</dt>
+  <dd>Open-source terminal coding agent. Full MCP support. Uses whichever model provider you have configured and authenticated in opencode (`opencode auth login`).</dd>
 
   <dt>**Gemini CLI** — `gemini-cli`</dt>
   <dd>Google account (free tier: 1K req/day). MCP blocked for personal accounts.</dd>
@@ -117,6 +129,7 @@ a CLI provider's binary on `PATH`, in this order, and uses the first one it find
 1. `claude-code` (`claude`)
 1. `codex-cli` (`codex`)
 1. `copilot-cli` (`copilot`)
+1. `opencode` (`opencode`)
 1. `gemini-cli` (`gemini`)
 
 If none are found, Atmos falls back to `anthropic`, which requires an `api_key`. Setting
@@ -156,7 +169,7 @@ In addition to `model`, CLI providers support:
   <dd>Budget cap per invocation in USD (Claude Code only).</dd>
 
   <dt>`full_auto`</dt>
-  <dd>Enable automatic tool approval (Codex CLI and Copilot CLI). For Codex, this passes `--full-auto` (or `--dangerously-bypass-approvals-and-sandbox` when MCP servers are configured). For Copilot, this passes `--allow-all-tools` (implied automatically when MCP servers are configured).</dd>
+  <dd>Enable automatic tool approval (Codex CLI, Copilot CLI, and opencode). For Codex, this passes `--full-auto` (or `--dangerously-bypass-approvals-and-sandbox` when MCP servers are configured). For Copilot, this passes `--allow-all-tools` (implied automatically when MCP servers are configured). For opencode, this passes `--auto`, which blanket-approves every permission not explicitly denied; because opencode already allows tool calls by default, this is **only** enabled when you set `full_auto: true` (never implicitly from MCP config), so your opencode `permission` rules are respected.</dd>
 
   <dt>`allowed_tools`</dt>
   <dd>List of tools Claude Code is allowed to use (Claude Code only).</dd>
@@ -182,6 +195,10 @@ ai:
       model: "claude-sonnet-4.6"
       full_auto: true
 
+    opencode:
+      model: "anthropic/claude-sonnet-4-5"  # opencode's provider/model slug
+      full_auto: true
+
     gemini-cli:
       model: "gemini-2.5-flash"
 ```
@@ -194,6 +211,7 @@ When `mcp.servers` is configured, CLI providers automatically pass MCP servers t
 - **Claude Code:** Temp `.mcp.json` via `--mcp-config`
 - **Codex CLI:** Written to `~/.codex/config.toml` (backup/restore after exit)
 - **Copilot CLI:** Merged into `~/.copilot/mcp-config.json` (backup/restore after exit; honors `COPILOT_HOME`)
+- **opencode:** Written to a temp config passed via `OPENCODE_CONFIG` (deep-merged by opencode; no user file is modified)
 - **Gemini CLI:** Written to `.gemini/settings.json` in cwd (backup/restore, MCP blocked for personal accounts)
 
 Auth-requiring servers are wrapped with `atmos auth exec -i <identity>`. Toolchain PATH and `ATMOS_*` env vars are injected automatically.
@@ -312,6 +330,21 @@ ai:
       model: "grok-4-latest"
       api_key: !env "XAI_API_KEY"
       base_url: "https://api.x.ai/v1"
+      max_tokens: 4096
+
+    openrouter:
+      model: "deepseek/deepseek-chat"  # any provider-prefixed slug, e.g. "anthropic/claude-sonnet-4-5"
+      api_key: !env "OPENROUTER_API_KEY"
+      max_tokens: 4096
+
+    deepseek:
+      model: "deepseek-chat"  # or "deepseek-reasoner"
+      api_key: !env "DEEPSEEK_API_KEY"
+      max_tokens: 4096
+
+    zai:
+      model: "glm-5.3"
+      api_key: !env "ZAI_API_KEY"
       max_tokens: 4096
 ```
 </File>
