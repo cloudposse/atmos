@@ -257,8 +257,6 @@ func writeVaultJSON(w http.ResponseWriter, status int, v any) {
 
 func TestVaultStore_Set_Validation(t *testing.T) {
 	s := newTestVaultStore(newFakeVaultKV())
-	assert.ErrorIs(t, s.Set("", "api", "k", "v"), store.ErrEmptyStack)
-	assert.ErrorIs(t, s.Set("prod", "", "k", "v"), store.ErrEmptyComponent)
 	assert.ErrorIs(t, s.Set("prod", "api", "", "v"), store.ErrEmptyKey)
 	assert.ErrorIs(t, s.Set("prod", "api", "k", nil), store.ErrNilValue)
 }
@@ -273,18 +271,12 @@ func TestVaultStore_ImplementsInterfaces(t *testing.T) {
 
 func TestVaultStore_Get_Validation(t *testing.T) {
 	s := newTestVaultStore(newFakeVaultKV())
-	_, err := s.Get("", "api", "k")
-	assert.ErrorIs(t, err, store.ErrEmptyStack)
-	_, err = s.Get("prod", "", "k")
-	assert.ErrorIs(t, err, store.ErrEmptyComponent)
-	_, err = s.Get("prod", "api", "")
+	_, err := s.Get("prod", "api", "")
 	assert.ErrorIs(t, err, store.ErrEmptyKey)
 }
 
 func TestVaultStore_Delete_Validation(t *testing.T) {
 	s := newTestVaultStore(newFakeVaultKV())
-	assert.ErrorIs(t, s.Delete("", "api", "k"), store.ErrEmptyStack)
-	assert.ErrorIs(t, s.Delete("prod", "", "k"), store.ErrEmptyComponent)
 	assert.ErrorIs(t, s.Delete("prod", "api", ""), store.ErrEmptyKey)
 }
 
@@ -412,11 +404,7 @@ func TestVaultStore_Has_UsesMetadataNotData(t *testing.T) {
 
 func TestVaultStore_Has_Validation(t *testing.T) {
 	s := newTestVaultStore(newFakeVaultKV())
-	_, err := s.Has("", "api", "k")
-	assert.ErrorIs(t, err, store.ErrEmptyStack)
-	_, err = s.Has("prod", "", "k")
-	assert.ErrorIs(t, err, store.ErrEmptyComponent)
-	_, err = s.Has("prod", "api", "")
+	_, err := s.Has("prod", "api", "")
 	assert.ErrorIs(t, err, store.ErrEmptyKey)
 }
 

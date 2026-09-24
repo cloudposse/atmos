@@ -198,13 +198,8 @@ func (s *VaultStore) getKey(stack string, component string, key string) (string,
 }
 
 // Set writes the value to a KV v2 path under a single "value" field.
+// Empty stack/component coordinates are valid for stack-scoped and global secrets.
 func (s *VaultStore) Set(stack string, component string, key string, value any) error {
-	if stack == "" {
-		return store.ErrEmptyStack
-	}
-	if component == "" {
-		return store.ErrEmptyComponent
-	}
 	if key == "" {
 		return store.ErrEmptyKey
 	}
@@ -224,13 +219,8 @@ func (s *VaultStore) Set(stack string, component string, key string, value any) 
 }
 
 // Get reads the "value" field from a KV v2 path.
+// Empty stack/component coordinates are omitted from the path by getKey.
 func (s *VaultStore) Get(stack string, component string, key string) (any, error) {
-	if stack == "" {
-		return nil, store.ErrEmptyStack
-	}
-	if component == "" {
-		return nil, store.ErrEmptyComponent
-	}
 	if key == "" {
 		return nil, store.ErrEmptyKey
 	}
@@ -270,13 +260,8 @@ func (s *VaultStore) getByPath(path string) (any, error) {
 }
 
 // Delete removes a KV v2 secret at the computed path.
+// Empty stack/component coordinates select stack-scoped or global secrets.
 func (s *VaultStore) Delete(stack string, component string, key string) error {
-	if stack == "" {
-		return store.ErrEmptyStack
-	}
-	if component == "" {
-		return store.ErrEmptyComponent
-	}
 	if key == "" {
 		return store.ErrEmptyKey
 	}
@@ -293,13 +278,8 @@ func (s *VaultStore) Delete(stack string, component string, key string) error {
 
 // Has reports whether a secret exists at the computed path. It checks existence via the KV v2
 // metadata endpoint (secret/metadata/<path>) so the secret data is never read or decrypted.
+// As with Get, stack-scoped and global secrets may omit stack/component coordinates.
 func (s *VaultStore) Has(stack string, component string, key string) (bool, error) {
-	if stack == "" {
-		return false, store.ErrEmptyStack
-	}
-	if component == "" {
-		return false, store.ErrEmptyComponent
-	}
 	if key == "" {
 		return false, store.ErrEmptyKey
 	}
