@@ -553,8 +553,12 @@ type TelemetrySettings struct {
 }
 
 // ProvisionSettings contains global defaults for provisioning.
+//
+// A global default for workdir provisioning is NOT configured here. It belongs in the stack
+// configuration under the toolchain section (`terraform.provision`, `helmfile.provision`, etc.),
+// consistent with global `vars`, `metadata`, and `secrets`. Component-level `provision` values
+// override that stack-level default. See #3197.
 type ProvisionSettings struct {
-	Workdir ProvisionWorkdirSettings `yaml:"workdir,omitempty" json:"workdir,omitempty" mapstructure:"workdir"`
 	// Default is the name of the target used by apply/deploy when no --target is given.
 	Default string `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 	// Targets maps target names to delivery destinations for rendered artifacts.
@@ -596,15 +600,6 @@ type ProvisionTargetCommit struct {
 type ProvisionTargetPullRequest struct {
 	// Enabled requests pull-request publishing (not yet supported by the cli provider).
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-}
-
-// ProvisionWorkdirSettings contains default settings for workdir provisioning.
-type ProvisionWorkdirSettings struct {
-	// Enabled sets the default enabled state for workdir provisioning.
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	// TTL is the default time-to-live for workdirs (e.g., "7d", "24h", "weekly").
-	// Workdirs not accessed within this duration can be cleaned up.
-	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
 }
 
 type Docs struct {
