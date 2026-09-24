@@ -188,23 +188,20 @@ atmos toolchain install kubectl@1.28.0
 
 ## Directory Structure
 
-After installation, tools are organized as follows:
+Tools are grouped by owner, repository, and version under the configured installation path
+(the XDG toolchain cache by default):
 
-```
-.tools/
-├── bin/
-│   └── darwin/                    # OS-specific directory
-│       ├── terraform/
-│       │   └── 1.9.8/
-│       │       └── terraform      # Binary
-│       ├── kubectl/
-│       │   └── 1.28.0/
-│       │       └── kubectl
-│       └── helm/
-│           └── 3.13.0/
-│               └── helm
-└── cache/
-    └── downloads/                 # Downloaded archives
+```text
+<install_path>/
+└── bin/
+    ├── hashicorp/
+    │   └── terraform/
+    │       └── 1.9.8/
+    │           └── terraform
+    └── helm/
+        └── helm/
+            └── 3.13.0/
+                └── helm
 ```
 
 ## Advanced Configuration

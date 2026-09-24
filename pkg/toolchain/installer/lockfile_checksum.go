@@ -1,6 +1,8 @@
 package installer
 
 import (
+	"crypto/sha256"
+	"crypto/sha512"
 	"errors"
 	"os"
 	"runtime"
@@ -35,6 +37,8 @@ func (i *Installer) prepareLockChecksum(tool *registry.Tool, version, path strin
 	return nil
 }
 
+// lockChecksumAlgorithm prefers recorded digest metadata and preserves the upstream
+// algorithm when an older entry does not identify a recognizable SHA digest.
 func (i *Installer) lockChecksumAlgorithm(toolName, version, fallback string) (string, error) {
 	lf, err := loadInstallerLockFile(i.lockFilePath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -51,5 +55,21 @@ func (i *Installer) lockChecksumAlgorithm(toolName, version, fallback string) (s
 	if entry == nil || entry.Checksum == "" {
 		return fallback, nil
 	}
-	return entry.ChecksumAlgorithm, nil
+	if entry.ChecksumAlgorithm != "" {
+		return entry.ChecksumAlgorithm, nil
+	}
+	return inferLockChecksumAlgorithm(entry.Checksum, fallback), nil
+}
+
+// inferLockChecksumAlgorithm recognizes legacy SHA digests by their hex length,
+// retaining upstream verification metadata when inference is not possible.
+func inferLockChecksumAlgorithm(checksum, fallback string) string {
+	switch len(checksum) {
+	case sha512.Size * 2:
+		return "sha512"
+	case sha256.Size * 2:
+		return "sha256"
+	default:
+		return fallback
+	}
 }
