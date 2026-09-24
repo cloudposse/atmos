@@ -41,6 +41,19 @@ needed the same evaluation boundary as the normal output path.
   bare `atmos` opens the picker when stacks exist and shows help otherwise.
   Extracted small TUI helpers and corrected test path joins to satisfy pre-commit
   lint without changing behavior.
+- PR review fixes make environment-selected identities fail fast in `describe
+  component`, including identity-backed stores, and restrict the bare-command
+  picker to interactive stdin and stdout.
+- Restored resolved-value caching for deferred Terraform state and component
+  references. Caches are invocation-local and partitioned by target stack,
+  component, and configuration (including inherited identities), not identity
+  names alone. Failed, masked, and computed results cannot populate these caches.
+  Warm static reads retain missing-output errors, and deferred backend reads
+  discard stale caller credentials when no authenticated context is resolved.
+- Shared stores explicitly reset runtime credentials and SDK clients before
+  rebinding; disabled or absent authentication cannot retain a prior account.
+- AWS access-denied responses remain authorization errors, not missing
+  credentials. Authentication classification preserves remediation hints.
 
 ## Validation
 
@@ -62,6 +75,14 @@ needed the same evaluation boundary as the normal output path.
   preparation stopped at the pre-commit gate; full-suite validation is incomplete.
 - The demo configuration, emulator state, and installed Homebrew binary were
   left unchanged.
+- Review regressions passed for explicit environment selection, headless root
+  fallback, store auth/client reset, same-name identity isolation, repeated state
+  and template reads, failure and masked-value cache isolation, AWS authorization
+  classification, and authentication remediation hints.
+- Review validation also passed the affected command/auth/store/deferred short
+  suites, focused exec tests, website build, and patch-scoped lint. Rechecked the
+  workspace binary against the stopped demo emulator, including explicit
+  environment selection with YAML-function processing disabled.
 
 ## Follow-ups
 

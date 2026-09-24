@@ -2,7 +2,6 @@ package auth
 
 import (
 	"errors"
-	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -30,7 +29,7 @@ func NormalizeAuthenticationError(err error) error {
 		errUtils.ErrExpiredCredentials, errUtils.ErrCredentialsInvalid, errUtils.ErrIdentityCredentialsNone,
 	} {
 		if errors.Is(err, unavailable) {
-			return fmt.Errorf("%w: %w", errUtils.ErrAuthenticationUnavailable, err)
+			return errUtils.JoinPreservingHints(errUtils.ErrAuthenticationUnavailable, err)
 		}
 	}
 	return err

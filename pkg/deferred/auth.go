@@ -40,6 +40,7 @@ type deferredAuthResolver struct {
 	disabled bool
 	factory  AuthFactory
 	results  map[string]deferredAuthResult
+	values   sync.Map
 }
 
 // ConfigureAuth defers implicit authentication and records explicit disable.
@@ -72,6 +73,8 @@ func (r *deferredAuthResolver) Resolve(ac *schema.AtmosConfiguration, info *sche
 	}
 	if r.disabled || info.AuthDisabled {
 		info.AuthDisabled = true
+		info.AuthManager = nil
+		info.AuthContext = nil
 		return nil
 	}
 	config, err := auth.MergeComponentAuthFromConfig(&ac.Auth, info.ComponentSection, ac, cfg.AuthSectionName)
@@ -125,6 +128,8 @@ func NewAuthResolver(opts AuthOptions) schema.DeferredAuthResolver {
 }
 
 func propagateAuth(info *schema.ConfigAndStacksInfo, manager auth.AuthManager) {
+	info.AuthManager = nil
+	info.AuthContext = nil
 	if manager == nil {
 		return
 	}

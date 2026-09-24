@@ -143,7 +143,9 @@ func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
 		return nil, nil
 	}
 	needsStoreAuth := p.processYamlFunctions && hasIdentityBackedStore(p.atmosConfig)
-	if !p.identityExplicit && !needsStoreAuth {
+	// Environment selection is just as explicit as --identity.
+	explicit := p.identityExplicit || p.identityName != ""
+	if !explicit && !needsStoreAuth {
 		return nil, nil
 	}
 
@@ -171,7 +173,7 @@ func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
 		}
 	}
 
-	if !p.identityExplicit {
+	if !explicit {
 		return auth.CreateManagerWithAtmosConfigForStack(mergedAuthConfig, p.atmosConfig, p.stack)
 	}
 

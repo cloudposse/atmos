@@ -116,6 +116,17 @@ func (s *SecretsManagerStore) SetAuthContext(resolver store.AuthContextResolver,
 	}
 }
 
+// ResetAuthContext clears all runtime authentication and cached client state.
+func (s *SecretsManagerStore) ResetAuthContext() {
+	defer perf.Track(nil, "providers.SecretsManagerStore.ResetAuthContext")()
+
+	s.authResolver = nil
+	s.identityName = ""
+	s.client = nil
+	s.initOnce = sync.Once{}
+	s.initErr = nil
+}
+
 // IdentityName returns the configured identity for default identity inheritance.
 func (s *SecretsManagerStore) IdentityName() string {
 	return s.identityName

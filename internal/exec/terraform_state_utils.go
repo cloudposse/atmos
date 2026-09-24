@@ -8,6 +8,7 @@ import (
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -17,6 +18,13 @@ import (
 var terraformStateCache = sync.Map{}
 
 type terraformStateNotProvisionedCacheEntry struct{}
+
+type terraformStateLookup struct {
+	yamlFunc  string
+	stack     string
+	component string
+	output    string
+}
 
 // invalidateTerraformStateCache removes the cached outputs for one component.
 // Terraform can create an empty state file while selecting a workspace, then later
@@ -106,10 +114,10 @@ func GetTerraformState(
 		}
 	}
 
-	authDisabled := false
+	authDisabled := deferred.AuthDisabled(atmosConfig)
 	if parentAuthMgr != nil {
 		if stackInfo := parentAuthMgr.GetStackInfo(); stackInfo != nil {
-			authDisabled = stackInfo.AuthDisabled
+			authDisabled = authDisabled || stackInfo.AuthDisabled
 		}
 	}
 
@@ -119,13 +127,17 @@ func GetTerraformState(
 	//   - If no: uses parent AuthManager (inherits authentication)
 	// This enables each nested level to optionally override auth settings.
 	resolvedAuthMgr := parentAuthMgr
-	if !authDisabled {
+	var valueCache *deferred.ValueCache
+	if atmosConfig.DeferredAuth != nil {
+		var err error
+		resolvedAuthMgr, valueCache, err = deferredTargetAuthAndCache(atmosConfig, component, stack, parentAuthMgr)
+		if err != nil {
+			return nil, err
+		}
+	} else if !authDisabled {
 		var err error
 		resolvedAuthMgr, err = resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
 		if err != nil {
-			if atmosConfig.DeferredAuth != nil {
-				return nil, err
-			}
 			log.Debug(
 				"Auth does not exist for nested component, using parent AuthManager",
 				"component", component,
@@ -135,16 +147,20 @@ func GetTerraformState(
 			resolvedAuthMgr = parentAuthMgr
 		}
 	}
+	if maskOnly {
+		valueCache = nil
+	}
+	lookup := &terraformStateLookup{yamlFunc: yamlFunc, stack: stack, component: component, output: output}
+	if !skipCache {
+		if result, cached, err := cachedTerraformStateOutput(atmosConfig, lookup, valueCache); cached {
+			return result, err
+		}
+	}
 
 	// Derive the effective AuthContext for backend reads.
 	// If we resolved a component-specific AuthManager, use its AuthContext instead of the
 	// passed-in one (which may be nil when the parent didn't propagate auth).
-	resolvedAuthContext := authContext
-	if resolvedAuthMgr != nil {
-		if si := resolvedAuthMgr.GetStackInfo(); si != nil && si.AuthContext != nil {
-			resolvedAuthContext = si.AuthContext
-		}
-	}
+	resolvedAuthContext := resolvedTargetAuthContext(atmosConfig, resolvedAuthMgr, authContext, authDisabled)
 
 	componentSections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 		ResolveSecrets:       !maskOnly,
@@ -171,19 +187,12 @@ func GetTerraformState(
 
 	// Read static remote state backend outputs.
 	if remoteStateBackendStaticTypeOutputs != nil {
+		valueCache.Store("terraform.state.static", remoteStateBackendStaticTypeOutputs)
 		// Cache the result
 		if !maskOnly && atmosConfig.DeferredAuth == nil {
 			terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
 		}
-		result, exists, err := tfoutput.GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
-		if err != nil {
-			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
-		}
-		if !exists {
-			return nil, fmt.Errorf("%w: output `%s` does not exist for component `%s` in stack `%s`\nin YAML function: `%s`", errUtils.ErrReadTerraformState, output, component, stack, yamlFunc)
-		}
-		// result may be nil if the output is legitimately null
-		return result, nil
+		return staticTerraformStateOutput(atmosConfig, lookup, remoteStateBackendStaticTypeOutputs)
 	}
 
 	// Read Terraform backend using resolved auth context.
@@ -203,6 +212,7 @@ func GetTerraformState(
 	}
 
 	// Cache the result now that we know it reflects a real, provisioned backend.
+	valueCache.Store("terraform.state", backend)
 	if !maskOnly && atmosConfig.DeferredAuth == nil {
 		terraformStateCache.Store(stackSlug, backend)
 	}
@@ -214,5 +224,34 @@ func GetTerraformState(
 		return nil, er
 	}
 
+	return result, nil
+}
+
+func cachedTerraformStateOutput(ac *schema.AtmosConfiguration, lookup *terraformStateLookup, cache *deferred.ValueCache) (any, bool, error) {
+	if cached, ok := cache.Load("terraform.state.static"); ok {
+		result, err := staticTerraformStateOutput(ac, lookup, cached.(map[string]any))
+		return result, true, err
+	}
+	cached, ok := cache.Load("terraform.state")
+	if !ok {
+		return nil, false, nil
+	}
+	result, err := tb.GetTerraformBackendVariable(ac, cached.(map[string]any), lookup.output)
+	if err != nil {
+		return nil, true, fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrEvaluateTerraformBackendVariable, lookup.output, lookup.component, lookup.stack, lookup.yamlFunc, err)
+	}
+	return result, true, nil
+}
+
+// Static outputs distinguish absent keys from legitimate null values on both cold
+// and warm reads, preserving Terraform/YQ fallback behavior.
+func staticTerraformStateOutput(ac *schema.AtmosConfiguration, lookup *terraformStateLookup, outputs map[string]any) (any, error) {
+	result, exists, err := tfoutput.GetStaticRemoteStateOutput(ac, lookup.component, lookup.stack, outputs, lookup.output)
+	if err != nil {
+		return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrReadTerraformState, lookup.component, lookup.stack, lookup.yamlFunc, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("%w: output `%s` does not exist for component `%s` in stack `%s`\nin YAML function: `%s`", errUtils.ErrReadTerraformState, lookup.output, lookup.component, lookup.stack, lookup.yamlFunc)
+	}
 	return result, nil
 }

@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"testing"
 
-	errUtils "github.com/cloudposse/atmos/errors"
+	cockroacherrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestNormalizeAuthenticationError(t *testing.T) {
@@ -21,4 +23,12 @@ func TestNormalizeAuthenticationError(t *testing.T) {
 		require.ErrorIs(t, normalized, err)
 		require.Same(t, normalized, NormalizeAuthenticationError(normalized))
 	}
+}
+
+func TestNormalizeAuthenticationErrorPreservesHints(t *testing.T) {
+	original := cockroacherrors.WithHint(errUtils.ErrAuthenticationFailed, "Start the configured emulator and try again.")
+	normalized := NormalizeAuthenticationError(original)
+	require.ErrorIs(t, normalized, errUtils.ErrAuthenticationUnavailable)
+	require.ErrorIs(t, normalized, errUtils.ErrAuthenticationFailed)
+	require.Equal(t, cockroacherrors.GetAllHints(original), cockroacherrors.GetAllHints(normalized))
 }

@@ -132,6 +132,18 @@ func (s *SSMStore) SetAuthContext(resolver store.AuthContextResolver, identityNa
 	}
 }
 
+// ResetAuthContext clears all runtime authentication and cached client state.
+func (s *SSMStore) ResetAuthContext() {
+	defer perf.Track(nil, "providers.SSMStore.ResetAuthContext")()
+
+	s.authResolver = nil
+	s.identityName = ""
+	s.client = nil
+	s.awsConfig = nil
+	s.initOnce = sync.Once{}
+	s.initErr = nil
+}
+
 // IdentityName returns the configured identity name, if any.
 func (s *SSMStore) IdentityName() string {
 	return s.identityName

@@ -98,14 +98,18 @@ func ResolveStoreAuth(ac *schema.AtmosConfiguration, info *schema.ConfigAndStack
 	if !ok || ac.DeferredAuth == nil {
 		return nil
 	}
+	// Stores are shared between components. Even the same identity name can resolve
+	// to different credentials or endpoints under a different effective auth config.
+	s.ResetAuthContext()
 	if AuthDisabled(ac) || (info != nil && info.AuthDisabled) {
-		s.SetAuthContext(nil, "")
 		return nil
 	}
 	copyInfo := schema.ConfigAndStacksInfo{}
 	if info != nil {
 		copyInfo = *info
 	}
+	copyInfo.AuthManager = nil
+	copyInfo.AuthContext = nil
 	copyConfig := *ac
 	identity := ac.StoresConfig[name].Identity
 	if identity != "" {
@@ -142,17 +146,27 @@ func deferredStoreIdentity(ac *schema.AtmosConfiguration, info *schema.ConfigAnd
 
 func injectDeferredStoreContext(s store.IdentityAwareStore, manager auth.AuthManager, identity string) {
 	if manager == nil {
+		preserveConfiguredStoreIdentity(s, identity)
+		return
+	}
+	info := manager.GetStackInfo()
+	if info == nil {
+		preserveConfiguredStoreIdentity(s, identity)
 		return
 	}
 	chain := manager.GetChain()
 	if identity == "" && len(chain) > 0 {
 		identity = chain[len(chain)-1]
 	}
-	info := manager.GetStackInfo()
-	if info == nil {
-		return
-	}
 	s.SetAuthContext(authbridge.NewResolvedContext(info.AuthContext), identity)
+}
+
+// An explicitly configured identity must not silently become ambient credentials
+// if a custom resolver returns no usable authentication context.
+func preserveConfiguredStoreIdentity(s store.IdentityAwareStore, identity string) {
+	if identity != "" {
+		s.SetAuthContext(nil, identity)
+	}
 }
 
 type storeParams struct {

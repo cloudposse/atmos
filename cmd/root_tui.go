@@ -7,12 +7,16 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // executeAtmosUI allows command tests to verify routing without opening a terminal.
 var executeAtmosUI = e.ExecuteAtmosCmdWithConfig
+
+// rootTTYDetector uses the shared terminal capability pipeline and is injectable in tests.
+var rootTTYDetector term.TTYDetector = &term.DefaultTTYDetector{}
 
 // runRootCommand opens the stack picker when stacks are available. Projects that
 // only use workflows or custom commands can display help without configuring stacks.
@@ -48,6 +52,11 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	// Errors parsing manifests, resolving imports, or starting the UI remain errors.
+	// A picker needs both interactive input and output; pipes and automation get help.
+	if !rootTTYDetector.IsTTYForStdin() || !rootTTYDetector.IsTTYForStdout() {
+		return showHelp()
+	}
+	// Errors parsing manifests, resolving imports, or starting the UI remain errors
+	// when launching the interactive picker.
 	return executeAtmosUI(&config)
 }

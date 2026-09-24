@@ -4,13 +4,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/deferred"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 

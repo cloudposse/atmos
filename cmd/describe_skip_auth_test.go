@@ -632,9 +632,9 @@ func TestDescribeComponent_DefersConfiguredStoreIdentityAuthentication(t *testin
 	assert.NoError(t, err)
 }
 
-// TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled verifies that
-// ATMOS_IDENTITY env var does not bypass the guard for describe component.
-func TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
+// TestDescribeComponent_EnvIdentityAuthenticatesWithFunctionsDisabled verifies that
+// ATMOS_IDENTITY is an explicit authentication request even for unevaluated output.
+func TestDescribeComponent_EnvIdentityAuthenticatesWithFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
 	require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
@@ -645,19 +645,42 @@ func TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing
 	defer ctrl.Finish()
 
 	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
-	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
-		func(params exec.DescribeComponentParams) error {
-			assert.Nil(t, params.AuthManager, "AuthManager must be nil when ATMOS_IDENTITY env var set but no explicit --identity flag")
-			assert.False(t, params.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
-			return nil
-		},
-	).Times(1)
 
 	testCmd := newTestCmdForDescribeComponent(t, false, "")
 	run := getRunnableDescribeComponentCmd(describeComponentTestProps(mockExec, atmosConfigWithBrokenDefaultIdentity()))
 
 	err := run(testCmd, []string{"test-component"})
-	assert.NoError(t, err, "env var ATMOS_IDENTITY must not trigger auth when --process-functions=false")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityKind)
+}
+
+// TestDescribeComponent_EnvIdentityDoesNotSelectStoreDefault verifies that an
+// explicit environment identity is validated instead of using the store's identity.
+func TestDescribeComponent_EnvIdentityDoesNotSelectStoreDefault(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+	require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
+	t.Setenv("ATMOS_IDENTITY", "missing-selected-identity")
+	config := schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{Identities: map[string]schema.Identity{
+			"store-identity": {
+				Default: true,
+				Kind:    "aws/user",
+				Credentials: map[string]interface{}{
+					"access_key_id": "test", "secret_access_key": "test",
+				},
+			},
+		}},
+		StoresConfig: store.StoresConfig{"outputs/ssm": {Identity: "store-identity"}},
+	}
+	ssmStore, err := providers.NewSSMStore(providers.SSMStoreOptions{Region: "us-east-1"}, "store-identity")
+	require.NoError(t, err)
+	config.Stores = store.StoreRegistry{"outputs/ssm": ssmStore}
+	mockExec := exec.NewMockDescribeComponentCmdExec(gomock.NewController(t))
+	testCmd := newTestCmdForDescribeComponent(t, true, "")
+	run := getRunnableDescribeComponentCmd(describeComponentTestProps(mockExec, config))
+
+	err = run(testCmd, []string{"test-component"})
+	require.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
 }
 
 // TestDescribeComponent_ExplicitIdentityForcesAuthWhenFunctionsDisabled verifies that

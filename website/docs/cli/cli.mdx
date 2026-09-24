@@ -4,7 +4,7 @@ title: Atmos CLI
 sidebar_label: atmos
 sidebar_class_name: hidden command
 sidebar_position: 1
-description: Open the interactive stack picker, or show help when no stacks are configured
+description: Open the stack picker in an interactive terminal, or show help when the picker is unavailable
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
@@ -13,12 +13,12 @@ import FeaturedCasts from '@site/src/components/FeaturedCasts'
 <Intro>
 Atmos is a CLI for provisioning infrastructure with Terraform, Helmfile, Packer, and more, and for running workflows and custom commands.
 Run `atmos` without arguments to open an interactive UI for selecting a command, stack, and component.
-When no stack manifests are available, Atmos displays help instead, including configured custom commands. You can use Atmos for workflows and custom commands without configuring stacks.
+When no stack manifests are available, or input or output is not an interactive terminal, Atmos displays help instead, including configured custom commands. You can use Atmos for workflows and custom commands without configuring stacks.
 </Intro>
 
 ## Usage
 
-Run `atmos` to open the interactive stack picker in a project with stacks:
+Run `atmos` in an interactive terminal to open the stack picker in a project with stacks:
 
 ```shell
 atmos

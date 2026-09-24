@@ -6,20 +6,30 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/deferred"
-
+	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/aws/autherrors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestDeferredAuthDoesNotDegradeAuthorizationFailures(t *testing.T) {
+	ac := &schema.AtmosConfiguration{}
+	deferred.ConfigureAuth(ac, "")
+	for _, code := range []string{"AccessDenied", "AccessDeniedException"} {
+		err := autherrors.Normalize(&smithy.GenericAPIError{Code: code})
+		require.False(t, canDegradeValue(ac, err), "valid credentials without permission must remain fatal")
+	}
+}
 
 func TestDeferredAuthPipeline(t *testing.T) {
 	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "list-deferred-auth"))

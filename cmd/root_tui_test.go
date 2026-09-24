@@ -4,14 +4,17 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -50,6 +53,12 @@ func rootTUIProject(t *testing.T, files map[string]string) string {
 	}
 	previous := executeAtmosUI
 	t.Cleanup(func() { executeAtmosUI = previous })
+	previousDetector := rootTTYDetector
+	t.Cleanup(func() { rootTTYDetector = previousDetector })
+	detector := term.NewMockTTYDetector(gomock.NewController(t))
+	detector.EXPECT().IsTTYForStdin().Return(true).AnyTimes()
+	detector.EXPECT().IsTTYForStdout().Return(true).AnyTimes()
+	rootTTYDetector = detector
 	return dir
 }
 
@@ -119,6 +128,31 @@ func TestRootWithStacksLaunchesTUI(t *testing.T) {
 	}
 	require.NoError(t, RootCmd.RunE(command, nil))
 	assert.True(t, called, "bare atmos must invoke the TUI")
+}
+
+func TestRootWithStacksWithoutTerminalRequestsHelp(t *testing.T) {
+	for _, stdinTTY := range []bool{false, true} {
+		t.Run(strconv.FormatBool(stdinTTY), func(t *testing.T) {
+			rootTUIProject(t, map[string]string{
+				"atmos.yaml": rootTUIConfig, "stacks/deploy/dev.yaml": rootTUIStack,
+			})
+			detector := term.NewMockTTYDetector(gomock.NewController(t))
+			detector.EXPECT().IsTTYForStdin().Return(stdinTTY)
+			if stdinTTY {
+				detector.EXPECT().IsTTYForStdout().Return(false)
+			}
+			rootTTYDetector = detector
+			executeAtmosUI = func(*schema.AtmosConfiguration) error {
+				t.Fatal("noninteractive input or output must not launch the TUI")
+				return nil
+			}
+			command := rootTUICommand()
+			var helpArgs []string
+			command.SetHelpFunc(func(_ *cobra.Command, args []string) { helpArgs = args })
+			require.NoError(t, RootCmd.RunE(command, nil))
+			assert.Equal(t, []string{helpFlagLong}, helpArgs)
+		})
+	}
 }
 
 func TestRootTUIHonorsConfigOverrides(t *testing.T) {

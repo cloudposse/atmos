@@ -14,26 +14,39 @@ import (
 // deferredTargetAuth resolves the referenced component, with its own stack and defaults.
 // Authentication errors propagate; they must never select an unrelated ambient identity.
 func deferredTargetAuth(ac *schema.AtmosConfiguration, component, stack string, parents ...auth.AuthManager) (auth.AuthManager, error) {
+	manager, _, err := deferredTargetAuthAndCache(ac, component, stack, parents...)
+	return manager, err
+}
+
+// deferredTargetAuthAndCache binds values to the target's full configuration, not
+// just its identity name. No cache is returned when authentication fails.
+func deferredTargetAuthAndCache(ac *schema.AtmosConfiguration, component, stack string, parents ...auth.AuthManager) (auth.AuthManager, *deferred.ValueCache, error) {
 	section, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 		AtmosConfig: ac, Component: component, Stack: stack,
 		ProcessTemplates: false, ProcessYamlFunctions: false,
 	})
 	if err != nil {
-		return nil, err
-	}
-	if GetComponentRemoteStateBackendStaticType(&section) != nil {
-		return nil, nil
+		return nil, nil, err
 	}
 	section = inheritDeferredAuth(section, parents)
 	info := &schema.ConfigAndStacksInfo{Component: component, Stack: stack, ComponentSection: section}
-	if err := deferred.ResolveAuth(ac, info); err != nil {
-		return nil, err
+	if len(parents) > 0 && parents[0] != nil {
+		if parent := parents[0].GetStackInfo(); parent != nil {
+			info.AuthDisabled = parent.AuthDisabled
+		}
 	}
+	if GetComponentRemoteStateBackendStaticType(&section) != nil {
+		return nil, deferred.CacheFor(ac, info), nil
+	}
+	if err := deferred.ResolveAuth(ac, info); err != nil {
+		return nil, nil, err
+	}
+	cache := deferred.CacheFor(ac, info)
 	if info.AuthDisabled {
-		return &authContextWrapper{stackInfo: info}, nil
+		return &authContextWrapper{stackInfo: info}, cache, nil
 	}
 	manager, _ := info.AuthManager.(auth.AuthManager)
-	return manager, nil
+	return manager, cache, nil
 }
 
 func inheritDeferredAuth(section map[string]any, parents []auth.AuthManager) map[string]any {
@@ -49,6 +62,23 @@ func inheritDeferredAuth(section map[string]any, parents []auth.AuthManager) map
 		}
 	}
 	return section
+}
+
+// Deferred resolution is authoritative; a missing result must not resurrect a
+// previous caller's credentials. Eager execution retains its existing fallback.
+func resolvedTargetAuthContext(ac *schema.AtmosConfiguration, manager auth.AuthManager, fallback *schema.AuthContext, disabled bool) *schema.AuthContext {
+	if disabled {
+		return nil
+	}
+	if manager != nil {
+		if info := manager.GetStackInfo(); info != nil && info.AuthContext != nil {
+			return info.AuthContext
+		}
+	}
+	if ac.DeferredAuth != nil {
+		return nil
+	}
+	return fallback
 }
 
 // Only actual credential consumers call this hook. Terraform references resolve

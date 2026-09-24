@@ -3,14 +3,13 @@ package exec
 import (
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/deferred"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -23,6 +22,7 @@ func TestDeferredStoreFailedAuthStopsRead(t *testing.T) {
 	factory := deferred.NewMockAuthFactory(ctrl)
 	setDeferredAuthFactory(ac, factory)
 	factory.EXPECT().Create(gomock.Any(), gomock.Any(), "dev").Return(nil, unavailableAuth(errUtils.ErrExpiredCredentials)).Times(1)
+	s.EXPECT().ResetAuthContext().Times(2)
 	for range 2 {
 		_, err := deferred.ReadStore(ac, "!store.get remote key | default fallback", "dev", &schema.ConfigAndStacksInfo{Stack: "dev"})
 		require.ErrorIs(t, err, errUtils.ErrAuthenticationUnavailable)
@@ -40,6 +40,7 @@ func TestDeferredStoreSuccessfulAuthIsNotRepeated(t *testing.T) {
 	manager.EXPECT().GetChain().Return([]string{"local"}).AnyTimes()
 	manager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{AuthContext: &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "local"}}}).AnyTimes()
 	factory.EXPECT().Create(gomock.Any(), gomock.Any(), "dev").Return(manager, nil).Times(1)
+	s.EXPECT().ResetAuthContext().Times(2)
 	s.EXPECT().SetAuthContext(gomock.Any(), "local").Do(func(resolver store.AuthContextResolver, name string) {
 		resolved, err := resolver.ResolveAWSAuthContext(t.Context(), name)
 		require.NoError(t, err)
@@ -59,7 +60,7 @@ func TestDeferredStoreDisabledAndLocal(t *testing.T) {
 	ac := &schema.AtmosConfiguration{Stores: store.StoreRegistry{"remote": s}}
 	deferred.ConfigureAuth(ac, "false")
 	setDeferredAuthFactory(ac, deferred.NewMockAuthFactory(ctrl))
-	s.EXPECT().SetAuthContext(nil, "")
+	s.EXPECT().ResetAuthContext()
 	require.NoError(t, deferred.ResolveStoreAuth(ac, &schema.ConfigAndStacksInfo{}, "remote"))
 	deferred.ConfigureAuth(ac, "")
 	setDeferredAuthFactory(ac, deferred.NewMockAuthFactory(ctrl))

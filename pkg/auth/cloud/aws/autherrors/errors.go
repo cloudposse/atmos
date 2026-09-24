@@ -3,7 +3,6 @@ package autherrors
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/smithy-go"
@@ -21,7 +20,7 @@ func Normalize(err error) error {
 		return err
 	}
 	if unavailable(err) {
-		return fmt.Errorf("%w: %w", errUtils.ErrAuthenticationUnavailable, err)
+		return errUtils.JoinPreservingHints(errUtils.ErrAuthenticationUnavailable, err)
 	}
 	return err
 }
@@ -37,7 +36,7 @@ func unavailable(err error) bool {
 	}
 	switch apiError.ErrorCode() {
 	case "ExpiredToken", "ExpiredTokenException", "InvalidClientTokenId", "UnrecognizedClientException",
-		"AccessDenied", "AccessDeniedException", "InvalidSignatureException", "SignatureDoesNotMatch", "AuthFailure":
+		"InvalidSignatureException", "SignatureDoesNotMatch", "AuthFailure":
 		return true
 	default:
 		return false
