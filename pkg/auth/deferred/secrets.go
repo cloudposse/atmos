@@ -17,7 +17,7 @@ import (
 
 // Local secrets (including age-encrypted files) must not authenticate a cloud identity.
 func PrepareSecretAuth(ac *schema.AtmosConfiguration, input string, info *schema.ConfigAndStacksInfo) error {
-	defer perf.Track(ac, "deferred.PrepareSecretAuth")()
+	defer perf.Track(ac, "auth.deferred.PrepareSecretAuth")()
 
 	parsed, err := fnparser.ParseSecret(strings.TrimSpace(strings.TrimPrefix(input, u.AtmosYamlFuncSecret)))
 	if err != nil {

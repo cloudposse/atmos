@@ -1,15 +1,12 @@
 package deferred
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestEvaluationDemand(t *testing.T) {
@@ -33,24 +30,6 @@ func TestEvaluationDemand(t *testing.T) {
 	assert.False(t, IsSectionRequired([]string{}, "vars"))
 	assert.Equal(t, [][]string{{"vars", "name"}}, PathsForQuery(".vars.name"))
 	assert.Nil(t, PathsForQuery(".vars | select(.enabled)"))
-}
-
-func TestAuthCacheIncludesStackAndConfiguration(t *testing.T) {
-	ac := &schema.AtmosConfiguration{}
-	factory := NewMockAuthFactory(gomock.NewController(t))
-	ac.DeferredAuth = NewAuthResolver(AuthOptions{Factory: factory})
-	failure := errors.Join(errUtils.ErrAuthenticationUnavailable, errUtils.ErrExpiredCredentials)
-	for _, stack := range []string{"dev", "prod"} {
-		factory.EXPECT().Create(ac, gomock.Any(), stack).Return(nil, failure).Times(2)
-		for _, name := range []string{"first", "second"} {
-			info := &schema.ConfigAndStacksInfo{Stack: stack, ComponentSection: map[string]any{"auth": map[string]any{"identities": map[string]any{name: map[string]any{"kind": "aws/user", "default": true}}}}}
-			for range 2 {
-				require.ErrorIs(t, ResolveAuth(ac, info), errUtils.ErrAuthenticationUnavailable)
-				assert.Nil(t, info.AuthContext)
-				assert.Nil(t, info.AuthManager)
-			}
-		}
-	}
 }
 
 func TestRenderValuesPreservesStructure(t *testing.T) {

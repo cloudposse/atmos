@@ -10,9 +10,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
-	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -327,7 +327,7 @@ func executeAndExtractStacks(
 		false, // includeEmptyStacks
 		skip,
 		authManager,
-		deferred.AuthDisabled(atmosConfig),
+		authdeferred.AuthDisabled(atmosConfig),
 		opts.Tags,
 		labels,
 		errOpts,
@@ -373,7 +373,7 @@ func newScopedDescribeFunc(atmosConfig *schema.AtmosConfiguration, describeDeps 
 			false, // includeEmptyStacks
 			describeDeps.skip,
 			describeDeps.authManager,
-			deferred.AuthDisabled(atmosConfig),
+			authdeferred.AuthDisabled(atmosConfig),
 			nil, // tagsFilter: closure scoping owns selection.
 			nil, // labelsFilter: closure scoping owns selection.
 			describeDeps.errOpts,
@@ -609,7 +609,7 @@ func renderStacksTreeFormat(
 		false, // includeEmptyStacks
 		skip,
 		authManager,
-		deferred.AuthDisabled(atmosConfig),
+		authdeferred.AuthDisabled(atmosConfig),
 		nil, nil,
 		errOpts,
 		resolveStacksEvalSections(atmosConfig, opts),

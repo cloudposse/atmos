@@ -1,3 +1,5 @@
+// Package deferred selects, evaluates, and caches only the values a caller needs.
+// Authentication resolution belongs to pkg/auth/deferred.
 package deferred
 
 import (

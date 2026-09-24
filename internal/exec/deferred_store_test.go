@@ -8,6 +8,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -18,8 +19,8 @@ func TestDeferredStoreFailedAuthStopsRead(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := store.NewMockIdentityAwareStore(ctrl)
 	ac := &schema.AtmosConfiguration{Stores: store.StoreRegistry{"remote": s}}
-	deferred.ConfigureAuth(ac, "")
-	factory := deferred.NewMockAuthFactory(ctrl)
+	authdeferred.ConfigureAuth(ac, "")
+	factory := authdeferred.NewMockAuthFactory(ctrl)
 	setDeferredAuthFactory(ac, factory)
 	factory.EXPECT().Create(gomock.Any(), gomock.Any(), "dev").Return(nil, unavailableAuth(errUtils.ErrExpiredCredentials)).Times(1)
 	s.EXPECT().ResetAuthContext().Times(2)
@@ -33,8 +34,8 @@ func TestDeferredStoreSuccessfulAuthIsNotRepeated(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := store.NewMockIdentityAwareStore(ctrl)
 	ac := &schema.AtmosConfiguration{Stores: store.StoreRegistry{"remote": s}}
-	deferred.ConfigureAuth(ac, "")
-	factory := deferred.NewMockAuthFactory(ctrl)
+	authdeferred.ConfigureAuth(ac, "")
+	factory := authdeferred.NewMockAuthFactory(ctrl)
 	setDeferredAuthFactory(ac, factory)
 	manager := types.NewMockAuthManager(ctrl)
 	manager.EXPECT().GetChain().Return([]string{"local"}).AnyTimes()
@@ -58,12 +59,12 @@ func TestDeferredStoreDisabledAndLocal(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := store.NewMockIdentityAwareStore(ctrl)
 	ac := &schema.AtmosConfiguration{Stores: store.StoreRegistry{"remote": s}}
-	deferred.ConfigureAuth(ac, "false")
-	setDeferredAuthFactory(ac, deferred.NewMockAuthFactory(ctrl))
+	authdeferred.ConfigureAuth(ac, "false")
+	setDeferredAuthFactory(ac, authdeferred.NewMockAuthFactory(ctrl))
 	s.EXPECT().ResetAuthContext()
-	require.NoError(t, deferred.ResolveStoreAuth(ac, &schema.ConfigAndStacksInfo{}, "remote"))
-	deferred.ConfigureAuth(ac, "")
-	setDeferredAuthFactory(ac, deferred.NewMockAuthFactory(ctrl))
+	require.NoError(t, authdeferred.ResolveStoreAuth(ac, &schema.ConfigAndStacksInfo{}, "remote"))
+	authdeferred.ConfigureAuth(ac, "")
+	setDeferredAuthFactory(ac, authdeferred.NewMockAuthFactory(ctrl))
 	local := store.NewMockStore(ctrl)
 	ac.Stores["local"] = local
 	local.EXPECT().GetKey("key").Return("local value", nil)

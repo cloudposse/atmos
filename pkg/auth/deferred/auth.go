@@ -1,4 +1,4 @@
-// Package deferred plans demanded values and resolves authentication at their point of use.
+// Package deferred resolves Atmos authentication at the first credential request.
 package deferred
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_auth.go -package=deferred
@@ -23,7 +23,7 @@ type AuthFactory interface {
 type defaultAuthFactory struct{}
 
 func (defaultAuthFactory) Create(ac *schema.AtmosConfiguration, config *schema.AuthConfig, stack string) (auth.AuthManager, error) {
-	defer perf.Track(ac, "deferred.defaultAuthFactory.Create")()
+	defer perf.Track(ac, "auth.deferred.defaultAuthFactory.Create")()
 
 	return auth.CreateAndAuthenticateManagerWithAtmosConfigForStack("", config, cfg.IdentityFlagSelectValue, ac, stack)
 }
@@ -40,13 +40,12 @@ type deferredAuthResolver struct {
 	disabled bool
 	factory  AuthFactory
 	results  map[string]deferredAuthResult
-	values   sync.Map
 }
 
 // ConfigureAuth defers implicit authentication and records explicit disable.
 // False means an explicit identity was requested and the caller must authenticate it.
 func ConfigureAuth(ac *schema.AtmosConfiguration, identity string) bool {
-	defer perf.Track(ac, "deferred.ConfigureAuth")()
+	defer perf.Track(ac, "auth.deferred.ConfigureAuth")()
 
 	identity = cfg.NormalizeIdentityValue(identity)
 	if identity != "" && identity != cfg.IdentityFlagDisabledValue {
@@ -59,14 +58,16 @@ func ConfigureAuth(ac *schema.AtmosConfiguration, identity string) bool {
 
 // AuthDisabled distinguishes explicit disable from deferred credentials.
 func AuthDisabled(ac *schema.AtmosConfiguration) bool {
-	defer perf.Track(ac, "deferred.AuthDisabled")()
+	defer perf.Track(ac, "auth.deferred.AuthDisabled")()
 
-	r, ok := ac.DeferredAuth.(*deferredAuthResolver)
-	return ok && r.disabled
+	return ac != nil && ac.DeferredAuth != nil && ac.DeferredAuth.Disabled()
 }
 
+// Disabled reports an explicit request not to use Atmos authentication.
+func (r *deferredAuthResolver) Disabled() bool { return r.disabled }
+
 func (r *deferredAuthResolver) Resolve(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
-	defer perf.Track(ac, "deferred.deferredAuthResolver.Resolve")()
+	defer perf.Track(ac, "auth.deferred.deferredAuthResolver.Resolve")()
 
 	if info == nil {
 		return nil
@@ -102,7 +103,7 @@ func (r *deferredAuthResolver) Resolve(ac *schema.AtmosConfiguration, info *sche
 }
 
 func ResolveAuth(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
-	defer perf.Track(ac, "deferred.ResolveAuth")()
+	defer perf.Track(ac, "auth.deferred.ResolveAuth")()
 
 	if ac == nil || ac.DeferredAuth == nil {
 		return nil
@@ -118,7 +119,7 @@ type AuthOptions struct {
 
 // NewAuthResolver creates an invocation-scoped resolver with an empty result cache.
 func NewAuthResolver(opts AuthOptions) schema.DeferredAuthResolver {
-	defer perf.Track(nil, "deferred.NewAuthResolver")()
+	defer perf.Track(nil, "auth.deferred.NewAuthResolver")()
 
 	factory := opts.Factory
 	if factory == nil {

@@ -11,9 +11,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -139,7 +139,7 @@ type resolveAuthManagerParams struct {
 // unauthenticated: the store resolver authenticates its configured identity only if the store
 // is actually read, preserving describe component's non-eager inspection behavior.
 func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
-	if deferred.ConfigureAuth(p.atmosConfig, p.identityName) {
+	if authdeferred.ConfigureAuth(p.atmosConfig, p.identityName) {
 		return nil, nil
 	}
 	needsStoreAuth := p.processYamlFunctions && hasIdentityBackedStore(p.atmosConfig)

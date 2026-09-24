@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -14,8 +15,8 @@ import (
 func TestDeferredAuthUnusedSibling(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	ac := templatingEnabledConfig()
-	deferred.ConfigureAuth(ac, "")
-	setDeferredAuthFactory(ac, deferred.NewMockAuthFactory(ctrl))
+	authdeferred.ConfigureAuth(ac, "")
+	setDeferredAuthFactory(ac, authdeferred.NewMockAuthFactory(ctrl))
 	input := map[string]any{"vars": map[string]any{
 		"literal": "preserved", "account": "!aws.account_id",
 		"template": `{{ atmos.Resolve "!aws.account_id" }}`,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"go.yaml.in/yaml/v3"
@@ -20,6 +21,14 @@ type AtmosSectionMapType = map[string]any
 // Resolve populates the supplied stack info or returns an error before backend access.
 type DeferredAuthResolver interface {
 	Resolve(*AtmosConfiguration, *ConfigAndStacksInfo) error
+	Disabled() bool
+}
+
+// DeferredEvaluationContext holds invocation-local evaluated values, independently
+// of the authentication implementation. The resolver identifies the invocation.
+type DeferredEvaluationContext struct {
+	Resolver DeferredAuthResolver
+	Values   sync.Map
 }
 
 // DescribeSettings contains settings for the describe command output.
@@ -108,6 +117,8 @@ type ConfigMetadata struct {
 type AtmosConfiguration struct {
 	// DeferredAuth is invocation-local and is never loaded from or serialized to configuration.
 	DeferredAuth DeferredAuthResolver `yaml:"-" json:"-" mapstructure:"-"`
+	// DeferredEvaluation is owned by pkg/deferred, not the authentication resolver.
+	DeferredEvaluation *DeferredEvaluationContext `yaml:"-" json:"-" mapstructure:"-"`
 	// ListEvaluationPaths carries the fields consumed by this list invocation.
 	ListEvaluationPaths           [][]string         `yaml:"-" json:"-" mapstructure:"-"`
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -25,8 +26,8 @@ func TestDeferredDescribeComponentQuery(t *testing.T) {
 	ClearFindStacksMapCache()
 	ac, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
-	deferred.ConfigureAuth(&ac, "")
-	setDeferredAuthFactory(&ac, deferred.NewMockAuthFactory(gomock.NewController(t)))
+	authdeferred.ConfigureAuth(&ac, "")
+	setDeferredAuthFactory(&ac, authdeferred.NewMockAuthFactory(gomock.NewController(t)))
 	result, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 		AtmosConfig: &ac, Component: "example", Stack: "dev",
 		ProcessTemplates: true, ProcessYamlFunctions: true,

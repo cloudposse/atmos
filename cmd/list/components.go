@@ -9,8 +9,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -287,7 +287,7 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		false, // includeEmptyStacks
 		skip,
 		authManager,
-		deferred.AuthDisabled(&atmosConfig),
+		authdeferred.AuthDisabled(&atmosConfig),
 		opts.Tags,
 		labels,
 		errOpts,

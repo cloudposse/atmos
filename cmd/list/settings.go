@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/data"
-	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -159,7 +159,7 @@ func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsO
 	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
 	errOpts.EvaluationPaths = [][]string{{"settings"}}
 	stacksMap, err := e.ExecuteDescribeStacksWithOptions(&atmosConfig, "", nil, nil, nil, false,
-		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager, deferred.AuthDisabled(&atmosConfig),
+		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager, authdeferred.AuthDisabled(&atmosConfig),
 		errOpts)
 	if err != nil {
 		return "", nil, &listerrors.DescribeStacksError{Cause: err}

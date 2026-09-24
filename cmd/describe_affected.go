@@ -8,8 +8,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -135,7 +135,7 @@ func getRunnableDescribeAffectedCmd(
 		// tried to disable. See plan: --identity=false not honored in `atmos describe affected`.
 		props.AuthDisabled = identityName == cfg.IdentityFlagDisabledValue
 
-		if !deferred.ConfigureAuth(props.CLIConfig, identityName) && (props.ProcessYamlFunctions || props.ProcessTemplates || identityExplicit || identityName != "") {
+		if !authdeferred.ConfigureAuth(props.CLIConfig, identityName) && (props.ProcessYamlFunctions || props.ProcessTemplates || identityExplicit || identityName != "") {
 			// Category B: describe affected operates on multiple affected components across stacks
 			// with no single target (component, stack) pair. Use the SCAN wrapper to discover
 			// stack-level defaults (including imported _defaults.yaml). See

@@ -19,8 +19,9 @@ needed the same evaluation boundary as the normal output path.
 ## Changes
 
 - Added `pkg/deferred` for required sections/fields, transitive template dependencies,
-  conservative dynamic-expression handling, invocation-local authentication caching,
-  and per-value recovery. Existing evaluators retain execution responsibilities.
+  conservative dynamic-expression handling, invocation-local value caching,
+  and per-value recovery. Authentication resolution and its cache live in
+  `pkg/auth/deferred`. Existing evaluators retain execution responsibilities.
 - Kept provider error classification at provider boundaries. Shared evaluation
   consumes a provider-neutral authentication-unavailable error, not SDK codes or
   emulator-specific exceptions. AWS classification lives in

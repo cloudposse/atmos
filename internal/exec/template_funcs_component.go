@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -58,7 +59,7 @@ func componentFunc(
 	stack string,
 ) (any, error) {
 	maskOnly := configAndStacksInfo != nil && configAndStacksInfo.SecretsMaskOnly
-	authDisabled := deferred.AuthDisabled(atmosConfig) || (configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled)
+	authDisabled := authdeferred.AuthDisabled(atmosConfig) || (configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled)
 	functionName := fmt.Sprintf("atmos.Component(%s, %s)", component, stack)
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 

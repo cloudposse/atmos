@@ -10,9 +10,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,7 +23,7 @@ func TestDeferredReferenceValueCache(t *testing.T) {
 	for _, name := range []string{"terraform.state", "atmos.Component"} {
 		t.Run(name, func(t *testing.T) {
 			ac, mockStore := setupNativeSecretReference(t)
-			deferred.ConfigureAuth(ac, "")
+			authdeferred.ConfigureAuth(ac, "")
 			calls := 0
 			mockStore.EXPECT().Get("dev", "producer", "CREDENTIAL").DoAndReturn(func(_, _, _ string) (any, error) {
 				calls++
@@ -37,7 +37,7 @@ func TestDeferredReferenceValueCache(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, nativeReferenceSecret, value)
 			require.Equal(t, before, calls, "cached target must not be evaluated again")
-			deferred.ConfigureAuth(ac, "")
+			authdeferred.ConfigureAuth(ac, "")
 			value, err = loaders[name](ac)
 			require.NoError(t, err)
 			require.Equal(t, nativeReferenceSecret, value)
@@ -48,7 +48,7 @@ func TestDeferredReferenceValueCache(t *testing.T) {
 
 func TestDeferredStaticStateCachePreservesMissingOutputErrors(t *testing.T) {
 	ac, mockStore := setupNativeSecretReference(t)
-	deferred.ConfigureAuth(ac, "")
+	authdeferred.ConfigureAuth(ac, "")
 	mockStore.EXPECT().Get("dev", "producer", "CREDENTIAL").Return(nativeReferenceSecret, nil).MinTimes(1)
 	for range 2 {
 		_, err := GetTerraformState(ac, "!terraform.state", "dev", "producer", "missing", false, nil, nil)
@@ -63,7 +63,7 @@ func TestDeferredTargetDoesNotReuseCallerAuthContext(t *testing.T) {
 	ac := &schema.AtmosConfiguration{}
 	prior := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "previous-account"}}
 	require.Same(t, prior, resolvedTargetAuthContext(ac, nil, prior, false), "eager execution retains its fallback")
-	deferred.ConfigureAuth(ac, "")
+	authdeferred.ConfigureAuth(ac, "")
 	require.Nil(t, resolvedTargetAuthContext(ac, nil, prior, false))
 	manager := &authContextWrapper{stackInfo: &schema.ConfigAndStacksInfo{}}
 	require.Nil(t, resolvedTargetAuthContext(ac, manager, prior, false))
@@ -73,7 +73,7 @@ func TestDeferredTargetDoesNotReuseCallerAuthContext(t *testing.T) {
 	require.Nil(t, resolvedTargetAuthContext(ac, manager, prior, true), "disabled auth must discard all Atmos contexts")
 }
 
-func setupDeferredCacheTarget(t *testing.T) (*schema.AtmosConfiguration, *deferred.MockAuthFactory, string) {
+func setupDeferredCacheTarget(t *testing.T) (*schema.AtmosConfiguration, *authdeferred.MockAuthFactory, string) {
 	t.Helper()
 	dir := t.TempDir()
 	for name, content := range map[string]string{
@@ -109,8 +109,8 @@ stacks:
 	t.Cleanup(ClearResolutionContext)
 	ac, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
-	factory := deferred.NewMockAuthFactory(gomock.NewController(t))
-	ac.DeferredAuth = deferred.NewAuthResolver(deferred.AuthOptions{Factory: factory})
+	factory := authdeferred.NewMockAuthFactory(gomock.NewController(t))
+	ac.DeferredAuth = authdeferred.NewAuthResolver(authdeferred.AuthOptions{Factory: factory})
 	return &ac, factory, filepath.Join(dir, "components", "terraform", "target", "cached.tfstate")
 }
 

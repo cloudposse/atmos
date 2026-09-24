@@ -14,8 +14,8 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
@@ -236,7 +236,7 @@ func createAuthManagerForList(
 	processTemplates, processYamlFunctions bool,
 ) (auth.AuthManager, error) {
 	identityName := getIdentityFromCommand(cmd)
-	if deferred.ConfigureAuth(atmosConfig, identityName) {
+	if authdeferred.ConfigureAuth(atmosConfig, identityName) {
 		return nil, nil
 	}
 
@@ -254,7 +254,7 @@ func createAuthManagerForList(
 }
 
 func skipCredentialBackedYAMLFunctionsForInventory(skip []string, authManager auth.AuthManager, configs ...*schema.AtmosConfiguration) []string {
-	if len(configs) > 0 && configs[0].DeferredAuth != nil && !deferred.AuthDisabled(configs[0]) {
+	if len(configs) > 0 && configs[0].DeferredAuth != nil && !authdeferred.AuthDisabled(configs[0]) {
 		return skip
 	}
 	if authManager != nil {

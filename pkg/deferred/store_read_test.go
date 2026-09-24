@@ -7,6 +7,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -90,8 +91,8 @@ func TestLookupStoreGuardsAndTemplateRead(t *testing.T) {
 func TestReadStoreFailedConfiguredIdentityStopsBackend(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	s := store.NewMockIdentityAwareStore(ctrl)
-	factory := NewMockAuthFactory(ctrl)
-	ac := &schema.AtmosConfiguration{Stores: store.StoreRegistry{"remote": s}, DeferredAuth: NewAuthResolver(AuthOptions{Factory: factory})}
+	factory := authdeferred.NewMockAuthFactory(ctrl)
+	ac := &schema.AtmosConfiguration{Stores: store.StoreRegistry{"remote": s}, DeferredAuth: authdeferred.NewAuthResolver(authdeferred.AuthOptions{Factory: factory})}
 	s.EXPECT().ResetAuthContext()
 	factory.EXPECT().Create(ac, gomock.Any(), "dev").Return(nil, errUtils.ErrAuthenticationUnavailable)
 	_, err := ReadStore(ac, "!store.get remote key | default fallback", "dev", &schema.ConfigAndStacksInfo{Stack: "dev"})

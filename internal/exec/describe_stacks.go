@@ -7,8 +7,8 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -103,7 +103,7 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 		args.IncludeEmptyStacks,
 		args.Skip,
 		args.AuthManager,
-		deferred.AuthDisabled(atmosConfig),
+		authdeferred.AuthDisabled(atmosConfig),
 		errOptions,
 	)
 	if err != nil {

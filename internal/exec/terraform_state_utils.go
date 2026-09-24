@@ -7,6 +7,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -114,7 +115,7 @@ func GetTerraformState(
 		}
 	}
 
-	authDisabled := deferred.AuthDisabled(atmosConfig)
+	authDisabled := authdeferred.AuthDisabled(atmosConfig)
 	if parentAuthMgr != nil {
 		if stackInfo := parentAuthMgr.GetStackInfo(); stackInfo != nil {
 			authDisabled = authDisabled || stackInfo.AuthDisabled

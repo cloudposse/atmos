@@ -11,8 +11,8 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -221,7 +221,7 @@ func fetchAndFilterSources(opts *SourcesOptions) ([]map[string]any, error) {
 		false, // includeEmptyStacks
 		opts.Skip,
 		opts.AuthManager,
-		deferred.AuthDisabled(opts.AtmosConfig),
+		authdeferred.AuthDisabled(opts.AtmosConfig),
 		opts.Tags,
 		labels,
 		e.DescribeStacksErrorOptions{},

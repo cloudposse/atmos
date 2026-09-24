@@ -10,8 +10,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -96,7 +96,7 @@ func getRunnableDescribeStacksCmd(
 		// Default identities are resolved when a requested value needs credentials.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
 		identityExplicit := cmd.Flags().Changed(cfg.IdentityFlagName)
-		if !deferred.ConfigureAuth(&atmosConfig, identityName) && shouldCreateDescribeStacksAuthManager(describe.ProcessTemplates, describe.ProcessYamlFunctions, identityExplicit || identityName != "") {
+		if !authdeferred.ConfigureAuth(&atmosConfig, identityName) && shouldCreateDescribeStacksAuthManager(describe.ProcessTemplates, describe.ProcessYamlFunctions, identityExplicit || identityName != "") {
 			// Category B: describe stacks operates on multiple stacks/components with no single
 			// target (component, stack) pair. Use the SCAN wrapper so stack-level default identities
 			// (including those declared in imported _defaults.yaml files) are discovered. See

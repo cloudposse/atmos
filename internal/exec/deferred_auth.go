@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -38,7 +39,7 @@ func deferredTargetAuthAndCache(ac *schema.AtmosConfiguration, component, stack 
 	if GetComponentRemoteStateBackendStaticType(&section) != nil {
 		return nil, deferred.CacheFor(ac, info), nil
 	}
-	if err := deferred.ResolveAuth(ac, info); err != nil {
+	if err := authdeferred.ResolveAuth(ac, info); err != nil {
 		return nil, nil, err
 	}
 	cache := deferred.CacheFor(ac, info)
@@ -92,12 +93,12 @@ func prepareDeferredYAMLAuth(ac *schema.AtmosConfiguration, input string, skip [
 		u.AtmosYamlFuncAwsCallerIdentityUserID, u.AtmosYamlFuncAwsRegion, u.AtmosYamlFuncAwsOrganizationID,
 	} {
 		if input == tag && !skipFunc(skip, tag) {
-			return deferred.ResolveAuth(ac, info)
+			return authdeferred.ResolveAuth(ac, info)
 		}
 	}
 	if strings.HasPrefix(input, u.AtmosYamlFuncSecret+" ") && !skipFunc(skip, u.AtmosYamlFuncSecret) &&
 		info != nil && !info.SecretsMaskOnly {
-		return deferred.PrepareSecretAuth(ac, input, info)
+		return authdeferred.PrepareSecretAuth(ac, input, info)
 	}
 	return nil
 }

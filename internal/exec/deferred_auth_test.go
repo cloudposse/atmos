@@ -14,17 +14,17 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/aws/autherrors"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestDeferredAuthDoesNotDegradeAuthorizationFailures(t *testing.T) {
 	ac := &schema.AtmosConfiguration{}
-	deferred.ConfigureAuth(ac, "")
+	authdeferred.ConfigureAuth(ac, "")
 	for _, code := range []string{"AccessDenied", "AccessDeniedException"} {
 		err := autherrors.Normalize(&smithy.GenericAPIError{Code: code})
 		require.False(t, canDegradeValue(ac, err), "valid credentials without permission must remain fatal")
@@ -39,9 +39,9 @@ func TestDeferredAuthPipeline(t *testing.T) {
 				ClearFindStacksMapCache()
 				ac, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 				require.NoError(t, err)
-				deferred.ConfigureAuth(&ac, "")
+				authdeferred.ConfigureAuth(&ac, "")
 				ctrl := gomock.NewController(t)
-				factory := deferred.NewMockAuthFactory(ctrl)
+				factory := authdeferred.NewMockAuthFactory(ctrl)
 				setDeferredAuthFactory(&ac, factory)
 				oldOutputs := componentFuncOutputsExecutor
 				t.Cleanup(func() { componentFuncOutputsExecutor = oldOutputs })
@@ -80,8 +80,8 @@ func TestDeferredAuthInheritedAndOverridden(t *testing.T) {
 	parentSection := map[string]any{"auth": map[string]any{"identities": map[string]any{"parent": map[string]any{"kind": "aws/emulator", "default": true, "emulator": "aws"}}}}
 	parent.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{ComponentSection: parentSection}).AnyTimes()
 	ac := &schema.AtmosConfiguration{}
-	deferred.ConfigureAuth(ac, "")
-	factory := deferred.NewMockAuthFactory(ctrl)
+	authdeferred.ConfigureAuth(ac, "")
+	factory := authdeferred.NewMockAuthFactory(ctrl)
 	setDeferredAuthFactory(ac, factory)
 	for _, name := range []string{"parent", "target"} {
 		section := map[string]any{}
@@ -94,7 +94,7 @@ func TestDeferredAuthInheritedAndOverridden(t *testing.T) {
 			return nil, unavailableAuth(errUtils.ErrExpiredCredentials)
 		}).Times(1)
 		for range 2 {
-			err := deferred.ResolveAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev", ComponentSection: section})
+			err := authdeferred.ResolveAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev", ComponentSection: section})
 			require.ErrorIs(t, err, errUtils.ErrAuthenticationUnavailable)
 		}
 	}
@@ -102,9 +102,9 @@ func TestDeferredAuthInheritedAndOverridden(t *testing.T) {
 
 func TestDeferredAuthExplicitAndFatalErrors(t *testing.T) {
 	ac := templatingEnabledConfig()
-	assert.False(t, deferred.ConfigureAuth(ac, "local"))
+	assert.False(t, authdeferred.ConfigureAuth(ac, "local"))
 	assert.Nil(t, ac.DeferredAuth)
-	deferred.ConfigureAuth(ac, "")
+	authdeferred.ConfigureAuth(ac, "")
 	for _, value := range []string{`{{ fail "invalid expression" }}`, `{{ .vars.malformed `} {
 		info := &schema.ConfigAndStacksInfo{Stack: "dev"}
 		opts, _ := ErrorOptionsFromMode("warn")
@@ -124,8 +124,8 @@ func TestDeferredAuthBackendFailureAndSuccess(t *testing.T) {
 		t.Run(fmt.Sprint(failure), func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			ac := templatingEnabledConfig()
-			deferred.ConfigureAuth(ac, "")
-			factory := deferred.NewMockAuthFactory(ctrl)
+			authdeferred.ConfigureAuth(ac, "")
+			factory := authdeferred.NewMockAuthFactory(ctrl)
 			setDeferredAuthFactory(ac, factory)
 			manager := types.NewMockAuthManager(ctrl)
 			authContext := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "configured"}}
@@ -159,9 +159,9 @@ func TestDeferredAuthCacheAndFailure(t *testing.T) {
 	for _, failure := range []bool{false, true} {
 		t.Run(fmt.Sprint(failure), func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			factory := deferred.NewMockAuthFactory(ctrl)
+			factory := authdeferred.NewMockAuthFactory(ctrl)
 			ac := &schema.AtmosConfiguration{}
-			require.True(t, deferred.ConfigureAuth(ac, ""))
+			require.True(t, authdeferred.ConfigureAuth(ac, ""))
 			setDeferredAuthFactory(ac, factory)
 			manager := types.NewMockAuthManager(ctrl)
 			context := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "configured"}}
@@ -175,7 +175,7 @@ func TestDeferredAuthCacheAndFailure(t *testing.T) {
 				}
 				for range 2 {
 					info := &schema.ConfigAndStacksInfo{Stack: stack}
-					err := deferred.ResolveAuth(ac, info)
+					err := authdeferred.ResolveAuth(ac, info)
 					if failure {
 						require.ErrorIs(t, err, errUtils.ErrAuthenticationUnavailable)
 						require.ErrorIs(t, err, errUtils.ErrEmulatorNotRunning)
@@ -195,8 +195,8 @@ func TestDeferredAuthDoesNotEnableTerraformDefaults(t *testing.T) {
 	assert.False(t, isRecoverableTerraformError(errUtils.ErrAuthenticationUnavailable), "YQ defaults must not hide failed auth")
 }
 
-func setDeferredAuthFactory(ac *schema.AtmosConfiguration, factory deferred.AuthFactory) {
-	ac.DeferredAuth = deferred.NewAuthResolver(deferred.AuthOptions{Disabled: deferred.AuthDisabled(ac), Factory: factory})
+func setDeferredAuthFactory(ac *schema.AtmosConfiguration, factory authdeferred.AuthFactory) {
+	ac.DeferredAuth = authdeferred.NewAuthResolver(authdeferred.AuthOptions{Disabled: authdeferred.AuthDisabled(ac), Factory: factory})
 }
 
 func unavailableAuth(err error) error {
@@ -207,9 +207,9 @@ func TestDeferredAuthYAMLDegradation(t *testing.T) {
 	for _, mode := range []string{"warn", "silent", "strict"} {
 		t.Run(mode, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			factory := deferred.NewMockAuthFactory(ctrl)
+			factory := authdeferred.NewMockAuthFactory(ctrl)
 			ac := &schema.AtmosConfiguration{}
-			deferred.ConfigureAuth(ac, "")
+			authdeferred.ConfigureAuth(ac, "")
 			setDeferredAuthFactory(ac, factory)
 			factory.EXPECT().Create(ac, gomock.Any(), "dev").Return(nil, unavailableAuth(errUtils.ErrEmulatorNotRunning)).Times(1)
 			info := &schema.ConfigAndStacksInfo{Stack: "dev", Component: "example"}
@@ -229,25 +229,25 @@ func TestDeferredAuthYAMLDegradation(t *testing.T) {
 
 func TestDeferredAuthUnusedAndDisabled(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	factory := deferred.NewMockAuthFactory(ctrl)
+	factory := authdeferred.NewMockAuthFactory(ctrl)
 	ac := &schema.AtmosConfiguration{}
-	deferred.ConfigureAuth(ac, "")
+	authdeferred.ConfigureAuth(ac, "")
 	setDeferredAuthFactory(ac, factory)
 	input := map[string]any{"vars": map[string]any{"account": "!aws.account_id"}}
 	got, err := processComponentSectionYAMLFunctions(ac, &schema.ConfigAndStacksInfo{}, input, nil, nil, true, []string{})
 	require.NoError(t, err)
 	assert.Equal(t, input, got)
-	deferred.ConfigureAuth(ac, "false")
+	authdeferred.ConfigureAuth(ac, "false")
 	info := &schema.ConfigAndStacksInfo{}
-	require.NoError(t, deferred.ResolveAuth(ac, info))
+	require.NoError(t, authdeferred.ResolveAuth(ac, info))
 	assert.True(t, info.AuthDisabled)
 }
 
 func TestDeferredAuthTemplateDegradation(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	factory := deferred.NewMockAuthFactory(ctrl)
+	factory := authdeferred.NewMockAuthFactory(ctrl)
 	ac := templatingEnabledConfig()
-	deferred.ConfigureAuth(ac, "")
+	authdeferred.ConfigureAuth(ac, "")
 	setDeferredAuthFactory(ac, factory)
 	factory.EXPECT().Create(ac, gomock.Any(), "dev").Return(nil, unavailableAuth(errUtils.ErrExpiredCredentials)).Times(1)
 	info := &schema.ConfigAndStacksInfo{Stack: "dev", Component: "example"}
