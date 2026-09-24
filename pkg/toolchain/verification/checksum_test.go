@@ -347,6 +347,104 @@ func TestDigestAndURLHelpers(t *testing.T) {
 	assert.Equal(t, "tool", assetNameFromURL("://bad-url/tool"))
 }
 
+// TestReplaceVersionSegmentInPath covers the non-URL version-segment correction used for bare
+// cosign args like `--certificate-github-workflow-ref refs/tags/{{.Version}}`. See #3209.
+func TestReplaceVersionSegmentInPath(t *testing.T) {
+	tests := []struct {
+		name             string
+		raw              string
+		version          string
+		effectiveVersion string
+		want             string
+	}{
+		{
+			name:             "restores v prefix on a bare ref",
+			raw:              "refs/tags/0.64.0",
+			version:          "0.64.0",
+			effectiveVersion: "v0.64.0",
+			want:             "refs/tags/v0.64.0",
+		},
+		{
+			name:             "no version segment is left untouched",
+			raw:              "terraform-linters/tflint",
+			version:          "0.64.0",
+			effectiveVersion: "v0.64.0",
+			want:             "terraform-linters/tflint",
+		},
+		{
+			name:             "bare version token is corrected",
+			raw:              "0.64.0",
+			version:          "0.64.0",
+			effectiveVersion: "v0.64.0",
+			want:             "v0.64.0",
+		},
+		{
+			name:             "url-shaped value is left to the url corrector",
+			raw:              "https://example.com/releases/download/0.64.0/tool.zip",
+			version:          "0.64.0",
+			effectiveVersion: "v0.64.0",
+			want:             "https://example.com/releases/download/0.64.0/tool.zip",
+		},
+		{
+			name:             "effective equals version is a no-op",
+			raw:              "refs/tags/v0.64.0",
+			version:          "v0.64.0",
+			effectiveVersion: "v0.64.0",
+			want:             "refs/tags/v0.64.0",
+		},
+		{
+			name:             "empty effective version is a no-op",
+			raw:              "refs/tags/0.64.0",
+			version:          "0.64.0",
+			effectiveVersion: "",
+			want:             "refs/tags/0.64.0",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, replaceVersionSegmentInPath(tt.raw, tt.version, tt.effectiveVersion))
+		})
+	}
+}
+
+// TestRenderArgsCorrectsCosignWorkflowRef reproduces #3209: the aqua registry cosign config uses
+// `{{.Version}}` for both `--certificate-identity` (a URL) and `--certificate-github-workflow-ref`
+// (a bare ref). The version renders v-stripped while the real release tag is v-prefixed. Both
+// rendered args must carry the v-prefixed tag so cosign's certificate workflow-ref match succeeds.
+func TestRenderArgsCorrectsCosignWorkflowRef(t *testing.T) {
+	req := &Request{
+		Tool:    &registry.Tool{RepoOwner: "terraform-linters", RepoName: "tflint"},
+		Version: "0.64.0",
+		// The resolved GitHub asset URL carries the actual v-prefixed release tag.
+		AssetURL: "https://github.com/terraform-linters/tflint/releases/download/v0.64.0/tflint_linux_amd64.zip",
+	}
+	args := []string{
+		"--certificate-identity",
+		"https://github.com/terraform-linters/tflint/.github/workflows/release.yml@refs/tags/{{.Version}}",
+		"--certificate-github-workflow-repository",
+		"terraform-linters/tflint",
+		"--certificate-github-workflow-ref",
+		"refs/tags/{{.Version}}",
+		// An unrelated non-URL option whose value happens to contain the version segment must NOT be
+		// rewritten - the path correction is scoped to --certificate-github-workflow-ref only. See #3209.
+		"--key",
+		"/keys/{{.Version}}/public.pem",
+	}
+
+	rendered, err := renderArgs(args, req)
+	require.NoError(t, err)
+	require.Len(t, rendered, len(args))
+
+	assert.Equal(t,
+		"https://github.com/terraform-linters/tflint/.github/workflows/release.yml@refs/tags/v0.64.0",
+		rendered[1], "certificate-identity must keep the v-prefixed tag")
+	assert.Equal(t, "terraform-linters/tflint", rendered[3], "workflow-repository must be untouched")
+	assert.Equal(t, "refs/tags/v0.64.0", rendered[5],
+		"certificate-github-workflow-ref must carry the v-prefixed release tag (#3209)")
+	assert.Equal(t, "/keys/0.64.0/public.pem", rendered[7],
+		"a non-URL --key path must not be version-corrected (scoped to workflow-ref only)")
+}
+
 func TestVerifyChecksumCosignVerifiesChecksumSidecar(t *testing.T) {
 	assetPath := writeAsset(t, []byte("hello"))
 	sum := sha256.Sum256([]byte("hello"))
