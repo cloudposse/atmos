@@ -37,6 +37,32 @@ func TestLockUpdatePreservesExistingEntry(t *testing.T) {
 	require.ErrorIs(t, err, ErrLockfileChecksumMismatch)
 }
 
+// TestFrozenLockUpdateRequiresVerifiedArtifact rejects absent verification data
+// even when the project already has a complete lock entry, without taking a write lock.
+func TestFrozenLockUpdateRequiresVerifiedArtifact(t *testing.T) {
+	i := installerWithLockedChecksum(t, "locked", "sha256")
+	i.frozenLockFile = true
+	before, err := os.ReadFile(i.lockFilePath)
+	require.NoError(t, err)
+	tool := &registry.Tool{RepoOwner: "owner", RepoName: "tool"}
+	for _, result := range []*verification.Result{nil, {}, {Checksum: "changed"}, {Checksum: "locked"}} {
+		err := i.updateLockFile(tool, "1.0.0", "https://example.com/mirror", result)
+		switch {
+		case result == nil || result.Checksum == "":
+			require.ErrorIs(t, err, errUtils.ErrFrozenLockfile)
+		case result.Checksum == "changed":
+			require.ErrorIs(t, err, ErrLockfileChecksumMismatch)
+		default:
+			require.NoError(t, err)
+		}
+	}
+	after, err := os.ReadFile(i.lockFilePath)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+	require.NoFileExists(t, i.lockFilePath+".lock")
+	require.ErrorIs(t, i.requireFrozenEntry("owner", "tool", "latest"), errUtils.ErrFrozenLockfile)
+}
+
 func TestFrozenInstall(t *testing.T) {
 	asset := []byte("a test executable")
 	sum := fmt.Sprintf("%x", sha256.Sum256(asset))

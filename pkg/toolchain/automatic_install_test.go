@@ -74,6 +74,26 @@ func TestAutomaticInstallPreservesDeclarations(t *testing.T) {
 	}
 }
 
+// TestFrozenAutomaticInstallRejectsUnpinnableRequests verifies that unsupported
+// requests fail before installation or declaration writes can begin.
+func TestFrozenAutomaticInstallRejectsUnpinnableRequests(t *testing.T) {
+	setupTestIO(t)
+	for _, spec := range []string{"pr:123", "sha:abcdef1", "ref:main", "atmos@pr:123", "atmos@sha:abcdef1", "atmos@ref:main", "owner/tool@latest", "owner/tool@1@2"} {
+		t.Run(spec, func(t *testing.T) {
+			config, manifest, _ := batchDeclarationFixture(t)
+			config.Toolchain.FrozenLockFile = true
+			err := RunAutomaticInstall(spec)
+			if spec == "owner/tool@1@2" {
+				require.ErrorIs(t, err, ErrInvalidToolSpec)
+			} else {
+				require.ErrorIs(t, err, errUtils.ErrFrozenLockfile)
+			}
+			require.NoFileExists(t, manifest)
+			require.NoDirExists(t, filepath.Join(config.Toolchain.InstallPath, "bin"))
+		})
+	}
+}
+
 func TestReadMissingToolVersionsDoesNotCreateFiles(t *testing.T) {
 	root := t.TempDir()
 	_, err := LoadToolVersions(filepath.Join(root, "missing", ".tool-versions"))

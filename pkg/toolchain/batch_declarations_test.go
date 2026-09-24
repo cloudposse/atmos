@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -57,6 +58,36 @@ func TestBatchInstallDeclarationPolicy(t *testing.T) {
 					require.Empty(t, entries, "declarations must use the configured project path")
 				})
 			}
+		}
+	}
+}
+
+// TestBatchInstallReportsDeclarationFailures ensures successful downloads and cache
+// hits cannot mask a failure to persist an explicitly requested declaration.
+func TestBatchInstallReportsDeclarationFailures(t *testing.T) {
+	setupTestIO(t)
+	for _, concurrency := range []int{1, 2} {
+		for _, cached := range []bool{false, true} {
+			t.Run(fmt.Sprintf("concurrency=%d/cached=%t", concurrency, cached), func(t *testing.T) {
+				config, _, specs := batchDeclarationFixture(t)
+				if cached {
+					require.NoError(t, RunAutomaticInstallBatch(specs, false))
+				}
+				blocked := filepath.Join(config.BasePathAbsolute, "blocked")
+				require.NoError(t, os.WriteFile(blocked, []byte("preserve"), 0o600))
+				config.Toolchain.VersionsFile = filepath.Join("blocked", ".tool-versions")
+				err := RunInstallBatchWithOptions(specs, BatchInstallOptions{MaxConcurrency: concurrency})
+				require.ErrorIs(t, err, errUtils.ErrToolInstall)
+				require.Contains(t, err.Error(), "2 tool installation(s) failed")
+				for _, repo := range []string{"first", "second"} {
+					binary, err := NewInstaller().FindBinaryPath("owner", repo, "1.0.0")
+					require.NoError(t, err, "failure must come from declaration persistence, not installation")
+					require.FileExists(t, binary)
+				}
+				contents, err := os.ReadFile(blocked)
+				require.NoError(t, err)
+				require.Equal(t, "preserve", string(contents))
+			})
 		}
 	}
 }

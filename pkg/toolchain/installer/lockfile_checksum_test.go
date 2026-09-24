@@ -42,6 +42,43 @@ func TestLockChecksumAlgorithmFallback(t *testing.T) {
 	}
 }
 
+// TestPrepareLockChecksumErrors preserves upstream verification results when
+// lock metadata or the downloaded artifact cannot be read or hashed.
+func TestPrepareLockChecksumErrors(t *testing.T) {
+	for _, scenario := range []string{"malformed lock", "unreadable lock", "missing artifact", "unsupported algorithm"} {
+		t.Run(scenario, func(t *testing.T) {
+			i := installerWithLockedChecksum(t, "locked", "sha256")
+			path := filepath.Join(t.TempDir(), "artifact")
+			require.NoError(t, os.WriteFile(path, []byte("artifact"), 0o600))
+			switch scenario {
+			case "malformed lock":
+				require.NoError(t, os.WriteFile(i.lockFilePath, []byte("tools: ["), 0o600))
+			case "unreadable lock":
+				i.lockFilePath = t.TempDir()
+			case "missing artifact":
+				require.NoError(t, os.Remove(path))
+			case "unsupported algorithm":
+				i = installerWithLockedChecksum(t, "locked", "unsupported")
+			}
+			original := verification.Result{Checksum: "upstream", ChecksumAlgorithm: "sha512"}
+			result := original
+			err := i.prepareLockChecksum(&registry.Tool{RepoOwner: "owner", RepoName: "tool"}, "1.0.0", path, &result)
+			require.Error(t, err)
+			switch scenario {
+			case "malformed lock":
+				require.ErrorIs(t, err, ErrLockfileParse)
+			case "unreadable lock":
+				require.ErrorIs(t, err, ErrLockfileIO)
+			case "missing artifact":
+				require.ErrorIs(t, err, os.ErrNotExist)
+			case "unsupported algorithm":
+				require.Contains(t, err.Error(), "unsupported")
+			}
+			require.Equal(t, original, result)
+		})
+	}
+}
+
 // TestPrepareLockChecksumWithoutAlgorithm ensures legacy entries still detect tampering
 // without rewriting the recorded artifact metadata.
 func TestPrepareLockChecksumWithoutAlgorithm(t *testing.T) {
