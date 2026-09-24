@@ -11,6 +11,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/extract"
@@ -99,7 +100,7 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 	// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
 	// This matches the gating pattern used by describe stacks/affected/dependents.
 	var authManager auth.AuthManager
-	if opts.ProcessFunctions || opts.IdentityName != "" {
+	if !deferred.ConfigureAuth(&atmosConfig, opts.IdentityName) {
 		// Category B: list affected operates on multiple affected components across stacks without a
 		// single target (component, stack) pair. Use the SCAN variant so stack-level defaults
 		// (including defaults declared in imported _defaults.yaml) are discovered. See

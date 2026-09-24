@@ -16,6 +16,12 @@ import (
 
 type AtmosSectionMapType = map[string]any
 
+// DeferredAuthResolver resolves credentials only when a list/describe value needs them.
+// Resolve populates the supplied stack info or returns an error before backend access.
+type DeferredAuthResolver interface {
+	Resolve(*AtmosConfiguration, *ConfigAndStacksInfo) error
+}
+
 // DescribeSettings contains settings for the describe command output.
 type DescribeSettings struct {
 	IncludeEmpty *bool `yaml:"include_empty,omitempty" json:"include_empty,omitempty" mapstructure:"include_empty"`
@@ -100,6 +106,10 @@ type ConfigMetadata struct {
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
+	// DeferredAuth is invocation-local and is never loaded from or serialized to configuration.
+	DeferredAuth DeferredAuthResolver `yaml:"-" json:"-" mapstructure:"-"`
+	// ListEvaluationPaths carries the fields consumed by this list invocation.
+	ListEvaluationPaths           [][]string         `yaml:"-" json:"-" mapstructure:"-"`
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"`                                       // "runtime" if from env var/CLI/provider, "" if from config file.
 	Edition                       string             `yaml:"edition,omitempty" json:"edition,omitempty" mapstructure:"edition"` // Date anchor ("YYYY", "YYYY-MM", or "YYYY-MM-DD") that pins defaults to how they stood on that date.
@@ -1893,6 +1903,8 @@ type ConfigAndStacksInfo struct {
 	//   - Type assertions are used at usage sites to recover type safety
 	AuthManager  any
 	AuthDisabled bool
+	// EvaluationPaths limits list value evaluation; nil evaluates every field.
+	EvaluationPaths [][]string
 	// DeferredMergeContexts holds the per-section deferred-merge contexts recovered from the
 	// FindStacksMap cache for this component, keyed by section name (vars, settings, env, auth,
 	// providers, required_providers, hooks, test, generate). A later, per-invocation stage

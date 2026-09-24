@@ -74,7 +74,7 @@ func GetTerraformState(
 	// Keep inspection placeholders and resolved execution values out of each other's lookups.
 	var cachedBackend any
 	var found bool
-	if !skipCache && !maskOnly {
+	if !skipCache && !maskOnly && atmosConfig.DeferredAuth == nil {
 		cachedBackend, found = terraformStateCache.Load(stackSlug)
 	}
 	if found {
@@ -123,6 +123,9 @@ func GetTerraformState(
 		var err error
 		resolvedAuthMgr, err = resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
 		if err != nil {
+			if atmosConfig.DeferredAuth != nil {
+				return nil, err
+			}
 			log.Debug(
 				"Auth does not exist for nested component, using parent AuthManager",
 				"component", component,
@@ -169,7 +172,7 @@ func GetTerraformState(
 	// Read static remote state backend outputs.
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
-		if !maskOnly {
+		if !maskOnly && atmosConfig.DeferredAuth == nil {
 			terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
 		}
 		result, exists, err := tfoutput.GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
@@ -186,21 +189,21 @@ func GetTerraformState(
 	// Read Terraform backend using resolved auth context.
 	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, resolvedAuthContext)
 	if err != nil {
-		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
+		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
 	// Cache a missing state until its component succeeds. ExecuteTerraform invalidates this exact
 	// entry after every successful node, so later dependents still see freshly-created state.
 	if backend == nil {
-		if !maskOnly {
+		if !maskOnly && atmosConfig.DeferredAuth == nil {
 			terraformStateCache.Store(stackSlug, terraformStateNotProvisionedCacheEntry{})
 		}
 		return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
 	}
 
 	// Cache the result now that we know it reflects a real, provisioned backend.
-	if !maskOnly {
+	if !maskOnly && atmosConfig.DeferredAuth == nil {
 		terraformStateCache.Store(stackSlug, backend)
 	}
 

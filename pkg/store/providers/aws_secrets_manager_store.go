@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 
+	"github.com/cloudposse/atmos/pkg/auth/cloud/aws/autherrors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -350,7 +351,7 @@ func (s *SecretsManagerStore) getRawByID(secretID string) (string, error) {
 	})
 	if err != nil {
 		// Use %w for the underlying error so callers (e.g. Has) can detect ResourceNotFound.
-		return "", fmt.Errorf("%w '%s': %w", store.ErrGetSecret, secretID, err)
+		return "", fmt.Errorf("%w '%s': %w", store.ErrGetSecret, secretID, autherrors.Normalize(err))
 	}
 	if output == nil || output.SecretString == nil {
 		return "", fmt.Errorf("%w '%s': empty secret string", store.ErrGetSecret, secretID)
@@ -470,7 +471,7 @@ func (s *SecretsManagerStore) Has(stack string, component string, key string) (b
 		}
 		// Reuse store.ErrGetSecret as the existence-check failure sentinel (no dedicated
 		// store.ErrDescribeSecret exists in errors.go, which is owned by other code).
-		return false, fmt.Errorf("%w '%s': %w", store.ErrGetSecret, secretID, err)
+		return false, fmt.Errorf("%w '%s': %w", store.ErrGetSecret, secretID, autherrors.Normalize(err))
 	}
 	return true, nil
 }

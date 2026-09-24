@@ -155,6 +155,9 @@ func resolveAuthManagerForNestedComponent(
 	stack string,
 	parentAuthManager auth.AuthManager,
 ) (auth.AuthManager, error) {
+	if atmosConfig.DeferredAuth != nil {
+		return deferredTargetAuth(atmosConfig, component, stack, parentAuthManager)
+	}
 	// Get component configuration WITHOUT processing templates/functions.
 	componentConfig, err := getComponentConfigForAuthResolution(component, stack)
 	if err != nil {

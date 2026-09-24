@@ -108,7 +108,7 @@ func processTagTerraformOutputWithContext(
 		// Propagate AuthDisabled downstream even when no AuthManager was created (mirrors
 		// !terraform.state): the wrapper's stack info tells the output getter to skip resolving
 		// the target component's own auth section.
-		if authManager == nil && stackInfo.AuthDisabled {
+		if atmosConfig.DeferredAuth != nil || (authManager == nil && stackInfo.AuthDisabled) {
 			authManager = &authContextWrapper{stackInfo: stackInfo}
 		}
 	}

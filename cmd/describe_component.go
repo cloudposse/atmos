@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -138,6 +139,9 @@ type resolveAuthManagerParams struct {
 // unauthenticated: the store resolver authenticates its configured identity only if the store
 // is actually read, preserving describe component's non-eager inspection behavior.
 func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
+	if deferred.ConfigureAuth(p.atmosConfig, p.identityName) {
+		return nil, nil
+	}
 	needsStoreAuth := p.processYamlFunctions && hasIdentityBackedStore(p.atmosConfig)
 	if !p.identityExplicit && !needsStoreAuth {
 		return nil, nil
@@ -269,6 +273,7 @@ func getRunnableDescribeComponentCmd(
 		}
 
 		return g.newDescribeComponentExec.ExecuteDescribeComponentCmd(e.DescribeComponentParams{
+			DeferredAuth:         atmosConfig.DeferredAuth,
 			Component:            component,
 			Stack:                f.stack,
 			ProcessTemplates:     f.processTemplates,

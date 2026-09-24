@@ -58,14 +58,14 @@ func TestCreateAuthManagerForList_EvaluationPolicy(t *testing.T) {
 		wantIdentity         string
 	}{
 		{
-			name:             "templates enable default identity discovery",
+			name:             "templates defer default identity discovery",
 			processTemplates: true,
-			wantCalls:        1,
+			wantCalls:        0,
 		},
 		{
-			name:                 "yaml functions enable default identity discovery",
+			name:                 "yaml functions defer default identity discovery",
 			processYamlFunctions: true,
-			wantCalls:            1,
+			wantCalls:            0,
 		},
 		{
 			name:      "no evaluation remains credential free",

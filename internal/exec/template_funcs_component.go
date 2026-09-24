@@ -71,11 +71,18 @@ func componentFunc(
 		log.Debug("Skipping atmos.Component for disabled enclosing component", "function", functionName)
 		return emptyComponentSections(), nil
 	}
+	resolution := GetOrCreateResolutionContext()
+	if err := resolution.Push(atmosConfig, DependencyNode{
+		Component: component, Stack: stack, FunctionType: "atmos.Component", FunctionCall: functionName,
+	}); err != nil {
+		return nil, err
+	}
+	defer resolution.Pop(atmosConfig)
 
 	// Inspection must neither consume resolved secrets nor cache display placeholders.
 	var existingSections any
 	var found bool
-	if !maskOnly {
+	if !maskOnly && atmosConfig.DeferredAuth == nil {
 		existingSections, found = componentFuncSyncMap.Load(stackSlug)
 	}
 	if found && existingSections != nil {
@@ -98,7 +105,16 @@ func componentFunc(
 	// mirroring !terraform.state / !terraform.output via resolveAuthManagerForNestedComponent.
 	// Without this, atmos.Component() always reused the enclosing component's credentials verbatim,
 	// even for a target that authenticates independently.
-	resolvedAuthMgr := resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
+	var resolvedAuthMgr auth.AuthManager
+	if atmosConfig.DeferredAuth != nil {
+		var err error
+		resolvedAuthMgr, err = deferredTargetAuth(atmosConfig, component, stack, &authContextWrapper{stackInfo: configAndStacksInfo})
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		resolvedAuthMgr = resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
+	}
 
 	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 		AtmosConfig:          atmosConfig,
@@ -149,7 +165,7 @@ func componentFunc(
 	}
 
 	// Cache the result
-	if !maskOnly {
+	if !maskOnly && atmosConfig.DeferredAuth == nil {
 		componentFuncSyncMap.Store(stackSlug, sections)
 	}
 

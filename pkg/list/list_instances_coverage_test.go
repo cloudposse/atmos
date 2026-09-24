@@ -990,6 +990,7 @@ func TestExecuteListInstancesCmd_ClosurePreviewPropagatesError(t *testing.T) {
 		Args:                []string{},
 		Format:              "json",
 		Tags:                []string{"broken-tag"},
+		ColumnsFlag:         []string{"Value={{ .vars.upstream_value }}"},
 		IncludeDependencies: -1,
 		ProcessTemplates:    true,
 		AuthDisabled:        true,

@@ -44,11 +44,12 @@ var defaultInstanceColumns = []column.Config{
 
 // InstancesCommandOptions contains options for the list instances command.
 type InstancesCommandOptions struct {
-	Info        *schema.ConfigAndStacksInfo
-	Cmd         *cobra.Command
-	Args        []string
-	ShowImports bool
-	ColumnsFlag []string
+	DeferredAuth schema.DeferredAuthResolver
+	Info         *schema.ConfigAndStacksInfo
+	Cmd          *cobra.Command
+	Args         []string
+	ShowImports  bool
+	ColumnsFlag  []string
 	// Format selects the output format (table, json, yaml, csv, tsv, tree, matrix).
 	// Authoritative source — must reach this struct via viper so ATMOS_FORMAT
 	// is honored. Do not re-read from cmd.Flags() inside the impl.
@@ -884,6 +885,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		log.Error(errUtils.ErrFailedToInitConfig.Error(), "error", err)
 		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
+	atmosConfig.DeferredAuth = opts.DeferredAuth
 
 	// Read flags from the options struct (populated via viper, so env vars
 	// like ATMOS_FORMAT / ATMOS_UPLOAD are honored). Reading from
@@ -958,6 +960,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		e.ClearFindStacksMapCache()
 
 		// Get all stacks for provenance-based import resolution (single call).
+		atmosConfig.ListEvaluationPaths = [][]string{{"metadata"}}
 		// Honor the caller-supplied template/function flags so tree output is
 		// consistent with non-tree runs of the same command invocation, matching
 		// the behavior of `list stacks --format=tree`.
@@ -1023,6 +1026,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 
 	var instances []schema.Instance
 	var closureMembers map[string]struct{}
+	atmosConfig.ListEvaluationPaths = resolveInstancesEvaluationPaths(&atmosConfig, columns, opts)
 	if opts.closureRequested() {
 		instances, closureMembers, err = processInstancesScopedClosure(&atmosConfig, opts, labels)
 	} else {

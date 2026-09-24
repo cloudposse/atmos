@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -89,7 +90,7 @@ func getRunnableDescribeDependentsCmd(
 		// per-component auth. Mirrors the wiring in `cmd/describe_affected.go`.
 		describe.AuthDisabled = identityName == cfg.IdentityFlagDisabledValue
 
-		if describe.ProcessYamlFunctions || identityExplicit {
+		if !deferred.ConfigureAuth(&atmosConfig, identityName) && (describe.ProcessYamlFunctions || identityExplicit || identityName != "") {
 			// Category B: describe dependents has no single target (component, stack) pair.
 			// Use the SCAN wrapper to discover stack-level defaults.
 			authManager, authErr := CreateAuthManagerFromIdentityWithStackScan(identityName, &atmosConfig.Auth, &atmosConfig)

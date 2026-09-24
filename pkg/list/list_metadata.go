@@ -99,6 +99,7 @@ func parseMetadataColumnsFlag(columnsFlag []string) ([]column.Config, error) {
 
 // MetadataOptions contains options for list metadata command.
 type MetadataOptions struct {
+	DeferredAuth     schema.DeferredAuthResolver
 	Format           string
 	Columns          []string
 	Sort             string
@@ -124,6 +125,17 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToInitConfig, err)
+	}
+	atmosConfig.DeferredAuth = opts.DeferredAuth
+	if opts.Filter == "" {
+		columns, columnErr := getMetadataColumns(&atmosConfig, opts.Columns)
+		if columnErr != nil {
+			return columnErr
+		}
+		atmosConfig.ListEvaluationPaths = column.RequiredPaths(columns)
+		if atmosConfig.ListEvaluationPaths != nil {
+			atmosConfig.ListEvaluationPaths = append(atmosConfig.ListEvaluationPaths, []string{"metadata"})
+		}
 	}
 
 	// Process instances (same as list instances, but we'll extract metadata).

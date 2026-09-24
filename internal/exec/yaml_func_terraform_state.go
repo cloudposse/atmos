@@ -116,7 +116,7 @@ func processTagTerraformStateWithContext(
 	if stackInfo != nil {
 		authContext = stackInfo.AuthContext
 		authManager = stackInfo.AuthManager
-		if authManager == nil && stackInfo.AuthDisabled {
+		if atmosConfig.DeferredAuth != nil || (authManager == nil && stackInfo.AuthDisabled) {
 			authManager = &authContextWrapper{stackInfo: stackInfo}
 		}
 	}

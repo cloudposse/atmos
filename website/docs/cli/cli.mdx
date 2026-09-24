@@ -4,22 +4,29 @@ title: Atmos CLI
 sidebar_label: atmos
 sidebar_class_name: hidden command
 sidebar_position: 1
-description: Show Atmos usage and available commands without requiring stack configuration
+description: Open the interactive stack picker, or show help when no stacks are configured
 ---
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import FeaturedCasts from '@site/src/components/FeaturedCasts'
 
 <Intro>
 Atmos is a CLI for provisioning infrastructure with Terraform, Helmfile, Packer, and more, and for running workflows and custom commands.
-Run `atmos` without arguments to display usage and available commands, including configured custom commands. No stack configuration is required to display help.
+Run `atmos` without arguments to open an interactive UI for selecting a command, stack, and component.
+When no stack manifests are available, Atmos displays help instead, including configured custom commands. You can use Atmos for workflows and custom commands without configuring stacks.
 </Intro>
 
 ## Usage
 
-Run any of these commands to display help:
+Run `atmos` to open the interactive stack picker in a project with stacks:
 
 ```shell
 atmos
+```
+
+To display help regardless of whether stacks are configured, use:
+
+```shell
 atmos --help
 atmos help
 ```
@@ -34,6 +41,18 @@ atmos terraform plan --help
 :::tip
 To quickly check the Atmos version, use `atmos --version` or `atmos version`. See the [version command](/cli/commands/version/usage) for more details.
 :::
+
+## Interactive Picker
+
+- Use the left/right arrow keys to move between the Commands, Stacks, and Components views.
+- Use the up/down arrow keys or mouse wheel to select an item.
+- Press `/` to filter commands, stacks, or components.
+- Press `Tab` to switch between browsing components in a stack and stacks containing a component.
+- Press `Enter` to execute the selected command, or `Esc` / `Ctrl+C` to quit.
+
+Try the [quickstart](/quick-start/) and run `atmos` to explore the picker:
+
+<CastPlayer src="/casts/cli/interactive-menu.cast" title="atmos (interactive)" chrome controls scrubber />
 
 ## Featured Examples
 

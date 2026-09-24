@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -197,12 +198,15 @@ func newDependenciesDescribeContext(cmd *cobra.Command, args []string, opts *Dep
 	if err != nil {
 		return nil, err
 	}
+	if !e.GetEagerEvaluationSetting(&atmosConfig) {
+		atmosConfig.ListEvaluationPaths = [][]string{{"metadata"}, {"dependencies"}, {"settings", "depends_on"}}
+	}
 
 	return &dependenciesDescribeContext{
 		atmosConfig:  atmosConfig,
 		authManager:  authManager,
-		authDisabled: opts.AuthDisabled || authManager == nil,
-		skip:         skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager),
+		authDisabled: opts.AuthDisabled || deferred.AuthDisabled(&atmosConfig),
+		skip:         skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager, &atmosConfig),
 	}, nil
 }
 
