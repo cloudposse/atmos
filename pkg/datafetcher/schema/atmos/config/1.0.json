@@ -8432,19 +8432,6 @@
     },
     "ProvisionSettings": {
       "properties": {
-        "workdir": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ProvisionWorkdirSettings"
-            },
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/yamlFunction"
-            }
-          ]
-        },
         "default": {
           "anyOf": [
             {
@@ -8485,7 +8472,7 @@
         }
       },
       "type": "object",
-      "description": "ProvisionSettings contains global defaults for provisioning."
+      "description": "ProvisionSettings contains global defaults for provisioning.\n\nA global default for workdir provisioning is NOT configured here. It belongs in the stack\nconfiguration under the toolchain section (`terraform.provision`, `helmfile.provision`, etc.),\nconsistent with global `vars`, `metadata`, and `secrets`. Component-level `provision` values\noverride that stack-level default. See #3197."
     },
     "ProvisionTarget": {
       "properties": {
@@ -8631,37 +8618,6 @@
       },
       "type": "object",
       "description": "ProvisionTargetPullRequest configures pull-request publishing for a git delivery."
-    },
-    "ProvisionWorkdirSettings": {
-      "properties": {
-        "enabled": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/yamlFunction"
-            }
-          ],
-          "description": "Enabled sets the default enabled state for workdir provisioning."
-        },
-        "ttl": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "TTL is the default time-to-live for workdirs (e.g., \"7d\", \"24h\", \"weekly\").\nWorkdirs not accessed within this duration can be cleaned up."
-        }
-      },
-      "type": "object",
-      "description": "ProvisionWorkdirSettings contains default settings for workdir provisioning."
     },
     "Registry": {
       "properties": {
