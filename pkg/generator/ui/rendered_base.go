@@ -33,8 +33,12 @@ func (ui *InitUI) SetRenderedBaseSource(cfg *tmpl.Configuration, values map[stri
 
 // loadOldScaffoldConfig finds and loads oldConfig's own scaffold.yaml, so
 // renderPristineBase can render it against the old ref's own schema rather
-// than the current run's.
-func loadOldScaffoldConfig(oldConfig *tmpl.Configuration) (*config.ScaffoldConfig, error) {
+// than the current run's. The returned []string is every path some
+// !include tag in that scaffold.yaml consumed (see config.WithIncludedPaths)
+// -- renderPristineBaseFiles excludes those from the render the same way
+// executeWithSetup's own generation loop does, so the pristine base and the
+// real target always agree on whether such a file exists.
+func loadOldScaffoldConfig(oldConfig *tmpl.Configuration) (*config.ScaffoldConfig, []string, error) {
 	var oldScaffoldConfigFile *tmpl.File
 	for i := range oldConfig.Files {
 		if oldConfig.Files[i].Path == config.ScaffoldConfigFileName {
@@ -43,17 +47,20 @@ func loadOldScaffoldConfig(oldConfig *tmpl.Configuration) (*config.ScaffoldConfi
 		}
 	}
 	if oldScaffoldConfigFile == nil {
-		return nil, errUtils.Build(errUtils.ErrScaffoldConfigMissing).
+		return nil, nil, errUtils.Build(errUtils.ErrScaffoldConfigMissing).
 			WithExplanationf("%s not found in the old ref's rendered configuration", config.ScaffoldConfigFileName).
 			WithHint("--update-strategy=rendered requires the template to carry a scaffold.yaml at every ref it's updated across").
 			Err()
 	}
 
-	oldScaffoldConfig, err := config.LoadScaffoldConfigFromContent(oldScaffoldConfigFile.Content)
+	var includedPaths []string
+	oldScaffoldConfig, err := config.LoadScaffoldConfigFromContent(
+		oldScaffoldConfigFile.Content, config.WithSourceDir(oldConfig.Source), config.WithIncludedPaths(&includedPaths),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load the old ref's scaffold configuration: %w", err)
+		return nil, nil, fmt.Errorf("failed to load the old ref's scaffold configuration: %w", err)
 	}
-	return oldScaffoldConfig, nil
+	return oldScaffoldConfig, includedPaths, nil
 }
 
 // renderPristineBase renders oldConfig -- a template Configuration fetched at
@@ -69,7 +76,7 @@ func loadOldScaffoldConfig(oldConfig *tmpl.Configuration) (*config.ScaffoldConfi
 // force=true, update=false so every file is a plain overwrite into an
 // otherwise-empty directory, never touching merge/hooks itself.
 func (ui *InitUI) renderPristineBase(oldConfig *tmpl.Configuration, oldValues map[string]interface{}, delimiters []string) (tempDir string, cleanup func(), err error) {
-	oldScaffoldConfig, err := loadOldScaffoldConfig(oldConfig)
+	oldScaffoldConfig, includedPaths, err := loadOldScaffoldConfig(oldConfig)
 	if err != nil {
 		return "", nil, err
 	}
@@ -109,7 +116,14 @@ func (ui *InitUI) renderPristineBase(oldConfig *tmpl.Configuration, oldValues ma
 	ui.processor.SetDryRun(false)
 	defer ui.processor.SetDryRun(dryRun)
 
-	if err := ui.renderPristineBaseFiles(oldConfig, oldScaffoldConfig, mergedOldValues, tempDir, delimiters); err != nil {
+	if err := ui.renderPristineBaseFiles(&renderPristineBaseFilesArgs{
+		oldConfig:         oldConfig,
+		oldScaffoldConfig: oldScaffoldConfig,
+		mergedOldValues:   mergedOldValues,
+		tempDir:           tempDir,
+		delimiters:        delimiters,
+		includedPaths:     includedPaths,
+	}); err != nil {
 		cleanup()
 		return "", nil, err
 	}
@@ -117,23 +131,37 @@ func (ui *InitUI) renderPristineBase(oldConfig *tmpl.Configuration, oldValues ma
 	return tempDir, cleanup, nil
 }
 
-// renderPristineBaseFiles loops oldConfig's files (skipping scaffold.yaml
-// and directory entries) and renders each into tempDir via
+// renderPristineBaseFilesArgs bundles renderPristineBaseFiles's parameters
+// (grouped into a struct, rather than six separate parameters, to stay
+// under revive's argument-limit).
+type renderPristineBaseFilesArgs struct {
+	oldConfig         *tmpl.Configuration
+	oldScaffoldConfig *config.ScaffoldConfig
+	mergedOldValues   map[string]interface{}
+	tempDir           string
+	delimiters        []string
+	includedPaths     []string
+}
+
+// renderPristineBaseFiles loops oldConfig's files (skipping scaffold.yaml,
+// directory entries, and !include-consumed files -- see
+// loadOldScaffoldConfig) and renders each into tempDir via
 // ui.processFileEntry, joining any per-file failures into a single error.
-func (ui *InitUI) renderPristineBaseFiles(oldConfig *tmpl.Configuration, oldScaffoldConfig *config.ScaffoldConfig, mergedOldValues map[string]interface{}, tempDir string, delimiters []string) error {
-	activeDelimiters := ResolveDelimiters(delimiters, oldScaffoldConfig)
-	fileSpecs := FileSpecByPath(oldScaffoldConfig, oldConfig.Files)
+func (ui *InitUI) renderPristineBaseFiles(args *renderPristineBaseFilesArgs) error {
+	activeDelimiters := ResolveDelimiters(args.delimiters, args.oldScaffoldConfig)
+	fileSpecs := FileSpecByPath(args.oldScaffoldConfig, args.oldConfig.Files)
 	seenRenderedPaths := make(map[string]string)
 	matrixExpansions := make(map[string]matrixExpansionResult)
+	includedSet := includedPathSet(args.includedPaths)
 
 	var failureErrs []error
-	for _, file := range oldConfig.Files {
-		if file.Path == config.ScaffoldConfigFileName || file.IsDirectory {
+	for _, file := range args.oldConfig.Files {
+		if file.Path == config.ScaffoldConfigFileName || file.IsDirectory || includedSet[file.Path] {
 			continue
 		}
 
 		spec := fileSpecs[file.Path]
-		_, _, _, entryErr := ui.processFileEntry(file, spec, tempDir, true, false, oldScaffoldConfig, mergedOldValues, activeDelimiters, seenRenderedPaths, matrixExpansions)
+		_, _, _, entryErr := ui.processFileEntry(file, spec, args.tempDir, true, false, args.oldScaffoldConfig, args.mergedOldValues, activeDelimiters, seenRenderedPaths, matrixExpansions)
 		if entryErr != nil {
 			failureErrs = append(failureErrs, entryErr)
 		}
