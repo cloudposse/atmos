@@ -168,7 +168,7 @@ func (e *Executor) GetAllOutputs(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.GetAllOutputs")()
 
-	stackSlug := stackComponentKey(stack, component)
+	stackSlug := outputCacheKey(stack, component, authContext, authManager)
 	if outputs := checkOutputsCache(stackSlug, component, stack); outputs != nil {
 		return outputs, nil
 	}
@@ -210,7 +210,7 @@ func (e *Executor) GetOutput(
 		}
 	}
 
-	stackSlug := stackComponentKey(stack, component)
+	stackSlug := outputCacheKey(stack, component, authContext, authManager)
 
 	// Check cache first.
 	if !skipCache {
@@ -302,7 +302,7 @@ func (e *Executor) GetOutputWithOptions(
 	}
 
 	maskOnly := opts != nil && opts.SecretsMaskOnly
-	stackSlug := stackComponentKey(stack, component)
+	stackSlug := outputCacheKey(stack, component, authContext, authManager)
 
 	// Check cache first.
 	if !skipCache && !maskOnly {
@@ -411,7 +411,8 @@ func (e *Executor) ExecuteWithSections(
 //nolint:revive // argument-limit: internal function with complex state.
 func (e *Executor) fetchAndCacheOutputs(
 	atmosConfig *schema.AtmosConfiguration,
-	component, stack, stackSlug string,
+	component, stack string,
+	stackSlug any,
 	authContext *schema.AuthContext,
 	opts *OutputOptions,
 	authManager any,
