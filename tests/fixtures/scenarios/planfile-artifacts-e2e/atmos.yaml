@@ -14,11 +14,11 @@ components:
 
     # Planfile storage via the GitHub Actions Artifacts backend.
     #
-    # Inside GitHub Actions the upload hook (fired by `--ci`) auto-detects the
-    # runner and uploads with prefix "planfile" to the current repository
-    # (GITHUB_REPOSITORY). The named "github" store below mirrors that exactly —
-    # prefix "planfile" and no hard-coded owner/repo — so `planfile download
-    # --store=github` resolves the identical artifact name for the round-trip.
+    # The priority list below selects the named "github" store for the upload hook
+    # (fired by `--ci`), which uploads with prefix "planfile" to the current
+    # repository (GITHUB_REPOSITORY, so no hard-coded owner/repo). `planfile
+    # download --store=github` resolves the identical artifact name for the
+    # round-trip.
     planfiles:
       priority:
         - "github"
