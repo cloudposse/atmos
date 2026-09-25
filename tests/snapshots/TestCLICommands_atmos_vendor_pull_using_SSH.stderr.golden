@@ -1,6 +1,4 @@
  DEBU  Set logs-level=debug logs-file=/dev/stderr
- DEBU  Loading toolchain registries from atmos.yaml registryCount=0
- DEBU  Successfully loaded configured registry from atmos.yaml
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
  DEBU  ProcessCommandLineArgs input componentType=terraform args=[]
  DEBU  After ParseFlags identity.Value="" identity.Changed=false
@@ -14,8 +12,8 @@
  DEBU  Token injection enabled for host host=github.com
  DEBU  Skipping token injection: URL already has user credentials url="ssh://***@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0"
  DEBU  Final transformation url="git::ssh://***@github.com/cloudposse/terraform-null-label.git//.?depth=1&ref=0.25.0"
-✓ terraform-null-label-cred (0.25.0) (checked)
  DEBU  Entering dry-run flow for generic (non component/mixin) vendoring package=terraform-null-label-basic
+✓ terraform-null-label-cred (0.25.0) (checked)
 ✓ terraform-null-label-basic (0.25.0) (checked)
 Checked 2 packages, 0 failed, 0 canceled
  DEBU  Telemetry event enqueued
