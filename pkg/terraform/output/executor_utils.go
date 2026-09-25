@@ -21,6 +21,14 @@ func wrapDescribeError(component, stack string, err error) error {
 // terraformOutputsCache caches terraform outputs by stack-component key.
 var terraformOutputsCache = sync.Map{}
 
+// InvalidateComponentOutputs removes the cached outputs for a single component so
+// subsequent lookups reflect its current state, including after its first apply.
+func InvalidateComponentOutputs(stack, component string) {
+	defer perf.Track(nil, "output.InvalidateComponentOutputs")()
+
+	terraformOutputsCache.Delete(stackComponentKey(stack, component))
+}
+
 // ResetOutputsCache clears the terraform outputs cache.
 // This is exported for use in tests to ensure cache isolation between test functions.
 func ResetOutputsCache() {

@@ -19,6 +19,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
 )
 
@@ -205,6 +206,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		// A successful Terraform command can create, change, or remove state. Drop
 		// any preflight snapshot so a dependent graph node reads the current outputs.
 		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
+		tfoutput.InvalidateComponentOutputs(info.Stack, info.ComponentFromArg)
 	}
 
 	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, execMetadataSyncParams{
