@@ -76,6 +76,25 @@ func TestPrepareSecretAuthGuards(t *testing.T) {
 	}
 }
 
+func TestPrepareSecretAuthClearsPreviousResolverWhenDisabled(t *testing.T) {
+	for _, componentDisabled := range []bool{false, true} {
+		t.Run(map[bool]string{false: "manager disabled", true: "component disabled"}[componentDisabled], func(t *testing.T) {
+			factory := authdeferred.NewMockAuthFactory(gomock.NewController(t))
+			ac := &schema.AtmosConfiguration{AuthManager: authdeferred.NewManager(authdeferred.AuthOptions{Factory: factory})}
+			info := secretInfo("sops")
+			require.NoError(t, PrepareSecretAuth(ac, "!secret KEY", info))
+			require.NotNil(t, ac.SecretsAuth)
+			if componentDisabled {
+				info.AuthDisabled = true
+			} else {
+				ac.AuthManager = authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true, Factory: factory})
+			}
+			require.NoError(t, PrepareSecretAuth(ac, "!secret KEY", info))
+			require.Nil(t, ac.SecretsAuth, "disabled lookup must not retain an enabled lookup's resolver")
+		})
+	}
+}
+
 func TestDeferredSecretContextErrorsAndImplicitIdentity(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	factory := authdeferred.NewMockAuthFactory(ctrl)
@@ -105,5 +124,9 @@ func TestDeferredAuthRejectsMalformedComponentConfig(t *testing.T) {
 	s.EXPECT().ResetAuthContext()
 	ac.Stores = store.StoreRegistry{"vault": s}
 	ac.StoresConfig = store.StoresConfig{"vault": {Identity: "selected"}}
-	require.Error(t, storedeferred.ResolveStoreAuth(ac, info, "vault"))
+	_, err = storedeferred.WithStoreAuth(ac, info, "vault", func() (any, error) {
+		t.Fatal("invalid authentication must prevent the store operation")
+		return nil, nil
+	})
+	require.Error(t, err)
 }

@@ -66,3 +66,21 @@ func TestSecretValueComposesStoreAndAuthOnDemand(t *testing.T) {
 		})
 	}
 }
+
+func TestSecretDefaultDoesNotHideAuthenticationFailure(t *testing.T) {
+	for _, failure := range []error{errUtils.ErrAuthenticationUnavailable, errUtils.ErrInvalidAuthConfig} {
+		ctrl := gomock.NewController(t)
+		backend := store.NewMockIdentityAwareStore(ctrl)
+		factory := authdeferred.NewMockAuthFactory(ctrl)
+		ac := &schema.AtmosConfiguration{
+			AuthManager:  authdeferred.NewManager(authdeferred.AuthOptions{Factory: factory}),
+			Stores:       store.StoreRegistry{"vault": backend},
+			StoresConfig: store.StoresConfig{"vault": {Secret: true}},
+		}
+		backend.EXPECT().ResetAuthContext()
+		factory.EXPECT().Create(gomock.Any(), gomock.Any(), "dev").Return(nil, failure)
+		value, err := NewValue(ac, "!secret KEY | default fallback", "dev", secretInfo("store")).Resolve()
+		require.ErrorIs(t, err, failure)
+		require.Nil(t, value)
+	}
+}

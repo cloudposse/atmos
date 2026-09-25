@@ -9,7 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 )
 
-func ResolveStoreAuth(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, name string) error {
+func resolveStoreAuth(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, name string) error {
 	defer perf.Track(ac, "store.deferred.ResolveStoreAuth")()
 
 	s, ok := ac.Stores[name].(store.IdentityAwareStore)

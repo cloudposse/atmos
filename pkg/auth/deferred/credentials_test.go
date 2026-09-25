@@ -106,3 +106,15 @@ func TestDefaultIdentityDoesNotAuthenticate(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultIdentityRejectsMultipleDefaults(t *testing.T) {
+	ac := &schema.AtmosConfiguration{Auth: schema.AuthConfig{Identities: map[string]schema.Identity{
+		"first":  {Kind: "aws/user", Default: true},
+		"second": {Kind: "aws/user", Default: true},
+	}}}
+	for range 20 {
+		identity, err := DefaultIdentity(ac, &schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, errUtils.ErrMultipleDefaultIdentities)
+		require.Empty(t, identity, "ambiguous configuration must not select a principal by map order")
+	}
+}

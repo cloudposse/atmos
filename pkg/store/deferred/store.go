@@ -64,17 +64,20 @@ func readDeferredStore(ac *schema.AtmosConfiguration, p *storeParams, info *sche
 	if ac.StoresConfig[p.storeName].Secret {
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrStoreIsSecret, p.storeName)
 	}
-	if err := ResolveStoreAuth(ac, info, p.storeName); err != nil {
-		return nil, err
+	var lookupErr error
+	value, err := WithStoreAuth(ac, info, p.storeName, func() (any, error) {
+		var result any
+		if getKey {
+			result, lookupErr = s.GetKey(p.key)
+		} else {
+			result, lookupErr = s.Get(p.stack, p.component, p.key)
+		}
+		return result, nil
+	})
+	if err != nil {
+		return nil, err // Authentication failures must not activate value defaults.
 	}
-	var value any
-	var err error
-	if getKey {
-		value, err = s.GetKey(p.key)
-	} else {
-		value, err = s.Get(p.stack, p.component, p.key)
-	}
-	return deferredStoreResult(ac, p, value, err)
+	return deferredStoreResult(ac, p, value, lookupErr)
 }
 
 func deferredStoreResult(ac *schema.AtmosConfiguration, p *storeParams, value any, err error) (any, error) {

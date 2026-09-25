@@ -43,12 +43,16 @@ func DefaultIdentity(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacks
 	if err != nil {
 		return "", err
 	}
+	selected := ""
 	for name := range merged.Identities {
 		if merged.Identities[name].Default || len(merged.Identities) == 1 {
-			return name, nil
+			if selected != "" {
+				return "", errUtils.ErrMultipleDefaultIdentities
+			}
+			selected = name
 		}
 	}
-	return "", nil
+	return selected, nil
 }
 
 func identityConfig(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, identity string) (*schema.AuthConfig, error) {

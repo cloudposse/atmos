@@ -39,7 +39,7 @@ func TestResolveStoreAuthClearsPreviousIdentity(t *testing.T) {
 				manager.EXPECT().GetChain().Return([]string{}).AnyTimes()
 				factory.EXPECT().Create(gomock.Any(), gomock.Any(), "dev").Return(manager, nil)
 			}
-			require.NoError(t, ResolveStoreAuth(ac, info, "remote"))
+			require.NoError(t, resolveStoreAuth(ac, info, "remote"))
 			assert.Empty(t, s.(*providers.SSMStore).IdentityName(), "a previous component's identity must not survive")
 		})
 	}
@@ -71,7 +71,7 @@ func TestResolveStoreAuthRebindsSameIdentityWithDifferentConfig(t *testing.T) {
 				assert.Equal(t, profile, resolved.Profile)
 			}),
 		)
-		require.NoError(t, ResolveStoreAuth(ac, info, "remote"))
+		require.NoError(t, resolveStoreAuth(ac, info, "remote"))
 	}
 }
 
@@ -95,7 +95,7 @@ func TestResolveStoreAuthPreservesConfiguredIdentityWithoutContext(t *testing.T)
 			} else {
 				factory.EXPECT().Create(gomock.Any(), gomock.Any(), "dev").Return(nil, nil)
 			}
-			require.NoError(t, ResolveStoreAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev"}, "remote"))
+			require.NoError(t, resolveStoreAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev"}, "remote"))
 			assert.Equal(t, "configured", s.(*providers.SSMStore).IdentityName())
 			_, err = s.GetKey("key")
 			require.ErrorIs(t, err, store.ErrIdentityNotConfigured, "must not fall back to ambient credentials")

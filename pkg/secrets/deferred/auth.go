@@ -11,13 +11,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/secrets"
 	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
-	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // Local secrets (including age-encrypted files) must not authenticate a cloud identity.
 func PrepareSecretAuth(ac *schema.AtmosConfiguration, input string, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(ac, "secrets.deferred.PrepareSecretAuth")()
+	// This configuration belongs to one lookup. Never retain another lookup's resolver.
+	ac.SecretsAuth = nil
 
 	parsed, err := fnparser.ParseSecret(strings.TrimSpace(strings.TrimPrefix(input, u.AtmosYamlFuncSecret)))
 	if err != nil {
@@ -28,7 +29,8 @@ func PrepareSecretAuth(ac *schema.AtmosConfiguration, input string, info *schema
 		return nil
 	} // The secret resolver reports the malformed reference.
 	if decl.BackendType == secrets.BackendStore {
-		return storedeferred.ResolveStoreAuth(ac, info, decl.BackendName)
+		// ScopedStores binds credentials atomically with the actual backend read.
+		return nil
 	}
 	if authdeferred.AuthDisabled(ac.AuthManager) || info.AuthDisabled {
 		return nil
