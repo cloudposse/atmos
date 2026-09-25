@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/aws/autherrors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -195,7 +196,7 @@ func GetCallerIdentity(
 	stsClient := sts.NewFromConfig(cfg)
 	output, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsGetCallerIdentity, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsGetCallerIdentity, autherrors.Normalize(err))
 	}
 
 	result := &CallerIdentity{

@@ -18,7 +18,7 @@ func wrapDescribeError(component, stack string, err error) error {
 	return errUtils.WrapComponentDescribeError(component, stack, err, "component")
 }
 
-// terraformOutputsCache caches terraform outputs by stack-component key.
+// terraformOutputsCache caches terraform outputs by stack, component, and authentication scope.
 var terraformOutputsCache = sync.Map{}
 
 // ResetOutputsCache clears the terraform outputs cache.
@@ -94,7 +94,7 @@ func wrapErrorWithStderr(err error, capture *quietModeWriter) error {
 }
 
 // checkOutputsCache checks if terraform outputs are already cached for the given stack/component.
-func checkOutputsCache(stackSlug, component, stack string) map[string]any {
+func checkOutputsCache(stackSlug any, component, stack string) map[string]any {
 	cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
 	if found && cachedOutputs != nil {
 		log.Debug("Cache hit for terraform outputs", "stack", stack, "component", component)
@@ -125,7 +125,7 @@ type cachedOutputResult struct {
 // output" was logged -- at Debug level only, so it never appeared outside
 // debug/trace logging. A test.vars block with nine !terraform.output lookups
 // across two components would then show only two "Fetching ..." messages.
-func resolveOutputFromCache(atmosConfig *schema.AtmosConfiguration, stackSlug, component, stack, output string) *cachedOutputResult {
+func resolveOutputFromCache(atmosConfig *schema.AtmosConfiguration, stackSlug any, component, stack, output string) *cachedOutputResult {
 	cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
 	if !found || cachedOutputs == nil {
 		return nil
