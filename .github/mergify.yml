@@ -54,6 +54,18 @@ pull_request_rules:
               ref: "{{ head }}"
             - workflow: test.yml
               ref: "{{ head }}"
+            - workflow: ci-build-linux.yml
+              ref: "{{ head }}"
+            - workflow: ci-build-macos.yml
+              ref: "{{ head }}"
+            - workflow: ci-build-windows.yml
+              ref: "{{ head }}"
+            - workflow: ci-test-go.yml
+              ref: "{{ head }}"
+            - workflow: ci-test-kubernetes.yml
+              ref: "{{ head }}"
+            - workflow: ci-lint.yml
+              ref: "{{ head }}"
 
   - name: Comment when size/xxl label is added
     conditions:

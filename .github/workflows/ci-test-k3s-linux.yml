@@ -1,0 +1,161 @@
+name: CI Test k3s Linux
+run-name: CI source ${{ github.event.workflow_run.id }} attempt ${{ github.event.workflow_run.run_attempt }}
+on:
+  workflow_run:
+    workflows:
+      - CI Build Linux
+    types:
+      - completed
+cache-mode: read
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+  pull-requests: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+env:
+  ATMOS_BOOTSTRAP_VERSION: 1.223.0
+  HELMFILE_UPGRADE_NOTICE_DISABLED: 'true'
+  TEST_SHARD_COUNT: '10'
+  RACE_SHARD_COUNT: '4'
+  GOPROXY: https://proxy.golang.org
+jobs:
+  source:
+    if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      revision: ${{ steps.source.outputs.revision }}
+      event: ${{ steps.source.outputs.event }}
+      draft: ${{ steps.source.outputs.draft }}
+      run-id: ${{ steps.source.outputs.run-id }}
+      active: ${{ steps.source.outputs.active }}
+    steps:
+      - id: source
+        uses: $/.github/actions/ci-pipeline
+        with:
+          mode: resolve
+          run-id: ${{ github.event.workflow_run.id }}
+          attempt: ${{ github.event.workflow_run.run_attempt }}
+          github-token: ${{ github.token }}
+  k3s-linux:
+    name: '[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name }}'
+    needs:
+      - source
+    runs-on: ${{ matrix.flavor.os }}
+    env:
+      ATMOS_LOGS_LEVEL: Debug
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      CI_SOURCE_REVISION: ${{ needs.source.outputs.revision }}
+      CI_SOURCE_EVENT: ${{ needs.source.outputs.event }}
+      CI_SOURCE_DRAFT: ${{ needs.source.outputs.draft }}
+      CI_BUILD_RUN_ID: ${{ needs.source.outputs.run-id }}
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - os: ubuntu-latest
+            target: linux
+            artifact: linux
+        fixture:
+          - name: demo-helmfile
+            path: examples/demo-helmfile
+          - name: helm
+            path: examples/helm
+          - name: helm-lifecycle
+            path: tests/fixtures/scenarios/helm-lifecycle
+    timeout-minutes: 180
+    steps:
+      - uses: $/.github/actions/ci-k3s-setup
+        with:
+          matrix: ${{ toJSON(matrix) }}
+      - name: Start Docker-compatible runtime on macOS
+        if: matrix.flavor.target == 'macos'
+        timeout-minutes: 55
+        uses: $/.github/actions/setup-colima
+      - name: Configure Docker Hub mirror on Linux
+        if: matrix.flavor.target == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -d -m 0755 /etc/docker
+          if sudo test -s /etc/docker/daemon.json; then
+            sudo jq '."registry-mirrors" = ((."registry-mirrors" // []) as $mirrors | if ($mirrors | index("https://mirror.gcr.io")) == null then $mirrors + ["https://mirror.gcr.io"] else $mirrors end)' \
+              /etc/docker/daemon.json | sudo tee /etc/docker/daemon.json.tmp >/dev/null
+            sudo mv /etc/docker/daemon.json.tmp /etc/docker/daemon.json
+          else
+            printf '%s\n' '{"registry-mirrors":["https://mirror.gcr.io"]}' | sudo tee /etc/docker/daemon.json >/dev/null
+          fi
+          sudo systemctl restart docker
+          docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -F 'https://mirror.gcr.io'
+      - name: Write a default AWS profile to the AWS config file
+        run: |
+          mkdir -p ~/.aws
+          echo '[default]' > ~/.aws/config
+      - name: Run tests for ${{ matrix.fixture.name }}
+        run: |
+          cd "${{ matrix.fixture.path }}"
+          run_with_timeout() {
+            python3 - "$@" <<'PY'
+          import os
+          import signal
+          import subprocess
+          import sys
+
+          timeout = int(sys.argv[1])
+          cmd = sys.argv[2:]
+          proc = subprocess.Popen(cmd, start_new_session=True)
+          try:
+              raise SystemExit(proc.wait(timeout=timeout))
+          except subprocess.TimeoutExpired:
+              print(f"{' '.join(cmd)} timed out after {timeout}s", file=sys.stderr)
+              os.killpg(proc.pid, signal.SIGTERM)
+              try:
+                  proc.wait(timeout=10)
+              except subprocess.TimeoutExpired:
+                  os.killpg(proc.pid, signal.SIGKILL)
+                  proc.wait()
+              raise SystemExit(124)
+          PY
+          }
+
+          cleanup_k3s() {
+            run_with_timeout 60 atmos emulator down kubernetes -s dev || true
+            run_with_timeout 30 docker rm -f atmos-dev-emulator-kubernetes >/dev/null 2>&1 || true
+          }
+
+          diagnose_k3s() {
+            if ! run_with_timeout 15 docker inspect atmos-dev-emulator-kubernetes >/dev/null 2>&1; then
+              return
+            fi
+
+            echo "::group::k3s workload diagnostics"
+            run_with_timeout 30 docker exec atmos-dev-emulator-kubernetes kubectl get pods,jobs,deployments -A -o wide || true
+            run_with_timeout 30 docker exec atmos-dev-emulator-kubernetes kubectl get events -A --sort-by=.lastTimestamp || true
+            run_with_timeout 30 docker exec atmos-dev-emulator-kubernetes ctr --namespace k8s.io images list || true
+            echo "::endgroup::"
+          }
+
+          # macOS k3s jobs can occasionally hang in the Docker/Colima stack.
+          # Bound each attempt so the matrix can retry instead of consuming the
+          # whole job timeout and cancelling the required aggregate check.
+          attempt_timeout=1500
+          if [ "${{ matrix.flavor.target }}" = "macos" ]; then
+            attempt_timeout=2700
+          fi
+
+          trap cleanup_k3s EXIT
+          for attempt in 1 2; do
+            run_with_timeout "${attempt_timeout}" atmos test && exit 0
+            status=$?
+            echo "atmos test failed (attempt ${attempt}/2, status ${status})" >&2
+            diagnose_k3s
+            cleanup_k3s
+            [ "${attempt}" -lt 2 ] && sleep 15
+          done
+          exit "${status}"
+    if: ${{ needs.source.outputs.active == 'true' }}

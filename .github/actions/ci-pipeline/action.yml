@@ -1,0 +1,46 @@
+name: CI pipeline coordination
+description: Resolve immutable source runs and publish CI results without executing test code.
+inputs:
+  mode:
+    description: resolve, report, coverage, or merge-coverage
+    required: true
+  github-token:
+    description: Read token for resolution, checks-write token only for the trusted reporter.
+    default: ''
+  run-id:
+    description: Triggering workflow run ID.
+    default: ''
+  attempt:
+    description: Reject a triggering event if this attempt has been superseded.
+    default: ''
+  coverage-directory:
+    description: Directory containing downloaded coverage data.
+    default: ''
+outputs:
+  active:
+    description: Whether this is still the current source run and attempt.
+  revision:
+    description: Exact tested PR merge, merge-group, or branch revision.
+  base:
+    description: Original comparison base for affected validation.
+  event:
+    description: Original root event.
+  draft:
+    description: Whether the source PR is a draft.
+  run-id:
+    description: Root producer run containing build artifacts.
+  head-sha:
+    description: Root head SHA used to correlate sibling workflows.
+  pr-number:
+    description: Associated open PR number, when applicable.
+  ready:
+    description: Whether every coverage input is ready.
+  test-run-id:
+    description: Linux acceptance run containing coverage shards.
+  go-run-id:
+    description: Go test run containing Mage and noticegen coverage.
+  branch:
+    description: Source head branch for coverage reporting.
+runs:
+  using: node24
+  main: index.mjs

@@ -8,6 +8,12 @@ description: >
   build artifact already produced earlier in the same run.
 
 inputs:
+  run-id:
+    description: Producer workflow run ID; empty means the current run.
+    default: ''
+  github-token:
+    description: Token with actions read permission for cross-workflow downloads.
+    default: ''
   target:
     description: 'Build flavor the artifact was built for (e.g. linux, macos, macos-intel, windows); used to derive the default build-artifacts-<target> artifact name'
     required: true
@@ -32,11 +38,13 @@ runs:
   using: composite
   steps:
     - name: Download atmos build artifact
-      uses: ./.github/actions/download-artifact-retry
+      uses: $/.github/actions/download-artifact-retry
       with:
         name: ${{ inputs.name || format('build-artifacts-{0}', inputs.target) }}
         path: ${{ inputs.path }}
         backoff-seconds: ${{ inputs.backoff-seconds }}
+        run-id: ${{ inputs.run-id }}
+        github-token: ${{ inputs.github-token }}
 
     - name: Add install directory to PATH
       if: inputs.add-to-path == 'true'

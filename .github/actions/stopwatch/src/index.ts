@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile } from "node:fs/promises";
 
 import { GitHubClient } from "./github";
+import { includePipelineRuns, timingRoot, type PipelineRun } from "./pipeline";
 import {
   calculateTimingSummary,
   renderComment,
@@ -18,7 +19,7 @@ interface ApiPullRequest {
   head: { sha: string };
 }
 
-interface ApiWorkflowRun {
+interface ApiWorkflowRun extends PipelineRun {
   id: number;
   workflow_id: number;
   name?: string | null;
@@ -160,7 +161,20 @@ async function run(): Promise<void> {
   }
 
   const triggeringData = await client.request<ApiWorkflowRun>("GET", `${encodedRepo}/actions/runs/${workflowRunId}`);
-  const triggeringRun = toWorkflowRun(triggeringData);
+  const splitPipeline = process.env["INPUT_INCLUDE-CI-PIPELINE"] === "true";
+  let rootData = triggeringData;
+  if (splitPipeline && triggeringData.event === "workflow_run") {
+    try {
+      rootData = await timingRoot(client, encodedRepo, triggeringData);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message.startsWith("Superseded")) {
+        await setResult(false, error.message);
+        return;
+      }
+      throw error;
+    }
+  }
+  const triggeringRun = toWorkflowRun(rootData);
   const headSha = triggeringRun.headSha;
 
   let pullRequestNumber: number | undefined = triggeringRun.pullRequests[0]?.number;
@@ -192,8 +206,15 @@ async function run(): Promise<void> {
     (page) => `${encodedRepo}/actions/runs?head_sha=${encodeURIComponent(headSha)}&per_page=100&page=${page}`,
     unwrapProperty<ApiWorkflowRun>("workflow_runs"),
   );
+  const pipeline = splitPipeline
+    ? await includePipelineRuns(client, encodedRepo, workflowRunResponses, rootData.event)
+    : { runs: workflowRunResponses, pending: false };
+  if (pipeline.pending) {
+    await setResult(false, "Waiting for downstream CI workflows to be created");
+    return;
+  }
   const selectedRuns = selectLatestRuns(
-    workflowRunResponses.map(toWorkflowRun),
+    pipeline.runs.map(toWorkflowRun),
     headSha,
     pullRequestNumber,
     COORDINATOR_WORKFLOW_NAME,

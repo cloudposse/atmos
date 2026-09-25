@@ -3,6 +3,9 @@ description: Publish a sticky pull-request comment summarizing all GitHub Action
 author: Cloud Posse
 
 inputs:
+  include-ci-pipeline:
+    description: Include downstream CI workflows by their immutable source run and attempt.
+    default: "false"
   github-token:
     description: GitHub token with actions:read, pull-requests:write, and issues:write permissions.
     required: true

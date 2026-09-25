@@ -1,0 +1,290 @@
+{
+  "ci-test-linux.yml": {
+    "name": "CI Test Linux",
+    "parent": "ci-build-linux.yml",
+    "required": [
+      {
+        "name": "Acceptance Tests (linux)",
+        "jobs": [
+          "Acceptance Tests (linux, shard 1/10)",
+          "Acceptance Tests (linux, shard 2/10)",
+          "Acceptance Tests (linux, shard 3/10)",
+          "Acceptance Tests (linux, shard 4/10)",
+          "Acceptance Tests (linux, shard 5/10)",
+          "Acceptance Tests (linux, shard 6/10)",
+          "Acceptance Tests (linux, shard 7/10)",
+          "Acceptance Tests (linux, shard 8/10)",
+          "Acceptance Tests (linux, shard 9/10)",
+          "Acceptance Tests (linux, shard 10/10)",
+          "Terraform registry cache test (linux)"
+        ]
+      },
+      {
+        "name": "[mock-linux] examples/demo-atlantis",
+        "jobs": [
+          "[mock-linux] examples/demo-atlantis"
+        ]
+      },
+      {
+        "name": "[mock-linux] examples/demo-component-versions",
+        "jobs": [
+          "[mock-linux] examples/demo-component-versions"
+        ]
+      },
+      {
+        "name": "[mock-linux] examples/demo-context",
+        "jobs": [
+          "[mock-linux] examples/demo-context"
+        ]
+      },
+      {
+        "name": "[mock-linux] examples/demo-vendoring",
+        "jobs": [
+          "[mock-linux] examples/demo-vendoring"
+        ]
+      },
+      {
+        "name": "[mock-linux] examples/config-profiles",
+        "jobs": [
+          "[mock-linux] examples/config-profiles"
+        ]
+      },
+      {
+        "name": "[mock-linux] tests/fixtures/scenarios/complete",
+        "jobs": [
+          "[mock-linux] tests/fixtures/scenarios/complete"
+        ]
+      }
+    ],
+    "jobs": [
+      "Terraform registry cache test (linux)",
+      "Acceptance Tests (linux, shard 1/10)",
+      "Acceptance Tests (linux, shard 2/10)",
+      "Acceptance Tests (linux, shard 3/10)",
+      "Acceptance Tests (linux, shard 4/10)",
+      "Acceptance Tests (linux, shard 5/10)",
+      "Acceptance Tests (linux, shard 6/10)",
+      "Acceptance Tests (linux, shard 7/10)",
+      "Acceptance Tests (linux, shard 8/10)",
+      "Acceptance Tests (linux, shard 9/10)",
+      "Acceptance Tests (linux, shard 10/10)",
+      "[mock-linux] examples/demo-atlantis",
+      "[mock-linux] examples/demo-component-versions",
+      "[mock-linux] examples/demo-context",
+      "[mock-linux] examples/demo-vendoring",
+      "[mock-linux] examples/config-profiles",
+      "[mock-linux] tests/fixtures/scenarios/complete"
+    ]
+  },
+  "ci-test-macos.yml": {
+    "name": "CI Test macOS",
+    "parent": "ci-build-macos.yml",
+    "required": [
+      {
+        "name": "Acceptance Tests (macos)",
+        "jobs": [
+          "Acceptance Tests (macos, shard 1/10)",
+          "Acceptance Tests (macos, shard 2/10)",
+          "Acceptance Tests (macos, shard 3/10)",
+          "Acceptance Tests (macos, shard 4/10)",
+          "Acceptance Tests (macos, shard 5/10)",
+          "Acceptance Tests (macos, shard 6/10)",
+          "Acceptance Tests (macos, shard 7/10)",
+          "Acceptance Tests (macos, shard 8/10)",
+          "Acceptance Tests (macos, shard 9/10)",
+          "Acceptance Tests (macos, shard 10/10)",
+          "Terraform registry cache test (macos)"
+        ]
+      },
+      {
+        "name": "[mock-macos] examples/demo-atlantis",
+        "jobs": [
+          "[mock-macos] examples/demo-atlantis"
+        ]
+      },
+      {
+        "name": "[mock-macos] examples/demo-component-versions",
+        "jobs": [
+          "[mock-macos] examples/demo-component-versions"
+        ]
+      },
+      {
+        "name": "[mock-macos] examples/demo-context",
+        "jobs": [
+          "[mock-macos] examples/demo-context"
+        ]
+      },
+      {
+        "name": "[mock-macos] examples/demo-vendoring",
+        "jobs": [
+          "[mock-macos] examples/demo-vendoring"
+        ]
+      },
+      {
+        "name": "[mock-macos] examples/config-profiles",
+        "jobs": [
+          "[mock-macos] examples/config-profiles"
+        ]
+      },
+      {
+        "name": "[mock-macos] tests/fixtures/scenarios/complete",
+        "jobs": [
+          "[mock-macos] tests/fixtures/scenarios/complete"
+        ]
+      }
+    ],
+    "jobs": [
+      "Terraform registry cache test (macos)",
+      "Acceptance Tests (macos, shard 1/10)",
+      "Acceptance Tests (macos, shard 2/10)",
+      "Acceptance Tests (macos, shard 3/10)",
+      "Acceptance Tests (macos, shard 4/10)",
+      "Acceptance Tests (macos, shard 5/10)",
+      "Acceptance Tests (macos, shard 6/10)",
+      "Acceptance Tests (macos, shard 7/10)",
+      "Acceptance Tests (macos, shard 8/10)",
+      "Acceptance Tests (macos, shard 9/10)",
+      "Acceptance Tests (macos, shard 10/10)",
+      "[mock-macos] examples/demo-atlantis",
+      "[mock-macos] examples/demo-component-versions",
+      "[mock-macos] examples/demo-context",
+      "[mock-macos] examples/demo-vendoring",
+      "[mock-macos] examples/config-profiles",
+      "[mock-macos] tests/fixtures/scenarios/complete"
+    ]
+  },
+  "ci-test-windows.yml": {
+    "name": "CI Test Windows",
+    "parent": "ci-build-windows.yml",
+    "required": [
+      {
+        "name": "Acceptance Tests (windows)",
+        "jobs": [
+          "Acceptance Tests (windows, shard 1/10)",
+          "Acceptance Tests (windows, shard 2/10)",
+          "Acceptance Tests (windows, shard 3/10)",
+          "Acceptance Tests (windows, shard 4/10)",
+          "Acceptance Tests (windows, shard 5/10)",
+          "Acceptance Tests (windows, shard 6/10)",
+          "Acceptance Tests (windows, shard 7/10)",
+          "Acceptance Tests (windows, shard 8/10)",
+          "Acceptance Tests (windows, shard 9/10)",
+          "Acceptance Tests (windows, shard 10/10)",
+          "Terraform registry cache test (windows)"
+        ]
+      },
+      {
+        "name": "[mock-windows] examples/demo-atlantis",
+        "jobs": [
+          "[mock-windows] examples/demo-atlantis"
+        ]
+      },
+      {
+        "name": "[mock-windows] examples/demo-component-versions",
+        "jobs": [
+          "[mock-windows] examples/demo-component-versions"
+        ]
+      },
+      {
+        "name": "[mock-windows] examples/demo-context",
+        "jobs": [
+          "[mock-windows] examples/demo-context"
+        ]
+      },
+      {
+        "name": "[mock-windows] examples/demo-vendoring",
+        "jobs": [
+          "[mock-windows] examples/demo-vendoring"
+        ]
+      },
+      {
+        "name": "[mock-windows] examples/config-profiles",
+        "jobs": [
+          "[mock-windows] examples/config-profiles"
+        ]
+      },
+      {
+        "name": "[mock-windows] tests/fixtures/scenarios/complete",
+        "jobs": [
+          "[mock-windows] tests/fixtures/scenarios/complete"
+        ]
+      }
+    ],
+    "jobs": [
+      "Terraform registry cache test (windows)",
+      "Acceptance Tests (windows, shard 1/10)",
+      "Acceptance Tests (windows, shard 2/10)",
+      "Acceptance Tests (windows, shard 3/10)",
+      "Acceptance Tests (windows, shard 4/10)",
+      "Acceptance Tests (windows, shard 5/10)",
+      "Acceptance Tests (windows, shard 6/10)",
+      "Acceptance Tests (windows, shard 7/10)",
+      "Acceptance Tests (windows, shard 8/10)",
+      "Acceptance Tests (windows, shard 9/10)",
+      "Acceptance Tests (windows, shard 10/10)",
+      "[mock-windows] examples/demo-atlantis",
+      "[mock-windows] examples/demo-component-versions",
+      "[mock-windows] examples/demo-context",
+      "[mock-windows] examples/demo-vendoring",
+      "[mock-windows] examples/config-profiles",
+      "[mock-windows] tests/fixtures/scenarios/complete"
+    ]
+  },
+  "ci-test-floci.yml": {
+    "name": "CI Test Floci",
+    "parent": "ci-build-linux.yml",
+    "required": [],
+    "jobs": [
+      "[floci] emulator-aws",
+      "[floci] terraform-tests",
+      "[floci] backend-provisioning",
+      "[floci] go e2e (scaffold)",
+      "[floci] go e2e (workflows)"
+    ]
+  },
+  "ci-test-k3s-linux.yml": {
+    "name": "CI Test k3s Linux",
+    "parent": "ci-build-linux.yml",
+    "required": [],
+    "jobs": [
+      "[k3s-linux] demo-helmfile",
+      "[k3s-linux] helm",
+      "[k3s-linux] helm-lifecycle"
+    ]
+  },
+  "ci-test-k3s-macos.yml": {
+    "name": "CI Test k3s macOS",
+    "parent": "ci-build-macos.yml",
+    "required": [],
+    "jobs": [
+      "[k3s-macos] demo-helmfile",
+      "[k3s-macos] helm"
+    ]
+  },
+  "ci-test-integrations.yml": {
+    "name": "CI Test Integrations",
+    "parent": "ci-build-linux.yml",
+    "required": [],
+    "jobs": [
+      "Validation (affected)",
+      "[lint] quick-start-advanced (kms-key)",
+      "[lint] quick-start-advanced (s3-bucket)",
+      "[lint] quick-start-advanced (dynamodb-table)",
+      "[lint] quick-start-advanced (sns-topic)",
+      "[lint] quick-start-advanced (sqs-queue)",
+      "[lint] quick-start-advanced (app-config)",
+      "[hooks-tflint] example",
+      "[validate] demo-context",
+      "[validate] emulator-aws",
+      "[validate] terraform-tests",
+      "[validate] backend-provisioning",
+      "[validate] demo-stacks",
+      "[validate] quick-start-simple",
+      "[validate] custom-components",
+      "[validate] sops-secrets",
+      "[validate] onepassword-secrets",
+      "[validate] packer-docker",
+      "[container-step] example"
+    ]
+  }
+}

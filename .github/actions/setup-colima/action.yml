@@ -52,7 +52,21 @@ runs:
           brew untap aws/tap
         fi
 
-        run_with_timeout 420 brew install colima docker
+        # Avoid refreshing already installed tools on hosted images.
+        missing=()
+        for tool in colima docker; do
+          if ! command -v "$tool" >/dev/null 2>&1; then
+            missing+=("$tool")
+          fi
+        done
+        if [ "${#missing[@]}" -gt 0 ]; then
+          run_with_timeout 420 brew install "${missing[@]}"
+        fi
+
+        # Give k3s the runner's available CPUs instead of throttling a four-core
+        # Intel host to two. Leave memory for the host and CLI processes.
+        vm_cpus=$(sysctl -n hw.ncpu)
+        vm_memory=6
 
         # Colima/Lima occasionally leaves the VM half-started on macOS runners
         # (SSH/DHCP timeout while the previous VM is still exiting). Start from a clean
@@ -76,7 +90,7 @@ runs:
           # Allow 12 minutes for both boots and provisioning.
           for attempt in 1 2; do
             echo "::group::Start Colima (vz) attempt ${attempt}"
-            if run_with_timeout 720 colima start --runtime docker --vm-type vz --cpu 2 --memory 4 --disk 20 \
+            if run_with_timeout 720 colima start --runtime docker --vm-type vz --cpu "$vm_cpus" --memory "$vm_memory" --disk 20 \
               && run_with_timeout 120 docker info; then
               echo "::endgroup::"
               return 0

@@ -1,0 +1,213 @@
+name: CI Test Floci
+run-name: CI source ${{ github.event.workflow_run.id }} attempt ${{ github.event.workflow_run.run_attempt }}
+on:
+  workflow_run:
+    workflows:
+      - CI Build Linux
+    types:
+      - completed
+cache-mode: read
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+  pull-requests: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+env:
+  ATMOS_BOOTSTRAP_VERSION: 1.223.0
+  HELMFILE_UPGRADE_NOTICE_DISABLED: 'true'
+  TEST_SHARD_COUNT: '10'
+  RACE_SHARD_COUNT: '4'
+  GOPROXY: https://proxy.golang.org
+jobs:
+  source:
+    if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      revision: ${{ steps.source.outputs.revision }}
+      event: ${{ steps.source.outputs.event }}
+      draft: ${{ steps.source.outputs.draft }}
+      run-id: ${{ steps.source.outputs.run-id }}
+      active: ${{ steps.source.outputs.active }}
+    steps:
+      - id: source
+        uses: $/.github/actions/ci-pipeline
+        with:
+          mode: resolve
+          run-id: ${{ github.event.workflow_run.id }}
+          attempt: ${{ github.event.workflow_run.run_attempt }}
+          github-token: ${{ github.token }}
+  floci:
+    name: '[floci] ${{ matrix.demo-folder }}'
+    needs:
+      - source
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        demo-folder:
+          - emulator-aws
+          - terraform-tests
+          - backend-provisioning
+    timeout-minutes: 30
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            checkpoint-api.hashicorp.com:443
+            github.com:443
+            mirror.gcr.io:443
+            raw.githubusercontent.com:443
+            registry.terraform.io:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            us.i.posthog.com:443
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - name: Set up Atmos (install build artifact)
+        uses: $/.github/actions/setup-atmos-install
+        with:
+          target: linux
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Restore the Atmos toolchain cache
+        continue-on-error: true
+        uses: $/actions/cache
+        with:
+          mode: restore-only
+      - name: Install Terraform and OpenTofu with Atmos toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain env --format=github
+      - name: Verify OpenTofu
+        run: tofu version
+      - name: Run tests for ${{ matrix.demo-folder }}
+        run: |
+          cd examples/${{ matrix.demo-folder }}
+          timeout 25m atmos test || {
+            status=$?
+            echo "atmos test failed or timed out with status ${status}"
+            exit "${status}"
+          }
+    if: ${{ needs.source.outputs.active == 'true' }}
+    env:
+      CI_SOURCE_REVISION: ${{ needs.source.outputs.revision }}
+      CI_SOURCE_EVENT: ${{ needs.source.outputs.event }}
+      CI_SOURCE_DRAFT: ${{ needs.source.outputs.draft }}
+      CI_BUILD_RUN_ID: ${{ needs.source.outputs.run-id }}
+  floci-go:
+    name: '[floci] go e2e (${{ matrix.group }})'
+    needs:
+      - source
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: scaffold
+            tests: ^TestScaffold(AWSLandingZone|AWSApp)FlociE2E$
+          - group: workflows
+            tests: ^Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|LocalGitOpsPushE2E|Scaffold(GCPLandingZone|AzureLandingZone)FlociE2E|InitFromTemplateRepoGiteaE2E|TerraformFlociTfmigrateS3History)$
+    services:
+      floci:
+        image: floci/floci@sha256:d2ecc8035822b23b8587a56eab15edd825f41d3fb80d93e8e66680410beddc08
+        ports:
+          - 4566:4566
+      floci-gcp:
+        image: floci/floci-gcp@sha256:102db655af6facdcd1ec621e108558aafc46c817eaada63236d3acf3c5e92aaa
+        ports:
+          - 4588:4588
+      floci-az:
+        image: floci/floci-az@sha256:5e403a7d788c24ab2d1dc03d4803ef2d3962ca01522abba65ed86f221ae87ac0
+        env:
+          FLOCI_AZ_TLS_ENABLED: 'true'
+        ports:
+          - 4577:4577
+    timeout-minutes: 30
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            archive.ubuntu.com:80
+            auth.docker.io:443
+            azure.archive.ubuntu.com:80
+            checkpoint-api.hashicorp.com:443
+            dl.google.com:443
+            esm.ubuntu.com:443
+            github.com:443
+            mirror.gcr.io:443
+            motd.ubuntu.com:443
+            openidconnect.googleapis.com:443
+            production.cloudfront.docker.com:443
+            proxy.golang.org:443
+            raw.githubusercontent.com:443
+            registry-1.docker.io:443
+            registry.opentofu.org:443
+            registry.terraform.io:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
+            storage.googleapis.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            us.i.posthog.com:443
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - name: Set up Atmos (install build artifact)
+        uses: $/.github/actions/setup-atmos-install
+        with:
+          target: linux
+          run-id: ${{ env.CI_BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Set up Go
+        uses: $/.github/actions/setup-go-cache
+      - name: Restore the Atmos toolchain cache
+        continue-on-error: true
+        uses: $/actions/cache
+        with:
+          mode: restore-only
+      - name: Install OpenTofu with Atmos toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain env --format=github
+      - name: Verify OpenTofu
+        run: tofu version
+      - name: Run Floci Go E2E tests
+        env:
+          CGO_ENABLED: '0'
+          GOFIPS140: latest
+          FLOCI_TEST_PATTERN: ${{ matrix.tests }}
+          ATMOS_TEST_FLOCI: 'true'
+          FLOCI_ENDPOINT_URL: http://localhost:4566
+          FLOCI_GCP_ENDPOINT: http://localhost:4588
+          FLOCI_AZURE_ENDPOINT: http://localhost:4577
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: go test ./tests -run "$FLOCI_TEST_PATTERN" -count=1 -timeout 25m -v
+    if: ${{ needs.source.outputs.active == 'true' }}
+    env:
+      CI_SOURCE_REVISION: ${{ needs.source.outputs.revision }}
+      CI_SOURCE_EVENT: ${{ needs.source.outputs.event }}
+      CI_SOURCE_DRAFT: ${{ needs.source.outputs.draft }}
+      CI_BUILD_RUN_ID: ${{ needs.source.outputs.run-id }}

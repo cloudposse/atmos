@@ -96,7 +96,7 @@ jobs:
       # Surface the runner's ACTIONS_* credentials to every later run step.
       # This is the entire reason github/artifacts works from a `run:` step.
       - name: Expose GitHub Actions runtime credentials
-        uses: ./actions/github-runtime
+        uses: $/actions/github-runtime
         with:
           mode: env
 
@@ -148,7 +148,7 @@ jobs:
           echo "$PWD/build" >> "$GITHUB_PATH"
 
       - name: Expose GitHub Actions runtime credentials
-        uses: ./actions/github-runtime
+        uses: $/actions/github-runtime
         with:
           mode: env
 

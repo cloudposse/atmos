@@ -106,24 +106,12 @@ func TestTestRunPatternMatchesOnlyAssignedTests(t *testing.T) {
 func TestVerifyWorkflow(t *testing.T) {
 	t.Parallel()
 
-	root := t.TempDir()
-	workflowDir := filepath.Join(root, ".github", "workflows")
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	workflow := `shard: [1, 2, 3]
-name: ${{ matrix.check }}
-check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
-run: go test ./tests -run '^TestTerraformRegistryCache$'
-`
-	if err := os.WriteFile(filepath.Join(workflowDir, "test.yml"), []byte(workflow), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := verifyWorkflow(root, 3); err != nil {
+	root := realRepoRoot(t)
+	if err := verifyWorkflow(root, 10); err != nil {
 		t.Fatalf("verify valid workflow: %v", err)
 	}
 	if err := verifyWorkflow(root, 4); err == nil {
-		t.Fatal("expected shard-count mismatch")
+		t.Fatal("expected a shard-count mismatch")
 	}
 }
 

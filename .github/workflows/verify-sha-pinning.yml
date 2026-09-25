@@ -37,6 +37,6 @@ jobs:
       # on new pushes), not from hiding the policy behind a base-branch
       # checkout. A base-only policy also can't be extended by the PR that
       # needs the extension, which defeats the point of an allowlist.
-      - uses: ./.github/actions/verify-sha-pinning
+      - uses: $/.github/actions/verify-sha-pinning
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

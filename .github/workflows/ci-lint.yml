@@ -1,0 +1,97 @@
+name: CI Lint Docker
+run-name: CI revision ${{ github.sha }} base ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || github.sha }}
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths-ignore:
+      - README.md
+  merge_group:
+    types:
+      - checks_requested
+  push:
+    branches:
+      - main
+      - release/v*
+    paths-ignore:
+      - .github/**
+      - docs/**
+      - examples/**
+      - test/**
+  workflow_dispatch: null
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+cache-mode: write
+
+permissions:
+  checks: read
+  contents: read
+  packages: read
+  pull-requests: read
+  actions: read
+env:
+  ATMOS_BOOTSTRAP_VERSION: 1.223.0
+  HELMFILE_UPGRADE_NOTICE_DISABLED: 'true'
+  TEST_SHARD_COUNT: '10'
+  RACE_SHARD_COUNT: '4'
+  GOPROXY: https://proxy.golang.org
+  CI_SOURCE_REVISION: ${{ github.sha }}
+  CI_SOURCE_EVENT: ${{ github.event_name }}
+  CI_SOURCE_DRAFT: ${{ github.event.pull_request.draft || false }}
+  CI_BUILD_RUN_ID: ''
+jobs:
+  docker:
+    name: '[lint] Dockerfile'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            check.trivy.dev:443
+            get.trivy.dev:443
+            github.com:443
+            release-assets.githubusercontent.com:443
+      - name: Check out code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
+      - uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
+        id: hadolint
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+          format: sarif
+          output-file: hadolint.sarif
+          ignore: DL3008
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        if: always() && env.CI_SOURCE_EVENT != 'merge_group'
+        with:
+          sarif_file: hadolint.sarif
+          category: hadolint
+          wait-for-processing: true
+      - name: Trivy config scan (Dockerfile)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: Dockerfile
+          format: sarif
+          output: trivy-config.sarif
+      - name: Upload Trivy config scan results
+        if: always() && env.CI_SOURCE_EVENT != 'merge_group'
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          sarif_file: trivy-config.sarif
+          category: trivy-config
+    if: ${{ vars.CI_SPLIT_WORKFLOWS == 'true' }}
