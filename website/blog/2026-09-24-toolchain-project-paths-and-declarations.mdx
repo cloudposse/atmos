@@ -5,15 +5,13 @@ authors: [osterman]
 tags: [enhancement, bugfix]
 ---
 
-Running a command from a subdirectory could change where Atmos looked for toolchain files. Automatically installing a missing dependency could also modify the project's `.tool-versions`. This update fixes both: [toolchain paths](/cli/configuration/toolchain#configuration-options) now resolve from the configured project base, and automatic installs leave declared versions unchanged.
+CI should install the artifacts reviewed and committed with a project. Ordinary lockfile use verifies recorded checksums, but it can still accept and record a new artifact when a tool or platform entry is missing.
+
+Enable [`toolchain.frozen_lock_file: true`](/cli/configuration/toolchain#frozen-installs-in-ci) in CI and security-sensitive environments to reject those missing entries and prevent lockfile writes. Prepare and review lockfile updates before running CI.
+
+This update makes project configuration consistent across invocation directories and keeps automatic installs from changing declared dependencies. The same project paths and declarations apply whether a developer or CI runs the command.
 
 <!--truncate-->
-
-:::tip CI and security-sensitive environments
-
-Enable [`toolchain.frozen_lock_file: true`](/cli/configuration/toolchain#frozen-installs-in-ci) to require artifacts already recorded in the committed lockfile and reject missing tool or platform entries. Prepare and review lockfile updates before running CI. Existing checksum verification applies with ordinary lockfile use too; frozen mode additionally prevents installations from accepting and recording new artifacts automatically.
-
-:::
 
 ## The Problem
 
@@ -22,6 +20,8 @@ Relative toolchain paths could follow the directory where you invoked Atmos. A c
 Automatic installation also used the declaration-writing behavior of an explicit install command. Running an infrastructure command could leave a change in `.tool-versions`, even though you had not asked to change the project's dependencies.
 
 ## The Fix
+
+[Toolchain paths](/cli/configuration/toolchain#configuration-options) now resolve from the configured project base, and automatic installs leave declared versions unchanged.
 
 | Behavior | Before | Now |
 | --- | --- | --- |
