@@ -162,3 +162,18 @@ func (p *CLIPrompter) promptWithoutCache() (bool, error) {
 
 	return allowed, nil
 }
+
+// NonInteractivePrompter implements Prompter for non-interactive environments.
+// It always denies permission requests, making it suitable for scenarios where
+// user interaction is not possible (e.g., MCP server using stdio for protocol).
+type NonInteractivePrompter struct{}
+
+// NewNonInteractivePrompter creates a new non-interactive prompter.
+func NewNonInteractivePrompter() *NonInteractivePrompter {
+	return &NonInteractivePrompter{}
+}
+
+// Prompt always denies permission in non-interactive mode.
+func (p *NonInteractivePrompter) Prompt(ctx context.Context, tool Tool, params map[string]interface{}) (bool, error) {
+	return false, fmt.Errorf("%w: %s (non-interactive mode)", errUtils.ErrAINoPrompter, tool.Name())
+}
