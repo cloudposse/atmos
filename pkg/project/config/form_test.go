@@ -638,6 +638,29 @@ func TestBuildConfigForm_FieldWhenGating(t *testing.T) {
 	assert.Contains(t, ctx.valueGetters, "environments")
 }
 
+// TestBuildConfigForm_SkipsComputedFields proves a type: computed field
+// never gets a huh field/group or a valueGetters entry -- it is entirely
+// absent from the interactive form, since ComputeFields derives its value
+// after the form completes rather than prompting for it.
+func TestBuildConfigForm_SkipsComputedFields(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{
+		Metadata: manifest.Metadata{Name: "test-scaffold"},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "region", Type: "input", Label: "Region"},
+				{Name: "derived", Type: fieldTypeComputed, Value: "{{ answers.region }}"},
+			},
+		},
+	}
+
+	huhForm, ctx, err := buildConfigForm(scaffoldConfig, map[string]interface{}{})
+	require.NoError(t, err)
+	require.NotNil(t, huhForm)
+	assert.Len(t, ctx.valueGetters, 1)
+	assert.Contains(t, ctx.valueGetters, "region")
+	assert.NotContains(t, ctx.valueGetters, "derived")
+}
+
 func TestMissingRequiredValues_RespectsWhen(t *testing.T) {
 	scaffoldConfig := &ScaffoldConfig{
 		Metadata: manifest.Metadata{Name: "test-scaffold"},

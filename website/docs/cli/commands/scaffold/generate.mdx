@@ -106,6 +106,54 @@ their declared `options`; `false` remains a valid answer for a required boolean.
 earlier field answers through `answers`; use CEL (`&&`, `||`, `!`) for compound logic because the
 map-style `{all, any, not}` form is not accepted by scaffold manifests.
 
+## Computed Fields
+
+A `type: computed` field is never prompted for and can't be set with `--set` — its `value:` is
+either a Go-template expression deriving it from other fields' answers (using the same
+`answers.*` binding `options:`'s dynamic form uses below), or a literal of any type (string,
+number, boolean, list, or map), used as-is with no rendering at all:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: regions
+      type: multiselect
+      options: [us-east-1, us-west-2, eu-west-1]
+    - name: primary_region_select
+      type: select
+      options: answers.regions
+      when: "size(answers.regions) > 1"
+    - name: primary_region
+      type: computed
+      value: "{{ ternary answers.primary_region_select (index answers.regions 0) (gt (len answers.regions) 1) }}"
+    - name: provider_version_pins
+      type: computed
+      value:
+        aws: "~> 5.0"
+        azurerm: "~> 3.0"
+        google: "~> 5.0"
+```
+
+Without a computed field, every file that needs the "primary region, defaulting to the only
+region when there's just one" value has to re-derive it with the same `{{ if .Config.primary_region_select }}...{{ end }}`
+snippet. `primary_region` derives it once, and `.Config.primary_region` is then usable anywhere
+`.Config` is: file content, `target:`, and `matrix:` axes. `provider_version_pins` is a plain
+literal — no template rendering happens for it at all, it's just stored and exposed at
+`.Config.provider_version_pins` as-is, useful for a small hand-authored reference table.
+`options:` is the one exception —
+it's resolved before computed fields have a value, so a `select`/`multiselect` field's
+`options:` referencing a computed field is a load-time error rather than a silently
+non-functional constraint.
+
+`value:` is required on a `computed` field (and rejected on every other field type); `required:`
+and `default:` are both rejected on a `computed` field, since it's always self-supplied. Computed
+fields evaluate once, in `spec.fields[]` declaration order, after every regular field's answer is
+already final — a computed field can reference any regular field regardless of order, but only an
+**earlier-declared** computed field's own result. Referencing itself or a later-declared computed
+field fails at scaffold-load time rather than silently rendering as `<no value>`. Because that
+evaluation happens after the interactive form completes, a regular field's own `when:` can never
+depend on a computed field — only the reverse works.
+
 ## Dynamic and Label/Value Options
 
 `select` and `multiselect` fields declare their choices through `options:`, which accepts four

@@ -68,7 +68,7 @@ func TestResolveTargetDirectory(t *testing.T) {
 
 // TestLoadScaffoldTemplates tests loading scaffold templates.
 func TestLoadScaffoldTemplates(t *testing.T) {
-	configs, origins, ui, err := loadScaffoldTemplates("", "")
+	configs, origins, _, ui, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 	assert.NotNil(t, configs)
 	assert.NotNil(t, origins)
@@ -109,7 +109,7 @@ func TestScaffoldCommandProvider_UncoveredMetadata(t *testing.T) {
 }
 
 func TestSelectGenerateTemplate_NonInteractiveRequiresName(t *testing.T) {
-	_, err := selectGenerateTemplate(&scaffoldGenerateOptions{interactive: false}, map[string]templates.Configuration{}, nil)
+	_, err := selectGenerateTemplate(&scaffoldGenerateOptions{interactive: false}, map[string]templates.Configuration{}, nil, nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrTemplateNameRequired)
@@ -489,7 +489,7 @@ func TestMaybeInitGeneratedGitRepository_PropagatesInitGitError(t *testing.T) {
 // surface a parse error immediately, rather than silently proceeding to
 // preview an empty file list.
 func TestExecuteScaffoldGenerate_DryRunPropagatesInvalidScaffoldConfig(t *testing.T) {
-	_, _, scaffoldUI, err := loadScaffoldTemplates("", "")
+	_, _, _, scaffoldUI, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 
 	cfg := &templates.Configuration{
@@ -532,7 +532,7 @@ func TestSelectTemplateErrors(t *testing.T) {
 
 	// Test selecting non-existent template. selectTemplateByName never
 	// touches scaffoldUI, so a nil ScaffoldUI is safe here.
-	_, err := selectTemplate("nonexistent", configs, nil)
+	_, err := selectTemplate("nonexistent", configs, nil, nil)
 	assert.Error(t, err)
 
 	// Test selecting with empty name: this triggers selectTemplateInteractive,
@@ -542,7 +542,7 @@ func TestSelectTemplateErrors(t *testing.T) {
 	mockUI := NewMockScaffoldUI(ctrl)
 	mockUI.EXPECT().PromptForTemplate("scaffold", gomock.Any()).Return("", assert.AnError)
 
-	_, err = selectTemplate("", configs, mockUI)
+	_, err = selectTemplate("", configs, nil, mockUI)
 	assert.Error(t, err)
 }
 
@@ -573,7 +573,7 @@ func TestMaybeInitGeneratedGitRepository_GitDisabled(t *testing.T) {
 // prompts) rather than the targetDir == "" branch, which always prompts for a
 // target directory via a real terminal form and cannot be safely unit tested.
 func TestExecuteTemplateGeneration_WithTargetDir(t *testing.T) {
-	configs, _, scaffoldUI, err := loadScaffoldTemplates("", "")
+	configs, _, _, scaffoldUI, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 	cfg := configs["simple"]
 
@@ -777,7 +777,7 @@ func TestDefaultBaseRef_PropagatesUnreadableMetadataError(t *testing.T) {
 // regenerates the template while preserving the user's own edits via a
 // 3-way merge, instead of failing with "target directory is not empty".
 func TestExecuteTemplateGeneration_UpdateFlag_MergesExistingDirectory(t *testing.T) {
-	configs, _, scaffoldUI, err := loadScaffoldTemplates("", "")
+	configs, _, _, scaffoldUI, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 	cfg := configs["simple"]
 
@@ -831,7 +831,7 @@ func TestExecuteTemplateGeneration_UpdateFlag_MergesExistingDirectory(t *testing
 // diffs against the true pristine content regardless of what's since been
 // committed.
 func TestExecuteTemplateGeneration_UpdateFlag_PreservesCommittedEdit(t *testing.T) {
-	_, _, scaffoldUI, err := loadScaffoldTemplates("", "")
+	_, _, _, scaffoldUI, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 
 	cfg := &templates.Configuration{
@@ -897,7 +897,7 @@ func TestExecuteTemplateGeneration_UpdateFlag_PreservesCommittedEdit(t *testing.
 // the identical template, which must write nothing to either its own target
 // directory or any matrix-expanded subpath.
 func TestExecuteTemplateGeneration_DryRunMatrixExpansion(t *testing.T) {
-	_, _, scaffoldUI, err := loadScaffoldTemplates("", "")
+	_, _, _, scaffoldUI, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 
 	scaffoldYAML := `apiVersion: atmos/v1
@@ -980,7 +980,7 @@ func TestSelectGenerateTemplate_ConfigHit(t *testing.T) {
 		"demo": {Name: "demo", Description: "demo template"},
 	}
 
-	result, err := selectGenerateTemplate(&scaffoldGenerateOptions{templateName: "demo"}, configs, nil)
+	result, err := selectGenerateTemplate(&scaffoldGenerateOptions{templateName: "demo"}, configs, nil, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "demo", result.Name)
@@ -990,6 +990,7 @@ func TestSelectGenerateTemplate_TemplateSource(t *testing.T) {
 	result, err := selectGenerateTemplate(
 		&scaffoldGenerateOptions{templateName: "./local-template"},
 		map[string]templates.Configuration{},
+		nil,
 		nil,
 	)
 
@@ -1001,6 +1002,7 @@ func TestSelectGenerateTemplate_FallbackNotFound(t *testing.T) {
 	_, err := selectGenerateTemplate(
 		&scaffoldGenerateOptions{templateName: "nonexistent", interactive: false},
 		map[string]templates.Configuration{},
+		nil,
 		nil,
 	)
 
@@ -1023,11 +1025,12 @@ func TestMergeConfiguredTemplates_Success(t *testing.T) {
 
 	configs := map[string]templates.Configuration{}
 	origins := map[string]string{}
-	err := mergeConfiguredTemplates(configs, origins, "")
+	failed, err := mergeConfiguredTemplates(configs, origins, "")
 
 	require.NoError(t, err)
 	require.Contains(t, configs, "my-template")
 	assert.Equal(t, "atmos.yaml", origins["my-template"])
+	assert.Empty(t, failed)
 }
 
 func TestMergeConfiguredTemplates_WarnsAndContinues(t *testing.T) {
@@ -1041,10 +1044,15 @@ func TestMergeConfiguredTemplates_WarnsAndContinues(t *testing.T) {
 
 	configs := map[string]templates.Configuration{}
 	origins := map[string]string{}
-	err := mergeConfiguredTemplates(configs, origins, "")
+	failed, err := mergeConfiguredTemplates(configs, origins, "")
 
 	require.NoError(t, err)
 	assert.NotContains(t, configs, "broken-template")
+	// The specific load error must survive for selectTemplateByName to
+	// surface later instead of a generic "not found" -- see
+	// TestSelectTemplateByName_SurfacesFailedTemplateLoadError.
+	assert.Contains(t, failed, "broken-template")
+	assert.Error(t, failed["broken-template"])
 }
 
 func TestDetermineScaffoldPathsToValidate_EmptyPathDefaultsToCwd(t *testing.T) {

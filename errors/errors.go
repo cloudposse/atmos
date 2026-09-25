@@ -1315,6 +1315,8 @@ var (
 	ErrScaffoldExpressionFailed               = errors.New("template expression failed to render")
 	ErrScaffoldFilePathPatternInvalid         = errors.New("file path glob pattern is malformed")
 	ErrScaffoldMatrixTargetMissingFileContext = errors.New("matrix target must reference .file.Path or .file.RelPath when its path matches more than one file")
+	ErrScaffoldComputedFieldInvalid           = errors.New("computed field is misconfigured")
+	ErrScaffoldComputedFieldNotSettable       = errors.New("computed field cannot be set")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

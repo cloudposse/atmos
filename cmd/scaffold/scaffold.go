@@ -394,7 +394,7 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 	// Load all available templates. absTargetDir is threaded through so a
 	// local-source template (`source: "."`) never re-ingests its own prior
 	// output as template content when the target happens to land inside it.
-	configs, _, scaffoldUI, err := loadScaffoldTemplates(opts.sourceOverride, absTargetDir)
+	configs, _, failedTemplates, scaffoldUI, err := loadScaffoldTemplates(opts.sourceOverride, absTargetDir)
 	if err != nil {
 		return err
 	}
@@ -432,7 +432,7 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 	}
 
 	// Select template (interactive or by name)
-	selectedConfig, err := selectGenerateTemplate(opts, configs, scaffoldUI)
+	selectedConfig, err := selectGenerateTemplate(opts, configs, failedTemplates, scaffoldUI)
 	if err != nil {
 		return err
 	}
@@ -477,6 +477,7 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 func selectGenerateTemplate(
 	opts *scaffoldGenerateOptions,
 	configs map[string]templates.Configuration,
+	failedTemplates map[string]error,
 	scaffoldUI ScaffoldUI,
 ) (templates.Configuration, error) {
 	if opts.templateName == "" && !opts.interactive {
@@ -498,7 +499,7 @@ func selectGenerateTemplate(
 			}, nil
 		}
 	}
-	return selectTemplate(opts.templateName, configs, scaffoldUI)
+	return selectTemplate(opts.templateName, configs, failedTemplates, scaffoldUI)
 }
 
 // resolveTargetDirectory converts target directory to absolute path.
@@ -527,12 +528,16 @@ func resolveTargetDirectory(targetDir string) (string, error) {
 // nested inside its own `source` never leaks back in as template content (see
 // templates.WithExcludePath). Callers that aren't about to generate (e.g. `scaffold list`)
 // pass "".
-// Returns configs, origins (map[name]source where source is "embedded" or "atmos.yaml"), UI, and error.
-func loadScaffoldTemplates(sourceOverride, excludeTargetDir string) (map[string]templates.Configuration, map[string]string, ScaffoldUI, error) {
+// Returns configs, origins (map[name]source where source is "embedded" or "atmos.yaml"),
+// failedTemplates (map[name]error for any atmos.yaml-configured template that failed to load --
+// see mergeConfiguredTemplates; selectTemplateByName consults this to surface the real load
+// error instead of a misleading "template not found" when the requested name is one of these),
+// UI, and error.
+func loadScaffoldTemplates(sourceOverride, excludeTargetDir string) (map[string]templates.Configuration, map[string]string, map[string]error, ScaffoldUI, error) {
 	// Create generator context
 	genCtx, err := setup.NewGeneratorContext()
 	if err != nil {
-		return nil, nil, nil, errUtils.Build(errUtils.ErrCreateGeneratorContext).
+		return nil, nil, nil, nil, errUtils.Build(errUtils.ErrCreateGeneratorContext).
 			WithExplanation("Failed to initialize generator context").
 			WithHint("Check terminal capabilities and I/O permissions").
 			WithHint("Try running with `ATMOS_LOGS_LEVEL=Debug` for more details").
@@ -543,7 +548,7 @@ func loadScaffoldTemplates(sourceOverride, excludeTargetDir string) (map[string]
 	// Load embedded templates
 	configs, err := templates.GetAvailableConfigurations()
 	if err != nil {
-		return nil, nil, nil, errUtils.Build(errUtils.ErrLoadScaffoldTemplates).
+		return nil, nil, nil, nil, errUtils.Build(errUtils.ErrLoadScaffoldTemplates).
 			WithExplanation("Failed to load available scaffold templates").
 			WithHint("Run `atmos scaffold list` to see available templates").
 			WithHint("Check that embedded templates are included in the binary").
@@ -572,23 +577,29 @@ func loadScaffoldTemplates(sourceOverride, excludeTargetDir string) (map[string]
 	}
 
 	// Merge with configured templates from atmos.yaml (these override the above).
-	if err := mergeConfiguredTemplates(configs, origins, excludeTargetDir); err != nil {
-		return nil, nil, nil, err
+	failedTemplates, err := mergeConfiguredTemplates(configs, origins, excludeTargetDir)
+	if err != nil {
+		return nil, nil, nil, nil, err
 	}
 
-	return configs, origins, genCtx.UI, nil
+	return configs, origins, failedTemplates, genCtx.UI, nil
 }
 
 // mergeConfiguredTemplates merges scaffold templates from atmos.yaml into the configs map.
 // It also updates the origins map to track which templates came from atmos.yaml.
 // The excludeTargetDir parameter is forwarded to convertScaffoldTemplateToConfiguration -- see
 // loadScaffoldTemplates.
-func mergeConfiguredTemplates(configs map[string]templates.Configuration, origins map[string]string, excludeTargetDir string) error {
+// Returns a map of template name to the error that made it fail to load, if any -- a single
+// broken template must never prevent every OTHER configured template from loading (hence
+// continuing the loop rather than returning early), but the specific error is still worth
+// keeping around: see selectTemplateByName, which surfaces it verbatim when the user actually
+// asked for that broken template by name, instead of a generic "not found".
+func mergeConfiguredTemplates(configs map[string]templates.Configuration, origins map[string]string, excludeTargetDir string) (map[string]error, error) {
 	defer perf.Track(nil, "scaffold.mergeConfiguredTemplates")()
 
 	scaffoldSection, err := config.ReadAtmosScaffoldSection(".")
 	if err != nil {
-		return errUtils.Build(errUtils.ErrReadScaffoldConfig).
+		return nil, errUtils.Build(errUtils.ErrReadScaffoldConfig).
 			WithExplanation("Failed to read `scaffold` section from `atmos.yaml`").
 			WithHint("Check the `scaffold` section syntax in `atmos.yaml`").
 			WithHint("Run `atmos validate config` to verify configuration syntax").
@@ -600,12 +611,12 @@ func mergeConfiguredTemplates(configs map[string]templates.Configuration, origin
 
 	templatesData, ok := scaffoldSection["templates"]
 	if !ok {
-		return nil // No templates configured, that's fine
+		return nil, nil // No templates configured, that's fine
 	}
 
 	templatesMap, ok := templatesData.(map[string]interface{})
 	if !ok {
-		return errUtils.Build(errUtils.ErrInvalidScaffoldConfig).
+		return nil, errUtils.Build(errUtils.ErrInvalidScaffoldConfig).
 			WithExplanation("The `scaffold.templates` section is not a valid configuration").
 			WithHint("The `scaffold.templates` section must be a map of template names to configurations").
 			WithExample("```yaml\nscaffold:\n  templates:\n    my-template:\n      description: My template\n      source: ./path\n```").
@@ -614,11 +625,16 @@ func mergeConfiguredTemplates(configs map[string]templates.Configuration, origin
 			Err()
 	}
 
+	var failedTemplates map[string]error
 	for templateName, templateData := range templatesMap {
 		cfg, err := convertScaffoldTemplateToConfiguration(templateName, templateData, excludeTargetDir)
 		if err != nil {
 			// Log error but continue with other templates.
 			atmosui.Warning(fmt.Sprintf("Failed to load scaffold template '%s': %v", templateName, err))
+			if failedTemplates == nil {
+				failedTemplates = make(map[string]error)
+			}
+			failedTemplates[templateName] = err
 			continue
 		}
 		// Configured templates override embedded templates
@@ -627,19 +643,20 @@ func mergeConfiguredTemplates(configs map[string]templates.Configuration, origin
 		origins[templateName] = "atmos.yaml"
 	}
 
-	return nil
+	return failedTemplates, nil
 }
 
 // selectTemplate selects a template either interactively or by name.
 func selectTemplate(
 	templateName string,
 	configs map[string]templates.Configuration,
+	failedTemplates map[string]error,
 	scaffoldUI ScaffoldUI,
 ) (templates.Configuration, error) {
 	if templateName == "" {
 		return selectTemplateInteractive(configs, scaffoldUI)
 	}
-	return selectTemplateByName(templateName, configs)
+	return selectTemplateByName(templateName, configs, failedTemplates)
 }
 
 // selectTemplateInteractive prompts the user to select a template.
@@ -661,13 +678,22 @@ func selectTemplateInteractive(
 	return configs[selectedName], nil
 }
 
-// selectTemplateByName selects a template by name from available configs.
+// selectTemplateByName selects a template by name from available configs. It consults
+// failedTemplates (see mergeConfiguredTemplates) first when templateName isn't in configs: a
+// template that IS configured but failed to load never makes it into configs, so without this
+// check the user would only ever see a generic "not found" error -- hiding the real, specific,
+// already-well-formatted load error (e.g. an invalid scaffold.yaml field) behind advice to check
+// spelling or run `scaffold list`, none of which addresses the actual problem.
 func selectTemplateByName(
 	templateName string,
 	configs map[string]templates.Configuration,
+	failedTemplates map[string]error,
 ) (templates.Configuration, error) {
 	cfg, exists := configs[templateName]
 	if !exists {
+		if loadErr, failed := failedTemplates[templateName]; failed {
+			return templates.Configuration{}, loadErr
+		}
 		availableTemplates := make([]string, 0, len(configs))
 		for name := range configs {
 			availableTemplates = append(availableTemplates, name)
@@ -1009,7 +1035,7 @@ func reloadLocalTemplateFiles(selectedConfig *templates.Configuration, targetDir
 // This logic was moved from internal/exec/scaffold.go to keep command logic in cmd/.
 func executeScaffoldList(_ *cobra.Command) error {
 	// Load all available templates (embedded + catalog + atmos.yaml).
-	configs, origins, scaffoldUI, err := loadScaffoldTemplates("", "")
+	configs, origins, _, scaffoldUI, err := loadScaffoldTemplates("", "")
 	if err != nil {
 		return err
 	}

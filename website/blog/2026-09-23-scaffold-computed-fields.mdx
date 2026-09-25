@@ -1,0 +1,85 @@
+---
+slug: scaffold-computed-fields
+title: "Derive a scaffold field once with type: computed"
+date: 2026-09-23T12:00:00.000Z
+authors: [jorrite]
+tags: [feature]
+---
+
+A scaffold template's `spec.fields[]` questionnaire is great at collecting answers, but not every
+value a template needs is really an answer. Some values are just a function of other answers —
+"the primary region, defaulting to the only region when there's just one" — and until now, every
+file that needed that value had to re-derive it itself, with the same `{{ if .Config.primary_region }}...{{ end }}`
+snippet copied into each one.
+
+<!--truncate-->
+
+## The Problem
+
+Templating and scaffolding tools all hit the same shape of problem eventually: a value the
+generated output needs isn't something the user should be prompted for at all — it's derived from
+answers they already gave. Ask for a list of regions, then only ask for a primary region when
+there's more than one; when there's exactly one, it's the primary by definition, no prompt needed.
+That derivation logic is simple once, but a scaffold template has no single place to put it. It
+gets pasted into every file that references the value, and every copy has to independently stay
+in sync with the same conditional. Miss one, or get the fallback logic subtly wrong in one file,
+and that file quietly disagrees with the rest of the generated project.
+
+## The Fix
+
+A new [`type: computed`](/cli/commands/scaffold/generate#computed-fields) field declares a value
+once — either derived from other answers via a `value:` Go-template expression, or a plain
+literal (string, number, boolean, list, or map) used as-is — and is never itself prompted for or
+settable with `--set`:
+
+```yaml
+spec:
+  fields:
+    - name: regions
+      type: multiselect
+      options: [us-east-1, us-west-2, eu-west-1]
+    - name: primary_region_select
+      type: select
+      options: answers.regions
+      when: "size(answers.regions) > 1"
+    - name: primary_region
+      type: computed
+      value: "{{ ternary answers.primary_region_select (index answers.regions 0) (gt (len answers.regions) 1) }}"
+```
+
+`primary_region` derives its value exactly once, and `.Config.primary_region` is then usable
+everywhere `.Config` is — file content, `target:` path templates, and `matrix:` axes — with no
+per-file fallback logic to keep in sync. Computed fields evaluate in declaration order, after
+every regular field's answer is already final, so a computed field can reference any regular
+field regardless of where it's declared, and any *earlier*-declared computed field's own result.
+
+A computed field's `value:` doesn't have to be an expression at all — a plain literal works too,
+useful for a small hand-authored reference table shared across every file in the template:
+
+```yaml
+- name: provider_version_pins
+  type: computed
+  value: {aws: "~> 5.0", azurerm: "~> 3.0", google: "~> 5.0"}
+```
+
+`provider_version_pins` is stored exactly as written, with no template rendering, and is
+reachable the same way as any other computed field: `.Config.provider_version_pins`.
+
+## How to Use It
+
+Add a `type: computed` field to any existing `scaffold.yaml`, following the shape above, and
+reference its name from `.Config` in any file the template generates:
+
+```shell
+atmos scaffold generate <template> <target> --set regions=us-east-1,us-west-2
+```
+
+See the [Computed Fields](/cli/commands/scaffold/generate#computed-fields) section of the
+`atmos scaffold generate` docs for the full set of validation rules (`value:` is required on a
+computed field and rejected on every other type; `required:`/`default:` are both rejected on a
+computed field) and the ordering constraints that keep a computed field's dependencies resolvable.
+
+## Get Involved
+
+See the [`atmos scaffold generate`](/cli/commands/scaffold/generate#computed-fields) docs for the
+full reference, or [open an issue](https://github.com/cloudposse/atmos/issues) with feedback.

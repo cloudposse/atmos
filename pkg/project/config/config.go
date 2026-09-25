@@ -56,6 +56,11 @@ const filePermissions = 0o644
 
 const fieldNameErrorFormat = "%w: %q"
 
+// fieldTypeComputed is the FieldDefinition.Type value for a field that is
+// never prompted for or --set, only ever derived from other answers via its
+// Value expression. See ComputeFields.
+const fieldTypeComputed = "computed"
+
 var (
 	errInvalidBooleanFieldValue   = errors.New("invalid boolean field value")
 	errFieldMustBeText            = errors.New("field must be text")
@@ -306,21 +311,47 @@ type FieldValidation struct {
 // type, presentation, validation, and default value.
 type FieldDefinition struct {
 	Name        string           `yaml:"name" json:"name" jsonschema:"description=Field name used as the template variable"`
-	Type        string           `yaml:"type,omitempty" json:"type,omitempty" jsonschema:"description=Prompt type,enum=input,enum=text,enum=string,enum=select,enum=multiselect,enum=confirm,enum=bool,enum=boolean"`
+	Type        string           `yaml:"type,omitempty" json:"type,omitempty" jsonschema:"description=Prompt type,enum=input,enum=text,enum=string,enum=select,enum=multiselect,enum=confirm,enum=bool,enum=boolean,enum=computed"`
 	Label       string           `yaml:"label,omitempty" json:"label,omitempty" jsonschema:"description=Short prompt label"`
 	Description string           `yaml:"description,omitempty" json:"description,omitempty" jsonschema:"description=Longer help text shown with the prompt"`
-	Required    bool             `yaml:"required,omitempty" json:"required,omitempty" jsonschema:"description=Whether a value must be provided"`
+	Required    bool             `yaml:"required,omitempty" json:"required,omitempty" jsonschema:"description=Whether a value must be provided (not valid on a computed field)"`
 	Default     any              `yaml:"default,omitempty" json:"default,omitempty" jsonschema:"description=Default value"`
 	Options     any              `yaml:"options,omitempty" json:"options,omitempty" jsonschema:"description=Static list of choices (plain strings or {label: value} objects); a dot-path string into answers.* (e.g. answers.environments); or a Go-template expression computing the list,oneof_type=string;array"`
 	Placeholder string           `yaml:"placeholder,omitempty" json:"placeholder,omitempty" jsonschema:"description=Placeholder text for input fields"`
 	Validation  *FieldValidation `yaml:"validation,omitempty" json:"validation,omitempty" jsonschema:"description=Optional validation constraints for this field"`
+	// Value computes a computed field's value. Either a Go-template
+	// expression string (the same `answers` binding When and dynamic
+	// Options use), rendered via engine.Processor.RenderAnswersExpression,
+	// or a literal of any other type (map, list, scalar, bool) taken
+	// as-is -- e.g. a hand-authored literal, or one produced by a YAML
+	// function such as !include that resolves before this field is ever
+	// unmarshaled. ComputeFields branches on the resolved Go type: a string
+	// always goes through the expression renderer (a bare literal string
+	// with no template delimiters still errors, exactly as before this
+	// field accepted non-string values); anything else is stored directly,
+	// skipping the renderer entirely. Only valid when Type is "computed";
+	// every other field type is user-supplied (prompted or --set) and
+	// ignores Value. See ComputeFields, which evaluates every computed
+	// field once, in Fields declaration order, after every regular field's
+	// answer is already final -- so a computed field may reference any
+	// regular field regardless of declaration order, but may only
+	// reference an earlier-declared computed field. Referencing itself or a
+	// later-declared computed field is rejected at load time
+	// (validateComputedFieldOrdering, string values only -- a literal has
+	// no expression to scan), rather than silently resolving to no value at
+	// render time. Because ComputeFields runs after the interactive form
+	// completes, a regular field's own When can never depend on a computed
+	// field's result -- only the reverse.
+	Value any `yaml:"value,omitempty" json:"value,omitempty" jsonschema:"description=A Go-template expression computing this field's value from answers.* -- or a literal value of any type (only valid when type: computed)"`
 	// When gates whether this field is prompted for, evaluated against
 	// answers collected from fields declared earlier in Fields (as the
-	// `answers` CEL variable). Empty always prompts. Schema-restricted to a
-	// predicate/CEL string or a list (implicit all): invopop reflects
-	// Condition's oneOf branches alongside a sibling additionalProperties:
-	// false (Condition has no exported fields), so including "object" here
-	// would make the {all:/any:/not:} map form fail schema validation even
+	// `answers` CEL variable). Empty always prompts. Never sees a computed
+	// field's result, even one declared earlier -- see Value's doc comment.
+	// Schema-restricted to a predicate/CEL string or a list (implicit all):
+	// invopop reflects Condition's oneOf branches alongside a sibling
+	// additionalProperties: false (Condition has no exported fields), so
+	// including "object" here would make the {all:/any:/not:} map form fail
+	// schema validation even
 	// though pkg/condition parses it -- confirmed empirically, not assumed.
 	// Use CEL's &&/||/! for compound conditions instead.
 	When condition.Condition `yaml:"when,omitempty" json:"when,omitempty" jsonschema:"description=Condition (predicate/CEL string or a list treated as 'all'; use CEL &&/||/! instead of the all/any/not map form) gating whether this field is prompted for,oneof_type=string;array"`
