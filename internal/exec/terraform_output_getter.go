@@ -47,7 +47,7 @@ func (d *defaultOutputGetter) GetOutput(
 	// Resolve the target component's own auth section (when it declares a default identity)
 	// before fetching its outputs, so `!terraform.output` matches `!terraform.state` and
 	// atmos.Component() instead of always reusing the enclosing component's credentials verbatim.
-	resolvedAuthContext := authContext
+	var resolvedAuthContext *schema.AuthContext
 	var resolvedAuthManager any
 	if authdeferred.IsDeferred(atmosConfig.AuthManager) {
 		parent, _ := authManager.(auth.AuthManager)
@@ -56,9 +56,7 @@ func (d *defaultOutputGetter) GetOutput(
 			return nil, false, err
 		}
 		resolvedAuthManager = manager
-		if manager != nil && manager.GetStackInfo() != nil {
-			resolvedAuthContext = manager.GetStackInfo().AuthContext
-		}
+		resolvedAuthContext = resolvedTargetAuthContext(atmosConfig, manager, authContext, false)
 	} else {
 		resolvedAuthContext, resolvedAuthManager = resolveNestedOutputAuth(
 			atmosConfig, component, stack, authContext, authManager, resolveAuthManagerForNestedComponent,

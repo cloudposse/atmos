@@ -40,3 +40,51 @@ func TestRenderValuesPreservesStructure(t *testing.T) {
 	_, err = RenderValues(input, func(string) (any, error) { return nil, errUtils.ErrInvalidAuthConfig })
 	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
 }
+
+func TestEvaluationDemandCustomDelimiters(t *testing.T) {
+	input := map[string]any{
+		"vars":     map[string]any{"name": "[[ .settings.owner ]]", "unused": "!aws.account_id"},
+		"settings": map[string]any{"owner": []any{"[[ .env.TEAM ]]"}},
+		"env":      map[string]any{"TEAM": "platform"},
+	}
+	paths := ExpandEvaluationPaths(input, [][]string{{"vars", "name"}}, "[[", "]]")
+	assert.ElementsMatch(t, [][]string{{"vars", "name"}, {"settings", "owner"}, {"env", "TEAM"}}, paths)
+	assert.Equal(t, [][]string{}, ExpandEvaluationPaths(input, [][]string{}, "[[", "]]"))
+	assert.Nil(t, ExpandEvaluationPaths(input, nil, "[[", "]]"))
+	assert.Nil(t, ExpandEvaluationPaths(input, [][]string{{"vars", "name"}}, "[["))
+	input["vars"] = map[string]any{"name": "[[ index . .key ]]"}
+	assert.Nil(t, ExpandEvaluationPaths(input, [][]string{{"vars", "name"}}, "[[", "]]"))
+}
+
+func TestEvaluationDemandDelimiterOverrides(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		delimiters any
+		template   string
+		full       bool
+	}{
+		{"string pair", []string{"<<", ">>"}, "<< .settings.owner >>", false},
+		{"YAML pair", []any{"<<", ">>"}, "<< .settings.owner >>", false},
+		{"empty resets defaults", []any{}, "{{ .settings.owner }}", false},
+		{"malformed pair", []any{42, ">>"}, "<< .settings.owner >>", true},
+		{"dynamic delimiters", "[[ .vars.delimiters ]]", "<< .settings.owner >>", true},
+		{"empty delimiter", []string{"", ">>"}, "<< .settings.owner >>", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := map[string]any{
+				"vars": map[string]any{"name": tc.template},
+				"settings": map[string]any{
+					"owner":     "platform",
+					"templates": map[string]any{"settings": map[string]any{"delimiters": tc.delimiters}},
+				},
+			}
+			paths := ExpandEvaluationPaths(data, [][]string{{"vars", "name"}}, "[[", "]]")
+			if tc.full {
+				require.Nil(t, paths)
+			} else {
+				require.Equal(t, [][]string{{"vars", "name"}, {"settings", "owner"}}, paths)
+			}
+			require.Equal(t, [][]string{}, ExpandEvaluationPaths(data, [][]string{}, "[[", "]]"))
+		})
+	}
+}

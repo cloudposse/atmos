@@ -38,16 +38,21 @@ func FilterDeferredFields(dctx *m.DeferredMergeContext, section string, paths []
 
 // ExpandEvaluationPaths includes fields referenced by selected template values.
 // Dynamic scope/root access cannot be proven safe to narrow, so it evaluates fully.
-func ExpandEvaluationPaths(data map[string]any, paths [][]string) [][]string {
+// Optional delimiters keep dependency analysis aligned with template rendering.
+func ExpandEvaluationPaths(data map[string]any, paths [][]string, delimiters ...string) [][]string {
 	defer perf.Track(nil, "deferred.ExpandEvaluationPaths")()
 
-	if paths == nil {
+	if len(paths) == 0 {
+		return paths
+	}
+	// Component settings override CLI defaults, including an explicit empty pair
+	// which resets template rendering to the standard delimiters.
+	var ok bool
+	delimiters, ok = evaluationTemplateDelimiters(data, delimiters)
+	if !ok {
 		return nil
 	}
 	result := slices.Clone(paths)
-	if result == nil {
-		result = make([][]string, 0)
-	}
 	seen := make(map[string]bool)
 	for i := 0; i < len(result); i++ {
 		path := result[i]
@@ -65,7 +70,7 @@ func ExpandEvaluationPaths(data map[string]any, paths [][]string) [][]string {
 			}
 			value = section[part]
 		}
-		refs, ok := evaluationReferences(value)
+		refs, ok := evaluationReferences(value, delimiters)
 		if !ok {
 			return nil
 		}
@@ -78,12 +83,43 @@ func ExpandEvaluationPaths(data map[string]any, paths [][]string) [][]string {
 	return result
 }
 
-func evaluationReferences(value any) ([][]string, bool) {
+func evaluationTemplateDelimiters(data map[string]any, fallback []string) ([]string, bool) {
+	settings := data
+	for _, key := range []string{"settings", "templates", "settings"} {
+		nested, ok := settings[key].(map[string]any)
+		if !ok {
+			return fallback, true
+		}
+		settings = nested
+	}
+	raw, exists := settings["delimiters"]
+	if !exists {
+		return fallback, true
+	}
+	switch delimiters := raw.(type) {
+	case []string:
+		return delimiters, true
+	case []any:
+		result := make([]string, len(delimiters))
+		for i, value := range delimiters {
+			delimiter, ok := value.(string)
+			if !ok {
+				return nil, false
+			}
+			result[i] = delimiter
+		}
+		return result, true
+	default:
+		return nil, false
+	}
+}
+
+func evaluationReferences(value any, delimiters []string) ([][]string, bool) {
 	var paths [][]string
 	switch v := value.(type) {
 	case map[string]any:
 		for _, child := range v {
-			refs, ok := evaluationReferences(child)
+			refs, ok := evaluationReferences(child, delimiters)
 			if !ok {
 				return nil, false
 			}
@@ -91,23 +127,30 @@ func evaluationReferences(value any) ([][]string, bool) {
 		}
 	case []any:
 		for _, child := range v {
-			refs, ok := evaluationReferences(child)
+			refs, ok := evaluationReferences(child, delimiters)
 			if !ok {
 				return nil, false
 			}
 			paths = append(paths, refs...)
 		}
 	case string:
-		return templateEvaluationReferences(v)
+		return templateEvaluationReferences(v, delimiters)
 	}
 	return paths, true
 }
 
-func templateEvaluationReferences(value string) ([][]string, bool) {
-	if !strings.Contains(value, "{{") {
+func templateEvaluationReferences(value string, delimiters []string) ([][]string, bool) {
+	left := "{{"
+	if len(delimiters) != 0 {
+		if len(delimiters) != 2 || delimiters[0] == "" || delimiters[1] == "" {
+			return nil, false
+		}
+		left = delimiters[0]
+	}
+	if !strings.Contains(value, left) {
 		return nil, true
 	}
-	refs, static := atmostemplate.StaticFieldRefs(value)
+	refs, static := atmostemplate.StaticFieldRefs(value, delimiters...)
 	if !static {
 		return nil, false
 	}

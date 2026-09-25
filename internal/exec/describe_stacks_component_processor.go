@@ -465,11 +465,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 
 	info := buildConfigAndStacksInfo(componentName, stackFileName, stackManifestName, secs)
-	info.EvaluationPaths = deferred.ExpandEvaluationPaths(componentSection, p.evalPaths)
-	delimiters := p.atmosConfig.Templates.Settings.Delimiters
-	if len(delimiters) > 0 && !slices.Equal(delimiters, []string{"{{", "}}"}) {
-		info.EvaluationPaths = nil
-	}
+	info.EvaluationPaths = deferred.ExpandEvaluationPaths(componentSection, p.evalPaths, p.atmosConfig.Templates.Settings.Delimiters...)
 
 	// Ensure the component key is present in the info's ComponentSection.
 	if comp, ok := info.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {

@@ -25,3 +25,15 @@ func TestStaticFieldRefs(t *testing.T) {
 		})
 	}
 }
+
+func TestStaticFieldRefsCustomDelimiters(t *testing.T) {
+	refs, static := StaticFieldRefs(`[[ .vars.name ]] {{ .unused }}`, "[[", "]]")
+	assert.True(t, static)
+	assert.Equal(t, []FieldRef{{Path: []string{"vars", "name"}}}, refs)
+	_, static = StaticFieldRefs(`[[ index . .key ]]`, "[[", "]]")
+	assert.False(t, static)
+	_, static = StaticFieldRefs(`[[ .vars.name`, "[[", "]]")
+	assert.False(t, static)
+	_, static = StaticFieldRefs(`[[ .vars.name ]]`, "[[")
+	assert.False(t, static)
+}

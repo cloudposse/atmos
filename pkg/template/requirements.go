@@ -9,12 +9,20 @@ import (
 // StaticFieldRefs returns root-relative dependencies without executing functions.
 // Function names are resolved by the evaluator, not by this structural analysis.
 // Dynamic scope, whole-root access, and named template calls require full evaluation.
-func StaticFieldRefs(input string) ([]FieldRef, bool) {
+// An optional delimiter pair uses the same syntax as the template evaluator.
+func StaticFieldRefs(input string, delimiters ...string) ([]FieldRef, bool) {
 	defer perf.Track(nil, "template.StaticFieldRefs")()
 
+	left, right := "{{", "}}"
+	if len(delimiters) != 0 {
+		if len(delimiters) != 2 || delimiters[0] == "" || delimiters[1] == "" {
+			return nil, false
+		}
+		left, right = delimiters[0], delimiters[1]
+	}
 	tree := parse.New("requirements")
 	tree.Mode = parse.SkipFuncCheck
-	if _, err := tree.Parse(input, "{{", "}}", make(map[string]*parse.Tree)); err != nil {
+	if _, err := tree.Parse(input, left, right, make(map[string]*parse.Tree)); err != nil {
 		return nil, false
 	}
 	var refs []FieldRef

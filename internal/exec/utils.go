@@ -985,7 +985,7 @@ func processStacks(
 	// having none available when processTemplates is false but processYamlFunctions is true.
 	var settingsSectionStruct schema.Settings
 	var componentTemplateContext map[string]any
-	configAndStacksInfo.EvaluationPaths = deferred.ExpandEvaluationPaths(configAndStacksInfo.ComponentSection, configAndStacksInfo.EvaluationPaths)
+	configAndStacksInfo.EvaluationPaths = deferred.ExpandEvaluationPaths(configAndStacksInfo.ComponentSection, configAndStacksInfo.EvaluationPaths, atmosConfig.Templates.Settings.Delimiters...)
 
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
