@@ -3,7 +3,6 @@ package ui
 import (
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	tfjson "github.com/hashicorp/terraform-json"
@@ -640,8 +639,8 @@ func TestExtractReferences_NilExpression(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-// Tests for renderMultilineDiffSimple - verifies line-by-line diff behavior.
-func TestRenderMultilineDiffSimple_IdenticalLines(t *testing.T) {
+// Tests for renderValueDiff verify line-by-line diff behavior.
+func TestRenderValueDiff_IdenticalLines(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -650,7 +649,7 @@ func TestRenderMultilineDiffSimple_IdenticalLines(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
+	renderValueDiff(&b, plainAttributeValue(before), plainAttributeValue(after), attrRenderContext{Config: &RenderConfig{Width: 120, CreateStyle: createStyle, DeleteStyle: deleteStyle}})
 
 	result := b.String()
 	// Identical content should have no +/- markers.
@@ -662,7 +661,7 @@ func TestRenderMultilineDiffSimple_IdenticalLines(t *testing.T) {
 	assert.Contains(t, result, "line3")
 }
 
-func TestRenderMultilineDiffSimple_SingleLineChange(t *testing.T) {
+func TestRenderValueDiff_SingleLineChange(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -671,7 +670,7 @@ func TestRenderMultilineDiffSimple_SingleLineChange(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
+	renderValueDiff(&b, plainAttributeValue(before), plainAttributeValue(after), attrRenderContext{Config: &RenderConfig{Width: 120, CreateStyle: createStyle, DeleteStyle: deleteStyle}})
 
 	result := b.String()
 	// Only the changed line should have markers.
@@ -682,7 +681,7 @@ func TestRenderMultilineDiffSimple_SingleLineChange(t *testing.T) {
 	assert.Contains(t, result, "line3")
 }
 
-func TestRenderMultilineDiffSimple_ConsecutiveChangesGrouped(t *testing.T) {
+func TestRenderValueDiff_ConsecutiveChangesGrouped(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -691,7 +690,7 @@ func TestRenderMultilineDiffSimple_ConsecutiveChangesGrouped(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
+	renderValueDiff(&b, plainAttributeValue(before), plainAttributeValue(after), attrRenderContext{Config: &RenderConfig{Width: 120, CreateStyle: createStyle, DeleteStyle: deleteStyle}})
 
 	result := b.String()
 
@@ -718,7 +717,7 @@ func TestRenderMultilineDiffSimple_ConsecutiveChangesGrouped(t *testing.T) {
 	assert.Less(t, new1Pos, new2Pos, "+ new1 should come before + new2")
 }
 
-func TestRenderMultilineDiffSimple_MixedUnchangedAndChanged(t *testing.T) {
+func TestRenderValueDiff_MixedUnchangedAndChanged(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -727,7 +726,7 @@ func TestRenderMultilineDiffSimple_MixedUnchangedAndChanged(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
+	renderValueDiff(&b, plainAttributeValue(before), plainAttributeValue(after), attrRenderContext{Config: &RenderConfig{Width: 120, CreateStyle: createStyle, DeleteStyle: deleteStyle}})
 
 	result := b.String()
 
@@ -743,7 +742,7 @@ func TestRenderMultilineDiffSimple_MixedUnchangedAndChanged(t *testing.T) {
 	assert.Contains(t, result, "+ new-section2")
 }
 
-func TestRenderMultilineDiffSimple_LinesAdded(t *testing.T) {
+func TestRenderValueDiff_LinesAdded(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -752,7 +751,7 @@ func TestRenderMultilineDiffSimple_LinesAdded(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
+	renderValueDiff(&b, plainAttributeValue(before), plainAttributeValue(after), attrRenderContext{Config: &RenderConfig{Width: 120, CreateStyle: createStyle, DeleteStyle: deleteStyle}})
 
 	result := b.String()
 	// line2 is new, should have + marker.
@@ -762,7 +761,7 @@ func TestRenderMultilineDiffSimple_LinesAdded(t *testing.T) {
 	assert.Contains(t, result, "line3")
 }
 
-func TestRenderMultilineDiffSimple_LinesDeleted(t *testing.T) {
+func TestRenderValueDiff_LinesDeleted(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -771,7 +770,7 @@ func TestRenderMultilineDiffSimple_LinesDeleted(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
+	renderValueDiff(&b, plainAttributeValue(before), plainAttributeValue(after), attrRenderContext{Config: &RenderConfig{Width: 120, CreateStyle: createStyle, DeleteStyle: deleteStyle}})
 
 	result := b.String()
 	// line2 was removed, should have - marker.
@@ -781,7 +780,7 @@ func TestRenderMultilineDiffSimple_LinesDeleted(t *testing.T) {
 	assert.Contains(t, result, "line3")
 }
 
-func TestRenderMultilineDiffSimple_DifferentLengths(t *testing.T) {
+func TestRenderValueDiff_DifferentLengths(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -790,7 +789,7 @@ func TestRenderMultilineDiffSimple_DifferentLengths(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
+	renderValueDiff(&b, plainAttributeValue(before), plainAttributeValue(after), attrRenderContext{Config: &RenderConfig{Width: 120, CreateStyle: createStyle, DeleteStyle: deleteStyle}})
 
 	result := b.String()
 	// a and b are unchanged.
@@ -802,7 +801,7 @@ func TestRenderMultilineDiffSimple_DifferentLengths(t *testing.T) {
 	assert.Contains(t, result, "+ e")
 }
 
-func TestRenderMultilineDiffSimple_EmptyBefore(t *testing.T) {
+func TestRenderValueDiff_EmptyBefore(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -811,14 +810,14 @@ func TestRenderMultilineDiffSimple_EmptyBefore(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
+	renderValueDiff(&b, plainAttributeValue(before), plainAttributeValue(after), attrRenderContext{Config: &RenderConfig{Width: 120, CreateStyle: createStyle, DeleteStyle: deleteStyle}})
 
 	result := b.String()
 	// All content is new.
 	assert.Contains(t, result, "+ new-line")
 }
 
-func TestRenderMultilineDiffSimple_EmptyAfter(t *testing.T) {
+func TestRenderValueDiff_EmptyAfter(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -827,7 +826,7 @@ func TestRenderMultilineDiffSimple_EmptyAfter(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
+	renderValueDiff(&b, plainAttributeValue(before), plainAttributeValue(after), attrRenderContext{Config: &RenderConfig{Width: 120, CreateStyle: createStyle, DeleteStyle: deleteStyle}})
 
 	result := b.String()
 	// All content is deleted.
@@ -1006,7 +1005,7 @@ func TestRenderAttributeChanges_ForcesReplacementMultiline(t *testing.T) {
 	result := b.String()
 	// Should contain the attribute name.
 	assert.Contains(t, result, "content")
-	// Should show "# forces replacement" annotation on the key line.
+	// Should show "# forces replacement" annotation alongside the diff.
 	assert.Contains(t, result, "# forces replacement")
 }
 
@@ -1414,8 +1413,7 @@ func TestRenderAttributeChanges_WithAttributeBar(t *testing.T) {
 }
 
 // TestRenderAttributeChanges_MultilineOnlyAddition verifies a purely-added multi-line value
-// (Before nil, After multi-line) renders every line with a "+" marker via
-// renderMultilineValueSimple, including truncation of lines exceeding the max width.
+// (Before nil, After multi-line) sits beneath its header and wraps without truncation.
 func TestRenderAttributeChanges_MultilineOnlyAddition(t *testing.T) {
 	t.Parallel()
 
@@ -1425,7 +1423,7 @@ func TestRenderAttributeChanges_MultilineOnlyAddition(t *testing.T) {
 		{Key: "script", Before: nil, After: "line1\n" + longLine, Unknown: false},
 	}
 
-	renderAttributeChanges(&b, changes, "", &RenderConfig{ShowAttributeBar: true})
+	renderAttributeChanges(&b, changes, "", &RenderConfig{ShowAttributeBar: true, Width: 120})
 
 	// resolveRenderConfig falls back to styled (colored) Create/Delete symbols when
 	// RenderConfig leaves them unset, which inserts an ANSI reset between the "+"/"-"
@@ -1433,8 +1431,10 @@ func TestRenderAttributeChanges_MultilineOnlyAddition(t *testing.T) {
 	// independent of whether the terminal the test runs under supports color.
 	result := ansi.Strip(b.String())
 	assert.Contains(t, result, "script")
-	assert.Contains(t, result, "+ line1")
-	assert.Contains(t, result, "...", "a line longer than the max width must be truncated")
+	assert.Contains(t, result, "script (none)  →\n")
+	assert.Contains(t, result, "┃   line1")
+	assert.NotContains(t, result, "...", "long lines must wrap without losing content")
+	assert.Equal(t, 150, strings.Count(result, "a"))
 	assert.NotContains(t, result, longLine, "the untruncated long line must not appear verbatim")
 }
 
@@ -1459,7 +1459,7 @@ func TestRenderAttributeChanges_MultilineOnlyDeletion(t *testing.T) {
 }
 
 // TestRenderAttributeChanges_ComplexValue_Create verifies a map/array attribute that's newly
-// added (Before nil) is rendered as pretty-printed JSON lines, each prefixed with "+".
+// added (Before nil) is rendered as pretty-printed JSON beneath its header.
 func TestRenderAttributeChanges_ComplexValue_Create(t *testing.T) {
 	t.Parallel()
 
@@ -1472,7 +1472,7 @@ func TestRenderAttributeChanges_ComplexValue_Create(t *testing.T) {
 
 	result := b.String()
 	assert.Contains(t, result, "tags")
-	assert.Contains(t, result, "+")
+	assert.Contains(t, result, "→")
 	assert.Contains(t, result, "Name")
 }
 
@@ -1495,7 +1495,7 @@ func TestRenderAttributeChanges_ComplexValue_Delete(t *testing.T) {
 }
 
 // TestRenderAttributeChanges_ComplexValue_Update verifies a map/array attribute present on
-// both sides is rendered as a line-by-line JSON diff (renderJSONDiff), also exercising the
+// both sides is rendered as a line-by-line JSON diff (renderValueDiff), also exercising the
 // attribute-bar content-indent branch (ShowAttributeBar: true).
 func TestRenderAttributeChanges_ComplexValue_Update(t *testing.T) {
 	t.Parallel()
@@ -1519,9 +1519,8 @@ func TestRenderAttributeChanges_ComplexValue_Update(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(result, "Shared"))
 }
 
-// TestRenderMultilineDiffSimple_LongLineTruncated verifies makeTruncator's truncation branch:
-// a line exceeding the max content width is cut short and suffixed with "...".
-func TestRenderMultilineDiffSimple_LongLineTruncated(t *testing.T) {
+// TestRenderValueDiff_LongLineWrapped verifies long diff lines wrap without losing content.
+func TestRenderValueDiff_LongLineWrapped(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -1532,81 +1531,14 @@ func TestRenderMultilineDiffSimple_LongLineTruncated(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
+	renderValueDiff(&b, plainAttributeValue(before), plainAttributeValue(after), attrRenderContext{Config: &RenderConfig{Width: 120, CreateStyle: createStyle, DeleteStyle: deleteStyle}})
 
 	result := b.String()
-	assert.Contains(t, result, "...")
+	assert.NotContains(t, result, "...")
+	assert.Equal(t, 150, strings.Count(result, "x"))
+	assert.Equal(t, 150, strings.Count(result, "y"))
 	assert.NotContains(t, result, longBefore, "the full untruncated deleted line should not appear")
 	assert.NotContains(t, result, longAfter, "the full untruncated added line should not appear")
-}
-
-// TestMakeTruncator_RuneSafe verifies makeTruncator cuts on rune boundaries, not byte indices,
-// so a multi-byte UTF-8 character (e.g. in a tag/description/template attribute value) is never
-// split into an invalid partial sequence.
-func TestMakeTruncator_RuneSafe(t *testing.T) {
-	t.Parallel()
-
-	truncate := makeTruncator(10)
-
-	// Each "é" is 2 bytes in UTF-8; a byte-index slice at width-3=7 would land mid-rune.
-	line := strings.Repeat("é", 20)
-	result := truncate(line)
-
-	assert.True(t, strings.HasSuffix(result, "..."), "truncated line must end with the ellipsis")
-	assert.True(t, utf8.ValidString(result), "truncated line must remain valid UTF-8, never split mid-rune")
-	// 10-3=7 runes kept, plus "...".
-	assert.Equal(t, strings.Repeat("é", 7)+"...", result)
-}
-
-// TestMakeTruncator_ShortLineUnchanged verifies lines at or under maxWidth pass through untouched.
-func TestMakeTruncator_ShortLineUnchanged(t *testing.T) {
-	t.Parallel()
-
-	truncate := makeTruncator(10)
-	assert.Equal(t, "short", truncate("short"))
-}
-
-// TestMakeTruncator_WideCharacterSafe verifies makeTruncator measures and truncates by
-// terminal-cell display width, not rune count: a wide (e.g. CJK) character occupies two cells
-// per rune, so lipgloss.Width(line) can exceed maxWidth while len([]rune(line)) is still less
-// than maxWidth-3 - slicing the rune slice directly at maxWidth-3 (the earlier, buggy
-// implementation) indexes past the end of a short-enough rune slice and panics. 6 "界"
-// characters have a rune length of 6 but a display width of 12.
-func TestMakeTruncator_WideCharacterSafe(t *testing.T) {
-	t.Parallel()
-
-	truncate := makeTruncator(10)
-
-	line := strings.Repeat("界", 6)
-	var result string
-	assert.NotPanics(t, func() {
-		result = truncate(line)
-	})
-
-	assert.True(t, strings.HasSuffix(result, "..."), "truncated line must end with the ellipsis")
-	assert.True(t, utf8.ValidString(result), "truncated line must remain valid UTF-8")
-	assert.LessOrEqual(t, lipgloss.Width(result), 10, "truncated output must not exceed maxWidth in display cells")
-	assert.Equal(t, "界界界...", result)
-}
-
-// TestTransformLines_NilTransform verifies transformLines returns the input slice unchanged
-// when no transform function is supplied (the identity path used defensively but never
-// actually reached by the current call site, which always passes a non-nil truncator).
-func TestTransformLines_NilTransform(t *testing.T) {
-	t.Parallel()
-
-	lines := []string{"a", "b", "c"}
-	result := transformLines(lines, nil)
-	assert.Equal(t, lines, result)
-}
-
-// TestTransformLines_WithTransform verifies transformLines applies the transform to every line.
-func TestTransformLines_WithTransform(t *testing.T) {
-	t.Parallel()
-
-	lines := []string{"a", "bb"}
-	result := transformLines(lines, strings.ToUpper)
-	assert.Equal(t, []string{"A", "BB"}, result)
 }
 
 // TestRenderChildren_WithAttributeChanges verifies renderChildren delegates to
