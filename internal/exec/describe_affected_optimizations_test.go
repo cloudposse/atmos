@@ -33,6 +33,12 @@ func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
 			Packer: schema.Packer{
 				BasePath: "components/packer",
 			},
+			Ansible: schema.Ansible{
+				BasePath: "components/ansible",
+			},
+			Container: schema.ContainerComponentsConfig{
+				BasePath: "components/container",
+			},
 		},
 	}
 
@@ -60,6 +66,31 @@ func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, filepath.ToSlash(pattern), "components/packer/image")
 		assert.Contains(t, pattern, "/**")
+	})
+
+	t.Run("ansible component pattern", func(t *testing.T) {
+		t.Parallel()
+		pattern, err := cache.getComponentPathPattern("webserver", cfg.AnsibleComponentType, atmosConfig)
+		require.NoError(t, err)
+		assert.Contains(t, filepath.ToSlash(pattern), "components/ansible/webserver")
+		assert.Contains(t, pattern, "/**")
+	})
+
+	t.Run("container component pattern", func(t *testing.T) {
+		t.Parallel()
+		pattern, err := cache.getComponentPathPattern("app", cfg.ContainerComponentType, atmosConfig)
+		require.NoError(t, err)
+		assert.Contains(t, filepath.ToSlash(pattern), "components/container/app")
+		assert.Contains(t, pattern, "/**")
+	})
+
+	t.Run("emulator component has no source pattern", func(t *testing.T) {
+		t.Parallel()
+		// Emulator components are stack-defined services with no filesystem source tree, so the
+		// pattern is empty (isComponentFolderChangedIndexed treats an empty pattern as no match).
+		pattern, err := cache.getComponentPathPattern("gcs", cfg.EmulatorComponentType, atmosConfig)
+		require.NoError(t, err)
+		assert.Empty(t, pattern)
 	})
 
 	t.Run("unsupported component type", func(t *testing.T) {
@@ -1784,7 +1815,8 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 
 		helmfileSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.HelmfileComponentType].(map[string]any)
 
-		affected, err := processHelmfileComponentsIndexed(
+		affected, err := processSimpleComponentsIndexed(
+			cfg.HelmfileComponentType,
 			"dev-stack",
 			helmfileSection,
 			remoteStacks,
@@ -1849,7 +1881,8 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 
 		helmfileSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.HelmfileComponentType].(map[string]any)
 
-		affected, err := processHelmfileComponentsIndexed(
+		affected, err := processSimpleComponentsIndexed(
+			cfg.HelmfileComponentType,
 			"dev-stack",
 			helmfileSection,
 			remoteStacks,
@@ -1907,7 +1940,8 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 
 		helmfileSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.HelmfileComponentType].(map[string]any)
 
-		affected, err := processHelmfileComponentsIndexed(
+		affected, err := processSimpleComponentsIndexed(
+			cfg.HelmfileComponentType,
 			"dev-stack",
 			helmfileSection,
 			remoteStacks,
@@ -1992,7 +2026,8 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 
 		packerSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.PackerComponentType].(map[string]any)
 
-		affected, err := processPackerComponentsIndexed(
+		affected, err := processSimpleComponentsIndexed(
+			cfg.PackerComponentType,
 			"dev-stack",
 			packerSection,
 			remoteStacks,
@@ -2051,7 +2086,8 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 
 		packerSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.PackerComponentType].(map[string]any)
 
-		affected, err := processPackerComponentsIndexed(
+		affected, err := processSimpleComponentsIndexed(
+			cfg.PackerComponentType,
 			"dev-stack",
 			packerSection,
 			remoteStacks,
@@ -2095,7 +2131,8 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 
 		packerSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.PackerComponentType].(map[string]any)
 
-		affected, err := processPackerComponentsIndexed(
+		affected, err := processSimpleComponentsIndexed(
+			cfg.PackerComponentType,
 			"dev-stack",
 			packerSection,
 			remoteStacks,
