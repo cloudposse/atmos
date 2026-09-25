@@ -19,10 +19,12 @@ type attributeValue struct {
 	format string
 }
 
+// isBlock identifies documents and multiline text that require a value block.
 func (v attributeValue) isBlock() bool {
 	return v.format != "" || len(v.lines) > 1
 }
 
+// plainAttributeValue preserves literal lines without document normalization.
 func plainAttributeValue(text string) attributeValue {
 	return attributeValue{lines: strings.Split(text, newlineStr)}
 }
@@ -71,6 +73,11 @@ func formatJSONDocument(text string) (string, bool) {
 // formatYAMLDocument retains comments, tags, and scalar spelling via the syntax tree.
 // It uses the YAML parser directly, never Atmos's function-evaluating config loader.
 func formatYAMLDocument(text string, indent int) (string, bool) {
+	trimmed := strings.TrimSpace(text)
+	if !strings.Contains(trimmed, newlineStr) && !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") {
+		// A colon in a single-line description does not make it a document.
+		return "", false
+	}
 	decoder := yaml.NewDecoder(strings.NewReader(text))
 	var document, extra yaml.Node
 	if decoder.Decode(&document) != nil || len(document.Content) != 1 {
@@ -123,6 +130,7 @@ func (v attributeValue) displayLines(config *RenderConfig) []string {
 	return lines
 }
 
+// diffLines applies the display's omission boundaries without syntax colors.
 func (v attributeValue) diffLines(config *RenderConfig) []string {
 	if v.format != "" {
 		return collapseIfNeeded(v.lines, config.MaxLines)

@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestFormatAttributeValue_Documents recognizes complete JSON/YAML collections and preserves their format.
 func TestFormatAttributeValue_Documents(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -35,11 +36,13 @@ func TestFormatAttributeValue_Documents(t *testing.T) {
 	}
 }
 
+// TestFormatAttributeValue_OrdinaryText keeps scalar prose and invalid documents verbatim.
 func TestFormatAttributeValue_OrdinaryText(t *testing.T) {
 	t.Parallel()
 	for _, input := range []string{
 		"", "true", "123", "null", `"a JSON scalar"`, "plain text",
 		"arn:aws:iam::000000000000:root", "https://example.com/path",
+		"Note: managed by Terraform", "Owner:   team", "Owner:   team\n",
 		"line one\nline two\n", "{invalid JSON", "a: [invalid YAML",
 		"a: 1\na: 2", "a: *missing", "a: 1\n---\nb: 2", "a: 1\n---\n[invalid",
 	} {
@@ -52,6 +55,7 @@ func TestFormatAttributeValue_OrdinaryText(t *testing.T) {
 	}
 }
 
+// TestRenderStructuredAttribute_UpdatesAndDeletions shows changes once while keeping shared lines.
 func TestRenderStructuredAttribute_UpdatesAndDeletions(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -85,6 +89,7 @@ func TestRenderStructuredAttribute_UpdatesAndDeletions(t *testing.T) {
 	}
 }
 
+// TestRenderStructuredAttribute_TypeTransitions renders changes between scalars, collections, and unknowns.
 func TestRenderStructuredAttribute_TypeTransitions(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -109,6 +114,7 @@ func TestRenderStructuredAttribute_TypeTransitions(t *testing.T) {
 	}
 }
 
+// TestRenderAttributeColumns_UnicodeAlignment aligns old-value columns by terminal display width.
 func TestRenderAttributeColumns_UnicodeAlignment(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
@@ -123,6 +129,7 @@ func TestRenderAttributeColumns_UnicodeAlignment(t *testing.T) {
 	assert.Equal(t, column1, column2)
 }
 
+// TestResolveRenderConfig_FormattingContext retains explicit settings and resolves the default terminal width.
 func TestResolveRenderConfig_FormattingContext(t *testing.T) {
 	t.Parallel()
 	config := &RenderConfig{Width: 97, AtmosConfig: &schema.AtmosConfiguration{}}
@@ -132,6 +139,7 @@ func TestResolveRenderConfig_FormattingContext(t *testing.T) {
 	assert.Equal(t, templates.GetTerminalWidth(), resolveRenderConfig(nil).Width)
 }
 
+// TestRenderStructuredAttribute_FormattingSettings honors indentation and explicit syntax-disable settings.
 func TestRenderStructuredAttribute_FormattingSettings(t *testing.T) {
 	t.Parallel()
 	config := &schema.AtmosConfiguration{}
@@ -145,6 +153,7 @@ func TestRenderStructuredAttribute_FormattingSettings(t *testing.T) {
 	assert.False(t, config.Settings.Terminal.SyntaxHighlighting.Enabled)
 }
 
+// TestRenderStructuredAttribute_HighlightingDoesNotChangeDiff keeps diff semantics independent of syntax coloring.
 func TestRenderStructuredAttribute_HighlightingDoesNotChangeDiff(t *testing.T) {
 	t.Parallel()
 	for _, value := range []string{`{"a":"old","shared":true}`, "a: old\nshared: true\nscript: |\n  echo hi"} {

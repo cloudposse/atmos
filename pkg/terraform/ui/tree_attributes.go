@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -18,6 +19,7 @@ type formattedAttributeChange struct {
 	newVal string
 }
 
+// formatOneAttributeChange resolves placeholders before formatting visible values.
 func formatOneAttributeChange(change *AttributeChange, config *RenderConfig) formattedAttributeChange {
 	fc := formattedAttributeChange{change: change}
 	if change.Sensitive {
@@ -41,6 +43,7 @@ func formatOneAttributeChange(change *AttributeChange, config *RenderConfig) for
 	return fc
 }
 
+// inlineAttributeValue distinguishes missing and empty values in arrow columns.
 func inlineAttributeValue(value attributeValue) string {
 	if len(value.lines) == 0 {
 		return "(none)"
@@ -96,10 +99,12 @@ func renderOneAttributeChange(b *strings.Builder, fc *formattedAttributeChange, 
 	renderAttributeAnnotation(b, info.Annotation, ctx)
 }
 
+// padAttributeColumn aligns columns using visible terminal cells.
 func padAttributeColumn(text string, width int) string {
 	return text + strings.Repeat(spaceChar, max(0, width-ansi.StringWidth(text)))
 }
 
+// renderArrowValue repeats the continuation gutter for every wrapped logical line.
 func renderArrowValue(b *strings.Builder, lines []string, prefix, continuation string, width int) {
 	for _, line := range lines {
 		writeWrappedAttributeLine(b, line, prefix, continuation, width)
@@ -133,6 +138,7 @@ func renderCompactAttribute(b *strings.Builder, fc *formattedAttributeChange, ct
 	renderAttributeAnnotation(b, info.Annotation, ctx)
 }
 
+// renderAttributeAnnotation wraps replacement notes within the attribute gutter.
 func renderAttributeAnnotation(b *strings.Builder, annotation string, ctx attrRenderContext) {
 	if annotation != "" {
 		prefix := ctx.Indent + ctx.Bar
@@ -140,6 +146,7 @@ func renderAttributeAnnotation(b *strings.Builder, annotation string, ctx attrRe
 	}
 }
 
+// renderAttributeDiff puts the change header above its indented line diff.
 func renderAttributeDiff(b *strings.Builder, fc *formattedAttributeChange, ctx attrRenderContext, info *attrStyleInfo) {
 	prefix := ctx.Indent + ctx.Bar
 	header := info.KeyStyle.Render(fc.change.Key)
@@ -151,7 +158,20 @@ func renderAttributeDiff(b *strings.Builder, fc *formattedAttributeChange, ctx a
 	}
 	ctx.Indent = prefix + twoSpaceIndent
 	ctx.Bar = ""
-	renderValueDiff(b, fc.before, fc.after, ctx)
+	before, after := attributeDiffValues(fc)
+	renderValueDiff(b, before, after, ctx)
+}
+
+// attributeDiffValues falls back to literal strings when document normalization
+// would hide a formatting-only change, without exposing protected values.
+func attributeDiffValues(fc *formattedAttributeChange) (attributeValue, attributeValue) {
+	before, beforeString := fc.change.Before.(string)
+	after, afterString := fc.change.After.(string)
+	if !fc.change.Sensitive && !fc.change.Unknown && beforeString && afterString && before != after &&
+		fc.before.format != "" && slices.Equal(fc.before.lines, fc.after.lines) {
+		return plainAttributeValue(before), plainAttributeValue(after)
+	}
+	return fc.before, fc.after
 }
 
 // renderValueDiff compares uncolored, unwrapped lines and groups removals before additions.
@@ -159,10 +179,20 @@ func renderAttributeDiff(b *strings.Builder, fc *formattedAttributeChange, ctx a
 func renderValueDiff(b *strings.Builder, before, after attributeValue, ctx attrRenderContext) {
 	beforeLines, afterLines := before.diffLines(ctx.Config), after.diffLines(ctx.Config)
 	beforeDisplay, afterDisplay := before.displayLines(ctx.Config), after.displayLines(ctx.Config)
+	changedOmission := -1
+	if slices.Equal(beforeLines, afterLines) && !slices.Equal(before.lines, after.lines) {
+		// Equal collapsed views can conceal a change in the omitted middle.
+		changedOmission = max(1, ctx.Config.MaxLines*truncHeadRatioNum/truncRatioDenom)
+	}
 	cursor := diffCursor{}
 	for cursor.I < len(beforeLines) || cursor.J < len(afterLines) {
 		if linesMatch(beforeLines, afterLines, cursor.I, cursor.J) {
-			renderAttributeDiffLine(b, beforeDisplay[cursor.I], spaceChar, ctx)
+			if cursor.I == changedOmission {
+				renderAttributeDiffLine(b, beforeDisplay[cursor.I], ctx.Config.DeleteStyle.Render("-"), ctx)
+				renderAttributeDiffLine(b, afterDisplay[cursor.J], ctx.Config.CreateStyle.Render("+"), ctx)
+			} else {
+				renderAttributeDiffLine(b, beforeDisplay[cursor.I], spaceChar, ctx)
+			}
 			cursor.I++
 			cursor.J++
 			continue
@@ -178,6 +208,7 @@ func renderValueDiff(b *strings.Builder, before, after attributeValue, ctx attrR
 	}
 }
 
+// renderAttributeDiffLine wraps a value with its change marker on the first row.
 func renderAttributeDiffLine(b *strings.Builder, line, symbol string, ctx attrRenderContext) {
 	prefix := ctx.Indent + symbol + spaceChar
 	writeWrappedAttributeLine(b, line, prefix, ctx.Indent+twoSpaceIndent, ctx.Config.Width)

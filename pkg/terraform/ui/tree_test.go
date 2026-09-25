@@ -1423,7 +1423,7 @@ func TestRenderAttributeChanges_MultilineOnlyAddition(t *testing.T) {
 		{Key: "script", Before: nil, After: "line1\n" + longLine, Unknown: false},
 	}
 
-	renderAttributeChanges(&b, changes, "", &RenderConfig{ShowAttributeBar: true})
+	renderAttributeChanges(&b, changes, "", &RenderConfig{ShowAttributeBar: true, Width: 120})
 
 	// resolveRenderConfig falls back to styled (colored) Create/Delete symbols when
 	// RenderConfig leaves them unset, which inserts an ANSI reset between the "+"/"-"

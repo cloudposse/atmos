@@ -17,6 +17,7 @@ import (
 
 const kmsPolicy = `{"Statement":[{"Action":"kms:*","Effect":"Allow","Principal":{"AWS":"arn:aws:iam::000000000000:root"},"Resource":"*","Sid":"EnableRootAccess"},{"Action":["kms:ReEncrypt*","kms:GenerateDataKey*","kms:Encrypt","kms:DescribeKey","kms:Decrypt"],"Condition":{"ArnLike":{"kms:EncryptionContext:aws:logs:arn":"arn:aws:logs:us-east-1:000000000000:log-group:*"}},"Effect":"Allow","Principal":{"Service":"logs.us-east-1.amazonaws.com"},"Resource":"*","Sid":"AllowCloudWatchLogs"}],"Version":"2012-10-17"}`
 
+// kmsPolicyTree reproduces the KMS policy and dependent alias from the reported demo.
 func kmsPolicyTree() *DependencyTree {
 	return &DependencyTree{
 		Stack: "dev", Component: "kms",
@@ -32,6 +33,7 @@ func kmsPolicyTree() *DependencyTree {
 	}
 }
 
+// TestRenderTree_KMSPolicyWrapping checks content, aligned headers, and connected rails across terminal widths.
 func TestRenderTree_KMSPolicyWrapping(t *testing.T) {
 	t.Parallel()
 	for _, width := range []int{60, 80, 120, 180} {
@@ -51,6 +53,7 @@ func TestRenderTree_KMSPolicyWrapping(t *testing.T) {
 	}
 }
 
+// assertTreeLayout checks the rendered width and the shared tree-gutter connectivity invariant.
 func assertTreeLayout(t *testing.T, rows []string, width int) {
 	t.Helper()
 	for _, row := range rows {
@@ -59,6 +62,7 @@ func assertTreeLayout(t *testing.T, rows []string, width int) {
 	assert.Empty(t, uitree.Violations(rows), strings.Join(rows, "\n"))
 }
 
+// assertKMSPolicyContent reconstructs the wrapped policy to detect lost or altered values.
 func assertKMSPolicyContent(t *testing.T, rows []string) {
 	t.Helper()
 	start := -1
@@ -96,6 +100,7 @@ func assertKMSPolicyContent(t *testing.T, rows []string) {
 	assert.Equal(t, expected, actual, "wrapping must preserve every policy field and ARN")
 }
 
+// TestRenderAttributeDocuments_BelowHeaderOnWideTerminal keeps multiline content beneath the key even when space is available.
 func TestRenderAttributeDocuments_BelowHeaderOnWideTerminal(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -120,6 +125,7 @@ func TestRenderAttributeDocuments_BelowHeaderOnWideTerminal(t *testing.T) {
 	}
 }
 
+// TestRenderAttributeDocuments_SingleLineValuesStayInline preserves compact scalar and empty-collection rows.
 func TestRenderAttributeDocuments_SingleLineValuesStayInline(t *testing.T) {
 	t.Parallel()
 	for _, value := range []any{"short", "{}", "[]", true} {
@@ -131,6 +137,29 @@ func TestRenderAttributeDocuments_SingleLineValuesStayInline(t *testing.T) {
 	}
 }
 
+// TestRenderAttributeValues_EmptyAndAbsent distinguishes an empty string from deletion
+// and creation so the UI never silently drops the empty side of an inline comparison.
+func TestRenderAttributeValues_EmptyAndAbsent(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name, expected string
+		before, after  any
+	}{
+		{"create empty", `value (none)  →  ""`, nil, ""},
+		{"delete empty", `value ""  →  (none)`, "", nil},
+		{"replace empty", `value ""  →  next`, "", "next"},
+		{"become empty", `value "old"  →  ""`, "old", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var b strings.Builder
+			renderAttributeChanges(&b, []*AttributeChange{{Key: "value", Before: tt.before, After: tt.after}}, "", &RenderConfig{Width: 120})
+			assert.Equal(t, tt.expected, strings.TrimSpace(ansi.Strip(b.String())))
+		})
+	}
+}
+
+// TestRenderAttributeDocuments_HeaderAlignmentAndNarrowFallback checks shared columns without overflowing narrow terminals.
 func TestRenderAttributeDocuments_HeaderAlignmentAndNarrowFallback(t *testing.T) {
 	t.Parallel()
 	for _, width := range []int{60, 120} {
@@ -154,6 +183,7 @@ func TestRenderAttributeDocuments_HeaderAlignmentAndNarrowFallback(t *testing.T)
 	}
 }
 
+// TestRenderAttributeWrapping_PreservesTextAndRails checks lossless wrapping of Unicode, whitespace, and styled tokens.
 func TestRenderAttributeWrapping_PreservesTextAndRails(t *testing.T) {
 	t.Parallel()
 	for _, text := range []string{
@@ -186,6 +216,7 @@ func TestRenderAttributeWrapping_PreservesTextAndRails(t *testing.T) {
 	}
 }
 
+// TestRenderAttributeWrapping_LongUpdateAndKey preserves both values and replacement annotations during wrapping.
 func TestRenderAttributeWrapping_LongUpdateAndKey(t *testing.T) {
 	t.Parallel()
 	before, after := strings.Repeat("x", 160), strings.Repeat("y", 180)
@@ -203,6 +234,7 @@ func TestRenderAttributeWrapping_LongUpdateAndKey(t *testing.T) {
 	assertTreeLayout(t, strings.Split(strings.TrimSuffix(output, "\n"), "\n"), 60)
 }
 
+// TestRenderAttributeWrapping_SensitiveAndUnknown prevents structured formatting from exposing hidden values.
 func TestRenderAttributeWrapping_SensitiveAndUnknown(t *testing.T) {
 	t.Parallel()
 	for _, value := range []any{`{"secret":"hidden-value"}`, "secret: hidden-value", map[string]any{"secret": "hidden-value"}} {
@@ -222,6 +254,7 @@ func TestRenderAttributeWrapping_SensitiveAndUnknown(t *testing.T) {
 	}
 }
 
+// TestRenderStructuredAttribute_ColorAndCollapsing checks syntax colors, omission markers, and caller configuration isolation.
 func TestRenderStructuredAttribute_ColorAndCollapsing(t *testing.T) {
 	t.Parallel()
 	for _, noColor := range []bool{false, true} {

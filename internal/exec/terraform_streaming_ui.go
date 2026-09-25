@@ -98,8 +98,23 @@ func executeStreamingOrShell(atmosConfig *schema.AtmosConfiguration, info *schem
 		return runShell()
 	}
 
+	execOpts := buildStreamingExecuteOptions(atmosConfig, info, req)
+	ctx := shellCommandContext(req.shellOpts...)
+	err := dispatchStreamingExecutor(ctx, req.subCommand, info.DryRun, execOpts)
+	if errors.Is(err, errUtils.ErrStreamingNotSupported) {
+		log.Debug("Streaming UI not supported, falling back to regular execution")
+		return runShell()
+	}
+	return err
+}
+
+// buildStreamingExecuteOptions carries execution metadata, capture writers, and the
+// active formatting configuration across the shell-to-streaming UI boundary.
+func buildStreamingExecuteOptions(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, req *streamingExecRequest) *tfui.ExecuteOptions {
 	stdoutCapture, stderrCapture := streamingCaptureWriters(req.shellOpts)
-	execOpts := &tfui.ExecuteOptions{
+	renderConfig := tfui.BuildRenderConfig(atmosConfig.Components.Terraform.UI)
+	renderConfig.AtmosConfig = atmosConfig
+	return &tfui.ExecuteOptions{
 		Command:       info.Command,
 		Args:          req.args,
 		WorkingDir:    req.componentPath,
@@ -109,20 +124,10 @@ func executeStreamingOrShell(atmosConfig *schema.AtmosConfiguration, info *schem
 		SubCommand:    req.subCommand,
 		Workspace:     req.workspace,
 		DryRun:        info.DryRun,
-		RenderConfig:  tfui.BuildRenderConfig(atmosConfig.Components.Terraform.UI),
+		RenderConfig:  renderConfig,
 		StdoutCapture: stdoutCapture,
 		StderrCapture: stderrCapture,
 	}
-
-	execOpts.RenderConfig.AtmosConfig = atmosConfig
-
-	ctx := shellCommandContext(req.shellOpts...)
-	err := dispatchStreamingExecutor(ctx, req.subCommand, info.DryRun, execOpts)
-	if errors.Is(err, errUtils.ErrStreamingNotSupported) {
-		log.Debug("Streaming UI not supported, falling back to regular execution")
-		return runShell()
-	}
-	return err
 }
 
 // streamingCaptureWriters builds a shellCommandConfig from shellOpts (applying the option funcs
