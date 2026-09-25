@@ -98,7 +98,9 @@ default of `4`.
 
 ## Frozen Installs
 
-Use `toolchain.frozen_lock_file: true` in `atmos.yaml`, or enable it for a CI command:
+Enable frozen mode in CI and security-sensitive environments. Prepare, review, and commit the
+lockfile for the required tools and platforms first. Set `toolchain.frozen_lock_file: true` in
+`atmos.yaml`, or enable it for a CI command:
 
 ```shell
 ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE=true atmos toolchain install

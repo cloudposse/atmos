@@ -21,6 +21,16 @@ The toolchain feature enables you to manage CLI tool versions (Terraform, kubect
 - Automatic tool provisioning in workflows
 </KeyPoints>
 
+:::tip CI and security-sensitive environments
+
+Enable [`toolchain.frozen_lock_file: true`](#frozen-installs-in-ci) to require artifacts already
+recorded in the committed lockfile and reject missing tool or platform entries. Prepare and
+review lockfile updates before running CI. Existing checksum verification applies with ordinary
+lockfile use too; frozen mode additionally prevents installations from accepting and recording
+new artifacts automatically.
+
+:::
+
 ## Basic Configuration
 
 Configure toolchain behavior in your `atmos.yaml`:

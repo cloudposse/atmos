@@ -9,6 +9,12 @@ Running a command from a subdirectory could change where Atmos looked for toolch
 
 <!--truncate-->
 
+:::tip CI and security-sensitive environments
+
+Enable [`toolchain.frozen_lock_file: true`](/cli/configuration/toolchain#frozen-installs-in-ci) to require artifacts already recorded in the committed lockfile and reject missing tool or platform entries. Prepare and review lockfile updates before running CI. Existing checksum verification applies with ordinary lockfile use too; frozen mode additionally prevents installations from accepting and recording new artifacts automatically.
+
+:::
+
 ## The Problem
 
 Relative toolchain paths could follow the directory where you invoked Atmos. A command run from a component directory could therefore look for a different version manifest or use a different installation directory than the same command run from the project base.
@@ -32,8 +38,6 @@ Binaries still use shared XDG cache storage by default. When Atmos installs a ve
 Existing projects get the path and declaration fixes without adding configuration. Continue running your usual Atmos commands; when they need to install a tool automatically, the project's declarations remain unchanged. Use explicit [toolchain management commands](/cli/commands/toolchain/install) when you intend to add or change those declarations.
 
 Automatic installs can still update **resolved artifact metadata** in the existing `toolchain.lock.yaml`: they record missing version or platform entries after successful installation, preserve matching entries, and fail on checksum mismatches. The distinction is between declaring a dependency and recording the artifact used to satisfy it. See [automatic installation and lockfiles](/cli/configuration/toolchain#automatic-installation-and-lockfiles) for details.
-
-For CI that must prohibit lockfile writes, [frozen mode](/cli/configuration/toolchain#frozen-installs-in-ci) requires complete entries for the current platform, including on binary cache hits.
 
 ### Compatibility
 
