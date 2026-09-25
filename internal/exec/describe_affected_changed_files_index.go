@@ -117,6 +117,19 @@ func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath))
 	}
 
+	// Add Ansible base path if configured.
+	if atmosConfig.Components.Ansible.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath))
+	}
+
+	// Add container base path if configured.
+	if atmosConfig.Components.Container.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Container.BasePath))
+	}
+
+	// Emulator components are stack-defined services with no filesystem source tree, so there is
+	// no base path to index for them (see getComponentBasePath in describe_stacks.go).
+
 	// Add stacks base path if configured.
 	if atmosConfig.Stacks.BasePath != "" {
 		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath))
@@ -135,17 +148,22 @@ func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 	return normalizedBasePaths
 }
 
-// indexChangedFile indexes a single changed file by finding its matching base path.
+// indexChangedFile indexes a single changed file under every base path that contains it.
 // The input file path must already be absolute (normalized in newChangedFilesIndex).
 // Files that don't match any base path are not indexed (they may still be checked via
 // module patterns or dependency paths, which are independent mechanisms).
 func indexChangedFile(index *changedFilesIndex, absFile string, normalizedBasePaths []string) {
-	// Find which base path this file belongs to.
-	// Use filepath.Rel to properly check path boundaries, not just string prefixes.
-	// This prevents sibling paths like "components/terraform" and "components/terraform-modules"
-	// from colliding due to shared prefixes.
-	if matchedPath := findMatchingBasePath(absFile, normalizedBasePaths); matchedPath != "" {
-		index.filesByBasePath[matchedPath] = append(index.filesByBasePath[matchedPath], absFile)
+	// Index the file under EVERY containing base path, not just the first match. Use filepath.Rel
+	// to properly check path boundaries, not just string prefixes. This prevents sibling paths
+	// like "components/terraform" and "components/terraform-modules" from colliding due to shared
+	// prefixes. When one component type's base path is nested under another's (e.g.
+	// terraform=`components`, ansible=`components/ansible`), a file can belong to more than one
+	// base path; indexing under only the first would hide it from getRelevantFiles for the more
+	// specific type, so a source edit under the nested type would go unreported. See #3204.
+	for _, basePath := range normalizedBasePaths {
+		if isFileInBasePath(absFile, basePath) {
+			index.filesByBasePath[basePath] = append(index.filesByBasePath[basePath], absFile)
+		}
 	}
 
 	// Files that don't match any base path are NOT indexed for base path checking.
@@ -153,16 +171,6 @@ func indexChangedFile(index *changedFilesIndex, absFile string, normalizedBasePa
 	// - Module pattern cache (if referenced as Terraform modules)
 	// - Dependency checking (if specified in component dependencies)
 	// This maintains independence between component folder checks, module checks, and dependency checks.
-}
-
-// findMatchingBasePath returns the base path that contains the given file, or empty string if none match.
-func findMatchingBasePath(absFile string, normalizedBasePaths []string) string {
-	for _, basePath := range normalizedBasePaths {
-		if isFileInBasePath(absFile, basePath) {
-			return basePath
-		}
-	}
-	return ""
 }
 
 // isFileInBasePath checks if a file is within a base path using proper path boundary checking.
@@ -197,8 +205,13 @@ func (idx *changedFilesIndex) getRelevantFiles(componentType string, atmosConfig
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath)
 	case cfg.HelmComponentType:
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath)
+	case cfg.AnsibleComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath)
+	case cfg.ContainerComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Container.BasePath)
 	default:
-		// Unknown component type - return all files as fallback.
+		// Unknown component type (or a type with no filesystem source, e.g. emulator) -
+		// return all files as fallback.
 		return idx.allFiles
 	}
 
