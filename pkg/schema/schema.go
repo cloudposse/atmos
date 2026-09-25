@@ -400,6 +400,7 @@ type Toolchain struct {
 	LockFile        string                    `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
 	UseToolVersions bool                      `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
 	UseLockFile     bool                      `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
+	FrozenLockFile  bool                      `yaml:"frozen_lock_file" json:"frozen_lock_file" mapstructure:"frozen_lock_file"`
 	Verification    *ToolchainVerification    `yaml:"verification,omitempty" json:"verification,omitempty" mapstructure:"verification"`
 	Registries      []ToolchainRegistry       `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
 	Aliases         map[string]string         `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
