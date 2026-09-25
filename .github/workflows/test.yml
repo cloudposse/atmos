@@ -550,36 +550,20 @@ jobs:
             api.github.com:443
             github.com:443
             release-assets.githubusercontent.com:443
-            golang.org:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
       - name: Skip verification (workflow run was cancelled)
         if: ${{ cancelled() }}
         run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
-      - name: Check out code into the Go module directory
-        if: ${{ !cancelled() }}
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
-      - name: Set up Go
-        if: ${{ !cancelled() }}
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      # The API-only gate needs neither a checkout nor a Go/Mage compile.
       - name: Check per-OS test matrix result
         if: ${{ !cancelled() }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CHECK: ${{ matrix.check }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-        run: go tool mage ci:checkShardResults "$REPO" "$RUN_ID" "$RUN_ATTEMPT" "$CHECK"
+        uses: $/.github/actions/ci-pipeline
+        with:
+          mode: check-shards
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
+          attempt: ${{ github.run_attempt }}
+          target: ${{ matrix.target }}
+          shard-count: ${{ env.TEST_SHARD_COUNT }}
       - name: Check terraform-registry-cache result
         if: ${{ !cancelled() }}
         run: |
@@ -615,36 +599,20 @@ jobs:
             api.github.com:443
             github.com:443
             release-assets.githubusercontent.com:443
-            golang.org:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
       - name: Skip verification (workflow run was cancelled)
         if: ${{ cancelled() }}
         run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
-      - name: Check out code into the Go module directory
-        if: ${{ !cancelled() }}
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
-      - name: Set up Go
-        if: ${{ !cancelled() }}
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      # The API-only gate needs neither a checkout nor a Go/Mage compile.
       - name: Check per-OS test matrix result
         if: ${{ !cancelled() }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CHECK: ${{ matrix.check }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-        run: go tool mage ci:checkShardResults "$REPO" "$RUN_ID" "$RUN_ATTEMPT" "$CHECK"
+        uses: $/.github/actions/ci-pipeline
+        with:
+          mode: check-shards
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
+          attempt: ${{ github.run_attempt }}
+          target: ${{ matrix.target }}
+          shard-count: ${{ env.TEST_SHARD_COUNT }}
       - name: Check terraform-registry-cache result
         if: ${{ !cancelled() }}
         run: |
@@ -680,36 +648,20 @@ jobs:
             api.github.com:443
             github.com:443
             release-assets.githubusercontent.com:443
-            golang.org:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
       - name: Skip verification (workflow run was cancelled)
         if: ${{ cancelled() }}
         run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
-      - name: Check out code into the Go module directory
-        if: ${{ !cancelled() }}
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-          ref: ${{ env.CI_SOURCE_REVISION || github.sha }}
-      - name: Set up Go
-        if: ${{ !cancelled() }}
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      # The API-only gate needs neither a checkout nor a Go/Mage compile.
       - name: Check per-OS test matrix result
         if: ${{ !cancelled() }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CHECK: ${{ matrix.check }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-        run: go tool mage ci:checkShardResults "$REPO" "$RUN_ID" "$RUN_ATTEMPT" "$CHECK"
+        uses: $/.github/actions/ci-pipeline
+        with:
+          mode: check-shards
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
+          attempt: ${{ github.run_attempt }}
+          target: ${{ matrix.target }}
+          shard-count: ${{ env.TEST_SHARD_COUNT }}
       - name: Check terraform-registry-cache result
         if: ${{ !cancelled() }}
         run: |

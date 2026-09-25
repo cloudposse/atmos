@@ -1,5 +1,6 @@
 import { appendFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { checkShards } from './shards.mjs';
 import { GitHub } from './api.mjs';
 import { filename, policy, resolveRoot } from './source.mjs';
 import { report } from './report.mjs';
@@ -18,6 +19,11 @@ async function main() {
     return;
   }
   const api = new GitHub(process.env.GITHUB_REPOSITORY, input('github-token'));
+  if (mode === 'check-shards') {
+    await checkShards(api, { runId: input('run-id'), attempt: input('attempt'),
+      target: input('target'), count: input('shard-count') });
+    return;
+  }
   const run = await api.run(input('run-id'));
   if (mode === 'report') {
     const result = await report(api, run);

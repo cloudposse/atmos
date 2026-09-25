@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 const gracePeriod = 24 * 60 * 60 * 1000;
 // Restrict deletion to immutable generations written by our warmup. Match the
 // complete OS/architecture/Go/dependency-hash lineage, never a broad prefix.
-const generation = /^((?:go-cache|race-go-cache|race-plan-go-cache)-(?:Linux|Windows|macOS)-(?:X64|ARM64)-go[^-]+-[a-f0-9]{64})-\d+$/;
+const generation = /^((?:go-cache|race-go-cache|race-plan-go-cache|intel-go-cache)-(?:Linux|Windows|macOS)-(?:X64|ARM64)-go[^-]+-[a-f0-9]{64})-\d+$/;
 
 export function pruneCandidates(caches, now = Date.now()) {
   const lineages = new Map();
