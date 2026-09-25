@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -157,6 +158,22 @@ func FileSpecByPath(scaffoldConfig *config.ScaffoldConfig, files []tmpl.File) ma
 		}
 	}
 	return specByPath
+}
+
+// includedPathSet normalizes includedPaths (raw !include/!include.raw path
+// arguments exactly as written, e.g. "./lib/regions.yaml", collected by
+// config.WithIncludedPaths) into the same relative, forward-slash,
+// no-leading-"./" form tmpl.File.Path already uses, so the two can be
+// compared by simple map lookup. Uses the path package (not filepath) since
+// this is a fs.FS-relative convention, not an OS one -- filepath.Clean would
+// rewrite separators to "\" on Windows and silently break every lookup
+// there.
+func includedPathSet(includedPaths []string) map[string]bool {
+	set := make(map[string]bool, len(includedPaths))
+	for _, p := range includedPaths {
+		set[path.Clean(strings.TrimPrefix(p, "./"))] = true
+	}
+	return set
 }
 
 // FileOutputPath resolves the output path template for one discovered file:
@@ -991,7 +1008,7 @@ func (ui *InitUI) loadScaffoldConfigFromEmbeds(embedsConfig *tmpl.Configuration)
 			Err()
 	}
 
-	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content)
+	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content, config.WithSourceDir(embedsConfig.Source))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load scaffold configuration: %w", err)
 	}
@@ -1666,7 +1683,10 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	}
 
 	// Load the scaffold configuration from embedded content (don't write to target folder)
-	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content)
+	var includedPaths []string
+	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(
+		scaffoldConfigFile.Content, config.WithSourceDir(embedsConfig.Source), config.WithIncludedPaths(&includedPaths),
+	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrGeneratorValidation) {
 			return errUtils.Build(err).
@@ -1743,9 +1763,18 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// file -- see matrixExpansionResult's doc comment for why recomputing
 	// per file is unsafe, not just wasteful.
 	matrixExpansions := make(map[string]matrixExpansionResult)
+	includedSet := includedPathSet(includedPaths)
 	for _, file := range embedsConfig.Files {
 		// Skip the scaffold.yaml as it's only used for schema definition
 		if file.Path == config.ScaffoldConfigFileName {
+			continue
+		}
+
+		// Skip a file some !include tag in scaffold.yaml consumed -- it
+		// exists only to be read as data (options:, computed value:, or a
+		// matrix: axis), never to be generated as regular project output.
+		// See config.WithIncludedPaths.
+		if includedSet[file.Path] {
 			continue
 		}
 

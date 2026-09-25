@@ -257,7 +257,14 @@ func loadConfiguration(fsys fs.FS, templatePath, defaultName, source, excludeRoo
 	// Use path.Join (forward slashes) not filepath.Join for fs.FS paths.
 	scaffoldPath := path.Join(templatePath, "scaffold.yaml") //nolint:forbidigo // fs.FS always uses forward slashes
 	if data, err := fs.ReadFile(fsys, scaffoldPath); err == nil {
-		scaffoldConfig, err := config.LoadScaffoldConfigFromContent(string(data))
+		// source is a real directory for every fetched/local template, and
+		// the config.SourceEmbedded sentinel for Atmos's own built-in
+		// templates (compiled into the binary, no real directory at all) --
+		// passing it either way is safe: a local !include target simply
+		// fails to resolve cleanly in the embedded case (no different from
+		// a genuinely missing file), while a remote target is unaffected
+		// either way since it never touches this local path at all.
+		scaffoldConfig, err := config.LoadScaffoldConfigFromContent(string(data), config.WithSourceDir(source))
 		if err != nil {
 			return nil, errUtils.Build(errUtils.ErrScaffoldLoadConfig).
 				WithCause(err).
