@@ -2,6 +2,7 @@ package version
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain/installer"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -73,13 +75,14 @@ type RefResolver func(ctx context.Context, ref string) (string, error)
 
 // ReexecConfig holds dependencies for version re-execution.
 type ReexecConfig struct {
-	Finder    VersionFinder
-	Installer VersionInstaller
-	ExecFn    ExecFunc
-	GetEnv    func(string) string
-	SetEnv    func(string, string) error
-	Args      []string
-	Environ   func() []string
+	FrozenLockFile bool
+	Finder         VersionFinder
+	Installer      VersionInstaller
+	ExecFn         ExecFunc
+	GetEnv         func(string) string
+	SetEnv         func(string, string) error
+	Args           []string
+	Environ        func() []string
 
 	// PR/SHA version support (injectable for testing).
 	CheckPRCache   PRCacheChecker
@@ -97,7 +100,9 @@ func DefaultReexecConfig() *ReexecConfig {
 	defer perf.Track(nil, "version.DefaultReexecConfig")()
 
 	installer := toolchain.NewInstaller()
+	frozen := toolchain.GetAtmosConfig() != nil && toolchain.GetAtmosConfig().Toolchain.FrozenLockFile
 	return &ReexecConfig{
+		FrozenLockFile: frozen,
 		Finder:         installer,
 		Installer:      &defaultInstaller{},
 		ExecFn:         reexec.Exec,
@@ -168,15 +173,15 @@ func explicitVersionOverride(getEnv func(string) string, args []string) string {
 	return ""
 }
 
-// defaultInstaller wraps toolchain.RunInstall.
+// defaultInstaller installs automatic dependencies without editing declarations.
 type defaultInstaller struct{}
 
-// Install implements VersionInstaller by delegating to toolchain.RunInstall.
+// Install implements VersionInstaller for automatic version switching.
 func (d *defaultInstaller) Install(toolSpec string, force, allowPrereleases bool) error {
 	defer perf.Track(nil, "version.defaultInstaller.Install")()
 
 	// Suppress PATH hint for --use-version installs (automatic version switching), but show progress bar.
-	return toolchain.RunInstall(toolSpec, force, allowPrereleases, false, true)
+	return toolchain.RunAutomaticInstall(toolSpec)
 }
 
 // CheckAndReexec checks if version.use is configured and re-executes with the specified version.
@@ -185,7 +190,22 @@ func (d *defaultInstaller) Install(toolSpec string, force, allowPrereleases bool
 func CheckAndReexec(atmosConfig *schema.AtmosConfiguration) bool {
 	defer perf.Track(atmosConfig, "version.CheckAndReexec")()
 
-	return CheckAndReexecWithConfig(atmosConfig, DefaultReexecConfig())
+	// Build dependencies from the current (including profile-selected) configuration,
+	// not the earlier package-global snapshot used during command initialization.
+	selection := &ReexecConfig{GetEnv: getEnvWrapper, Args: os.Args}
+	requested := resolveRequestedVersion(atmosConfig, selection)
+	if requested == "" || shouldSkipReexec(requested, selection) {
+		return false
+	}
+	bootstrap, err := bootstrapConfiguration(atmosConfig)
+	if err != nil {
+		fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+		return false
+	}
+	previous := toolchain.GetAtmosConfig()
+	toolchain.SetAtmosConfig(bootstrap)
+	defer toolchain.SetAtmosConfig(previous)
+	return CheckAndReexecWithConfig(bootstrap, DefaultReexecConfig())
 }
 
 // CheckAndReexecWithConfig checks if version.use is configured and re-executes with the specified version.
@@ -220,6 +240,9 @@ func resolveRequestedVersion(atmosConfig *schema.AtmosConfiguration, cfg *Reexec
 	}
 	if v := cfg.GetEnv(VersionEnvVar); v != "" {
 		return v
+	}
+	if atmosConfig == nil {
+		return ""
 	}
 	return atmosConfig.Version.Use
 }
@@ -288,6 +311,12 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	// Find or install the requested version.
 	binaryPath, err := findOrInstallVersionWithConfig(targetVersion, cfg)
 	if err != nil {
+		// Lockfile failures must never silently run a different Atmos version.
+		if errors.Is(err, errUtils.ErrFrozenLockfile) || errors.Is(err, installer.ErrLockfileChecksumMismatch) ||
+			errors.Is(err, installer.ErrLockfileIO) || errors.Is(err, installer.ErrLockfileParse) {
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+			return false
+		}
 		// For PR versions, fail hard - don't continue with wrong version.
 		if _, isPR := toolchain.IsPRVersion(requestedVersion); isPR {
 			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
@@ -357,6 +386,10 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 			WithCause(err).
 			WithExitCode(1).
 			Err()
+	}
+
+	if cfg.FrozenLockFile && vType != toolchain.VersionTypeSemver {
+		return "", fmt.Errorf("%w: development artifacts do not have toolchain lock entries", errUtils.ErrFrozenLockfile)
 	}
 
 	// Handle PR versions (pr:NNNN or just digits) - install from PR artifact.
