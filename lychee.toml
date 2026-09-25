@@ -49,6 +49,10 @@ exclude = [
   "example\\.com",
   "cpco\\.io",
   "cloudposse\\.com.*utm_",
+  # These URLs repeatedly reset/refuse CI connections despite working outside CI.
+  # Keep other Cloud Posse pages and assets covered by link checks.
+  "^https?://cloudposse\\.com/?$",
+  "^https?://cloudposse\\.com/(support|office-hours|slack|readme/footer/img)/?$",
   # Private GitHub org (not accessible to CI)
   "github\\.com/cloudposse-corp",
   "slack\\.cloudposse\\.com",
