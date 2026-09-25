@@ -67,6 +67,63 @@ spec:
 	assert.Len(t, licenseField.Options, 3)
 }
 
+// TestLoadScaffoldConfigFromContent_ComputedLiteralValue_BlockAndFlowStyle
+// proves a computed field's literal map/list Value unmarshals identically
+// from real YAML text regardless of whether the author uses block style or
+// flow style -- the earlier literal-value tests (TestComputeFields_LiteralValue,
+// TestGetConfigurationSummary_ComplexValues) only ever constructed Value as
+// a Go literal directly, never through the actual YAML loader, so this is
+// the first test to confirm both styles decode the same way through
+// LoadScaffoldConfigFromContent -- gopkg.in/yaml.v3 should produce identical
+// map[string]interface{}/[]interface{} values either way, but that's worth
+// proving, not assuming.
+func TestLoadScaffoldConfigFromContent_ComputedLiteralValue_BlockAndFlowStyle(t *testing.T) {
+	content := `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: literal-value-style-test
+spec:
+  fields:
+    - name: block_style_map
+      type: computed
+      value:
+        aws: "~> 5.0"
+        azurerm: "~> 3.0"
+    - name: flow_style_map
+      type: computed
+      value: {aws: "~> 5.0", azurerm: "~> 3.0"}
+    - name: block_style_list
+      type: computed
+      value:
+        - dev
+        - staging
+    - name: flow_style_list
+      type: computed
+      value: [dev, staging]`
+
+	config, err := LoadScaffoldConfigFromContent(content)
+	require.NoError(t, err)
+	require.Len(t, config.Spec.Fields, 4)
+
+	wantMap := map[string]interface{}{"aws": "~> 5.0", "azurerm": "~> 3.0"}
+	wantList := []interface{}{"dev", "staging"}
+
+	assert.Equal(t, wantMap, config.Spec.Fields[0].Value, "block style map")
+	assert.Equal(t, wantMap, config.Spec.Fields[1].Value, "flow style map")
+	assert.Equal(t, wantList, config.Spec.Fields[2].Value, "block style list")
+	assert.Equal(t, wantList, config.Spec.Fields[3].Value, "flow style list")
+
+	// Both styles must also compute identically, not just unmarshal
+	// identically -- exercise the real ComputeFields path, not just the
+	// loader.
+	values := map[string]interface{}{}
+	require.NoError(t, ComputeFields(config, values, nil))
+	assert.Equal(t, wantMap, values["block_style_map"])
+	assert.Equal(t, wantMap, values["flow_style_map"])
+	assert.Equal(t, wantList, values["block_style_list"])
+	assert.Equal(t, wantList, values["flow_style_list"])
+}
+
 func TestLoadScaffoldConfigFromContent_InvalidManifests(t *testing.T) {
 	tests := []struct {
 		name    string

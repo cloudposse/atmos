@@ -28,8 +28,9 @@ and that file quietly disagrees with the rest of the generated project.
 ## The Fix
 
 A new [`type: computed`](/cli/commands/scaffold/generate#computed-fields) field declares a value
-once, computed from other answers via a `value:` Go-template expression, and is never itself
-prompted for or settable with `--set`:
+once — either derived from other answers via a `value:` Go-template expression, or a plain
+literal (string, number, boolean, list, or map) used as-is — and is never itself prompted for or
+settable with `--set`:
 
 ```yaml
 spec:
@@ -51,6 +52,18 @@ everywhere `.Config` is — file content, `target:` path templates, and `matrix:
 per-file fallback logic to keep in sync. Computed fields evaluate in declaration order, after
 every regular field's answer is already final, so a computed field can reference any regular
 field regardless of where it's declared, and any *earlier*-declared computed field's own result.
+
+A computed field's `value:` doesn't have to be an expression at all — a plain literal works too,
+useful for a small hand-authored reference table shared across every file in the template:
+
+```yaml
+- name: provider_version_pins
+  type: computed
+  value: {aws: "~> 5.0", azurerm: "~> 3.0", google: "~> 5.0"}
+```
+
+`provider_version_pins` is stored exactly as written, with no template rendering, and is
+reachable the same way as any other computed field: `.Config.provider_version_pins`.
 
 ## How to Use It
 
