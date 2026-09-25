@@ -10,7 +10,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -57,6 +59,7 @@ func componentFunc(
 	stack string,
 ) (any, error) {
 	maskOnly := configAndStacksInfo != nil && configAndStacksInfo.SecretsMaskOnly
+	authDisabled := authdeferred.AuthDisabled(atmosConfig.AuthManager) || (configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled)
 	functionName := fmt.Sprintf("atmos.Component(%s, %s)", component, stack)
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
@@ -71,11 +74,18 @@ func componentFunc(
 		log.Debug("Skipping atmos.Component for disabled enclosing component", "function", functionName)
 		return emptyComponentSections(), nil
 	}
+	resolution := GetOrCreateResolutionContext()
+	if err := resolution.Push(atmosConfig, DependencyNode{
+		Component: component, Stack: stack, FunctionType: "atmos.Component", FunctionCall: functionName,
+	}); err != nil {
+		return nil, err
+	}
+	defer resolution.Pop(atmosConfig)
 
 	// Inspection must neither consume resolved secrets nor cache display placeholders.
 	var existingSections any
 	var found bool
-	if !maskOnly {
+	if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
 		existingSections, found = componentFuncSyncMap.Load(stackSlug)
 	}
 	if found && existingSections != nil {
@@ -98,7 +108,23 @@ func componentFunc(
 	// mirroring !terraform.state / !terraform.output via resolveAuthManagerForNestedComponent.
 	// Without this, atmos.Component() always reused the enclosing component's credentials verbatim,
 	// even for a target that authenticates independently.
-	resolvedAuthMgr := resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
+	var resolvedAuthMgr auth.AuthManager
+	var valueCache *deferred.ValueCache
+	if authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		var err error
+		resolvedAuthMgr, valueCache, err = deferredTargetAuthAndCache(atmosConfig, component, stack, &authContextWrapper{stackInfo: configAndStacksInfo})
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		resolvedAuthMgr = resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
+	}
+	if maskOnly {
+		valueCache = nil
+	}
+	if cached, ok := valueCache.Load("atmos.Component"); ok {
+		return cached, nil
+	}
 
 	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 		AtmosConfig:          atmosConfig,
@@ -109,6 +135,7 @@ func componentFunc(
 		ProcessYamlFunctions: true,
 		Skip:                 nil,
 		AuthManager:          resolvedAuthMgr,
+		AuthDisabled:         authDisabled,
 	})
 	if err != nil {
 		return nil, errUtils.WrapComponentDescribeError(component, stack, err, "atmos.Component")
@@ -129,12 +156,7 @@ func componentFunc(
 			// Execute `terraform output` using the resolved AuthContext: the target's own if it
 			// authenticated independently, otherwise the enclosing component's (propagated from the
 			// --identity flag).
-			var authContext *schema.AuthContext
-			if resolvedAuthMgr != nil {
-				if si := resolvedAuthMgr.GetStackInfo(); si != nil {
-					authContext = si.AuthContext
-				}
-			}
+			authContext := resolvedTargetAuthContext(atmosConfig, resolvedAuthMgr, nil, authDisabled)
 			terraformOutputs, err = componentFuncOutputsExecutor.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
 			if err != nil {
 				return nil, fmt.Errorf("atmos.Component(%s, %s) failed to get terraform outputs: %w", component, stack, err)
@@ -149,7 +171,8 @@ func componentFunc(
 	}
 
 	// Cache the result
-	if !maskOnly {
+	valueCache.Store("atmos.Component", sections)
+	if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
 		componentFuncSyncMap.Store(stackSlug, sections)
 	}
 

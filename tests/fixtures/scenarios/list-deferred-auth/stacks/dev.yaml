@@ -1,0 +1,10 @@
+vars:
+  stage: dev
+components:
+  terraform:
+    example:
+      vars:
+        literal: preserved
+        account: !aws.account_id
+        state: !terraform.state example id
+        template: '{{ (atmos.Component "example" "dev").outputs.id }}'

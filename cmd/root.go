@@ -688,11 +688,7 @@ var RootCmd = &cobra.Command{
 			}
 		}
 	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Request help explicitly so the shared renderer does not report missing usage.
-		cmd.HelpFunc()(cmd, []string{helpFlagLong})
-		return nil
-	},
+	RunE: runRootCommand,
 }
 
 // reconcileMaskingForCommand applies the configured masking policy and then
