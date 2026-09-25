@@ -1151,25 +1151,6 @@ func TestSetupLogger_LogFileCreation(t *testing.T) {
 	assert.NotEmpty(t, content)
 }
 
-// TestRootCmd_RunE tests the root command's RunE function.
-func TestRootCmd_RunE(t *testing.T) {
-	// This test verifies that the root command's RunE function
-	// properly handles configuration and prints the ATMOS logo.
-
-	// Use test fixtures.
-	stacksPath := "../tests/fixtures/scenarios/complete"
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-	// The RunE function calls checkAtmosConfig() and ExecuteAtmosCmd().
-	// We can't easily test the full execution without integration tests,
-	// but we can verify it doesn't panic with valid config.
-
-	// Note: This is a minimal test - the actual RunE behavior is tested
-	// through integration tests in the tests/ directory.
-	assert.NotNil(t, RootCmd.RunE, "RootCmd should have a RunE function")
-}
-
 // TestConvertToTermenvProfile tests terminal color profile conversion.
 func TestConvertToTermenvProfile(t *testing.T) {
 	tests := []struct {

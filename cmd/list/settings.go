@@ -156,8 +156,9 @@ func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsO
 	// caller explicitly disabled it (--identity=false); either way, per-component auth
 	// resolution must be skipped rather than silently attempting real authentication.
 	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
-	stacksMap, err := e.ExecuteDescribeStacksWithOptions(&atmosConfig, "", nil, nil, nil, false,
-		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager, authManager == nil,
+	errOpts.EvaluationPaths = [][]string{{"settings"}}
+	stacksMap, err := e.ExecuteDescribeStacksScoped(&atmosConfig, "", nil, nil, nil, false,
+		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager, nil, nil,
 		errOpts)
 	if err != nil {
 		return "", nil, &listerrors.DescribeStacksError{Cause: err}

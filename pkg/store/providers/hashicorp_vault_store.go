@@ -9,6 +9,7 @@ import (
 
 	vault "github.com/hashicorp/vault/api"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -188,6 +189,15 @@ func (s *VaultStore) SetAuthContext(resolver store.AuthContextResolver, identity
 	if identityName != "" {
 		s.identityName = identityName
 	}
+}
+
+// ResetAuthContext clears inherited cloud authentication. Vault's token client is
+// independent of this resolver and remains valid.
+func (s *VaultStore) ResetAuthContext() {
+	defer perf.Track(nil, "providers.VaultStore.ResetAuthContext")()
+
+	s.authResolver = nil
+	s.identityName = ""
 }
 
 func (s *VaultStore) getKey(stack string, component string, key string) (string, error) {
