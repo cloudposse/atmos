@@ -64,6 +64,10 @@ func (Test) Race() error {
 		return err
 	}
 
+	if os.Getenv("ATMOS_TEST_RACE_SHARD") != "" {
+		return runRaceShard(root)
+	}
+
 	packages, err := racePackagesFromEnv(root)
 	if err != nil {
 		return err
