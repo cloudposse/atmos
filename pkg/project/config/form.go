@@ -637,6 +637,14 @@ func GetConfigurationSummary(scaffoldConfig *ScaffoldConfig, mergedValues map[st
 			valueStr = strings.Join(v, ", ")
 		case bool:
 			valueStr = fmt.Sprintf("%t", v)
+		case map[string]interface{}, []interface{}:
+			// A computed field's value: can be a literal of any type, not just
+			// a template-expression string -- a decoded YAML map or a non-
+			// string list has no sensible flat single-line rendering, and
+			// falling through to %v would print Go's raw internal syntax
+			// (e.g. "map[eastasia:map[abbreviation:eas ...]]") on this
+			// review screen. Found via a /field-test pass.
+			valueStr = "(complex data)"
 		default:
 			valueStr = fmt.Sprintf("%v", v)
 		}

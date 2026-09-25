@@ -471,6 +471,40 @@ func TestGetConfigurationSummary_ComputedFieldSourceIsAlwaysComputed(t *testing.
 	assert.Equal(t, []string{"derived", "us-east-1", "computed"}, rows[1])
 }
 
+// TestGetConfigurationSummary_ComplexValues proves a computed field's
+// literal map or list value (reachable since Value widened to any) renders
+// as a short placeholder rather than Go's raw %v syntax (e.g.
+// "map[eastasia:map[abbreviation:eas ...]]"), while a []string answer, a
+// bool, and a plain scalar keep their existing, already-sensible
+// formatting. Found via a /field-test pass on the literal-value addendum.
+func TestGetConfigurationSummary_ComplexValues(t *testing.T) {
+	projectConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{Fields: []FieldDefinition{
+			{Name: "lookup", Type: fieldTypeComputed, Value: map[string]any{"a": "b"}},
+			{Name: "list", Type: fieldTypeComputed, Value: []any{"a", "b"}},
+			{Name: "regions", Type: "multiselect"},
+			{Name: "enabled", Type: fieldTypeComputed, Value: false},
+			{Name: "count", Type: fieldTypeComputed, Value: 3},
+		}},
+	}
+	merged := map[string]interface{}{
+		"lookup":  map[string]interface{}{"eastasia": map[string]interface{}{"abbreviation": "eas"}},
+		"list":    []interface{}{"eastasia", "westeurope"},
+		"regions": []string{"eastasia", "westeurope"},
+		"enabled": false,
+		"count":   3,
+	}
+
+	rows, _ := GetConfigurationSummary(projectConfig, merged, map[string]string{})
+
+	require.Len(t, rows, 5)
+	assert.Equal(t, []string{"lookup", "(complex data)", "computed"}, rows[0])
+	assert.Equal(t, []string{"list", "(complex data)", "computed"}, rows[1])
+	assert.Equal(t, []string{"regions", "eastasia, westeurope", "default"}, rows[2])
+	assert.Equal(t, []string{"enabled", "false", "computed"}, rows[3])
+	assert.Equal(t, []string{"count", "3", "computed"}, rows[4])
+}
+
 func TestPersistenceFlow(t *testing.T) {
 	tempDir := t.TempDir()
 
