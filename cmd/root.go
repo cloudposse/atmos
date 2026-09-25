@@ -63,6 +63,7 @@ import (
 	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/profiler"
@@ -1870,6 +1871,8 @@ func applyCIGitCloneBootstrap(cmd *cobra.Command, args []string, tmpConfig *sche
 // command, captures telemetry, and handles unknown-command errors by showing usage.
 // This function is invoked once from main.main.
 func Execute() error {
+	executionID, restoreInvocation := proexec.BeginInvocation()
+	defer restoreInvocation()
 	defer perf.Track(&atmosConfig, "cmd.Execute")()
 	defer castcmd.FinalizeRecording()
 	resetExperimentalCommandNotices(RootCmd)
@@ -1929,6 +1932,12 @@ func Execute() error {
 	// Initialize markdown renderer only if config loaded successfully
 	// This prevents deep exits in InitializeMarkdown when config is invalid
 	if initErr == nil {
+		reporter := pro.NewErrorReporter(&atmosConfig, executionID, pro.ExceptionTransportOptions{})
+		if previous := errUtils.SetErrorReporter(reporter); previous != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), errUtils.CloseSentryTimeout)
+			previous.Flush(ctx)
+			cancel()
+		}
 		errUtils.InitializeMarkdown(&atmosConfig)
 	}
 
@@ -2022,6 +2031,9 @@ func Execute() error {
 		showUsageAndExit(RootCmd, []string{command})
 	}
 
+	if cmd != nil {
+		errUtils.CaptureErrorWithContext(err, map[string]string{"command": cmd.CommandPath()})
+	}
 	return err
 }
 
