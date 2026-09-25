@@ -167,6 +167,7 @@ func TestExecuteListDependenciesCmd_CoverageIntegration(t *testing.T) {
 	chdirToDependenciesFixture(t)
 
 	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
 	opts := &DependenciesOptions{
 		Format:           "json",
 		Direction:        "both",
@@ -174,7 +175,6 @@ func TestExecuteListDependenciesCmd_CoverageIntegration(t *testing.T) {
 		Component:        "vpc",
 		ProcessTemplates: true,
 		ProcessFunctions: false,
-		AuthDisabled:     true,
 	}
 
 	require.NoError(t, executeListDependenciesCmd(cmd, []string{"vpc"}, opts),
@@ -233,12 +233,12 @@ func TestExecuteListDependenciesCmd_UnboundedSuccessBuildsFullGraph(t *testing.T
 	chdirToDependenciesFixture(t)
 
 	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
 	opts := &DependenciesOptions{
 		Format:           "json",
 		Direction:        "both",
 		ProcessTemplates: true,
 		ProcessFunctions: false,
-		AuthDisabled:     true,
 	}
 
 	require.NoError(t, executeListDependenciesCmd(cmd, []string{}, opts),
@@ -367,12 +367,12 @@ func TestExecuteListDependenciesCmd_ProcessCommandLineArgsError(t *testing.T) {
 	chdirToDependenciesFixture(t)
 
 	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
 	opts := &DependenciesOptions{
 		Format:           "json",
 		Direction:        "both",
 		ProcessTemplates: true,
 		ProcessFunctions: false,
-		AuthDisabled:     true,
 	}
 
 	err := executeListDependenciesCmd(cmd, []string{"vpc", "--not-a-real-flag"}, opts)

@@ -37,6 +37,23 @@ Run `atmos list stacks --help` to see all the available options
 
 ## Examples
 
+### Authentication is only needed for requested values
+
+Plain `atmos list stacks` lists stack names without resolving unused YAML functions or
+templates. It does not authenticate a default identity, even if that identity would fail
+or its emulator is stopped. This also applies to tree/provenance output and strict mode.
+
+Custom columns evaluate the values they need, including their dependencies. If a requested
+value needs credentials, Atmos authenticates its effective identity at that point. In
+`warn` mode, unavailable implicit authentication produces `(computed)` for the affected value
+and one summary counting substitutions; `silent` omits the summary; `strict` fails.
+Dynamic expressions may require broader evaluation when their dependencies cannot be determined.
+
+Explicit `--identity` or `ATMOS_IDENTITY` selection still authenticates before listing and
+fails if authentication fails, even for names-only output. `--identity=false` disables
+Atmos authentication. Malformed configuration, invalid expressions, and dependency cycles
+remain errors; a failed configured identity never falls back to another account's credentials.
+
 List all stacks:
 ```shell
 atmos list stacks
@@ -139,7 +156,7 @@ atmos list stacks --component vpc --format tree --provenance
   <dd>Show import provenance in tree format. Only works with `--format=tree`. Displays the import hierarchy showing which files each stack inherits from.<br/>Environment variable: `ATMOS_PROVENANCE`</dd>
 
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
-  <dd>Authenticate with a specific identity before listing stacks.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list stacks --identity my-aws-identity`<br/><br/>Environment variable: `ATMOS_IDENTITY`</dd>
+  <dd>Explicitly authenticate with a specific identity before listing stacks, even for names-only output. Authentication failures are fatal. Without this flag, default identity authentication occurs only when a requested value needs credentials. Use `--identity=false` to disable Atmos authentication.<br/>Environment variable: `ATMOS_IDENTITY`</dd>
 
   <dt>`--process-templates`</dt>
   <dd>Enable/disable Go template processing in Atmos stack manifests (default `true`). Go template functions include `atmos.Component(...)`.<br/>Environment variable: `ATMOS_PROCESS_TEMPLATES`</dd>
@@ -151,7 +168,7 @@ atmos list stacks --component vpc --format tree --provenance
   <dd>Skip executing a specific YAML function in the Atmos stack manifests when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`). Use this to bypass a single function (such as a backend-resolving `!terraform.state` call) while leaving other YAML functions enabled.<br/>Environment variable: `ATMOS_SKIP`</dd>
 
   <dt>`--error-mode`</dt>
-	<dd>How to handle a recoverable YAML-function error, such as a Terraform backend that has not been provisioned yet (default `warn`). `strict` fails the command on the first such error. `warn` substitutes `(computed)` for the unresolved value, prints a warning naming the stack/component/function, and continues processing the rest of the stacks. `silent` continues without the summary. Errors unrelated to backend provisioning (auth failures, malformed YAML, etc.) still fail the command in either mode.<br/>Environment variable: `ATMOS_LIST_ERROR_MODE`</dd>
+  <dd>How to handle unavailable requested values, including missing Terraform state and unavailable implicit authentication (default `warn`). `warn` substitutes `(computed)` and prints one summary; `silent` substitutes without a summary; `strict` fails. Unused values are not evaluated in any mode. Explicit identity failures, malformed configuration, invalid expressions, and dependency cycles remain fatal.<br/>Environment variable: `ATMOS_LIST_ERROR_MODE`</dd>
 </dl>
 
 ## Tree Format with Import Provenance
