@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	vault "github.com/hashicorp/vault/api"
 
@@ -47,10 +49,10 @@ type VaultKVClient interface {
 	Put(ctx context.Context, path string, data map[string]any) error
 	Get(ctx context.Context, path string) (map[string]any, error)
 	Delete(ctx context.Context, path string) error
-	// HasMetadata reports whether a secret exists at the path by reading the KV v2 metadata
-	// endpoint (secret/metadata/<path>), which returns no secret values. A missing secret must
-	// surface as a not-found error (vault.ErrSecretNotFound or a 404 ResponseError) so callers
-	// can map it to absence via isVaultNotFound.
+	// HasMetadata checks whether the current version is available via the KV v2 metadata
+	// endpoint (secret/metadata/<path>), which returns no secret values. Missing, soft-deleted,
+	// or destroyed current versions must surface as a not-found error (vault.ErrSecretNotFound
+	// or a 404 ResponseError) so callers can map them to absence via isVaultNotFound.
 	HasMetadata(ctx context.Context, path string) error
 	// List returns the immediate child key/folder names under path, via the KV v2 metadata LIST
 	// operation (secret/metadata/<path>). Vault's LIST is directory-scoped: it returns only the
@@ -96,12 +98,25 @@ func (c *vaultKVv2Client) Delete(ctx context.Context, path string) error {
 	return c.kv.Delete(ctx, path)
 }
 
-// HasMetadata reads the KV v2 metadata endpoint (secret/metadata/<path>) to confirm existence
-// without reading or decrypting the secret data. GetMetadata returns vault.ErrSecretNotFound when
-// the path is absent, which isVaultNotFound recognizes.
+// HasMetadata checks the current version's metadata without reading or decrypting secret data.
+// Unavailable versions return vault.ErrSecretNotFound, which isVaultNotFound recognizes.
 func (c *vaultKVv2Client) HasMetadata(ctx context.Context, path string) error {
-	_, err := c.kv.GetMetadata(ctx, path)
-	return err
+	metadata, err := c.kv.GetMetadata(ctx, path)
+	if err != nil {
+		return err
+	}
+	if metadata == nil || metadata.CurrentVersion < 1 {
+		return vault.ErrSecretNotFound
+	}
+	version, ok := metadata.Versions[strconv.Itoa(metadata.CurrentVersion)]
+	if !ok || version.Destroyed {
+		return vault.ErrSecretNotFound
+	}
+	// A future deletion_time schedules a soft delete; the version is still available until then.
+	if !version.DeletionTime.IsZero() && !version.DeletionTime.After(time.Now()) {
+		return vault.ErrSecretNotFound
+	}
+	return nil
 }
 
 // List returns the immediate child key/folder names under path via the KV v2 metadata LIST
@@ -198,13 +213,8 @@ func (s *VaultStore) getKey(stack string, component string, key string) (string,
 }
 
 // Set writes the value to a KV v2 path under a single "value" field.
+// Empty stack/component coordinates are valid for stack-scoped and global secrets.
 func (s *VaultStore) Set(stack string, component string, key string, value any) error {
-	if stack == "" {
-		return store.ErrEmptyStack
-	}
-	if component == "" {
-		return store.ErrEmptyComponent
-	}
 	if key == "" {
 		return store.ErrEmptyKey
 	}
@@ -224,13 +234,8 @@ func (s *VaultStore) Set(stack string, component string, key string, value any) 
 }
 
 // Get reads the "value" field from a KV v2 path.
+// Empty stack/component coordinates are omitted from the path by getKey.
 func (s *VaultStore) Get(stack string, component string, key string) (any, error) {
-	if stack == "" {
-		return nil, store.ErrEmptyStack
-	}
-	if component == "" {
-		return nil, store.ErrEmptyComponent
-	}
 	if key == "" {
 		return nil, store.ErrEmptyKey
 	}
@@ -270,13 +275,8 @@ func (s *VaultStore) getByPath(path string) (any, error) {
 }
 
 // Delete removes a KV v2 secret at the computed path.
+// Empty stack/component coordinates select stack-scoped or global secrets.
 func (s *VaultStore) Delete(stack string, component string, key string) error {
-	if stack == "" {
-		return store.ErrEmptyStack
-	}
-	if component == "" {
-		return store.ErrEmptyComponent
-	}
 	if key == "" {
 		return store.ErrEmptyKey
 	}
@@ -291,15 +291,10 @@ func (s *VaultStore) Delete(stack string, component string, key string) error {
 	return nil
 }
 
-// Has reports whether a secret exists at the computed path. It checks existence via the KV v2
+// Has reports whether the current secret version is available at the computed path, via the KV v2
 // metadata endpoint (secret/metadata/<path>) so the secret data is never read or decrypted.
+// As with Get, stack-scoped and global secrets may omit stack/component coordinates.
 func (s *VaultStore) Has(stack string, component string, key string) (bool, error) {
-	if stack == "" {
-		return false, store.ErrEmptyStack
-	}
-	if component == "" {
-		return false, store.ErrEmptyComponent
-	}
 	if key == "" {
 		return false, store.ErrEmptyKey
 	}
@@ -310,7 +305,7 @@ func (s *VaultStore) Has(stack string, component string, key string) (bool, erro
 	}
 
 	if err := s.client.HasMetadata(context.TODO(), path); err != nil {
-		// A missing secret (404 / store.ErrSecretNotFound) or empty metadata maps to absence.
+		// Missing, deleted, or destroyed current versions and empty metadata map to absence.
 		if errors.Is(err, store.ErrVaultEmptyData) || isVaultNotFound(err) {
 			return false, nil
 		}

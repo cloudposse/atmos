@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	vault "github.com/hashicorp/vault/api"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,8 @@ import (
 
 // fakeVaultKV is an in-memory VaultKVClient for testing the VaultStore logic.
 type fakeVaultKV struct {
-	data map[string]map[string]any
+	data     map[string]map[string]any
+	metadata map[string]vault.KVVersionMetadata // Metadata for the latest version, retained on soft delete.
 
 	putErr  error // returned by Put when set.
 	getErr  error // returned by Get when set.
@@ -31,7 +33,10 @@ type fakeVaultKV struct {
 }
 
 func newFakeVaultKV() *fakeVaultKV {
-	return &fakeVaultKV{data: make(map[string]map[string]any)}
+	return &fakeVaultKV{
+		data:     make(map[string]map[string]any),
+		metadata: make(map[string]vault.KVVersionMetadata),
+	}
 }
 
 func (f *fakeVaultKV) Put(_ context.Context, path string, data map[string]any) error {
@@ -39,6 +44,7 @@ func (f *fakeVaultKV) Put(_ context.Context, path string, data map[string]any) e
 		return f.putErr
 	}
 	f.data[path] = data
+	f.metadata[path] = vault.KVVersionMetadata{Version: f.metadata[path].Version + 1}
 	return nil
 }
 
@@ -48,20 +54,20 @@ func (f *fakeVaultKV) Get(_ context.Context, path string) (map[string]any, error
 		return nil, f.getErr
 	}
 	v, ok := f.data[path]
-	if !ok {
+	if !ok || !f.metadata[path].DeletionTime.IsZero() {
 		return nil, nil
 	}
 	return v, nil
 }
 
 // HasMetadata mirrors the KV v2 metadata read: it reports existence without returning any secret
-// values. A missing path surfaces as vault.ErrSecretNotFound, matching the real client.
+// values. Missing and soft-deleted versions surface as vault.ErrSecretNotFound.
 func (f *fakeVaultKV) HasMetadata(_ context.Context, path string) error {
 	f.metaCalls++
 	if f.metaErr != nil {
 		return f.metaErr
 	}
-	if _, ok := f.data[path]; !ok {
+	if _, ok := f.data[path]; !ok || !f.metadata[path].DeletionTime.IsZero() {
 		return vault.ErrSecretNotFound
 	}
 	return nil
@@ -97,7 +103,11 @@ func (f *fakeVaultKV) Delete(_ context.Context, path string) error {
 	if f.delErr != nil {
 		return f.delErr
 	}
-	delete(f.data, path)
+	if _, ok := f.data[path]; ok {
+		metadata := f.metadata[path]
+		metadata.DeletionTime = time.Now()
+		f.metadata[path] = metadata
+	}
 	return nil
 }
 
@@ -134,6 +144,7 @@ func TestVaultStore_SetGetDeleteHas(t *testing.T) {
 
 func TestVaultStore_HTTPKVv2Integration(t *testing.T) {
 	data := map[string]map[string]any{}
+	deletionTimes := map[string]string{}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/secret/data/", func(w http.ResponseWriter, r *http.Request) {
@@ -148,10 +159,11 @@ func TestVaultStore_HTTPKVv2Integration(t *testing.T) {
 				return
 			}
 			data[path] = body.Data
+			deletionTimes[path] = ""
 			writeVaultJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"version": 1}})
 		case http.MethodGet:
 			value, ok := data[path]
-			if !ok {
+			if !ok || deletionTimes[path] != "" {
 				writeVaultJSON(w, http.StatusNotFound, map[string]any{"errors": []string{"missing secret"}})
 				return
 			}
@@ -162,7 +174,7 @@ func TestVaultStore_HTTPKVv2Integration(t *testing.T) {
 				},
 			})
 		case http.MethodDelete:
-			delete(data, path)
+			deletionTimes[path] = time.Now().UTC().Format(time.RFC3339Nano)
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -182,7 +194,10 @@ func TestVaultStore_HTTPKVv2Integration(t *testing.T) {
 		// Note: no secret data is included, only metadata.
 		writeVaultJSON(w, http.StatusOK, map[string]any{
 			"data": map[string]any{
-				"versions":        map[string]any{"1": map[string]any{}},
+				"versions": map[string]any{"1": map[string]any{
+					"deletion_time": deletionTimes[path],
+					"destroyed":     false,
+				}},
 				"current_version": 1,
 			},
 		})
@@ -222,8 +237,8 @@ func TestVaultStore_HTTPKVv2Integration(t *testing.T) {
 	assert.True(t, has)
 
 	require.NoError(t, s.Delete("plat-prod", "api", "API_KEY"))
-	_, ok := data["atmos/plat/prod/api/API_KEY"]
-	assert.False(t, ok)
+	assert.Contains(t, data, "atmos/plat/prod/api/API_KEY", "soft delete retains the underlying data and metadata")
+	assert.NotEmpty(t, deletionTimes["atmos/plat/prod/api/API_KEY"])
 
 	has, err = s.Has("plat-prod", "api", "API_KEY")
 	require.NoError(t, err)
@@ -257,8 +272,6 @@ func writeVaultJSON(w http.ResponseWriter, status int, v any) {
 
 func TestVaultStore_Set_Validation(t *testing.T) {
 	s := newTestVaultStore(newFakeVaultKV())
-	assert.ErrorIs(t, s.Set("", "api", "k", "v"), store.ErrEmptyStack)
-	assert.ErrorIs(t, s.Set("prod", "", "k", "v"), store.ErrEmptyComponent)
 	assert.ErrorIs(t, s.Set("prod", "api", "", "v"), store.ErrEmptyKey)
 	assert.ErrorIs(t, s.Set("prod", "api", "k", nil), store.ErrNilValue)
 }
@@ -273,18 +286,12 @@ func TestVaultStore_ImplementsInterfaces(t *testing.T) {
 
 func TestVaultStore_Get_Validation(t *testing.T) {
 	s := newTestVaultStore(newFakeVaultKV())
-	_, err := s.Get("", "api", "k")
-	assert.ErrorIs(t, err, store.ErrEmptyStack)
-	_, err = s.Get("prod", "", "k")
-	assert.ErrorIs(t, err, store.ErrEmptyComponent)
-	_, err = s.Get("prod", "api", "")
+	_, err := s.Get("prod", "api", "")
 	assert.ErrorIs(t, err, store.ErrEmptyKey)
 }
 
 func TestVaultStore_Delete_Validation(t *testing.T) {
 	s := newTestVaultStore(newFakeVaultKV())
-	assert.ErrorIs(t, s.Delete("", "api", "k"), store.ErrEmptyStack)
-	assert.ErrorIs(t, s.Delete("prod", "", "k"), store.ErrEmptyComponent)
 	assert.ErrorIs(t, s.Delete("prod", "api", ""), store.ErrEmptyKey)
 }
 
@@ -408,15 +415,36 @@ func TestVaultStore_Has_UsesMetadataNotData(t *testing.T) {
 		assert.Equal(t, 1, fake.metaCalls, "Has must read metadata")
 		assert.Equal(t, 0, fake.getCalls, "Has must NOT read the secret data")
 	})
+
+	t.Run("soft-deleted secret retains metadata but returns false", func(t *testing.T) {
+		fake := newFakeVaultKV()
+		s := newTestVaultStore(fake)
+		require.NoError(t, s.Set("prod", "api", "API_KEY", "secret-value"))
+		require.NoError(t, s.Delete("prod", "api", "API_KEY"))
+		assert.Contains(t, fake.data, "/prod/api/API_KEY")
+		metadata := fake.metadata["/prod/api/API_KEY"]
+		assert.Equal(t, 1, metadata.Version)
+		assert.False(t, metadata.DeletionTime.IsZero())
+
+		has, err := s.Has("prod", "api", "API_KEY")
+		require.NoError(t, err)
+		assert.False(t, has)
+		assert.Equal(t, 1, fake.metaCalls)
+		assert.Zero(t, fake.getCalls)
+
+		require.NoError(t, s.Set("prod", "api", "API_KEY", "new-secret-value"))
+		has, err = s.Has("prod", "api", "API_KEY")
+		require.NoError(t, err)
+		assert.True(t, has, "a new version is readable after a soft delete")
+		assert.Equal(t, 2, fake.metadata["/prod/api/API_KEY"].Version)
+		assert.Equal(t, 2, fake.metaCalls)
+		assert.Zero(t, fake.getCalls)
+	})
 }
 
 func TestVaultStore_Has_Validation(t *testing.T) {
 	s := newTestVaultStore(newFakeVaultKV())
-	_, err := s.Has("", "api", "k")
-	assert.ErrorIs(t, err, store.ErrEmptyStack)
-	_, err = s.Has("prod", "", "k")
-	assert.ErrorIs(t, err, store.ErrEmptyComponent)
-	_, err = s.Has("prod", "api", "")
+	_, err := s.Has("prod", "api", "")
 	assert.ErrorIs(t, err, store.ErrEmptyKey)
 }
 
