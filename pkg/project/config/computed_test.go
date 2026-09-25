@@ -65,6 +65,29 @@ func TestComputeFields_LaterComputedFieldSeesEarlierResult(t *testing.T) {
 	assert.Equal(t, "second-value", values["second_computed"])
 }
 
+// TestComputeFields_LiteralValue proves a non-string Value (a hand-authored
+// literal, or one produced by a YAML function such as !include before this
+// field was ever unmarshaled) is stored as-is, with no renderer call at all
+// -- ComputeFields must not require a ComputedFieldRenderer for a field
+// that has nothing to render.
+func TestComputeFields_LiteralValue(t *testing.T) {
+	cfg := &ScaffoldConfig{Spec: ScaffoldSpec{Fields: []FieldDefinition{
+		{Name: "regions_list", Type: fieldTypeComputed, Value: []any{"eastasia", "westeurope"}},
+		{Name: "retry_count", Type: fieldTypeComputed, Value: 3},
+		{Name: "lookup", Type: fieldTypeComputed, Value: map[string]any{"eastasia": "eas"}},
+	}}}
+	values := map[string]interface{}{}
+
+	err := ComputeFields(cfg, values, func(string, map[string]interface{}, []string) (any, error) {
+		t.Fatal("render must not be called for a literal (non-string) Value")
+		return nil, nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []any{"eastasia", "westeurope"}, values["regions_list"])
+	assert.Equal(t, 3, values["retry_count"])
+	assert.Equal(t, map[string]any{"eastasia": "eas"}, values["lookup"])
+}
+
 func TestComputeFields_SkipsNonComputedFields(t *testing.T) {
 	cfg := &ScaffoldConfig{Spec: ScaffoldSpec{Fields: []FieldDefinition{
 		{Name: "regular", Type: "input"},
@@ -151,11 +174,14 @@ func TestValidateComputedFieldDefinition(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "valid computed field", field: FieldDefinition{Name: "f", Type: fieldTypeComputed, Value: "expr"}},
+		{name: "valid computed field with a literal list value", field: FieldDefinition{Name: "f", Type: fieldTypeComputed, Value: []any{"a", "b"}}},
+		{name: "valid computed field with a literal scalar value", field: FieldDefinition{Name: "f", Type: fieldTypeComputed, Value: 3}},
 		{name: "valid regular field", field: FieldDefinition{Name: "f", Type: "input"}},
 		{name: "computed without value", field: FieldDefinition{Name: "f", Type: fieldTypeComputed}, wantErr: true},
 		{name: "computed with required", field: FieldDefinition{Name: "f", Type: fieldTypeComputed, Value: "expr", Required: true}, wantErr: true},
 		{name: "computed with default", field: FieldDefinition{Name: "f", Type: fieldTypeComputed, Value: "expr", Default: "x"}, wantErr: true},
 		{name: "non-computed with value", field: FieldDefinition{Name: "f", Type: "input", Value: "expr"}, wantErr: true},
+		{name: "non-computed with a literal value", field: FieldDefinition{Name: "f", Type: "input", Value: 3}, wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -227,6 +253,13 @@ func TestValidateComputedFieldOrdering(t *testing.T) {
 				{Name: "selfref", Type: fieldTypeComputed, Value: "{{ answers.selfref }}"},
 			},
 			wantErr: true,
+		},
+		{
+			name: "a literal (non-string) value has nothing to scan and is never rejected",
+			fields: []FieldDefinition{
+				{Name: "first", Type: fieldTypeComputed, Value: []any{"a", "b"}},
+				{Name: "second", Type: fieldTypeComputed, Value: "expr-second"},
+			},
 		},
 	}
 

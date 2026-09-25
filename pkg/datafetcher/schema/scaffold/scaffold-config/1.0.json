@@ -123,8 +123,7 @@
                 "type": "object"
               },
               "value": {
-                "description": "Go-template expression computing this field's value from answers.* (only valid when type: computed)",
-                "type": "string"
+                "description": "A Go-template expression computing this field's value from answers.* -- or a literal value of any type (only valid when type: computed)"
               },
               "when": {
                 "additionalProperties": false,
