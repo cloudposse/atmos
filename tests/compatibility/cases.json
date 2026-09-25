@@ -1,0 +1,1897 @@
+[
+  {
+    "id": "context",
+    "template": "{{ .vars.stage }}"
+  },
+  {
+    "id": "sprig-functions",
+    "template": "{{ upper \"hello\" }}|{{ default \"fallback\" \"\" }}|{{ add 2 3 }}"
+  },
+  {
+    "id": "sprig-collisions",
+    "template": "{{ contains \"ell\" \"hello\" }}|{{ hasPrefix \"he\" \"hello\" }}|{{ trim \" a \" }}|{{ splitList \",\" \"a,b\" | toJson }}"
+  },
+  {
+    "id": "builtin-slice",
+    "template": "{{ slice (list \"a\" \"b\" \"c\") 1 3 | toJson }}"
+  },
+  {
+    "id": "conv-bool",
+    "template": "{{ printf \"%T:%v\" (conv.Bool \"true\") (conv.Bool \"true\") }}"
+  },
+  {
+    "id": "conv-slice",
+    "template": "{{ printf \"%T\" (conv.Slice \"a\" 2 true) }}|{{ conv.Slice \"a\" 2 true | toJSON }}"
+  },
+  {
+    "id": "conv-dict",
+    "template": "{{ printf \"%T\" (conv.Dict \"name\" \"test\" \"count\" 2) }}|{{ conv.Dict \"name\" \"test\" \"count\" 2 | toJSON }}"
+  },
+  {
+    "id": "conv-has",
+    "template": "{{ conv.Has (dict \"a\" 1) \"a\" }}|{{ conv.Has (dict \"a\" 1) \"b\" }}"
+  },
+  {
+    "id": "conv-int64",
+    "template": "{{ printf \"%T:%v\" (conv.ToInt64 \"42\") (conv.ToInt64 \"42\") }}"
+  },
+  {
+    "id": "conv-int",
+    "template": "{{ printf \"%T:%v\" (conv.ToInt \"42\") (conv.ToInt \"42\") }}"
+  },
+  {
+    "id": "conv-float",
+    "template": "{{ printf \"%T:%v\" (conv.ToFloat64 \"1.25\") (conv.ToFloat64 \"1.25\") }}"
+  },
+  {
+    "id": "conv-atoi",
+    "template": "{{ printf \"%T:%v\" (conv.Atoi \"42\") (conv.Atoi \"42\") }}"
+  },
+  {
+    "id": "conv-int64-invalid",
+    "template": "{{ conv.ToInt64 \"invalid\" }}"
+  },
+  {
+    "id": "conv-int-invalid",
+    "template": "{{ conv.ToInt \"invalid\" }}"
+  },
+  {
+    "id": "conv-float-invalid",
+    "template": "{{ conv.ToFloat64 \"invalid\" }}"
+  },
+  {
+    "id": "conv-atoi-invalid",
+    "template": "{{ conv.Atoi \"invalid\" }}"
+  },
+  {
+    "id": "strings-sort",
+    "template": "{{ strings.Sort (conv.Slice \"b\" \"a\") | toJSON }}"
+  },
+  {
+    "id": "net-ip",
+    "template": "{{ printf \"%T:%v\" (net.ParseIP \"192.0.2.1\") (net.ParseIP \"192.0.2.1\") }}|{{ (net.ParseIP \"192.0.2.1\").As4 }}"
+  },
+  {
+    "id": "net-prefix",
+    "template": "{{ printf \"%T:%v\" (net.ParseIPPrefix \"192.0.2.0/24\") (net.ParseIPPrefix \"192.0.2.0/24\") }}"
+  },
+  {
+    "id": "net-range",
+    "template": "{{ printf \"%T:%v\" (net.ParseIPRange \"192.0.2.1-192.0.2.3\") (net.ParseIPRange \"192.0.2.1-192.0.2.3\") }}"
+  },
+  {
+    "id": "data-json-types",
+    "template": "{{ $d := data.JSON `{\"n\":42,\"b\":true,\"a\":[1,2]}` }}{{ printf \"%T/%T/%T\" $d.n $d.b $d.a }}|{{ $d | toJSON }}"
+  },
+  {
+    "id": "data-yaml-types",
+    "template": "{{ $d := data.YAML \"n: 42\\nb: true\\na: [1, 2]\" }}{{ printf \"%T/%T/%T\" $d.n $d.b $d.a }}|{{ $d | toJSON }}"
+  },
+  {
+    "id": "env",
+    "template": "{{ getenv \"COMPAT_VALUE\" }}"
+  },
+  {
+    "id": "parse-error",
+    "template": "{{ if }}",
+    "baseline_exit": 1
+  },
+  {
+    "id": "unknown-function",
+    "template": "{{ functionDoesNotExist }}",
+    "baseline_exit": 1
+  },
+  {
+    "id": "net-ip-invalid",
+    "template": "{{ net.ParseIP \"invalid\" }}",
+    "baseline_exit": 1
+  },
+  {
+    "id": "sprig-disabled-aliases",
+    "template": "{{ contains \"hello\" \"ell\" }}|{{ hasPrefix \"hello\" \"he\" }}|{{ split \"a,b\" \",\" | toJSON }}|{{ splitN \"a,b,c\" \",\" 2 | toJSON }}",
+    "settings": {
+      "sprig": {
+        "enabled": false
+      }
+    }
+  },
+  {
+    "id": "missing-key",
+    "template": "{{ .vars.missing }}"
+  },
+  {
+    "id": "gomplate-disabled",
+    "template": "{{ upper \"hello\" }}",
+    "settings": {
+      "gomplate": {
+        "enabled": false
+      }
+    }
+  },
+  {
+    "id": "custom-delimiters",
+    "template": "[[ strings.ToUpper \"hello\" ]]",
+    "settings": {
+      "delimiters": [
+        "[[",
+        "]]"
+      ]
+    }
+  },
+  {
+    "id": "file-json",
+    "template": "{{ $d := datasource \"cfg\" }}{{ printf \"%T/%T/%T\" $d.count $d.enabled $d.items }}|{{ $d | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "file-yaml",
+    "template": "{{ $d := datasource \"cfg\" }}{{ printf \"%T/%T/%T\" $d.count $d.enabled $d.items }}|{{ $d | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/config.yaml"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "file-path",
+    "template": "{{ $d := datasource \"cfg\" }}{{ printf \"%T/%T/%T\" $d.count $d.enabled $d.items }}|{{ $d | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_PATH@/config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "http-json",
+    "template": "{{ $d := datasource \"cfg\" }}{{ printf \"%T/%T/%T\" $d.count $d.enabled $d.items }}|{{ $d | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "http-yaml",
+    "template": "{{ $d := datasource \"cfg\" }}{{ printf \"%T/%T/%T\" $d.count $d.enabled $d.items }}|{{ $d | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/config.yaml"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "http-headers-query",
+    "template": "{{ (ds \"cfg\").name }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/config.json?version=1",
+            "headers": {
+              "X-Fixture": [
+                "compatibility"
+              ],
+              "Accept": [
+                "application/json"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "subpath-trailing-slash",
+    "template": "{{ (datasource \"cfg\" \"config.json\").name }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "subpath-no-slash",
+    "template": "{{ (datasource \"cfg\" \"config.json\").name }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "http-subpath",
+    "template": "{{ (datasource \"cfg\" \"config.json\").name }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/configs/"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "include-text",
+    "template": "{{ include \"cfg\" }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/plain.txt"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "datasource-exists",
+    "template": "{{ datasourceExists \"cfg\" }}|{{ datasourceExists \"missing\" }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "datasource-context",
+    "template": "{{ .vars.stage }}|{{ (ds \"cfg\").name }}|{{ upper \"hello\" }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "inline-datasource",
+    "template": "{{ defineDatasource \"cfg\" \"@DATA_URI@/config.json\" }}{{ (ds \"cfg\").name }}"
+  },
+  {
+    "id": "http-not-found",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/missing.json"
+          }
+        }
+      }
+    },
+    "baseline_exit": 1
+  },
+  {
+    "id": "file-not-found",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/missing.json"
+          }
+        }
+      }
+    },
+    "baseline_exit": 1
+  },
+  {
+    "id": "malformed-datasource",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/invalid.json"
+          }
+        }
+      }
+    },
+    "baseline_exit": 1
+  },
+  {
+    "id": "permissive-json-as-yaml",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/broken.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "unknown-datasource",
+    "template": "{{ ds \"missing\" }}",
+    "baseline_exit": 1
+  },
+  {
+    "id": "catalog-component-1",
+    "catalog": "scenarios/stack-templates",
+    "args": [
+      "describe",
+      "component",
+      "component-1",
+      "-s",
+      "nonprod",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "catalog-test-basic-template",
+    "catalog": "scenarios/atmos-template-yaml-function",
+    "args": [
+      "describe",
+      "component",
+      "test-basic-template",
+      "-s",
+      "nonprod",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "catalog-test-template-with-expressions",
+    "catalog": "scenarios/atmos-template-yaml-function",
+    "args": [
+      "describe",
+      "component",
+      "test-template-with-expressions",
+      "-s",
+      "nonprod",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "catalog-test-template-with-atmos-component",
+    "catalog": "scenarios/atmos-template-yaml-function",
+    "args": [
+      "describe",
+      "component",
+      "test-template-with-atmos-component",
+      "-s",
+      "nonprod",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "catalog-test-template-in-lists",
+    "catalog": "scenarios/atmos-template-yaml-function",
+    "args": [
+      "describe",
+      "component",
+      "test-template-in-lists",
+      "-s",
+      "nonprod",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "catalog-test-template-in-maps",
+    "catalog": "scenarios/atmos-template-yaml-function",
+    "args": [
+      "describe",
+      "component",
+      "test-template-in-maps",
+      "-s",
+      "nonprod",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "catalog-test-template-edge-cases",
+    "catalog": "scenarios/atmos-template-yaml-function",
+    "args": [
+      "describe",
+      "component",
+      "test-template-edge-cases",
+      "-s",
+      "nonprod",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "catalog-test-real-world-scenario",
+    "catalog": "scenarios/atmos-template-yaml-function",
+    "args": [
+      "describe",
+      "component",
+      "test-real-world-scenario",
+      "-s",
+      "nonprod",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "generate-files-dev",
+    "catalog": "generate-files",
+    "args": [
+      "terraform",
+      "generate",
+      "files",
+      "demo",
+      "-s",
+      "dev"
+    ],
+    "files": [
+      "components/terraform/demo/versions.tf",
+      "components/terraform/demo/locals.tf",
+      "components/terraform/demo/variables.tf",
+      "components/terraform/demo/outputs.tf",
+      "components/terraform/demo/terraform.tfvars",
+      "components/terraform/demo/config.json",
+      "components/terraform/demo/README.md"
+    ]
+  },
+  {
+    "id": "generate-files-prod",
+    "catalog": "generate-files",
+    "args": [
+      "terraform",
+      "generate",
+      "files",
+      "demo",
+      "-s",
+      "prod"
+    ],
+    "files": [
+      "components/terraform/demo/versions.tf",
+      "components/terraform/demo/locals.tf",
+      "components/terraform/demo/variables.tf",
+      "components/terraform/demo/outputs.tf",
+      "components/terraform/demo/terraform.tfvars",
+      "components/terraform/demo/config.json",
+      "components/terraform/demo/README.md"
+    ]
+  },
+  {
+    "id": "catalog-import-context",
+    "catalog": "import-context",
+    "args": [
+      "describe",
+      "component",
+      "service",
+      "-s",
+      "explicit-context",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "http-get-only",
+    "template": "{{ (ds \"cfg\").name }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/get-only/config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "ssm-string",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "aws+smp:///compat/string"
+          }
+        }
+      }
+    },
+    "services": [
+      "ssm"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "ssm-value-field",
+    "template": "{{ (ds \"cfg\").Value }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "aws+smp:///compat/string"
+          }
+        }
+      }
+    },
+    "services": [
+      "ssm"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "ssm-secure",
+    "template": "{{ (ds \"cfg\").Value }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "aws+smp:///compat/secure"
+          }
+        }
+      }
+    },
+    "services": [
+      "ssm"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "ssm-json",
+    "template": "{{ (ds \"cfg\").Value | data.JSON | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "aws+smp:///compat/json"
+          }
+        }
+      }
+    },
+    "services": [
+      "ssm"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "ssm-json-type",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "aws+smp:///compat/json?type=application/json"
+          }
+        }
+      }
+    },
+    "services": [
+      "ssm"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "ssm-stringlist",
+    "template": "{{ (ds \"cfg\").Value }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "aws+smp:///compat/stringlist"
+          }
+        }
+      }
+    },
+    "services": [
+      "ssm"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "ssm-directory",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "aws+smp:///compat/list/"
+          }
+        }
+      }
+    },
+    "services": [
+      "ssm"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "ssm-missing",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "aws+smp:///compat/missing"
+          }
+        }
+      }
+    },
+    "services": [
+      "ssm"
+    ],
+    "baseline_exit": 1
+  },
+  {
+    "id": "ssm-denied",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "aws+smp:///compat/denied"
+          }
+        }
+      }
+    },
+    "services": [
+      "ssm"
+    ],
+    "baseline_exit": 1
+  },
+  {
+    "id": "ssm-session-token",
+    "template": "{{ (ds \"cfg\").Value }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "aws+smp:///compat/string"
+          }
+        }
+      }
+    },
+    "services": [
+      "ssm"
+    ],
+    "env": {
+      "AWS_SESSION_TOKEN": "compat-session-token"
+    }
+  },
+  {
+    "id": "ssm-invalid-credentials",
+    "template": "{{ (ds \"cfg\").Value }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "aws+smp:///compat/string"
+          }
+        }
+      }
+    },
+    "services": [
+      "ssm"
+    ],
+    "env": {
+      "AWS_SECRET_ACCESS_KEY": "wrong-fixture-key"
+    },
+    "baseline_exit": 1
+  },
+  {
+    "id": "consul-json",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "consul://@AUTHORITY@/config.json"
+          }
+        }
+      }
+    },
+    "services": [
+      "consul"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "consul-plain",
+    "template": "{{ include \"cfg\" }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "consul://@AUTHORITY@/plain"
+          }
+        }
+      }
+    },
+    "services": [
+      "consul"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "consul-directory",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "consul://@AUTHORITY@/configs/"
+          }
+        }
+      }
+    },
+    "services": [
+      "consul"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "consul-directory-fields",
+    "template": "{{ range ds \"cfg\" }}{{ .key }}={{ .value }};{{ end }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "consul://@AUTHORITY@/configs/"
+          }
+        }
+      }
+    },
+    "services": [
+      "consul"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "consul-missing",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "consul://@AUTHORITY@/missing"
+          }
+        }
+      }
+    },
+    "services": [
+      "consul"
+    ],
+    "baseline_exit": 1
+  },
+  {
+    "id": "consul-denied",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "consul://@AUTHORITY@/config.json"
+          }
+        }
+      }
+    },
+    "services": [
+      "consul"
+    ],
+    "env": {
+      "CONSUL_HTTP_TOKEN": "wrong-fixture-token"
+    },
+    "baseline_exit": 1
+  },
+  {
+    "id": "consul-env-address",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "consul:///config.json"
+          }
+        }
+      }
+    },
+    "services": [
+      "consul"
+    ],
+    "env": {
+      "CONSUL_HTTP_ADDR": "@HTTP@"
+    }
+  },
+  {
+    "id": "boltdb-json",
+    "template": "{{ ds \"cfg\" \"config.json\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "boltdb://@DATA_PATH@/legacy.db#compat"
+          }
+        }
+      }
+    },
+    "baseline_exit": 0
+  },
+  {
+    "id": "boltdb-plain",
+    "template": "{{ include \"cfg\" \"plain\" }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "boltdb://@DATA_PATH@/legacy.db#compat"
+          }
+        }
+      }
+    },
+    "baseline_exit": 0
+  },
+  {
+    "id": "boltdb-missing",
+    "template": "{{ ds \"cfg\" \"missing\" }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "boltdb://@DATA_PATH@/legacy.db#compat"
+          }
+        }
+      }
+    },
+    "baseline_exit": 1
+  },
+  {
+    "id": "ip-method-iszero",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").IsZero }}"
+  },
+  {
+    "id": "ip-method-isvalid",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").IsValid }}"
+  },
+  {
+    "id": "ip-method-is4",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").Is4 }}"
+  },
+  {
+    "id": "ip-method-is4in6",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").Is4in6 }}"
+  },
+  {
+    "id": "ip-method-is6",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").Is6 }}"
+  },
+  {
+    "id": "ip-method-bitlen",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").BitLen }}"
+  },
+  {
+    "id": "ip-method-ipaddr",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").IPAddr }}"
+  },
+  {
+    "id": "ip-method-as4",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").As4 }}"
+  },
+  {
+    "id": "ip-method-as16",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").As16 }}"
+  },
+  {
+    "id": "ip-method-next",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").Next }}"
+  },
+  {
+    "id": "ip-method-prior",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").Prior }}"
+  },
+  {
+    "id": "ip-method-string",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").String }}"
+  },
+  {
+    "id": "ip-method-stringexpanded",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").StringExpanded }}"
+  },
+  {
+    "id": "ip-method-unmap",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").Unmap }}"
+  },
+  {
+    "id": "ip-method-isprivate",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").IsPrivate }}"
+  },
+  {
+    "id": "ip-method-isloopback",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").IsLoopback }}"
+  },
+  {
+    "id": "ip-method-isglobalunicast",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").IsGlobalUnicast }}"
+  },
+  {
+    "id": "ip-method-isunspecified",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").IsUnspecified }}"
+  },
+  {
+    "id": "ip-method-islinklocalunicast",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").IsLinkLocalUnicast }}"
+  },
+  {
+    "id": "ip-method-ismulticast",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").IsMulticast }}"
+  },
+  {
+    "id": "ip-method-isinterfacelocalmulticast",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").IsInterfaceLocalMulticast }}"
+  },
+  {
+    "id": "ip-method-islinklocalmulticast",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").IsLinkLocalMulticast }}"
+  },
+  {
+    "id": "ip-method-compare",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").Compare (net.ParseIP \"192.0.2.2\") }}"
+  },
+  {
+    "id": "ip-method-less",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").Less (net.ParseIP \"192.0.2.2\") }}"
+  },
+  {
+    "id": "ip-prefix-method",
+    "template": "{{ (net.ParseIP \"192.0.2.1\").Prefix 24 }}"
+  },
+  {
+    "id": "ip-v6-mapped",
+    "template": "{{ $ip := net.ParseIP \"::ffff:192.0.2.1\" }}{{ $ip.Is4in6 }}|{{ $ip.Unmap }}|{{ $ip.As16 }}"
+  },
+  {
+    "id": "ip-v6-zone",
+    "template": "{{ $ip := net.ParseIP \"fe80::1%eth0\" }}{{ $ip.Zone }}|{{ $ip.WithZone \"eth1\" }}|{{ $ip.IPAddr }}"
+  },
+  {
+    "id": "ip-chain-prior",
+    "template": "{{ (net.ParseIP \"192.0.2.2\").Prior.IPAddr }}"
+  },
+  {
+    "id": "prefix-method-ip",
+    "template": "{{ (net.ParseIPPrefix \"192.0.2.1/24\").IP }}"
+  },
+  {
+    "id": "prefix-method-bits",
+    "template": "{{ (net.ParseIPPrefix \"192.0.2.1/24\").Bits }}"
+  },
+  {
+    "id": "prefix-method-isvalid",
+    "template": "{{ (net.ParseIPPrefix \"192.0.2.1/24\").IsValid }}"
+  },
+  {
+    "id": "prefix-method-valid",
+    "template": "{{ (net.ParseIPPrefix \"192.0.2.1/24\").Valid }}"
+  },
+  {
+    "id": "prefix-method-iszero",
+    "template": "{{ (net.ParseIPPrefix \"192.0.2.1/24\").IsZero }}"
+  },
+  {
+    "id": "prefix-method-issingleip",
+    "template": "{{ (net.ParseIPPrefix \"192.0.2.1/24\").IsSingleIP }}"
+  },
+  {
+    "id": "prefix-method-masked",
+    "template": "{{ (net.ParseIPPrefix \"192.0.2.1/24\").Masked }}"
+  },
+  {
+    "id": "prefix-method-range",
+    "template": "{{ (net.ParseIPPrefix \"192.0.2.1/24\").Range }}"
+  },
+  {
+    "id": "prefix-method-ipnet",
+    "template": "{{ (net.ParseIPPrefix \"192.0.2.1/24\").IPNet }}"
+  },
+  {
+    "id": "prefix-method-string",
+    "template": "{{ (net.ParseIPPrefix \"192.0.2.1/24\").String }}"
+  },
+  {
+    "id": "prefix-contains",
+    "template": "{{ (net.ParseIPPrefix \"192.0.2.0/24\").Contains (net.ParseIP \"192.0.2.42\") }}"
+  },
+  {
+    "id": "prefix-overlaps",
+    "template": "{{ (net.ParseIPPrefix \"192.0.2.0/24\").Overlaps (net.ParseIPPrefix \"192.0.2.0/25\") }}"
+  },
+  {
+    "id": "range-method-from",
+    "template": "{{ (net.ParseIPRange \"192.0.2.1-192.0.2.3\").From }}"
+  },
+  {
+    "id": "range-method-to",
+    "template": "{{ (net.ParseIPRange \"192.0.2.1-192.0.2.3\").To }}"
+  },
+  {
+    "id": "range-method-iszero",
+    "template": "{{ (net.ParseIPRange \"192.0.2.1-192.0.2.3\").IsZero }}"
+  },
+  {
+    "id": "range-method-isvalid",
+    "template": "{{ (net.ParseIPRange \"192.0.2.1-192.0.2.3\").IsValid }}"
+  },
+  {
+    "id": "range-method-valid",
+    "template": "{{ (net.ParseIPRange \"192.0.2.1-192.0.2.3\").Valid }}"
+  },
+  {
+    "id": "range-method-prefixes",
+    "template": "{{ (net.ParseIPRange \"192.0.2.1-192.0.2.3\").Prefixes }}"
+  },
+  {
+    "id": "range-method-string",
+    "template": "{{ (net.ParseIPRange \"192.0.2.1-192.0.2.3\").String }}"
+  },
+  {
+    "id": "range-contains",
+    "template": "{{ (net.ParseIPRange \"192.0.2.1-192.0.2.3\").Contains (net.ParseIP \"192.0.2.2\") }}"
+  },
+  {
+    "id": "range-overlaps",
+    "template": "{{ (net.ParseIPRange \"192.0.2.1-192.0.2.3\").Overlaps (net.ParseIPRange \"192.0.2.2-192.0.2.4\") }}"
+  },
+  {
+    "id": "prefix-invalid",
+    "template": "{{ net.ParseIPPrefix \"invalid\" }}",
+    "baseline_exit": 1
+  },
+  {
+    "id": "range-invalid",
+    "template": "{{ net.ParseIPRange \"invalid\" }}",
+    "baseline_exit": 1
+  },
+  {
+    "id": "convert-toint64-empty",
+    "template": "{{ printf \"%T:%v\" (conv.ToInt64 \"\") (conv.ToInt64 \"\") }}"
+  },
+  {
+    "id": "convert-tofloat64-empty",
+    "template": "{{ printf \"%T:%v\" (conv.ToFloat64 \"\") (conv.ToFloat64 \"\") }}"
+  },
+  {
+    "id": "convert-toint64-bool",
+    "template": "{{ printf \"%T:%v\" (conv.ToInt64 true) (conv.ToInt64 true) }}"
+  },
+  {
+    "id": "convert-tofloat64-bool",
+    "template": "{{ printf \"%T:%v\" (conv.ToFloat64 true) (conv.ToFloat64 true) }}"
+  },
+  {
+    "id": "convert-toint64-negative",
+    "template": "{{ printf \"%T:%v\" (conv.ToInt64 \"-42\") (conv.ToInt64 \"-42\") }}"
+  },
+  {
+    "id": "convert-tofloat64-negative",
+    "template": "{{ printf \"%T:%v\" (conv.ToFloat64 \"-42\") (conv.ToFloat64 \"-42\") }}"
+  },
+  {
+    "id": "convert-toint64-float",
+    "template": "{{ printf \"%T:%v\" (conv.ToInt64 1.75) (conv.ToInt64 1.75) }}"
+  },
+  {
+    "id": "convert-tofloat64-float",
+    "template": "{{ printf \"%T:%v\" (conv.ToFloat64 1.75) (conv.ToFloat64 1.75) }}"
+  },
+  {
+    "id": "convert-toint64-overflow",
+    "template": "{{ printf \"%T:%v\" (conv.ToInt64 \"9999999999999999999999999999999\") (conv.ToInt64 \"9999999999999999999999999999999\") }}"
+  },
+  {
+    "id": "convert-tofloat64-overflow",
+    "template": "{{ printf \"%T:%v\" (conv.ToFloat64 \"9999999999999999999999999999999\") (conv.ToFloat64 \"9999999999999999999999999999999\") }}"
+  },
+  {
+    "id": "convert-toint64-nil",
+    "template": "{{ printf \"%T:%v\" (conv.ToInt64 nil) (conv.ToInt64 nil) }}"
+  },
+  {
+    "id": "convert-tofloat64-nil",
+    "template": "{{ printf \"%T:%v\" (conv.ToFloat64 nil) (conv.ToFloat64 nil) }}"
+  },
+  {
+    "id": "coll-dict-odd",
+    "template": "{{ coll.Dict \"a\" 1 \"b\" | toJSON }}"
+  },
+  {
+    "id": "conv-dict-odd",
+    "template": "{{ conv.Dict \"a\" 1 \"b\" | toJSON }}"
+  },
+  {
+    "id": "coll-slice",
+    "template": "{{ coll.Slice \"a\" 2 true | toJSON }}"
+  },
+  {
+    "id": "coll-sort",
+    "template": "{{ coll.Sort (coll.Slice 3 1 2) | toJSON }}"
+  },
+  {
+    "id": "coll-merge",
+    "template": "{{ coll.Merge (dict \"a\" 1) (dict \"b\" 2) | toJSON }}"
+  },
+  {
+    "id": "coll-jsonpath",
+    "template": "{{ coll.JSONPath \"$.a\" (dict \"a\" (list 1 2)) | toJSON }}"
+  },
+  {
+    "id": "coll-jq",
+    "template": "{{ coll.JQ \".a\" (dict \"a\" (list 1 2)) | toJSON }}",
+    "baseline_exit": 1
+  },
+  {
+    "id": "strings-split",
+    "template": "{{ strings.Split \",\" \"a,b\" | toJSON }}"
+  },
+  {
+    "id": "strings-trim",
+    "template": "{{ strings.Trim \"x\" \"xxabcxx\" | toJSON }}"
+  },
+  {
+    "id": "strings-replace",
+    "template": "{{ strings.ReplaceAll \"a\" \"x\" \"banana\" | toJSON }}"
+  },
+  {
+    "id": "sprig-dict-odd",
+    "template": "{{ dict \"a\" 1 \"b\" | toJSON }}"
+  },
+  {
+    "id": "sprig-int-invalid",
+    "template": "{{ int \"not-a-number\" | toJSON }}"
+  },
+  {
+    "id": "math-add",
+    "template": "{{ math.Add 1 2 3 | toJSON }}"
+  },
+  {
+    "id": "math-div",
+    "template": "{{ math.Div 7 2 | toJSON }}"
+  },
+  {
+    "id": "base64-roundtrip",
+    "template": "{{ base64.Decode (base64.Encode \"hello \u4e16\u754c\") | toJSON }}"
+  },
+  {
+    "id": "regexp-replace",
+    "template": "{{ regexp.Replace \"a+\" \"x\" \"baaac\" | toJSON }}"
+  },
+  {
+    "id": "filepath-join",
+    "template": "{{ filepath.Join \"a\" \"b\" \"c\" | toJSON }}"
+  },
+  {
+    "id": "data-csv",
+    "template": "{{ data.CSV \"a,b\\n1,2\" | toJSON }}"
+  },
+  {
+    "id": "bare-slice-sprig-disabled",
+    "template": "{{ slice \"a\" \"b\" | toJSON }}",
+    "settings": {
+      "sprig": {
+        "enabled": false
+      }
+    }
+  },
+  {
+    "id": "bare-splitn-sprig-enabled",
+    "template": "{{ splitN \",\" 2 \"a,b,c\" | toJson }}",
+    "baseline_exit": 1
+  },
+  {
+    "id": "bare-splitn-sprig-disabled",
+    "template": "{{ splitN \"a,b,c\" \",\" 2 | toJSON }}",
+    "settings": {
+      "sprig": {
+        "enabled": false
+      }
+    }
+  },
+  {
+    "id": "templates-disabled",
+    "template": "{{ .vars.stage }}",
+    "settings": {
+      "enabled": false
+    }
+  },
+  {
+    "id": "sprig-disabled-error",
+    "template": "{{ upper \"hello\" }}",
+    "settings": {
+      "sprig": {
+        "enabled": false
+      }
+    },
+    "baseline_exit": 1
+  },
+  {
+    "id": "gomplate-disabled-error",
+    "template": "{{ strings.ToUpper \"hello\" }}",
+    "settings": {
+      "gomplate": {
+        "enabled": false
+      }
+    },
+    "baseline_exit": 1
+  },
+  {
+    "id": "evaluations-1",
+    "template": "{{ .settings.config.next }}",
+    "settings": {
+      "evaluations": 1
+    },
+    "component_settings": {
+      "config": {
+        "next": "{{ .vars.stage }}"
+      }
+    }
+  },
+  {
+    "id": "evaluations-2",
+    "template": "{{ .settings.config.next }}",
+    "settings": {
+      "evaluations": 2
+    },
+    "component_settings": {
+      "config": {
+        "next": "{{ .vars.stage }}"
+      }
+    }
+  },
+  {
+    "id": "evaluations-3",
+    "template": "{{ .settings.config.next }}",
+    "settings": {
+      "evaluations": 3
+    },
+    "component_settings": {
+      "config": {
+        "next": "{{ .vars.stage }}"
+      }
+    }
+  },
+  {
+    "id": "env-cli",
+    "template": "{{ getenv \"COMPAT_VALUE\" }}",
+    "settings": {
+      "env": {
+        "COMPAT_VALUE": "cli-value"
+      }
+    }
+  },
+  {
+    "id": "env-stack",
+    "template": "{{ getenv \"COMPAT_VALUE\" }}",
+    "settings": {
+      "env": {
+        "COMPAT_VALUE": "cli-value"
+      }
+    },
+    "stack_settings": {
+      "templates": {
+        "settings": {
+          "env": {
+            "COMPAT_VALUE": "stack-value"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "env-component",
+    "template": "{{ getenv \"COMPAT_VALUE\" }}",
+    "settings": {
+      "env": {
+        "COMPAT_VALUE": "cli-value"
+      }
+    },
+    "stack_settings": {
+      "templates": {
+        "settings": {
+          "env": {
+            "COMPAT_VALUE": "stack-value"
+          }
+        }
+      }
+    },
+    "component_settings": {
+      "templates": {
+        "settings": {
+          "env": {
+            "COMPAT_VALUE": "component-value"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "settings-component-datasource",
+    "template": "{{ (ds \"cfg\").name }}",
+    "component_settings": {
+      "templates": {
+        "settings": {
+          "gomplate": {
+            "datasources": {
+              "cfg": {
+                "url": "@DATA_URI@/config.json"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "custom-delimiters-datasource",
+    "template": "[[ (ds \"cfg\").name ]]",
+    "settings": {
+      "delimiters": [
+        "[[",
+        "]]"
+      ],
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "delimiters-invalid",
+    "template": "{{ .vars.stage }}",
+    "settings": {
+      "delimiters": [
+        "[["
+      ]
+    },
+    "baseline_exit": 1
+  },
+  {
+    "id": "yaml-output",
+    "template": "{{ .vars.stage }}",
+    "format": "yaml"
+  },
+  {
+    "id": "http-no-head",
+    "template": "{{ (ds \"cfg\").name }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/no-head/config.json"
+          }
+        }
+      }
+    },
+    "baseline_exit": 0
+  },
+  {
+    "id": "http-redirect",
+    "template": "{{ (ds \"cfg\").name }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/redirect/config.json"
+          }
+        }
+      }
+    },
+    "baseline_exit": 0
+  },
+  {
+    "id": "http-authorized",
+    "template": "{{ (ds \"cfg\").name }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/protected/config.json",
+            "headers": {
+              "X-Fixture": [
+                "compatibility"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "baseline_exit": 0
+  },
+  {
+    "id": "http-unauthorized",
+    "template": "{{ (ds \"cfg\").name }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/protected/config.json"
+          }
+        }
+      }
+    },
+    "baseline_exit": 1
+  },
+  {
+    "id": "http-timeout",
+    "template": "{{ (ds \"cfg\").name }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/slow/config.json"
+          }
+        },
+        "timeout": 1
+      }
+    },
+    "baseline_exit": 0
+  },
+  {
+    "id": "http-repeated-read",
+    "template": "{{ (ds \"cfg\").name }}|{{ (ds \"cfg\").count }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "datasource-missing-key",
+    "template": "{{ (ds \"cfg\").missing }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "datasource-env",
+    "template": "{{ getenv \"COMPAT_VALUE\" }}|{{ (ds \"cfg\").name }}",
+    "settings": {
+      "env": {
+        "COMPAT_VALUE": "datasource-env"
+      },
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "tmpl-inline",
+    "template": "{{ tmpl.Inline \"{{ .name }}\" (dict \"name\" \"inline-value\") }}",
+    "baseline_exit": 1
+  },
+  {
+    "id": "tmpl-inline-datasource",
+    "template": "{{ tmpl.Inline \"{{ .name }}\" (ds \"cfg\") }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/config.json"
+          }
+        }
+      }
+    },
+    "baseline_exit": 1
+  },
+  {
+    "id": "catalog-template-env-vars",
+    "catalog": "scenarios/template-env-vars",
+    "args": [
+      "describe",
+      "component",
+      "env-test",
+      "-s",
+      "test",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "catalog-locals-deep-import-chain",
+    "catalog": "scenarios/locals-deep-import-chain",
+    "args": [
+      "describe",
+      "component",
+      "deep-chain-component",
+      "-s",
+      "final",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "catalog-atmos-pro-template-regression",
+    "catalog": "scenarios/atmos-pro-template-regression",
+    "args": [
+      "describe",
+      "component",
+      "vpc",
+      "-s",
+      "test-dev",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "catalog-stack-name-template",
+    "catalog": "scenarios/stack-name-template",
+    "args": [
+      "describe",
+      "component",
+      "c1",
+      "-s",
+      "plat-ue2-dev",
+      "--format",
+      "json"
+    ]
+  },
+  {
+    "id": "bare-splitn-legacy-sprig-enabled",
+    "template": "{{ splitN \"a,b,c\" \",\" 2 | toJSON }}"
+  },
+  {
+    "id": "s3-object",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "s3://compat-bucket/config.json?region=us-east-1&endpoint=@AUTHORITY@&disableSSL=true&s3ForcePathStyle=true"
+          }
+        }
+      }
+    },
+    "services": [
+      "s3"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "s3-directory",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "s3://compat-bucket/?region=us-east-1&endpoint=@AUTHORITY@&disableSSL=true&s3ForcePathStyle=true"
+          }
+        }
+      }
+    },
+    "services": [
+      "s3"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "s3-missing",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "s3://compat-bucket/missing.json?region=us-east-1&endpoint=@AUTHORITY@&disableSSL=true&s3ForcePathStyle=true"
+          }
+        }
+      }
+    },
+    "services": [
+      "s3"
+    ],
+    "baseline_exit": 1
+  },
+  {
+    "id": "vault-kv1",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "vault+http://@AUTHORITY@/secret/config"
+          }
+        }
+      }
+    },
+    "services": [
+      "vault"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "vault-directory",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "vault+http://@AUTHORITY@/secret/"
+          }
+        }
+      }
+    },
+    "services": [
+      "vault"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "vault-kv2-raw",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "vault+http://@AUTHORITY@/kv/data/config"
+          }
+        }
+      }
+    },
+    "services": [
+      "vault"
+    ],
+    "baseline_exit": 0
+  },
+  {
+    "id": "vault-missing",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "vault+http://@AUTHORITY@/secret/missing"
+          }
+        }
+      }
+    },
+    "services": [
+      "vault"
+    ],
+    "baseline_exit": 1
+  },
+  {
+    "id": "vault-denied",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "vault+http://@AUTHORITY@/secret/config"
+          }
+        }
+      }
+    },
+    "services": [
+      "vault"
+    ],
+    "env": {
+      "VAULT_TOKEN": "invalid-fixture-token"
+    },
+    "baseline_exit": 1
+  },
+  {
+    "id": "vault-namespace",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "vault+http://@AUTHORITY@/secret/config"
+          }
+        }
+      }
+    },
+    "services": [
+      "vault"
+    ],
+    "env": {
+      "VAULT_NAMESPACE": "compat-namespace"
+    }
+  },
+  {
+    "id": "env-datasource",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "env://COMPAT_JSON?type=application/json"
+          }
+        }
+      }
+    },
+    "env": {
+      "COMPAT_JSON": "{\"count\":42,\"enabled\":true}"
+    }
+  },
+  {
+    "id": "file-space-uri",
+    "template": "{{ (ds \"cfg\").name }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/space%20config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "file-toml",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/config.toml"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "file-csv",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@DATA_URI@/config.csv"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "atmos-datasource",
+    "template": "{{ (atmos.GomplateDatasource \"cfg\").name }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "atmos-datasource-cached",
+    "template": "{{ (atmos.GomplateDatasource \"cfg\").name }}|{{ (atmos.GomplateDatasource \"cfg\").count }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "@HTTP@/config.json"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "s3-corrupt-checksum",
+    "template": "{{ ds \"cfg\" | toJSON }}",
+    "settings": {
+      "gomplate": {
+        "datasources": {
+          "cfg": {
+            "url": "s3://compat-bucket/corrupt.json?region=us-east-1&endpoint=@AUTHORITY@&disableSSL=true&s3ForcePathStyle=true"
+          }
+        }
+      }
+    },
+    "services": [
+      "s3"
+    ]
+  },
+  {
+    "id": "docs-basic",
+    "catalog": "docs",
+    "args": [
+      "docs",
+      "generate",
+      "basic"
+    ],
+    "files": [
+      "README.md"
+    ]
+  },
+  {
+    "id": "docs-legacy",
+    "catalog": "docs",
+    "args": [
+      "docs",
+      "generate",
+      "legacy"
+    ],
+    "files": [
+      "README.md"
+    ]
+  },
+  {
+    "id": "docs-env-context",
+    "catalog": "docs",
+    "args": [
+      "docs",
+      "generate",
+      "env-context"
+    ],
+    "baseline_exit": 1
+  }
+]

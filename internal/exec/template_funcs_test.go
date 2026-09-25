@@ -2,13 +2,16 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"testing"
 
-	"github.com/hairyhenderson/gomplate/v3/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/templating"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -16,9 +19,9 @@ func TestFuncMap(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
 	ctx := context.TODO()
-	gomplateData := &data.Data{}
+	reader := templating.NewMockDatasourceReader(gomock.NewController(t))
 
-	fm := FuncMap(atmosConfig, configAndStacksInfo, ctx, gomplateData)
+	fm := FuncMap(atmosConfig, configAndStacksInfo, ctx, reader)
 
 	// Verify the function map contains expected keys: "atmos" plus every
 	// function templatefuncs.FuncMap() registers (e.g. "collectKeys").
@@ -39,19 +42,14 @@ func TestFuncMap(t *testing.T) {
 	// Verify AtmosFuncs has the expected configuration.
 	assert.Equal(t, atmosConfig, atmosFuncs.atmosConfig)
 	assert.Equal(t, configAndStacksInfo, atmosFuncs.configAndStacksInfo)
+	assert.Equal(t, reader, atmosFuncs.datasources)
 }
 
 func TestAtmosFuncs_Component(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
-	ctx := context.TODO()
-	gomplateData := &data.Data{}
-
 	atmosFuncs := &AtmosFuncs{
-		atmosConfig:         atmosConfig,
-		configAndStacksInfo: configAndStacksInfo,
-		ctx:                 ctx,
-		gomplateData:        gomplateData,
+		atmosConfig:         &schema.AtmosConfiguration{},
+		configAndStacksInfo: &schema.ConfigAndStacksInfo{},
+		ctx:                 context.TODO(),
 	}
 
 	// Test with empty parameters - should return error.
@@ -60,21 +58,48 @@ func TestAtmosFuncs_Component(t *testing.T) {
 }
 
 func TestAtmosFuncs_GomplateDatasource(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
-	ctx := context.TODO()
-	gomplateData := &data.Data{}
+	t.Run("delegates alias and args to the datasource reader", func(t *testing.T) {
+		reader := templating.NewMockDatasourceReader(gomock.NewController(t))
+		reader.EXPECT().
+			Datasource("config", "sub", "path").
+			Return(map[string]any{"name": "atmos"}, nil)
 
-	atmosFuncs := &AtmosFuncs{
-		atmosConfig:         atmosConfig,
-		configAndStacksInfo: configAndStacksInfo,
-		ctx:                 ctx,
-		gomplateData:        gomplateData,
-	}
+		atmosFuncs := &AtmosFuncs{
+			atmosConfig:         &schema.AtmosConfiguration{},
+			configAndStacksInfo: &schema.ConfigAndStacksInfo{},
+			ctx:                 context.TODO(),
+			datasources:         reader,
+		}
 
-	// Test with invalid alias - should return error.
-	_, err := atmosFuncs.GomplateDatasource("nonexistent-alias")
-	assert.Error(t, err, "GomplateDatasource() should return error for invalid alias")
+		result, err := atmosFuncs.GomplateDatasource("config", "sub", "path")
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{"name": "atmos"}, result)
+	})
+
+	t.Run("propagates reader errors", func(t *testing.T) {
+		readErr := errors.New("boom")
+		reader := templating.NewMockDatasourceReader(gomock.NewController(t))
+		reader.EXPECT().Datasource("nonexistent-alias").Return(nil, readErr)
+
+		atmosFuncs := &AtmosFuncs{
+			atmosConfig: &schema.AtmosConfiguration{},
+			ctx:         context.TODO(),
+			datasources: reader,
+		}
+
+		_, err := atmosFuncs.GomplateDatasource("nonexistent-alias")
+		require.ErrorIs(t, err, readErr)
+	})
+
+	t.Run("nil reader is unavailable", func(t *testing.T) {
+		atmosFuncs := &AtmosFuncs{
+			atmosConfig: &schema.AtmosConfiguration{},
+			ctx:         context.TODO(),
+		}
+
+		_, err := atmosFuncs.GomplateDatasource("config")
+		require.ErrorIs(t, err, errUtils.ErrGomplateDatasourceUnavailable)
+	})
 }
 
 func TestAtmosFuncs_Resolve(t *testing.T) {
@@ -82,7 +107,6 @@ func TestAtmosFuncs_Resolve(t *testing.T) {
 		atmosConfig:         &schema.AtmosConfiguration{},
 		configAndStacksInfo: &schema.ConfigAndStacksInfo{},
 		ctx:                 context.TODO(),
-		gomplateData:        &data.Data{},
 	}
 
 	t.Run("plain untagged string is returned unchanged", func(t *testing.T) {
@@ -100,9 +124,8 @@ func TestAtmosFuncs_Resolve(t *testing.T) {
 
 	t.Run("does not panic with nil configAndStacksInfo", func(t *testing.T) {
 		funcs := &AtmosFuncs{
-			atmosConfig:  &schema.AtmosConfiguration{},
-			ctx:          context.TODO(),
-			gomplateData: &data.Data{},
+			atmosConfig: &schema.AtmosConfiguration{},
+			ctx:         context.TODO(),
 		}
 		result, err := funcs.Resolve("plain")
 		require.NoError(t, err)

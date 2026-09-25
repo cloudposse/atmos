@@ -1,0 +1,3 @@
+name = "fixture"
+count = 42
+enabled = true

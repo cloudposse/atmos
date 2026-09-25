@@ -124,6 +124,12 @@ func walkAST(node parse.Node, fn func(parse.Node)) {
 
 	case *parse.TemplateNode:
 		walkAST(n.Pipe, fn)
+
+	case *parse.ChainNode:
+		// A chain is a field access on an expression, e.g. `(ds "cfg").name`
+		// or `atmos.Component "x" "y"`; the expression itself may contain
+		// function calls and field references.
+		walkAST(n.Node, fn)
 	}
 }
 
@@ -170,6 +176,74 @@ func walkBranchNode(pipe *parse.PipeNode, list, elseList *parse.ListNode, fn fun
 // fieldKey creates a unique key from a field path for deduplication.
 func fieldKey(ident []string) string {
 	return strings.Join(ident, ".")
+}
+
+// WalkNodes calls fn for every node in every template associated with tmpl
+// (including tmpl itself, and any template declared inside it with `define`),
+// using the same traversal rules as UsesFunctions. It exists so packages
+// outside this one can run their own analysis passes (for example, a
+// deprecation lint) over a parsed template without duplicating the AST
+// traversal.
+func WalkNodes(tmpl *template.Template, fn func(parse.Node)) {
+	defer perf.Track(nil, "template.WalkNodes")()
+
+	if tmpl == nil {
+		return
+	}
+	for _, t := range tmpl.Templates() {
+		if t.Tree == nil || t.Root == nil {
+			continue
+		}
+		walkAST(t.Root, fn)
+	}
+}
+
+// UsesFunctions reports whether the parsed template (or any template
+// associated with it, e.g. one declared with `define`) calls any of the
+// named functions, or any of the named `identifier.Method` chains
+// (e.g. "atmos.GomplateDatasource"). Function calls appear in the AST as
+// IdentifierNodes; a method call on a function's result appears as a
+// ChainNode whose head is that IdentifierNode. Only names present in the
+// maps are matched, so callers can pass an empty map for either set.
+func UsesFunctions(tmpl *template.Template, funcNames map[string]struct{}, methodChains map[string]struct{}) bool {
+	defer perf.Track(nil, "template.UsesFunctions")()
+
+	if tmpl == nil {
+		return false
+	}
+
+	found := false
+	for _, t := range tmpl.Templates() {
+		if found || t.Tree == nil || t.Root == nil {
+			continue
+		}
+		walkAST(t.Root, func(node parse.Node) {
+			if !found && matchesFunction(node, funcNames, methodChains) {
+				found = true
+			}
+		})
+	}
+
+	return found
+}
+
+// matchesFunction reports whether node is a call to one of funcNames or a
+// method chain listed in methodChains.
+func matchesFunction(node parse.Node, funcNames map[string]struct{}, methodChains map[string]struct{}) bool {
+	switch n := node.(type) {
+	case *parse.IdentifierNode:
+		_, ok := funcNames[n.Ident]
+		return ok
+	case *parse.ChainNode:
+		ident, ok := n.Node.(*parse.IdentifierNode)
+		if !ok || len(n.Field) == 0 {
+			return false
+		}
+		_, ok = methodChains[ident.Ident+"."+n.Field[0]]
+		return ok
+	default:
+		return false
+	}
 }
 
 // HasTemplateActions checks if a string contains Go template actions.
@@ -252,6 +326,8 @@ func ExtractPlainFieldRef(templateStr string) (FieldRef, bool, error) {
 	return ref, ok, nil
 }
 
+// Returns the template's only action node when the template consists of
+// exactly one action surrounded by nothing but whitespace.
 func singlePlainAction(tmpl *template.Template) (*parse.ActionNode, bool) {
 	if tmpl.Tree == nil || tmpl.Root == nil {
 		return nil, false
@@ -275,6 +351,8 @@ func singlePlainAction(tmpl *template.Template) (*parse.ActionNode, bool) {
 	return action, action != nil
 }
 
+// Extracts the field reference from an action that is a single, undecorated
+// field access such as .a.b with no pipeline or arguments.
 func fieldRefFromAction(action *parse.ActionNode) (FieldRef, bool) {
 	if action.Pipe == nil || len(action.Pipe.Decl) != 0 || len(action.Pipe.Cmds) != 1 {
 		return FieldRef{}, false
@@ -378,6 +456,7 @@ func LookupFieldPath(data any, path []string) (any, bool) {
 	return current, true
 }
 
+// Reads key from a map[string]any or any string-keyed map.
 func lookupMapValue(data any, key string) (any, bool) {
 	if data == nil {
 		return nil, false
