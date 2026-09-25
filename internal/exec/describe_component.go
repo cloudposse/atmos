@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -96,6 +97,8 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	if err != nil {
 		return err
 	}
+	atmosConfig.AuthManager = describeComponentParams.AuthManager
+	errOptions.EvaluationPaths = deferred.PathsForQuery(query)
 
 	// The --provenance flag overrides the `describe.provenance` config default
 	// (on by default; journaled in pkg/edition, so an edition pin can disable it).
@@ -500,6 +503,7 @@ func detectComponentType(
 		authManager:          params.AuthManager,
 		onWarning:            params.ErrorOptions.OnWarning,
 	}
+	baseParams.configAndStacksInfo.EvaluationPaths = params.ErrorOptions.EvaluationPaths
 
 	// If a specific component type is provided, use it directly.
 	if params.ComponentType != "" {

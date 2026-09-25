@@ -4,6 +4,7 @@ package exec
 
 import (
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -46,9 +47,21 @@ func (d *defaultOutputGetter) GetOutput(
 	// Resolve the target component's own auth section (when it declares a default identity)
 	// before fetching its outputs, so `!terraform.output` matches `!terraform.state` and
 	// atmos.Component() instead of always reusing the enclosing component's credentials verbatim.
-	resolvedAuthContext, resolvedAuthManager := resolveNestedOutputAuth(
-		atmosConfig, component, stack, authContext, authManager, resolveAuthManagerForNestedComponent,
-	)
+	var resolvedAuthContext *schema.AuthContext
+	var resolvedAuthManager any
+	if authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		parent, _ := authManager.(auth.AuthManager)
+		manager, err := deferredTargetAuth(atmosConfig, component, stack, parent)
+		if err != nil {
+			return nil, false, err
+		}
+		resolvedAuthManager = manager
+		resolvedAuthContext = resolvedTargetAuthContext(atmosConfig, manager, authContext, false)
+	} else {
+		resolvedAuthContext, resolvedAuthManager = resolveNestedOutputAuth(
+			atmosConfig, component, stack, authContext, authManager, resolveAuthManagerForNestedComponent,
+		)
+	}
 	if lookupSecretsMaskOnly(options) {
 		return tfoutput.GetDefaultExecutor().GetOutputWithOptions(
 			atmosConfig, stack, component, output, skipCache, resolvedAuthContext, resolvedAuthManager,
