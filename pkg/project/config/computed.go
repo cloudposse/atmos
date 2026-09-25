@@ -17,16 +17,19 @@ import (
 // FieldOptionsRenderer is (see its own doc comment).
 type ComputedFieldRenderer func(expr string, answers map[string]interface{}, delimiters []string) (any, error)
 
-// ComputeFields evaluates every type: computed field's Value expression, in
-// the order fields are declared in spec.fields, and writes each result into
-// values under the field's own name. A computed field may reference any
-// regular field's answer (all of those are already collected by the time
-// ComputeFields runs, whether prompted, --set, or defaulted) and any
-// earlier-declared computed field's own result -- a later computed field
-// sees it in values because each result is written back before the next
-// field is evaluated. A field whose When evaluates false against the
-// values collected so far is skipped entirely (left unset), matching how a
-// hidden regular field is never prompted for either.
+// ComputeFields evaluates every type: computed field's Value, in the order
+// fields are declared in spec.fields, and writes each result into values
+// under the field's own name. Value is either a template-expression string
+// (rendered via render, resolved against answers) or an already-resolved
+// literal of any other type, stored as-is with no rendering at all. A
+// computed field may reference any regular field's answer (all of those are
+// already collected by the time ComputeFields runs, whether prompted,
+// --set, or defaulted) and any earlier-declared computed field's own result
+// -- a later computed field sees it in values because each result is
+// written back before the next field is evaluated. A field whose When
+// evaluates false against the values collected so far is skipped entirely
+// (left unset), matching how a hidden regular field is never prompted for
+// either.
 func ComputeFields(scaffoldConfig *ScaffoldConfig, values map[string]interface{}, render ComputedFieldRenderer) error {
 	defer perf.Track(nil, "config.ComputeFields")()
 
@@ -40,6 +43,17 @@ func ComputeFields(scaffoldConfig *ScaffoldConfig, values map[string]interface{}
 		if !field.When.Evaluate(condition.Context{Answers: values}) {
 			continue
 		}
+
+		expr, isExpression := field.Value.(string)
+		if !isExpression {
+			// Not a template-expression string -- an already-resolved
+			// literal (hand-authored, or produced by a YAML function like
+			// !include before this field was ever unmarshaled). Use it
+			// as-is; no renderer needed at all for this field.
+			values[field.Name] = field.Value
+			continue
+		}
+
 		if render == nil {
 			return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
 				WithExplanationf("Field %q is `type: computed` but no expression renderer is available", field.Name).
@@ -49,7 +63,7 @@ func ComputeFields(scaffoldConfig *ScaffoldConfig, values map[string]interface{}
 				Err()
 		}
 
-		value, err := render(field.Value, values, delimiters)
+		value, err := render(expr, values, delimiters)
 		if err != nil {
 			return fmt.Errorf("computed field %q: %w", field.Name, err)
 		}
@@ -107,12 +121,18 @@ func validateComputedFieldOrdering(fields []FieldDefinition) error {
 		if field.Type != fieldTypeComputed {
 			continue
 		}
+		expr, isExpression := field.Value.(string)
+		if !isExpression {
+			// A literal value has no expression to scan for a self/
+			// forward-reference -- nothing to validate.
+			continue
+		}
 		for j := i; j < len(fields); j++ {
 			later := &fields[j]
 			if later.Type != fieldTypeComputed {
 				continue
 			}
-			if !valueReferencesAnswer(field.Value, later.Name) {
+			if !valueReferencesAnswer(expr, later.Name) {
 				continue
 			}
 			if j == i {

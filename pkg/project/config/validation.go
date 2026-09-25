@@ -174,16 +174,17 @@ func validateFieldDefinitions(scaffoldConfig *ScaffoldConfig) error {
 }
 
 // validateComputedFieldDefinition statically validates a `type: computed`
-// field's shape at scaffold-load time: it must declare a non-empty `value:`
-// expression and must not declare `required:` (meaningless for a field
-// that's always self-supplied, never prompted or --set) or `default:`
-// (redundant with `value:`, and ambiguous about which wins). Conversely, a
-// non-computed field must not declare `value:` -- it's silently ignored by
-// every other field type today, which would be confusing rather than an
-// error surfaced only much later.
+// field's shape at scaffold-load time: it must declare a non-nil `value:`
+// (a template expression string, or a literal of any other type) and must
+// not declare `required:` (meaningless for a field that's always
+// self-supplied, never prompted or --set) or `default:` (redundant with
+// `value:`, and ambiguous about which wins). Conversely, a non-computed
+// field must not declare `value:` -- it's silently ignored by every other
+// field type today, which would be confusing rather than an error surfaced
+// only much later.
 func validateComputedFieldDefinition(field *FieldDefinition) error {
 	if field.Type != fieldTypeComputed {
-		if field.Value != "" {
+		if field.Value != nil {
 			return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
 				WithExplanationf("Field %q declares `value:` but its type is %q, not `computed`", field.Name, field.Type).
 				WithHint("Either set `type: computed`, or remove `value:` and use `default:` instead").
@@ -194,7 +195,7 @@ func validateComputedFieldDefinition(field *FieldDefinition) error {
 		return nil
 	}
 
-	if field.Value == "" {
+	if field.Value == nil {
 		return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
 			WithExplanationf("Field %q has `type: computed` but no `value:` expression", field.Name).
 			WithHint("Add a `value:` Go-template expression computing this field from answers.*").
