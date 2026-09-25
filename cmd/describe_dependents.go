@@ -9,6 +9,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -89,7 +91,7 @@ func getRunnableDescribeDependentsCmd(
 		// per-component auth. Mirrors the wiring in `cmd/describe_affected.go`.
 		describe.AuthDisabled = identityName == cfg.IdentityFlagDisabledValue
 
-		if describe.ProcessYamlFunctions || identityExplicit {
+		if !authdeferred.ConfigureAuth(&atmosConfig, identityName) && (describe.ProcessYamlFunctions || identityExplicit || identityName != "") {
 			// Category B: describe dependents has no single target (component, stack) pair.
 			// Use the SCAN wrapper to discover stack-level defaults.
 			authManager, authErr := CreateAuthManagerFromIdentityWithStackScan(identityName, &atmosConfig.Auth, &atmosConfig)
@@ -98,6 +100,10 @@ func getRunnableDescribeDependentsCmd(
 			}
 			describe.AuthManager = authManager
 		}
+		if describe.AuthManager == nil {
+			describe.AuthManager, _ = atmosConfig.AuthManager.(auth.AuthManager)
+		}
+		atmosConfig.AuthManager = describe.AuthManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 

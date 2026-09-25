@@ -16,6 +16,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -146,6 +147,17 @@ func (s *AzureKeyVaultStore) SetAuthContext(resolver store.AuthContextResolver, 
 		s.initOnce = sync.Once{}
 		s.initErr = nil
 	}
+}
+
+// ResetAuthContext clears all runtime authentication and cached client state.
+func (s *AzureKeyVaultStore) ResetAuthContext() {
+	defer perf.Track(nil, "providers.AzureKeyVaultStore.ResetAuthContext")()
+
+	s.authResolver = nil
+	s.identityName = ""
+	s.client = nil
+	s.initOnce = sync.Once{}
+	s.initErr = nil
 }
 
 // IdentityName returns the configured identity name, if any.
