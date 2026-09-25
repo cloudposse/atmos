@@ -27,14 +27,13 @@ func processTagAwsValue(
 	expectedTag string,
 	stackInfo *schema.ConfigAndStacksInfo,
 	extractor func(*awsIdentity.CallerIdentity) string,
-) any {
+) (any, error) {
 	log.Debug(execAWSYAMLFunction, functionKey, input)
 
 	// Validate the tag matches expected.
 	if input != expectedTag {
 		log.Error(invalidYAMLFunction, functionKey, input, "expected", expectedTag)
-		errUtils.CheckErrorPrintAndExit(errUtils.ErrYamlFuncInvalidArguments, "", "")
-		return nil
+		return nil, errUtils.ErrYamlFuncInvalidArguments
 	}
 
 	// Get auth context from stack info if available.
@@ -48,12 +47,11 @@ func processTagAwsValue(
 	identity, err := awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, authContext)
 	if err != nil {
 		log.Error(failedGetIdentity, "error", err)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return nil
+		return nil, err
 	}
 
 	// Extract the requested value.
-	return extractor(identity)
+	return extractor(identity), nil
 }
 
 // processTagAwsAccountID processes the !aws.account_id YAML function.
@@ -67,17 +65,17 @@ func processTagAwsAccountID(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagAwsAccountID")()
 
-	result := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsAccountID, stackInfo, func(id *awsIdentity.CallerIdentity) string {
+	result, err := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsAccountID, stackInfo, func(id *awsIdentity.CallerIdentity) string {
 		return id.Account
 	})
 
 	if result != nil {
 		log.Debug("Resolved !aws.account_id", "account_id", result)
 	}
-	return result
+	return result, err
 }
 
 // processTagAwsCallerIdentityArn processes the !aws.caller_identity_arn YAML function.
@@ -91,17 +89,17 @@ func processTagAwsCallerIdentityArn(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagAwsCallerIdentityArn")()
 
-	result := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo, func(id *awsIdentity.CallerIdentity) string {
+	result, err := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo, func(id *awsIdentity.CallerIdentity) string {
 		return id.Arn
 	})
 
 	if result != nil {
 		log.Debug("Resolved !aws.caller_identity_arn", "arn", result)
 	}
-	return result
+	return result, err
 }
 
 // processTagAwsCallerIdentityUserID processes the !aws.caller_identity_user_id YAML function.
@@ -115,17 +113,17 @@ func processTagAwsCallerIdentityUserID(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagAwsCallerIdentityUserID")()
 
-	result := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsCallerIdentityUserID, stackInfo, func(id *awsIdentity.CallerIdentity) string {
+	result, err := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsCallerIdentityUserID, stackInfo, func(id *awsIdentity.CallerIdentity) string {
 		return id.UserID
 	})
 
 	if result != nil {
 		log.Debug("Resolved !aws.caller_identity_user_id", "user_id", result)
 	}
-	return result
+	return result, err
 }
 
 // processTagAwsRegion processes the !aws.region YAML function.
@@ -139,17 +137,17 @@ func processTagAwsRegion(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagAwsRegion")()
 
-	result := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsRegion, stackInfo, func(id *awsIdentity.CallerIdentity) string {
+	result, err := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsRegion, stackInfo, func(id *awsIdentity.CallerIdentity) string {
 		return id.Region
 	})
 
 	if result != nil {
 		log.Debug("Resolved !aws.region", "region", result)
 	}
-	return result
+	return result, err
 }
 
 // processTagAwsOrganizationID processes the !aws.organization_id YAML function.
@@ -163,7 +161,7 @@ func processTagAwsOrganizationID(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagAwsOrganizationID")()
 
 	log.Debug(execAWSYAMLFunction, functionKey, input)
@@ -171,8 +169,7 @@ func processTagAwsOrganizationID(
 	// Validate the tag matches expected.
 	if input != u.AtmosYamlFuncAwsOrganizationID {
 		log.Error(invalidYAMLFunction, functionKey, input, "expected", u.AtmosYamlFuncAwsOrganizationID)
-		errUtils.CheckErrorPrintAndExit(errUtils.ErrYamlFuncInvalidArguments, "", "")
-		return nil
+		return nil, errUtils.ErrYamlFuncInvalidArguments
 	}
 
 	// Get auth context from stack info if available.
@@ -186,16 +183,14 @@ func processTagAwsOrganizationID(
 	orgInfo, err := awsOrg.GetOrganizationCached(ctx, atmosConfig, authContext)
 	if err != nil {
 		log.Error("Failed to get AWS organization info", "error", err)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return nil
+		return nil, err
 	}
 
 	if orgInfo == nil || orgInfo.ID == "" {
 		log.Error("Failed to get AWS organization info", "error", errUtils.ErrAwsDescribeOrganization)
-		errUtils.CheckErrorPrintAndExit(errUtils.ErrAwsDescribeOrganization, "", "")
-		return nil
+		return nil, errUtils.ErrAwsDescribeOrganization
 	}
 
 	log.Debug("Resolved !aws.organization_id", "organization_id", orgInfo.ID)
-	return orgInfo.ID
+	return orgInfo.ID, nil
 }

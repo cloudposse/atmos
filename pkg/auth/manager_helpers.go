@@ -333,7 +333,7 @@ func CreateAndAuthenticateManagerWithReExecContext(
 
 	// Authenticate with the resolved identity.
 	if err := authenticateWithIdentity(authManager, resolvedIdentity, selectValue); err != nil {
-		return nil, err
+		return nil, NormalizeAuthenticationError(err)
 	}
 
 	return authManager, nil
