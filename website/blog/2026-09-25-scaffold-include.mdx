@@ -1,0 +1,66 @@
+---
+slug: scaffold-include
+title: "Load shared reference data into a scaffold template with !include"
+authors: [jorrite]
+tags: [feature]
+---
+
+Two fields in the same scaffold template often need the exact same list of choices — a license
+picker and a region list are both really just "options sourced from some small reference table."
+Until now, that table had nowhere to live but inside `scaffold.yaml` itself, copied into every
+field that needed it, with no way to keep the copies in sync as the list changed.
+
+<!--truncate-->
+
+## The Problem
+
+Small pieces of reference data — license choices, region codes, a naming convention lookup — show
+up constantly in real scaffold templates, and they rarely stay confined to one field. A `select`
+field needs them as `{label, value}` options; a file elsewhere in the same template needs the raw
+table to look values up by key. Duplicating that table by hand, once per field that needs it, means
+every future edit has to find and update every copy — and a missed one quietly drifts out of sync
+with the rest.
+
+## The Fix
+
+The [`!include`](/functions/yaml/include) YAML function, already available in stack manifests, now
+works in `scaffold.yaml` too — resolving before the manifest is even schema-validated, so it's
+usable anywhere a literal value is otherwise accepted: `options:`, a `type: computed` field's
+`value:`, or a `matrix:` axis.
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: license
+      type: select
+      options: !include "./lib/licenses.yaml '. | to_entries | map({\"label\": .value.full_name, \"value\": .key})'"
+
+    - name: license_lookup
+      type: computed
+      value: !include ./lib/licenses.yaml
+```
+
+One file, `lib/licenses.yaml`, backs both fields: a YQ-filtered `!include` shapes it into real
+`{label, value}` options for the `select` field, and an unfiltered `!include` on the computed field
+lands that same table's raw structure at `.Config.license_lookup` for any other file to read. A
+local file that exists solely to be included this way is automatically excluded from generated
+output — it behaves like `scaffold.yaml` itself, never copied into the generated project.
+
+## How to Use It
+
+Add `!include <path> [<yq-filter>]` anywhere `options:`, a computed field's `value:`
+(see [Computed Fields](/cli/commands/scaffold/generate#computed-fields)), or a matrix axis
+currently accepts a literal value. A local path resolves relative to `scaffold.yaml`'s own
+directory; a remote source (`git::`, `oci://`, `https://`) works the same way `!include` already
+does in stack manifests. `atmos scaffold validate` resolves and validates the result too, so a
+missing file or a YQ filter producing the wrong shape is caught before anyone runs `generate`.
+
+See the full [`examples/scaffolding-include`](https://github.com/cloudposse/atmos/tree/main/examples/scaffolding-include)
+example, or the [Loading External Data with `!include`](/cli/commands/scaffold/generate#loading-external-data-with-include)
+section of the `atmos scaffold generate` docs.
+
+## Get Involved
+
+See the [`atmos scaffold generate`](/cli/commands/scaffold/generate#loading-external-data-with-include)
+docs for the full reference, or [open an issue](https://github.com/cloudposse/atmos/issues) with
+feedback.
