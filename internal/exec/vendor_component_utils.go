@@ -281,7 +281,6 @@ func handleStackVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags)
 		false, // includeEmptyStacks
 		nil,   // skip
 		nil,   // authManager
-		true,  // authDisabled
 		nil,   // tagsFilter -- vendor.yaml source tags are a separate concept, resolved elsewhere.
 		flg.Labels,
 		DescribeStacksErrorOptions{},
@@ -540,7 +539,6 @@ func ResolveVendorComponentSelector(
 		false, // includeEmptyStacks
 		nil,   // skip
 		nil,   // authManager
-		true,  // authDisabled
 		nil,   // tagsFilter -- vendor.yaml source tags are a separate concept, resolved elsewhere.
 		labels,
 		DescribeStacksErrorOptions{},
