@@ -1,12 +1,3 @@
-terraform {
-  required_providers {
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.0"
-    }
-  }
-}
-
 variable "stage" {
   description = "Stage. Used to define an Atmos stack."
   type        = string
@@ -19,8 +10,9 @@ variable "exit_code" {
   default     = 0
 }
 
-resource "null_resource" "fail_on_second_apply" {
-  triggers = {
+// Use the built-in provider so exit-code tests do not depend on registry downloads.
+resource "terraform_data" "fail_on_second_apply" {
+  triggers_replace = {
     always_run = timestamp()
   }
 

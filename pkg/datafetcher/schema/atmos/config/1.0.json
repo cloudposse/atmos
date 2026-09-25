@@ -12570,6 +12570,19 @@
             }
           ]
         },
+        "frozen_lock_file": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "verification": {
           "anyOf": [
             {
