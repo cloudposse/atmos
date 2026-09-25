@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"go.yaml.in/yaml/v3"
@@ -15,6 +16,13 @@ import (
 )
 
 type AtmosSectionMapType = map[string]any
+
+// DeferredEvaluationContext holds invocation-local evaluated values, independently
+// of the authentication implementation. The resolver identifies the invocation.
+type DeferredEvaluationContext struct {
+	Manager any
+	Values  sync.Map
+}
 
 // DescribeSettings contains settings for the describe command output.
 type DescribeSettings struct {
@@ -100,6 +108,13 @@ type ConfigMetadata struct {
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
+	// AuthManager carries the same invocation-local manager passed by the caller.
+	// Like ConfigAndStacksInfo.AuthManager, any avoids the auth/schema import cycle.
+	AuthManager any `yaml:"-" json:"-" mapstructure:"-"`
+	// DeferredEvaluation is owned by pkg/stack/deferred, not the authentication resolver.
+	DeferredEvaluation *DeferredEvaluationContext `yaml:"-" json:"-" mapstructure:"-"`
+	// ListEvaluationPaths carries the fields consumed by this list invocation.
+	ListEvaluationPaths           [][]string         `yaml:"-" json:"-" mapstructure:"-"`
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"`                                       // "runtime" if from env var/CLI/provider, "" if from config file.
 	Edition                       string             `yaml:"edition,omitempty" json:"edition,omitempty" mapstructure:"edition"` // Date anchor ("YYYY", "YYYY-MM", or "YYYY-MM-DD") that pins defaults to how they stood on that date.
@@ -1889,6 +1904,8 @@ type ConfigAndStacksInfo struct {
 	//   - Type assertions are used at usage sites to recover type safety
 	AuthManager  any
 	AuthDisabled bool
+	// EvaluationPaths limits list value evaluation; nil evaluates every field.
+	EvaluationPaths [][]string
 	// DeferredMergeContexts holds the per-section deferred-merge contexts recovered from the
 	// FindStacksMap cache for this component, keyed by section name (vars, settings, env, auth,
 	// providers, required_providers, hooks, test, generate). A later, per-invocation stage
