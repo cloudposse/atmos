@@ -59,6 +59,7 @@ toolchain:
     - Default: `.tool-versions`
     - Supports relative or absolute paths
     - Compatible with asdf format
+    - Override with `ATMOS_TOOLCHAIN_FILE_PATH`
   </dd>
 
   <dt>`install_path`</dt>
@@ -67,6 +68,7 @@ toolchain:
     - Default: the XDG cache directory (`~/.cache/atmos/toolchain` on Linux/macOS)
     - Supports relative or absolute paths
     - Tools are organized by owner, repository, and version: `<install_path>/bin/<owner>/<repo>/<version>/`
+    - Override with `ATMOS_TOOLCHAIN_INSTALL_PATH`
   </dd>
 
   <dt>`versions_file`</dt>
@@ -111,6 +113,29 @@ toolchain:
     - Applies to explicit multi-tool installs and installs from `.tool-versions`
   </dd>
 </dl>
+
+## Environment Variables
+
+These overrides apply during configuration loading, including automatic dependency installation
+and Atmos version switching:
+
+| Environment variable | Overrides |
+| --- | --- |
+| `ATMOS_TOOLCHAIN_FILE_PATH` | The version manifest path, including both `file_path` and `versions_file`. |
+| `ATMOS_TOOLCHAIN_INSTALL_PATH` | The binary installation directory, `install_path`. |
+
+Absolute paths are used as supplied. Relative paths resolve from the configured project base.
+Without a project, an explicit installation path is still honored; XDG storage remains the default.
+Automatic installs continue to leave the version manifest unchanged.
+
+For example, install the project's tools into a shared directory:
+
+```shell
+ATMOS_TOOLCHAIN_INSTALL_PATH=/shared/atmos-tools atmos toolchain install
+```
+
+The toolchain command's existing `--tool-versions` and `--toolchain-path` flags take precedence
+over these environment variables.
 
 ## Package Verification
 

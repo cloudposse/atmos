@@ -11,14 +11,14 @@ import (
 const bootstrapDirectoryPermissions = 0o755
 
 // bootstrapConfiguration preserves the project's registry and lockfile settings.
-// Without a project, all automatic installation metadata belongs in XDG storage.
+// Without a project or explicit installation path, metadata belongs in XDG storage.
 // Copy before overriding paths so bootstrap never changes the caller's configuration.
 func bootstrapConfiguration(config *schema.AtmosConfiguration) (*schema.AtmosConfiguration, error) {
 	result := &schema.AtmosConfiguration{Toolchain: schema.Toolchain{UseLockFile: true}}
 	if config != nil {
 		*result = *config
 	}
-	if result.CliConfigPath != "" {
+	if result.CliConfigPath != "" || result.Toolchain.InstallPath != "" {
 		return result, nil
 	}
 	cache, err := xdg.GetXDGCacheDir("toolchain", bootstrapDirectoryPermissions)

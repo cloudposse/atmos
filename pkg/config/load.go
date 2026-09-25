@@ -819,6 +819,12 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.telemetry.endpoint", "ATMOS_TELEMETRY_ENDPOINT")
 	bindEnv(v, "settings.telemetry.logging", "ATMOS_TELEMETRY_LOGGING")
 
+	// Toolchain path overrides apply before automatic dependencies and version bootstrap.
+	// Bind both manifest names so a configured alias cannot defeat the environment override.
+	bindEnv(v, "toolchain.file_path", "ATMOS_TOOLCHAIN_FILE_PATH")
+	bindEnv(v, "toolchain.versions_file", "ATMOS_TOOLCHAIN_FILE_PATH")
+	bindEnv(v, "toolchain.install_path", "ATMOS_TOOLCHAIN_INSTALL_PATH")
+
 	// Frozen toolchain installs apply to explicit installs and automatic dependencies.
 	bindEnv(v, "toolchain.frozen_lock_file", "ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE")
 

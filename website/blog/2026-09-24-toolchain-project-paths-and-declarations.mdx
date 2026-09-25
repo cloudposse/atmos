@@ -28,14 +28,17 @@ Automatic installation also used the declaration-writing behavior of an explicit
 | Relative toolchain paths | Could resolve from the invocation directory. | Resolve from the configured project base, including the default `.tool-versions` path. |
 | Automatic dependency installation | Could add entries to `.tool-versions`. | Installs the dependency without rewriting declarations. |
 | Atmos version switching | Could use earlier toolchain settings instead of the active project configuration. | Uses the active configuration, including selected profiles and project lockfile settings. |
+| Toolchain path environment overrides | `ATMOS_TOOLCHAIN_FILE_PATH` and `ATMOS_TOOLCHAIN_INSTALL_PATH` were not applied. | Override configured paths for explicit installs, automatic dependencies, and Atmos version switching. |
 
 For example, with `/work/infra` as the configured project base, Atmos reads `/work/infra/.tool-versions` even when invoked from `/work/infra/components/vpc`. A configured `install_path: .tools` resolves to `/work/infra/.tools` from either directory. The same rule applies to relative `versions_file` and `lock_file` settings.
 
-Binaries still use shared XDG cache storage by default. When Atmos installs a version of itself outside a project, it now keeps installation metadata there too, without creating project files in the current directory.
+Binaries still use shared XDG cache storage by default. When Atmos installs a version of itself outside a project, it now keeps installation metadata there too, unless you explicitly override the installation path.
 
 ## How to Use It
 
 Existing projects get the path and declaration fixes without adding configuration. Continue running your usual Atmos commands; when they need to install a tool automatically, the project's declarations remain unchanged. Use explicit [toolchain management commands](/cli/commands/toolchain/install) when you intend to add or change those declarations.
+
+Use the [toolchain environment overrides](/cli/configuration/toolchain#environment-variables) to select a different manifest or installation directory without editing project configuration. For example, `ATMOS_TOOLCHAIN_INSTALL_PATH=/shared/atmos-tools atmos toolchain install` installs binaries in the supplied directory even when invoked outside the project.
 
 Automatic installs can still update **resolved artifact metadata** in the existing `toolchain.lock.yaml`: they record missing version or platform entries after successful installation, preserve matching entries, and fail on checksum mismatches. The distinction is between declaring a dependency and recording the artifact used to satisfy it. See [automatic installation and lockfiles](/cli/configuration/toolchain#automatic-installation-and-lockfiles) for details.
 

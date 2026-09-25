@@ -96,7 +96,7 @@ func TestBootstrapConfiguration(t *testing.T) {
 	got.Toolchain.LockFile = "changed"
 	require.Equal(t, "project.lock.yaml", project.Toolchain.LockFile)
 
-	for _, config := range []*schema.AtmosConfiguration{nil, {Toolchain: schema.Toolchain{InstallPath: ".tools", LockFile: "local.lock.yaml"}}} {
+	for _, config := range []*schema.AtmosConfiguration{nil, {Toolchain: schema.Toolchain{LockFile: "local.lock.yaml"}}} {
 		got, err := bootstrapConfiguration(config)
 		require.NoError(t, err)
 		cache, err := xdg.GetXDGCacheDir("toolchain", 0o755)
@@ -128,16 +128,19 @@ func TestFrozenBootstrapRejectsDevelopmentArtifacts(t *testing.T) {
 }
 
 func TestBootstrapInstallUsesLockWithoutCreatingManifest(t *testing.T) {
-	for _, project := range []bool{false, true} {
-		t.Run(map[bool]string{false: "XDG", true: "project"}[project], func(t *testing.T) {
+	for _, mode := range []string{"XDG", "project", "explicit path without project"} {
+		t.Run(mode, func(t *testing.T) {
 			t.Chdir(t.TempDir())
 			t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
 			config := &schema.AtmosConfiguration{Toolchain: schema.Toolchain{UseLockFile: true}}
-			if project {
+			switch mode {
+			case "project":
 				config.CliConfigPath = t.TempDir()
 				config.BasePathAbsolute = config.CliConfigPath
 				config.Toolchain.InstallPath = ".tools"
 				config.Toolchain.LockFile = "toolchain.lock.yaml"
+			case "explicit path without project":
+				config.Toolchain.InstallPath = t.TempDir()
 			}
 			bootstrap, err := bootstrapConfiguration(config)
 			require.NoError(t, err)
@@ -153,9 +156,13 @@ func TestBootstrapInstallUsesLockWithoutCreatingManifest(t *testing.T) {
 			toolchain.SetAtmosConfig(bootstrap)
 			require.NoError(t, (&defaultInstaller{}).Install("atmos@1.2.3", false, false))
 			lockPath := bootstrap.Toolchain.LockFile
-			if project {
+			switch mode {
+			case "project":
 				lockPath = filepath.Join(config.BasePathAbsolute, lockPath)
 				require.NoFileExists(t, filepath.Join(config.BasePathAbsolute, ".tool-versions"))
+			case "explicit path without project":
+				lockPath = filepath.Join(config.Toolchain.InstallPath, "toolchain.lock.yaml")
+				require.Equal(t, config.Toolchain.InstallPath, bootstrap.Toolchain.InstallPath)
 			}
 			lf, err := lockfile.Load(lockPath)
 			require.NoError(t, err)
