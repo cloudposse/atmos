@@ -1,6 +1,7 @@
 package deferred
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -68,6 +69,38 @@ func TestReadStoreErrorsAndDefaults(t *testing.T) {
 			default:
 				require.NoError(t, err)
 				require.Equal(t, tc.want, value)
+			}
+		})
+	}
+}
+
+func TestReadStoreAuthenticationErrorsNeverDefault(t *testing.T) {
+	for _, input := range []string{
+		"!store remote target key | default fallback",
+		"!store.get remote key | default fallback",
+	} {
+		t.Run(input, func(t *testing.T) {
+			for _, cause := range []error{
+				errUtils.ErrAuthenticationUnavailable,
+				errUtils.ErrAuthenticationFailed,
+				store.ErrAuthContextNotAvailable,
+				store.ErrIdentityNotConfigured,
+				store.ErrPermissionDenied,
+			} {
+				t.Run(cause.Error(), func(t *testing.T) {
+					for _, readErr := range []error{cause, fmt.Errorf("store read: %w", cause)} {
+						s := store.NewMockStore(gomock.NewController(t))
+						ac := &schema.AtmosConfiguration{Stores: store.StoreRegistry{"remote": s}}
+						if input == "!store.get remote key | default fallback" {
+							s.EXPECT().GetKey("key").Return(nil, readErr)
+						} else {
+							s.EXPECT().Get("dev", "target", "key").Return(nil, readErr)
+						}
+						value, err := ReadStore(ac, input, "dev", nil)
+						require.ErrorIs(t, err, cause)
+						require.Nil(t, value, "authentication and authorization errors must not return a default")
+					}
+				})
 			}
 		})
 	}

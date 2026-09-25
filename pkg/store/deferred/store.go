@@ -11,6 +11,7 @@ import (
 	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -83,6 +84,13 @@ func readDeferredStore(ac *schema.AtmosConfiguration, p *storeParams, info *sche
 func deferredStoreResult(ac *schema.AtmosConfiguration, p *storeParams, value any, err error) (any, error) {
 	if errors.Is(err, errUtils.ErrAuthenticationUnavailable) {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrAuthenticationUnavailable, err)
+	}
+	// A value default must not hide a failed identity or denied access.
+	if errors.Is(err, errUtils.ErrAuthenticationFailed) ||
+		errors.Is(err, store.ErrAuthContextNotAvailable) ||
+		errors.Is(err, store.ErrIdentityNotConfigured) ||
+		errors.Is(err, store.ErrPermissionDenied) {
+		return nil, err
 	}
 	if err != nil {
 		return deferredStoreDefault(p.defaultValue, err)
