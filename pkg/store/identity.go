@@ -72,4 +72,7 @@ type IdentityAwareStore interface {
 	// SetAuthContext injects the resolver and identity name so the store can
 	// lazily resolve credentials on first Get/Set call.
 	SetAuthContext(resolver AuthContextResolver, identityName string)
+	// ResetAuthContext clears runtime credentials, the inherited identity, and cached
+	// clients before rebinding a shared store to a different evaluation context.
+	ResetAuthContext()
 }
