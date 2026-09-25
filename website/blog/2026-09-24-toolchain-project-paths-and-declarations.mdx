@@ -5,7 +5,7 @@ authors: [osterman]
 tags: [enhancement, bugfix]
 ---
 
-CI should install the artifacts reviewed and committed with a project. Ordinary lockfile use verifies recorded checksums, but it can still accept and record a new artifact when a tool or platform entry is missing.
+CI should install the artifacts reviewed and committed with a project. Ordinarily, Atmos verifies artifacts against the lockfile's recorded checksums, but it can still accept and record a new artifact when a tool or platform entry is missing.
 
 Enable [`toolchain.frozen_lock_file: true`](/cli/configuration/toolchain#frozen-installs-in-ci) in CI and security-sensitive environments to reject those missing entries and prevent lockfile writes. Prepare and review lockfile updates before running CI.
 
