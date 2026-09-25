@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -131,7 +132,7 @@ func TestDescribeStacks_SkipsAuthWhenTemplatesAndFunctionsDisabled(t *testing.T)
 	mockExec := exec.NewMockDescribeStacksExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ *schema.AtmosConfiguration, args *exec.DescribeStacksArgs) error {
-			assert.Nil(t, args.AuthManager, "AuthManager must be nil when both templates and functions are disabled")
+			assert.True(t, authdeferred.IsDeferred(args.AuthManager), "unused authentication stays deferred")
 			assert.False(t, args.ProcessTemplates, "ProcessTemplates must be false")
 			assert.False(t, args.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
 			return nil
@@ -157,24 +158,24 @@ func TestDescribeStacks_SkipsAuthWhenTemplatesAndFunctionsDisabled(t *testing.T)
 	assert.NoError(t, err, "should succeed when templates and functions are both disabled — auth must be skipped entirely")
 }
 
-// TestDescribeStacks_CreatesAuthWhenTemplatesEnabledEvenIfFunctionsDisabled verifies the
-// fix for nested auth inheritance: Go templates (notably atmos.Component()) can require
-// credentials just like YAML functions, so describe stacks must still resolve the default
-// identity when --process-templates remains enabled (the default), even if
-// --process-functions=false. Without this, a nested atmos.Component() target with no
-// auth: section of its own would inherit an empty AuthContext and fall through to
-// ambient/IMDS credentials. See docs/fixes/2026-07-24-nested-auth-inheritance.md.
-func TestDescribeStacks_CreatesAuthWhenTemplatesEnabledEvenIfFunctionsDisabled(t *testing.T) {
+// Templates can need credentials, but enabling templates alone must not authenticate.
+func TestDescribeStacks_DefersAuthWhenTemplatesEnabledEvenIfFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	clearIdentityEnvVars(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	// Mock should NOT be called — auth resolution fails (broken identity) before execution.
-	// No .EXPECT() is registered on mockExec, so gomock fails the test immediately if
-	// Execute is ever invoked, which is what proves the auth error happens first.
+	// The broken default identity must not prevent entering value evaluation.
 	mockExec := exec.NewMockDescribeStacksExec(ctrl)
+	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ac *schema.AtmosConfiguration, args *exec.DescribeStacksArgs) error {
+			assert.NotNil(t, ac.AuthManager)
+			assert.True(t, authdeferred.IsDeferred(args.AuthManager), "unused authentication stays deferred")
+			assert.True(t, args.ProcessTemplates)
+			return nil
+		},
+	)
 
 	// --process-templates is registered with its real default (true) and left unset;
 	// only --process-functions is disabled. See newTestCmdWithFunctionsDisabledTemplatesDefault
@@ -196,18 +197,16 @@ func TestDescribeStacks_CreatesAuthWhenTemplatesEnabledEvenIfFunctionsDisabled(t
 	})
 
 	err := run(testCmd, []string{})
-	assert.Error(t, err, "templates remain enabled by default, so auth must still be attempted even though functions are disabled")
+	assert.NoError(t, err, "auth must be deferred until a template consumes credentials")
 }
 
-// TestDescribeStacks_SkipsAuthWhenEnvVarSetButTemplatesAndFunctionsDisabled verifies that
-// an ATMOS_IDENTITY environment variable does NOT bypass the templates/functions guard.
-// Only an explicit --identity CLI flag should force auth when both are disabled.
-func TestDescribeStacks_SkipsAuthWhenEnvVarSetButTemplatesAndFunctionsDisabled(t *testing.T) {
+// An explicitly selected environment identity is validated even with evaluation disabled.
+func TestDescribeStacks_EnvIdentityAuthenticatesWithEvaluationDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
 	// Re-bind after reset so viper can see the env var via GetIdentityFromFlags.
 	require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
-	// Set the env var — this should NOT trigger auth when templates and functions are disabled.
+	// ATMOS_IDENTITY is an explicit authentication request, just like --identity.
 	t.Setenv("ATMOS_IDENTITY", "some-identity")
 	t.Setenv("IDENTITY", "")
 
@@ -215,14 +214,7 @@ func TestDescribeStacks_SkipsAuthWhenEnvVarSetButTemplatesAndFunctionsDisabled(t
 	defer ctrl.Finish()
 
 	mockExec := exec.NewMockDescribeStacksExec(ctrl)
-	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ *schema.AtmosConfiguration, args *exec.DescribeStacksArgs) error {
-			assert.Nil(t, args.AuthManager, "AuthManager must be nil when ATMOS_IDENTITY env var is set but templates/functions are disabled and no explicit --identity flag")
-			assert.False(t, args.ProcessTemplates, "ProcessTemplates must be false")
-			assert.False(t, args.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
-			return nil
-		},
-	).Times(1)
+	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Times(0)
 
 	// testCmd carries the real, explicitly-disabled --process-templates=false and
 	// --process-functions=false flag values (see newTestCmdWithTemplatesAndFunctionsDisabled),
@@ -244,7 +236,7 @@ func TestDescribeStacks_SkipsAuthWhenEnvVarSetButTemplatesAndFunctionsDisabled(t
 	})
 
 	err := run(testCmd, []string{})
-	assert.NoError(t, err, "env var ATMOS_IDENTITY must not trigger auth when templates and functions are both disabled")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityKind)
 }
 
 // TestDescribeStacks_ExplicitIdentityForcesAuthWhenFunctionsDisabled verifies that
@@ -293,7 +285,7 @@ func TestDescribeDependents_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	mockExec := exec.NewMockDescribeDependentsExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any()).DoAndReturn(
 		func(props *exec.DescribeDependentsExecProps) error {
-			assert.Nil(t, props.AuthManager, "AuthManager must be nil when --process-functions=false")
+			assert.True(t, authdeferred.IsDeferred(props.AuthManager), "unused authentication stays deferred")
 			assert.False(t, props.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
 			return nil
 		},
@@ -318,9 +310,8 @@ func TestDescribeDependents_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	assert.NoError(t, err, "should succeed when functions disabled — auth must be skipped entirely")
 }
 
-// TestDescribeDependents_SkipsAuthWhenEnvVarSetButFunctionsDisabled verifies that
-// ATMOS_IDENTITY env var does not bypass the guard for describe dependents.
-func TestDescribeDependents_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
+// Environment identity selection remains explicit with function evaluation disabled.
+func TestDescribeDependents_EnvIdentityAuthenticatesWithFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
 	require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
@@ -331,13 +322,7 @@ func TestDescribeDependents_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testin
 	defer ctrl.Finish()
 
 	mockExec := exec.NewMockDescribeDependentsExec(ctrl)
-	mockExec.EXPECT().Execute(gomock.Any()).DoAndReturn(
-		func(props *exec.DescribeDependentsExecProps) error {
-			assert.Nil(t, props.AuthManager, "AuthManager must be nil when ATMOS_IDENTITY env var set but no explicit --identity flag")
-			assert.False(t, props.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
-			return nil
-		},
-	).Times(1)
+	mockExec.EXPECT().Execute(gomock.Any()).Times(0)
 
 	testCmd := newTestCmdWithFunctionsDisabled(t)
 
@@ -355,7 +340,7 @@ func TestDescribeDependents_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testin
 	)
 
 	err := run(testCmd, []string{"test-component"})
-	assert.NoError(t, err, "env var ATMOS_IDENTITY must not trigger auth when --process-functions=false")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityKind)
 }
 
 // TestDescribeDependents_ExplicitIdentityForcesAuthWhenFunctionsDisabled verifies that
@@ -404,7 +389,7 @@ func TestDescribeAffected_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	mockExec := exec.NewMockDescribeAffectedExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any()).DoAndReturn(
 		func(args *exec.DescribeAffectedCmdArgs) error {
-			assert.Nil(t, args.AuthManager, "AuthManager must be nil when ProcessYamlFunctions=false")
+			assert.True(t, authdeferred.IsDeferred(args.AuthManager), "unused authentication stays deferred")
 			assert.False(t, args.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
 			return nil
 		},
@@ -430,9 +415,8 @@ func TestDescribeAffected_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	assert.NoError(t, err, "should succeed when functions disabled — auth must be skipped entirely")
 }
 
-// TestDescribeAffected_SkipsAuthWhenEnvVarSetButFunctionsDisabled verifies that
-// ATMOS_IDENTITY env var does not bypass the guard for describe affected.
-func TestDescribeAffected_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
+// Environment identity selection remains explicit with function evaluation disabled.
+func TestDescribeAffected_EnvIdentityAuthenticatesWithFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
 	require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
@@ -445,13 +429,7 @@ func TestDescribeAffected_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.
 	defer ctrl.Finish()
 
 	mockExec := exec.NewMockDescribeAffectedExec(ctrl)
-	mockExec.EXPECT().Execute(gomock.Any()).DoAndReturn(
-		func(args *exec.DescribeAffectedCmdArgs) error {
-			assert.Nil(t, args.AuthManager, "AuthManager must be nil when ATMOS_IDENTITY env var set but no explicit --identity flag")
-			assert.False(t, args.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
-			return nil
-		},
-	).Times(1)
+	mockExec.EXPECT().Execute(gomock.Any()).Times(0)
 
 	testCmd := newTestCmdWithFunctionsDisabled(t)
 
@@ -470,7 +448,7 @@ func TestDescribeAffected_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.
 	)
 
 	err := run(testCmd, []string{})
-	assert.NoError(t, err, "env var ATMOS_IDENTITY must not trigger auth when --process-functions=false")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityKind)
 }
 
 // TestDescribeAffected_ExplicitIdentityForcesAuthWhenFunctionsDisabled verifies that
@@ -570,7 +548,7 @@ func TestDescribeComponent_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
 	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
 		func(params exec.DescribeComponentParams) error {
-			assert.Nil(t, params.AuthManager, "AuthManager must be nil when --process-functions=false")
+			assert.True(t, authdeferred.IsDeferred(params.AuthManager), "unused authentication stays deferred")
 			assert.False(t, params.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
 			return nil
 		},
@@ -597,7 +575,7 @@ func TestDescribeComponent_SkipsImplicitAuthWhenFunctionsEnabled(t *testing.T) {
 	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
 	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
 		func(params exec.DescribeComponentParams) error {
-			assert.Nil(t, params.AuthManager, "AuthManager must be nil without an explicit --identity")
+			assert.True(t, authdeferred.IsDeferred(params.AuthManager), "unused authentication stays deferred")
 			assert.True(t, params.ProcessYamlFunctions, "ProcessYamlFunctions must remain enabled")
 			return nil
 		},
@@ -641,7 +619,8 @@ func TestDescribeComponent_DefersConfiguredStoreIdentityAuthentication(t *testin
 	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
 	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
 		func(params exec.DescribeComponentParams) error {
-			assert.NotNil(t, params.AuthManager, "identity-backed stores need a resolver-backed auth manager")
+			assert.True(t, authdeferred.IsDeferred(params.AuthManager), "unused authentication stays deferred")
+			assert.NotNil(t, params.AuthManager, "identity-backed stores need the deferred resolver")
 			assert.True(t, params.ProcessYamlFunctions)
 			return nil
 		},
@@ -654,9 +633,9 @@ func TestDescribeComponent_DefersConfiguredStoreIdentityAuthentication(t *testin
 	assert.NoError(t, err)
 }
 
-// TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled verifies that
-// ATMOS_IDENTITY env var does not bypass the guard for describe component.
-func TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
+// TestDescribeComponent_EnvIdentityAuthenticatesWithFunctionsDisabled verifies that
+// ATMOS_IDENTITY is an explicit authentication request even for unevaluated output.
+func TestDescribeComponent_EnvIdentityAuthenticatesWithFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
 	require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
@@ -667,19 +646,42 @@ func TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing
 	defer ctrl.Finish()
 
 	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
-	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
-		func(params exec.DescribeComponentParams) error {
-			assert.Nil(t, params.AuthManager, "AuthManager must be nil when ATMOS_IDENTITY env var set but no explicit --identity flag")
-			assert.False(t, params.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
-			return nil
-		},
-	).Times(1)
 
 	testCmd := newTestCmdForDescribeComponent(t, false, "")
 	run := getRunnableDescribeComponentCmd(describeComponentTestProps(mockExec, atmosConfigWithBrokenDefaultIdentity()))
 
 	err := run(testCmd, []string{"test-component"})
-	assert.NoError(t, err, "env var ATMOS_IDENTITY must not trigger auth when --process-functions=false")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityKind)
+}
+
+// TestDescribeComponent_EnvIdentityDoesNotSelectStoreDefault verifies that an
+// explicit environment identity is validated instead of using the store's identity.
+func TestDescribeComponent_EnvIdentityDoesNotSelectStoreDefault(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+	require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
+	t.Setenv("ATMOS_IDENTITY", "missing-selected-identity")
+	config := schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{Identities: map[string]schema.Identity{
+			"store-identity": {
+				Default: true,
+				Kind:    "aws/user",
+				Credentials: map[string]interface{}{
+					"access_key_id": "test", "secret_access_key": "test",
+				},
+			},
+		}},
+		StoresConfig: store.StoresConfig{"outputs/ssm": {Identity: "store-identity"}},
+	}
+	ssmStore, err := providers.NewSSMStore(providers.SSMStoreOptions{Region: "us-east-1"}, "store-identity")
+	require.NoError(t, err)
+	config.Stores = store.StoreRegistry{"outputs/ssm": ssmStore}
+	mockExec := exec.NewMockDescribeComponentCmdExec(gomock.NewController(t))
+	testCmd := newTestCmdForDescribeComponent(t, true, "")
+	run := getRunnableDescribeComponentCmd(describeComponentTestProps(mockExec, config))
+
+	err = run(testCmd, []string{"test-component"})
+	require.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
 }
 
 // TestDescribeComponent_ExplicitIdentityForcesAuthWhenFunctionsDisabled verifies that

@@ -112,6 +112,8 @@ func walkAST(node parse.Node, fn func(parse.Node)) {
 
 	case *parse.CommandNode:
 		walkCommandNode(n, fn)
+	case *parse.ChainNode:
+		walkAST(n.Node, fn)
 
 	case *parse.IfNode:
 		walkBranchNode(n.Pipe, n.List, n.ElseList, fn)
