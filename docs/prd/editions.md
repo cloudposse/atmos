@@ -227,6 +227,14 @@ current schema.
   See [PR #3164](https://github.com/cloudposse/atmos/pull/3164)
   and the migration section in `docs/prd/experimental-features-system.md`.
 
+  **Additional post-editions candidate (2026-09-24):** relative toolchain
+  `install_path`, `versions_file`, and `lock_file` values now resolve against the project
+  base path, and automatic installation preserves declarations and matching artifact
+  entries; these behavior changes ship independently of edition pins because
+  `KindBehavior` resolution is not implemented. See
+  [PR #3215](https://github.com/cloudposse/atmos/pull/3215)
+  and the migration section in `docs/prd/toolchain-lock-file.md`.
+
   **Not gatable:** the auth credential realm isolation change (2026-02-10,
   [changelog/auth-realm-isolation](https://atmos.tools/changelog/auth-realm-isolation)) is a hard
   break — cached credentials moved realms and every user had to re-login. Editions cannot roll it
@@ -250,3 +258,4 @@ current schema.
 | 2026-07-16 | 1.0 | Initial PRD; v1 implementation (value defaults, journal, pin, list/describe commands, guardrails). |
 | 2026-09-12 | 1.1 | Documented the first post-editions `KindBehavior` candidate (`init_run_reconfigure`'s reinterpretation in PR #3127) in the Roadmap; no code change. |
 | 2026-09-14 | 1.2 | Documented child-process suppression of experimental command and setting notices as an additional post-editions behavior-gating candidate. |
+| 2026-09-24 | 1.3 | Recorded project-relative toolchain paths and automatic-install metadata policy as behavior-gating candidates. |
