@@ -3,9 +3,10 @@ package proexec
 import (
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/git"
 )
 
 func TestInvocationCorrelation(t *testing.T) {
