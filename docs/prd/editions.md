@@ -241,6 +241,7 @@ current schema.
   The explicit opt-out is `settings.pro.errors.enabled: false` or
   `ATMOS_PRO_ERRORS_ENABLED=false`. This behavior is independent of edition pins
   because `KindBehavior` resolution is not implemented. See
+  [PR #3220](https://github.com/cloudposse/atmos/pull/3220) and
   [the migration section](pro-exception-reporting.md#migration-and-editions).
 
   **Not gatable:** the auth credential realm isolation change (2026-02-10,
