@@ -48,7 +48,7 @@ func NewLockFileManager(config *schema.AtmosConfiguration) *LockFileManager {
 func (m *LockFileManager) Enabled() bool {
 	defer perf.Track(nil, "filemanager.LockFileManager.Enabled")()
 
-	return m.config.Toolchain.UseLockFile
+	return m.config.Toolchain.UseLockFile || m.config.Toolchain.FrozenLockFile
 }
 
 // AddTool adds or updates a tool version in the lock file with optional platform-specific metadata.
@@ -215,6 +215,9 @@ func (m *LockFileManager) Name() string {
 }
 
 func (m *LockFileManager) withExclusiveLock(ctx context.Context, fn func() error) error {
+	if m.config.Toolchain.FrozenLockFile {
+		return errUtils.ErrFrozenLockfile
+	}
 	if err := os.MkdirAll(filepath.Dir(m.filePath), lockDirectoryPermissions); err != nil {
 		return err
 	}
