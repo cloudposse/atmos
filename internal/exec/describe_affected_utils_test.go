@@ -17,6 +17,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -1857,6 +1858,47 @@ func TestProcessComponentsIndexedVarsEnvChanges(t *testing.T) {
 			envNewValue:   "us-west-2",
 			componentBase: "components/packer",
 		},
+		{
+			name:          "ansible component with vars and env changes",
+			componentType: "ansible",
+			componentName: "webserver",
+			stackName:     "dev",
+			varsKey:       "playbook",
+			varsOldValue:  "old.yml",
+			varsNewValue:  "new.yml",
+			envKey:        "ANSIBLE_HOST_KEY_CHECKING",
+			envOldValue:   "false",
+			envNewValue:   "true",
+			componentBase: "components/ansible",
+		},
+		{
+			name:          "container component with vars and env changes",
+			componentType: "container",
+			componentName: "app",
+			stackName:     "dev",
+			varsKey:       "image",
+			varsOldValue:  "app:1.0",
+			varsNewValue:  "app:2.0",
+			envKey:        "LOG_LEVEL",
+			envOldValue:   "info",
+			envNewValue:   "debug",
+			componentBase: "components/container",
+		},
+		{
+			// Emulator components are stack-defined services with no filesystem source tree,
+			// so no componentBase is set; vars/env changes must still be detected.
+			name:          "emulator component with vars and env changes",
+			componentType: "emulator",
+			componentName: "gcs",
+			stackName:     "dev",
+			varsKey:       "port",
+			varsOldValue:  "8080",
+			varsNewValue:  "9090",
+			envKey:        "STORAGE_EMULATOR_HOST",
+			envOldValue:   "localhost:8080",
+			envNewValue:   "localhost:9090",
+			componentBase: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1901,32 +1943,276 @@ func TestProcessComponentsIndexedVarsEnvChanges(t *testing.T) {
 				atmosConfig.Components.Helmfile.BasePath = tt.componentBase
 			case "packer":
 				atmosConfig.Components.Packer.BasePath = tt.componentBase
+			case "ansible":
+				atmosConfig.Components.Ansible.BasePath = tt.componentBase
+			case "container":
+				atmosConfig.Components.Container.BasePath = tt.componentBase
+			case "emulator":
+				// No filesystem base path for emulator components.
 			}
 
 			filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
 			patternCache := newComponentPathPatternCache()
 
-			var affected []schema.Affected
-			var err error
+			affected, err := processSimpleComponentsIndexed(
+				tt.componentType, tt.stackName, componentSection, &remoteStacks, &currentStacks,
+				atmosConfig, filesIndex, patternCache, false, false, false,
+			)
 
-			switch tt.componentType {
-			case "helmfile":
-				affected, err = processHelmfileComponentsIndexed(
-					tt.stackName, componentSection, &remoteStacks, &currentStacks,
-					atmosConfig, filesIndex, patternCache, false, false, false,
-				)
-			case "packer":
-				affected, err = processPackerComponentsIndexed(
-					tt.stackName, componentSection, &remoteStacks, &currentStacks,
-					atmosConfig, filesIndex, patternCache, false, false, false,
-				)
-			}
-
-			assert.NoError(t, err)
-			// Should detect both vars and env changes.
-			assert.GreaterOrEqual(t, len(affected), 1)
+			require.NoError(t, err)
+			// Both vars and env changed; appendToAffected merges the reasons into one entry, so
+			// assert that entry's AffectedAll carries both stack.vars and stack.env.
+			require.NotEmpty(t, affected)
+			assert.Equal(t, tt.componentName, affected[0].Component)
+			assert.Contains(t, affected[0].AffectedAll, affectedReasonStackVars,
+				"vars change must be reported for %s", tt.componentType)
+			assert.Contains(t, affected[0].AffectedAll, affectedReasonStackEnv,
+				"env change must be reported for %s", tt.componentType)
 		})
 	}
+}
+
+// TestProcessSimpleComponentsIndexed_SkipsAndSettings covers the generic simple-component processor's
+// branches beyond a plain vars/env change: abstract/invalid components are skipped, and a component
+// with a settings section still reports a change. Uses the container type (routed through the
+// generic processor). See #3203.
+func TestProcessSimpleComponentsIndexed_SkipsAndSettings(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: "/test"}
+	atmosConfig.Components.Container.BasePath = "components/container"
+	patternCache := newComponentPathPatternCache()
+	stackName := "dev"
+
+	t.Run("abstract component is skipped", func(t *testing.T) {
+		t.Parallel()
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{
+			"base": map[string]any{
+				"metadata": map[string]any{"type": "abstract"},
+				"vars":     map[string]any{"image": "new"},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"base": map[string]any{"metadata": map[string]any{"type": "abstract"}, "vars": map[string]any{"image": "old"}},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected, "abstract components must not be reported as affected")
+	})
+
+	t.Run("invalid component section is skipped", func(t *testing.T) {
+		t.Parallel()
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{"broken": "not-a-map"}
+		remote := map[string]any{}
+		current := map[string]any{}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected, "a non-map component section must be skipped")
+	})
+
+	t.Run("explicitly emptied settings section is detected", func(t *testing.T) {
+		t.Parallel()
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		// HEAD empties the settings section (`settings: {}`); BASE had it populated. Emptying a
+		// present section is a change and must be reported, so the guard checks presence, not
+		// emptiness. Vars are unchanged so settings is the only possible reason.
+		section := map[string]any{
+			"app": map[string]any{
+				"vars":     map[string]any{"image": "app:1.0"},
+				"settings": map[string]any{},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"app": map[string]any{
+					"vars":     map[string]any{"image": "app:1.0"},
+					"settings": map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
+				},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, false,
+		)
+		require.NoError(t, err)
+		require.NotEmpty(t, affected, "emptying a populated settings section must be reported")
+		assert.Equal(t, "app", affected[0].Component)
+		assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+	})
+
+	t.Run("settings-less unchanged component is NOT flagged", func(t *testing.T) {
+		t.Parallel()
+		// Regression guard: a component with no `settings` section in EITHER ref, and identical vars,
+		// must not be reported. The settings comparison is guarded on either ref having a settings
+		// section (`settingsSection != nil || remote sectionPresent`). Dropping the guard entirely
+		// would call isEqual(..., nil, "settings"), which returns false whenever the remote has no
+		// settings section (see isEqual in describe_affected_utils_2.go) - flagging every
+		// settings-less component as affected. Most components have no settings section, so that
+		// would be a broad false positive. See the CodeRabbit thread on #3204.
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{
+			"app": map[string]any{
+				"vars": map[string]any{"image": "app:1.0"},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"app": map[string]any{
+					"vars": map[string]any{"image": "app:1.0"},
+				},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected, "an unchanged component with no settings section must not be reported as affected")
+	})
+
+	t.Run("settings section removed in HEAD is detected", func(t *testing.T) {
+		t.Parallel()
+		// BASE has a populated settings section; HEAD omits the key entirely (not `settings: {}`).
+		// Removing a section is a change and must be reported, even though HEAD's settingsSection is
+		// nil - the guard also compares when BASE has the section. Vars are unchanged.
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{
+			"app": map[string]any{
+				"vars": map[string]any{"image": "app:1.0"},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"app": map[string]any{
+					"vars":     map[string]any{"image": "app:1.0"},
+					"settings": map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
+				},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, false,
+		)
+		require.NoError(t, err)
+		require.NotEmpty(t, affected, "removing a populated settings section must be reported")
+		assert.Equal(t, "app", affected[0].Component)
+		assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+	})
+
+	t.Run("settings section added in HEAD is detected", func(t *testing.T) {
+		t.Parallel()
+		// BASE has no settings; HEAD adds a populated settings section. Adding a section is a change.
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{
+			"app": map[string]any{
+				"vars":     map[string]any{"image": "app:1.0"},
+				"settings": map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"app": map[string]any{
+					"vars": map[string]any{"image": "app:1.0"},
+				},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, false,
+		)
+		require.NoError(t, err)
+		require.NotEmpty(t, affected, "adding a settings section must be reported")
+		assert.Equal(t, "app", affected[0].Component)
+		assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+	})
+
+	t.Run("component with settings section and vars change is detected", func(t *testing.T) {
+		t.Parallel()
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{
+			"app": map[string]any{
+				"vars":     map[string]any{"image": "app:2.0"},
+				"settings": map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"app": map[string]any{
+					"vars":     map[string]any{"image": "app:1.0"},
+					"settings": map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
+				},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, false,
+		)
+		require.NoError(t, err)
+		require.NotEmpty(t, affected)
+		assert.Equal(t, "app", affected[0].Component)
+		assert.Equal(t, cfg.ContainerComponentType, affected[0].ComponentType)
+	})
+}
+
+// TestProcessSimpleComponentsIndexed_FileDependencyWithoutSettings verifies that a component's
+// top-level file dependency is checked even when the component has no settings section. Before the
+// fix the dependency check was gated behind a settings section, so a changed dependency file went
+// unreported for a settings-less component. See #3204.
+func TestProcessSimpleComponentsIndexed_FileDependencyWithoutSettings(t *testing.T) {
+	t.Parallel()
+
+	// Absolute dependency file path; newChangedFilesIndex uses absolute inputs as-is.
+	depFile := filepath.Join(t.TempDir(), "shared", "config.yaml")
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: "/test"}
+	atmosConfig.Components.Ansible.BasePath = "components/ansible"
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{depFile}, "")
+	patternCache := newComponentPathPatternCache()
+	stackName := "dev"
+
+	// Same vars and same dependency declaration in BASE and HEAD (so neither the vars nor the
+	// dependencies section differs); no settings section at all. The only thing that can mark the
+	// component affected is the changed dependency file.
+	compBody := map[string]any{
+		"vars":         map[string]any{"playbook": "site.yml"},
+		"dependencies": map[string]any{"files": []any{depFile}},
+	}
+	section := map[string]any{"webserver": compBody}
+	remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+		cfg.AnsibleComponentType: map[string]any{"webserver": compBody},
+	}}}
+	current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.AnsibleComponentType: section}}}
+
+	affected, err := processSimpleComponentsIndexed(
+		cfg.AnsibleComponentType, stackName, section, &remote, &current,
+		atmosConfig, filesIndex, patternCache, false, false, false,
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, affected, "a changed file dependency must be detected even without a settings section")
+	assert.Equal(t, "webserver", affected[0].Component)
 }
 
 // TestProcessComponentsSourceAndProvisionChanges tests that source and provision section changes
@@ -2084,14 +2370,9 @@ func TestProcessComponentsSourceAndProvisionChanges(t *testing.T) {
 					tt.stackName, componentSection, &remoteStacks, &currentStacks,
 					atmosConfig, filesIndex, patternCache, false, false, false,
 				)
-			case "helmfile":
-				affected, err = processHelmfileComponentsIndexed(
-					tt.stackName, componentSection, &remoteStacks, &currentStacks,
-					atmosConfig, filesIndex, patternCache, false, false, false,
-				)
-			case "packer":
-				affected, err = processPackerComponentsIndexed(
-					tt.stackName, componentSection, &remoteStacks, &currentStacks,
+			default:
+				affected, err = processSimpleComponentsIndexed(
+					tt.componentType, tt.stackName, componentSection, &remoteStacks, &currentStacks,
 					atmosConfig, filesIndex, patternCache, false, false, false,
 				)
 			}
