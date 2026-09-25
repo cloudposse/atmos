@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestRenderAttributeDiff_FormattingOnlyChanges keeps differences in the actual
@@ -34,6 +36,47 @@ func TestRenderAttributeDiff_FormattingOnlyChanges(t *testing.T) {
 			output = ansi.Strip(b.String())
 			assert.NotContains(t, output, "- ", "identical raw values must keep the formatted view")
 			assert.NotContains(t, output, "+ ")
+		})
+	}
+}
+
+// TestRenderAttributeDiff_FormattingOnlyChangesRespectMaxLines keeps literal document
+// differences visible without expanding the omitted middle, with or without colors.
+func TestRenderAttributeDiff_FormattingOnlyChangesRespectMaxLines(t *testing.T) {
+	t.Parallel()
+	jsonDocument := "{\n  \"a\": 1,\n  \"b\": 2,\n  \"c\": 3,\n  \"d\": 4,\n  \"e\": 5\n}"
+	yamlDocument := "a: 1\nb: 2\nc:\n  child: true\nd: 4\ne: 5"
+	for _, tt := range []struct {
+		name, before, after, hidden string
+	}{
+		{"JSON whitespace", jsonDocument, strings.Replace(jsonDocument, "  \"c\"", "    \"c\"", 1), `"c"`},
+		{"JSON key order", jsonDocument, strings.Replace(jsonDocument, "  \"b\": 2,\n  \"c\": 3,", "  \"c\": 3,\n  \"b\": 2,", 1), `"c"`},
+		{"YAML indentation", yamlDocument, strings.Replace(yamlDocument, "  child", "    child", 1), "child"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			for _, maxLines := range []int{0, 3} {
+				for _, noColor := range []bool{true, false} {
+					atmosConfig := &schema.AtmosConfiguration{}
+					atmosConfig.Settings.Terminal.NoColor = noColor
+					var b strings.Builder
+					renderAttributeChanges(&b, []*AttributeChange{{Key: "policy", Before: tt.before, After: tt.after}}, "│   ",
+						&RenderConfig{Width: 80, MaxLines: maxLines, AtmosConfig: atmosConfig})
+					output := ansi.Strip(b.String())
+					assert.Contains(t, output, "- ")
+					assert.Contains(t, output, "+ ")
+					if maxLines > 0 {
+						assert.Contains(t, output, "-     ... (")
+						assert.Contains(t, output, "+     ... (")
+						assert.NotContains(t, output, tt.hidden)
+						assert.LessOrEqual(t, strings.Count(output, "\n"), 1+2*maxLines)
+					} else {
+						assert.Contains(t, output, tt.hidden)
+						assert.NotContains(t, output, "lines omitted")
+					}
+					assertTreeLayout(t, strings.Split(strings.TrimSuffix(output, "\n"), "\n"), 80)
+				}
+			}
 		})
 	}
 }

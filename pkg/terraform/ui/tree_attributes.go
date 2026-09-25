@@ -163,13 +163,15 @@ func renderAttributeDiff(b *strings.Builder, fc *formattedAttributeChange, ctx a
 }
 
 // attributeDiffValues falls back to literal strings when document normalization
-// would hide a formatting-only change, without exposing protected values.
+// would hide a formatting-only change, retaining document highlighting and line
+// limits without exposing protected values.
 func attributeDiffValues(fc *formattedAttributeChange) (attributeValue, attributeValue) {
 	before, beforeString := fc.change.Before.(string)
 	after, afterString := fc.change.After.(string)
 	if !fc.change.Sensitive && !fc.change.Unknown && beforeString && afterString && before != after &&
 		fc.before.format != "" && slices.Equal(fc.before.lines, fc.after.lines) {
-		return plainAttributeValue(before), plainAttributeValue(after)
+		return attributeValue{lines: strings.Split(before, newlineStr), format: fc.before.format},
+			attributeValue{lines: strings.Split(after, newlineStr), format: fc.after.format}
 	}
 	return fc.before, fc.after
 }
