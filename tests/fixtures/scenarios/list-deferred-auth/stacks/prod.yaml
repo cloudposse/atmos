@@ -1,0 +1,4 @@
+import:
+  - dev
+vars:
+  stage: prod
