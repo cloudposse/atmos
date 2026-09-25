@@ -2,6 +2,7 @@ package github
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"testing"
@@ -20,10 +21,9 @@ func TestHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
 	}
-	if marker := os.Getenv("HELPER_READY_FILE"); marker != "" {
-		if err := os.WriteFile(marker, []byte("ready"), 0o600); err != nil {
-			os.Exit(2)
-		}
+	if os.Getenv("HELPER_WAIT_FOR_STDIN") == "1" {
+		_, _ = io.Copy(io.Discard, os.Stdin)
+		// Closing stdin must not let the helper exit without process cancellation.
 		time.Sleep(time.Minute)
 	}
 	fmt.Fprint(os.Stdout, os.Getenv("HELPER_STDOUT"))

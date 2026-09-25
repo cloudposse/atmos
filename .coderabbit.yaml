@@ -44,10 +44,6 @@ reviews:
       - "main"
   tools:
     ast-grep:
-      rule_dirs:
-        - "rules"
-      util_dirs:
-        - "utils"
       essential_rules: true
       packages:
         - "javascript"
