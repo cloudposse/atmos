@@ -434,7 +434,9 @@ func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
 	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app?ref=main"
 
 	requireGitBinary(t)
-	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, time.Minute)
+	// Real Git subprocesses can exceed a minute on busy Windows runners. Use
+	// the production fetch budget so the best-effort ref probe can finish too.
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, DefaultFetchTimeout)
 	require.NoError(t, err)
 	require.NotNil(t, cleanup)
 	defer cleanup()
@@ -463,7 +465,7 @@ func TestResolve_RemoteGitSubdirWithoutRefStillResolvesCommit(t *testing.T) {
 	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app"
 
 	requireGitBinary(t)
-	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, time.Minute)
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, DefaultFetchTimeout)
 	require.NoError(t, err)
 	defer cleanup()
 	require.NotNil(t, cfg)
@@ -516,7 +518,7 @@ func TestResolveRemote_SubdirGitSourcePinsRefBeforeFetch(t *testing.T) {
 
 	requireGitBinary(t)
 
-	pinnedSrc, ref := pinSubdirGitSource(&schema.AtmosConfiguration{}, src, time.Minute)
+	pinnedSrc, ref := pinSubdirGitSource(&schema.AtmosConfiguration{}, src, DefaultFetchTimeout)
 	require.Regexp(t, `^[0-9a-f]{40}$`, ref, "the commit must be resolved before the content fetch runs")
 	require.Contains(t, pinnedSrc, "ref="+ref, "the content fetch must be pinned to the resolved commit")
 
@@ -524,7 +526,7 @@ func TestResolveRemote_SubdirGitSourcePinsRefBeforeFetch(t *testing.T) {
 	// -- exactly the race window that used to split content from ResolvedRef.
 	commitFileToTestRepo(t, repoDir, "aws/app/file.txt", "v2")
 
-	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", pinnedSrc, time.Minute)
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", pinnedSrc, DefaultFetchTimeout)
 	require.NoError(t, err)
 	defer cleanup()
 	require.NotNil(t, cfg)
