@@ -14,6 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+
+	"github.com/cloudposse/atmos/pkg/auth/cloud/aws/autherrors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -128,6 +130,18 @@ func (s *SSMStore) SetAuthContext(resolver store.AuthContextResolver, identityNa
 		s.initOnce = sync.Once{}
 		s.initErr = nil
 	}
+}
+
+// ResetAuthContext clears all runtime authentication and cached client state.
+func (s *SSMStore) ResetAuthContext() {
+	defer perf.Track(nil, "providers.SSMStore.ResetAuthContext")()
+
+	s.authResolver = nil
+	s.identityName = ""
+	s.client = nil
+	s.awsConfig = nil
+	s.initOnce = sync.Once{}
+	s.initErr = nil
 }
 
 // IdentityName returns the configured identity name, if any.
@@ -454,7 +468,7 @@ func (s *SSMStore) GetRaw(stack string, component string, key string) (string, e
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
-		return "", fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, err)
+		return "", fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, autherrors.Normalize(err))
 	}
 	if output == nil || output.Parameter == nil || output.Parameter.Value == nil {
 		return "", fmt.Errorf("%w: incomplete response for %q", store.ErrGetParameter, paramName)
@@ -511,7 +525,7 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, err)
+		return nil, fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, autherrors.Normalize(err))
 	}
 
 	return s.decodeParameterValue(*output.Parameter.Value), nil
@@ -617,7 +631,7 @@ func (s *SSMStore) Has(stack string, component string, key string) (bool, error)
 		if isParameterNotFound(err) {
 			return false, nil
 		}
-		return false, fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, err)
+		return false, fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, autherrors.Normalize(err))
 	}
 	return true, nil
 }
