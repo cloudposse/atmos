@@ -3,8 +3,6 @@ package exec
 import (
 	"context"
 	"errors"
-	"os"
-	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,10 +32,11 @@ func (m *mockAWSGetter) GetCallerIdentity(
 
 // runAWSYamlFuncTest is a helper that reduces duplication in AWS YAML function tests.
 func runAWSYamlFuncTest(
+	t *testing.T,
 	input string,
 	mockIdentity *awsIdentity.CallerIdentity,
 	mockErr error,
-	testFunc func(*schema.AtmosConfiguration, string, *schema.ConfigAndStacksInfo) any,
+	testFunc func(*schema.AtmosConfiguration, string, *schema.ConfigAndStacksInfo) (any, error),
 ) any {
 	// Clear cache before each test.
 	awsIdentity.ClearIdentityCache()
@@ -52,7 +51,9 @@ func runAWSYamlFuncTest(
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackInfo := &schema.ConfigAndStacksInfo{}
 
-	return testFunc(atmosConfig, input, stackInfo)
+	result, err := testFunc(atmosConfig, input, stackInfo)
+	require.NoError(t, err)
+	return result
 }
 
 func TestProcessTagAwsAccountID(t *testing.T) {
@@ -90,7 +91,7 @@ func TestProcessTagAwsAccountID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := runAWSYamlFuncTest(tt.input, tt.mockIdentity, tt.mockErr, processTagAwsAccountID)
+			result := runAWSYamlFuncTest(t, tt.input, tt.mockIdentity, tt.mockErr, processTagAwsAccountID)
 
 			if tt.shouldReturnNil {
 				assert.Nil(t, result)
@@ -135,7 +136,7 @@ func TestProcessTagAwsCallerIdentityArn(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := runAWSYamlFuncTest(tt.input, tt.mockIdentity, tt.mockErr, processTagAwsCallerIdentityArn)
+			result := runAWSYamlFuncTest(t, tt.input, tt.mockIdentity, tt.mockErr, processTagAwsCallerIdentityArn)
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
@@ -175,7 +176,7 @@ func TestProcessTagAwsCallerIdentityUserID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := runAWSYamlFuncTest(tt.input, tt.mockIdentity, tt.mockErr, processTagAwsCallerIdentityUserID)
+			result := runAWSYamlFuncTest(t, tt.input, tt.mockIdentity, tt.mockErr, processTagAwsCallerIdentityUserID)
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
@@ -229,7 +230,7 @@ func TestProcessTagAwsRegion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := runAWSYamlFuncTest(tt.input, tt.mockIdentity, tt.mockErr, processTagAwsRegion)
+			result := runAWSYamlFuncTest(t, tt.input, tt.mockIdentity, tt.mockErr, processTagAwsRegion)
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
@@ -370,13 +371,15 @@ func TestProcessTagAwsWithAuthContext(t *testing.T) {
 		},
 	}
 
-	result := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	result, err := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	require.NoError(t, err)
 	assert.Equal(t, "222222222222", result)
 
 	// Clear cache for next test.
 	awsIdentity.ClearIdentityCache()
 
-	result = processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo)
+	result, err = processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo)
+	require.NoError(t, err)
 	assert.Equal(t, "arn:aws:sts::222222222222:assumed-role/MyRole/session", result)
 }
 
@@ -524,12 +527,14 @@ func TestProcessTagAwsWithNilStackInfo(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Test with nil stackInfo - should still work using default auth context.
-	result := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, nil)
+	result, err := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, nil)
+	require.NoError(t, err)
 	assert.Equal(t, "555555555555", result)
 
 	awsIdentity.ClearIdentityCache()
 
-	result = processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, nil)
+	result, err = processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, nil)
+	require.NoError(t, err)
 	assert.Equal(t, "us-west-1", result)
 }
 
@@ -557,7 +562,8 @@ func TestProcessTagAwsWithPartialAuthContext(t *testing.T) {
 		},
 	}
 
-	result := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	result, err := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	require.NoError(t, err)
 	assert.Equal(t, "666666666666", result)
 
 	awsIdentity.ClearIdentityCache()
@@ -567,7 +573,8 @@ func TestProcessTagAwsWithPartialAuthContext(t *testing.T) {
 		AuthContext: nil,
 	}
 
-	result = processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo2)
+	result, err = processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo2)
+	require.NoError(t, err)
 	assert.Equal(t, "arn:aws:iam::666666666666:user/partial-test", result)
 }
 
@@ -590,12 +597,14 @@ func TestProcessTagAwsWithEmptyIdentityFields(t *testing.T) {
 	stackInfo := &schema.ConfigAndStacksInfo{}
 
 	// Empty values should still be returned (not nil).
-	result := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	result, err := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	require.NoError(t, err)
 	assert.Equal(t, "", result)
 
 	awsIdentity.ClearIdentityCache()
 
-	result = processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, stackInfo)
+	result, err = processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, stackInfo)
+	require.NoError(t, err)
 	assert.Equal(t, "", result)
 }
 
@@ -669,10 +678,14 @@ func TestAllAWSFunctionsShareCache(t *testing.T) {
 	stackInfo := &schema.ConfigAndStacksInfo{}
 
 	// Call all four functions.
-	result1 := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
-	result2 := processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo)
-	result3 := processTagAwsCallerIdentityUserID(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, stackInfo)
-	result4 := processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, stackInfo)
+	result1, err := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	require.NoError(t, err)
+	result2, err := processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo)
+	require.NoError(t, err)
+	result3, err := processTagAwsCallerIdentityUserID(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, stackInfo)
+	require.NoError(t, err)
+	result4, err := processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, stackInfo)
+	require.NoError(t, err)
 
 	// Verify all results are correct.
 	assert.Equal(t, "888888888888", result1)
@@ -738,7 +751,7 @@ func runAWSOrgYamlFuncTest(
 	input string,
 	mockInfo *awsOrg.OrganizationInfo,
 	mockErr error,
-	testFunc func(*schema.AtmosConfiguration, string, *schema.ConfigAndStacksInfo) any,
+	testFunc func(*schema.AtmosConfiguration, string, *schema.ConfigAndStacksInfo) (any, error),
 ) any {
 	t.Helper()
 
@@ -759,7 +772,9 @@ func runAWSOrgYamlFuncTest(
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackInfo := &schema.ConfigAndStacksInfo{}
 
-	return testFunc(atmosConfig, input, stackInfo)
+	result, err := testFunc(atmosConfig, input, stackInfo)
+	require.NoError(t, err)
+	return result
 }
 
 func TestProcessTagAwsOrganizationID(t *testing.T) {
@@ -802,96 +817,25 @@ func TestProcessTagAwsOrganizationID(t *testing.T) {
 	}
 }
 
-// TestProcessTagAwsOrganizationID_ErrorExits verifies that error paths in processTagAwsOrganizationID
-// call CheckErrorPrintAndExit (which calls os.Exit). These are tested via subprocess to avoid
-// killing the test process.
-func TestProcessTagAwsOrganizationID_ErrorExits(t *testing.T) {
-	tests := []struct {
-		name    string
-		envVar  string
-		envVal  string
-		wantErr bool
+func TestProcessTagAwsOrganizationID_ReturnsErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		info *awsOrg.OrganizationInfo
+		err  error
 	}{
-		{
-			name:    "getter error causes exit",
-			envVar:  "TEST_ORG_ERROR",
-			envVal:  "getter_error",
-			wantErr: true,
-		},
-		{
-			name:    "nil org info causes exit",
-			envVar:  "TEST_ORG_ERROR",
-			envVal:  "nil_info",
-			wantErr: true,
-		},
-		{
-			name:    "empty org ID causes exit",
-			envVar:  "TEST_ORG_ERROR",
-			envVal:  "empty_id",
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Use subprocess pattern: re-invoke the test binary with the specific helper.
-			cmd := exec.Command(os.Args[0], "-test.run=^TestProcessTagAwsOrganizationID_ErrorHelper$")
-			cmd.Env = append(os.Environ(), tt.envVar+"="+tt.envVal)
-
-			err := cmd.Run()
-			if tt.wantErr {
-				var exitErr *exec.ExitError
-				require.ErrorAs(t, err, &exitErr)
-				assert.Equal(t, 1, exitErr.ExitCode(), "Expected helper to exit with code 1")
-			}
+		{"getter", nil, errUtils.ErrAwsDescribeOrganization},
+		{"nil", nil, nil},
+		{"empty", &awsOrg.OrganizationInfo{}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			awsOrg.ClearOrganizationCache()
+			mock := awsOrg.NewMockGetter(gomock.NewController(t))
+			mock.EXPECT().GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).Return(tc.info, tc.err)
+			t.Cleanup(awsOrg.SetGetter(mock))
+			_, err := processTagAwsOrganizationID(&schema.AtmosConfiguration{}, u.AtmosYamlFuncAwsOrganizationID, nil)
+			require.ErrorIs(t, err, errUtils.ErrAwsDescribeOrganization)
 		})
 	}
-}
-
-// TestProcessTagAwsOrganizationID_ErrorHelper is a subprocess helper for exit-code tests.
-// It is not run directly by `go test` (no matching test name without _ErrorExits).
-func TestProcessTagAwsOrganizationID_ErrorHelper(t *testing.T) {
-	testMode := os.Getenv("TEST_ORG_ERROR")
-	if testMode == "" {
-		t.Skipf("Skipping: TEST_ORG_ERROR not set")
-		return
-	}
-
-	var mockInfo *awsOrg.OrganizationInfo
-	var mockErr error
-
-	switch testMode {
-	case "getter_error":
-		mockInfo = nil
-		mockErr = errUtils.ErrAwsDescribeOrganization
-	case "nil_info":
-		mockInfo = nil
-		mockErr = nil
-	case "empty_id":
-		mockInfo = &awsOrg.OrganizationInfo{ID: ""}
-		mockErr = nil
-	default:
-		t.Skipf("Unknown test mode: %s", testMode)
-		return
-	}
-
-	awsOrg.ClearOrganizationCache()
-
-	ctrl := gomock.NewController(t)
-	mock := awsOrg.NewMockGetter(ctrl)
-	mock.EXPECT().
-		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(mockInfo, mockErr).
-		Times(1)
-
-	restore := awsOrg.SetGetter(mock)
-	defer restore()
-
-	atmosConfig := &schema.AtmosConfiguration{}
-	stackInfo := &schema.ConfigAndStacksInfo{}
-
-	// This will call CheckErrorPrintAndExit → os.Exit(1).
-	processTagAwsOrganizationID(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, stackInfo)
 }
 
 func TestProcessTagAwsOrganizationIDWithAuthContext(t *testing.T) {
@@ -920,7 +864,8 @@ func TestProcessTagAwsOrganizationIDWithAuthContext(t *testing.T) {
 		},
 	}
 
-	result := processTagAwsOrganizationID(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, stackInfo)
+	result, err := processTagAwsOrganizationID(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, stackInfo)
+	require.NoError(t, err)
 	assert.Equal(t, "o-authctx", result)
 }
 
@@ -942,7 +887,8 @@ func TestProcessTagAwsOrganizationIDWithNilStackInfo(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	result := processTagAwsOrganizationID(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, nil)
+	result, err := processTagAwsOrganizationID(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, nil)
+	require.NoError(t, err)
 	assert.Equal(t, "o-nilstack", result)
 }
 
