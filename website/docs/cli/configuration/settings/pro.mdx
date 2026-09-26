@@ -602,6 +602,80 @@ counterpart of these same numbers, and [execution
 metadata](/changelog/pro-exec-metadata-upload) for upload behavior and
 configuration.
 
+## Automatic exception reporting
+
+In GitHub Actions, Atmos reports CLI failures to Atmos Pro when the effective
+`settings.pro.enabled` is `true`. Set this in `atmos.yaml` for invocation-wide
+reporting, or in stack/component settings for component failures. Component
+settings override the invocation defaults.
+
+```yaml title="atmos.yaml"
+settings:
+  pro:
+    enabled: true
+    # Optional: select another Pro deployment, including QA.
+    base_url: https://qa-2.atmos-pro.com
+    errors:
+      enabled: true
+```
+
+The workflow must grant `permissions: {id-token: write}`. Atmos uses the GitHub
+repository ID and requests a fresh OIDC token for audience `atmos-pro.com` for
+each delivery. No manually configured Sentry DSN or workspace token is needed
+for this reporter. Outside GitHub Actions, or without OIDC credentials and a
+repository ID, automatic Pro exception reporting is skipped.
+
+<dl>
+  <dt>`settings.pro.enabled`</dt>
+  <dd>
+    Enable Pro exception reporting by default. The CLI-wide default is `false`.
+    Environment variable: `ATMOS_PRO_ENABLED`.
+  </dd>
+  <dt>`settings.pro.errors.enabled`</dt>
+  <dd>
+    Set to `false` to opt out of exceptions while keeping other Pro features.
+    Omission follows Pro enablement. Set in `atmos.yaml` or stack/component
+    settings. `ATMOS_PRO_ERRORS_ENABLED` takes precedence over component values;
+    setting it to `true` still requires Pro to be enabled.
+  </dd>
+</dl>
+
+Separately configured [`errors.sentry`](/cli/configuration/errors) destinations
+continue receiving errors. Both destinations receive the same event ID and
+fingerprint. The PostHog telemetry setting does not control exception reporting.
+Terraform diagnostics continue through execution uploads.
+
+### Tags, labels, and execution context
+
+Resolved component metadata, including inherited stack defaults, enriches
+exception events. For example:
+
+```yaml title="stacks/prod.yaml"
+metadata:
+  tags:
+    - production
+  labels:
+    team: platform
+```
+
+The event contains unprefixed Sentry tags `production: "true"` and
+`team: "platform"`. Values come from resolved metadata, not Terraform variables
+or command-line selection filters. Labels override presence tags, global
+`errors.sentry.tags` override metadata, and component error tags override global
+error tags. Runtime identity tags such as `atmos.component`, `atmos.stack`, and
+`atmos.execution_id` take precedence over user values.
+
+Events retain masked metadata in the `atmos_metadata` context. Keys or values
+that exceed Sentry tag constraints remain in that context instead of being
+truncated into ambiguous tags. Events also include the command, available CI
+commit/run identity, Atmos version, and the execution ID shared with execution
+uploads.
+
+Reporting applies Atmos's existing masking rules, queues up to 32 events, and
+limits envelopes to 1 MiB. Each delivery and the shared shutdown flush have a
+two-second timeout. Authentication or delivery failures do not change the
+command's exit code.
+
 ## Related Commands
 
 <DocCardList items={[
