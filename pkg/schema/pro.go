@@ -4,6 +4,8 @@ import "time"
 
 // ProSettings contains Atmos Pro integration configuration.
 type ProSettings struct {
+	Enabled         bool               `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Errors          ProErrorsSettings  `yaml:"errors,omitempty" json:"errors,omitempty" mapstructure:"errors"`
 	BaseURL         string             `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"`
 	Endpoint        string             `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`
 	Token           string             `yaml:"token,omitempty" json:"token,omitempty" mapstructure:"token"`
@@ -15,6 +17,11 @@ type ProSettings struct {
 	GitSTS GitSTSSettings `yaml:"git_sts,omitempty" json:"git_sts,omitempty" mapstructure:"git_sts"`
 	// Exec holds settings for the command-execution metadata upload feature.
 	Exec ExecSettings `yaml:"exec,omitempty" json:"exec,omitempty" mapstructure:"exec"`
+}
+
+// ProErrorsSettings controls automatic exception reporting independently of Sentry.
+type ProErrorsSettings struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 }
 
 // ExecSettings contains configuration for command-execution metadata upload

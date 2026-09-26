@@ -52,6 +52,7 @@ func TestConcurrentBindEnvAndGet(t *testing.T) {
 		for i := 0; i < iterations; i++ {
 			_ = viperguard.IsSet("settings.terminal.theme")
 			_ = viperguard.GetStringSlice("some.slice")
+			_ = viperguard.GetFloat64("settings.terminal.speed")
 		}
 	}()
 
@@ -59,6 +60,17 @@ func TestConcurrentBindEnvAndGet(t *testing.T) {
 
 	assert.True(t, viperguard.IsSet("settings.terminal.theme"),
 		"BindEnv must still have taken effect once every goroutine finished")
+}
+
+func TestGetFloat64(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	assert.Zero(t, viperguard.GetFloat64("settings.terminal.speed"))
+	viperguard.Set("settings.terminal.speed", "123.5")
+	assert.Equal(t, 123.5, viperguard.GetFloat64("settings.terminal.speed"))
+	viperguard.Set("settings.terminal.speed", 2400)
+	assert.Equal(t, float64(2400), viperguard.GetFloat64("settings.terminal.speed"))
 }
 
 // TestGetBoolAndView covers the package's GetBool and View, plus every
