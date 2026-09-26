@@ -33,6 +33,11 @@ func CaptureSync(atmosConfig *schema.AtmosConfiguration, in *ExecRecordInput) er
 	}
 
 	timeout := syncTimeout(atmosConfig)
+	// Snapshot before launching the upload; the invocation may end while it runs.
+	input := *in
+	if input.ExecutionID == "" {
+		input.ExecutionID = ExecutionID()
+	}
 	cmdName := in.Command
 
 	// Client creation (which may perform GitHub OIDC token exchange over the
@@ -46,7 +51,7 @@ func CaptureSync(atmosConfig *schema.AtmosConfiguration, in *ExecRecordInput) er
 			return
 		}
 
-		req, buildErr := buildRecord(in, git.NewDefaultGitRepo())
+		req, buildErr := buildRecord(&input, git.NewDefaultGitRepo())
 		if buildErr != nil {
 			resultCh <- buildErr
 			return
