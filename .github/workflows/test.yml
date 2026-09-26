@@ -805,6 +805,36 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+  pact:
+    name: "[pro] consumer contracts"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - name: Check out code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-cache
+      - name: Install native Pact library using the pinned Go dependency
+        run: go run github.com/pact-foundation/pact-go/v2 install --libDir "$RUNNER_TEMP/pact"
+      - name: Verify consumer contracts
+        env:
+          CGO_LDFLAGS: -L${{ runner.temp }}/pact
+          LD_LIBRARY_PATH: ${{ runner.temp }}/pact
+        run: go test -tags pact ./pkg/pro/... -run TestPact -count=1 -timeout 2m
+      - name: Check committed contracts
+        # Pact omits the final newline required by the repository hygiene hooks.
+        run: git diff --exit-code --ignore-space-at-eol -- pacts/
+      - name: Upload contracts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: atmos-pro-pacts
+          path: pacts/*.json
+          if-no-files-found: error
+
   # magefiles/ carries the `mage` build tag (invoked only via `go tool mage`),
   # so it's silently excluded from the default `go build ./...`/`go test
   # ./...` scope every other job here uses. Run it as its own lightweight job
