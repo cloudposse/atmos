@@ -798,6 +798,8 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "describe.component.filter", "ATMOS_DESCRIBE_COMPONENT_FILTER")
 
 	// Atmos Pro settings
+	bindEnv(v, "settings.pro.enabled", "ATMOS_PRO_ENABLED")
+	bindEnv(v, "settings.pro.errors.enabled", "ATMOS_PRO_ERRORS_ENABLED")
 	bindEnv(v, "settings.pro.base_url", AtmosProBaseUrlEnvVarName)
 	bindEnv(v, "settings.pro.endpoint", AtmosProEndpointEnvVarName)
 	bindEnv(v, "settings.pro.token", AtmosProTokenEnvVarName)
