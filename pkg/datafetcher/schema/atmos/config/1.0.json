@@ -8086,8 +8086,53 @@
       "type": "object",
       "description": "Preconditions declares tools that must already be on PATH for this step's work to be considered\nalready satisfied -- a lighter, inline, single-step-skip variant of the type: require/assert\nstep's hard preconditions gate (see pkg/runner/step/require.go), not a new concept. Deliberately\nnot named Expect: Task/WorkflowStep already has an unrelated Expect *HTTPExpect field (the\ntype: http step's post-hoc success criteria), and even without that collision, expect: is\nestablished elsewhere (HTTP step, CLI test-runner) as a post-hoc outcome assertion, whereas\nthis is a pre-hoc gate checked before the step runs. Plural, matching Inputs/Artifacts/\nDependencies: the block can hold multiple check kinds (currently Tools; more may follow)."
     },
+    "ProErrorsSettings": {
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "ProErrorsSettings controls automatic exception reporting independently of Sentry."
+    },
     "ProSettings": {
       "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "errors": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProErrorsSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "base_url": {
           "anyOf": [
             {
