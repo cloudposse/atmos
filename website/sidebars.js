@@ -65,6 +65,11 @@ module.exports = {
                 'quick-start/install-atmos',
                 'intro/features',
                 'intro/use-cases',
+                {
+                    type: 'doc',
+                    id: 'intro/alternatives',
+                    label: 'Alternatives',
+                },
                 'intro/faq',
                 {
                     type: 'category',
