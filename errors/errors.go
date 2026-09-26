@@ -797,6 +797,7 @@ var (
 	ErrTokenRefreshFailed           = errors.New("failed to refresh API token")
 	ErrFailedToUnmarshalAPIResponse = errors.New("failed to unmarshal API response")
 	ErrNilRequestDTO                = errors.New("nil request DTO")
+	ErrProExceptionEnvelopeTooLarge = errors.New("pro exception envelope exceeds the ingestion limit")
 	ErrFailedToUploadExecMetadata   = errors.New("failed to upload execution metadata")
 	ErrFailedToUploadExecData       = errors.New("failed to upload execution data")
 	ErrExecPayloadTooLarge          = errors.New("execution metadata payload too large")
