@@ -21,37 +21,3 @@ tests:
     expect:
       timeout: "10m"
       exit_code: 0
-
-  # Regression test for cloudposse/atmos#3218: with the default `schema` filter,
-  # `describe component` must surface the Helm `values` and `chart` sections (and
-  # other user-definable sections) while still hiding Atmos-computed bookkeeping.
-  # This runs fully offline (no cluster needed), so it is not OS-restricted.
-  - name: describe_component_helm_schema_filter_shows_values_and_chart
-    enabled: true
-    snapshot: false
-    description: "Default schema filter surfaces Helm `values`/`chart` and hides Atmos-computed fields (#3218)"
-    workdir: "../examples/helm"
-    env:
-      ATMOS_CLI_CONFIG_PATH: "."
-    command: "atmos"
-    args:
-      - "describe"
-      - "component"
-      - "demo"
-      - "-s"
-      - "dev"
-      - "--format"
-      - "json"
-    expect:
-      stdout:
-        # User-definable sections that the previous allowlist dropped.
-        - '"chart": "\."'
-        - '"values": \{'
-        - '"replicaCount": 2'
-        - '"command": "helm"'
-        # Atmos-computed bookkeeping must stay hidden under the schema filter.
-        - !not '"atmos_cli_config":'
-        - !not '"atmos_component":'
-        - !not '"sources":'
-        - !not '"component_info":'
-      exit_code: 0

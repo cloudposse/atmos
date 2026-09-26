@@ -33,12 +33,15 @@ came to be missing (added later in PR #2992) and how `values`/`chart` were missi
   - Replaced the keep-allowlist in `FilterComputedFields` with a **denylist**,
     `atmosComputedFields`, of the internal fields Atmos computes while resolving a component:
     identity/provenance (`atmos_cli_config`, `atmos_component`, `atmos_stack`, `atmos_stack_file`,
-    `atmos_manifest`, `stack`, `component_info`, `inheritance`, `source`, `sources`), the resolved
+    `atmos_manifest`, `stack`, `component_info`, `inheritance`, `sources`), the resolved
     dependency graph (`deps`, `deps_all`), derived CLI plumbing (`cli_args`, `tf_cli_vars`,
     `env_tf_cli_args`, `env_tf_cli_vars`), integration-derived identity (`atlantis_project`,
     `spacelift_stack`), and internal managed-workdir bookkeeping (`_workdir_path`,
     `_workdir_reprovisioned`, `_workdir_subpath_applied`). Constants from `pkg/config` and
-    `pkg/provisioner/workdir` are reused where they exist.
+    `pkg/provisioner/workdir` are reused where they exist. Note: the singular `source` section is
+    NOT denied - it is stack-definable component configuration (JIT-vendored/remote component
+    source, and it participates in base-component inheritance), distinct from the computed
+    `sources` list of resolved source files.
   - The filter now keeps everything else, so all user-definable sections (including Helm
     `values`/`chart`, `secrets`, `generate`, `auth`, `command`, `backend_type`, `provision`,
     `retry`, `workspace`, and any future section) surface by default without needing the list

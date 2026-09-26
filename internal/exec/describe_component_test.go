@@ -701,7 +701,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	// Verify the internal Atmos-computed fields are removed (denylist semantics).
 	// Note: `workspace` is effective config the user cares about and is intentionally
 	// kept (consistent with `describe stacks`), so it is NOT in this list. See #3218.
-	computedFields := []string{"atmos_component", "atmos_stack", "atmos_stack_file", "atmos_manifest", "atmos_cli_config", "component_info", "inheritance", "source", "cli_args", "sources", "deps", "deps_all", "stack"}
+	computedFields := []string{"atmos_component", "atmos_stack", "atmos_stack_file", "atmos_manifest", "atmos_cli_config", "component_info", "inheritance", "cli_args", "sources", "deps", "deps_all", "stack"}
 	for _, field := range computedFields {
 		assert.NotContains(t, filtered, field, "Filtered component section should not contain computed field: %s", field)
 	}
@@ -764,7 +764,6 @@ func TestFilterComputedFields(t *testing.T) {
 				"atmos_stack":      "test-stack",
 				"component_info":   map[string]any{"path": "/some/path"},
 				"inheritance":      []string{"base"},
-				"source":           map[string]any{"uri": "github.com/org/repo"},
 				"cli_args":         []string{"arg1"},
 				"tf_cli_vars":      map[string]any{"foo": "bar"},
 				"env_tf_cli_args":  "-refresh=false",
@@ -787,7 +786,8 @@ func TestFilterComputedFields(t *testing.T) {
 		{
 			// Issue #3218: native Helm components define `values` and `chart`, which
 			// the previous allowlist dropped. They must survive the schema filter,
-			// along with `workspace` (effective config), while Atmos bookkeeping
+			// along with `workspace` (effective config) and `source` (stack-definable,
+			// participates in base-component inheritance), while Atmos bookkeeping
 			// (atmos_component, deps) is still removed.
 			name: "Keeps Helm values, chart, and other user-definable sections (#3218)",
 			input: map[string]any{
@@ -802,6 +802,7 @@ func TestFilterComputedFields(t *testing.T) {
 				"provision":       map[string]any{"workdir": map[string]any{"enabled": true}},
 				"retry":           map[string]any{"max_attempts": 3},
 				"workspace":       "dev",
+				"source":          map[string]any{"uri": "github.com/org/repo//modules/vpc"},
 				"vars":            map[string]any{"stage": "dev"},
 				"atmos_component": "clear-dashboard",
 				"deps":            []string{"dep1"},
@@ -818,6 +819,7 @@ func TestFilterComputedFields(t *testing.T) {
 				"provision":    map[string]any{"workdir": map[string]any{"enabled": true}},
 				"retry":        map[string]any{"max_attempts": 3},
 				"workspace":    "dev",
+				"source":       map[string]any{"uri": "github.com/org/repo//modules/vpc"},
 				"vars":         map[string]any{"stage": "dev"},
 			},
 		},
@@ -900,6 +902,64 @@ func TestDescribeComponentFilter(t *testing.T) {
 	assert.Equal(t, describeComponentFilterFull, describeComponentFilter(&schema.AtmosConfiguration{
 		Describe: schema.Describe{Component: schema.DescribeComponentSettings{Filter: describeComponentFilterFull}},
 	}))
+}
+
+// TestDescribeComponentSchemaFilterKeepsHelmValuesAndChart is the end-to-end regression
+// test for issue #3218: running the real describe-component pipeline against the native
+// Helm example and applying the default `schema` filter must surface the user-definable
+// `values` and `chart` sections (previously dropped by the allowlist) while still hiding
+// Atmos-computed bookkeeping. It uses the local examples/helm fixture and runs offline
+// (the `demo` component uses a local chart, no cluster or network access).
+func TestDescribeComponentSchemaFilterKeepsHelmValuesAndChart(t *testing.T) {
+	// Clear caches to ensure fresh processing.
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
+	// Isolate from the repo's atmos.yaml and any inherited env.
+	t.Chdir("../../examples/helm")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	component := "demo"
+	stack := "dev"
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		ComponentFromArg: component,
+		Stack:            stack,
+	}, true)
+	require.NoError(t, err)
+
+	// Sanity check: the default filter is the schema filter, which is the path under test.
+	require.Equal(t, describeComponentFilterSchema, describeComponentFilter(&atmosConfig))
+
+	section, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		AtmosConfig:          &atmosConfig,
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, section)
+
+	// Before filtering, the full section carries the Helm sections and the computed fields.
+	require.Contains(t, section, "chart", "unfiltered section should contain the Helm chart")
+	require.Contains(t, section, "values", "unfiltered section should contain the Helm values")
+
+	filtered := FilterComputedFields(section)
+
+	// The user-definable Helm sections the previous allowlist dropped must survive (#3218).
+	assert.Equal(t, ".", filtered["chart"], "schema filter must keep the Helm 'chart' section")
+	values, ok := filtered["values"].(map[string]any)
+	require.True(t, ok, "schema filter must keep the Helm 'values' section as a map")
+	assert.Equal(t, 2, values["replicaCount"], "Helm values content must be preserved intact")
+
+	// Atmos-computed bookkeeping must stay hidden under the schema filter.
+	for _, computed := range []string{"atmos_cli_config", "atmos_component", "atmos_stack", "component_info", "sources", "deps", "inheritance", "stack"} {
+		assert.NotContains(t, filtered, computed, "schema filter must drop computed field %q", computed)
+	}
 }
 
 func TestFilterAbstractComponents(t *testing.T) {

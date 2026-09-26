@@ -674,8 +674,7 @@ var atmosComputedFields = map[string]bool{
 	"stack":                    true,
 	componentInfoKey:           true, // "component_info".
 	cfg.InheritanceSectionName: true, // "inheritance".
-	cfg.SourceSectionName:      true, // "source" (resolved vendored source).
-	sourcesSectionName:         true, // "sources".
+	sourcesSectionName:         true, // "sources" (resolved list of source files).
 	// Resolved dependency graph.
 	"deps":     true,
 	"deps_all": true,
