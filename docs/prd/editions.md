@@ -244,6 +244,16 @@ current schema.
   [PR #3220](https://github.com/cloudposse/atmos/pull/3220) and
   [the migration section](pro-exception-reporting.md#migration-and-editions).
 
+  **Additional post-editions candidate (2026-09-25):** `describe.component.filter: schema`
+  now removes only Atmos-computed internal fields and keeps every section a stack manifest
+  can define; previously it kept a fixed 12-section allowlist that dropped real sections
+  (native Helm `values`/`chart`, plus `secrets`, `generate`, `auth`, `command`,
+  `backend_type`, `provision`, `retry`, `workspace`, and others). The journaled default
+  value `schema` (2026-07-17) is unchanged; what it produces did. This ships independently
+  of edition pins because `KindBehavior` resolution is not implemented. See
+  [PR #3223](https://github.com/cloudposse/atmos/pull/3223)
+  and `docs/fixes/2026-09-25-describe-component-schema-filter.md`.
+
   **Not gatable:** the auth credential realm isolation change (2026-02-10,
   [changelog/auth-realm-isolation](https://atmos.tools/changelog/auth-realm-isolation)) is a hard
   break — cached credentials moved realms and every user had to re-login. Editions cannot roll it
@@ -269,3 +279,4 @@ current schema.
 | 2026-09-14 | 1.2 | Documented child-process suppression of experimental command and setting notices as an additional post-editions behavior-gating candidate. |
 | 2026-09-24 | 1.3 | Recorded project-relative toolchain paths and automatic-install metadata policy as behavior-gating candidates. |
 | 2026-09-25 | 1.4 | Recorded automatic exception reporting for existing Pro-enabled stacks as a behavior-gating candidate. |
+| 2026-09-25 | 1.5 | Recorded the `describe.component.filter: schema` reinterpretation (allowlist → denylist, surfacing all stack-definable sections) as a behavior-gating candidate; no code change to editions. |

@@ -15,7 +15,10 @@ backend:                                          # ○ [2] catalog/terraform/vp
   region: us-east-2
   role_arn: null
   workspace_key_prefix: top-level-component1
+backend_type: s3                                  # ○ [4] orgs/cp/_defaults.yaml:30
+command: tofu                                     # ○ [2] catalog/terraform/test-component-override-2.yaml:24
 component: top-level-component1                   # ○ [2] catalog/terraform/test-component-override-2.yaml:29
+component_type: terraform
 env: {}                                           # ○ [2] catalog/terraform/test-component-override-2.yaml:34
 import:                                           # ○ [3] orgs/cp/tenant1/_defaults.yaml:4
   - catalog/helmfile/echo-server                  # ○ [3] orgs/cp/tenant1/_defaults.yaml:4
@@ -87,6 +90,19 @@ providers:                                        # ○ [2] catalog/terraform/vp
       namespace: cp                               # ○ [4] orgs/cp/_defaults.yaml:83
       stage: dev                                  # ○ [4] orgs/cp/_defaults.yaml:86
       tenant: tenant1                             # ○ [4] orgs/cp/_defaults.yaml:84
+remote_state_backend:                             # ○ [2] catalog/terraform/test-component-override-2.yaml:40
+  acl: bucket-owner-full-control
+  bucket: cp-ue2-root-tfstate
+  dynamodb_table: cp-ue2-root-tfstate-lock
+  encrypt: true
+  key: terraform.tfstate
+  profile: cp-gbl-root-tfstate
+  region: us-east-2
+  role_arn: >-
+    arn:aws:iam::123456789012:role/cp-gbl-root-terraform
+  workspace_key_prefix: top-level-component1
+remote_state_backend_type: s3                     # ○ [2] catalog/terraform/test-component-override-2.yaml:38
+required_version: ""
 settings:                                         # ○ [2] catalog/terraform/vpc.yaml:12
   atlantis:                                       # ○ [4] orgs/cp/_defaults.yaml:118
     config_template:                              # ● [1] orgs/cp/tenant1/dev/us-east-2.yaml:62
@@ -196,3 +212,4 @@ vars:                                             # ○ [2] catalog/terraform/vp
     terraform_component: top-level-component1     # ○ [4] orgs/cp/_defaults.yaml:15
     terraform_workspace: tenant1-ue2-dev          # ○ [4] orgs/cp/_defaults.yaml:14
   tenant: tenant1                                 # ○ [3] orgs/cp/tenant1/_defaults.yaml:7
+workspace: tenant1-ue2-dev

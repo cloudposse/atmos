@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	p "github.com/cloudposse/atmos/pkg/provenance"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -644,39 +645,67 @@ func describeComponentFilter(atmosConfig *schema.AtmosConfiguration) string {
 	return describeComponentFilterSchema
 }
 
+// atmosComputedFields is the denylist of fields Atmos computes while resolving a
+// component. They are internal bookkeeping (identity, provenance, the resolved
+// dependency graph, derived CLI plumbing, integration-derived identity, and
+// workdir internals) rather than sections a stack manifest can define.
+//
+// The "schema" filter removes these and keeps everything else, so the default
+// `describe component` output surfaces every user-definable section (including
+// Helm `values`/`chart`, plus `secrets`, `generate`, `auth`, `command`,
+// `backend_type`, `provision`, `retry`, and others), consistent with
+// `describe stacks`.
+//
+// A denylist (rather than an allowlist of sections to keep) means new
+// user-definable sections are surfaced by default without having to update this
+// list — closing the drift the previous allowlist accumulated. See
+// docs/fixes/describe-component-schema-filter.md and issue #3218.
+//
+// Effective-config fields that Atmos derives but a user does care about (e.g.
+// `workspace`, `component_type`, `backend`, `backend_type`) are intentionally
+// NOT denied.
+var atmosComputedFields = map[string]bool{
+	// Identity and provenance of the described component.
+	"atmos_cli_config":         true,
+	"atmos_component":          true,
+	"atmos_stack":              true,
+	"atmos_stack_file":         true,
+	"atmos_manifest":           true,
+	"stack":                    true,
+	componentInfoKey:           true, // "component_info".
+	cfg.InheritanceSectionName: true, // "inheritance".
+	sourcesSectionName:         true, // "sources" (resolved list of source files).
+	// Resolved dependency graph.
+	"deps":     true,
+	"deps_all": true,
+	// Derived CLI plumbing passed to the underlying tool.
+	cfg.CliArgsSectionName:             true, // "cli_args".
+	cfg.TerraformCliVarsSectionName:    true, // "tf_cli_vars".
+	cfg.TerraformCliArgsEnvSectionName: true, // "env_tf_cli_args".
+	cfg.TerraformCliVarsEnvSectionName: true, // "env_tf_cli_vars".
+	// Integration-derived identity.
+	"atlantis_project": true,
+	"spacelift_stack":  true,
+	// Internal managed-workdir bookkeeping.
+	provWorkdir.WorkdirPathKey:          true, // "_workdir_path".
+	provWorkdir.WorkdirReprovisionedKey: true, // "_workdir_reprovisioned".
+	"_workdir_subpath_applied":          true, // Unexported key set by pkg/component.
+}
+
 // FilterComputedFields removes Atmos-added fields that don't come from stack files.
-// Only keeps fields that are defined in stack YAML files.
+// It keeps every section a stack manifest can define and drops only the internal
+// fields Atmos computes (see atmosComputedFields).
 func FilterComputedFields(componentSection map[string]any) map[string]any {
 	if componentSection == nil {
 		return map[string]any{}
 	}
 
-	// Fields to keep (the sections a stack manifest can define).
-	//
-	// NOTE: this allowlist is already missing several other real sections a stack
-	// manifest can define (e.g. retry, generate, auth, secrets, command, backend_type,
-	// workspace) — a broader, pre-existing gap out of scope for the "flags" addition
-	// below. See docs/fixes/ for the field-test finding that added "flags" here.
-	fieldsToKeep := map[string]bool{
-		"vars":         true,
-		"settings":     true,
-		"env":          true,
-		"backend":      true,
-		"metadata":     true,
-		"overrides":    true,
-		"providers":    true,
-		"imports":      true,
-		"dependencies": true,
-		"component":    true,
-		"hooks":        true,
-		"flags":        true,
-	}
-
-	filtered := make(map[string]any)
+	filtered := make(map[string]any, len(componentSection))
 	for k, v := range componentSection {
-		if fieldsToKeep[k] {
-			filtered[k] = v
+		if atmosComputedFields[k] {
+			continue
 		}
+		filtered[k] = v
 	}
 
 	return filtered
