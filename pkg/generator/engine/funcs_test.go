@@ -221,3 +221,98 @@ func TestRenderAnswersListExpression_InvalidResultType(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldExpressionFailed)
 }
+
+// TestRenderAnswersExpression_Scalar proves the general any-returning form
+// resolves a plain scalar expression, unlike RenderAnswersListExpression
+// which requires list-shaped output.
+func TestRenderAnswersExpression_Scalar(t *testing.T) {
+	p := NewProcessor()
+	answers := map[string]interface{}{"region": "us-east-1"}
+
+	got, err := p.RenderAnswersExpression("{{ answers.region }}", answers, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "us-east-1", got)
+}
+
+// TestRenderAnswersExpression_Bool proves a boolean-valued expression
+// round-trips as a Go bool rather than the string "true".
+func TestRenderAnswersExpression_Bool(t *testing.T) {
+	p := NewProcessor()
+	answers := map[string]interface{}{"regions": []interface{}{"us-east-1", "us-west-2"}}
+
+	got, err := p.RenderAnswersExpression("{{ gt (len answers.regions) 1 }}", answers, nil)
+	require.NoError(t, err)
+	assert.Equal(t, true, got)
+}
+
+// TestRenderAnswersExpression_Ternary exercises a realistic non-list
+// expression shape: Sprig's ternary picking between two answers based on a
+// condition. This return shape (a plain scalar chosen by a boolean
+// condition) is exactly what RenderAnswersListExpression can't decode, since
+// it always requires a list of strings.
+func TestRenderAnswersExpression_Ternary(t *testing.T) {
+	p := NewProcessor()
+
+	single := map[string]interface{}{"regions": []interface{}{"us-east-1"}, "primary_region": ""}
+	got, err := p.RenderAnswersExpression(
+		`{{ ternary answers.primary_region (index answers.regions 0) (gt (len answers.regions) 1) }}`,
+		single, nil,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "us-east-1", got)
+
+	multi := map[string]interface{}{"regions": []interface{}{"us-east-1", "us-west-2"}, "primary_region": "us-west-2"}
+	got, err = p.RenderAnswersExpression(
+		`{{ ternary answers.primary_region (index answers.regions 0) (gt (len answers.regions) 1) }}`,
+		multi, nil,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "us-west-2", got)
+}
+
+// TestRenderAnswersExpression_List proves the general form also decodes
+// list-shaped results, matching what RenderAnswersListExpression would
+// return but without the []string-specific type.
+func TestRenderAnswersExpression_List(t *testing.T) {
+	p := NewProcessor()
+	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
+
+	got, err := p.RenderAnswersExpression("{{ collectKeys answers.environments }}", answers, nil)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []any{"dev", "staging"}, got)
+}
+
+// TestRenderAnswersExpression_Map proves a map-shaped result round-trips as
+// a map[string]any rather than being rejected -- something
+// RenderAnswersListExpression can't do since it always requires a list of
+// strings.
+func TestRenderAnswersExpression_Map(t *testing.T) {
+	p := NewProcessor()
+	answers := map[string]interface{}{"tags": map[string]interface{}{"team": "platform"}}
+
+	got, err := p.RenderAnswersExpression("{{ answers.tags }}", answers, nil)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"team": "platform"}, got)
+}
+
+// TestRenderAnswersExpression_InvalidTemplateErrors mirrors
+// TestRenderAnswersListExpression_InvalidTemplateErrors: the shared
+// singleValuePipe/renderAnswersExpressionJSON validation applies
+// identically regardless of which decode shape the caller wants back.
+func TestRenderAnswersExpression_InvalidTemplateErrors(t *testing.T) {
+	p := NewProcessor()
+
+	_, err := p.RenderAnswersExpression("{{ answers.region ", map[string]interface{}{}, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldExpressionFailed)
+}
+
+// TestRenderAnswersExpression_MalformedJSONErrors proves a rendered result
+// that isn't valid JSON (e.g. an unquoted Go %v-style struct dump some
+// exotic value type could produce) fails clearly via
+// parseExpressionResultAny rather than returning a garbage value.
+func TestRenderAnswersExpression_MalformedJSONErrors(t *testing.T) {
+	_, err := parseExpressionResultAny("{not valid json", "irrelevant")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldExpressionFailed)
+}
