@@ -197,12 +197,12 @@ func TestResolveTargetPath_NonEmptyTargetPathIsPassthrough(t *testing.T) {
 // proves a computed field's own result -- present in preCollectedValues
 // because the temp-dir setup pass that produced it already ran
 // ComputeFields -- is not carried forward into the returned map on fresh
-// (non-update) generation. Found via CodeRabbit review: left in place, the
-// next RunSetupForm's own RejectComputedFieldOverrides would mistake this
-// pass's own computed output for a user-supplied --set override on the
-// same field and reject it every time, breaking interactive fresh
-// generation for any template with a computed field. A regular field's
-// value in preCollectedValues must still survive the merge unchanged.
+// (non-update) generation. Left in place, the next RunSetupForm's own
+// RejectComputedFieldOverrides would mistake this pass's own computed
+// output for a user-supplied --set override on the same field and reject
+// it every time, breaking interactive fresh generation for any template
+// with a computed field. A regular field's value in preCollectedValues
+// must still survive the merge unchanged.
 func TestResolvePreCollectedValues_FreshGeneration_StripsComputedFieldValues(t *testing.T) {
 	ui := createTestUI(t)
 	configuration := &templates.Configuration{
