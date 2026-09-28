@@ -298,3 +298,22 @@ func RejectComputedFieldOverrides(scaffoldConfig *ScaffoldConfig, overrides map[
 	}
 	return nil
 }
+
+// StripComputedFieldValues deletes every type: computed field's key from
+// values in place. Used when a scaffold setup form's own result -- which
+// already contains ComputeFields' output for this run, keyed just like any
+// other field -- is about to be re-threaded through as a future call's
+// cmdTemplateValues (see resolvePreCollectedValues). Left in place, that
+// future call's own RejectComputedFieldOverrides would mistake this run's
+// computed output for a user-supplied --set override on the same field and
+// reject it, even though the user never touched it.
+func StripComputedFieldValues(scaffoldConfig *ScaffoldConfig, values map[string]interface{}) {
+	defer perf.Track(nil, "config.StripComputedFieldValues")()
+
+	for i := range scaffoldConfig.Spec.Fields {
+		field := &scaffoldConfig.Spec.Fields[i]
+		if field.Type == fieldTypeComputed {
+			delete(values, field.Name)
+		}
+	}
+}

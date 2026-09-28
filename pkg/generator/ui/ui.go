@@ -858,10 +858,24 @@ func (ui *InitUI) resolvePreCollectedValues(
 
 	// Fresh generation: merge the pre-collected values into cmdTemplateValues
 	// and use --use-defaults so executeWithSetup skips showing the form again.
+	scaffoldConfig, cfgErr := ui.loadScaffoldConfigFromEmbeds(embedsConfig)
+	if cfgErr != nil {
+		return nil, useDefaults, cfgErr
+	}
 	merged := make(map[string]interface{}, len(preCollectedValues)+len(cmdTemplateValues))
 	for k, v := range preCollectedValues {
 		merged[k] = v
 	}
+	// preCollectedValues already contains this temp-dir setup pass's own
+	// ComputeFields results, keyed by field name like everything else in
+	// the map. Strip them back out before this becomes the next call's
+	// cmdTemplateValues -- otherwise the second RunSetupForm's own
+	// RejectComputedFieldOverrides would mistake the first pass's own
+	// computed output for a user-supplied --set override on the same
+	// field and reject it, even though the user never touched it. The
+	// second pass recomputes each one fresh from the regular-field
+	// answers already present in merged.
+	config.StripComputedFieldValues(scaffoldConfig, merged)
 	// Caller-supplied flags take highest priority and overwrite.
 	for k, v := range cmdTemplateValues {
 		merged[k] = v

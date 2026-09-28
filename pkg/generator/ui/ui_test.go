@@ -193,6 +193,47 @@ func TestResolveTargetPath_NonEmptyTargetPathIsPassthrough(t *testing.T) {
 	assert.True(t, gotUseDefaults)
 }
 
+// TestResolvePreCollectedValues_FreshGeneration_StripsComputedFieldValues
+// proves a computed field's own result -- present in preCollectedValues
+// because the temp-dir setup pass that produced it already ran
+// ComputeFields -- is not carried forward into the returned map on fresh
+// (non-update) generation. Found via CodeRabbit review: left in place, the
+// next RunSetupForm's own RejectComputedFieldOverrides would mistake this
+// pass's own computed output for a user-supplied --set override on the
+// same field and reject it every time, breaking interactive fresh
+// generation for any template with a computed field. A regular field's
+// value in preCollectedValues must still survive the merge unchanged.
+func TestResolvePreCollectedValues_FreshGeneration_StripsComputedFieldValues(t *testing.T) {
+	ui := createTestUI(t)
+	configuration := &templates.Configuration{
+		Name: "computed-precollected",
+		Files: []templates.File{{Path: "scaffold.yaml", Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: computed-precollected
+spec:
+  fields:
+    - name: region
+      type: input
+    - name: derived
+      type: computed
+      value: "{{ answers.region }}"
+`}},
+	}
+	preCollectedValues := map[string]interface{}{
+		"region":  "us-east-1",
+		"derived": "us-east-1", // Written by the temp-dir pass's own ComputeFields call.
+	}
+
+	merged, useDefaults, err := ui.resolvePreCollectedValues(configuration, t.TempDir(), false, false, preCollectedValues, nil)
+
+	require.NoError(t, err)
+	assert.True(t, useDefaults)
+	assert.Equal(t, "us-east-1", merged["region"], "a regular field's pre-collected value must survive")
+	_, exists := merged["derived"]
+	assert.False(t, exists, "a computed field's pre-collected value must be stripped before becoming cmdTemplateValues")
+}
+
 // TestExecuteWithBaseRef_EmptyTargetPathErrors covers ExecuteWithDelimiters's
 // defensive validation directly: an empty targetPath must be rejected before
 // any generation work starts, with a hint pointing at the interactive flow.
