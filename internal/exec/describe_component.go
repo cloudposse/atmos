@@ -653,10 +653,16 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 
 	// Fields to keep (the sections a stack manifest can define).
 	//
-	// NOTE: this allowlist is already missing several other real sections a stack
-	// manifest can define (e.g. retry, generate, auth, secrets, command, backend_type,
-	// workspace) — a broader, pre-existing gap out of scope for the "flags" addition
-	// below. See docs/fixes/ for the field-test finding that added "flags" here.
+	// NOTE: this is an intentional allowlist, not an exhaustive one. It still omits
+	// several real stack-definable sections (e.g. retry, generate, auth, secrets,
+	// command, backend_type, workspace). Whether to surface those, and whether this
+	// filter should be driven by the manifest schema instead of a hand-maintained
+	// list, is a broader design question tracked separately (see #3223).
+	//
+	// Incremental additions to date: "flags" (field-test finding, PR #2992) and the
+	// native Helm sections chart/values/values_files (#3218). For a Helm component
+	// those Helm sections are the primary configuration and were the visible gap.
+	// See docs/fixes/2026-09-28-describe-component-helm-values-chart.md.
 	fieldsToKeep := map[string]bool{
 		"vars":         true,
 		"settings":     true,
@@ -670,6 +676,9 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 		"component":    true,
 		"hooks":        true,
 		"flags":        true,
+		"chart":        true, // Native Helm chart reference (#3218).
+		"values":       true, // Native Helm chart values (#3218).
+		"values_files": true, // Native Helm values files (#3218).
 	}
 
 	filtered := make(map[string]any)
