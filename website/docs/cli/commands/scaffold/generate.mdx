@@ -156,6 +156,14 @@ field fails at scaffold-load time rather than silently rendering as `<no value>`
 evaluation happens after the interactive form completes, a regular field's own `when:` can never
 depend on a computed field — only the reverse works.
 
+A computed field's `value:` must be **pure** — deterministic given the same
+answers, with no reliance on outside state that can change between calls (the current time, an
+environment variable, a remote fetch that isn't guaranteed to return the same content twice).
+Interactive generation with no target directory given evaluates every computed field twice: once
+to suggest a target directory name, again against the final answers to actually generate files.
+An impure expression can compute a different value each time, so the suggested directory and the
+generated files can end up reflecting two different results for the same field.
+
 ## Dynamic and Label/Value Options
 
 `select` and `multiselect` fields declare their choices through `options:`, which accepts four

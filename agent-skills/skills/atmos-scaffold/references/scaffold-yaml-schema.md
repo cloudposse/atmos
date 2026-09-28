@@ -91,6 +91,13 @@ Rules, enforced at scaffold-load time (`ErrScaffoldComputedFieldInvalid`):
 - The resolved value lands in `.Config.<name>` exactly like any other field, so it's
   usable everywhere `.Config` is (file content, `target:`, `matrix:` axes, and other
   computed fields) — except `options:`, per the point above.
+- A `computed` field's `value:` must be **pure** (deterministic given the same
+  answers). Interactive generation with no target directory given evaluates every
+  computed field twice: once (against a throwaway temp directory) to suggest a
+  target directory name, again against the final answers to generate files. An
+  impure expression (the current time, an environment variable, a remote fetch not
+  guaranteed to return the same content twice) can compute a different value each
+  time, so the suggested directory and the generated files can disagree.
 
 ### `options:` — static, label/value, or dynamic
 
