@@ -257,14 +257,25 @@ func loadConfiguration(fsys fs.FS, templatePath, defaultName, source, excludeRoo
 	// Use path.Join (forward slashes) not filepath.Join for fs.FS paths.
 	scaffoldPath := path.Join(templatePath, "scaffold.yaml") //nolint:forbidigo // fs.FS always uses forward slashes
 	if data, err := fs.ReadFile(fsys, scaffoldPath); err == nil {
-		// source is a real directory for every fetched/local template, and
-		// the config.SourceEmbedded sentinel for Atmos's own built-in
-		// templates (compiled into the binary, no real directory at all) --
-		// passing it either way is safe: a local !include target simply
-		// fails to resolve cleanly in the embedded case (no different from
-		// a genuinely missing file), while a remote target is unaffected
-		// either way since it never touches this local path at all.
-		scaffoldConfig, err := config.LoadScaffoldConfigFromContent(string(data), config.WithSourceDir(source))
+		// source is a real directory for every fetched/local template. For
+		// Atmos's own built-in templates (compiled into the binary, no real
+		// directory at all), source is instead the config.SourceEmbedded
+		// sentinel ("embedded") -- passing that string as-is would let a
+		// local !include target resolve relative to the process's CWD
+		// (e.g. "./x.yaml" -> "embedded/x.yaml"), silently reading whatever
+		// happens to exist at that coincidental path instead of failing
+		// loudly. Substitute a fixed, syntactically valid absolute
+		// directory that can never coincidentally exist, so a local
+		// !include target in an embedded template fails cleanly -- there
+		// is no real host directory for an embedded template's local
+		// includes to resolve against. A remote !include target is
+		// unaffected either way, since remote resolution never touches
+		// this local path at all.
+		includeSourceDir := source
+		if source == config.SourceEmbedded {
+			includeSourceDir = filepath.Join(os.TempDir(), "atmos-embedded-template-has-no-local-source-dir")
+		}
+		scaffoldConfig, err := config.LoadScaffoldConfigFromContent(string(data), config.WithSourceDir(includeSourceDir))
 		if err != nil {
 			return nil, errUtils.Build(errUtils.ErrScaffoldLoadConfig).
 				WithCause(err).
