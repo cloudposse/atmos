@@ -86,11 +86,21 @@ func resolveIncludeTags(atmosConfig *schema.AtmosConfiguration, data []byte, fil
 }
 
 // walkIncludeTags recurses through node's tree, resolving every
-// !include/!include.raw tag it finds in place. A resolved node's own
-// content is recursed into afterward (matching processCustomTagsInner's
-// own order), so a transitively included file's own !include tags resolve
-// too. The consumedPaths slice, when non-nil, collects each tag's raw path
-// argument as encountered -- see WithIncludeResolution's doc comment.
+// !include/!include.raw tag it finds in place. This recursion exists to
+// find every !include tag anywhere in the ORIGINAL document (e.g. one
+// nested several levels deep inside spec.fields[]), not to chase a
+// transitively-included file's own !include tags -- those are never
+// actually reachable: !include's local/remote fetch decodes the included
+// file's content generically (into a plain Go map/slice/string, the same
+// way any other !include result does), and a custom YAML tag like
+// !include does not survive that decode. A literal !include inside an
+// included file therefore always resolves to inert, unprocessed text, not
+// a second round of resolution -- there is no path resolution question to
+// get right for it, and no risk of runaway/cyclic recursion either, since
+// a real !include tag can only ever be found once per occurrence in the
+// original document. The consumedPaths slice, when non-nil, collects each
+// tag's raw path argument as encountered -- see WithIncludeResolution's
+// doc comment.
 func walkIncludeTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string, consumedPaths *[]string) error {
 	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
 		return walkIncludeTags(atmosConfig, node.Content[0], file, consumedPaths)
