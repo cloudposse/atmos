@@ -249,13 +249,18 @@ func TestValueReferencesAnswer(t *testing.T) {
 		{name: "no reference", expr: "{{ answers.other }}", want: false},
 		{name: "prefix collision is not a match", expr: "{{ answers.regionsx }}", want: false},
 		{name: "literal string containing the name is not a match", expr: `{{ printf "regions" }}`, want: false},
-		// Found via CodeRabbit review: {{ index answers "regions" }} reaches
-		// the same answers map as {{ answers.regions }} (answers is a
-		// zero-argument FuncMap function, so index applies to its result),
+		// {{ index answers "regions" }} reaches the same answers map as
+		// {{ answers.regions }} (answers is a zero-argument FuncMap
+		// function, so index applies to its result),
 		// but tokenizes as separate "index"/"answers"/"regions" tokens.
 		{name: "index-form reference", expr: `{{ index answers "regions" }}`, want: true},
 		{name: "index-form different name is not a match", expr: `{{ index answers "other" }}`, want: false},
 		{name: "index-form missing the answers token is not a match", expr: `{{ index config "regions" }}`, want: false},
+		// Sprig's get function reaches the same answers map the same way
+		// index does (get is also just called with the answers map as its
+		// first argument), and tokenizes the same way.
+		{name: "get-form reference", expr: `{{ get answers "regions" }}`, want: true},
+		{name: "get-form different name is not a match", expr: `{{ get answers "other" }}`, want: false},
 	}
 
 	for _, tt := range tests {
@@ -309,9 +314,9 @@ func TestValidateComputedFieldOrdering(t *testing.T) {
 			},
 		},
 		{
-			// Found via CodeRabbit review: the index-form bypass of
-			// valueReferencesAnswer (see TestValueReferencesAnswer) also
-			// reopened this ordering check for any expression using it.
+			// The index-form bypass of valueReferencesAnswer (see
+			// TestValueReferencesAnswer) also reopened this ordering check
+			// for any expression using it.
 			name: "later computed field reference via index-form is rejected",
 			fields: []FieldDefinition{
 				{Name: "first", Type: fieldTypeComputed, Value: `{{ index answers "second" }}`},
@@ -379,9 +384,9 @@ func TestValidateOptionsNotComputed(t *testing.T) {
 			},
 		},
 		{
-			// Found via CodeRabbit review: same index-form bypass as
-			// TestValidateComputedFieldOrdering's regression case, reopening
-			// this check too since both share valueReferencesAnswer.
+			// Same index-form bypass as TestValidateComputedFieldOrdering's
+			// regression case, reopening this check too since both share
+			// valueReferencesAnswer.
 			name: "options index-form expression references a computed field",
 			fields: []FieldDefinition{
 				{Name: "derived", Type: fieldTypeComputed, Value: "expr"},
@@ -406,11 +411,11 @@ func TestValidateOptionsNotComputed(t *testing.T) {
 
 // TestValidateWhenNotComputed proves a regular field's when: referencing a
 // computed field is rejected at load time, the same timing bug
-// validateOptionsNotComputed already rejects for options: -- found via
-// CodeRabbit review: regular-field When conditions are evaluated before
-// ComputeFields ever populates a computed field's value, so this
-// combination could never actually work, and was previously left
-// unrejected (silently hiding the gated field forever, with no error).
+// validateOptionsNotComputed already rejects for options:. Regular-field
+// When conditions are evaluated before ComputeFields ever populates a
+// computed field's value, so this combination could never actually work,
+// and was previously left unrejected (silently hiding the gated field
+// forever, with no error).
 func TestValidateWhenNotComputed(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -448,10 +453,10 @@ func TestValidateWhenNotComputed(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// Found via CodeRabbit review: MentionsCELIdentifier's token scan
-			// only recognized the dotted form (answers.derived); CEL's
-			// bracket/index syntax for the same map access bypassed it
-			// entirely until pkg/condition's celMentionsBracketAccess was added.
+			// MentionsCELIdentifier's token scan only recognized the dotted
+			// form (answers.derived); CEL's bracket/index syntax for the
+			// same map access bypassed it entirely until
+			// pkg/condition's celMentionsBracketAccess was added.
 			name: "regular field's when references a computed field via CEL bracket access",
 			fields: []FieldDefinition{
 				{Name: "derived", Type: fieldTypeComputed, Value: "{{ expr }}"},

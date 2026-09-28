@@ -115,16 +115,25 @@ func valueReferencesAnswer(expr, name string) bool {
 			return true
 		}
 		// Go templates invoke the zero-argument "answers" function when it's
-		// passed to index (e.g. {{ index answers "name" }}), reaching the
-		// same answers map as the dotted answers.name form above -- but the
-		// token scan above never sees them joined into one token, since the
-		// quotes around the string argument split it into separate "index",
-		// "answers", and "name" tokens. Found via CodeRabbit review.
-		if i+2 < len(tokens) && token == "index" && tokens[i+1] == "answers" && tokens[i+2] == name {
+		// passed to index or Sprig's get (e.g. {{ index answers "name" }},
+		// {{ get answers "name" }}), reaching the same answers map as the
+		// dotted answers.name form above -- but the token scan above never
+		// sees them joined into one token, since the quotes around the
+		// string argument split each into separate function/"answers"/name
+		// tokens.
+		if callsFuncOnAnswers(tokens, i, name, "index") || callsFuncOnAnswers(tokens, i, name, "get") {
 			return true
 		}
 	}
 	return false
+}
+
+// callsFuncOnAnswers reports whether tokens[i:i+3] is the token sequence
+// funcName, "answers", name -- i.e. a Go-template function call of the
+// shape {{ funcName answers "name" }}, once quotes have been stripped by
+// the same token scan valueReferencesAnswer uses.
+func callsFuncOnAnswers(tokens []string, i int, name, funcName string) bool {
+	return i+2 < len(tokens) && tokens[i] == funcName && tokens[i+1] == "answers" && tokens[i+2] == name
 }
 
 // isNotIdentifierRune reports whether r can't be part of a dotted
