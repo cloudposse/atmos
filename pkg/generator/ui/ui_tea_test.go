@@ -211,6 +211,11 @@ func TestInitUI_ColorSource(t *testing.T) {
 			expectedText: "flag",
 		},
 		{
+			name:         "computed source",
+			source:       "computed",
+			expectedText: "computed",
+		},
+		{
 			name:         "default source",
 			source:       "unknown",
 			expectedText: "default",
@@ -249,6 +254,7 @@ func TestInitUI_ColorSourceUsesActiveThemeStyles(t *testing.T) {
 	require.NotNil(t, styles)
 	assert.Equal(t, styles.Command.Render("scaffold"), ui.colorSource("scaffold"))
 	assert.Equal(t, styles.PackageName.Render("flag"), ui.colorSource("flag"))
+	assert.Equal(t, styles.PackageName.Render("computed"), ui.colorSource("computed"))
 	assert.Equal(t, styles.Muted.Render("default"), ui.colorSource("default"))
 }
 
