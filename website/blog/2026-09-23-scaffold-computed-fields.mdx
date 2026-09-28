@@ -9,7 +9,7 @@ tags: [feature]
 A scaffold template's `spec.fields[]` questionnaire is great at collecting answers, but not every
 value a template needs is really an answer. Some values are just a function of other answers —
 "the primary region, defaulting to the only region when there's just one" — and until now, every
-file that needed that value had to re-derive it itself, with the same `{{ if .Config.primary_region }}...{{ end }}`
+file that needed that value had to re-derive it itself, with the same `{{ if .Config.primary_region_select }}...{{ end }}`
 snippet copied into each one.
 
 <!--truncate-->
