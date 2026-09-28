@@ -1055,6 +1055,33 @@ func TestMergeConfiguredTemplates_WarnsAndContinues(t *testing.T) {
 	assert.Error(t, failed["broken-template"])
 }
 
+// TestMergeConfiguredTemplates_RemovesSameNameFallbackOnFailure proves a
+// same-named embedded/catalog template already in configs is removed when
+// the atmos.yaml-configured template of that name fails to load -- found
+// via CodeRabbit review: leaving it in place let selectTemplateByName
+// return the stale fallback instead of surfacing the recorded load error,
+// generating the wrong template with no indication anything was wrong.
+func TestMergeConfiguredTemplates_RemovesSameNameFallbackOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`scaffold:
+  templates:
+    broken-template:
+      description: Missing source, cannot be converted
+`), 0o600))
+	t.Chdir(dir)
+
+	configs := map[string]templates.Configuration{
+		"broken-template": {Name: "broken-template", Description: "Stale embedded fallback"},
+	}
+	origins := map[string]string{"broken-template": "embedded"}
+	failed, err := mergeConfiguredTemplates(configs, origins, "")
+
+	require.NoError(t, err)
+	assert.Contains(t, failed, "broken-template")
+	assert.NotContains(t, configs, "broken-template")
+	assert.NotContains(t, origins, "broken-template")
+}
+
 func TestDetermineScaffoldPathsToValidate_EmptyPathDefaultsToCwd(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "scaffold.yaml"), []byte("apiVersion: atmos/v1\n"), 0o600))

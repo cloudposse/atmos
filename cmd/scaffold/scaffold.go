@@ -635,6 +635,12 @@ func mergeConfiguredTemplates(configs map[string]templates.Configuration, origin
 				failedTemplates = make(map[string]error)
 			}
 			failedTemplates[templateName] = err
+			// A same-named embedded/catalog template must not silently stand
+			// in for this one -- remove it so selectTemplateByName's exists
+			// check misses and falls through to the recorded load error,
+			// instead of generating the wrong (stale) template.
+			delete(configs, templateName)
+			delete(origins, templateName)
 			continue
 		}
 		// Configured templates override embedded templates
