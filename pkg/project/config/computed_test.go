@@ -418,6 +418,18 @@ func TestValidateWhenNotComputed(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			// Found via CodeRabbit review: MentionsCELIdentifier's token scan
+			// only recognized the dotted form (answers.derived); CEL's
+			// bracket/index syntax for the same map access bypassed it
+			// entirely until pkg/condition's celMentionsBracketAccess was added.
+			name: "regular field's when references a computed field via CEL bracket access",
+			fields: []FieldDefinition{
+				{Name: "derived", Type: fieldTypeComputed, Value: "{{ expr }}"},
+				{Name: "detail", Type: "input", When: condition.Must(`answers["derived"] == "yes"`)},
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {

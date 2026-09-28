@@ -427,6 +427,46 @@ func TestConditionMentionsCELIdentifier(t *testing.T) {
 	assert.False(t, Condition{}.MentionsCELIdentifier("checksum"), "a zero-value condition mentions nothing")
 }
 
+// TestConditionMentionsCELIdentifier_BracketForm proves a CEL bracket/index
+// access (answers["derived"]) is recognized the same way as the dotted form
+// (answers.derived) -- found via CodeRabbit review: celMentionsIdentifier's
+// token scan alone never sees "answers" and "derived" joined into one token
+// for the bracket form, since `[` and the quote character both split them
+// into separate tokens.
+func TestConditionMentionsCELIdentifier_BracketForm(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+		want bool
+	}{
+		{name: "double-quoted bracket access", expr: `answers["derived"] == "yes"`, want: true},
+		{name: "single-quoted bracket access", expr: `answers['derived'] == "yes"`, want: true},
+		{name: "whitespace inside brackets", expr: `answers[ "derived" ] == "yes"`, want: true},
+		{name: "dotted form still matches", expr: `answers.derived == "yes"`, want: true},
+		{name: "different member name does not match", expr: `answers["other"] == "yes"`, want: false},
+		{name: "no reference at all", expr: `ci == true`, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cond, err := New(tt.expr)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, cond.MentionsCELIdentifier("answers.derived"))
+		})
+	}
+}
+
+// TestCelMentionsBracketAccess_RootBoundary proves root must be a standalone
+// identifier token, not a substring of a longer one -- tested directly since
+// no real CEL variable name in this package's env contains "answers" as a
+// substring of a longer declared identifier, so this can't be exercised
+// through a real compiled CEL expression the way the other cases above are.
+func TestCelMentionsBracketAccess_RootBoundary(t *testing.T) {
+	assert.False(t, celMentionsBracketAccess(`myanswers["derived"]`, "answers", "derived"))
+	assert.True(t, celMentionsBracketAccess(`answers["derived"]`, "answers", "derived"))
+	assert.True(t, celMentionsBracketAccess(`ci && answers["derived"] == "yes"`, "answers", "derived"))
+}
+
 func TestConditionMentionsCELIdentifier_RecursesThroughCompoundChildren(t *testing.T) {
 	// A single bare CEL condition never exercises mentionsCELIdentifier's recursive branch --
 	// only a compound (all/any/not) condition wrapping a CEL child does, since only those Kinds
