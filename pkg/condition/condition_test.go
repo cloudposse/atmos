@@ -429,9 +429,9 @@ func TestConditionMentionsCELIdentifier(t *testing.T) {
 
 // TestConditionMentionsCELIdentifier_BracketForm proves a CEL bracket/index
 // access (answers["derived"]) is recognized the same way as the dotted form
-// (answers.derived). celMentionsIdentifier's token scan alone never sees
-// "answers" and "derived" joined into one token for the bracket form, since
-// `[` and the quote character both split them into separate tokens.
+// (answers.derived) -- the token scan alone never sees "answers" and
+// "derived" joined into one token for the bracket form, since `[` and the
+// quote character both split them into separate tokens.
 func TestConditionMentionsCELIdentifier_BracketForm(t *testing.T) {
 	tests := []struct {
 		name string
