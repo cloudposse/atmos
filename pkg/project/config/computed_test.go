@@ -314,6 +314,19 @@ func TestValidateComputedFieldOrdering(t *testing.T) {
 			},
 		},
 		{
+			// A plain string literal with no template action in it at all
+			// is stored as-is by ComputeFields (see containsTemplateAction)
+			// -- never rendered, so it can never actually resolve a
+			// forward/self-reference at runtime the way a real expression
+			// would. Scanning it anyway would falsely reject a literal that
+			// merely happens to contain a later field's name as text.
+			name: "a plain string literal that looks like a reference is never rejected",
+			fields: []FieldDefinition{
+				{Name: "first", Type: fieldTypeComputed, Value: "see answers.second for context"},
+				{Name: "second", Type: fieldTypeComputed, Value: "expr-second"},
+			},
+		},
+		{
 			// The index-form bypass of valueReferencesAnswer (see
 			// TestValueReferencesAnswer) also reopened this ordering check
 			// for any expression using it.
@@ -363,7 +376,7 @@ func TestValidateComputedFieldOrdering(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateComputedFieldOrdering(tt.fields)
+			err := validateComputedFieldOrdering(tt.fields, defaultDelimiters(nil))
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.ErrorIs(t, err, errUtils.ErrScaffoldComputedFieldInvalid)

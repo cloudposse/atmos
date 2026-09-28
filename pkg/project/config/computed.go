@@ -158,7 +158,7 @@ func isNotIdentifierRune(r rune) bool {
 // "<no value>" rather than failing loudly. Referencing an earlier-declared
 // computed field, or any regular field regardless of order, is unaffected
 // -- see ComputeFields' own doc comment for why those are always safe.
-func validateComputedFieldOrdering(fields []FieldDefinition) error {
+func validateComputedFieldOrdering(fields []FieldDefinition, delimiters []string) error {
 	for i := range fields {
 		field := &fields[i]
 		if field.Type != fieldTypeComputed {
@@ -168,9 +168,11 @@ func validateComputedFieldOrdering(fields []FieldDefinition) error {
 			return err
 		}
 		expr, isExpression := field.Value.(string)
-		if !isExpression {
-			// A literal value has no expression to scan for a self/
-			// forward-reference -- nothing to validate.
+		if !isExpression || !containsTemplateAction(expr, delimiters) {
+			// A non-string value, or a plain string with no template
+			// action in it at all, is a literal ComputeFields stores as-is
+			// with no rendering (see containsTemplateAction) -- there is no
+			// expression to scan for a self/forward-reference.
 			continue
 		}
 		for j := i; j < len(fields); j++ {

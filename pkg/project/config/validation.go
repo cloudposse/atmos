@@ -164,7 +164,7 @@ func validateFieldDefinitions(scaffoldConfig *ScaffoldConfig) error {
 			return err
 		}
 	}
-	if err := validateComputedFieldOrdering(scaffoldConfig.Spec.Fields); err != nil {
+	if err := validateComputedFieldOrdering(scaffoldConfig.Spec.Fields, delimiters); err != nil {
 		return err
 	}
 	if err := validateOptionsNotComputed(scaffoldConfig.Spec.Fields); err != nil {
