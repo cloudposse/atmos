@@ -20,16 +20,18 @@ type ComputedFieldRenderer func(expr string, answers map[string]interface{}, del
 // ComputeFields evaluates every type: computed field's Value, in the order
 // fields are declared in spec.fields, and writes each result into values
 // under the field's own name. Value is either a template-expression string
-// (rendered via render, resolved against answers) or an already-resolved
-// literal of any other type, stored as-is with no rendering at all. A
-// computed field may reference any regular field's answer (all of those are
-// already collected by the time ComputeFields runs, whether prompted,
-// --set, or defaulted) and any earlier-declared computed field's own result
-// -- a later computed field sees it in values because each result is
-// written back before the next field is evaluated. A field whose When
-// evaluates false against the values collected so far is skipped entirely
-// (left unset), matching how a hidden regular field is never prompted for
-// either.
+// containing a template action under delimiters (rendered via render,
+// resolved against answers -- see containsTemplateAction) or a literal:
+// either a non-string (number, bool, list, map) or a plain string with no
+// template action in it at all, stored as-is with no rendering. A computed
+// field may reference any regular field's answer (all of those are already
+// collected by the time ComputeFields runs, whether prompted, --set, or
+// defaulted) and any earlier-declared computed field's own result -- a
+// later computed field sees it in values because each result is written
+// back before the next field is evaluated. A field whose When evaluates
+// false against the values collected so far is skipped entirely (left
+// unset, deleting any stale value a persisted record already carried for
+// it), matching how a hidden regular field is never prompted for either.
 func ComputeFields(scaffoldConfig *ScaffoldConfig, values map[string]interface{}, render ComputedFieldRenderer) error {
 	defer perf.Track(nil, "config.ComputeFields")()
 
@@ -41,15 +43,24 @@ func ComputeFields(scaffoldConfig *ScaffoldConfig, values map[string]interface{}
 			continue
 		}
 		if !field.When.Evaluate(condition.Context{Answers: values}) {
+			// A skipped computed field is unset, full stop -- delete any
+			// stale value a persisted record (loaded via LoadUserValues,
+			// merged in before ComputeFields ever runs) already carried
+			// for this field from a prior generation where When was still
+			// true. Leaving it in place would let a since-invalidated
+			// computed value keep reaching template rendering.
+			delete(values, field.Name)
 			continue
 		}
 
 		expr, isExpression := field.Value.(string)
-		if !isExpression {
+		if !isExpression || !containsTemplateAction(expr, delimiters) {
 			// Not a template-expression string -- an already-resolved
 			// literal (hand-authored, or produced by a YAML function like
-			// !include before this field was ever unmarshaled). Use it
-			// as-is; no renderer needed at all for this field.
+			// !include before this field was ever unmarshaled), or a plain
+			// string with no template action in it at all (see
+			// containsTemplateAction). Use it as-is; no renderer needed at
+			// all for this field.
 			values[field.Name] = field.Value
 			continue
 		}
@@ -70,6 +81,19 @@ func ComputeFields(scaffoldConfig *ScaffoldConfig, values map[string]interface{}
 		values[field.Name] = value
 	}
 	return nil
+}
+
+// containsTemplateAction reports whether expr contains a template action
+// under delimiters -- the only signal available to distinguish a plain
+// string literal ("hello") from a Go-template expression ("{{ \"hello\" }}")
+// for a computed field's string-typed Value, since both decode to the same
+// Go string type from YAML with nothing else to tell them apart. A string
+// containing both the left and right delimiter is sent to render, which
+// still enforces its own single-template-action shape (see
+// engine.singleValuePipe) -- this only decides whether render is attempted
+// at all, not what render accepts once it is.
+func containsTemplateAction(expr string, delimiters []string) bool {
+	return strings.Contains(expr, delimiters[0]) && strings.Contains(expr, delimiters[1])
 }
 
 // valueReferencesAnswer reports whether a computed field's Value expression

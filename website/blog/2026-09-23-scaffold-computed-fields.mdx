@@ -30,7 +30,8 @@ and that file quietly disagrees with the rest of the generated project.
 A new [`type: computed`](/cli/commands/scaffold/generate#computed-fields) field declares a value
 once — either derived from other answers via a `value:` Go-template expression, or a plain
 literal (string, number, boolean, list, or map) used as-is — and is never itself prompted for or
-settable with `--set`:
+settable with `--set`. A string is only treated as an expression when it actually contains a
+template action; a plain string like `hello` is a literal too, same as any other type:
 
 ```yaml
 spec:

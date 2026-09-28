@@ -46,9 +46,12 @@ Field name uniqueness is enforced — a duplicate `name` fails to load
 ### `type: computed` — derived fields
 
 A `computed` field is never prompted for and can't be set with `--set`
-(`ErrScaffoldComputedFieldNotSettable`) — it's always derived from other
-answers via a `value:` Go-template expression, evaluated with the same
-`answers.*` binding `options:`'s dynamic form uses:
+(`ErrScaffoldComputedFieldNotSettable`) — its `value:` is either a
+Go-template expression deriving it from other answers (evaluated with the
+same `answers.*` binding `options:`'s dynamic form uses), or a literal of
+any type used as-is with no rendering. A string is only treated as an
+expression when it actually contains a template action; a plain string
+with none is a literal too:
 
 ```yaml
 - name: regions

@@ -45,14 +45,14 @@ func TestComputeFields_WritesValueIntoValues(t *testing.T) {
 // it, matching the declared-order dependency rule computed fields document.
 func TestComputeFields_LaterComputedFieldSeesEarlierResult(t *testing.T) {
 	cfg := &ScaffoldConfig{Spec: ScaffoldSpec{Fields: []FieldDefinition{
-		{Name: "first_computed", Type: fieldTypeComputed, Value: "expr-first"},
-		{Name: "second_computed", Type: fieldTypeComputed, Value: "expr-second"},
+		{Name: "first_computed", Type: fieldTypeComputed, Value: "{{ expr-first }}"},
+		{Name: "second_computed", Type: fieldTypeComputed, Value: "{{ expr-second }}"},
 	}}}
 	values := map[string]interface{}{}
 
 	var secondSawFirst any
 	render := ComputedFieldRenderer(func(expr string, answers map[string]interface{}, _ []string) (any, error) {
-		if expr == "expr-first" {
+		if expr == "{{ expr-first }}" {
 			return "first-value", nil
 		}
 		secondSawFirst = answers["first_computed"]
@@ -107,7 +107,7 @@ func TestComputeFields_SkipsNonComputedFields(t *testing.T) {
 // field is never prompted for.
 func TestComputeFields_SkipsWhenFalse(t *testing.T) {
 	cfg := &ScaffoldConfig{Spec: ScaffoldSpec{Fields: []FieldDefinition{
-		{Name: "hidden_computed", Type: fieldTypeComputed, Value: "expr", When: condition.Must("answers.enabled == true")},
+		{Name: "hidden_computed", Type: fieldTypeComputed, Value: "{{ expr }}", When: condition.Must("answers.enabled == true")},
 	}}}
 	values := map[string]interface{}{"enabled": false}
 
@@ -120,9 +120,49 @@ func TestComputeFields_SkipsWhenFalse(t *testing.T) {
 	assert.False(t, exists)
 }
 
+// TestComputeFields_SkipsWhenFalse_DeletesStaleValue proves a computed
+// field whose When evaluates false is left unset even when values already
+// carries a value under that field's name -- the case a persisted record
+// (loaded via LoadUserValues, merged in before ComputeFields runs) produces
+// when a prior generation had When true and this one doesn't. Left in
+// place, that stale value would keep reaching template rendering despite
+// the field being skipped.
+func TestComputeFields_SkipsWhenFalse_DeletesStaleValue(t *testing.T) {
+	cfg := &ScaffoldConfig{Spec: ScaffoldSpec{Fields: []FieldDefinition{
+		{Name: "hidden_computed", Type: fieldTypeComputed, Value: "{{ expr }}", When: condition.Must("answers.enabled == true")},
+	}}}
+	values := map[string]interface{}{"enabled": false, "hidden_computed": "stale-from-prior-generation"}
+
+	err := ComputeFields(cfg, values, func(string, map[string]interface{}, []string) (any, error) {
+		t.Fatal("render must not be called when When evaluates false")
+		return nil, nil
+	})
+	require.NoError(t, err)
+	_, exists := values["hidden_computed"]
+	assert.False(t, exists)
+}
+
+// TestComputeFields_PlainStringLiteral proves a string Value with no
+// template action in it is stored as-is, the same as any other literal
+// type -- containsTemplateAction is what makes this distinguishable from
+// a Go-template expression string, since both are the same Go type.
+func TestComputeFields_PlainStringLiteral(t *testing.T) {
+	cfg := &ScaffoldConfig{Spec: ScaffoldSpec{Fields: []FieldDefinition{
+		{Name: "greeting", Type: fieldTypeComputed, Value: "hello"},
+	}}}
+	values := map[string]interface{}{}
+
+	err := ComputeFields(cfg, values, func(string, map[string]interface{}, []string) (any, error) {
+		t.Fatal("render must not be called for a plain string with no template action")
+		return nil, nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "hello", values["greeting"])
+}
+
 func TestComputeFields_RenderErrorPropagates(t *testing.T) {
 	cfg := &ScaffoldConfig{Spec: ScaffoldSpec{Fields: []FieldDefinition{
-		{Name: "broken_computed", Type: fieldTypeComputed, Value: "expr"},
+		{Name: "broken_computed", Type: fieldTypeComputed, Value: "{{ expr }}"},
 	}}}
 	values := map[string]interface{}{}
 	renderErr := errors.New("boom")
@@ -136,7 +176,7 @@ func TestComputeFields_RenderErrorPropagates(t *testing.T) {
 
 func TestComputeFields_NilRendererErrors(t *testing.T) {
 	cfg := &ScaffoldConfig{Spec: ScaffoldSpec{Fields: []FieldDefinition{
-		{Name: "broken_computed", Type: fieldTypeComputed, Value: "expr"},
+		{Name: "broken_computed", Type: fieldTypeComputed, Value: "{{ expr }}"},
 	}}}
 
 	err := ComputeFields(cfg, map[string]interface{}{}, nil)

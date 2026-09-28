@@ -111,7 +111,9 @@ map-style `{all, any, not}` form is not accepted by scaffold manifests.
 A `type: computed` field is never prompted for and can't be set with `--set` — its `value:` is
 either a Go-template expression deriving it from other fields' answers (using the same
 `answers.*` binding `options:`'s dynamic form uses below), or a literal of any type (string,
-number, boolean, list, or map), used as-is with no rendering at all:
+number, boolean, list, or map), used as-is with no rendering at all. A string is only treated as
+an expression when it actually contains a template action (`{{ ... }}`, or your configured
+delimiters); a plain string with none, like `value: hello`, is a literal too:
 
 ```yaml title="scaffold.yaml"
 spec:
