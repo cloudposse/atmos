@@ -249,6 +249,13 @@ func TestValueReferencesAnswer(t *testing.T) {
 		{name: "no reference", expr: "{{ answers.other }}", want: false},
 		{name: "prefix collision is not a match", expr: "{{ answers.regionsx }}", want: false},
 		{name: "literal string containing the name is not a match", expr: `{{ printf "regions" }}`, want: false},
+		// Found via CodeRabbit review: {{ index answers "regions" }} reaches
+		// the same answers map as {{ answers.regions }} (answers is a
+		// zero-argument FuncMap function, so index applies to its result),
+		// but tokenizes as separate "index"/"answers"/"regions" tokens.
+		{name: "index-form reference", expr: `{{ index answers "regions" }}`, want: true},
+		{name: "index-form different name is not a match", expr: `{{ index answers "other" }}`, want: false},
+		{name: "index-form missing the answers token is not a match", expr: `{{ index config "regions" }}`, want: false},
 	}
 
 	for _, tt := range tests {
@@ -300,6 +307,17 @@ func TestValidateComputedFieldOrdering(t *testing.T) {
 				{Name: "first", Type: fieldTypeComputed, Value: []any{"a", "b"}},
 				{Name: "second", Type: fieldTypeComputed, Value: "expr-second"},
 			},
+		},
+		{
+			// Found via CodeRabbit review: the index-form bypass of
+			// valueReferencesAnswer (see TestValueReferencesAnswer) also
+			// reopened this ordering check for any expression using it.
+			name: "later computed field reference via index-form is rejected",
+			fields: []FieldDefinition{
+				{Name: "first", Type: fieldTypeComputed, Value: `{{ index answers "second" }}`},
+				{Name: "second", Type: fieldTypeComputed, Value: "expr-second"},
+			},
+			wantErr: true,
 		},
 	}
 
@@ -359,6 +377,17 @@ func TestValidateOptionsNotComputed(t *testing.T) {
 				{Name: "derived", Type: fieldTypeComputed, Value: "expr"},
 				{Name: "picked", Type: "select", Options: []string{"a", "b"}},
 			},
+		},
+		{
+			// Found via CodeRabbit review: same index-form bypass as
+			// TestValidateComputedFieldOrdering's regression case, reopening
+			// this check too since both share valueReferencesAnswer.
+			name: "options index-form expression references a computed field",
+			fields: []FieldDefinition{
+				{Name: "derived", Type: fieldTypeComputed, Value: "expr"},
+				{Name: "picked", Type: "select", Options: `{{ index answers "derived" }}`},
+			},
+			wantErr: true,
 		},
 	}
 

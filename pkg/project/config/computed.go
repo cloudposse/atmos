@@ -109,8 +109,18 @@ func containsTemplateAction(expr string, delimiters []string) bool {
 // with no --set-only or spec.values-only namesake to confuse it with.
 func valueReferencesAnswer(expr, name string) bool {
 	prefix := "answers." + name
-	for _, token := range strings.FieldsFunc(expr, isNotIdentifierRune) {
+	tokens := strings.FieldsFunc(expr, isNotIdentifierRune)
+	for i, token := range tokens {
 		if token == prefix || strings.HasPrefix(token, prefix+".") {
+			return true
+		}
+		// Go templates invoke the zero-argument "answers" function when it's
+		// passed to index (e.g. {{ index answers "name" }}), reaching the
+		// same answers map as the dotted answers.name form above -- but the
+		// token scan above never sees them joined into one token, since the
+		// quotes around the string argument split it into separate "index",
+		// "answers", and "name" tokens. Found via CodeRabbit review.
+		if i+2 < len(tokens) && token == "index" && tokens[i+1] == "answers" && tokens[i+2] == name {
 			return true
 		}
 	}
