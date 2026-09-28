@@ -374,3 +374,61 @@ func TestValidateOptionsNotComputed(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateWhenNotComputed proves a regular field's when: referencing a
+// computed field is rejected at load time, the same timing bug
+// validateOptionsNotComputed already rejects for options: -- found via
+// CodeRabbit review: regular-field When conditions are evaluated before
+// ComputeFields ever populates a computed field's value, so this
+// combination could never actually work, and was previously left
+// unrejected (silently hiding the gated field forever, with no error).
+func TestValidateWhenNotComputed(t *testing.T) {
+	tests := []struct {
+		name    string
+		fields  []FieldDefinition
+		wantErr bool
+	}{
+		{
+			name: "no computed fields at all",
+			fields: []FieldDefinition{
+				{Name: "enabled", Type: "confirm"},
+				{Name: "detail", Type: "input", When: condition.Must("answers.enabled == true")},
+			},
+		},
+		{
+			name: "when references a regular field",
+			fields: []FieldDefinition{
+				{Name: "enabled", Type: "confirm"},
+				{Name: "detail", Type: "input", When: condition.Must("answers.enabled == true")},
+				{Name: "derived", Type: fieldTypeComputed, Value: "{{ answers.enabled }}"},
+			},
+		},
+		{
+			name: "computed field's own when references a regular field",
+			fields: []FieldDefinition{
+				{Name: "enabled", Type: "confirm"},
+				{Name: "derived", Type: fieldTypeComputed, Value: "{{ expr }}", When: condition.Must("answers.enabled == true")},
+			},
+		},
+		{
+			name: "regular field's when references a computed field",
+			fields: []FieldDefinition{
+				{Name: "derived", Type: fieldTypeComputed, Value: "{{ expr }}"},
+				{Name: "detail", Type: "input", When: condition.Must("answers.derived == true")},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateWhenNotComputed(tt.fields)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrScaffoldComputedFieldInvalid)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}

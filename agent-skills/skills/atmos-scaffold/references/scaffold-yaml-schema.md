@@ -81,11 +81,12 @@ Rules, enforced at scaffold-load time (`ErrScaffoldComputedFieldInvalid`):
   interpolated into generated file content as the literal string `<no value>`.
 - Because computed fields are only evaluated after the interactive form completes, a
   regular field's `when:` cannot depend on a computed field's result — only the
-  reverse (a computed field depending on a regular field) works. The same timing rules
-  out `options:` too: `options:` resolves at form-build/validation time, before any
-  computed field has a value, so `options:` referencing a computed field is a load-time
-  error (`ErrScaffoldFieldOptionsInvalid`) rather than a permanently-disabled
-  constraint. A `matrix:` axis, by contrast, expands after `ComputeFields` runs, so
+  reverse (a computed field depending on a regular field) works. Referencing a
+  computed field from a regular field's `when:` is a load-time error
+  (`ErrScaffoldComputedFieldInvalid`), the same way `options:` referencing a computed
+  field is (`ErrScaffoldFieldOptionsInvalid`) — `options:` resolves at
+  form-build/validation time, before any computed field has a value, for the same
+  reason. A `matrix:` axis, by contrast, expands after `ComputeFields` runs, so
   referencing a computed field there works correctly.
 - The resolved value lands in `.Config.<name>` exactly like any other field, so it's
   usable everywhere `.Config` is (file content, `target:`, `matrix:` axes, and other

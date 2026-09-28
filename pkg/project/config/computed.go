@@ -196,12 +196,7 @@ func validateComputedFieldOrdering(fields []FieldDefinition) error {
 // field is unaffected by any of this -- matrix expansion runs on the final
 // merged answers, after ComputeFields.
 func validateOptionsNotComputed(fields []FieldDefinition) error {
-	var computedNames []string
-	for i := range fields {
-		if fields[i].Type == fieldTypeComputed {
-			computedNames = append(computedNames, fields[i].Name)
-		}
-	}
+	computedNames := collectComputedFieldNames(fields)
 	if len(computedNames) == 0 {
 		return nil
 	}
@@ -225,6 +220,56 @@ func validateOptionsNotComputed(fields []FieldDefinition) error {
 		}
 	}
 	return nil
+}
+
+// validateWhenNotComputed statically rejects a regular (non-computed)
+// field's when: condition when it references a type: computed field's
+// name -- the same timing bug validateOptionsNotComputed rejects for
+// options:, applied to When instead. Regular-field When conditions are
+// evaluated (to decide prompt/validation visibility) before ComputeFields
+// ever populates a computed field's value, so answers.<computed-name> is
+// always absent at that point; the documented contract only ever allows
+// the reverse dependency (a computed field's own When, or its Value/
+// Template.Args, may reference a regular field). Left unrejected, the
+// gated field is silently hidden and skipped during validation, forever,
+// with no error surfaced at all.
+func validateWhenNotComputed(fields []FieldDefinition) error {
+	computedNames := collectComputedFieldNames(fields)
+	if len(computedNames) == 0 {
+		return nil
+	}
+
+	for i := range fields {
+		field := &fields[i]
+		if field.Type == fieldTypeComputed {
+			continue
+		}
+		for _, computedName := range computedNames {
+			if !field.When.MentionsCELIdentifier("answers." + computedName) {
+				continue
+			}
+			return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+				WithExplanationf("Field %q declares `when:` referencing computed field %q", field.Name, computedName).
+				WithHint("when: is evaluated before computed fields are evaluated, so a computed field's value is never available here -- reference a regular field instead").
+				WithContext("field_name", field.Name).
+				WithContext("referenced_field", computedName).
+				Err()
+		}
+	}
+	return nil
+}
+
+// collectComputedFieldNames returns every type: computed field's name --
+// shared by validateOptionsNotComputed and validateWhenNotComputed, which
+// both reject a different field property referencing one of these names.
+func collectComputedFieldNames(fields []FieldDefinition) []string {
+	var names []string
+	for i := range fields {
+		if fields[i].Type == fieldTypeComputed {
+			names = append(names, fields[i].Name)
+		}
+	}
+	return names
 }
 
 // RejectComputedFieldOverrides returns an error if overrides (the --set
