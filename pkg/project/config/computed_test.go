@@ -324,6 +324,41 @@ func TestValidateComputedFieldOrdering(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			// validateComputedFieldOrdering previously only scanned Value,
+			// not When. ComputeFields evaluates a computed field's own When
+			// before its Value, so a self/forward reference there hits the
+			// same missing-value problem -- worse, Condition.Evaluate
+			// collapses the resulting CEL evaluation error to false, so the
+			// field is silently omitted rather than erroring at all.
+			name: "computed field's own when self-reference is rejected",
+			fields: []FieldDefinition{
+				{Name: "selfref", Type: fieldTypeComputed, Value: "expr", When: condition.Must(`answers.selfref == "x"`)},
+			},
+			wantErr: true,
+		},
+		{
+			name: "computed field's own when referencing a later computed field is rejected",
+			fields: []FieldDefinition{
+				{Name: "first", Type: fieldTypeComputed, Value: "expr-first", When: condition.Must(`answers.second == "x"`)},
+				{Name: "second", Type: fieldTypeComputed, Value: "expr-second"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "computed field's own when referencing an earlier computed field is fine",
+			fields: []FieldDefinition{
+				{Name: "first", Type: fieldTypeComputed, Value: "expr-first"},
+				{Name: "second", Type: fieldTypeComputed, Value: "expr-second", When: condition.Must(`answers.first == "x"`)},
+			},
+		},
+		{
+			name: "computed field's own when referencing a regular field is fine",
+			fields: []FieldDefinition{
+				{Name: "enabled", Type: "confirm"},
+				{Name: "derived", Type: fieldTypeComputed, Value: "expr", When: condition.Must("answers.enabled == true")},
+			},
+		},
 	}
 
 	for _, tt := range tests {

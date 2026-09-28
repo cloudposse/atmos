@@ -164,6 +164,9 @@ func validateComputedFieldOrdering(fields []FieldDefinition) error {
 		if field.Type != fieldTypeComputed {
 			continue
 		}
+		if err := rejectComputedFieldWhenOrdering(fields, i); err != nil {
+			return err
+		}
 		expr, isExpression := field.Value.(string)
 		if !isExpression {
 			// A literal value has no expression to scan for a self/
@@ -194,6 +197,41 @@ func validateComputedFieldOrdering(fields []FieldDefinition) error {
 				WithExitCode(2).
 				Err()
 		}
+	}
+	return nil
+}
+
+// rejectComputedFieldWhenOrdering rejects a computed field's own When
+// condition referencing itself or a computed field declared after it --
+// the same self/forward-reference rule validateComputedFieldOrdering
+// already enforces for Value, applied to When instead. ComputeFields
+// evaluates a computed field's own When before its Value, so a self/
+// forward reference here hits the same missing-value problem, but worse:
+// Condition.Evaluate collapses any evaluation error (e.g. a CEL map access
+// to a not-yet-populated key) to false, so the field is silently omitted
+// rather than erroring at all.
+func rejectComputedFieldWhenOrdering(fields []FieldDefinition, i int) error {
+	field := &fields[i]
+	for j := i; j < len(fields); j++ {
+		later := &fields[j]
+		if later.Type != fieldTypeComputed || !field.When.MentionsCELIdentifier("answers."+later.Name) {
+			continue
+		}
+		if j == i {
+			return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+				WithExplanationf("Field %q references itself in its own `when:` condition", field.Name).
+				WithHint("A computed field can't reference its own not-yet-computed value; remove the self-reference").
+				WithContext("field_name", field.Name).
+				WithExitCode(2).
+				Err()
+		}
+		return errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+			WithExplanationf("Field %q references computed field %q in its `when:` condition, which is declared after it", field.Name, later.Name).
+			WithHintf("Declare %q before %q -- a computed field can only reference an earlier-declared computed field", later.Name, field.Name).
+			WithContext("field_name", field.Name).
+			WithContext("referenced_field", later.Name).
+			WithExitCode(2).
+			Err()
 	}
 	return nil
 }
