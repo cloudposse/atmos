@@ -480,3 +480,96 @@ tests:
       file_not_exists:
         - "generated/invalid-option/environments"
         - "../../../etc.yaml"
+
+  # --- scaffold-computed-field: a type:computed field derived from other answers ---
+
+  - name: "scaffold-computed-field generate with multiple regions uses the selected primary"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-computed-field fixture with two regions and an explicit primary_region_select, verifying the computed field mirrors it"
+    workdir: "fixtures/scenarios/scaffold-computed-field"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/multi-region"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "regions=us-east-1,us-west-2"
+      - "--set"
+      - "primary_region_select=us-west-2"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Generated"
+      file_exists:
+        - "generated/multi-region/config.yaml"
+      file_contains:
+        "generated/multi-region/config.yaml":
+          - 'primary_region: "us-west-2"'
+
+  # A single selected region hides primary_region_select entirely (its when:
+  # is false), so the computed field must fall back to that one region
+  # rather than resolving to an empty string.
+  - name: "scaffold-computed-field generate with a single region derives it as primary"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-computed-field fixture with one region, verifying the computed field falls back to it"
+    workdir: "fixtures/scenarios/scaffold-computed-field"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/single-region"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "regions=us-east-1"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Generated"
+      file_exists:
+        - "generated/single-region/config.yaml"
+      file_contains:
+        "generated/single-region/config.yaml":
+          - 'primary_region: "us-east-1"'
+
+  # Wrong input: primary_region is type: computed, so --set-ing it directly
+  # must fail fast rather than letting ComputeFields silently overwrite it.
+  - name: "scaffold-computed-field generate with --set on the computed field fails"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate the scaffold-computed-field fixture with --set targeting the computed field, verifying the not-settable error"
+    workdir: "fixtures/scenarios/scaffold-computed-field"
+    command: "atmos"
+    args:
+      - "scaffold"
+      - "generate"
+      - "example"
+      - "generated/blocked"
+      - "--defaults"
+      - "--force"
+      - "--set"
+      - "regions=us-east-1"
+      - "--set"
+      - "primary_region=us-west-2"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    expect:
+      exit_code: 2
+      stderr:
+        - "computed field cannot be set"
+        - "cannot be set with --set"
+      file_not_exists:
+        - "generated/blocked/config.yaml"
