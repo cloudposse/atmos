@@ -1,0 +1,27 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: example
+  description: Test fixture exercising a type:computed field.
+spec:
+  fields:
+    - name: regions
+      label: Regions
+      type: multiselect
+      options: [us-east-1, us-west-2, eu-west-1]
+      required: true
+    - name: primary_region_select
+      label: Primary region
+      description: Only asked when more than one region is selected.
+      type: select
+      options: answers.regions
+      when: "size(answers.regions) > 1"
+    - name: primary_region
+      type: computed
+      # size(answers.regions) > 1 -> the user-selected primary_region_select
+      # wins; otherwise there's only one region, so it's the primary by
+      # definition.
+      value: "{{ ternary answers.primary_region_select (index answers.regions 0) (gt (len answers.regions) 1) }}"
+
+  files:
+    - path: config.yaml

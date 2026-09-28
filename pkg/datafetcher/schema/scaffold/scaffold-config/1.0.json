@@ -41,7 +41,7 @@
       "additionalProperties": false,
       "properties": {
         "baseRef": {
-          "description": "Git ref used as the three-way merge base",
+          "description": "Git ref used as the three-way merge base (tracked strategy)",
           "type": "string"
         },
         "delimiters": {
@@ -89,7 +89,7 @@
                 "type": "string"
               },
               "required": {
-                "description": "Whether a value must be provided",
+                "description": "Whether a value must be provided (not valid on a computed field)",
                 "type": "boolean"
               },
               "type": {
@@ -102,7 +102,8 @@
                   "multiselect",
                   "confirm",
                   "bool",
-                  "boolean"
+                  "boolean",
+                  "computed"
                 ],
                 "type": "string"
               },
@@ -120,6 +121,9 @@
                   }
                 },
                 "type": "object"
+              },
+              "value": {
+                "description": "A Go-template expression computing this field's value from answers.* -- or a literal value of any type (only valid when type: computed)"
               },
               "when": {
                 "additionalProperties": false,
@@ -172,7 +176,7 @@
                 "type": "object"
               },
               "path": {
-                "description": "File path as discovered in the template's file tree",
+                "description": "File path as discovered in the template's file tree; may be a glob pattern (*",
                 "type": "string"
               },
               "target": {
@@ -214,6 +218,10 @@
         "hooks": {
           "description": "Step-backed hooks around generation reusing the stack-level hooks vocabulary",
           "type": "object"
+        },
+        "renderedRef": {
+          "description": "Resolved immutable ref of the template source: a commit SHA for git",
+          "type": "string"
         },
         "source": {
           "description": "Where the template came from (written to project records)",
