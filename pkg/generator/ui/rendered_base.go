@@ -156,7 +156,7 @@ func (ui *InitUI) renderPristineBaseFiles(args *renderPristineBaseFilesArgs) err
 	fileSpecs := FileSpecByPath(args.oldScaffoldConfig, args.oldConfig.Files)
 	seenRenderedPaths := make(map[string]string)
 	matrixExpansions := make(map[string]matrixExpansionResult)
-	includedSet := includedPathSet(args.includedPaths)
+	includedSet := includedPathSet(args.includedPaths, args.oldConfig.IncludeSourceDir())
 
 	var failureErrs []error
 	for _, file := range args.oldConfig.Files {
