@@ -23,7 +23,9 @@ The [previous fix](./2026-09-06-homebrew-bump-safe-system.md) dropped the broken
 directly. The dropped action had implicitly put Homebrew on `PATH`; the direct
 `run:` step does not.
 
-GitHub Actions runs each `run:` step with `bash --noprofile --norc`. That skips
+GitHub Actions runs an unspecified-`shell` Linux `run:` step under `bash -e {0}`
+(a non-login, non-interactive shell; setting `shell: bash` explicitly would use
+`bash --noprofile --norc -eo pipefail {0}`). Neither form sources
 `/etc/profile.d/*`, which is exactly what adds the runner-preinstalled
 Homebrew's `bin` (`/home/linuxbrew/.linuxbrew/bin`) to `PATH`. So `brew` is not
 found and the step exits 127. This is the "additional plumbing" the prior fix's

@@ -71,8 +71,9 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          # GitHub's default step shell is `bash --noprofile --norc`, which skips
-          # /etc/profile.d/*, so the runner-preinstalled Homebrew's PATH entry
+          # An unspecified-`shell` Linux `run:` step runs under `bash -e {0}` - a
+          # non-login, non-interactive shell that does not source /etc/profile.d/*,
+          # so the runner-preinstalled Homebrew's PATH entry
           # (/home/linuxbrew/.linuxbrew/bin) is never loaded and `brew` resolves to
           # "command not found" (exit 127) - the bump silently failed on every
           # release. Load Homebrew explicitly here instead of relying on a login
