@@ -517,6 +517,14 @@ stores, Git, and CI integrations.
   <dt>`--merge-strategy` (default `manual`)</dt>
   <dd>Choose `manual`, `ours`, or `theirs` for merge conflicts.</dd>
 
+  <dt>`--max-changes` (default `50`)</dt>
+  <dd>
+    Maximum percentage (`0`-`100`) of changed lines allowed in a `--update` three-way merge before
+    it fails instead of applying. Lower it to be stricter about how much a merge is allowed to
+    touch; raise it (up to `100`) to allow larger merges through — conflicts still write markers
+    for `--merge-strategy=manual` to resolve. Configurable via `ATMOS_SCAFFOLD_MAX_CHANGES`.
+  </dd>
+
   <dt>`--skip-hooks`</dt>
   <dd>Skip all hooks or a comma-separated set of hook names.</dd>
 

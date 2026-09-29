@@ -151,6 +151,10 @@ when re-rendering), and the target must already carry a prior generation's `.atm
 record (a different file, at a different path — it stores that generation's recorded answers, not
 the template's field definitions).
 
+`--max-changes` (default `50`) caps the percentage of changed lines a three-way merge is allowed
+to touch before `--update` fails outright instead of applying it; raise it (up to `100`) to allow
+larger merges through.
+
 ## Project Initialization
 
 [`atmos init`](/cli/commands/init) consumes the same manifest and generation engine for complete

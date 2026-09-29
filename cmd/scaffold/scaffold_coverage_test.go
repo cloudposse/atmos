@@ -374,6 +374,38 @@ func TestScaffoldGenerateRunE_MergeStrategyInvalidValueRejected(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
 }
 
+// TestScaffoldGenerateRunE_MaxChangesOutOfRangeRejected covers --max-changes's
+// manual range validation (0-100, checked directly in RunE since pkg/flags
+// has no built-in numeric-range validation option): a value outside that
+// range must be rejected with errUtils.ErrInvalidFlagValue before any
+// generation work starts, mirroring
+// TestScaffoldGenerateRunE_UpdateStrategyInvalidValueRejected above.
+func TestScaffoldGenerateRunE_MaxChangesOutOfRangeRejected(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "above 100", value: "101"},
+		{name: "negative", value: "-1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Cleanup(func() { viper.Reset() })
+
+			cmd := &cobra.Command{}
+			scaffoldGenerateParser.RegisterFlags(cmd)
+			require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+			require.NoError(t, cmd.Flags().Set("max-changes", tt.value))
+
+			err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+		})
+	}
+}
+
 // TestScaffoldGenerateRunE_BaseRefWithRenderedStrategyRejected covers the
 // explicit --base-ref + --update-strategy=rendered mutual-exclusion check:
 // rendered's base ref comes from the target's own recorded scaffold.yaml,

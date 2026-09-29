@@ -173,6 +173,14 @@ generation's recorded answers, not the template's field definitions).
   <dt>`--merge-strategy`</dt>
   <dd>Select `manual`, `ours`, or `theirs`.</dd>
 
+  <dt>`--max-changes` (default `50`)</dt>
+  <dd>
+    Maximum percentage (`0`-`100`) of changed lines allowed in a `--update` three-way merge before
+    it fails instead of applying. Lower it to be stricter about how much a merge is allowed to
+    touch; raise it (up to `100`) to allow larger merges through — conflicts still write markers
+    for `--merge-strategy=manual` to resolve. Configurable via `ATMOS_INIT_MAX_CHANGES`.
+  </dd>
+
   <dt>`--skip-hooks`</dt>
   <dd>Skip all hooks or named generation hooks.</dd>
 

@@ -113,6 +113,12 @@ func TestInitCmd_FlagDefinitions(t *testing.T) {
 			shorthand:    "",
 			defaultValue: "auto",
 		},
+		{
+			name:         "max-changes flag",
+			flagName:     "max-changes",
+			shorthand:    "",
+			defaultValue: "50",
+		},
 	}
 
 	for _, tt := range tests {
@@ -882,6 +888,38 @@ func TestInitCmd_RunE_MergeStrategyInvalidValueRejected(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MaxChangesOutOfRangeRejected covers --max-changes's manual
+// range validation (0-100, checked directly in RunE since pkg/flags has no
+// built-in numeric-range validation option): a value outside that range must
+// be rejected with errUtils.ErrInvalidFlagValue before any generation work
+// starts, mirroring TestInitCmd_RunE_UpdateStrategyInvalidValueRejected
+// above.
+func TestInitCmd_RunE_MaxChangesOutOfRangeRejected(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "above 100", value: "101"},
+		{name: "negative", value: "-1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Cleanup(func() { viper.Reset() })
+
+			cmd := &cobra.Command{}
+			initParser.RegisterFlags(cmd)
+			require.NoError(t, cmd.Flags().Set("interactive", "false"))
+			require.NoError(t, cmd.Flags().Set("max-changes", tt.value))
+
+			err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+		})
+	}
 }
 
 // TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected covers the explicit
