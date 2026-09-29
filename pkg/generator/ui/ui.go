@@ -152,16 +152,29 @@ func FileSpecByPath(scaffoldConfig *config.ScaffoldConfig, files []tmpl.File) ma
 }
 
 // includedPathSet normalizes includedPaths (raw !include/!include.raw path
-// arguments exactly as written, e.g. "./lib/regions.yaml", collected by
-// config.WithIncludedPaths) into the same relative, forward-slash,
-// no-leading-"./" form tmpl.File.Path already uses, so the two can be
-// compared by simple map lookup. Uses the path package (not filepath) since
-// this is a fs.FS-relative convention, not an OS one -- filepath.Clean would
-// rewrite separators to "\" on Windows and silently break every lookup
-// there.
-func includedPathSet(includedPaths []string) map[string]bool {
+// arguments exactly as written, e.g. "./lib/regions.yaml" or an absolute path
+// inside sourceDir, collected by config.WithIncludedPaths) into the same
+// relative, forward-slash, no-leading-"./" form tmpl.File.Path already uses,
+// so the two can be compared by simple map lookup. An absolute argument is
+// first rebased onto sourceDir -- the directory findLocalFile itself resolved
+// it against -- since otherwise it would never match the relative
+// tmpl.File.Path and the consumed file would leak into project output. Once
+// relative, the path package (not filepath) does the rest of the
+// normalization, since this is a fs.FS-relative convention, not an OS one --
+// filepath.Clean would rewrite separators to "\" on Windows and silently
+// break every lookup there.
+func includedPathSet(includedPaths []string, sourceDir string) map[string]bool {
 	set := make(map[string]bool, len(includedPaths))
 	for _, p := range includedPaths {
+		if filepath.IsAbs(p) && sourceDir != "" {
+			if sourceAbs, err := filepath.Abs(sourceDir); err == nil {
+				if rel, err := filepath.Rel(sourceAbs, p); err == nil &&
+					rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+					p = rel
+				}
+			}
+		}
+		p = filepath.ToSlash(p)
 		set[path.Clean(strings.TrimPrefix(p, "./"))] = true
 	}
 	return set
@@ -1730,7 +1743,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// file -- see matrixExpansionResult's doc comment for why recomputing
 	// per file is unsafe, not just wasteful.
 	matrixExpansions := make(map[string]matrixExpansionResult)
-	includedSet := includedPathSet(includedPaths)
+	includedSet := includedPathSet(includedPaths, embedsConfig.IncludeSourceDir())
 	for _, file := range embedsConfig.Files {
 		// Skip the scaffold.yaml as it's only used for schema definition
 		if file.Path == config.ScaffoldConfigFileName {
