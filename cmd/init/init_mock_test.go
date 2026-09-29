@@ -442,3 +442,313 @@ func TestResolveInteractiveInitBaseRef_UpdateTrue_DefaultBaseRefError(t *testing
 	assert.Equal(t, dir, resolved.targetDir)
 	assert.Empty(t, resolved.baseRef)
 }
+
+// TestResolveInteractiveInitBaseRef_UpdateTrue_InvalidUpdateStrategyPropagatesError
+// covers resolveInteractiveInitBaseRef's own engine.ParseUpdateStrategy error
+// branch: a bogus --update-strategy value must surface directly, without
+// ever reaching source.ResolveRenderedBase or source.CheckNotSwitchedFromRendered.
+func TestResolveInteractiveInitBaseRef_UpdateTrue_InvalidUpdateStrategyPropagatesError(t *testing.T) {
+	selectedConfig := &templates.Configuration{Name: "test"}
+	dir := t.TempDir()
+	opts := &initOptions{
+		update:         true,
+		interactive:    true,
+		updateStrategy: "bogus",
+		templateVars:   map[string]interface{}{"key": "value"},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockInitUI(ctrl)
+	mockUI.EXPECT().
+		ResolveTargetPath(selectedConfig, "", true, false, opts.templateVars).
+		Return(dir, opts.templateVars, false, nil)
+
+	resolved, err := resolveInteractiveInitBaseRef(mockUI, selectedConfig, opts)
+
+	require.Error(t, err)
+	assert.Equal(t, dir, resolved.targetDir)
+	assert.Empty(t, resolved.baseRef)
+}
+
+// TestResolveInteractiveInitBaseRef_UpdateTrue_RenderedStrategyResolveFailurePropagatesError
+// covers resolveInteractiveInitBaseRef's own source.ResolveRenderedBase error
+// branch for a *valid* --update-strategy=rendered (unlike
+// TestResolveInteractiveInitBaseRef_UpdateTrue_InvalidUpdateStrategyPropagatesError
+// above, which covers the parse failure): the resolved target has no
+// recorded project state at all, so resolution itself fails and must
+// propagate directly, without ever reaching SetRenderedBaseSource (which
+// would panic against a nil mock expectation).
+func TestResolveInteractiveInitBaseRef_UpdateTrue_RenderedStrategyResolveFailurePropagatesError(t *testing.T) {
+	selectedConfig := &templates.Configuration{Name: "test"}
+	dir := t.TempDir()
+	opts := &initOptions{
+		update:         true,
+		interactive:    true,
+		updateStrategy: "rendered",
+		templateVars:   map[string]interface{}{"key": "value"},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockInitUI(ctrl)
+	mockUI.EXPECT().
+		ResolveTargetPath(selectedConfig, "", true, false, opts.templateVars).
+		Return(dir, opts.templateVars, false, nil)
+	// No SetRenderedBaseSource expectation: gomock fails the test if it's
+	// reached despite the resolution failure.
+
+	resolved, err := resolveInteractiveInitBaseRef(mockUI, selectedConfig, opts)
+
+	require.Error(t, err)
+	assert.Equal(t, dir, resolved.targetDir)
+	assert.Empty(t, resolved.baseRef)
+	assert.Nil(t, resolved.cleanup)
+}
+
+// TestResolveInteractiveInitBaseRef_UpdateTrue_RenderedStrategyWiresBaseSource
+// covers resolveInteractiveInitBaseRef's --update-strategy=rendered branch:
+// once ResolveTargetPath (standing in for the interactive prompt) picks the
+// real target directory, this must resolve the rendered old-ref base against
+// it, call SetRenderedBaseSource, and return a non-nil cleanup -- while
+// skipping the tracked-only CheckNotSwitchedFromRendered/defaultBaseRef calls
+// entirely (no baseRef is produced for rendered).
+func TestResolveInteractiveInitBaseRef_UpdateTrue_RenderedStrategyWiresBaseSource(t *testing.T) {
+	templateDir := writeLocalInitRenderedRetryTemplate(t)
+	targetDir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "retry-rendered"}}
+	require.NoError(t, config.SaveProjectRecord(targetDir, sampleConfig,
+		config.ProjectRecordProvenance{Source: templateDir, RenderedRef: "irrelevant-for-local-source"}, nil))
+
+	selectedConfig := &templates.Configuration{Name: "test"}
+	opts := &initOptions{
+		update:         true,
+		interactive:    true,
+		updateStrategy: "rendered",
+		templateVars:   map[string]interface{}{"key": "value"},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockInitUI(ctrl)
+	mockUI.EXPECT().
+		ResolveTargetPath(selectedConfig, "", true, false, opts.templateVars).
+		Return(targetDir, opts.templateVars, false, nil)
+	mockUI.EXPECT().
+		SetRenderedBaseSource(gomock.Any(), gomock.Any()).
+		Do(func(cfg *templates.Configuration, values map[string]interface{}) {
+			require.NotNil(t, cfg)
+			assert.NotEmpty(t, cfg.Files, "the old ref's template must be fully hydrated")
+		})
+
+	resolved, err := resolveInteractiveInitBaseRef(mockUI, selectedConfig, opts)
+
+	require.NoError(t, err)
+	assert.Equal(t, targetDir, resolved.targetDir)
+	assert.Empty(t, resolved.baseRef, "rendered mode never produces a tracked-style base ref")
+	assert.NotNil(t, resolved.cleanup)
+}
+
+// TestResolveInteractiveInitBaseRef_UpdateTrue_TrackedStrategyRejectsSwitchFromRendered
+// covers resolveInteractiveInitBaseRef's tracked-strategy
+// CheckNotSwitchedFromRendered error branch: a target last generated under
+// --update-strategy=rendered (spec.renderedRef set, spec.baseRef empty) must
+// reject a plain (tracked-defaulting) --update instead of silently resolving
+// a base ref against git history the target was never meant to have.
+func TestResolveInteractiveInitBaseRef_UpdateTrue_TrackedStrategyRejectsSwitchFromRendered(t *testing.T) {
+	selectedConfig := &templates.Configuration{Name: "test"}
+	dir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "retry-tracked"}}
+	require.NoError(t, config.SaveProjectRecord(dir, sampleConfig,
+		config.ProjectRecordProvenance{Source: "embedded", RenderedRef: "abc123"}, nil))
+
+	opts := &initOptions{
+		update:       true,
+		interactive:  true,
+		templateVars: map[string]interface{}{"key": "value"},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockInitUI(ctrl)
+	mockUI.EXPECT().
+		ResolveTargetPath(selectedConfig, "", true, false, opts.templateVars).
+		Return(dir, opts.templateVars, false, nil)
+
+	resolved, err := resolveInteractiveInitBaseRef(mockUI, selectedConfig, opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUpdateStrategySwitchedToTracked)
+	assert.Equal(t, dir, resolved.targetDir)
+}
+
+// TestRunInitInteractiveFlow_RenderedStrategy_DefersResolvedCleanup covers
+// runInitInteractiveFlow's own "if resolved.cleanup != nil { defer
+// resolved.cleanup() }" branch: with --update-strategy=rendered,
+// resolveInteractiveInitBaseRef returns a non-nil cleanup (see
+// TestResolveInteractiveInitBaseRef_UpdateTrue_RenderedStrategyWiresBaseSource
+// above), which runInitInteractiveFlow itself must defer -- exercised here
+// through the real entry point rather than calling
+// resolveInteractiveInitBaseRef directly.
+func TestRunInitInteractiveFlow_RenderedStrategy_DefersResolvedCleanup(t *testing.T) {
+	templateDir := writeLocalInitRenderedRetryTemplate(t)
+	targetDir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "retry-rendered"}}
+	require.NoError(t, config.SaveProjectRecord(targetDir, sampleConfig,
+		config.ProjectRecordProvenance{Source: templateDir, RenderedRef: "irrelevant-for-local-source"}, nil))
+
+	selectedConfig := &templates.Configuration{Name: "test"}
+	opts := &initOptions{
+		update:         true,
+		interactive:    true,
+		updateStrategy: "rendered",
+		templateVars:   map[string]interface{}{"key": "value"},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockInitUI(ctrl)
+	mockUI.EXPECT().
+		ResolveTargetPath(selectedConfig, "", true, false, opts.templateVars).
+		Return(targetDir, opts.templateVars, false, nil)
+	mockUI.EXPECT().SetRenderedBaseSource(gomock.Any(), gomock.Any())
+	mockUI.EXPECT().
+		ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, targetDir, false, true, false, "", opts.templateVars).
+		Return(targetDir, nil)
+
+	resultDir, err := runInitInteractiveFlow(mockUI, selectedConfig, opts)
+
+	require.NoError(t, err)
+	assert.Equal(t, targetDir, resultDir)
+}
+
+// TestRunInitInteractiveFlow_RetryConfirmed_RenderedStrategyQueuesCleanup
+// covers runInitInteractiveFlow's "if renderedCleanup != nil { defer
+// renderedCleanup() }" branch inside the confirmed-retry path: the initial
+// (non-update) attempt fails with ErrTargetDirectoryNotEmpty, the user
+// confirms the "update instead" offer, and --update-strategy=rendered makes
+// prepareRenderedRetryBase resolve and return a non-nil cleanup that this
+// function must defer before the retry call.
+func TestRunInitInteractiveFlow_RetryConfirmed_RenderedStrategyQueuesCleanup(t *testing.T) {
+	templateDir := writeLocalInitRenderedRetryTemplate(t)
+	targetDir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "retry-rendered"}}
+	require.NoError(t, config.SaveProjectRecord(targetDir, sampleConfig,
+		config.ProjectRecordProvenance{Source: templateDir, RenderedRef: "irrelevant-for-local-source"}, nil))
+
+	selectedConfig := &templates.Configuration{Name: "test"}
+	opts := &initOptions{
+		interactive:    true,
+		updateStrategy: "rendered",
+		templateVars:   map[string]interface{}{},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockInitUI(ctrl)
+
+	gomock.InOrder(
+		mockUI.EXPECT().
+			ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, "", false, false, false, "", opts.templateVars).
+			Return(targetDir, errUtils.ErrTargetDirectoryNotEmpty),
+		mockUI.EXPECT().
+			ConfirmUpdateInstead(targetDir).
+			Return(true, nil),
+		mockUI.EXPECT().
+			SetRenderedBaseSource(gomock.Any(), gomock.Any()).
+			Do(func(cfg *templates.Configuration, values map[string]interface{}) {
+				require.NotNil(t, cfg)
+				assert.NotEmpty(t, cfg.Files, "the old ref's template must be fully hydrated before the retry")
+			}),
+		mockUI.EXPECT().
+			ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, targetDir, false, true, false, "", opts.templateVars).
+			Return(targetDir, nil),
+	)
+
+	resultDir, err := runInitInteractiveFlow(mockUI, selectedConfig, opts)
+
+	require.NoError(t, err)
+	assert.Equal(t, targetDir, resultDir)
+}
+
+// TestRunInitInteractiveFlow_RetryConfirmed_PrepareRenderedRetryBaseErrorPropagates
+// covers runInitInteractiveFlow's "if prepErr != nil { return finalTargetDir,
+// prepErr }" branch: --update-strategy=rendered is a valid strategy (so
+// shouldOfferUpdate itself offers the retry unconditionally, without needing
+// any project record -- see shouldOfferUpdate's rendered short-circuit), but
+// prepareRenderedRetryBase's source.ResolveRenderedBase call fails because
+// targetDir has no recorded project state to resolve the old ref/answers
+// from. That failure must return directly, without ever attempting the
+// retry's second ExecuteWithInteractiveFlowAndBaseRefResult call.
+func TestRunInitInteractiveFlow_RetryConfirmed_PrepareRenderedRetryBaseErrorPropagates(t *testing.T) {
+	selectedConfig := &templates.Configuration{Name: "test"}
+	targetDir := t.TempDir()
+	opts := &initOptions{
+		interactive:    true,
+		updateStrategy: "rendered",
+		templateVars:   map[string]interface{}{},
+	}
+
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockInitUI(ctrl)
+
+	gomock.InOrder(
+		mockUI.EXPECT().
+			ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, "", false, false, false, "", opts.templateVars).
+			Return(targetDir, errUtils.ErrTargetDirectoryNotEmpty),
+		mockUI.EXPECT().
+			ConfirmUpdateInstead(targetDir).
+			Return(true, nil),
+	)
+	// No second ExecuteWithInteractiveFlowAndBaseRefResult expectation: gomock
+	// fails the test if the retry is attempted despite prepErr.
+
+	resultDir, err := runInitInteractiveFlow(mockUI, selectedConfig, opts)
+
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, errUtils.ErrTargetDirectoryNotEmpty)
+	assert.Equal(t, targetDir, resultDir)
+}
+
+// TestConfigureInitMergeSettings_InvalidMergeStrategyPropagatesError covers
+// configureInitMergeSettings's own merge.ResolveConflictStrategy error
+// branch. RunE's WithValidValues registration for --merge-strategy already
+// rejects a bogus value before executeInit is ever reached (see
+// TestInitCmd_RunE_MergeStrategyInvalidValueRejected), so this exercises
+// configureInitMergeSettings directly to prove it still fails safely --
+// returning the error and a nil cleanup, and never reaching
+// SetConflictStrategy/SetMergeDriver/SetSkipHooks/SetUpdateStrategy -- for
+// any other caller that skips that upfront validation.
+func TestConfigureInitMergeSettings_InvalidMergeStrategyPropagatesError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockInitUI(ctrl)
+	mockUI.EXPECT().SetMaxChanges(42)
+	// No SetConflictStrategy/SetMergeDriver/SetSkipHooks/SetUpdateStrategy
+	// expectations: gomock fails the test if any of them are called after the
+	// error.
+
+	opts := &initOptions{maxChanges: 42, mergeStrategy: "bogus"}
+
+	cleanup, err := configureInitMergeSettings(mockUI, opts)
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}
+
+// TestConfigureInitMergeSettings_InvalidUpdateStrategyPropagatesError covers
+// configureInitMergeSettings's engine.ParseUpdateStrategy error branch,
+// mirroring TestConfigureInitMergeSettings_InvalidMergeStrategyPropagatesError
+// above for the strategy parsed last (after SetConflictStrategy/
+// SetMergeDriver/SetSkipHooks have already run).
+func TestConfigureInitMergeSettings_InvalidUpdateStrategyPropagatesError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockInitUI(ctrl)
+	gomock.InOrder(
+		mockUI.EXPECT().SetMaxChanges(0),
+		mockUI.EXPECT().SetConflictStrategy(gomock.Any()),
+		mockUI.EXPECT().SetMergeDriver(gomock.Any()),
+		mockUI.EXPECT().SetSkipHooks(gomock.Any()),
+	)
+	// No SetUpdateStrategy expectation: gomock fails the test if it's called.
+
+	opts := &initOptions{updateStrategy: "bogus"}
+
+	cleanup, err := configureInitMergeSettings(mockUI, opts)
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}

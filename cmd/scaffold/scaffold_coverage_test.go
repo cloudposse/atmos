@@ -1145,3 +1145,51 @@ func TestFindScaffoldFilesInDirectory_WalkError(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldDirectoryRead)
 }
+
+// TestConfigureScaffoldMergeSettings_InvalidMergeStrategyPropagatesError
+// covers configureScaffoldMergeSettings's own merge.ResolveConflictStrategy
+// error branch. RunE's WithValidValues registration for --merge-strategy
+// already rejects a bogus value before executeScaffoldGenerate is ever
+// reached (see TestScaffoldGenerateRunE_MergeStrategyInvalidValueRejected),
+// so this exercises configureScaffoldMergeSettings directly to prove it
+// still fails safely -- returning the error and a nil cleanup, and never
+// reaching SetConflictStrategy/SetMergeDriver/SetUpdateStrategy -- for any
+// other caller that skips that upfront validation.
+func TestConfigureScaffoldMergeSettings_InvalidMergeStrategyPropagatesError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockScaffoldUI(ctrl)
+	mockUI.EXPECT().SetMaxChanges(42)
+	// No SetConflictStrategy/SetMergeDriver/SetUpdateStrategy expectations:
+	// gomock fails the test if any of them are called after the error.
+
+	opts := &scaffoldGenerateOptions{maxChanges: 42, mergeStrategy: "bogus"}
+
+	cleanup, err := configureScaffoldMergeSettings(mockUI, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}
+
+// TestConfigureScaffoldMergeSettings_InvalidUpdateStrategyPropagatesError
+// covers configureScaffoldMergeSettings's engine.ParseUpdateStrategy error
+// branch, mirroring
+// TestConfigureScaffoldMergeSettings_InvalidMergeStrategyPropagatesError
+// above for the strategy parsed last (after SetConflictStrategy/
+// SetMergeDriver have already run).
+func TestConfigureScaffoldMergeSettings_InvalidUpdateStrategyPropagatesError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockScaffoldUI(ctrl)
+	gomock.InOrder(
+		mockUI.EXPECT().SetMaxChanges(0),
+		mockUI.EXPECT().SetConflictStrategy(gomock.Any()),
+		mockUI.EXPECT().SetMergeDriver(gomock.Any()),
+	)
+	// No SetUpdateStrategy expectation: gomock fails the test if it's called.
+
+	opts := &scaffoldGenerateOptions{updateStrategy: "bogus"}
+
+	cleanup, err := configureScaffoldMergeSettings(mockUI, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}

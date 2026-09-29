@@ -497,6 +497,24 @@ func TestExecuteInit_InvalidMergeDriver(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrUnknownMergeDriver)
 }
 
+// TestExecuteInit_HydrateFailurePropagatesError covers executeInit's
+// source.Hydrate error branch: a template name that resolves as a direct
+// local-path source (rather than a catalog/embedded template key) but points
+// at a nonexistent directory must fail loudly, wrapped in
+// errUtils.ErrInitialization, instead of proceeding to generation with a
+// half-hydrated configuration.
+func TestExecuteInit_HydrateFailurePropagatesError(t *testing.T) {
+	err := executeInit(context.Background(), &initOptions{
+		templateName: "./this-template-path-does-not-exist-xyz",
+		targetDir:    t.TempDir(),
+		interactive:  false,
+		templateVars: map[string]interface{}{},
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInitialization)
+}
+
 func TestMaybeInitGeneratedProjectGit_GitEnabled(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello"), 0o600))
@@ -654,6 +672,21 @@ func TestShouldOfferUpdate_PropagatesMetadataLoadError(t *testing.T) {
 	opts := &initOptions{interactive: true}
 
 	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, dir)
+
+	require.Error(t, err)
+	assert.False(t, offer)
+	assert.Empty(t, baseRef)
+}
+
+// TestShouldOfferUpdate_InvalidUpdateStrategyPropagatesError covers
+// shouldOfferUpdate's own engine.ParseUpdateStrategy error branch: a bogus
+// --update-strategy value must surface as an error directly rather than
+// silently falling through to a tracked-style defaultBaseRef resolution.
+func TestShouldOfferUpdate_InvalidUpdateStrategyPropagatesError(t *testing.T) {
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	opts := &initOptions{interactive: true, updateStrategy: "bogus"}
+
+	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, t.TempDir())
 
 	require.Error(t, err)
 	assert.False(t, offer)
