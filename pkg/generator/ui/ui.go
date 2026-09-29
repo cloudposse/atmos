@@ -1008,7 +1008,7 @@ func (ui *InitUI) loadScaffoldConfigFromEmbeds(embedsConfig *tmpl.Configuration)
 			Err()
 	}
 
-	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content, config.WithSourceDir(embedsConfig.Source))
+	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content, config.WithSourceDir(embedsConfig.IncludeSourceDir()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load scaffold configuration: %w", err)
 	}
@@ -1685,7 +1685,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// Load the scaffold configuration from embedded content (don't write to target folder)
 	var includedPaths []string
 	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(
-		scaffoldConfigFile.Content, config.WithSourceDir(embedsConfig.Source), config.WithIncludedPaths(&includedPaths),
+		scaffoldConfigFile.Content, config.WithSourceDir(embedsConfig.IncludeSourceDir()), config.WithIncludedPaths(&includedPaths),
 	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrGeneratorValidation) {
