@@ -35,7 +35,7 @@ key as missing on a busy repository.
   and a missing `GITHUB_RUN_ID` return the original error unchanged.
 - Non-200 list responses now return a typed `listArtifactsStatusError`; its message and
   `errors.Is(err, ErrArtifactListFailed)` behavior match the previous `fmt.Errorf` form, except that an empty
-  response body no longer leaves a trailing `: `.
+  response body no longer leaves a trailing colon followed by a space.
 - `pkg/ci/artifact/github/store_query_test.go` (new) covers the behavior with `httptest` servers.
 
 ## Validation
