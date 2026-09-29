@@ -55,7 +55,7 @@ func loadOldScaffoldConfig(oldConfig *tmpl.Configuration) (*config.ScaffoldConfi
 
 	var includedPaths []string
 	oldScaffoldConfig, err := config.LoadScaffoldConfigFromContent(
-		oldScaffoldConfigFile.Content, config.WithSourceDir(oldConfig.Source), config.WithIncludedPaths(&includedPaths),
+		oldScaffoldConfigFile.Content, config.WithSourceDir(oldConfig.IncludeSourceDir()), config.WithIncludedPaths(&includedPaths),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load the old ref's scaffold configuration: %w", err)
