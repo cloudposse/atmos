@@ -172,6 +172,7 @@ tests:
     workdir: "fixtures/scenarios/toolchain-registry"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
       COLUMNS: "120"
     command: "atmos"
     args:
