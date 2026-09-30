@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	awsOrg "github.com/cloudposse/atmos/pkg/aws/organization"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -246,22 +248,22 @@ func processTagAwsCloudFormationOutputWithContext(
 	}
 	defer cleanup()
 
-	var authContext *schema.AuthContext
-	var authManager any
-	if stackInfo != nil {
-		authContext = stackInfo.AuthContext
-		authManager = stackInfo.AuthManager
-		// Propagate AuthDisabled downstream even when no AuthManager was created (mirrors
-		// !terraform.output / !terraform.state): the wrapper's stack info tells
-		// resolveNestedOutputAuth to skip resolving the target component's own auth section
-		// instead of falling through to the target's default identity.
-		authManager = propagateAuthDisabledManager(authManager, stackInfo)
+	authDisabled := authdeferred.AuthDisabled(atmosConfig.AuthManager) || (stackInfo != nil && stackInfo.AuthDisabled)
+	resolvedAuthManager, err := resolveCloudFormationOutputAuth(atmosConfig, component, stack, stackInfo)
+	if err != nil {
+		return nil, err
 	}
-	resolvedAuthContext, _ := resolveNestedOutputAuth(
-		atmosConfig, component, stack, authContext, authManager, resolveAuthManagerForNestedComponent,
-	)
+	var callerContext *schema.AuthContext
+	if stackInfo != nil {
+		callerContext = stackInfo.AuthContext
+	}
+	resolvedAuthContext := resolvedTargetAuthContext(atmosConfig, resolvedAuthManager, callerContext, authDisabled)
 
 	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		AtmosConfig:          atmosConfig,
+		ResolveSecrets:       stackInfo == nil || !stackInfo.SecretsMaskOnly,
+		AuthManager:          resolvedAuthManager,
+		AuthDisabled:         authDisabled,
 		Component:            component,
 		Stack:                stack,
 		ComponentType:        cfg.CloudFormationComponentType,
@@ -277,9 +279,23 @@ func processTagAwsCloudFormationOutputWithContext(
 		return nil, fmt.Errorf("failed to get aws/cloudformation output for component %s in stack %s, output %s: %w", component, stack, output, err)
 	}
 
-	value, exists := outputs[output]
-	if !exists {
+	return outputs[output], nil
+}
+
+// resolveCloudFormationOutputAuth resolves the target identity before any output
+// read. Resolver errors are fatal; they must not select the caller's credentials.
+func resolveCloudFormationOutputAuth(ac *schema.AtmosConfiguration, component, stack string, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+	if authdeferred.AuthDisabled(ac.AuthManager) || (info != nil && info.AuthDisabled) {
 		return nil, nil
 	}
-	return value, nil
+	var parent auth.AuthManager
+	if info != nil {
+		parent, _ = info.AuthManager.(auth.AuthManager)
+		// Deferred resolution needs the caller's auth configuration, not just its
+		// already-resolved credentials, to bind inherited defaults to the target.
+		if parent == nil || authdeferred.IsDeferred(ac.AuthManager) {
+			parent = &authContextWrapper{stackInfo: info}
+		}
+	}
+	return resolveAuthManagerForNestedComponent(ac, component, stack, parent)
 }

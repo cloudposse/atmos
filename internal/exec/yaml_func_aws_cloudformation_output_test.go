@@ -138,7 +138,7 @@ func TestProcessTagAwsCloudFormationOutputWithContext_DescribeComponentError(t *
 
 // processTagAwsCloudFormationOutputWithContext must extract authContext and
 // authManager from a populated stackInfo and thread the resolved AWS auth
-// context through to the outputs getter (via resolveNestedOutputAuth and
+// context through to the outputs getter (via resolveCloudFormationOutputAuth and
 // cloudFormationOutputsForSections), not just handle the nil-stackInfo case.
 func TestProcessTagAwsCloudFormationOutputWithContext_PopulatedStackInfo(t *testing.T) {
 	atmosConfig := setupAwsCloudFormationOutputFixture(t)

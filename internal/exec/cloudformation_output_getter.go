@@ -80,7 +80,7 @@ func resolveCloudFormationRegion(sections map[string]any) string {
 // component's stack_name and region from its already-described sections, and
 // fetches its deployed Outputs using the resolved AuthContext (the target's
 // own auth when it authenticates independently, otherwise the enclosing
-// component's — callers resolve this via resolveNestedOutputAuth /
+// component's — callers resolve this via resolveCloudFormationOutputAuth /
 // resolveComponentFuncAuthManager before calling in).
 func cloudFormationOutputsForSections(
 	atmosConfig *schema.AtmosConfiguration,
