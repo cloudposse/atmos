@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -928,7 +929,7 @@ func TestExecuteListInstancesCmd_ClosurePreview(t *testing.T) {
 		Tags:                []string{"istio"},
 		IncludeDependencies: -1,
 		ProcessTemplates:    true,
-		AuthDisabled:        true,
+		AuthManager:         authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true}),
 	})
 
 	require.NoError(t, err, "a closure preview over a healthy fixture should render cleanly")
@@ -990,9 +991,10 @@ func TestExecuteListInstancesCmd_ClosurePreviewPropagatesError(t *testing.T) {
 		Args:                []string{},
 		Format:              "json",
 		Tags:                []string{"broken-tag"},
+		ColumnsFlag:         []string{"Value={{ .vars.upstream_value }}"},
 		IncludeDependencies: -1,
 		ProcessTemplates:    true,
-		AuthDisabled:        true,
+		AuthManager:         authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true}),
 	})
 
 	require.Error(t, err)

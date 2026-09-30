@@ -125,6 +125,17 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
+	atmosConfig.AuthManager = opts.AuthManager
+	if opts.Filter == "" {
+		columns, columnErr := getMetadataColumns(&atmosConfig, opts.Columns)
+		if columnErr != nil {
+			return columnErr
+		}
+		atmosConfig.ListEvaluationPaths = column.RequiredPaths(columns)
+		if atmosConfig.ListEvaluationPaths != nil {
+			atmosConfig.ListEvaluationPaths = append(atmosConfig.ListEvaluationPaths, []string{"metadata"})
+		}
+	}
 
 	// Process instances (same as list instances, but we'll extract metadata).
 	// authDisabled is false here because `list metadata` doesn't expose

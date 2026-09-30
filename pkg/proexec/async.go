@@ -114,7 +114,7 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 
 	reportedCommand, args, flags := commandArgsAndFlags(cmd)
 
-	in := &ExecRecordInput{Command: reportedCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data}
+	in := &ExecRecordInput{ExecutionID: ExecutionID(), Command: reportedCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data}
 	done := make(chan error, 1)
 	go func() {
 		done <- uploadExecMetadata(in, client, git.NewDefaultGitRepo())

@@ -1513,6 +1513,27 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
+            "pro": {
+              "type": "object",
+              "description": "Atmos Pro integration settings.",
+              "additionalProperties": true,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable Atmos Pro for this stack or component, including automatic exception reporting in GitHub Actions."
+                },
+                "errors": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Report CLI exceptions to Atmos Pro. Omit to follow Pro enablement."
+                    }
+                  }
+                }
+              }
+            },
             "validation": {
               "$ref": "#/definitions/validation"
             },

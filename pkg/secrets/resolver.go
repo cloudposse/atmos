@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -83,6 +84,11 @@ func retrieveAndMask(atmosConfig *schema.AtmosConfiguration, provider providers.
 		value, err = provider.Get(coord)
 	}
 	if err != nil {
+		// A lazy store binding can fail before its read. A default must not hide
+		// failed authentication or malformed auth configuration as a missing value.
+		if errors.Is(err, errUtils.ErrAuthenticationFailed) || errors.Is(err, errUtils.ErrAuthenticationUnavailable) {
+			return nil, err
+		}
 		// A default replaces a missing value, not an unsupported retrieval capability. In
 		// particular, `raw | default` must not silently turn a structured-only backend into a
 		// successful lookup.

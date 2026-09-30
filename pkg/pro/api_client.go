@@ -2,6 +2,7 @@ package pro
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -620,6 +622,13 @@ func buildOIDCRequestURL(rawURL, audience string) (string, error) {
 // getGitHubOIDCTokenWithAudience retrieves an OIDC token from GitHub Actions for the
 // given audience. When audience is empty, DefaultProAudience is used.
 func getGitHubOIDCTokenWithAudience(githubOIDCSettings schema.GithubOIDCSettings, audience string, clients ...*http.Client) (string, error) {
+	return GetGitHubOIDCTokenContext(context.Background(), githubOIDCSettings, audience, clients...)
+}
+
+// GetGitHubOIDCTokenContext fetches a fresh token within the caller's delivery deadline.
+func GetGitHubOIDCTokenContext(ctx context.Context, githubOIDCSettings schema.GithubOIDCSettings, audience string, clients ...*http.Client) (string, error) {
+	defer perf.Track(nil, "pro.GetGitHubOIDCTokenContext")()
+
 	if audience == "" {
 		audience = DefaultProAudience
 	}
@@ -634,9 +643,7 @@ func getGitHubOIDCTokenWithAudience(githubOIDCSettings schema.GithubOIDCSettings
 	if err != nil {
 		return "", err
 	}
-	log.Debug("requestOIDCTokenURL", "requestOIDCTokenURL", requestOIDCTokenURL)
-
-	req, err := http.NewRequest("GET", requestOIDCTokenURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", requestOIDCTokenURL, nil)
 	if err != nil {
 		return "", wrapErr(errUtils.ErrFailedToCreateRequest, err)
 	}
@@ -646,7 +653,7 @@ func getGitHubOIDCTokenWithAudience(githubOIDCSettings schema.GithubOIDCSettings
 	// Request URL is SSRF-validated by buildOIDCRequestURL (https scheme + non-empty host).
 	resp, err := selectOIDCHTTPClient(clients).Do(req) //nolint:gosec
 	if err != nil {
-		log.Debug("getGitHubOIDCToken", "error", err)
+		log.Debug("GitHub OIDC token request failed")
 		return "", wrapErr(errUtils.ErrFailedToGetOIDCToken, err)
 	}
 	defer resp.Body.Close()

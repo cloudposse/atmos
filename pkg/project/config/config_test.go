@@ -67,6 +67,63 @@ spec:
 	assert.Len(t, licenseField.Options, 3)
 }
 
+// TestLoadScaffoldConfigFromContent_ComputedLiteralValue_BlockAndFlowStyle
+// proves a computed field's literal map/list Value unmarshals identically
+// from real YAML text regardless of whether the author uses block style or
+// flow style -- the earlier literal-value tests (TestComputeFields_LiteralValue,
+// TestGetConfigurationSummary_ComplexValues) only ever constructed Value as
+// a Go literal directly, never through the actual YAML loader, so this is
+// the first test to confirm both styles decode the same way through
+// LoadScaffoldConfigFromContent -- gopkg.in/yaml.v3 should produce identical
+// map[string]interface{}/[]interface{} values either way, but that's worth
+// proving, not assuming.
+func TestLoadScaffoldConfigFromContent_ComputedLiteralValue_BlockAndFlowStyle(t *testing.T) {
+	content := `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: literal-value-style-test
+spec:
+  fields:
+    - name: block_style_map
+      type: computed
+      value:
+        aws: "~> 5.0"
+        azurerm: "~> 3.0"
+    - name: flow_style_map
+      type: computed
+      value: {aws: "~> 5.0", azurerm: "~> 3.0"}
+    - name: block_style_list
+      type: computed
+      value:
+        - dev
+        - staging
+    - name: flow_style_list
+      type: computed
+      value: [dev, staging]`
+
+	config, err := LoadScaffoldConfigFromContent(content)
+	require.NoError(t, err)
+	require.Len(t, config.Spec.Fields, 4)
+
+	wantMap := map[string]interface{}{"aws": "~> 5.0", "azurerm": "~> 3.0"}
+	wantList := []interface{}{"dev", "staging"}
+
+	assert.Equal(t, wantMap, config.Spec.Fields[0].Value, "block style map")
+	assert.Equal(t, wantMap, config.Spec.Fields[1].Value, "flow style map")
+	assert.Equal(t, wantList, config.Spec.Fields[2].Value, "block style list")
+	assert.Equal(t, wantList, config.Spec.Fields[3].Value, "flow style list")
+
+	// Both styles must also compute identically, not just unmarshal
+	// identically -- exercise the real ComputeFields path, not just the
+	// loader.
+	values := map[string]interface{}{}
+	require.NoError(t, ComputeFields(config, values, nil))
+	assert.Equal(t, wantMap, values["block_style_map"])
+	assert.Equal(t, wantMap, values["flow_style_map"])
+	assert.Equal(t, wantList, values["block_style_list"])
+	assert.Equal(t, wantList, values["flow_style_list"])
+}
+
 func TestLoadScaffoldConfigFromContent_InvalidManifests(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -440,6 +497,69 @@ func TestGetConfigurationSummary_OrderFollowsFields(t *testing.T) {
 	assert.Equal(t, []string{"zeta", "1", "default"}, rows[0])
 	assert.Equal(t, []string{"alpha", "2", "flag"}, rows[1])
 	assert.Equal(t, []string{"mid", "3", "default"}, rows[2])
+}
+
+// TestGetConfigurationSummary_ComputedFieldSourceIsAlwaysComputed proves a
+// type: computed field's summary row always reports source "computed",
+// overriding whatever (if anything) valueSources says for it -- since its
+// value is always derived by ComputeFields, never actually sourced from a
+// flag or default.
+func TestGetConfigurationSummary_ComputedFieldSourceIsAlwaysComputed(t *testing.T) {
+	projectConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "region", Type: "input"},
+				{Name: "derived", Type: fieldTypeComputed, Value: "{{ answers.region }}"},
+			},
+		},
+	}
+	merged := map[string]interface{}{
+		"region":  "us-east-1",
+		"derived": "us-east-1",
+	}
+	// "flag" here is deliberately wrong for a computed field, to prove
+	// GetConfigurationSummary ignores valueSources entirely for it.
+	valueSources := map[string]string{"derived": "flag"}
+
+	rows, _ := GetConfigurationSummary(projectConfig, merged, valueSources)
+
+	require.Len(t, rows, 2)
+	assert.Equal(t, []string{"region", "us-east-1", "default"}, rows[0])
+	assert.Equal(t, []string{"derived", "us-east-1", "computed"}, rows[1])
+}
+
+// TestGetConfigurationSummary_ComplexValues proves a computed field's
+// literal map or list value (reachable since Value widened to any) renders
+// as a short placeholder rather than Go's raw %v syntax (e.g.
+// "map[eastasia:map[abbreviation:eas ...]]"), while a []string answer, a
+// bool, and a plain scalar keep their existing, already-sensible
+// formatting. Found via a /field-test pass on the literal-value addendum.
+func TestGetConfigurationSummary_ComplexValues(t *testing.T) {
+	projectConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{Fields: []FieldDefinition{
+			{Name: "lookup", Type: fieldTypeComputed, Value: map[string]any{"a": "b"}},
+			{Name: "list", Type: fieldTypeComputed, Value: []any{"a", "b"}},
+			{Name: "regions", Type: "multiselect"},
+			{Name: "enabled", Type: fieldTypeComputed, Value: false},
+			{Name: "count", Type: fieldTypeComputed, Value: 3},
+		}},
+	}
+	merged := map[string]interface{}{
+		"lookup":  map[string]interface{}{"eastasia": map[string]interface{}{"abbreviation": "eas"}},
+		"list":    []interface{}{"eastasia", "westeurope"},
+		"regions": []string{"eastasia", "westeurope"},
+		"enabled": false,
+		"count":   3,
+	}
+
+	rows, _ := GetConfigurationSummary(projectConfig, merged, map[string]string{})
+
+	require.Len(t, rows, 5)
+	assert.Equal(t, []string{"lookup", "(complex data)", "computed"}, rows[0])
+	assert.Equal(t, []string{"list", "(complex data)", "computed"}, rows[1])
+	assert.Equal(t, []string{"regions", "eastasia, westeurope", "default"}, rows[2])
+	assert.Equal(t, []string{"enabled", "false", "computed"}, rows[3])
+	assert.Equal(t, []string{"count", "3", "computed"}, rows[4])
 }
 
 func TestPersistenceFlow(t *testing.T) {

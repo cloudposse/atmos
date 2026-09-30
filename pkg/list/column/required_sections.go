@@ -55,7 +55,7 @@ var derivedFields = map[string]struct{}{
 // section is required" — and is distinct from a nil slice. Callers MUST preserve that
 // distinction (e.g. by passing the returned slice through unchanged, never coalescing an empty
 // result to nil) since downstream evaluation-gating treats nil as "no filter" (see
-// internal/exec's isSectionRequired).
+// pkg/deferred.IsSectionRequired).
 func RequiredSections(columns []Config) (sections []string, ok bool) {
 	defer perf.Track(nil, "list.column.RequiredSections")()
 
@@ -91,8 +91,33 @@ func RequiredSections(columns []Config) (sections []string, ok bool) {
 	return result, true
 }
 
+// RequiredPaths narrows statically known columns to individual fields. Nil means
+// dynamic access requires full evaluation; an empty slice means no fields are read.
+func RequiredPaths(columns []Config) [][]string {
+	defer perf.Track(nil, "list.column.RequiredPaths")()
+
+	if _, ok := RequiredSections(columns); !ok {
+		return nil
+	}
+	paths := make([][]string, 0)
+	for _, col := range columns {
+		refs, err := atmostemplate.ExtractFieldRefs(col.Value)
+		if err != nil {
+			return nil
+		}
+		for _, ref := range refs {
+			if len(ref.Path) > 0 {
+				if _, ok := sectionBackedFields[ref.Path[0]]; ok {
+					paths = append(paths, ref.Path)
+				}
+			}
+		}
+	}
+	return paths
+}
+
 // EnsureSection returns sections with name added if not already present, preserving a non-nil
-// result: an empty (but non-nil) input slice stays non-nil, matching isSectionRequired's contract
+// result: an empty (but non-nil) input slice stays non-nil, matching deferred.IsSectionRequired's contract
 // that a non-nil filter -- even an empty one -- means "gating is active," never "no filter".
 //
 // Callers use this to fold in a section their row-extraction pipeline always needs regardless of

@@ -13,8 +13,10 @@ import (
 
 	"github.com/hairyhenderson/gomplate/v3/data"
 
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
 )
 
@@ -57,6 +59,9 @@ func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error
 func (f AtmosFuncs) Store(store string, stack string, component string, key string) (any, error) {
 	defer perf.Track(nil, "exec.AtmosFuncs.Store")()
 
+	if authdeferred.IsDeferred(f.atmosConfig.AuthManager) {
+		return storedeferred.LookupStore(f.atmosConfig, f.configAndStacksInfo, storedeferred.StoreOptions{Name: store, Stack: stack, Component: component, Key: key})
+	}
 	return storeFunc(f.atmosConfig, store, stack, component, key)
 }
 

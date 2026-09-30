@@ -50,8 +50,9 @@ type PackerFlags struct {
 func ExecutePacker(
 	info *schema.ConfigAndStacksInfo,
 	packerFlags *PackerFlags,
-) error {
+) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecutePacker")()
+	defer attachComponentReporting(&resultErr, info, "packer", info.SubCommand)
 
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {

@@ -1,8 +1,12 @@
-package exec
+package deferred
 
-import "slices"
+import (
+	"slices"
 
-// isSectionRequired reports whether sectionName must be evaluated (rendered as a Go template
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// IsSectionRequired reports whether sectionName must be evaluated (rendered as a Go template
 // and/or have its YAML functions resolved) given an eval-sections filter.
 //
 // A nil filter disables gating entirely: every section is required, matching the historical
@@ -17,22 +21,26 @@ import "slices"
 // matters most (default `list stacks` columns, which reference no section at all). Do not
 // "simplify" this to `len(sections) == 0` -- that reintroduces the spurious eager-evaluation bug
 // this file exists to fix.
-func isSectionRequired(sections []string, sectionName string) bool {
+func IsSectionRequired(sections []string, sectionName string) bool {
+	defer perf.Track(nil, "deferred.IsSectionRequired")()
+
 	if sections == nil {
 		return true
 	}
 	return slices.Contains(sections, sectionName)
 }
 
-// splitSectionsByRequirement returns a shallow copy of componentSection restricted to the
-// top-level sections isSectionRequired approves, plus the sections that were left out so the
+// SplitSectionsByRequirement returns a shallow copy of componentSection restricted to the
+// top-level sections IsSectionRequired approves, plus the sections that were left out so the
 // caller can restore them untouched afterward (see restoreNonTemplatedSections, reused here
 // generically since "copy excluded keys back in" is identical for both use cases).
 //
 // A nil filter (gating disabled) returns the input unchanged with a nil excluded map -- the same
 // "nothing was split" shape splitNonTemplatedSections uses for its own no-op case, so both
 // exclusion sources can be restored through the same helper without special-casing nil.
-func splitSectionsByRequirement(componentSection map[string]any, sections []string) (filtered, excluded map[string]any) {
+func SplitSectionsByRequirement(componentSection map[string]any, sections []string) (filtered, excluded map[string]any) {
+	defer perf.Track(nil, "deferred.SplitSectionsByRequirement")()
+
 	if sections == nil {
 		return componentSection, nil
 	}
@@ -40,7 +48,7 @@ func splitSectionsByRequirement(componentSection map[string]any, sections []stri
 	filtered = make(map[string]any, len(componentSection))
 	excluded = make(map[string]any, len(componentSection))
 	for key, value := range componentSection {
-		if isSectionRequired(sections, key) {
+		if IsSectionRequired(sections, key) {
 			filtered[key] = value
 		} else {
 			excluded[key] = value

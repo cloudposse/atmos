@@ -130,7 +130,6 @@ func TestFetchAndFilterSources_ScopesDescribeCall(t *testing.T) {
 		_ bool,
 		_ []string,
 		_ auth.AuthManager,
-		_ bool,
 		tagsFilter []string,
 		labelsFilter map[string]string,
 		_ e.DescribeStacksErrorOptions,

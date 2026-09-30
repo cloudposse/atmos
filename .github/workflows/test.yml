@@ -805,6 +805,36 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+  pact:
+    name: "[pro] consumer contracts"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - name: Check out code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-cache
+      - name: Install native Pact library using the pinned Go dependency
+        run: go run github.com/pact-foundation/pact-go/v2 install --libDir "$RUNNER_TEMP/pact"
+      - name: Verify consumer contracts
+        env:
+          CGO_LDFLAGS: -L${{ runner.temp }}/pact
+          LD_LIBRARY_PATH: ${{ runner.temp }}/pact
+        run: go test -tags pact ./pkg/pro/... -run TestPact -count=1 -timeout 2m
+      - name: Check committed contracts
+        # Pact omits the final newline required by the repository hygiene hooks.
+        run: git diff --exit-code --ignore-space-at-eol -- pacts/
+      - name: Upload contracts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: atmos-pro-pacts
+          path: pacts/*.json
+          if-no-files-found: error
+
   # magefiles/ carries the `mage` build tag (invoked only via `go tool mage`),
   # so it's silently excluded from the default `go build ./...`/`go test
   # ./...` scope every other job here uses. Run it as its own lightweight job
@@ -1229,7 +1259,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
+      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         id: hadolint
         with:
           dockerfile: Dockerfile
@@ -1247,7 +1277,7 @@ jobs:
       # file -- evicting the PR from the queue for a result nobody consumes.
       # The same commit was already scanned on the PR run.
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         if: always() && github.event_name != 'merge_group'
         with:
           # Path to SARIF file relative to the root of the repository
@@ -1270,7 +1300,7 @@ jobs:
 
       - name: Upload Trivy config scan results
         if: always() && github.event_name != 'merge_group'
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config

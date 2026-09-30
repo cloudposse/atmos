@@ -94,6 +94,63 @@ spec:
 	assert.Equal(t, 2, errUtils.GetExitCode(err))
 }
 
+// TestExecuteWithSetup_ComputedFieldOverrideRejected proves a --set-style
+// cmdTemplateValues entry targeting a type: computed field is rejected by
+// buildSetupValues (via config.RejectComputedFieldOverrides) before the
+// setup form even runs, rather than being silently overwritten later by
+// ComputeFields.
+func TestExecuteWithSetup_ComputedFieldOverrideRejected(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+	configuration := &templates.Configuration{
+		Name: "computed-override",
+		Files: []templates.File{{Path: "scaffold.yaml", Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: computed-override
+spec:
+  fields:
+    - name: region
+      type: input
+    - name: derived
+      type: computed
+      value: "{{ answers.region }}"
+`}},
+	}
+
+	err := ui.executeWithSetup(configuration, targetDir, false, false, true, "", map[string]interface{}{"derived": "us-east-1"}, []string{"{{", "}}"})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrScaffoldComputedFieldNotSettable), err)
+	assert.Equal(t, 2, errUtils.GetExitCode(err))
+}
+
+// TestExecuteWithSetup_ComputedFieldRenderErrorReturnsError proves a
+// computed field whose expression fails to render (an undefined template
+// function, here) surfaces as a wrapped error from RunSetupForm rather than
+// silently leaving the field unset or panicking.
+func TestExecuteWithSetup_ComputedFieldRenderErrorReturnsError(t *testing.T) {
+	ui := createTestUI(t)
+	targetDir := t.TempDir()
+	configuration := &templates.Configuration{
+		Name: "computed-render-error",
+		Files: []templates.File{{Path: "scaffold.yaml", Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: computed-render-error
+spec:
+  fields:
+    - name: derived
+      type: computed
+      value: "{{ undefinedTemplateFunc answers.region }}"
+`}},
+	}
+
+	err := ui.executeWithSetup(configuration, targetDir, false, false, true, "", nil, []string{"{{", "}}"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to compute derived fields")
+	assert.True(t, errors.Is(err, errUtils.ErrScaffoldExpressionFailed), err)
+}
+
 // createTestUI creates a UI instance with I/O for testing.
 func createTestUI(t *testing.T) *InitUI {
 	t.Helper()
@@ -134,6 +191,47 @@ func TestResolveTargetPath_NonEmptyTargetPathIsPassthrough(t *testing.T) {
 	assert.Equal(t, dir, gotPath)
 	assert.Equal(t, values, gotValues)
 	assert.True(t, gotUseDefaults)
+}
+
+// TestResolvePreCollectedValues_FreshGeneration_StripsComputedFieldValues
+// proves a computed field's own result -- present in preCollectedValues
+// because the temp-dir setup pass that produced it already ran
+// ComputeFields -- is not carried forward into the returned map on fresh
+// (non-update) generation. Left in place, the next RunSetupForm's own
+// RejectComputedFieldOverrides would mistake this pass's own computed
+// output for a user-supplied --set override on the same field and reject
+// it every time, breaking interactive fresh generation for any template
+// with a computed field. A regular field's value in preCollectedValues
+// must still survive the merge unchanged.
+func TestResolvePreCollectedValues_FreshGeneration_StripsComputedFieldValues(t *testing.T) {
+	ui := createTestUI(t)
+	configuration := &templates.Configuration{
+		Name: "computed-precollected",
+		Files: []templates.File{{Path: "scaffold.yaml", Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: computed-precollected
+spec:
+  fields:
+    - name: region
+      type: input
+    - name: derived
+      type: computed
+      value: "{{ answers.region }}"
+`}},
+	}
+	preCollectedValues := map[string]interface{}{
+		"region":  "us-east-1",
+		"derived": "us-east-1", // Written by the temp-dir pass's own ComputeFields call.
+	}
+
+	merged, useDefaults, err := ui.resolvePreCollectedValues(configuration, t.TempDir(), false, false, preCollectedValues, nil)
+
+	require.NoError(t, err)
+	assert.True(t, useDefaults)
+	assert.Equal(t, "us-east-1", merged["region"], "a regular field's pre-collected value must survive")
+	_, exists := merged["derived"]
+	assert.False(t, exists, "a computed field's pre-collected value must be stripped before becoming cmdTemplateValues")
 }
 
 // TestExecuteWithBaseRef_EmptyTargetPathErrors covers ExecuteWithDelimiters's
@@ -521,6 +619,82 @@ spec:
 		if got := *calls; len(got) != 0 {
 			t.Errorf("expected the post-generate hook to be skipped, got: %v", got)
 		}
+	})
+}
+
+// workingDirectoryMarkerHandler records the resolved working directory every step executes in,
+// so tests can assert scaffold hooks anchor to the scaffold's target directory by default.
+type workingDirectoryMarkerHandler struct {
+	runnerstep.BaseHandler
+	dirs *[]string
+}
+
+func (h *workingDirectoryMarkerHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *workingDirectoryMarkerHandler) Execute(_ context.Context, step *schema.WorkflowStep, _ *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	*h.dirs = append(*h.dirs, step.WorkingDirectory)
+	return runnerstep.NewStepResult(step.WorkingDirectory), nil
+}
+
+// TestExecuteWithSetup_HooksDefaultWorkingDirectoryToTargetPath verifies that a scaffold hook's
+// working_directory defaults to the scaffold's target directory rather than the process's own
+// cwd (the bug: hooks like `terraform fmt -recursive` silently ran in the directory atmos was
+// launched from whenever the scaffold target differed from it), mirroring how component/stack
+// lifecycle hooks already default to the component's working directory. It also verifies the
+// documented override values (a bare-relative path, and a dot-prefixed path) still behave per
+// the existing working-directory convention.
+func TestExecuteWithSetup_HooksDefaultWorkingDirectoryToTargetPath(t *testing.T) {
+	// runCase registers a unique working-directory-capturing hook, generates the scaffold
+	// against a fresh target directory, and returns (capturedWorkingDirectory, targetDir).
+	runCase := func(t *testing.T, hookType, withBlock string) (string, string) {
+		t.Helper()
+		dirs := &[]string{}
+		runnerstep.Register(&workingDirectoryMarkerHandler{
+			BaseHandler: runnerstep.NewBaseHandler(hookType, runnerstep.CategoryOutput, false),
+			dirs:        dirs,
+		})
+
+		scaffoldYAML := "apiVersion: atmos/v1\n" +
+			"kind: AtmosScaffoldConfig\n" +
+			"metadata:\n" +
+			"  name: test-template\n" +
+			"spec:\n" +
+			"  hooks:\n" +
+			"    format:\n" +
+			"      events:\n" +
+			"        - after.scaffold.generate\n" +
+			"      kind: step\n" +
+			"      type: " + hookType + "\n" +
+			withBlock
+		embedsConfig := &templates.Configuration{
+			Name: "test-template",
+			Files: []templates.File{
+				{Path: "scaffold.yaml", Content: scaffoldYAML, Permissions: 0o644},
+				{Path: "README.md", Content: "hello", Permissions: 0o644},
+			},
+		}
+
+		ui := createTestUI(t)
+		targetDir := filepath.Join(t.TempDir(), "target")
+		err := ui.executeWithSetup(embedsConfig, targetDir, false, false, true, "", map[string]interface{}{}, []string{"{{", "}}"})
+		require.NoError(t, err)
+		require.Len(t, *dirs, 1)
+		return (*dirs)[0], targetDir
+	}
+
+	t.Run("unset working_directory defaults to the target path", func(t *testing.T) {
+		got, targetDir := runCase(t, "working-dir-marker-default", "")
+		assert.Equal(t, targetDir, got)
+	})
+
+	t.Run("bare relative working_directory resolves under the target path", func(t *testing.T) {
+		got, targetDir := runCase(t, "working-dir-marker-bare", "      with:\n        working_directory: sub\n")
+		assert.Equal(t, filepath.Join(targetDir, "sub"), got)
+	})
+
+	t.Run("dot-prefixed working_directory opts back into the process cwd", func(t *testing.T) {
+		got, _ := runCase(t, "working-dir-marker-dot", "      with:\n        working_directory: \".\"\n")
+		assert.Equal(t, ".", got)
 	})
 }
 

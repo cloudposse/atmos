@@ -243,7 +243,7 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	if err != nil {
 		return componentsExtractResult{}, err
 	}
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
+	skip := opts.Skip
 
 	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
 	if err != nil {
@@ -255,6 +255,10 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	// shared scoped closure engine: only the stacks (and components) the
 	// closure touches are ever evaluated, matching the terraform bulk paths.
 	if opts.IncludeDependencies != 0 || opts.IncludeDependents != 0 {
+		atmosConfig.ListEvaluationPaths = column.RequiredPaths(getComponentColumns(&atmosConfig, opts.Columns))
+		if atmosConfig.ListEvaluationPaths != nil {
+			atmosConfig.ListEvaluationPaths = append(atmosConfig.ListEvaluationPaths, []string{"metadata"}, []string{"dependencies"}, []string{"settings", "depends_on"})
+		}
 		components, closureErr := extractComponentsViaScopedClosure(&atmosConfig, opts, labels, &scopedDescribeDeps{authManager: authManager, skip: skip, errOpts: errOpts})
 		if closureErr != nil {
 			return componentsExtractResult{}, closureErr
@@ -270,6 +274,10 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	// which extract.UniqueComponents and buildComponentFilters always need for
 	// enabled/locked/tags/labels/type/status) actually reads — see resolveComponentsEvalSections.
 	evalSections := resolveComponentsEvalSections(&atmosConfig, opts)
+	errOpts.EvaluationPaths = column.RequiredPaths(getComponentColumns(&atmosConfig, opts.Columns))
+	if errOpts.EvaluationPaths != nil {
+		errOpts.EvaluationPaths = append(errOpts.EvaluationPaths, []string{"metadata"})
+	}
 	stacksMap, err := e.ExecuteDescribeStacksWithEvalSections(
 		&atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
@@ -278,7 +286,6 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		false, // includeEmptyStacks
 		skip,
 		authManager,
-		authManager == nil,
 		opts.Tags,
 		labels,
 		errOpts,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"go.yaml.in/yaml/v3"
@@ -15,6 +16,13 @@ import (
 )
 
 type AtmosSectionMapType = map[string]any
+
+// DeferredEvaluationContext holds invocation-local evaluated values, independently
+// of the authentication implementation. The resolver identifies the invocation.
+type DeferredEvaluationContext struct {
+	Manager any
+	Values  sync.Map
+}
 
 // DescribeSettings contains settings for the describe command output.
 type DescribeSettings struct {
@@ -100,6 +108,13 @@ type ConfigMetadata struct {
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
+	// AuthManager carries the same invocation-local manager passed by the caller.
+	// Like ConfigAndStacksInfo.AuthManager, any avoids the auth/schema import cycle.
+	AuthManager any `yaml:"-" json:"-" mapstructure:"-"`
+	// DeferredEvaluation is owned by pkg/stack/deferred, not the authentication resolver.
+	DeferredEvaluation *DeferredEvaluationContext `yaml:"-" json:"-" mapstructure:"-"`
+	// ListEvaluationPaths carries the fields consumed by this list invocation.
+	ListEvaluationPaths           [][]string         `yaml:"-" json:"-" mapstructure:"-"`
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"`                                       // "runtime" if from env var/CLI/provider, "" if from config file.
 	Edition                       string             `yaml:"edition,omitempty" json:"edition,omitempty" mapstructure:"edition"` // Date anchor ("YYYY", "YYYY-MM", or "YYYY-MM-DD") that pins defaults to how they stood on that date.
@@ -400,6 +415,7 @@ type Toolchain struct {
 	LockFile        string                    `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
 	UseToolVersions bool                      `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
 	UseLockFile     bool                      `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
+	FrozenLockFile  bool                      `yaml:"frozen_lock_file" json:"frozen_lock_file" mapstructure:"frozen_lock_file"`
 	Verification    *ToolchainVerification    `yaml:"verification,omitempty" json:"verification,omitempty" mapstructure:"verification"`
 	Registries      []ToolchainRegistry       `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
 	Aliases         map[string]string         `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
@@ -553,8 +569,12 @@ type TelemetrySettings struct {
 }
 
 // ProvisionSettings contains global defaults for provisioning.
+//
+// A global default for workdir provisioning is NOT configured here. It belongs in the stack
+// configuration under the toolchain section (`terraform.provision`, `helmfile.provision`, etc.),
+// consistent with global `vars`, `metadata`, and `secrets`. Component-level `provision` values
+// override that stack-level default. See #3197.
 type ProvisionSettings struct {
-	Workdir ProvisionWorkdirSettings `yaml:"workdir,omitempty" json:"workdir,omitempty" mapstructure:"workdir"`
 	// Default is the name of the target used by apply/deploy when no --target is given.
 	Default string `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 	// Targets maps target names to delivery destinations for rendered artifacts.
@@ -596,15 +616,6 @@ type ProvisionTargetCommit struct {
 type ProvisionTargetPullRequest struct {
 	// Enabled requests pull-request publishing (not yet supported by the cli provider).
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-}
-
-// ProvisionWorkdirSettings contains default settings for workdir provisioning.
-type ProvisionWorkdirSettings struct {
-	// Enabled sets the default enabled state for workdir provisioning.
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	// TTL is the default time-to-live for workdirs (e.g., "7d", "24h", "weekly").
-	// Workdirs not accessed within this duration can be cleaned up.
-	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
 }
 
 type Docs struct {
@@ -1893,6 +1904,8 @@ type ConfigAndStacksInfo struct {
 	//   - Type assertions are used at usage sites to recover type safety
 	AuthManager  any
 	AuthDisabled bool
+	// EvaluationPaths limits list value evaluation; nil evaluates every field.
+	EvaluationPaths [][]string
 	// DeferredMergeContexts holds the per-section deferred-merge contexts recovered from the
 	// FindStacksMap cache for this component, keyed by section name (vars, settings, env, auth,
 	// providers, required_providers, hooks, test, generate). A later, per-invocation stage

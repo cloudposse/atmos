@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -101,8 +102,7 @@ func TestDefaultStacksProcessor_ExecuteDescribeStacksScoped(t *testing.T) {
 				false,      // processYamlFunctions
 				false,      // includeEmptyStacks
 				[]string{}, // skip
-				nil,        // authManager
-				tt.authDisabled,
+				authdeferred.NewManager(authdeferred.AuthOptions{Disabled: tt.authDisabled}),
 				tt.tagsFilter,
 				tt.labelsFilter,
 			)

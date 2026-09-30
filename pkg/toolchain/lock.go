@@ -41,6 +41,10 @@ type lockOutcome struct {
 func RunLock(toolNames []string, opts LockOptions) error {
 	defer perf.Track(nil, "toolchain.Lock")()
 
+	if config := GetAtmosConfig(); config != nil && config.Toolchain.FrozenLockFile {
+		return errUtils.ErrFrozenLockfile
+	}
+
 	if opts.MaxConcurrency < 1 {
 		return fmt.Errorf("%w: max concurrency must be at least 1", errUtils.ErrInvalidFlagValue)
 	}
@@ -148,7 +152,7 @@ func resolveLockTargets(toolVersions *ToolVersions, toolNames []string) ([]toolI
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to resolve tool '%s': %w", errUtils.ErrInvalidToolSpec, name, err)
 		}
-		targets = append(targets, toolInfo{version, owner, repo})
+		targets = append(targets, toolInfo{name: resolvedKey, version: version, owner: owner, repo: repo})
 	}
 	return targets, nil
 }

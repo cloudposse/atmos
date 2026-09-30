@@ -21,6 +21,16 @@ The toolchain feature enables you to manage CLI tool versions (Terraform, kubect
 - Automatic tool provisioning in workflows
 </KeyPoints>
 
+:::tip CI and security-sensitive environments
+
+Enable [`toolchain.frozen_lock_file: true`](#frozen-installs-in-ci) to require artifacts already
+recorded in the committed lockfile and reject missing tool or platform entries. Prepare and
+review lockfile updates before running CI. Existing checksum verification applies with ordinary
+lockfile use too; frozen mode additionally prevents installations from accepting and recording
+new artifacts automatically.
+
+:::
+
 ## Basic Configuration
 
 Configure toolchain behavior in your `atmos.yaml`:
@@ -49,14 +59,16 @@ toolchain:
     - Default: `.tool-versions`
     - Supports relative or absolute paths
     - Compatible with asdf format
+    - Override with `ATMOS_TOOLCHAIN_FILE_PATH`
   </dd>
 
   <dt>`install_path`</dt>
   <dd>
     Directory where toolchain binaries will be installed.
-    - Default: `.tools`
+    - Default: the XDG cache directory (`~/.cache/atmos/toolchain` on Linux/macOS)
     - Supports relative or absolute paths
-    - Tools are organized by name and version: `.tools/bin/{os}/{tool}/{version}/{tool}`
+    - Tools are organized by owner, repository, and version: `<install_path>/bin/<owner>/<repo>/<version>/`
+    - Override with `ATMOS_TOOLCHAIN_INSTALL_PATH`
   </dd>
 
   <dt>`versions_file`</dt>
@@ -69,6 +81,30 @@ toolchain:
     Alternative name for `install_path`. Use `install_path` for consistency.
   </dd>
 
+  <dt>`lock_file`</dt>
+  <dd>
+    Path to the existing `toolchain.lock.yaml` artifact lockfile. Defaults to
+    `<install_path>/toolchain.lock.yaml`, including the XDG installation default.
+    An explicitly configured relative path resolves against the project's `base_path`.
+    Set `lock_file: toolchain.lock.yaml` to keep a committed project lockfile alongside `atmos.yaml`
+    while sharing binaries in XDG storage.
+  </dd>
+
+  <dt>`use_lock_file`</dt>
+  <dd>
+    Verify downloaded artifacts against recorded checksums and record missing version/platform
+    entries after successful installation. Defaults to `true`. Existing matching entries remain
+    unchanged; a checksum mismatch fails before extraction.
+  </dd>
+
+  <dt>`frozen_lock_file`</dt>
+  <dd>
+    Require an existing URL and checksum for every requested tool version and current platform,
+    even when its binary is cached. Defaults to `false`. Implies lockfile verification even if
+    `use_lock_file` is `false`. Prohibits lockfile updates, including explicit lock refreshes.
+    Override with `ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE=true` for CI.
+  </dd>
+
   <dt>`max_concurrency`</dt>
   <dd>
     Maximum number of independent tool installs that may run at the same time.
@@ -78,11 +114,78 @@ toolchain:
   </dd>
 </dl>
 
+## Environment Variables
+
+These overrides apply during configuration loading, including automatic dependency installation
+and Atmos version switching:
+
+| Environment variable | Overrides |
+| --- | --- |
+| `ATMOS_TOOLCHAIN_FILE_PATH` | The version manifest path, including both `file_path` and `versions_file`. |
+| `ATMOS_TOOLCHAIN_INSTALL_PATH` | The binary installation directory, `install_path`. |
+
+Absolute paths are used as supplied. Relative paths resolve from the configured project base.
+Without a project, an explicit installation path is still honored; XDG storage remains the default.
+Automatic installs continue to leave the version manifest unchanged.
+
+For example, install the project's tools into a shared directory:
+
+```shell
+ATMOS_TOOLCHAIN_INSTALL_PATH=/shared/atmos-tools atmos toolchain install
+```
+
+The toolchain command's existing `--tool-versions` and `--toolchain-path` flags take precedence
+over these environment variables.
+
 ## Package Verification
 
 Atmos verifies downloaded toolchain packages before extraction when registry metadata includes checksums, signatures, or attestations. The default behavior is non-breaking: verification runs when metadata is available, and packages without verification metadata can still install.
 
 See [Toolchain Verification](/cli/configuration/toolchain/verification) for checksum policies, signature policies, verifier CLI resolution, and strict verification settings.
+
+## Automatic Installation and Lockfiles
+
+Automatic dependency installation, proxy execution, `toolchain exec`, and Atmos version
+switching install missing binaries without adding or changing declarations in `.tool-versions`.
+They use the same `toolchain.lock.yaml` as explicit installations: existing checksums are
+constraints, and missing version/platform entries are recorded after successful installation.
+No additional configuration file is needed.
+
+Checksums are also computed when upstream checksum metadata is unavailable. This records the
+artifact for subsequent integrity checks; it does not replace upstream signature verification.
+Use the [verification policies](/cli/configuration/toolchain/verification) to require upstream evidence.
+
+Project-driven Atmos version switching honors the active project's registry, installation,
+and lockfile settings, including profiles. Without project configuration, bootstrap uses XDG
+storage for binaries and metadata and does not create `.tool-versions` in the invoking directory.
+
+The `.tool-versions.lock` sidecar coordinates concurrent file access. It is not an artifact
+lockfile and should not be committed.
+
+### Frozen Installs in CI
+
+```yaml
+toolchain:
+  lock_file: toolchain.lock.yaml
+```
+
+Generate and commit the lockfile for the platforms used by your team, then enable frozen mode in CI:
+
+```shell
+atmos toolchain lock
+ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE=true atmos toolchain install
+```
+
+Frozen mode fails before download if the file or the requested version/platform entry is missing
+or incomplete. It never refreshes the lockfile. Disable frozen mode explicitly when refreshing:
+
+```shell
+ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE=false atmos toolchain lock
+```
+
+Use exact release versions with frozen mode. Mutable `latest` requests and Atmos PR/SHA/ref
+artifact bootstrap are unsupported in frozen mode. Frozen checks validate archive checksums
+on download and require lock entries on cache hits; they do not rehash extracted cached binaries.
 
 ## Tool Versions File
 
@@ -120,23 +223,20 @@ atmos toolchain install kubectl@1.28.0
 
 ## Directory Structure
 
-After installation, tools are organized as follows:
+Tools are grouped by owner, repository, and version under the configured installation path
+(the XDG toolchain cache by default):
 
-```
-.tools/
-├── bin/
-│   └── darwin/                    # OS-specific directory
-│       ├── terraform/
-│       │   └── 1.9.8/
-│       │       └── terraform      # Binary
-│       ├── kubectl/
-│       │   └── 1.28.0/
-│       │       └── kubectl
-│       └── helm/
-│           └── 3.13.0/
-│               └── helm
-└── cache/
-    └── downloads/                 # Downloaded archives
+```text
+<install_path>/
+└── bin/
+    ├── hashicorp/
+    │   └── terraform/
+    │       └── 1.9.8/
+    │           └── terraform
+    └── helm/
+        └── helm/
+            └── 3.13.0/
+                └── helm
 ```
 
 ## Advanced Configuration

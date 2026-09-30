@@ -269,7 +269,6 @@ func (f *scopedFakeProcessor) ExecuteDescribeStacksScoped(
 	includeEmptyStacks bool,
 	skip []string,
 	authManager auth.AuthManager,
-	authDisabled bool,
 	tagsFilter []string,
 	labelsFilter map[string]string,
 ) (map[string]any, error) {

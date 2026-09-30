@@ -110,56 +110,75 @@ func runBubbleTeaSpinner(message string) *tea.Program {
 // Special format: pr:NNNN - installs Atmos from a PR's build artifact.
 // Example: atmos version install pr:2038.
 func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProgressBar bool) error {
+	return runInstall(toolSpec, installRequest{
+		setAsDefault: setAsDefault, reinstall: reinstallFlag, showHint: showHint,
+		showProgressBar: showProgressBar, updateVersions: true,
+	})
+}
+
+// RunAutomaticInstall installs a dependency without changing declared tool versions.
+// Verified artifacts still participate in the configured lockfile policy.
+func RunAutomaticInstall(toolSpec string) error {
+	defer perf.Track(nil, "toolchain.RunAutomaticInstall")()
+
+	return runInstall(toolSpec, installRequest{showProgressBar: true})
+}
+
+type installRequest struct {
+	setAsDefault, reinstall, showHint, showProgressBar, updateVersions bool
+}
+
+// runInstall resolves a requested version and applies the caller's declaration policy.
+func runInstall(toolSpec string, opts installRequest) error {
 	defer perf.Track(nil, "toolchain.Install")()
 
 	if toolSpec == "" {
-		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag, showHint)
+		return installFromToolVersions(GetToolVersionsFilePath(), opts.reinstall, opts.showHint)
 	}
-
-	// Check if this is a PR version specifier (e.g., "pr:2038").
-	if prNumber, isPR := IsPRVersion(toolSpec); isPR {
-		_, err := InstallFromPR(prNumber, showProgressBar)
+	if err := validateFrozenToolSpec(toolSpec); err != nil {
 		return err
 	}
-
-	// Check if this is a SHA version specifier (e.g., "sha:ceb7526").
-	if sha, isSHA := IsSHAVersion(toolSpec); isSHA {
-		_, err := InstallFromSHA(sha, showProgressBar)
-		return err
-	}
-
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
 		return err
 	}
-
-	// Also check if the version is a PR specifier (e.g., "atmos@pr:2038").
-	if prNumber, isPR := IsPRVersion(version); isPR {
-		_, err := InstallFromPR(prNumber, showProgressBar)
+	if handled, err := installDevelopmentVersion(toolSpec, version, opts.showProgressBar); handled {
 		return err
 	}
-
-	// Also check if the version is a SHA specifier (e.g., "atmos@sha:ceb7526").
-	if sha, isSHA := IsSHAVersion(version); isSHA {
-		_, err := InstallFromSHA(sha, showProgressBar)
-		return err
-	}
-
 	// Resolve version if not specified.
 	if version == "" {
 		lookupResult, err := resolveVersionFromToolVersions(tool, toolSpec)
 		if err != nil {
 			return err
 		}
-		tool = lookupResult.tool
-		version = lookupResult.version
+		tool, version = lookupResult.tool, lookupResult.version
 	}
-
 	// Validate tool and version.
 	if err := validateToolAndVersion(tool, version, toolSpec); err != nil {
 		return err
 	}
+	return installRelease(tool, version, opts)
+}
 
+// installDevelopmentVersion handles both bare specs (pr:2038, sha:ceb7526)
+// and named specs (atmos@pr:2038, atmos@sha:ceb7526).
+func installDevelopmentVersion(toolSpec, version string, showProgress bool) (bool, error) {
+	if version != "" {
+		toolSpec = version
+	}
+	if prNumber, isPR := IsPRVersion(toolSpec); isPR {
+		_, err := InstallFromPR(prNumber, showProgress)
+		return true, err
+	}
+	if sha, isSHA := IsSHAVersion(toolSpec); isSHA {
+		_, err := InstallFromSHA(sha, showProgress)
+		return true, err
+	}
+	return false, nil
+}
+
+// installRelease installs a release and records declarations for explicit management requests.
+func installRelease(tool, version string, opts installRequest) error {
 	// Parse tool specification to get owner/repo.
 	installer := NewInstaller()
 	owner, repo, err := installer.ParseToolSpec(tool)
@@ -181,19 +200,42 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProg
 	// Skip .tool-versions update here; updateToolVersionsFile handles it below with the original tool name.
 	err = InstallSingleTool(owner, repo, version, InstallOptions{
 		IsLatest:               version == "latest",
-		ShowProgressBar:        showProgressBar,
-		ShowInstallDetails:     showProgressBar, // Single-tool mode shows verbose output.
-		ShowHint:               showHint,
+		ShowProgressBar:        opts.showProgressBar,
+		ShowInstallDetails:     opts.showProgressBar, // Single-tool mode shows verbose output.
+		ShowHint:               opts.showHint,
 		SkipToolVersionsUpdate: true,
 	})
 	if err != nil {
 		return err
 	}
 
-	// Update .tool-versions file.
-	return updateToolVersionsFile(tool, version, setAsDefault)
+	if !opts.updateVersions || (GetAtmosConfig() != nil && GetAtmosConfig().Toolchain.FrozenLockFile) {
+		return nil
+	}
+
+	// Update .tool-versions file only for explicit management commands.
+	return updateToolVersionsFile(tool, version, opts.setAsDefault)
 }
 
+// validateFrozenToolSpec rejects development artifacts that have no reproducible lock entry.
+func validateFrozenToolSpec(toolSpec string) error {
+	if config := GetAtmosConfig(); config != nil && config.Toolchain.FrozenLockFile {
+		_, version, err := ParseToolVersionArg(toolSpec)
+		if err != nil {
+			return err
+		}
+		if version == "" {
+			version = toolSpec
+		}
+		if kind, _, err := ParseVersionSpec(version); err == nil && kind != VersionTypeSemver {
+			return fmt.Errorf("%w: development artifacts do not have toolchain lock entries", errUtils.ErrFrozenLockfile)
+		}
+	}
+
+	return nil
+}
+
+// InstallSingleTool installs one resolved tool with the requested output and declaration options.
 func InstallSingleTool(owner, repo, version string, opts InstallOptions) error {
 	defer perf.Track(nil, "toolchain.InstallSingleTool")()
 
@@ -203,6 +245,10 @@ func InstallSingleTool(owner, repo, version string, opts InstallOptions) error {
 // installSingleToolWithInstaller preserves the complete single-install lifecycle
 // while allowing concurrent batches to retain their worker-specific callbacks.
 func installSingleToolWithInstaller(installer *Installer, owner, repo, version string, opts InstallOptions) error {
+	if config := GetAtmosConfig(); config != nil && config.Toolchain.FrozenLockFile && version == "latest" {
+		return fmt.Errorf("%w: latest is not an exact version", errUtils.ErrFrozenLockfile)
+	}
+
 	// Start spinner immediately before any potentially slow operations.
 	spinner := &spinnerControl{showingSpinner: opts.ShowProgressBar}
 	message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
@@ -243,6 +289,7 @@ func installSingleToolWithInstaller(installer *Installer, owner, repo, version s
 	return nil
 }
 
+// installFromToolVersions installs declared tools without rewriting the source manifest.
 func installFromToolVersions(toolVersionsPath string, reinstallFlag, showHint bool) error {
 	installer := NewInstaller()
 
@@ -256,7 +303,10 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag, showHint bo
 		ui.Writef("No tools found in %s\n", toolVersionsPath)
 		return nil
 	}
-	return installToolList(toolList, reinstallFlag, showHint, DefaultInstallMaxConcurrency)
+	return installToolList(toolList, BatchInstallOptions{
+		Reinstall: reinstallFlag, ShowHint: showHint, MaxConcurrency: DefaultInstallMaxConcurrency,
+		SkipToolVersionsUpdate: true,
+	})
 }
 
 // RunInstallFromToolVersions installs every configured tool with bounded
@@ -276,16 +326,19 @@ func RunInstallFromToolVersions(reinstallFlag, showHint bool, maxConcurrency int
 		ui.Writef("No tools found in %s\n", toolVersionsPath)
 		return nil
 	}
-	return installToolList(toolList, reinstallFlag, showHint, maxConcurrency)
+	return installToolList(toolList, BatchInstallOptions{
+		Reinstall: reinstallFlag, ShowHint: showHint, MaxConcurrency: maxConcurrency,
+		SkipToolVersionsUpdate: true,
+	})
 }
 
 // installToolList installs or skips requested tools, respecting concurrency limits and reporting results.
-func installToolList(toolList []toolInfo, reinstallFlag, showHint bool, maxConcurrency int) error {
-	if maxConcurrency < 1 {
+func installToolList(toolList []toolInfo, opts BatchInstallOptions) error {
+	if opts.MaxConcurrency < 1 {
 		return fmt.Errorf("%w: max concurrency must be at least 1", errUtils.ErrInvalidFlagValue)
 	}
-	if maxConcurrency > 1 && len(toolList) > 1 {
-		return installToolListConcurrently(toolList, reinstallFlag, showHint, maxConcurrency)
+	if opts.MaxConcurrency > 1 && len(toolList) > 1 {
+		return installToolListConcurrently(toolList, opts)
 	}
 
 	spinner := ui.NewSpinner()
@@ -298,7 +351,7 @@ func installToolList(toolList []toolInfo, reinstallFlag, showHint bool, maxConcu
 
 	installer := NewInstaller()
 	for i, tool := range toolList {
-		result, err := installOrSkipTool(installer, tool, reinstallFlag, showHint)
+		result, err := installOrSkipToolWithProgress(installer, tool, opts, true)
 		switch result {
 		case resultInstalled:
 			installedCount++
@@ -310,13 +363,14 @@ func installToolList(toolList []toolInfo, reinstallFlag, showHint bool, maxConcu
 		showProgress(&spinner, &progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
 	}
 
-	printSummary(installedCount, failedCount, alreadyInstalledCount, len(toolList), showHint)
+	printSummary(installedCount, failedCount, alreadyInstalledCount, len(toolList), opts.ShowHint)
 	if failedCount > 0 {
 		return fmt.Errorf("%w: %d tool installation(s) failed", errUtils.ErrToolInstall, failedCount)
 	}
 	return nil
 }
 
+// buildToolList expands each manifest declaration into its installable versions.
 func buildToolList(installer *Installer, toolVersions *ToolVersions) []toolInfo {
 	var toolList []toolInfo
 	for toolName, versions := range toolVersions.Tools {
@@ -325,17 +379,21 @@ func buildToolList(installer *Installer, toolVersions *ToolVersions) []toolInfo 
 			continue
 		}
 		for _, version := range versions {
-			toolList = append(toolList, toolInfo{version, owner, repo})
+			toolList = append(toolList, toolInfo{name: toolName, version: version, owner: owner, repo: repo})
 		}
 	}
 	return toolList
 }
 
+// installOrSkipTool installs or reuses a declared tool without changing its manifest.
 func installOrSkipTool(installer *Installer, tool toolInfo, reinstallFlag, showHint bool) (string, error) {
-	return installOrSkipToolWithProgress(installer, tool, reinstallFlag, showHint, true)
+	return installOrSkipToolWithProgress(installer, tool, BatchInstallOptions{
+		Reinstall: reinstallFlag, ShowHint: showHint, SkipToolVersionsUpdate: true,
+	}, true)
 }
 
-func installOrSkipToolWithProgress(installer *Installer, tool toolInfo, reinstallFlag, showHint, showProgress bool) (string, error) {
+// installOrSkipToolWithProgress applies installation and declaration policy to fresh or cached tools.
+func installOrSkipToolWithProgress(installer *Installer, tool toolInfo, opts BatchInstallOptions, showProgress bool) (string, error) {
 	// Reject unsupported version formats (e.g. a hand-edited range/constraint in
 	// .tool-versions) before any lookup or network call, with a clear per-tool error
 	// instead of a raw HTTP 404 from treating the value as a literal release tag.
@@ -344,22 +402,44 @@ func installOrSkipToolWithProgress(installer *Installer, tool toolInfo, reinstal
 	}
 
 	_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
-	if err == nil && !reinstallFlag {
+	if err == nil && !opts.Reinstall {
+		if err := recordBatchToolVersion(tool, opts); err != nil {
+			return resultFailed, err
+		}
 		return resultSkipped, nil
 	}
 	err = installSingleToolWithInstaller(installer, tool.owner, tool.repo, tool.version, InstallOptions{
-		IsLatest:           tool.version == "latest",
-		ShowProgressBar:    showProgress,
-		ShowInstallDetails: false, // Batch mode - showProgress handles the simple message.
-		ShowHint:           showHint,
+		IsLatest:               tool.version == "latest",
+		ShowProgressBar:        showProgress,
+		ShowInstallDetails:     false, // Batch mode - showProgress handles the simple message.
+		SkipToolVersionsUpdate: true,  // The batch caller records declarations after successful installs.
+		ShowHint:               opts.ShowHint,
 	})
 	if err != nil {
+		return resultFailed, err
+	}
+	if err := recordBatchToolVersion(tool, opts); err != nil {
 		return resultFailed, err
 	}
 	return resultInstalled, nil
 }
 
+// recordBatchToolVersion declares explicit installs, including cache hits, while
+// automatic, manifest-driven, and frozen installs preserve project declarations.
+func recordBatchToolVersion(tool toolInfo, opts BatchInstallOptions) error {
+	config := GetAtmosConfig()
+	if opts.SkipToolVersionsUpdate || (config != nil && config.Toolchain.FrozenLockFile) {
+		return nil
+	}
+	name := tool.name
+	if name == "" {
+		name = tool.owner + "/" + tool.repo
+	}
+	return updateToolVersionsFile(name, tool.version, false)
+}
+
 type toolInfo struct {
+	name                 string // Original declaration name, which may be an alias.
 	version, owner, repo string
 }
 
@@ -466,9 +546,20 @@ func RunInstallBatch(toolSpecs []string, reinstallFlag bool) error {
 // BatchInstallOptions controls batch installation without changing the
 // long-standing RunInstallBatch API used by dependencies and integrations.
 type BatchInstallOptions struct {
-	Reinstall      bool
-	ShowHint       bool
-	MaxConcurrency int
+	SkipToolVersionsUpdate bool
+	Reinstall              bool
+	ShowHint               bool
+	MaxConcurrency         int
+}
+
+// RunAutomaticInstallBatch installs execution dependencies without editing declarations.
+func RunAutomaticInstallBatch(toolSpecs []string, reinstall bool) error {
+	defer perf.Track(nil, "toolchain.RunAutomaticInstallBatch")()
+
+	return RunInstallBatchWithOptions(toolSpecs, BatchInstallOptions{
+		Reinstall:              reinstall,
+		SkipToolVersionsUpdate: true,
+	})
 }
 
 // RunInstallBatchWithOptions installs an explicit tool list with the supplied
@@ -486,7 +577,10 @@ func RunInstallBatchWithOptions(toolSpecs []string, opts BatchInstallOptions) er
 		return fmt.Errorf("%w: max concurrency must be at least 1", errUtils.ErrInvalidFlagValue)
 	}
 	if len(toolSpecs) == 1 {
-		return RunInstall(toolSpecs[0], false, opts.Reinstall, opts.ShowHint, true)
+		return runInstall(toolSpecs[0], installRequest{
+			reinstall: opts.Reinstall, showHint: opts.ShowHint, showProgressBar: true,
+			updateVersions: !opts.SkipToolVersionsUpdate,
+		})
 	}
 	return installMultipleToolsWithOptions(toolSpecs, opts)
 }
@@ -499,6 +593,7 @@ func installMultipleTools(toolSpecs []string, reinstallFlag bool) error {
 	})
 }
 
+// installMultipleToolsWithOptions resolves explicit specifications before scheduling installs.
 func installMultipleToolsWithOptions(toolSpecs []string, opts BatchInstallOptions) error {
 	defer perf.Track(nil, "toolchain.installMultipleTools")()
 
@@ -520,6 +615,7 @@ func installMultipleToolsWithOptions(toolSpecs []string, opts BatchInstallOption
 		}
 
 		toolList = append(toolList, toolInfo{
+			name:    tool,
 			version: version,
 			owner:   owner,
 			repo:    repo,
@@ -530,7 +626,7 @@ func installMultipleToolsWithOptions(toolSpecs []string, opts BatchInstallOption
 		return nil
 	}
 
-	return installToolList(toolList, opts.Reinstall, opts.ShowHint, opts.MaxConcurrency)
+	return installToolList(toolList, opts)
 }
 
 type batchEvent struct {
@@ -634,12 +730,13 @@ func rightAlignInstallProgress(left string, downloaded, total int64, terminalWid
 	return batch.AlignProgress(left, downloaded, total, terminalWidth)
 }
 
-func installToolListConcurrently(toolList []toolInfo, reinstallFlag, showHint bool, maxConcurrency int) error {
-	events := startBatchInstallWorkers(toolList, reinstallFlag, maxConcurrency)
+// installToolListConcurrently collects worker results while one renderer owns terminal output.
+func installToolListConcurrently(toolList []toolInfo, opts BatchInstallOptions) error {
+	events := startBatchInstallWorkers(toolList, opts)
 	display := newBatchDisplay(len(toolList))
 	counts := collectBatchInstallEvents(events, display, len(toolList))
 	display.clear()
-	return counts.finish(len(toolList), showHint)
+	return counts.finish(len(toolList), opts.ShowHint)
 }
 
 func collectBatchInstallEvents(events <-chan batchEvent, display *batchDisplay, total int) batchInstallCounts {
@@ -663,13 +760,14 @@ func collectBatchInstallEvents(events <-chan batchEvent, display *batchDisplay, 
 	return counts
 }
 
-func startBatchInstallWorkers(toolList []toolInfo, reinstallFlag bool, maxConcurrency int) <-chan batchEvent {
+// startBatchInstallWorkers carries the batch policy to a bounded pool of independent installers.
+func startBatchInstallWorkers(toolList []toolInfo, opts BatchInstallOptions) <-chan batchEvent {
 	jobs := make(chan toolInfo)
 	events := make(chan batchEvent, len(toolList)*2)
 	var workers sync.WaitGroup
-	for range min(maxConcurrency, len(toolList)) {
+	for range min(opts.MaxConcurrency, len(toolList)) {
 		workers.Add(1)
-		go runBatchInstallWorker(jobs, events, reinstallFlag, &workers)
+		go runBatchInstallWorker(jobs, events, opts, &workers)
 	}
 	go func() {
 		for _, tool := range toolList {
@@ -682,7 +780,8 @@ func startBatchInstallWorkers(toolList []toolInfo, reinstallFlag bool, maxConcur
 	return events
 }
 
-func runBatchInstallWorker(jobs <-chan toolInfo, events chan<- batchEvent, reinstallFlag bool, workers *sync.WaitGroup) {
+// runBatchInstallWorker reports progress and records declarations according to the batch policy.
+func runBatchInstallWorker(jobs <-chan toolInfo, events chan<- batchEvent, opts BatchInstallOptions, workers *sync.WaitGroup) {
 	defer workers.Done()
 	for tool := range jobs {
 		events <- batchEvent{tool: tool, started: true}
@@ -692,7 +791,9 @@ func runBatchInstallWorker(jobs <-chan toolInfo, events chan<- batchEvent, reins
 			default:
 			}
 		}))
-		result, err := installOrSkipToolWithProgress(installer, tool, reinstallFlag, false, false)
+		// The renderer owns batch output, including the final PATH hint.
+		opts.ShowHint = false
+		result, err := installOrSkipToolWithProgress(installer, tool, opts, false)
 		events <- batchEvent{tool: tool, result: result, err: err}
 	}
 }

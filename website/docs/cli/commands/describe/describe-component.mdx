@@ -72,7 +72,9 @@ atmos describe component station/2 --stack dev  # ✓ Explicit and unambiguous
 :::
 
 :::info YAML Functions and Authentication
-By default, `atmos describe component` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during component processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
+Default identity authentication occurs when an evaluated YAML function or Go template needs credentials. In `--error-mode=warn`, unavailable implicit authentication, including a stopped emulator, produces `(computed)` for affected values while preserving resolvable siblings. `silent` omits the summary and `strict` fails. Queries with dynamic dependencies may require evaluation of the entire component.
+
+Explicit `--identity` or `ATMOS_IDENTITY` selection authenticates before processing and remains fail-fast. `--identity=false` disables Atmos authentication. Malformed configuration, invalid expressions, and dependency cycles remain fatal. You can disable function/template processing with `--process-functions=false` or `--process-templates=false`.
 :::
 
 :::tip

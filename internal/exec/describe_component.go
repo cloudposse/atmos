@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -96,6 +97,8 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	if err != nil {
 		return err
 	}
+	atmosConfig.AuthManager = describeComponentParams.AuthManager
+	errOptions.EvaluationPaths = deferred.PathsForQuery(query)
 
 	// The --provenance flag overrides the `describe.provenance` config default
 	// (on by default; journaled in pkg/edition, so an edition pin can disable it).
@@ -500,6 +503,7 @@ func detectComponentType(
 		authManager:          params.AuthManager,
 		onWarning:            params.ErrorOptions.OnWarning,
 	}
+	baseParams.configAndStacksInfo.EvaluationPaths = params.ErrorOptions.EvaluationPaths
 
 	// If a specific component type is provided, use it directly.
 	if params.ComponentType != "" {
@@ -649,10 +653,16 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 
 	// Fields to keep (the sections a stack manifest can define).
 	//
-	// NOTE: this allowlist is already missing several other real sections a stack
-	// manifest can define (e.g. retry, generate, auth, secrets, command, backend_type,
-	// workspace) — a broader, pre-existing gap out of scope for the "flags" addition
-	// below. See docs/fixes/ for the field-test finding that added "flags" here.
+	// NOTE: this is an intentional allowlist, not an exhaustive one. It still omits
+	// several real stack-definable sections (e.g. retry, generate, auth, secrets,
+	// command, backend_type, workspace). Whether to surface those, and whether this
+	// filter should be driven by the manifest schema instead of a hand-maintained
+	// list, is a broader design question tracked separately (see #3223).
+	//
+	// Incremental additions to date: "flags" (field-test finding, PR #2992) and the
+	// native Helm sections chart/values/values_files (#3218). For a Helm component
+	// those Helm sections are the primary configuration and were the visible gap.
+	// See docs/fixes/2026-09-28-describe-component-helm-values-chart.md.
 	fieldsToKeep := map[string]bool{
 		"vars":         true,
 		"settings":     true,
@@ -666,6 +676,9 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 		"component":    true,
 		"hooks":        true,
 		"flags":        true,
+		"chart":        true, // Native Helm chart reference (#3218).
+		"values":       true, // Native Helm chart values (#3218).
+		"values_files": true, // Native Helm values files (#3218).
 	}
 
 	filtered := make(map[string]any)

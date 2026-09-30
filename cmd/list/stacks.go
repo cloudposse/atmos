@@ -279,7 +279,7 @@ func executeAndExtractStacks(
 	errOpts e.DescribeStacksErrorOptions,
 ) ([]map[string]any, map[string]any, error) {
 	defer perf.Track(nil, "list.stacks.executeAndExtractStacks")()
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
+	skip := opts.Skip
 
 	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
 	if err != nil {
@@ -291,6 +291,10 @@ func executeAndExtractStacks(
 	// closure touches are ever evaluated, matching the terraform bulk paths.
 	closureRequested := opts.IncludeDependencies != 0 || opts.IncludeDependents != 0
 	if closureRequested {
+		atmosConfig.ListEvaluationPaths = stacksEvaluationPaths(atmosConfig, opts)
+		if atmosConfig.ListEvaluationPaths != nil {
+			atmosConfig.ListEvaluationPaths = append(atmosConfig.ListEvaluationPaths, []string{"metadata"}, []string{"dependencies"}, []string{"settings", "depends_on"})
+		}
 		return extractStacksViaScopedClosure(atmosConfig, opts, labels, &scopedDescribeDeps{authManager: authManager, skip: skip, errOpts: errOpts})
 	}
 
@@ -304,15 +308,24 @@ func executeAndExtractStacks(
 	// runs, and no "(computed)" degradation warning fires for a value no column would display —
 	// see https://github.com/cloudposse/atmos/issues/3068.
 	evalSections := resolveStacksEvalSections(atmosConfig, opts)
+	errOpts.EvaluationPaths = stacksEvaluationPaths(atmosConfig, opts)
+	if len(opts.Tags) > 0 || len(labels) > 0 {
+		if errOpts.EvaluationPaths != nil {
+			errOpts.EvaluationPaths = append(errOpts.EvaluationPaths, []string{"metadata"})
+		}
+	}
+	var components []string
+	if opts.Component != "" {
+		components = []string{opts.Component}
+	}
 	stacksMap, err := e.ExecuteDescribeStacksWithEvalSections(
-		atmosConfig, "", nil, nil, nil,
+		atmosConfig, "", components, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
 		skip,
 		authManager,
-		authManager == nil,
 		opts.Tags,
 		labels,
 		errOpts,
@@ -358,7 +371,6 @@ func newScopedDescribeFunc(atmosConfig *schema.AtmosConfiguration, describeDeps 
 			false, // includeEmptyStacks
 			describeDeps.skip,
 			describeDeps.authManager,
-			describeDeps.authManager == nil,
 			nil, // tagsFilter: closure scoping owns selection.
 			nil, // labelsFilter: closure scoping owns selection.
 			describeDeps.errOpts,
@@ -518,6 +530,13 @@ func resolveStacksEvalSections(atmosConfig *schema.AtmosConfiguration, opts *Sta
 	return sections
 }
 
+func stacksEvaluationPaths(ac *schema.AtmosConfiguration, opts *StacksOptions) [][]string {
+	if opts.Format == string(format.FormatTree) {
+		return make([][]string, 0)
+	}
+	return column.RequiredPaths(getStackColumns(ac, opts.Columns, opts.Component != ""))
+}
+
 // getStackColumns returns column configuration.
 func getStackColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string, hasComponent bool) []column.Config {
 	defer perf.Track(nil, "list.stacks.getStackColumns")()
@@ -577,8 +596,9 @@ func renderStacksTreeFormat(
 	// Re-process stacks with provenance tracking enabled. Honor the
 	// caller-supplied template/function flags so tree output is consistent with
 	// non-tree runs of the same command invocation.
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
-	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
+	skip := opts.Skip
+	errOpts.EvaluationPaths = make([][]string, 0)
+	stacksMap, err := e.ExecuteDescribeStacksWithEvalSections(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -586,8 +606,9 @@ func renderStacksTreeFormat(
 		false, // includeEmptyStacks
 		skip,
 		authManager,
-		authManager == nil,
+		nil, nil,
 		errOpts,
+		resolveStacksEvalSections(atmosConfig, opts),
 	)
 	if err != nil {
 		return fmt.Errorf("error re-processing stacks with provenance: %w", err)

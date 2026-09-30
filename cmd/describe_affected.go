@@ -8,6 +8,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -134,7 +136,7 @@ func getRunnableDescribeAffectedCmd(
 		// tried to disable. See plan: --identity=false not honored in `atmos describe affected`.
 		props.AuthDisabled = identityName == cfg.IdentityFlagDisabledValue
 
-		if props.ProcessYamlFunctions || identityExplicit {
+		if !authdeferred.ConfigureAuth(props.CLIConfig, identityName) && (props.ProcessYamlFunctions || props.ProcessTemplates || identityExplicit || identityName != "") {
 			// Category B: describe affected operates on multiple affected components across stacks
 			// with no single target (component, stack) pair. Use the SCAN wrapper to discover
 			// stack-level defaults (including imported _defaults.yaml). See
@@ -145,6 +147,10 @@ func getRunnableDescribeAffectedCmd(
 			}
 			props.AuthManager = authManager
 		}
+		if props.AuthManager == nil {
+			props.AuthManager, _ = props.CLIConfig.AuthManager.(auth.AuthManager)
+		}
+		props.CLIConfig.AuthManager = props.AuthManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 

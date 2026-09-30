@@ -19,7 +19,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -983,6 +985,7 @@ func processStacks(
 	// having none available when processTemplates is false but processYamlFunctions is true.
 	var settingsSectionStruct schema.Settings
 	var componentTemplateContext map[string]any
+	configAndStacksInfo.EvaluationPaths = deferred.ExpandEvaluationPaths(configAndStacksInfo.ComponentSection, configAndStacksInfo.EvaluationPaths, atmosConfig.Templates.Settings.Delimiters...)
 
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
@@ -990,6 +993,7 @@ func processStacks(
 		// configuration and must not be rendered as `Go` templates. They stay in the template
 		// context below, only the rendered input excludes them. See #2145.
 		templateInput, nonTemplatedSections := splitNonTemplatedSections(configAndStacksInfo.ComponentSection)
+		templateInput, unrequestedFields := deferred.SplitEvaluationFields(templateInput, configAndStacksInfo.EvaluationPaths)
 
 		// Use delimiter-safe YAML encoding when custom delimiters are configured.
 		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
@@ -1035,12 +1039,15 @@ func processStacks(
 			componentTemplateContext,
 			true,
 		)
-		if err != nil {
-			// If any error returned from the template processing, log it and exit.
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+		var componentSectionConverted schema.AtmosSectionMapType
+		if err != nil && authdeferred.IsDeferred(atmosConfig.AuthManager) && onWarning != nil && canDegradeValue(atmosConfig, err) {
+			componentSectionConverted, err = renderDeferredTemplateValues(templateInput, &deferredTemplateOptions{
+				config: atmosConfig, info: &configAndStacksInfo, settings: &settingsSectionStruct,
+				templateContext: componentTemplateContext, onWarning: onWarning,
+			})
+		} else if err == nil {
+			componentSectionConverted, err = u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
 		}
-
-		componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
 		if err != nil {
 			if !atmosConfig.Templates.Settings.Enabled {
 				if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
@@ -1049,10 +1056,11 @@ func processStacks(
 					err = errors.Join(err, errors.New(errorMessage))
 				}
 			}
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return configAndStacksInfo, err
 		}
 
 		restoreNonTemplatedSections(componentSectionConverted, nonTemplatedSections)
+		deferred.RestoreEvaluationFields(componentSectionConverted, unrequestedFields)
 
 		configAndStacksInfo.ComponentSection = componentSectionConverted
 	}
@@ -1060,14 +1068,16 @@ func processStacks(
 	// Process YAML functions in Atmos manifest sections.
 	if processYamlFunctions {
 		var componentSectionConverted schema.AtmosSectionMapType
+		input, unrequestedFields := deferred.SplitEvaluationFields(configAndStacksInfo.ComponentSection, configAndStacksInfo.EvaluationPaths)
 		if onWarning != nil {
-			componentSectionConverted, err = ProcessCustomYamlTagsLenient(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip, &configAndStacksInfo, onWarning)
+			componentSectionConverted, err = ProcessCustomYamlTagsLenient(atmosConfig, input, configAndStacksInfo.Stack, skip, &configAndStacksInfo, onWarning)
 		} else {
-			componentSectionConverted, err = ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip, &configAndStacksInfo)
+			componentSectionConverted, err = ProcessCustomYamlTags(atmosConfig, input, configAndStacksInfo.Stack, skip, &configAndStacksInfo)
 		}
 		if err != nil {
 			return configAndStacksInfo, err
 		}
+		deferred.RestoreEvaluationFields(componentSectionConverted, unrequestedFields)
 
 		configAndStacksInfo.ComponentSection = componentSectionConverted
 	}
@@ -1083,8 +1093,8 @@ func processStacks(
 	if processYamlFunctions {
 		// evalSections is nil (full eager evaluation): processStacks backs terraform/helmfile/
 		// describe-component and every other non-list caller, none of which opt into the
-		// evaluation-scope filter -- see isSectionRequired.
-		if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, skip, nil); err != nil {
+		// evaluation-scope filter -- see deferred.IsSectionRequired.
+		if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, skip, nil, onWarning); err != nil {
 			return configAndStacksInfo, err
 		}
 	}

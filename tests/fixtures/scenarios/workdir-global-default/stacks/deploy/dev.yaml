@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+
+# Global default: enable workdir provisioning for every Terraform component in this stack unless
+# a component overrides it. This lives under the toolchain section, alongside global `vars`,
+# `metadata`, and `secrets` - it is NOT set in atmos.yaml `settings.provision`. See #3197.
+terraform:
+  provision:
+    workdir:
+      enabled: true
+
+components:
+  terraform:
+    # Inherits the stack-level terraform.provision.workdir.enabled: true
+    # (no component-level provision block).
+    vpc-global:
+      metadata:
+        component: vpc
+      vars:
+        vpc_name: "global-default-vpc"
+
+    # Explicitly opts OUT, overriding the stack-level global default.
+    vpc-opt-out:
+      metadata:
+        component: vpc
+      provision:
+        workdir:
+          enabled: false
+      vars:
+        vpc_name: "opt-out-vpc"

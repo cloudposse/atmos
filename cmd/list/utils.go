@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -14,6 +13,7 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -226,9 +226,8 @@ func (defaultAuthManagerFactory) CreateWithStackScan(
 // without performing real authentication.
 var listAuthManagerFactory AuthManagerFactory = defaultAuthManagerFactory{}
 
-// createAuthManagerForList creates an AuthManager when the command will evaluate values
-// that can require credentials, or when the caller explicitly selected an identity. Plain
-// inventory runs with both template and YAML-function processing disabled remain credential-free.
+// createAuthManagerForList authenticates only an explicitly selected identity.
+// Default identity authentication is deferred until a requested value needs credentials.
 // An explicit --identity=false always disables authentication.
 func createAuthManagerForList(
 	cmd *cobra.Command,
@@ -236,11 +235,8 @@ func createAuthManagerForList(
 	processTemplates, processYamlFunctions bool,
 ) (auth.AuthManager, error) {
 	identityName := getIdentityFromCommand(cmd)
-	if identityName == cfg.IdentityFlagDisabledValue {
-		return nil, nil
-	}
-	if identityName == "" && !processTemplates && !processYamlFunctions {
-		return nil, nil
+	if authdeferred.ConfigureAuth(atmosConfig, identityName) {
+		return atmosConfig.AuthManager.(auth.AuthManager), nil
 	}
 
 	authManager, err := listAuthManagerFactory.CreateWithStackScan(
@@ -253,42 +249,8 @@ func createAuthManagerForList(
 		return nil, err
 	}
 
+	atmosConfig.AuthManager = authManager
 	return authManager, nil
-}
-
-func skipCredentialBackedYAMLFunctionsForInventory(skip []string, authManager auth.AuthManager) []string {
-	if authManager != nil {
-		return skip
-	}
-
-	merged := append([]string{}, skip...)
-	for _, functionName := range []string{
-		u.AtmosYamlFuncTerraformState,
-		u.AtmosYamlFuncTerraformOutput,
-		u.AtmosYamlFuncStore,
-		u.AtmosYamlFuncStoreGet,
-		u.AtmosYamlFuncSecret,
-		u.AtmosYamlFuncAwsAccountID,
-		u.AtmosYamlFuncAwsCallerIdentityArn,
-		u.AtmosYamlFuncAwsCallerIdentityUserID,
-		u.AtmosYamlFuncAwsRegion,
-		u.AtmosYamlFuncAwsOrganizationID,
-	} {
-		name := strings.TrimPrefix(functionName, "!")
-		if !containsString(merged, name) {
-			merged = append(merged, name)
-		}
-	}
-	return merged
-}
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
 }
 
 // setDefaultCSVDelimiter sets the delimiter to comma if CSV format is used and delimiter is default TSV.

@@ -8,13 +8,10 @@ package exec
 //   - selectStreamingExecutor/dispatchStreamingExecutor: the subCommand ->
 //     tfui.Execute* routing table.
 //
-// The actual "streaming succeeded" branch inside executeStreamingOrShell (where
-// tfui.ShouldUseStreamingUI returns true and dispatchStreamingExecutor is invoked
-// against a live TUI session) cannot be exercised here: ShouldUseStreamingUI's own
-// TTY/CI gating means it only ever returns true against a real interactive terminal,
-// and pkg/terraform/ui's Execute* functions have no DI seam to substitute a fake
-// implementation. That branch is intentionally left uncovered by this package's
-// tests (see the coverage report for this file).
+// The streaming path is exercised in dry-run mode using the existing force-TTY
+// setting, without launching an interactive TUI or Terraform process. The options
+// builder tests separately verify the execution and formatting settings handed off
+// to the streaming executors.
 //
 // The switch cases inside dispatchStreamingExecutor ARE covered two ways:
 //   - TestSelectStreamingExecutor_RoutesBySubcommand asserts the *identity* of
@@ -37,17 +34,106 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfui "github.com/cloudposse/atmos/pkg/terraform/ui"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
+
+// TestBuildStreamingExecuteOptions_ForwardsExecutionAndCapture verifies command metadata
+// and captured output survive the boundary between shell execution and the streaming UI.
+func TestBuildStreamingExecuteOptions_ForwardsExecutionAndCapture(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	info := &schema.ConfigAndStacksInfo{
+		Command: "tofu", ComponentEnvList: []string{"TF_IN_AUTOMATION=true"},
+		FinalComponent: "kms", Stack: "dev", DryRun: true,
+	}
+	req := &streamingExecRequest{
+		args: []string{"plan", "-input=false"}, componentPath: t.TempDir(),
+		subCommand: "plan", workspace: "dev-kms",
+		shellOpts: []ShellCommandOption{WithStdoutCapture(&stdout), WithStderrCapture(&stderr)},
+	}
+	opts := buildStreamingExecuteOptions(&schema.AtmosConfiguration{}, info, req)
+	assert.Equal(t, "tofu", opts.Command)
+	assert.Equal(t, []string{"plan", "-input=false"}, opts.Args)
+	assert.Equal(t, []string{"TF_IN_AUTOMATION=true"}, opts.Env)
+	assert.Equal(t, req.componentPath, opts.WorkingDir)
+	assert.Equal(t, "kms", opts.Component)
+	assert.Equal(t, "dev", opts.Stack)
+	assert.Equal(t, "plan", opts.SubCommand)
+	assert.Equal(t, "dev-kms", opts.Workspace)
+	assert.True(t, opts.DryRun)
+	require.NotNil(t, opts.StdoutCapture)
+	require.NotNil(t, opts.StderrCapture)
+	_, err := opts.StdoutCapture.Write([]byte("plan output"))
+	require.NoError(t, err)
+	_, err = opts.StderrCapture.Write([]byte("plan diagnostic"))
+	require.NoError(t, err)
+	assert.Equal(t, "plan output", stdout.String())
+	assert.Equal(t, "plan diagnostic", stderr.String())
+}
+
+// TestBuildStreamingExecuteOptions_UsesActiveFormatting verifies YAML indentation reaches
+// the tree renderer without needing a live Terraform process or interactive terminal.
+func TestBuildStreamingExecuteOptions_UsesActiveFormatting(t *testing.T) {
+	t.Parallel()
+	for _, indent := range []int{2, 4} {
+		atmosConfig := &schema.AtmosConfiguration{}
+		atmosConfig.Settings.Terminal.TabWidth = indent
+		atmosConfig.Settings.Terminal.NoColor = true
+		opts := buildStreamingExecuteOptions(atmosConfig, &schema.ConfigAndStacksInfo{}, &streamingExecRequest{})
+		require.NotNil(t, opts.RenderConfig)
+		assert.Same(t, atmosConfig, opts.RenderConfig.AtmosConfig)
+		assert.True(t, opts.RenderConfig.Compact, "unset UI settings retain their defaults")
+		assert.Nil(t, opts.StdoutCapture)
+		assert.Nil(t, opts.StderrCapture)
+		opts.RenderConfig.Width = 120
+		tree := &tfui.DependencyTree{Stack: "dev", Component: "kms", Root: &tfui.TreeNode{
+			Children: []*tfui.TreeNode{{Address: "kms", Action: "create", Changes: []*tfui.AttributeChange{
+				{Key: "policy", After: "parent:\n  child: retained"},
+			}}},
+		}}
+		output := ansi.Strip(tree.RenderTreeWithConfig(opts.RenderConfig))
+		assert.Contains(t, output, "\n"+strings.Repeat(" ", 15+indent)+"child: retained\n")
+		assert.Equal(t, indent, atmosConfig.Settings.Terminal.TabWidth)
+	}
+}
+
+// TestExecuteStreamingOrShell_ForcedTTYDryRun exercises the selected streaming path
+// through the real dispatcher while proving a dry run never launches Terraform.
+func TestExecuteStreamingOrShell_ForcedTTYDryRun(t *testing.T) {
+	withExecMetadataGateEnv(t, false)
+	t.Setenv("CI", "false")
+	previousForceTTY := viper.Get("force-tty")
+	viperguard.Set("force-tty", true)
+	t.Cleanup(func() { viperguard.Set("force-tty", previousForceTTY) })
+	require.True(t, tfui.ShouldUseStreamingUI(true, true, false, "plan"))
+	componentPath := t.TempDir()
+	info := &schema.ConfigAndStacksInfo{
+		Command:             filepath.Join(componentPath, "nonexistent-terraform"),
+		UIFlagExplicitlySet: true, UIEnabled: true, DryRun: true,
+		FinalComponent: "kms", Stack: "dev",
+	}
+	req := &streamingExecRequest{
+		args: []string{"plan"}, gatePhase: "plan", subCommand: "plan", componentPath: componentPath,
+	}
+	require.NoError(t, executeStreamingOrShell(&schema.AtmosConfiguration{}, info, req))
+	entries, err := os.ReadDir(componentPath)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "streaming dry run must not create plan files")
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // executeStreamingOrShell

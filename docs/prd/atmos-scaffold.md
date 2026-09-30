@@ -384,7 +384,14 @@ spec:
   # Optional: step-backed hooks around generation. Reuses the exact
   # events/kind/when/type/with vocabulary stack-level lifecycle hooks use
   # (pkg/hooks.Hook) -- see the atmos-hooks skill for the shared vocabulary.
-  # Only kind: step / kind: steps are supported for scaffold hooks.
+  # Only kind: step / kind: steps are supported for scaffold hooks. A step's
+  # unset/bare-relative working_directory defaults to (or resolves under)
+  # the scaffold's target directory (also exposed as {{ .TargetPath }});
+  # use working_directory: "." to opt back into the directory atmos was
+  # launched from. Exception: a type: atmos step keeps running in the
+  # directory atmos was launched from when working_directory is unset,
+  # since it must resolve its own atmos.yaml/stacks there, but an explicit
+  # working_directory on that step is still honored.
   hooks:
     format:
       events:

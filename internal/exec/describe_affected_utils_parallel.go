@@ -157,11 +157,18 @@ func processStackAffected(
 		affected = append(affected, terraformAffected...)
 	}
 
-	// Process Helmfile components.
-	if helmfileSection, ok := componentsSection[cfg.HelmfileComponentType].(map[string]any); ok {
-		helmfileAffected, err := processHelmfileComponentsIndexed(
+	// Process the simple (non-Terraform) component types that share processSimpleComponentsIndexed:
+	// helmfile, packer, ansible, container, and emulator. Terraform, Kubernetes, and Helm have
+	// dedicated processors with type-specific logic and are handled separately. See #3203.
+	for _, componentType := range simpleAffectedComponentTypes {
+		section, ok := componentsSection[componentType].(map[string]any)
+		if !ok {
+			continue
+		}
+		simpleAffected, err := processSimpleComponentsIndexed(
+			componentType,
 			stackName,
-			helmfileSection,
+			section,
 			remoteStacks,
 			currentStacks,
 			atmosConfig,
@@ -174,27 +181,7 @@ func processStackAffected(
 		if err != nil {
 			return nil, err
 		}
-		affected = append(affected, helmfileAffected...)
-	}
-
-	// Process Packer components.
-	if packerSection, ok := componentsSection[cfg.PackerComponentType].(map[string]any); ok {
-		packerAffected, err := processPackerComponentsIndexed(
-			stackName,
-			packerSection,
-			remoteStacks,
-			currentStacks,
-			atmosConfig,
-			filesIndex,
-			patternCache,
-			includeSpaceliftAdminStacks,
-			includeSettings,
-			excludeLocked,
-		)
-		if err != nil {
-			return nil, err
-		}
-		affected = append(affected, packerAffected...)
+		affected = append(affected, simpleAffected...)
 	}
 
 	// Process Kubernetes components.
