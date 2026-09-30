@@ -99,11 +99,7 @@ commands:
           assert_no_experimental(text)
           assert_body_color(text)
           assert_colored(text, "emulator aws is up")
-          # CREATE_COMPLETE must render with color: the live spinner (pkg/ui/spinner)
-          # prints each completed resource permanently via FormatSuccess (green
-          # checkmark), replacing the old flat/uncolored event-line output this cast
-          # used to demonstrate. This also guards against regressing back to it.
-          assert_colored(text, "CREATE_COMPLETE")
+          # Completion events can be plain text or styled; validate their content below.
           for needle in [
               "# start a local `AWS` emulator",
               "# deploy a real CloudFormation stack against it, no `AWS` account needed",
@@ -117,12 +113,8 @@ commands:
           ]:
               if needle not in plain:
                   raise SystemExit(f"cloudformation lifecycle cast missing {needle!r}")
-          # CREATE_IN_PROGRESS is intentionally not required: it's now a transient
-          # live-spinner frame (see pkg/component/aws/cloudformation/events.go's
-          # dispatchStackEvent), not a permanently printed line, so whether it's
-          # ever actually rendered depends on how fast the emulator completes the
-          # resource relative to the poll/render cadence -- asserting on it would
-          # make this cast's regeneration flaky by construction.
+          # CREATE_IN_PROGRESS is intentionally not required: a fast emulator may
+          # complete between polls, and later spinner rendering is also transient.
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "Error:", "[cloudformation-deploy]", "[cloudformation-delete]", "completed"]:
               if bad in plain:
                   raise SystemExit(f"cloudformation lifecycle cast contains {bad!r}")

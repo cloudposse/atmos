@@ -18,6 +18,15 @@ same stack-based workflow you use for Terraform, Helm, and Kubernetes components
 `cfn`/`sam`/`Rain` binary dependency. Alias: `atmos aws cfn`.
 </Intro>
 
+:::caution Unreleased CloudFormation extensions
+
+The backend commands, inline `template:` bodies, file-based `path:` configuration, and related
+examples on this page require the [phase 4 implementation](https://github.com/cloudposse/atmos/pull/3137).
+Until it lands, file-based components use `template: template.yaml`; backend commands and inline
+templates are unavailable.
+
+:::
+
 <Experimental />
 
 <ActionCard title="Configure CloudFormation Components">

@@ -2,6 +2,11 @@
 
 **Date:** 2026-08-25
 
+**Implementation dependency:** This report records the companion
+[phase 4 implementation](https://github.com/cloudposse/atmos/pull/3137) and its development
+validation. The behavior described below is pending that implementation; this documentation-only
+layer does not include the code fix.
+
 ## Summary
 
 `website/docs/migration/from-rain.mdx` documented `provision.backend.enabled: true` as an
@@ -42,9 +47,9 @@ already fully specified by the doc's own example.
   `backend create`/disabling the flag — apply must not silently continue into `uploadPackage` against
   a bucket that may not exist.
 
-`pkg/component/aws/cloudformation/provision.go`'s `deliverApply`: wired the call between
-`resolvePackagingTarget` (target resolution) and `uploadPackage`/`needsPackaging` (the first S3
-write) — the only point downstream of resolution and upstream of every S3 write in this function.
+`pkg/component/aws/cloudformation/provision.go`'s `deliverApply` and `packageIfNeeded` must call
+`autoProvisionBackendIfEnabled` after `resolvePackagingTarget` and before `uploadPackage` (the first
+S3 write). This wiring belongs to the companion implementation.
 Reuses the *same* already-resolved `s3Target`, never independently re-resolving via
 `ResolveS3BackendTarget` (a different resolution algorithm used only by the manual `backend`
 commands) — auto-provisioning can never target a different bucket than the one `apply` is about to
@@ -52,7 +57,7 @@ upload to.
 
 `errors.go`: no new sentinel needed — reuses the existing `ErrInvalidAwsCloudFormationSettings`.
 
-## Validation
+## Development validation (companion implementation)
 
 - New tests: `backend_autoprovision_test.go` — `TestIsBackendProvisionEnabled` (7 cases),
   `TestAutoProvisionBackendIfEnabled_Disabled_NoOp/AlreadyExists_NoOp/Missing_Creates/

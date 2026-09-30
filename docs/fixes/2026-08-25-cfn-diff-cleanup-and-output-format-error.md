@@ -2,6 +2,11 @@
 
 **Date:** 2026-08-25
 
+**Implementation dependency:** This report records the companion
+[phase 4 implementation](https://github.com/cloudposse/atmos/pull/3137) and its development
+validation. The behavior described below is pending that implementation; this documentation-only
+layer does not include the code fix.
+
 ## Summary
 
 `diff`/`plan` created a real AWS changeset to render its preview and never deleted it, leaking an
@@ -31,7 +36,7 @@ Confirmed safe for `apply`: `--format` is only registered on the `output` subcom
 (`cloudformation.go`), never on `apply`/`deploy`, so `runApply`'s `format` always resolves to the
 safe default — this change can only newly fail `output` itself when the user passes a bad value.
 
-## Validation
+## Development validation (companion implementation)
 
 - New/updated tests: `TestRunDiff` (now expects the `DeleteChangeSet` call),
   `TestRunDiff_CleanupFailureIsNonFatal`, `TestOperationHandlers_Dispatch`'s `diff` case (same),

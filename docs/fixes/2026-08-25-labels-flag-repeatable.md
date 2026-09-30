@@ -2,6 +2,11 @@
 
 **Date:** 2026-08-25
 
+**Implementation dependency:** This report records the companion
+[phase 4 implementation](https://github.com/cloudposse/atmos/pull/3137) and its development
+validation. The behavior described below is pending that implementation; this documentation-only
+layer does not include the code fix.
+
 ## Summary
 
 `--labels` was a single comma-separated string flag (`flags.WithStringFlag`) while its sibling
@@ -107,7 +112,7 @@ inside an unrelated flag's own composability list, not as a `--labels`-specific 
 `website/docs/cli/commands/list/list-vendor.mdx` was also left untouched: it documents that
 `--labels` is *not* available on `list vendor`.
 
-## Validation
+## Development validation (companion implementation)
 
 - `go build ./...` — clean.
 - `go vet ./...` — clean.

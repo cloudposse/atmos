@@ -104,12 +104,6 @@ commands:
           atmos aws cloudformation delete --help
           atmos aws cloudformation validate --help
           atmos aws cloudformation output --help
-          atmos aws cloudformation backend --help
-          atmos aws cloudformation backend create --help
-          atmos aws cloudformation backend delete --help
-          atmos aws cloudformation backend describe --help
-          atmos aws cloudformation backend list --help
-          atmos aws cloudformation backend update --help
           atmos aws cloudformation changeset --help
           atmos aws cloudformation changeset create --help
           atmos aws cloudformation changeset delete --help
