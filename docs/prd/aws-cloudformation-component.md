@@ -1176,8 +1176,9 @@ with `--ci`/`ATMOS_CI=true`.
 *Future Work* (not scheduled in any phase): CI events for changesets
 (`changeset-create`/`changeset-execute`/etc.) and stack sets, and routing CloudFormation drift
 results into the Atmos Pro dashboard — the `pro.AtmosProAPIClient.UploadInstanceStatus` pipeline
-Terraform's drift detection already uses — for parity with Terraform. Until that lands, CloudFormation
-drift remains a local/CLI-only signal via `--fail-on-drift`.
+Terraform's drift detection already uses — for parity with Terraform. CloudFormation drift supports
+`--fail-on-drift` gating and native CI job summaries in `$GITHUB_STEP_SUMMARY`; Atmos Pro uploads
+remain deferred.
 *Success criteria*: `atmos aws cloudformation diff/apply/delete` and
 `atmos aws cloudformation drift detect/describe` each emit a compact `$GITHUB_STEP_SUMMARY` job
 summary when run with `--ci` or inside a detected CI environment, matching the Kubernetes/Helmfile
