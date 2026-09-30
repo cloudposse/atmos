@@ -171,21 +171,14 @@ func VendorSource(
 		return err
 	}
 
-	// A go-getter source URI that resolves to a single file (e.g. a bare template
-	// URI like https://.../dns.yaml) is staged by ClientModeAny as the sole entry
-	// in tempDir, named by the URL's basename. Detect that shape here and write
-	// the file directly to targetDir, bypassing the directory-copy assumption the
-	// rest of this function makes. OCI, Git, and archive sources are
-	// excluded: they always unpack to a directory, so a module/component
-	// package that happens to contain only one file (e.g. a subdir like
-	// terraform-null-label//exports, which is just context.tf, or a tarball
-	// whose sole member is main.tf) must still be copied as a directory, not
-	// misdetected as a single-file template source.
+	// Single-file downloads keep the component target as a directory. Handle
+	// them explicitly because go-getter stages local files as external symlinks,
+	// which the shared directory copier correctly refuses to follow.
 	if !vendor.IsOCIURI(uri) && !vendor.IsGitURI(uri) && !vendor.IsArchiveURI(uri) {
 		if singleFile, ok, err := singleFileInDir(tempDir); err != nil {
 			return err
 		} else if ok {
-			return copySingleFileToTarget(singleFile, targetDir, vendorOpts)
+			return copySingleFileToDirectory(singleFile, targetDir, sourceSpec, vendorOpts)
 		}
 	}
 
@@ -475,9 +468,7 @@ func singleFileInDir(dir string) (string, bool, error) {
 }
 
 // copySingleFileToTarget writes a single downloaded or local file directly to
-// targetDir as a file. This backs the single-file `source:` shape (e.g.
-// `source: {uri: https://.../dns.yaml}` fetched directly as a component's
-// template file).
+// targetDir as a file. Callers resolve the filename within the component directory.
 func copySingleFileToTarget(srcFile, targetDir string, vendorOpts vendorSourceOptions) error {
 	if err := os.MkdirAll(filepath.Dir(targetDir), TargetDirPermissions); err != nil {
 		return errUtils.Build(errUtils.ErrSourceCopyFailed).
@@ -555,6 +546,29 @@ func copySingleFile(src, dst string) error {
 		return copyErr
 	}
 	return closeErr
+}
+
+// copySingleFileToDirectory preserves the directory contract and the same filtering
+// semantics as archive/directory sources while materializing an explicit file URI.
+func copySingleFileToDirectory(srcFile, targetDir string, spec *schema.VendorComponentSource, opts vendorSourceOptions) error {
+	if err := prepareVendorTarget(targetDir, opts); err != nil {
+		return err
+	}
+	info, err := os.Stat(srcFile)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).WithCause(err).Err()
+	}
+	skip, err := vendor.CreateSkipFunc(filepath.Dir(srcFile), spec.IncludedPaths, spec.ExcludedPaths)(info, srcFile, targetDir)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).WithCause(err).Err()
+	}
+	if err := os.MkdirAll(targetDir, TargetDirPermissions); err != nil {
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).WithCause(err).Err()
+	}
+	if skip {
+		return nil
+	}
+	return copySingleFileToTarget(srcFile, filepath.Join(targetDir, filepath.Base(srcFile)), opts)
 }
 
 func prepareVendorTarget(targetDir string, vendorOpts vendorSourceOptions) error {
