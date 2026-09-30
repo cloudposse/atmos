@@ -9,7 +9,7 @@ components:
       # No per-component identity binding: `local-aws` is the default identity
       # (auth.identities in atmos.yaml, `default: true`), so the component
       # deploys against the local sandbox automatically.
-      template: template.yaml
+      path: template.yaml
       stack_name: "atmos-cfn-demo-{{ .vars.stage }}"
       parameters:
         Stage: "{{ .vars.stage }}"
@@ -79,10 +79,35 @@ components:
       metadata:
         type: abstract
         component: demo-broken
-      template: template.yaml
+      path: template.yaml
       stack_name: "atmos-cfn-demo-broken-{{ .vars.stage }}"
       parameters:
         Stage: "{{ .vars.stage }}"
+      settings:
+        aws_cloudformation:
+          region: us-east-1
+    demo-inline:
+      metadata:
+        type: abstract
+        component: demo-inline
+      # Inline `template:` (a literal string body, not a file) — unlike
+      # `path:`, this flows through Atmos's own `{{ }}` templating pipeline,
+      # so `{{ .vars.stage }}` below is resolved by Atmos itself before the
+      # body is ever sent to CloudFormation.
+      template: |
+        AWSTemplateFormatVersion: '2010-09-09'
+        Description: Inline aws/cloudformation template — no on-disk template.yaml.
+        Resources:
+          Marker:
+            Type: AWS::SSM::Parameter
+            Properties:
+              Name: "/atmos/demo-inline/{{ .vars.stage }}/marker"
+              Type: String
+              Value: "hello inline from {{ .vars.stage }}"
+        Outputs:
+          ParameterName:
+            Value: !Ref Marker
+      stack_name: "atmos-cfn-demo-inline-{{ .vars.stage }}"
       settings:
         aws_cloudformation:
           region: us-east-1
