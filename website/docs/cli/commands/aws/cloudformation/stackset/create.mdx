@@ -84,8 +84,9 @@ atmos aws cloudformation stackset create --affected --base origin/main
 
 If the resolved target declares only `accounts` or only `regions` (not both),
 `stackset create` stops after creating the StackSet itself — no instances are
-created. Creating instances later requires deleting and re-creating the
-StackSet with both fields set; there is no separate "add instances" verb.
+created. To add instances to the existing StackSet later, use AWS CloudFormation
+directly through [CreateStackInstances](https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_CreateStackInstances.html).
+Atmos currently has no separate command to add instances.
 
 Instance targeting currently supports `SELF_MANAGED` permissions only. A
 `SERVICE_MANAGED` target with both `accounts` and `regions` is rejected before
