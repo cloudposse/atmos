@@ -10,8 +10,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	sdk "github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
 )
 
 func TestIdentityEndpointUsesBucketPath(t *testing.T) {

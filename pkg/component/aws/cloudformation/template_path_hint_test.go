@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	cockroachErrors "github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/stretchr/testify/require"
 )
 
 func TestValidateComponentConfig_TemplateFileHint(t *testing.T) {
