@@ -1,10 +1,18 @@
 package cmd
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
 
-// sourceDryRun reads an optional flag supplied by the parent command. Avoid
-// global Viper state: other source command groups may not expose dry-run at all.
+	"github.com/cloudposse/atmos/pkg/flags"
+)
+
+// sourceDryRun resolves an optional flag supplied by the parent command, including
+// its declared environment variable. Command groups without the flag opt out.
 func sourceDryRun(cmd *cobra.Command) bool {
 	flag := cmd.Flag("dry-run")
-	return flag != nil && flag.Value.Type() == "bool" && flag.Value.String() == "true"
+	if flag == nil || flag.Value.Type() != "bool" {
+		return false
+	}
+	_, dryRun := flags.NewStandardParser(flags.WithDryRunFlag()).IsBoolFlagExplicitlySet(cmd, "dry-run")
+	return dryRun
 }
