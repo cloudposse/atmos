@@ -46,6 +46,9 @@ type changeSetResult struct {
 	ChangeSetType cfntypes.ChangeSetType
 	// StackStub records that this invocation created a previously absent stack.
 	StackStub bool
+	// OnStackFailure preserves the stored policy returned by DescribeChangeSet,
+	// including named changesets whose type is not exposed by that API.
+	OnStackFailure cfntypes.OnStackFailure
 }
 
 // changeSetNameMaxLength is CloudFormation's hard limit on ChangeSetName length
@@ -256,13 +259,14 @@ func waitForChangeSet(ctx context.Context, client CloudFormationClient, stackNam
 		}
 
 		result := &changeSetResult{
-			ChangeSetID:   stringValue(out.ChangeSetId),
-			ChangeSetName: name,
-			StackID:       stringValue(out.StackId),
-			Status:        out.Status,
-			StatusReason:  stringValue(out.StatusReason),
-			Changes:       out.Changes,
-			ChangeSetType: changeSetType,
+			ChangeSetID:    stringValue(out.ChangeSetId),
+			ChangeSetName:  name,
+			StackID:        stringValue(out.StackId),
+			Status:         out.Status,
+			StatusReason:   stringValue(out.StatusReason),
+			Changes:        out.Changes,
+			ChangeSetType:  changeSetType,
+			OnStackFailure: out.OnStackFailure,
 		}
 
 		if decision, err := evaluateChangeSetStatus(result); decision != changeSetPollContinue {
@@ -362,7 +366,10 @@ func executeChangeSet(ctx context.Context, client CloudFormationClient, spec *st
 	// AWS rejects an ExecuteChangeSet that sets DisableRollback when OnStackFailure
 	// was already set on the CREATE changeset (createChangeSet does this for the same
 	// spec.DisableRollback/CREATE combination) — omit it here to avoid that conflict.
-	onStackFailureAlreadySet := spec.DisableRollback && result.ChangeSetType == cfntypes.ChangeSetTypeCreate
+	// Named changesets carry their actual stored policy because DescribeChangeSet
+	// does not return their type, and their creation settings may differ from spec.
+	onStackFailureAlreadySet := result.OnStackFailure != "" ||
+		(spec.DisableRollback && result.ChangeSetType == cfntypes.ChangeSetTypeCreate)
 	if spec.DisableRollback && !onStackFailureAlreadySet {
 		input.DisableRollback = awsBool(true)
 	}
