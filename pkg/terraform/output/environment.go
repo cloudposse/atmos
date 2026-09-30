@@ -100,9 +100,11 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 	// vars as TF_VAR_* so the internal `terraform init` (run while resolving
 	// !terraform.output) can satisfy init-time variable dependencies — e.g. a
 	// module whose `version`/`source` is bound to var.foo. The main terraform
-	// path passes -var-file on init for this; the output executor runs init via
-	// the terraform-exec library, which cannot pass a var-file to init, so vars
-	// are forwarded through the environment instead. See issue #1412.
+	// path passes -var-file on init for this; terraform-exec cannot pass a var-file
+	// to init, so vars are forwarded through the environment instead. Note that
+	// terraform-exec also refuses TF_VAR_* in SetEnv (issue #3231), so the executor
+	// hands these entries to the init subprocess only (see withVarsInit) and strips
+	// them from the environment given to the terraform-exec runner. See issue #1412.
 	if config.PassVars && len(config.Vars) > 0 {
 		addTerraformVarsToEnv(environMap, config.Vars)
 	}
