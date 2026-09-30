@@ -349,7 +349,7 @@ func TestFindComponentSectionInCachedStacks_PackerOnly(t *testing.T) {
 //
 //nolint:paralleltest // registerFakeComponentTypes mutates the shared component registry (comp.Reset/comp.Register); must run serially.
 func TestFindComponentSectionInCachedStacks_RegisteredProviderTypes(t *testing.T) {
-	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
+	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType, "test-provider")
 	require.NotEmpty(t, comp.ListTypes(), "test setup should have registered fake provider types")
 
 	for _, componentType := range comp.ListTypes() {
@@ -373,7 +373,7 @@ func TestFindComponentSectionInCachedStacks_RegisteredProviderTypes(t *testing.T
 
 //nolint:paralleltest // registerFakeComponentTypes mutates the shared component registry (comp.Reset/comp.Register); must run serially.
 func TestComponentSectionSearchOrder_IncludesLegacyAndRegisteredTypes(t *testing.T) {
-	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
+	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType, "test-provider")
 	require.NotEmpty(t, comp.ListTypes(), "test setup should have registered fake provider types")
 
 	order := componentSectionSearchOrder()
