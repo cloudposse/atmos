@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -38,8 +39,8 @@ func validateComponentConfig(config map[string]any) error {
 }
 
 // setStackPolicy applies the component's stack_policy document to the deployed
-// stack via SetStackPolicy — CreateChangeSet/ExecuteChangeSet have no stack-policy
-// parameter, so this runs as a follow-up call after a successful apply.
+// stack via SetStackPolicy. Existing stacks receive it before execution so it
+// protects the current update; new stacks receive it after successful creation.
 func setStackPolicy(ctx context.Context, client CloudFormationClient, spec *stackSpec) error {
 	defer perf.Track(nil, "cloudformation.setStackPolicy")()
 
@@ -51,6 +52,18 @@ func setStackPolicy(ctx context.Context, client CloudFormationClient, spec *stac
 		return wrapAPICallError(spec.StackName, err)
 	}
 	return nil
+}
+
+// prepareStackPolicy protects existing resources before a changeset executes.
+// Its result says whether policy installation must wait for successful creation.
+func prepareStackPolicy(ctx context.Context, client CloudFormationClient, spec *stackSpec, result *changeSetResult) (bool, error) {
+	if spec.StackPolicyBody == "" {
+		return false, nil
+	}
+	if result.ChangeSetType == cfntypes.ChangeSetTypeCreate {
+		return true, nil
+	}
+	return false, setStackPolicy(ctx, client, spec)
 }
 
 // applyTerminationProtection reconciles the stack's actual termination-protection
