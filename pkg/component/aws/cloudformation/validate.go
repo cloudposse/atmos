@@ -73,16 +73,28 @@ func applyTerminationProtection(ctx context.Context, client CloudFormationClient
 	return nil
 }
 
+// runValidate prepares large templates before server-side validation.
+func runValidate(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+	if err := prepareTemplateForAPI(octx, spec, summary); err != nil {
+		return summary, err
+	}
+	return summary, validateTemplate(octx.Ctx, client, spec)
+}
+
 // validateTemplate calls the server-side ValidateTemplate API (syntax +
 // capability discovery) — an API-backed check, not a local linter. Local
 // linting (cfn-lint/cfn-guard) is not built into this component type; users
 // who want it declare those tools via the toolchain subsystem.
-func validateTemplate(ctx context.Context, client CloudFormationClient, templateBody string) error {
+func validateTemplate(ctx context.Context, client CloudFormationClient, spec *stackSpec) error {
 	defer perf.Track(nil, "cloudformation.validateTemplate")()
 
-	_, err := client.ValidateTemplate(ctx, &cloudformation.ValidateTemplateInput{
-		TemplateBody: awsString(templateBody),
-	})
+	input := &cloudformation.ValidateTemplateInput{}
+	if spec.TemplateURL != "" {
+		input.TemplateURL = awsString(spec.TemplateURL)
+	} else {
+		input.TemplateBody = awsString(spec.TemplateBody)
+	}
+	_, err := client.ValidateTemplate(ctx, input)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrInvalidSpecificAwsCloudFormationComponent, err)
 	}

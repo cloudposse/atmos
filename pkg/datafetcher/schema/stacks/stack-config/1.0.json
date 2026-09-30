@@ -1045,6 +1045,20 @@
         }
       ]
     },
+    "locals": {
+      "title": "locals",
+      "description": "File-scoped local variables for use within templates. Locals are resolved before other sections and can reference each other within the same file. Unlike vars and settings, locals do NOT inherit across file boundaries.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
     "aws_cloudformation": {
       "title": "aws_cloudformation",
       "description": "aws/cloudformation component type defaults",
@@ -1068,6 +1082,21 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []

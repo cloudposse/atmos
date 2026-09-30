@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // stackSpec is the fully-resolved, SDK-ready shape of an aws/cloudformation component,
@@ -19,7 +20,7 @@ type stackSpec struct {
 	StackName    string
 	TemplatePath string
 	TemplateBody string
-	// TemplateURL is set by deliverApply when the template was packaged to a
+	// TemplateURL is set by packageIfNeeded when the template was packaged to a
 	// `kind: aws/s3` target (either because it exceeds CloudFormation's
 	// 51,200-byte inline TemplateBody limit, or because packaging was
 	// otherwise selected). When set, createChangeSet sends TemplateURL
@@ -79,6 +80,8 @@ func buildStackSpec(componentSection map[string]any) (*stackSpec, error) {
 	spec.TerminationProtection, _ = componentSection[cfg.TerminationProtectionSectionName].(bool)
 
 	if timeout, ok := componentSection[cfg.TimeoutInMinutesSectionName]; ok {
+		// CreateChangeSet/ExecuteChangeSet have no timeout parameter.
+		ui.Warning("timeout_in_minutes is unsupported by changeset-based operations and is ignored.")
 		spec.TimeoutInMinutes = toInt32(timeout)
 	}
 

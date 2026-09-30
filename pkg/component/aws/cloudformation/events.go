@@ -21,7 +21,7 @@ var eventPollInterval = 3 * time.Second
 
 // operationTimeout bounds how long a single stack create/update/delete may run
 // before this command gives up watching it (the operation itself may continue in
-// the account; CloudFormation's own timeout_in_minutes governs that).
+// the account). The changeset API does not support a stack timeout.
 const operationTimeout = 60 * time.Minute
 
 // stackPoll bundles one pollStackEvents observation: the stack's current
