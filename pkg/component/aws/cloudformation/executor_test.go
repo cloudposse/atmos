@@ -93,7 +93,7 @@ func TestRunDiff(t *testing.T) {
 	}, nil)
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-	summary, err := runDiff(context.Background(), client, spec, map[string]any{})
+	summary, err := runDiff(&opContext{Ctx: context.Background()}, client, spec, map[string]any{})
 	require.NoError(t, err)
 	assert.False(t, summary["no_op"].(bool))
 	assert.Len(t, summary["changes"].([]cfntypes.Change), 1)
@@ -109,7 +109,7 @@ func TestRunDiff_CreateChangeSetError(t *testing.T) {
 	client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(nil, sentinel)
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-	_, err := runDiff(context.Background(), client, spec, map[string]any{})
+	_, err := runDiff(&opContext{Ctx: context.Background()}, client, spec, map[string]any{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
 }
