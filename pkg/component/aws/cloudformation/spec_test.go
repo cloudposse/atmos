@@ -192,3 +192,13 @@ func TestIsAbstractComponent(t *testing.T) {
 	}))
 	assert.False(t, isAbstractComponent(map[string]any{}))
 }
+
+func TestBuildStackSpec_WarnsForIgnoredTimeout(t *testing.T) {
+	section := map[string]any{"stack_name": "vpc", "template": "template.yaml", "timeout_in_minutes": 30}
+	output := captureStderr(t, func() { _, err := buildStackSpec(section); require.NoError(t, err) })
+	assert.Contains(t, normalizeUIOutput(output), "timeout_in_minutes")
+	assert.Contains(t, normalizeUIOutput(output), "ignored")
+	delete(section, "timeout_in_minutes")
+	output = captureStderr(t, func() { _, err := buildStackSpec(section); require.NoError(t, err) })
+	assert.NotContains(t, output, "timeout_in_minutes")
+}

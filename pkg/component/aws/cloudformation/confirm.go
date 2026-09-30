@@ -3,8 +3,10 @@ package cloudformation
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -14,6 +16,9 @@ import (
 // --auto-approve was passed (deploy defaults it to true — see
 // operationFlagOptions in cmd/aws/cloudformation). A seam for testing.
 var confirmOperation = defaultConfirmOperation
+
+// stdinIsTerminal checks the actual input stream, independently of forced output TTY settings.
+var stdinIsTerminal = func() bool { return term.IsTerminal(os.Stdin.Fd()) }
 
 // runConfirmField runs a huh field individually. Exposed as a package
 // variable so tests can stub it — a real huh field requires an interactive
@@ -30,6 +35,13 @@ func requireConfirmation(operation Operation, stackName string, flags map[string
 	autoApprove, _ := flags["auto-approve"].(bool)
 	if autoApprove {
 		return nil
+	}
+
+	if !stdinIsTerminal() {
+		return errUtils.Build(errUtils.ErrUserAborted).
+			WithExplanation("Stack changes require confirmation, but stdin is not a terminal.").
+			WithHint("Pass --auto-approve to explicitly authorize this operation in a non-interactive session.").
+			Err()
 	}
 
 	verb := "apply"
