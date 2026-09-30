@@ -417,6 +417,7 @@ func runDiff(octx *opContext, client CloudFormationClient, spec *stackSpec, summ
 		return summary, err
 	}
 	summary["changeset_id"] = result.ChangeSetID
+	summary["changeset_name"] = result.ChangeSetName
 	summary["no_op"] = result.NoOp
 	summary["changes"] = result.Changes
 	renderErr := renderDiffSummary(spec.StackName, result)
@@ -493,6 +494,7 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		return summary, nil
 	}
 	summary["changeset_id"] = result.ChangeSetID
+	summary["changeset_name"] = result.ChangeSetName
 	summary["no_op"] = result.NoOp
 
 	if spec.StackPolicyBody != "" && (result.NoOp || result.ChangeSetType == cfntypes.ChangeSetTypeCreate) {
