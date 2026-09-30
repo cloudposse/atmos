@@ -157,10 +157,9 @@ atmos aws cloudformation drift describe vpc -s dev
 
 `drift detect` runs `DetectStackDrift`/polls `DescribeStackDriftDetectionStatus`; `drift describe`
 renders the results of the most recent detection (`DescribeStackResourceDrifts`). `--fail-on-drift`
-exits non-zero when drift is found, for CI gating — drift is not a hard failure by default. Drift
-results are local/CLI-only in the current implementation; routing them into the Atmos Pro dashboard
-(the same `UploadInstanceStatus` pipeline Terraform's drift detection uses) is recorded as future
-work, not yet implemented.
+exits non-zero when drift is found, for CI gating — drift is not a hard failure by default. Native CI
+also publishes drift summaries to `$GITHUB_STEP_SUMMARY` when CI is enabled. Atmos Pro dashboard
+uploads through `UploadInstanceStatus` remain future work.
 
 ## Delivery Targets (Backend Management)
 
