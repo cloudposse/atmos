@@ -5,7 +5,6 @@ import (
 	"sort"
 
 	comp "github.com/cloudposse/atmos/pkg/component"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 // findComponentSectionInCachedStacks extracts a component section from pre-computed stacks.
