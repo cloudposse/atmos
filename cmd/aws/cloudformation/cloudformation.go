@@ -311,8 +311,8 @@ func applySelectionFlags(cmd *cobra.Command, info *schema.ConfigAndStacksInfo) {
 	if stackFlag := cmd.Flag("stack"); stackFlag != nil && stackFlag.Value.String() != "" {
 		info.Stack = stackFlag.Value.String()
 	}
-	if dryRunFlag := cmd.Flag("dry-run"); dryRunFlag != nil && dryRunFlag.Value.String() == valueTrue {
-		info.DryRun = true
+	if set, dryRun := cloudFormationParser.IsBoolFlagExplicitlySet(cmd, "dry-run"); set {
+		info.DryRun = dryRun
 	}
 	if allFlag := cmd.Flag(flagAll); allFlag != nil && allFlag.Value.String() == valueTrue {
 		info.All = true
