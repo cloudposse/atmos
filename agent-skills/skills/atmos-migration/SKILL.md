@@ -106,21 +106,21 @@ user's repository.
 Find the user's source pattern before you propose any change. Each pattern points to a different
 reference file:
 
-| User has...                                                          | Use reference                                    |
-|----------------------------------------------------------------------|--------------------------------------------------|
-| One TF root module, env config via `.tfvars` or env vars             | [from-native-terraform.md](references/from-native-terraform.md) |
-| Multiple TF root modules in scattered dirs                           | [from-native-terraform.md](references/from-native-terraform.md) |
-| `terraform.workspace`-driven environments with shared state backend  | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
+| User has... | Use reference |
+| --- | --- |
+| One TF root module, env config via `.tfvars` or env vars | [from-native-terraform.md](references/from-native-terraform.md) |
+| Multiple TF root modules in scattered dirs | [from-native-terraform.md](references/from-native-terraform.md) |
+| `terraform.workspace`-driven environments with shared state backend | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
 | `.tm.hcl` files, `stack.tm.hcl`, `generate_hcl` blocks (Terramate project) | [from-terramate.md](references/from-terramate.md) |
-| Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
-| User has a Makefile driving builds/tests/deploys                     | [from-makefile.md](references/from-makefile.md) |
-| User has a Justfile (`just` command runner)                          | [from-justfile.md](references/from-justfile.md) |
-| User has a Taskfile.yml (go-task)                                    | [from-taskfile.md](references/from-taskfile.md) |
-| `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
-| Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`)               | [from-terragrunt.md](references/from-terragrunt.md) |
+| Need to read outputs from un-migrated TF (legacy or another repo) | [remote-state-bridge.md](references/remote-state-bridge.md) |
+| User has a Makefile driving builds/tests/deploys | [from-makefile.md](references/from-makefile.md) |
+| User has a Justfile (`just` command runner) | [from-justfile.md](references/from-justfile.md) |
+| User has a Taskfile.yml (go-task) | [from-taskfile.md](references/from-taskfile.md) |
+| `cloudposse/github-action-atmos-component-updater` | [from-component-updater.md](references/from-component-updater.md) |
+| Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`) | [from-terragrunt.md](references/from-terragrunt.md) |
 | mise config (`mise.toml`, `.mise.toml`, `.mise/config.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
-| `aqua.yaml` (Aqua CLI) for tool versions                             | [from-aqua.md](references/from-aqua.md) |
-| User is migrating off Rain / raw CloudFormation                      | [from-rain.md](references/from-rain.md) |
+| `aqua.yaml` (Aqua CLI) for tool versions | [from-aqua.md](references/from-aqua.md) |
+| User is migrating off Rain / raw CloudFormation | [from-rain.md](references/from-rain.md) |
 
 The remote-state-bridge pattern makes progressive migration possible. It lets a team migrate one
 component at a time. Without it, the team must migrate everything at once. Use this pattern when
