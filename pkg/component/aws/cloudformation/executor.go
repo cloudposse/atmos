@@ -81,6 +81,13 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 		return err
 	}
 
+	// Dry-run validates the resolved component without authenticating, provisioning
+	// sources, or executing hooks. Render keeps its normal local template behavior.
+	if info.DryRun && operation != OperationRender {
+		_, err := buildStackSpec(info.ComponentSection)
+		return err
+	}
+
 	if operation != OperationRender {
 		authManager, err := setupComponentAuthForCLI(atmosConfig, info)
 		if err != nil {
@@ -177,6 +184,12 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 
 	if operation == OperationRender {
 		summary["template"] = spec.TemplateBody
+		return summary, nil
+	}
+
+	// Even diff/validate can write remote changesets or packaged templates.
+	// Stop before confirmation and client creation for every dry-run operation.
+	if octx.Info.DryRun {
 		return summary, nil
 	}
 
