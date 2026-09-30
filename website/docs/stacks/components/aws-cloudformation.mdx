@@ -5,16 +5,18 @@ sidebar_label: aws/cloudformation
 sidebar_class_name: command
 description: Configure native aws/cloudformation components in Atmos stack manifests.
 id: aws-cloudformation
-sidebar_group: component-library
-sidebar_reference: true
-component_type: aws/cloudformation
-component_implementation: CloudFormation templates
-slug: /stacks/components/aws-cloudformation
 ---
 
 import File from "@site/src/components/File";
 import Intro from "@site/src/components/Intro";
 import Experimental from "@site/src/components/Experimental";
+
+
+:::caution Unreleased CloudFormation support
+This documentation previews the implementation in [PR #3157](https://github.com/cloudposse/atmos/pull/3157).
+The documentation-only revision does not register `atmos aws cloudformation` or its `cfn` alias.
+Use a build containing that implementation before running these examples.
+:::
 
 <Intro>
   Define CloudFormation stacks in stack manifests when you want Atmos to
@@ -281,6 +283,6 @@ components:
 
 ## Related
 
-- [`atmos aws cloudformation`](/cli/commands/aws/cloudformation) command reference
+- [upcoming `atmos aws cloudformation` implementation](https://github.com/cloudposse/atmos/pull/3157)
 - [CloudFormation `atmos.yaml` configuration](/cli/configuration/components/aws-cloudformation)
 - [Component dependencies](/stacks/dependencies/components)
