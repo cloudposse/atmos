@@ -157,9 +157,9 @@ func IsArchiveURI(uri string) bool {
 		return archive
 	}
 
-	lowerPath := strings.ToLower(path)
+	// Match case-sensitively, as go-getter does when selecting a decompressor.
 	for _, ext := range directoryArchiveExtensions {
-		if strings.HasSuffix(lowerPath, ext) {
+		if strings.HasSuffix(path, ext) {
 			return true
 		}
 	}

@@ -604,3 +604,10 @@ func TestSanitizeFileName(t *testing.T) {
 		})
 	}
 }
+
+func TestIsArchiveURI_CaseMatchesGoGetter(t *testing.T) {
+	assert.False(t, IsArchiveURI("https://example.com/module.ZIP"))
+	assert.False(t, IsArchiveURI("https://example.com/module.Tar.Gz"))
+	assert.True(t, IsArchiveURI("https://example.com/module.ZIP?archive=zip"))
+	assert.True(t, IsArchiveURI("https://example.com/MODULE.zip"))
+}

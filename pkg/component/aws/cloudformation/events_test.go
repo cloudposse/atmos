@@ -80,7 +80,7 @@ func TestPollStackEvents_DeduplicatesAcrossCalls(t *testing.T) {
 	}, nil).Times(2)
 
 	seen := make(map[string]bool)
-	events, poll, err := pollStackEvents(context.Background(), client, "vpc", seen)
+	events, poll, err := pollStackEvents(context.Background(), client, "vpc", seen, OperationApply)
 	require.NoError(t, err)
 	assert.Len(t, events, 1)
 	assert.Equal(t, cfntypes.StackStatusCreateInProgress, poll.Status)
@@ -89,7 +89,7 @@ func TestPollStackEvents_DeduplicatesAcrossCalls(t *testing.T) {
 
 	// Second poll with the same client and seen map: event-1 was already
 	// recorded, so it must not be reported as fresh again.
-	events, poll, err = pollStackEvents(context.Background(), client, "vpc", seen)
+	events, poll, err = pollStackEvents(context.Background(), client, "vpc", seen, OperationApply)
 	require.NoError(t, err)
 	assert.Empty(t, events, "an event already recorded in seen must not be reported as fresh on a subsequent poll")
 	assert.Equal(t, cfntypes.StackStatusCreateInProgress, poll.Status)
@@ -140,7 +140,7 @@ func TestPollStackEvents_DescribeStackEventsError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
 
-	_, _, err := pollStackEvents(context.Background(), client, "vpc", map[string]bool{})
+	_, _, err := pollStackEvents(context.Background(), client, "vpc", map[string]bool{}, OperationApply)
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, context.Canceled)
 	assert.Contains(t, err.Error(), "access denied")
@@ -158,7 +158,7 @@ func TestPollStackEvents_DescribeStacksErrorNonNotFound(t *testing.T) {
 	}, nil)
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
 
-	events, poll, err := pollStackEvents(context.Background(), client, "vpc", map[string]bool{})
+	events, poll, err := pollStackEvents(context.Background(), client, "vpc", map[string]bool{}, OperationApply)
 	require.Error(t, err)
 	assert.Empty(t, poll.Status)
 	assert.False(t, poll.Gone)
@@ -171,7 +171,7 @@ func TestStreamStackEvents_PollError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
 
-	_, err := streamStackEvents(context.Background(), client, "vpc", map[string]bool{})
+	_, err := streamStackEvents(context.Background(), client, "vpc", eventBaseline{valid: true}, OperationApply)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "access denied")
 }
@@ -190,7 +190,7 @@ func TestStreamStackEvents_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Already cancelled: the select must take the ctx.Done() branch immediately.
 
-	status, err := streamStackEvents(ctx, client, "vpc", map[string]bool{})
+	status, err := streamStackEvents(ctx, client, "vpc", eventBaseline{valid: true}, OperationApply)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, cfntypes.StackStatusCreateInProgress, status, "the last-observed (non-terminal) status must still be returned")
@@ -234,8 +234,8 @@ func TestStreamStackEvents_IgnoresStaleTerminalStatusWithoutInProgress(t *testin
 	// Pre-seeded baseline: this event already existed before the operation
 	// started, so it must not be reported as fresh (see pollStackEvents), and
 	// therefore must not set seenNewEvent either.
-	baseline := map[string]bool{staleEventID: true}
-	status, err := streamStackEvents(ctx, client, "vpc", baseline)
+	baseline := eventBaseline{seen: map[string]bool{staleEventID: true}, valid: true}
+	status, err := streamStackEvents(ctx, client, "vpc", baseline, OperationApply)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled,
 		"a stale terminal status with no observed IN_PROGRESS and no genuinely new event must not be accepted as completion")
@@ -268,7 +268,7 @@ func TestStreamStackEvents_AcceptsTerminalStatusOnFirstPollWithNewEvent(t *testi
 	// Empty baseline: nothing existed on the stack before this operation (a
 	// brand-new CREATE), so the single event returned on this very first poll
 	// is unambiguously new -- no *_IN_PROGRESS status is ever observed.
-	status, err := streamStackEvents(context.Background(), client, "vpc", map[string]bool{})
+	status, err := streamStackEvents(context.Background(), client, "vpc", eventBaseline{valid: true}, OperationApply)
 	require.NoError(t, err)
 	assert.Equal(t, cfntypes.StackStatusCreateComplete, status)
 }
@@ -296,7 +296,7 @@ func TestStreamStackEvents_AcceptsTerminalStatusAfterObservedInProgress(t *testi
 		}, nil),
 	)
 
-	status, err := streamStackEvents(context.Background(), client, "vpc", map[string]bool{})
+	status, err := streamStackEvents(context.Background(), client, "vpc", eventBaseline{valid: true}, OperationApply)
 	require.NoError(t, err)
 	assert.Equal(t, cfntypes.StackStatusUpdateComplete, status)
 }
@@ -313,9 +313,10 @@ func TestPreOperationEventBaseline_ReturnsExistingEventIDs(t *testing.T) {
 	}, nil)
 
 	seen := preOperationEventBaseline(context.Background(), client, "vpc")
-	assert.True(t, seen["event-1"])
-	assert.True(t, seen["event-2"])
-	assert.Len(t, seen, 2)
+	assert.True(t, seen.seen["event-1"])
+	assert.True(t, seen.seen["event-2"])
+	assert.Len(t, seen.seen, 2)
+	assert.True(t, seen.valid)
 }
 
 // preOperationEventBaseline must degrade to an empty (non-nil) baseline --
@@ -327,11 +328,11 @@ func TestPreOperationEventBaseline_StackNotFound(t *testing.T) {
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("Stack [vpc] does not exist"))
 
 	seen := preOperationEventBaseline(context.Background(), client, "vpc")
-	assert.NotNil(t, seen)
-	assert.Empty(t, seen)
+	assert.True(t, seen.valid)
+	assert.Empty(t, seen.seen)
 }
 
-// preOperationEventBaseline must also degrade to an empty baseline -- never
+// preOperationEventBaseline must also degrade to an unavailable baseline -- never
 // propagate the error -- for any other DescribeStackEvents failure (e.g. a
 // transient throttle/network blip): losing the fast-path new-event signal for
 // this one operation is preferable to aborting the create/update/delete that's
@@ -340,10 +341,18 @@ func TestPreOperationEventBaseline_OtherErrorDegradesGracefully(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
-
-	seen := preOperationEventBaseline(context.Background(), client, "vpc")
-	assert.NotNil(t, seen)
-	assert.Empty(t, seen)
+	baseline := preOperationEventBaseline(context.Background(), client, "vpc")
+	staleID := "previous-operation"
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{{EventId: &staleID}},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
+	}, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := streamStackEvents(ctx, client, "vpc", baseline, OperationApply)
+	require.ErrorIs(t, err, context.Canceled, "unavailable baseline must not make stale history a completion signal")
 }
 
 func TestPollStackEvents_StackDeleted(t *testing.T) {
@@ -353,7 +362,7 @@ func TestPollStackEvents_StackDeleted(t *testing.T) {
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
 
-	_, poll, err := pollStackEvents(context.Background(), client, "vpc", map[string]bool{})
+	_, poll, err := pollStackEvents(context.Background(), client, "vpc", map[string]bool{}, OperationDelete)
 	require.NoError(t, err)
 	assert.Equal(t, cfntypes.StackStatusDeleteComplete, poll.Status)
 	assert.True(t, poll.Gone, "an empty Stacks list from DescribeStacks is a positive, unambiguous completion signal")

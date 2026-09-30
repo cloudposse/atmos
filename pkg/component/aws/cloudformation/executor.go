@@ -3,8 +3,10 @@ package cloudformation
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -215,29 +217,29 @@ func runDiff(ctx context.Context, client CloudFormationClient, spec *stackSpec, 
 	summary["changeset_id"] = result.ChangeSetID
 	summary["no_op"] = result.NoOp
 	summary["changes"] = result.Changes
-	renderDiffSummary(spec.StackName, result)
-	return summary, nil
+	return summary, renderDiffSummary(spec.StackName, result)
 }
 
 // renderDiffSummary writes the changeset's predicted resource changes to the
 // data channel (stdout), one line per resource — the `plan`/`diff` counterpart
 // to renderOutputsSummary, without which those verbs produce no visible output
 // at all despite successfully creating and describing the changeset.
-func renderDiffSummary(stackName string, result *changeSetResult) {
-	if result.NoOp {
-		_ = data.Writeln(fmt.Sprintf("%s: no changes (changeset would be a no-op)", stackName))
-		return
+func renderDiffSummary(stackName string, result *changeSetResult) error {
+	lines := []string{fmt.Sprintf("%s: no changes (changeset would be a no-op)", stackName)}
+	if !result.NoOp {
+		lines = diffResourceLines(result.Changes)
+		lines = append([]string{fmt.Sprintf("%s: %d resource change(s)", stackName, len(lines))}, lines...)
 	}
-
-	resourceChangeCount := 0
-	for _, change := range result.Changes {
-		if change.ResourceChange != nil {
-			resourceChangeCount++
-		}
+	if err := data.Writeln(strings.Join(lines, "\n")); err != nil {
+		return fmt.Errorf("write CloudFormation diff summary: %w", err)
 	}
+	return nil
+}
 
-	_ = data.Writeln(fmt.Sprintf("%s: %d resource change(s)", stackName, resourceChangeCount))
-	for _, change := range result.Changes {
+// diffResourceLines renders resource changes, excluding non-resource changes.
+func diffResourceLines(changes []cfntypes.Change) []string {
+	var lines []string
+	for _, change := range changes {
 		rc := change.ResourceChange
 		if rc == nil {
 			continue
@@ -246,8 +248,9 @@ func renderDiffSummary(stackName string, result *changeSetResult) {
 		if rc.Replacement != "" {
 			line += fmt.Sprintf(" (replacement: %s)", rc.Replacement)
 		}
-		_ = data.Writeln(line)
+		lines = append(lines, line)
 	}
+	return lines
 }
 
 // runApply executes the changeset (creating or updating the stack) and renders
@@ -314,7 +317,7 @@ func runDelete(ctx context.Context, client CloudFormationClient, flags map[strin
 	if err := deleteStack(ctx, client, spec, opts); err != nil {
 		return summary, err
 	}
-	status, err := streamStackEvents(ctx, client, spec.StackName, baseline)
+	status, err := streamStackEvents(ctx, client, spec.StackName, baseline, OperationDelete)
 	if err != nil {
 		return summary, err
 	}

@@ -34,6 +34,13 @@ type stackPoll struct {
 	Gone   bool
 }
 
+// eventBaseline carries the observed event IDs and whether they can distinguish
+// new events from history. A failed baseline request must not trust fresh events.
+type eventBaseline struct {
+	seen  map[string]bool
+	valid bool
+}
+
 // streamStackEvents polls DescribeStackEvents from the moment it's called and
 // prints each new event as it appears, until the stack reaches a terminal status.
 // Returns the final stack status. On a non-TTY stream (CI, non-interactive), plain
@@ -41,24 +48,25 @@ type stackPoll struct {
 // the standard I/O layer degrades automatically — this function only needs to emit
 // lines, not manage its own TTY detection.
 //
-// The seen map seeds the dedup map pollStackEvents uses to decide which events
+// The baseline seeds the dedup map pollStackEvents uses to decide which events
 // are "fresh". Callers pass preOperationEventBaseline's result here (the
 // stack's event IDs captured immediately before ExecuteChangeSet/DeleteStack
 // was called) so that "fresh" means "an event from *this* operation", which is
 // what lets completionSignals.seenNewEvent (see below) be trusted as a
-// completion signal. A nil map is treated as empty, for callers (tests) with
-// nothing to seed.
-func streamStackEvents(ctx context.Context, client CloudFormationClient, stackName string, seen map[string]bool) (cfntypes.StackStatus, error) {
+// completion signal. An unavailable baseline disables new-event completion;
+// observing an in-progress status still allows completion.
+func streamStackEvents(ctx context.Context, client CloudFormationClient, stackName string, baseline eventBaseline, operation Operation) (cfntypes.StackStatus, error) {
 	defer perf.Track(nil, "cloudformation.streamStackEvents")()
 
+	seen := baseline.seen
 	if seen == nil {
 		seen = make(map[string]bool)
 	}
 	deadline := time.Now().Add(operationTimeout)
-	signals := completionSignals{}
+	signals := completionSignals{baselineValid: baseline.valid}
 
 	for {
-		events, poll, err := pollStackEvents(ctx, client, stackName, seen)
+		events, poll, err := pollStackEvents(ctx, client, stackName, seen, operation)
 		if err != nil {
 			return "", err
 		}
@@ -86,6 +94,8 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 // than a stale one left over from a previous, unrelated operation -- see
 // acceptTerminalStatus.
 type completionSignals struct {
+	// baselineValid prevents stale history from masquerading as fresh events.
+	baselineValid bool
 	// seenInProgress guards against misreading a stack's leftover terminal
 	// status from a previous, unrelated operation as this operation's
 	// completion: ExecuteChangeSet/DeleteStack return before CloudFormation
@@ -110,14 +120,13 @@ type completionSignals struct {
 // whether poll's status may now be accepted as this operation's completion.
 func (s *completionSignals) observe(poll stackPoll, freshEventCount int) bool {
 	s.seenInProgress = s.seenInProgress || isInProgressStatus(poll.Status)
-	s.seenNewEvent = s.seenNewEvent || freshEventCount > 0
+	s.seenNewEvent = s.seenNewEvent || (s.baselineValid && freshEventCount > 0)
 	return acceptTerminalStatus(poll, s.seenInProgress, s.seenNewEvent)
 }
 
 // preOperationEventBaseline captures the stack's current DescribeStackEvents
 // event IDs immediately before an operation (ExecuteChangeSet/DeleteStack) is
-// kicked off, for streamStackEvents to seed its dedup map with (see its "seen"
-// parameter). Without this baseline, streamStackEvents' first poll after a very
+// kicked off, for streamStackEvents to seed its dedup map with. Without this baseline, streamStackEvents' first poll after a very
 // fast create/update can't distinguish "an event from this operation" from "an
 // event that already existed" -- both look equally "fresh" starting from an
 // empty map -- which is exactly the ambiguity seenNewEvent is meant to resolve.
@@ -125,25 +134,25 @@ func (s *completionSignals) observe(poll stackPoll, freshEventCount int) bool {
 // This is deliberately best-effort and never returns an error: a brand-new
 // CREATE has no prior events at all (DescribeStackEvents reports the stack
 // doesn't exist yet), which is not a failure, just an empty baseline. Any other
-// failure (e.g. a network blip) also degrades to an empty baseline rather than
+// failure (e.g. a network blip) marks the baseline unavailable rather than
 // aborting the create/update/delete that's about to happen -- losing the
 // new-event fast-path signal only re-exposes the pre-existing, timeout-bounded
 // race this baseline closes; it does not reintroduce the original stale-status
 // bug, since seenInProgress still guards that path independently.
-func preOperationEventBaseline(ctx context.Context, client CloudFormationClient, stackName string) map[string]bool {
+func preOperationEventBaseline(ctx context.Context, client CloudFormationClient, stackName string) eventBaseline {
 	defer perf.Track(nil, "cloudformation.preOperationEventBaseline")()
 
 	seen := make(map[string]bool)
 	out, err := client.DescribeStackEvents(ctx, &cloudformation.DescribeStackEventsInput{StackName: awsString(stackName)})
 	if err != nil {
-		return seen
+		return eventBaseline{seen: seen, valid: isStackNotFoundError(err)}
 	}
 	for i := range out.StackEvents {
 		if id := stringValue(out.StackEvents[i].EventId); id != "" {
 			seen[id] = true
 		}
 	}
-	return seen
+	return eventBaseline{seen: seen, valid: true}
 }
 
 // isInProgressStatus reports whether status is a non-empty `*_IN_PROGRESS` status.
@@ -177,9 +186,10 @@ func acceptTerminalStatus(poll stackPoll, seenInProgress, seenNewEvent bool) boo
 
 // pollStackEvents fetches the current stack status and any events not already in
 // seen, oldest-first (the API returns newest-first). Returns an empty status when
-// the stack has been fully deleted (DescribeStacks returns not-found), with
-// stackPoll.Gone set -- see stackPoll and acceptTerminalStatus.
-func pollStackEvents(ctx context.Context, client CloudFormationClient, stackName string, seen map[string]bool) ([]cfntypes.StackEvent, stackPoll, error) {
+// an apply has no visible stack yet. Only deletion accepts not-found as a
+// terminal DELETE_COMPLETE status with stackPoll.Gone set -- see stackPoll
+// and acceptTerminalStatus.
+func pollStackEvents(ctx context.Context, client CloudFormationClient, stackName string, seen map[string]bool, operation Operation) ([]cfntypes.StackEvent, stackPoll, error) {
 	eventsOut, err := client.DescribeStackEvents(ctx, &cloudformation.DescribeStackEventsInput{StackName: awsString(stackName)})
 	if err != nil {
 		// A delete can complete (and the stack disappear) faster than this poll loop's
@@ -187,7 +197,7 @@ func pollStackEvents(ctx context.Context, client CloudFormationClient, stackName
 		// history immediately rather than retaining it the way real AWS does. Treat "not
 		// found" here the same as the DescribeStacks not-found check below: the stack is
 		// gone, which is delete's successful terminal state, not an error.
-		if isStackNotFoundError(err) {
+		if operation == OperationDelete && isStackNotFoundError(err) {
 			return nil, stackPoll{Status: cfntypes.StackStatusDeleteComplete, Gone: true}, nil
 		}
 		return nil, stackPoll{}, err
@@ -204,17 +214,26 @@ func pollStackEvents(ctx context.Context, client CloudFormationClient, stackName
 		fresh = append(fresh, event)
 	}
 
+	poll, err := pollStackStatus(ctx, client, stackName, operation)
+	return fresh, poll, err
+}
+
+// pollStackStatus recognizes disappearance only when watching a delete.
+func pollStackStatus(ctx context.Context, client CloudFormationClient, stackName string, operation Operation) (stackPoll, error) {
 	stacksOut, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: awsString(stackName)})
 	if err != nil {
-		if isStackNotFoundError(err) {
-			return fresh, stackPoll{Status: cfntypes.StackStatusDeleteComplete, Gone: true}, nil
+		if operation == OperationDelete && isStackNotFoundError(err) {
+			return stackPoll{Status: cfntypes.StackStatusDeleteComplete, Gone: true}, nil
 		}
-		return fresh, stackPoll{}, err
+		return stackPoll{}, err
 	}
 	if len(stacksOut.Stacks) == 0 {
-		return fresh, stackPoll{Status: cfntypes.StackStatusDeleteComplete, Gone: true}, nil
+		if operation == OperationDelete {
+			return stackPoll{Status: cfntypes.StackStatusDeleteComplete, Gone: true}, nil
+		}
+		return stackPoll{}, nil
 	}
-	return fresh, stackPoll{Status: stacksOut.Stacks[0].StackStatus}, nil
+	return stackPoll{Status: stacksOut.Stacks[0].StackStatus}, nil
 }
 
 // isTerminalStackStatus reports whether a stack status is a resting state (not a

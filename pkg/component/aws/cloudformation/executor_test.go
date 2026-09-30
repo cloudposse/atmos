@@ -210,7 +210,7 @@ func TestRunOutput_RenderError(t *testing.T) {
 // per-resource lines.
 func TestRenderDiffSummary_NoOp(t *testing.T) {
 	out := captureStdout(t, func() {
-		renderDiffSummary("vpc", &changeSetResult{NoOp: true})
+		require.NoError(t, renderDiffSummary("vpc", &changeSetResult{NoOp: true}))
 	})
 	assert.Contains(t, out, "vpc: no changes (changeset would be a no-op)")
 }
@@ -247,7 +247,7 @@ func TestRenderDiffSummary_ListsResourceChanges(t *testing.T) {
 	}
 
 	out := captureStdout(t, func() {
-		renderDiffSummary("vpc", result)
+		require.NoError(t, renderDiffSummary("vpc", result))
 	})
 	// The summary count must match what the per-resource loop actually prints:
 	// only entries with a non-nil ResourceChange, excluding hook-only changes.
