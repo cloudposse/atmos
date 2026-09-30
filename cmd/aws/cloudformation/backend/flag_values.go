@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -87,4 +88,13 @@ func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]stri
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return components, cobra.ShellCompDirectiveNoFileComp
+}
+
+// dryRunRequested honors the parent's inherited flag, including an explicit
+// false value, before falling back to configuration resolved by Viper.
+func dryRunRequested(cmd *cobra.Command, v *viper.Viper) bool {
+	if value, provided := getCommandFlagBool(cmd, "dry-run"); provided {
+		return value
+	}
+	return v.GetBool("dry-run")
 }

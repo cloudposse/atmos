@@ -50,6 +50,7 @@ encryption, and public access blocking to match secure defaults.`,
 			Identity:    identity,
 			Target:      target,
 			AutoApprove: autoApprove,
+			DryRun:      dryRunRequested(cmd, v),
 		})
 	},
 }
