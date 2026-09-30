@@ -348,9 +348,11 @@ func checkComponentRestrictions(info *schema.ConfigAndStacksInfo) error {
 
 // printAndWriteVarFiles logs component variables and, when not using a pre-existing
 // plan file, writes them to the varfile on disk (path derived from atmosConfig+info).
-// Workspace subcommands do not use varfiles and are skipped entirely.
+// Workspace subcommands do not use varfiles and are skipped, unless init.pass_vars is enabled: the init
+// that runs before a workspace command then receives -var-file, so the varfile must exist even for a
+// component that was never planned.
 func printAndWriteVarFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
-	if info.SubCommand == subcommandWorkspace {
+	if info.SubCommand == subcommandWorkspace && !atmosConfig.Components.Terraform.Init.PassVars {
 		return nil
 	}
 
