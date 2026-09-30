@@ -62,7 +62,7 @@ func componentFunc(
 	authDisabled := authdeferred.AuthDisabled(atmosConfig.AuthManager) || (configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled)
 	functionName := fmt.Sprintf("atmos.Component(%s, %s)", component, stack)
 
-	log.Debug("Executing template function", "function", functionName)
+	log.Debug("Executing template function", functionKey, functionName)
 
 	// Skip live resolution when the enclosing component is disabled via metadata.enabled.
 	// A disabled component has no deployed state; resolving atmos.Component would read remote
@@ -70,7 +70,7 @@ func componentFunc(
 	// the result stay nil-safe. Gate on metadata.enabled only, independent of vars.enabled.
 	// See docs/fixes/2026-06-22-describe-respect-metadata-enabled.md.
 	if enclosingComponentDisabled(configAndStacksInfo) {
-		log.Debug("Skipping atmos.Component for disabled enclosing component", "function", functionName)
+		log.Debug("Skipping atmos.Component for disabled enclosing component", functionKey, functionName)
 		return emptyComponentSections(), nil
 	}
 	resolution := GetOrCreateResolutionContext()
@@ -116,16 +116,7 @@ func componentFunc(
 		existingSections, found = componentFuncSyncMap.Load(stackSlug)
 	}
 	if found && existingSections != nil {
-		log.Debug("Cache hit for template function", "function", functionName)
-
-		if outputsSection, ok := existingSections.(map[string]any)[cfg.OutputsSectionName]; ok {
-			y, err2 := u.ConvertToYAML(outputsSection)
-			if err2 != nil {
-				log.Error(err2)
-			} else {
-				log.Debug("'outputs' of the template function", "function", functionName, cfg.OutputsSectionName, y)
-			}
-		}
+		logComponentFuncCacheHit(functionName, existingSections.(map[string]any))
 
 		return existingSections, nil
 	}
@@ -185,7 +176,7 @@ func componentFunc(
 		componentFuncSyncMap.Store(stackSlug, sections)
 	}
 
-	log.Debug("Executed template function", "function", functionName)
+	log.Debug("Executed template function", functionKey, functionName)
 
 	// Print the `outputs` section of the Terraform component
 	if componentType == cfg.TerraformComponentType {
@@ -193,11 +184,26 @@ func componentFunc(
 		if err2 != nil {
 			log.Error(err2)
 		} else {
-			log.Debug("'outputs' of the template function", "function", functionName, cfg.OutputsSectionName, y)
+			log.Debug("'outputs' of the template function", functionKey, functionName, cfg.OutputsSectionName, y)
 		}
 	}
 
 	return sections, nil
+}
+
+// logComponentFuncCacheHit renders cached outputs without affecting cache policy.
+func logComponentFuncCacheHit(functionName string, sections map[string]any) {
+	log.Debug("Cache hit for template function", functionKey, functionName)
+	outputs, ok := sections[cfg.OutputsSectionName]
+	if !ok {
+		return
+	}
+	y, err := u.ConvertToYAML(outputs)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	log.Debug("'outputs' of the template function", functionKey, functionName, cfg.OutputsSectionName, y)
 }
 
 // authCacheKeySuffix derives a cache-key fragment from the resolved AuthContext, so
