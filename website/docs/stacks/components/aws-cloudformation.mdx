@@ -317,7 +317,7 @@ components:
     <dd>Target AWS regions for stack instances.</dd>
 
     <dt>`permission_model`</dt>
-    <dd>`SELF_MANAGED` (default) or `SERVICE_MANAGED`.</dd>
+    <dd>`SELF_MANAGED` (default) or `SERVICE_MANAGED`. Atmos supports instance targeting only with `SELF_MANAGED`. A `SERVICE_MANAGED` target with both `accounts` and `regions` is rejected before the StackSet is created. Empty service-managed StackSets can be created and deleted; manage their instances with AWS CloudFormation.</dd>
 
     <dt>`administration_role_arn`</dt>
     <dd>IAM role ARN CloudFormation assumes to create/manage the StackSet (self-managed permissions).</dd>
