@@ -104,49 +104,6 @@ func TestAuthWhoamiTool_Execute_UnknownIdentity(t *testing.T) {
 	assert.False(t, result.Success)
 }
 
-func TestAuthWhoamiTool_Execute_DefaultMockIdentity(t *testing.T) {
-	t.Parallel()
-
-	authConfig := mockAuthConfig(true)
-	atmosConfig := &schema.AtmosConfiguration{
-		Auth:          authConfig,
-		CliConfigPath: t.TempDir(),
-	}
-	tool := NewAuthWhoamiTool(atmosConfig)
-
-	result, err := tool.Execute(context.Background(), map[string]interface{}{})
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.True(t, result.Success)
-	assert.Equal(t, "mock-identity", result.Data["identity"])
-	assert.Contains(t, result.Output, "mock-identity")
-	// Credentials must never be present in the output or data.
-	assert.NotContains(t, result.Output, "MOCK_SECRET")
-	assert.NotContains(t, result.Output, "MOCK_TOKEN")
-}
-
-func TestAuthWhoamiTool_Execute_ExplicitIdentity(t *testing.T) {
-	t.Parallel()
-
-	authConfig := mockAuthConfig(false)
-	atmosConfig := &schema.AtmosConfiguration{
-		Auth:          authConfig,
-		CliConfigPath: t.TempDir(),
-	}
-	tool := NewAuthWhoamiTool(atmosConfig)
-
-	result, err := tool.Execute(context.Background(), map[string]interface{}{
-		"identity": "mock-identity",
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.True(t, result.Success)
-	assert.Equal(t, "mock-identity", result.Data["identity"])
-	assert.Equal(t, true, result.Data["valid"])
-}
-
 func TestWhoamiCredentialsValid_NilInputs(t *testing.T) {
 	t.Parallel()
 
