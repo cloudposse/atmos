@@ -90,7 +90,9 @@ func runChangesetCreate(ctx context.Context, client CloudFormationClient, spec *
 	summary["changeset_name"] = result.ChangeSetName
 	summary["no_op"] = result.NoOp
 	summary["changes"] = result.Changes
-	renderDiffSummary(spec.StackName, result)
+	if err := renderDiffSummary(spec.StackName, result); err != nil {
+		return summary, err
+	}
 	if !result.NoOp {
 		_ = data.Writeln(fmt.Sprintf("changeset: %s", result.ChangeSetName))
 	}
