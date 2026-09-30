@@ -57,6 +57,7 @@ func TestRequireConfirmation_AutoApproveSkipsPrompt(t *testing.T) {
 // changeset-execute must prompt for confirmation, using the distinct "execute
 // changeset against" verb, and must skip the prompt when --auto-approve is set.
 func TestRequireConfirmation_ChangesetExecutePrompts(t *testing.T) {
+	stubConfirmOperation(t, true, nil)
 	var gotMessage string
 	original := confirmOperation
 	confirmOperation = func(message string) (bool, error) {
@@ -74,6 +75,7 @@ func TestRequireConfirmation_ChangesetExecutePrompts(t *testing.T) {
 // so two changesets against the same stack produce distinguishable prompts — a user who supplies
 // a valid but unintended --changeset-name can catch the mistake before it executes.
 func TestRequireConfirmation_ChangesetExecutePromptsIncludesChangesetName(t *testing.T) {
+	stubConfirmOperation(t, true, nil)
 	var gotMessage string
 	original := confirmOperation
 	confirmOperation = func(message string) (bool, error) {
@@ -181,7 +183,7 @@ func TestRequireConfirmation_NonTerminalAbortsWithoutPrompt(t *testing.T) {
 	originalConfirm := confirmOperation
 	confirmOperation = func(string) (bool, error) { t.Fatal("non-terminal input must not prompt"); return true, nil }
 	t.Cleanup(func() { confirmOperation = originalConfirm })
-	for _, operation := range []Operation{OperationApply, OperationDelete} {
+	for _, operation := range []Operation{OperationApply, OperationDelete, OperationChangesetExecute} {
 		err := requireConfirmation(operation, "vpc", nil)
 		require.ErrorIs(t, err, errUtils.ErrUserAborted)
 		assert.True(t, errUtils.HasHint(err, "--auto-approve"))

@@ -22,6 +22,6 @@ func TestRunChangesetCreate_ClosedStdout(t *testing.T) {
 	old := os.Stdout
 	os.Stdout = out
 	t.Cleanup(func() { os.Stdout = old })
-	_, err = runChangesetCreate(context.Background(), client, &stackSpec{StackName: "vpc", TemplateBody: "Resources: {}"}, map[string]any{})
+	_, err = runChangesetCreate(&opContext{Ctx: context.Background()}, client, &stackSpec{StackName: "vpc", TemplateBody: "Resources: {}"}, map[string]any{})
 	require.ErrorIs(t, err, os.ErrClosed)
 }

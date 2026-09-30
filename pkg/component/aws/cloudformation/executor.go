@@ -247,7 +247,7 @@ var operationHandlers = map[Operation]operationHandler{
 		return runOutput(octx.Ctx, client, spec.StackName, octx.Flags, summary)
 	},
 	OperationChangesetCreate: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
-		return runChangesetCreate(octx.Ctx, client, spec, summary)
+		return runChangesetCreate(octx, client, spec, summary)
 	},
 	OperationChangesetExecute: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 		return runChangesetExecute(octx.Ctx, client, spec, changesetNameFlag(octx.Flags), summary)
