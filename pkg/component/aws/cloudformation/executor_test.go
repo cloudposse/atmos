@@ -897,8 +897,12 @@ func TestExecute_Single_Render_Success(t *testing.T) {
 	})
 
 	ctx := &component.ExecutionContext{ConfigAndStacksInfo: schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"}}
-	err := Execute(ctx, OperationRender)
-	require.NoError(t, err)
+	var renderErr error
+	output := captureStdout(t, func() {
+		renderErr = Execute(ctx, OperationRender)
+	})
+	require.NoError(t, renderErr)
+	assert.Equal(t, templateBody, output)
 }
 
 // executeSingle must skip validation/auth/resolution entirely and return nil
