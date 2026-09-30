@@ -95,6 +95,9 @@ type Executor struct {
 	staticRemoteStateGetter StaticRemoteStateGetter
 	workdirProvisioner      WorkdirProvisioner
 	backendGenerator        BackendGenerator
+	// initWithVars runs `terraform init` with TF_VAR_* in its environment when init.pass_vars is
+	// enabled (see WithInitWithVars). Nil selects the os/exec default.
+	initWithVars InitWithVarsFunc
 }
 
 // ExecutorOption configures the Executor.
@@ -564,11 +567,13 @@ func (e *Executor) execute(
 	if len(tenv.ToolchainDirs()) > 0 {
 		environMap["PATH"] = tenv.PrependToPath(environMap["PATH"])
 	}
-	if len(environMap) > 0 {
-		if err := runner.SetEnv(environMap); err != nil {
-			return nil, err
-		}
+	// terraform-exec rejects TF_VAR_* in SetEnv (issue #3231), so the runner gets a TF_VAR-free copy;
+	// the full environMap (with TF_VAR_* from init.pass_vars, issue #1412) is delivered to the init
+	// subprocess by the runner returned from withVarsInit, and still feeds the smart-init fingerprint.
+	if err := setRunnerEnv(runner, environMap); err != nil {
+		return nil, err
 	}
+	runner = e.withVarsInit(runner, config, environMap, stderrCapture)
 
 	// Steps 9-10: Decide whether terraform init needs to run at all ("smart
 	// init" — see pkg/terraform/autoinit), run it with the right flags when it
