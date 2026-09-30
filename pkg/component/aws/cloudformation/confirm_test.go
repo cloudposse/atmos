@@ -114,6 +114,7 @@ func TestRequireConfirmation_ChangesetExecuteDeclinedAborts(t *testing.T) {
 // changeset-delete must prompt, for consistency with every other mutating
 // verb (stackset delete already did; changeset delete previously didn't).
 func TestRequireConfirmation_ChangesetDeletePrompts(t *testing.T) {
+	stubConfirmOperation(t, true, nil)
 	var gotMessage string
 	original := confirmOperation
 	confirmOperation = func(message string) (bool, error) {
@@ -132,6 +133,7 @@ func TestRequireConfirmation_ChangesetDeletePrompts(t *testing.T) {
 // multiple changesets against the same stack must be able to tell which one a
 // prompt refers to before confirming.
 func TestRequireConfirmation_ChangesetDeletePromptsIncludesChangesetName(t *testing.T) {
+	stubConfirmOperation(t, true, nil)
 	var gotMessage string
 	original := confirmOperation
 	confirmOperation = func(message string) (bool, error) {
@@ -293,7 +295,7 @@ func TestRequireConfirmation_NonTerminalAbortsWithoutPrompt(t *testing.T) {
 	originalConfirm := confirmOperation
 	confirmOperation = func(string) (bool, error) { t.Fatal("non-terminal input must not prompt"); return true, nil }
 	t.Cleanup(func() { confirmOperation = originalConfirm })
-	for _, operation := range []Operation{OperationApply, OperationDelete, OperationChangesetExecute, OperationStackSetCreate, OperationStackSetUpdate, OperationStackSetDelete} {
+	for _, operation := range []Operation{OperationApply, OperationDelete, OperationChangesetExecute, OperationChangesetDelete, OperationStackSetCreate, OperationStackSetUpdate, OperationStackSetDelete} {
 		err := requireConfirmation(operation, "vpc", nil)
 		require.ErrorIs(t, err, errUtils.ErrUserAborted)
 		assert.True(t, errUtils.HasHint(err, "--auto-approve"))
