@@ -117,8 +117,8 @@ var operationsSkippingAuth = map[Operation]bool{
 // name/ID (delete, output, explicit changeset execute/list/delete, drift, get)
 // and never send a local template to CloudFormation, so resolving the
 // component's on-disk path (including JIT source provisioning) and loading the
-// template file from disk would be pure overhead — a source checkout or
-// provisioning failure must not block any of them.
+// template file from disk would be pure overhead. Named execution still loads
+// a configured stack policy to protect the current update.
 var operationsSkippingTemplateLoad = map[Operation]bool{
 	OperationDelete:           true,
 	OperationOutput:           true,
@@ -136,7 +136,7 @@ var operationsSkippingTemplateLoad = map[Operation]bool{
 // spec.StackPolicyBody: fmt only round-trips the template file, and
 // changeset-create's createChangeSet call has no stack-policy parameter
 // (CreateChangeSet/ExecuteChangeSet don't support one — see setStackPolicy's
-// doc comment). Only runApply's post-apply SetStackPolicy call reads
+// doc comment). Apply and explicit changeset execution read
 // StackPolicyBody, so a missing or unreadable stack_policy file must not
 // block either of these.
 var operationsSkippingStackPolicyLoad = map[Operation]bool{
@@ -149,10 +149,10 @@ var operationsSkippingStackPolicyLoad = map[Operation]bool{
 // on-disk path (including JIT source provisioning), loads the template body,
 // registers NoEcho values with the masker, and loads the stack policy.
 // Operations in operationsSkippingTemplateLoad only need spec fields already
-// set by buildStackSpec (e.g. StackName), so they return immediately.
+// set by buildStackSpec (e.g. StackName), except named execution also loads its
+// configured policy without loading the template.
 // Operations in operationsSkippingStackPolicyLoad need the template but never
-// consume StackPolicyBody (only runApply's post-apply SetStackPolicy call
-// does), so they return right after the template load instead of also
+// consume StackPolicyBody, so they return right after the template load instead of also
 // resolving and reading a stack_policy file that a missing/unreadable policy
 // would otherwise block them on for no reason.
 func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) (*stackSpec, error) {
@@ -162,6 +162,9 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 	}
 
 	if operationsSkippingTemplateLoad[operation] {
+		if operation == OperationChangesetExecute && spec.StackPolicyFile != "" {
+			return resolveExecutionPolicy(ctx, atmosConfig, info, spec)
+		}
 		return spec, nil
 	}
 
