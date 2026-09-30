@@ -109,7 +109,7 @@ func deployDirect(ctx context.Context, client CloudFormationClient, spec *stackS
 		return result, err
 	}
 
-	status, err := streamStackEvents(ctx, client, spec.StackName, baseline)
+	status, err := streamStackEvents(ctx, client, spec.StackName, baseline, OperationApply)
 	if err != nil {
 		return result, err
 	}
