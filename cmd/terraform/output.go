@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	exec "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	envfmt "github.com/cloudposse/atmos/pkg/env"
@@ -153,7 +154,29 @@ func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndS
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	// setupTerraformAuth only sets info.AuthManager; copy the resolved credentials onto
+	// info.AuthContext so tfoutput.GetComponentOutputs can export them to the subprocess.
+	populateAuthContextFromManager(&info, authManager)
 	return &info, &atmosConfig, authManager, nil
+}
+
+// populateAuthContextFromManager copies the AuthContext resolved by the auth manager (from --identity)
+// onto info, mirroring how the main terraform execution path populates it. It is a no-op when
+// info.AuthContext is already set, the manager is nil or not an auth.AuthManager, or the manager
+// has no stack info or auth context.
+func populateAuthContextFromManager(info *schema.ConfigAndStacksInfo, authManager any) {
+	if info.AuthContext != nil {
+		return
+	}
+	manager, ok := authManager.(auth.AuthManager)
+	if !ok || manager == nil {
+		return
+	}
+	stackInfo := manager.GetStackInfo()
+	if stackInfo == nil || stackInfo.AuthContext == nil {
+		return
+	}
+	info.AuthContext = stackInfo.AuthContext
 }
 
 // executeOutputWithFormat retrieves and formats terraform outputs.
