@@ -950,6 +950,12 @@ func TestMain(m *testing.M) {
 	githubMock, githubMockClose = httpmock.NewGitHubMockServerStandalone()
 	os.Setenv("ATMOS_TEST_GITHUB_MOCK_URL", githubMock.URL()) //nolint:lintroller // Set before m.Run(); no *testing.T available in TestMain; must persist process-wide for every subtest.
 
+	// Toolchain-info fixtures exercise registry metadata and release rendering
+	// against fixed local releases, independent of GitHub availability or rate limits.
+	githubMock.RegisterRelease("replicatedhq", "replicated", httpmock.ReleaseSpec{TagName: "v0.124.1"})
+	githubMock.RegisterRelease("junegunn", "fzf", httpmock.ReleaseSpec{TagName: "v0.67.0"})
+	githubMock.RegisterRelease("jqlang", "jq", httpmock.ReleaseSpec{TagName: "jq-1.8.1"})
+
 	// Register the one raw-content fixture tests/test-cases/atmos-include-yaml-function.yaml's
 	// !include points at (see the comment on that fixture's settings: line), so the case that
 	// opts into ATMOS_TEST_GITHUB_MOCK_URL gets real, checked-in content back instead of a 404.
