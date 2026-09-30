@@ -137,7 +137,10 @@ func (s *Store) initIdentityClient(ctx context.Context) error {
 func buildClientOptFns(authContext *artifact.AWSAuthConfig) []func(*s3.Options) {
 	var optFns []func(*s3.Options)
 	if authContext != nil && authContext.EndpointURL != "" {
-		optFns = append(optFns, func(o *s3.Options) { o.BaseEndpoint = aws.String(authContext.EndpointURL) })
+		optFns = append(optFns, func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(authContext.EndpointURL)
+			o.UsePathStyle = true
+		})
 	}
 	return optFns
 }

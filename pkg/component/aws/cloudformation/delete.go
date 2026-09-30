@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -51,6 +52,16 @@ const terminationProtectionRestoreTimeout = 30 * time.Second
 func deleteStack(ctx context.Context, client CloudFormationClient, spec *stackSpec, opts deleteOptions) error {
 	defer perf.Track(nil, "cloudformation.deleteStack")()
 
+	err := deleteExistingStack(ctx, client, spec, opts)
+	if isMissingStackValidationError(err) {
+		return nil
+	}
+	return err
+}
+
+// deleteExistingStack validates and deletes a stack; the caller treats an AWS
+// missing-stack response from either validation or deletion as an idempotent success.
+func deleteExistingStack(ctx context.Context, client CloudFormationClient, spec *stackSpec, opts deleteOptions) error {
 	// describedStack is populated lazily by whichever gate below needs a live
 	// DescribeStacks lookup first, and reused by the others if they also need
 	// one — so a single delete call never issues more DescribeStacks requests
@@ -124,6 +135,10 @@ func deleteStackInput(spec *stackSpec, opts deleteOptions) *cloudformation.Delet
 // restoring here would turn an originally-unprotected stack into a protected
 // one purely as a side effect of a failed delete attempt.
 func handleDeleteStackError(ctx context.Context, attempt deleteAttempt, deleteAPIErr error) error {
+	// A stack that disappeared during deletion has no protection left to restore.
+	if isMissingStackValidationError(deleteAPIErr) {
+		return nil
+	}
 	deleteErr := fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, deleteAPIErr)
 	if !attempt.WasProtected {
 		return deleteErr
@@ -305,4 +320,11 @@ func describeStack(ctx context.Context, client CloudFormationClient, stackName s
 		return nil, fmt.Errorf("%w: stack %s not found", errUtils.ErrAwsCloudFormationChangeSetFailed, stackName)
 	}
 	return &out.Stacks[0], nil
+}
+
+// isMissingStackValidationError excludes authorization and other API failures
+// even when their diagnostic message mentions a nonexistent stack.
+func isMissingStackValidationError(err error) bool {
+	var apiErr smithy.APIError
+	return errors.As(err, &apiErr) && apiErr.ErrorCode() == "ValidationError" && isStackNotFoundError(err)
 }

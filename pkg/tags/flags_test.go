@@ -63,10 +63,8 @@ func TestParseLabelsFlag(t *testing.T) {
 	})
 
 	t.Run("multiple pairs within one occurrence are split and trimmed", func(t *testing.T) {
-		// pflag comma-splits a single "--labels a=1, b=2" occurrence before
-		// ParseLabelsFlag sees it, but does not trim whitespace around each
-		// element -- so the embedded comma survives here as one slice element
-		// containing both pairs (mirroring what pflag actually produces).
+		// ParseLabelsFlag receives two separate pairs and trims whitespace
+		// around the second pair's key and value.
 		got, err := ParseLabelsFlag([]string{"cost-center=platform", " compliance = sox"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
