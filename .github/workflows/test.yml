@@ -1068,7 +1068,10 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            dl.google.com:443
             github.com:443
+            go.dev:443
+            raw.githubusercontent.com:443
             release-assets.githubusercontent.com:443
             golang.org:443
             proxy.golang.org:443
