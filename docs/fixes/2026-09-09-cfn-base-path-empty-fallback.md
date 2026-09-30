@@ -2,6 +2,11 @@
 
 **Date:** 2026-09-09
 
+**Implementation status:** Pending in the documentation-only [PR #3156](https://github.com/cloudposse/atmos/pull/3156).
+The implementation and regression tests are in the follow-up [PR #3157](https://github.com/cloudposse/atmos/pull/3157).
+This report preserves the development findings and validation of that implementation;
+it does not mean the fix is present in the documentation-only revision.
+
 ## Summary
 
 `pkg/config/config.go`'s absolute-path resolution for `aws/cloudformation` components joined
@@ -29,7 +34,7 @@ A correct, independent fallback already existed in
 neither is on the path that `pkg/config/config.go` uses to compute
 `CloudFormationDirAbsolutePath`, so that resolution had no fallback at all.
 
-## Changes
+## Proposed implementation (PR #3157)
 
 - `pkg/config/config.go` (`AtmosConfigAbsolutePaths`): before joining
   `atmosConfig.Components.CloudFormation.BasePath` into an absolute path, default it to
@@ -51,7 +56,7 @@ with its own empty-check fallback to `DefaultConfig()`, not reached from
 `internal/exec/describe_stacks.go`) run after `AtmosConfigAbsolutePaths` has already defaulted
 the field in place, exactly as they already do for `Components.Container.BasePath`.
 
-## Validation
+## Development validation (implementation revision)
 
 - `go build ./...` — passes.
 - `go test ./pkg/config/...` — passes, including the two new sub-tests and the full existing

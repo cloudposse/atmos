@@ -2,6 +2,11 @@
 
 **Date:** 2026-09-09
 
+**Implementation status:** Pending in the documentation-only [PR #3156](https://github.com/cloudposse/atmos/pull/3156).
+The implementation and regression tests are in the follow-up [PR #3157](https://github.com/cloudposse/atmos/pull/3157).
+This report preserves the development findings and validation of that implementation;
+it does not mean the fix is present in the documentation-only revision.
+
 ## Summary
 
 `pkg/component/aws/cloudformation/packaging.go`'s `newS3Backend` only used identity-aware credentials
@@ -40,7 +45,7 @@ equivalent fallback — it only ever inspected `info.Identity` itself.
 equals the identity name that was actually authenticated, explicit or default. This is the signal
 `newS3Backend` was missing.
 
-## Changes
+## Proposed implementation (PR #3157)
 
 `pkg/component/aws/cloudformation/packaging.go`:
 
@@ -77,7 +82,7 @@ of the new resolution helper, including the negative no-identity-active path). A
 backend only (no real AWS network call — matches the existing `TestNewS3Backend_WithIdentity` pattern,
 whose backend defers auth to first real use).
 
-## Validation
+## Development validation (implementation revision)
 
 - `go build ./...` — passes.
 - `go test ./pkg/component/aws/cloudformation/... ./pkg/ci/artifact/...` — all pass, including the new and

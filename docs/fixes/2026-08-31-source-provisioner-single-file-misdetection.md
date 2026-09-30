@@ -2,6 +2,11 @@
 
 **Date:** 2026-08-31
 
+**Implementation status:** Pending in the documentation-only [PR #3156](https://github.com/cloudposse/atmos/pull/3156).
+The implementation and regression tests are in the follow-up [PR #3157](https://github.com/cloudposse/atmos/pull/3157).
+This report preserves the development findings and validation of that implementation;
+it does not mean the fix is present in the documentation-only revision.
+
 ## Summary
 
 `VendorSource`'s single-file detection — added to support bare template URIs like
@@ -24,11 +29,11 @@ against `main`. Re-running the exact same test locally 5/5 times reproduced the 
 deterministically, which ruled out a race and prompted a real root-cause investigation instead
 of continuing to report it as an environment flake.
 
-## Changes
+## Proposed implementation (PR #3157)
 
 - `pkg/provisioner/source/vendor.go`: excluded Git, S3, and archive sources from the
   `singleFileInDir` single-file heuristic in `VendorSource`. These getters always unpack to a
-  directory — even a directory containing just one file (e.g.
+  directory — even a directory containing just one file (e.g.,
   `github.com/cloudposse/terraform-null-label//exports`, which only has `context.tf`, or a
   module tarball whose sole member is `main.tf`) — so they must never be routed through
   `copySingleFileToTarget`.
@@ -43,7 +48,7 @@ of continuing to report it as an environment flake.
 - `pkg/vendor/uri_test.go`: added `TestIsArchiveURI` covering the directory-producing and
   single-compressed-file extension cases.
 
-## Validation
+## Development validation (implementation revision)
 
 - Reverted the fix locally and confirmed the new regression test fails with the exact
   `"...: not a directory"` signature seen in CI, then restored the fix and confirmed it passes.

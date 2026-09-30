@@ -2,6 +2,11 @@
 
 **Date:** 2026-09-09
 
+**Implementation status:** Pending in the documentation-only [PR #3156](https://github.com/cloudposse/atmos/pull/3156).
+The implementation and regression tests are in the follow-up [PR #3157](https://github.com/cloudposse/atmos/pull/3157).
+This report preserves the development findings and validation of that implementation;
+it does not mean the fix is present in the documentation-only revision.
+
 ## Summary
 
 `atmos aws cfn apply <component> -s <stack> --target <publish-only-target>` crashed with a raw,
@@ -48,7 +53,7 @@ wrapping pattern — contrasted with the curated errors elsewhere in the same pa
 `delete.go`'s termination-protection/retain-resources gates) that use the full error-builder
 pattern with an explanation and hint.
 
-## Changes
+## Proposed implementation (PR #3157)
 
 **Bug 1 (primary) — `pkg/component/aws/cloudformation/executor.go`, `runApply` (~line 397-448):**
 
@@ -114,7 +119,7 @@ stack-scoped follow-up calls that can legitimately target a non-existent stack):
 `output.go` no longer needs the `fmt` or `errUtils` imports after this change and had both
 removed.
 
-## Validation
+## Development validation (implementation revision)
 
 - `go build ./...` — passes.
 - `go vet ./pkg/component/aws/cloudformation/...` — passes.
