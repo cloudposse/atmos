@@ -1559,6 +1559,9 @@ func TestOperationHandlers_StackSetUpdate_Dispatch(t *testing.T) {
 func TestOperationHandlers_StackSetDelete_Dispatch(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOutput{
+		StackSet: &cfntypes.StackSet{PermissionModel: cfntypes.PermissionModelsSelfManaged},
+	}, nil)
 	client.EXPECT().ListStackInstances(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackInstancesOutput{}, nil)
 	client.EXPECT().DeleteStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackSetOutput{}, nil)
 
