@@ -27,7 +27,8 @@ depends on that."
 | `gh stack add <branch>` | Creates and checks out a new branch on top of the current top of the stack |
 | `gh stack submit` | Pushes every branch and creates/updates every PR in the stack (4 sequential steps: push branches, create PRs, update base branches, create/update the stack object — not atomic; a mid-run failure can leave some branches pushed with no PR yet, or a partially-updated stack. Rerunning is safe — it picks up wherever it left off) |
 | `gh stack view` | Shows the full stack (branches, PR numbers, merge-readiness) |
-| `gh stack checkout` / `gh stack switch` | Moves between branches in the stack |
+| `gh stack checkout [<stack-number> / <pr-number> / <pr-url> / <branch>]` | Resolves an identifier, fetching a remote stack when needed; no argument opens the available-stack picker |
+| `gh stack switch` | Opens the branch picker for the current stack; accepts no identifier |
 | `gh stack rebase` / `gh stack sync` | Fetches trunk, cascades a rebase across every branch in the stack |
 | `gh stack merge` | Merges one or more ready PRs in the stack (doesn't require merging the whole stack at once) |
 
@@ -35,11 +36,12 @@ depends on that."
 
 ### 1. Switching stack layers does NOT clear your staged changes
 
-`gh stack checkout`/`switch` is more than a thin `git checkout` wrapper — it resolves stack numbers,
-PR numbers, and PR URLs, fetches branches and sets up local stack tracking when a stack isn't tracked
-locally yet, and offers an interactive picker when run with no argument. But once it resolves *which*
-branch to land on, the actual switch still goes through git's own checkout, which does not reset the
-index or the working tree — it only touches files that differ between the two branches. If you have
+`gh stack checkout` resolves stack numbers, PR numbers, PR URLs, and locally tracked branch names.
+It can fetch a remote stack and set up local tracking; with no argument it opens the available-stack
+picker. `gh stack switch` only opens the branch picker for the current stack: it does not accept an
+identifier, so use `gh stack checkout <branch>`, not `gh stack switch <branch>`. Once either command
+resolves *which* branch to land on, the actual switch goes through git's own checkout, which does not
+reset the index or the working tree — it only touches files that differ between the two branches. If you have
 staged **or unstaged** changes for **files that are identical on both branches**, those changes
 silently ride along to whatever branch you land on next.
 
@@ -56,7 +58,8 @@ must never mean silently discarding uncommitted work. **Never discard changes (`
 matches this repo's Git Safety Protocol. Preserve the work first, then switch:
 
 - Commit it, even as a throwaway WIP commit on the current branch (`git commit -m 'WIP: <tag>'`) —
-  you can `git reset --soft HEAD~1` to restore it as unstaged changes once you're back on this layer.
+  with the user's approval, `git reset --mixed HEAD~1` restores it as unstaged changes once you're
+  back on this layer. Use this only for your own unpublished WIP commit at the branch tip.
 - Or copy the dirty files out to a temporary worktree, or a patch file written safely: create a
   private temp directory (`dir=$(mktemp -d)`), exclusively create the patch file inside it
   (`patch=$(mktemp "$dir/XXXXXX.patch")` — avoids following a pre-existing symlink at a predictable
@@ -77,12 +80,17 @@ git status --short            # confirm only the files you intend to touch are d
 git diff --cached --stat      # right before committing — confirm the staged set matches your intent
 ```
 
-### 2. The `atmos-validate-editorconfig` pre-commit hook scans the whole tree, not your diff
+### 2. The EditorConfig hook's affected set differs from your staged diff
 
-Most of this repo's pre-commit hooks are diff-aware (lint, go-fumpt, etc.), but
-`atmos-validate-editorconfig` validates every file in the working tree regardless of what's staged.
-On a stacked branch, this means: **a commit on layer 2 can fail because of a pre-existing formatting
-issue in a file that only layer 1 touched** — even though your layer-2 commit never touches that file.
+`atmos-validate-editorconfig` runs on every commit (`always_run: true`), but its
+`atmos validate --affected` command normally selects committed changes since the merge base,
+unstaged changes, and untracked files, subject to the hook's exclusions. It does not collect the
+staged diff separately: a staged-only path can be missed unless another part of that affected set
+also includes it. Selected EditorConfig rule changes trigger a full scan instead.
+
+On a stacked branch, lower-layer changes can appear in that committed range: **a commit on layer 2
+can fail because of a formatting issue in a file that only layer 1 touched**, even though your
+layer-2 commit never touches that file. A passing hook is not proof that every staged file was checked.
 
 If a commit fails on a file you didn't stage and don't recognize as part of your change, check
 whether it's inherited from a lower stack layer before assuming your own change broke something.
