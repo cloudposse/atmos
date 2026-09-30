@@ -47,8 +47,8 @@ atmos helm deploy <component> --stack <stack> --ci
 atmos helm apply --affected --tags production
 atmos helm apply --all --labels cost-center=platform
 
-# Repeat --labels to combine multiple selectors across occurrences
-atmos helm apply --all --labels cost-center=platform --labels compliance=sox
+# Combine multiple selectors in one comma-separated --labels value
+atmos helm apply --all --labels cost-center=platform,compliance=sox
 ```
 
 The native Helm component renders charts in-process with the Helm Go SDK

@@ -25,6 +25,15 @@ import Experimental from "@site/src/components/Experimental";
   Go v2, with no `aws` CLI or `cfn`/`sam`/`Rain` binary dependency.
 </Intro>
 
+:::caution Unreleased CloudFormation extensions
+
+The backend commands, inline `template:` bodies, file-based `path:` configuration, and related
+examples on this page require the [phase 4 implementation](https://github.com/cloudposse/atmos/pull/3137).
+Until it lands, file-based components use `template: template.yaml`; backend commands and inline
+templates are unavailable.
+
+:::
+
 <Experimental />
 
 ## Available Configuration Sections
@@ -320,7 +329,7 @@ components:
 
     The bucket must exist before `apply`/`deploy` uploads to it — either
     provision it explicitly with
-    [`atmos aws cloudformation backend create`](/cli/commands/aws/cloudformation/backend/create),
+    `atmos aws cloudformation backend create` (requires phase 4),
     or set `provision.backend.enabled: true` (a sibling of `targets`, not
     nested under a target) to have `apply`/`deploy` create it automatically
     the first time it's missing. Auto-provisioning only runs the existence

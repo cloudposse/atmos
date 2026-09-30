@@ -24,8 +24,8 @@ atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
 atmos helm deploy --all --tags production,tier-1
 atmos helm deploy --affected --labels cost-center=platform
 
-# Repeat --labels to combine multiple selectors across occurrences
-atmos helm deploy --affected --labels cost-center=platform --labels compliance=sox
+# Combine multiple selectors in one comma-separated --labels value
+atmos helm deploy --affected --labels cost-center=platform,compliance=sox
 ```
 
 ## Flags
@@ -44,7 +44,7 @@ atmos helm deploy --affected --labels cost-center=platform --labels compliance=s
   <dd>Process multiple Helm components in dependency order. See [`apply`](/cli/commands/helm/apply).</dd>
 
   <dt>`--tags` / `--labels` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` or `key:value` pairs within one occurrence, and/or repeated for more, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform` or `--labels cost-center=platform --labels compliance=sox`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+  <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` or `key:value` pairs in one flag value, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 
   <dt>Release lifecycle flags <em>(optional)</em></dt>
   <dd>`--on-failure`, `--cleanup-on-failure`, `--wait`, `--wait-for-jobs`, `--timeout`, `--history-max`, `--no-hooks`, `--skip-crds`, `--server-side-apply`, and `--force-conflicts` behave the same as for [`apply`](/cli/commands/helm/apply#flags) and take precedence over stack `release` configuration.</dd>

@@ -2,6 +2,11 @@
 
 **Date:** 2026-08-25
 
+**Implementation dependency:** This report records the companion
+[phase 4 implementation](https://github.com/cloudposse/atmos/pull/3137) and its development
+validation. The behavior described below is pending that implementation; this documentation-only
+layer does not include the code fix.
+
 ## Summary
 
 The S3-backed CI artifact store (`pkg/ci/artifact/s3`) never threaded the active identity's
@@ -27,7 +32,7 @@ resolved auth context but never `EndpointURL`, and `initIdentityClient` called
 `pkg/ci/artifact/s3/store.go`: added `buildClientOptFns(authContext)`, mirroring
 `pkg/component/aws/cloudformation/client.go`'s `newClient` pattern exactly — when
 `authContext.EndpointURL` is non-empty, appends an `s3.Options` functional option setting
-`BaseEndpoint`. Wired into `initIdentityClient`'s `s3.NewFromConfig(cfg, ...)` call. Left
+`BaseEndpoint`. Wired into the `s3.NewFromConfig` call in `initIdentityClient`. Left
 `initDefaultClient` unchanged — it has no `authContext` in scope (no identity configured), so
 there's nothing to override there.
 
@@ -37,7 +42,7 @@ AWS SDK, same rationale already recorded for `pkg/ci/planfile/s3`. The package's
 non-test AWS SDK imports predate this branch so were never flagged by `--new-from-rev`; this
 change's new test-file imports were the first to surface the missing exclusion.
 
-## Validation
+## Development validation (companion implementation)
 
 - New test: `TestStore_BuildClientOptFns` (store_test.go) — written first, confirmed failing
   (`undefined: buildClientOptFns`) before the fix, then passing after. Mirrors the existing

@@ -2,6 +2,11 @@
 
 **Date:** 2026-08-25
 
+**Implementation dependency:** This report records the companion
+[phase 4 implementation](https://github.com/cloudposse/atmos/pull/3137) and its development
+validation. The behavior described below is pending that implementation; this documentation-only
+layer does not include the code fix.
+
 ## Summary
 
 `aws/cloudformation` components had no way to author a CloudFormation template directly in stack
@@ -93,7 +98,7 @@ construct `map[string]any` directly, bypassing real stack processing):
 - `website/docs/migration/from-rain.mdx`: all four `template: template.yaml` examples → `path:
   template.yaml`; the "Atmos never preprocesses..." sentence scoped to file-based (`path:`) templates.
 
-## Validation
+## Development validation (companion implementation)
 
 - Bug Fixing Workflow: new tests written first for `buildStackSpec`/`validateComponentConfig`/
   `runFmt`, confirmed failing against the old behavior, then made to pass by the implementation.

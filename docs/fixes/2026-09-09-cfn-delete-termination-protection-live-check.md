@@ -2,6 +2,11 @@
 
 **Date:** 2026-09-09
 
+**Implementation dependency:** This report records the companion
+[phase 4 implementation](https://github.com/cloudposse/atmos/pull/3137) and its development
+validation. The behavior described below is pending that implementation; this documentation-only
+layer does not include the code fix.
+
 ## Summary
 
 `deleteStack` (`pkg/component/aws/cloudformation/delete.go`) gated its termination-protection
@@ -103,7 +108,7 @@ needed it most.
     call (returning an unprotected stack) that `checkTerminationProtectionGate` issues before
     `DeleteStack`.
 
-## Validation
+## Development validation (companion implementation)
 
 - `go build ./...` — passes.
 - `go test -count=1 ./pkg/component/aws/cloudformation/...` — passes, including the new/updated
