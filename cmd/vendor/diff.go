@@ -62,7 +62,7 @@ func resolveDiffComponents(cmd *cobra.Command, v *viper.Viper) ([]string, error)
 	component := v.GetString("component")
 	filterTags := splitTags(v.GetString("tags"))
 	stack := v.GetString("stack")
-	labels, err := pkgtags.ParseLabelsFlag(v.GetStringSlice("labels"))
+	labels, err := pkgtags.ParseLabelsFlag(pkgtags.ReadLabelsFlag(v))
 	if err != nil {
 		return nil, err
 	}

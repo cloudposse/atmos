@@ -34,6 +34,11 @@ name, an interactive selector will prompt you to choose which one to run.`,
 			return cmd.Help()
 		}
 
+		// Bind after parsing so explicit flags take precedence over environment labels.
+		if err := workflowParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+			return err
+		}
+
 		// If no arguments are provided, start the workflow UI.
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)

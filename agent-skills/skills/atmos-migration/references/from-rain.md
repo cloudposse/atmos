@@ -28,12 +28,13 @@ and `website/docs/stacks/components/aws-cloudformation.mdx` for the stack-config
   itself already handles — Atmos stack config (`parameters:`, `!env`, `!template`, inheritance)
   for anything CloudFormation Parameters can express, or CloudFormation's own native
   `Fn::Transform`/`AWS::Include` intrinsic for template-fragment reuse.
-2. **Existing templates and parameter files are `!include`d or pointed at, never rewritten.**
-  Point `path:` at the existing `.yaml`/`.json` template file unchanged (after resolving any
-  `!Rain::` directives per the table below). If the user has a Rain/CFN parameters JSON file
-  (`--parameters` flag or `Parameters.json`), pull it into the component's `parameters:` section
-  with `!include`. Migration is opt-in, matching the Terraform migration guide's philosophy — see
-  [from-native-terraform.md](from-native-terraform.md) Core Principle 2 for the identical stance.
+2. **Reuse templates and include parameter maps.** Point `path:` at the existing `.yaml`/`.json`
+  template file unchanged (after resolving any `!Rain::` directives per the table below).
+  Atmos `parameters:` requires a map from parameter names to values. A Rain/CFN parameters JSON
+  file in AWS CLI `ParameterKey`/`ParameterValue` array format must first be converted to that map;
+  include the converted file with `!include`, which loads data without reshaping it. Keep the
+  original parameter file for the existing workflow. Migration is opt-in — see
+  [from-native-terraform.md](from-native-terraform.md) Core Principle 2 for the same stance.
 3. **No 1:1 CLI compatibility.** `atmos aws cloudformation` verbs are Atmos-native — see the verb
   cross-reference table below. Do not tell a user to alias `rain` to `atmos aws cfn`; flag names,
   output shape, and confirmation semantics differ.
@@ -203,6 +204,27 @@ mapped to" rather than guessing.
         capabilities:
           - CAPABILITY_IAM
   ```
+  The included `params/dev-parameters.json` must contain a parameter map. For example, convert
+  this existing AWS CLI parameter array:
+
+  ```json
+  [
+    {"ParameterKey": "CidrBlock", "ParameterValue": "10.0.0.0/16"},
+    {"ParameterKey": "Environment", "ParameterValue": "dev"}
+  ]
+  ```
+
+  into this new `params/dev-parameters.json` file:
+
+  ```json
+  {
+    "CidrBlock": "10.0.0.0/16",
+    "Environment": "dev"
+  }
+  ```
+
+  Do not include the array directly: Atmos does not convert AWS CLI parameter arrays.
+
 5. **Run `atmos aws cloudformation plan vpc -s dev`** and compare the predicted changeset against
   what `rain diff`/`aws cloudformation deploy --no-execute-changeset` produced before.
 6. **Run `atmos aws cloudformation deploy vpc -s dev`** and confirm the end-of-deploy Outputs

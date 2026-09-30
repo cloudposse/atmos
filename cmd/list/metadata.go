@@ -76,7 +76,7 @@ func parseMetadataOptions(cmd *cobra.Command, v *viper.Viper) *MetadataOptions {
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
-		LabelsRaw:        v.GetStringSlice("labels"),
+		LabelsRaw:        tags.ReadLabelsFlag(v),
 	}
 }
 

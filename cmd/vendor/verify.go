@@ -69,7 +69,7 @@ Exits non-zero when any drift is found. This never checks for a newer upstream v
 		component := v.GetString("component")
 		filterTags := splitTags(v.GetString("tags"))
 		stack := v.GetString("stack")
-		labels, err := pkgtags.ParseLabelsFlag(v.GetStringSlice("labels"))
+		labels, err := pkgtags.ParseLabelsFlag(pkgtags.ReadLabelsFlag(v))
 		if err != nil {
 			return err
 		}

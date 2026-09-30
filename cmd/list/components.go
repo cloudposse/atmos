@@ -118,7 +118,7 @@ func parseComponentsOptions(cmd *cobra.Command, v *viper.Viper) *ComponentsOptio
 		Skip:             v.GetStringSlice("skip"),
 		ErrorMode:        v.GetString("error-mode"),
 		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
-		LabelsRaw:        v.GetStringSlice("labels"),
+		LabelsRaw:        tags.ReadLabelsFlag(v),
 	}
 }
 

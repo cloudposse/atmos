@@ -45,6 +45,9 @@ func expectPreviewRequest(t *testing.T, client *MockCloudFormationClient, operat
 		return &cloudformation.CreateChangeSetOutput{}, nil
 	})
 	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{Status: cfntypes.ChangeSetStatusCreateComplete}, nil)
+	if operation == OperationDiff {
+		client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil)
+	}
 }
 
 func assertTemplateInput(t *testing.T, spec *stackSpec, body, url *string) {

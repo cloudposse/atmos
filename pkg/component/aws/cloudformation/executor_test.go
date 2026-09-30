@@ -136,7 +136,7 @@ func TestRunDiff_CleanupFailureIsNonFatal(t *testing.T) {
 	client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-	_, err := runDiff(context.Background(), client, spec, map[string]any{})
+	_, err := runDiff(&opContext{Ctx: context.Background()}, client, spec, map[string]any{})
 	require.NoError(t, err)
 }
 

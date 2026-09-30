@@ -116,7 +116,7 @@ func TestValidateTemplate_Error(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().ValidateTemplate(gomock.Any(), gomock.Any()).Return(nil, errors.New("invalid template"))
 
-	err := validateTemplate(context.Background(), client, &stackSpec{TemplateBody: "not a template"})
+	err := validateTemplate(context.Background(), client, &stackSpec{StackName: "vpc", TemplateBody: "not a template"})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidSpecificAwsCloudFormationComponent)
 }

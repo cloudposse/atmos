@@ -133,7 +133,7 @@ func parseSourcesOptions(cmd *cobra.Command, v *viper.Viper, args []string) *Sou
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
-		LabelsRaw:        v.GetStringSlice("labels"),
+		LabelsRaw:        tags.ReadLabelsFlag(v),
 	}
 	if len(args) > 0 {
 		opts.Component = args[0]
