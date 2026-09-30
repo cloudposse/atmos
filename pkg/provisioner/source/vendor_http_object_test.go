@@ -32,13 +32,14 @@ func TestVendorSourceHTTPObjectRecognizedAsS3(t *testing.T) {
 	require.True(t, vendor.IsS3URI(uri))
 	target := filepath.Join(t.TempDir(), "template.yaml")
 	require.NoError(t, VendorSource(context.Background(), &schema.AtmosConfiguration{}, &schema.VendorComponentSource{Uri: uri}, target))
-	actual, err := os.ReadFile(target)
+	require.DirExists(t, target)
+	actual, err := os.ReadFile(filepath.Join(target, "template.yaml"))
 	require.NoError(t, err)
 	assert.Equal(t, content, string(actual))
 	assert.Positive(t, requests.Load())
 }
 
-func TestVendorSourceUppercaseArchiveExtensionRemainsFile(t *testing.T) {
+func TestVendorSourceUppercaseArchiveExtensionRemainsRawContent(t *testing.T) {
 	const content = "raw bytes from a case-sensitive source"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, content)
@@ -46,7 +47,8 @@ func TestVendorSourceUppercaseArchiveExtensionRemainsFile(t *testing.T) {
 	defer server.Close()
 	target := filepath.Join(t.TempDir(), "target")
 	require.NoError(t, VendorSource(context.Background(), &schema.AtmosConfiguration{}, &schema.VendorComponentSource{Uri: server.URL + "/module.ZIP"}, target))
-	actual, err := os.ReadFile(target)
+	require.DirExists(t, target)
+	actual, err := os.ReadFile(filepath.Join(target, "module.ZIP"))
 	require.NoError(t, err)
 	assert.Equal(t, content, string(actual))
 }

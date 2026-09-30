@@ -65,7 +65,7 @@ func executeBulk(
 }
 
 func authManagerForBulk(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
-	if info.Identity == "" {
+	if info.DryRun || info.Identity == "" {
 		return nil, nil
 	}
 	authConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)

@@ -403,7 +403,7 @@ func TestVendorSourcePostDownloadReplaceTargetFalseFailsWhenTargetExists(t *test
 
 // TestVendorSourcePostDownloadReplacesExistingFileTarget verifies the post-download
 // path replaces an existing target (even a plain file) when replacement is enabled,
-// exercising the single-file target-replacement branch after a real download.
+// exercising target replacement after a real download.
 func TestVendorSourcePostDownloadReplacesExistingFileTarget(t *testing.T) {
 	srcDir := t.TempDir()
 	srcFile := filepath.Join(srcDir, "main.tf")
@@ -416,20 +416,18 @@ func TestVendorSourcePostDownloadReplacesExistingFileTarget(t *testing.T) {
 	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceURL.String()}, targetDir)
 	require.NoError(t, err)
 
-	// A single-file source (go-getter stages it as the sole entry in the temp
-	// staging dir) is written directly to targetDir as a file, not nested inside
-	// a directory named after targetDir.
+	// Single-file sources keep the component target as a directory.
 	info, statErr := os.Stat(targetDir)
 	require.NoError(t, statErr)
-	assert.False(t, info.IsDir())
-	content, err := os.ReadFile(targetDir)
+	assert.True(t, info.IsDir())
+	content, err := os.ReadFile(filepath.Join(targetDir, "main.tf"))
 	require.NoError(t, err)
 	assert.Equal(t, "# new source\n", string(content))
 }
 
 // TestVendorSourceSupportsSingleFileURI verifies the PRD's single-file source
 // shape (e.g. `source: {uri: https://.../dns.yaml}`): the fetched file is
-// written directly to targetDir as a file, not a directory containing the file.
+// written inside the component directory under its original basename.
 func TestVendorSourceSupportsSingleFileURI(t *testing.T) {
 	srcDir := t.TempDir()
 	srcFile := filepath.Join(srcDir, "dns.yaml")
@@ -442,8 +440,8 @@ func TestVendorSourceSupportsSingleFileURI(t *testing.T) {
 
 	info, statErr := os.Stat(targetDir)
 	require.NoError(t, statErr)
-	assert.False(t, info.IsDir())
-	content, err := os.ReadFile(targetDir)
+	assert.True(t, info.IsDir())
+	content, err := os.ReadFile(filepath.Join(targetDir, "dns.yaml"))
 	require.NoError(t, err)
 	assert.Equal(t, "Resources: {}\n", string(content))
 }
