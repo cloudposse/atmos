@@ -141,7 +141,7 @@ func TestRunChangesetCreate_Success(t *testing.T) {
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
 	out := captureStdout(t, func() {
-		summary, err := runChangesetCreate(context.Background(), client, spec, map[string]any{})
+		summary, err := runChangesetCreate(&opContext{Ctx: context.Background()}, client, spec, map[string]any{})
 		require.NoError(t, err)
 		assert.False(t, summary["no_op"].(bool))
 		assert.NotEmpty(t, summary["changeset_name"])
@@ -156,7 +156,7 @@ func TestRunChangesetCreate_Error(t *testing.T) {
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-	_, err := runChangesetCreate(context.Background(), client, spec, map[string]any{})
+	_, err := runChangesetCreate(&opContext{Ctx: context.Background()}, client, spec, map[string]any{})
 	require.Error(t, err)
 }
 

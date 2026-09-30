@@ -81,8 +81,11 @@ func describeNamedChangeSet(ctx context.Context, client CloudFormationClient, st
 // review/execution — the explicit-control complement to diff/plan's implicit,
 // preview-only changeset (which is also left in place, but framed as a preview
 // rather than a named, reusable artifact).
-func runChangesetCreate(ctx context.Context, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
-	result, err := createChangeSet(ctx, client, spec)
+func runChangesetCreate(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+	if err := prepareTemplateForAPI(octx, spec, summary); err != nil {
+		return summary, err
+	}
+	result, err := createChangeSet(octx.Ctx, client, spec)
 	if err != nil {
 		return summary, err
 	}
