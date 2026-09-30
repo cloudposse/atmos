@@ -20,8 +20,9 @@ func TestCloudFormationSourceDryRun_MountedCommandsPreserveSource(t *testing.T) 
 	for _, tt := range []struct {
 		verb  string
 		force bool
-	}{{"pull", true}, {"delete", true}, {"delete", false}} {
-		t.Run(tt.verb+map[bool]string{true: "/forced", false: "/confirmation"}[tt.force], func(t *testing.T) {
+		env   bool
+	}{{"pull", true, false}, {"delete", true, false}, {"delete", false, false}, {"pull", true, true}, {"delete", true, true}, {"delete", false, true}} {
+		t.Run(tt.verb+map[bool]string{true: "/forced", false: "/confirmation"}[tt.force]+map[bool]string{true: "/env", false: "/cli"}[tt.env], func(t *testing.T) {
 			viper.Reset()
 			t.Cleanup(viper.Reset)
 			var requests atomic.Int32
@@ -53,7 +54,13 @@ func TestCloudFormationSourceDryRun_MountedCommandsPreserveSource(t *testing.T) 
 				t.Cleanup(func() { require.NoError(t, flag.Value.Set(previous)); flag.Changed = changed })
 			}
 			t.Cleanup(func() { root.SetArgs(nil) })
-			args := []string{"source", tt.verb, "vpc", "--stack", "dev", "--dry-run"}
+			t.Setenv("ATMOS_DRY_RUN", "false")
+			args := []string{"source", tt.verb, "vpc", "--stack", "dev"}
+			if tt.env {
+				t.Setenv("ATMOS_DRY_RUN", "true")
+			} else {
+				args = append(args, "--dry-run")
+			}
 			if tt.force {
 				args = append(args, "--force")
 			}
