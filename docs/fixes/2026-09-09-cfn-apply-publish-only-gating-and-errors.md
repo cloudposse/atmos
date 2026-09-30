@@ -2,10 +2,9 @@
 
 **Date:** 2026-09-09
 
-**Implementation status:** Pending in the documentation-only [PR #3156](https://github.com/cloudposse/atmos/pull/3156).
-The implementation and regression tests are in the follow-up [PR #3157](https://github.com/cloudposse/atmos/pull/3157).
-This report preserves the development findings and validation of that implementation;
-it does not mean the fix is present in the documentation-only revision.
+**Implementation status:** Included in [PR #3157](https://github.com/cloudposse/atmos/pull/3157),
+the implementation follow-up to documentation-only [PR #3156](https://github.com/cloudposse/atmos/pull/3156).
+This report preserves the development findings and validation of that implementation.
 
 ## Summary
 
@@ -53,7 +52,7 @@ wrapping pattern — contrasted with the curated errors elsewhere in the same pa
 `delete.go`'s termination-protection/retain-resources gates) that use the full error-builder
 pattern with an explanation and hint.
 
-## Proposed implementation (PR #3157)
+## Implementation (PR #3157)
 
 **Bug 1 (primary) — `pkg/component/aws/cloudformation/executor.go`, `runApply` (~line 397-448):**
 
