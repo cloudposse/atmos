@@ -105,7 +105,7 @@ func parseDependenciesOptions(cmd *cobra.Command, v *viper.Viper, args []string)
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		Tags:             tags.ParseTagsFlag(v.GetString(tagsViperKey)),
-		LabelsRaw:        v.GetStringSlice(labelsViperKey),
+		LabelsRaw:        tags.ReadLabelsFlagKey(v, labelsViperKey),
 	}
 }
 

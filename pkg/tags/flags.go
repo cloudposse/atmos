@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/spf13/viper"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -26,15 +28,36 @@ func ParseTagsFlag(input string) []string {
 	return result
 }
 
+// ReadLabelsFlag reads the bare "labels" key without splitting scalar configuration or
+// environment values on whitespace. StringSlice flags and list configuration retain their shape.
+func ReadLabelsFlag(v *viper.Viper) []string {
+	defer perf.Track(nil, "tags.ReadLabelsFlag")()
+
+	return ReadLabelsFlagKey(v, "labels")
+}
+
+// ReadLabelsFlagKey is ReadLabelsFlag for a namespaced Viper key (for example "list.labels"),
+// used by command families that bind --labels away from the bare key so a job-level ATMOS_LABELS
+// cannot leak into them through Viper's AutomaticEnv lookup.
+func ReadLabelsFlagKey(v *viper.Viper, key string) []string {
+	defer perf.Track(nil, "tags.ReadLabelsFlagKey")()
+
+	if scalar, ok := v.Get(key).(string); ok {
+		return []string{scalar}
+	}
+	return v.GetStringSlice(key)
+}
+
 // labelsFlagSource is the default source name used in --labels parse errors.
 const labelsFlagSource = "--labels"
 
 // ParseLabelsFlag parses a slice of key=value (or key:value) pairs into a map[string]string.
 // The input is shaped the way pflag's StringSlice flag type hands it over: comma-splitting within
 // a single occurrence happens in pflag itself and repeated occurrences accumulate
-// (e.g. --labels a=1,b=2 --labels c=3). Elements are still comma-split here so a value bound from
-// an environment variable (one element holding the whole comma-separated list) parses the same
-// way. Duplicate keys are last-wins. Errors name the "--labels" flag as their source.
+// (e.g. --labels a=1,b=2 --labels c=3). Elements are still comma-split here so a scalar value read
+// by ReadLabelsFlag (one element holding the whole comma-separated list, as ATMOS_LABELS="a=1,b=2"
+// or a plain string in config arrives) parses the same way without splitting label values on
+// whitespace. Duplicate keys are last-wins. Errors name the "--labels" flag as their source.
 func ParseLabelsFlag(input []string) (map[string]string, error) {
 	defer perf.Track(nil, "tags.ParseLabelsFlag")()
 

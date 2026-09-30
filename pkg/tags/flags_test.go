@@ -7,6 +7,9 @@ import (
 
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -222,7 +225,7 @@ func TestParseLabelsFlag(t *testing.T) {
 	})
 
 	// A scalar Viper value (e.g. ATMOS_LABELS="a=1,b=2", or a plain string set via
-	// viper.Set) reaches ParseRunOptions as v.GetStringSlice("labels"), which wraps
+	// viper.Set) reaches ParseRunOptions through ReadLabelsFlag, which wraps
 	// the whole comma-separated string in a single slice element -- unlike pflag's
 	// own StringSlice.Set, which comma-splits before ParseLabelsFlag ever sees it.
 	// Regression test for both pairs being dropped/mangled into one bad entry.
@@ -377,4 +380,29 @@ func TestParseLabelsFlag_PflagStringSliceRepeatAccumulates(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestReadLabelsFlag(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		input any
+		want  []string
+	}{
+		{name: "absent"},
+		{name: "scalar spaces", input: "team = platform,owner=platform engineering", want: []string{"team = platform,owner=platform engineering"}},
+		{name: "string slice", input: []string{"team = platform", "owner=platform engineering"}, want: []string{"team = platform", "owner=platform engineering"}},
+		{name: "config list", input: []any{"team = platform", "owner=platform engineering"}, want: []string{"team = platform", "owner=platform engineering"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := viper.New()
+			v.Set("labels", tc.input)
+			got := ReadLabelsFlag(v)
+			assert.Equal(t, tc.want, got)
+			labels, err := ParseLabelsFlag(got)
+			require.NoError(t, err)
+			if tc.input != nil {
+				assert.Equal(t, map[string]string{"team": "platform", "owner": "platform engineering"}, labels)
+			}
+		})
+	}
 }

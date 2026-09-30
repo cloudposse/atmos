@@ -172,7 +172,7 @@ func TestParseRunOptions_InvalidLabelsFlagReturnsError(t *testing.T) {
 // TestParseRunOptions_ScalarCommaSeparatedLabelsAreSplit is a regression test for a
 // scalar Viper value (e.g. set via ATMOS_LABELS or a plain string in config, rather
 // than pflag's own StringSlice.Set) reaching ParseRunOptions as a single
-// comma-separated string, since Viper's GetStringSlice wraps that whole string in
+// comma-separated string, since ReadLabelsFlag wraps that whole string in
 // one slice element, so ParseLabelsFlag itself must comma-split each element --
 // otherwise only one bad "a=1,b=2" entry would be produced instead of two labels.
 func TestParseRunOptions_ScalarCommaSeparatedLabelsAreSplit(t *testing.T) {
@@ -749,4 +749,12 @@ stacks:
   name_pattern: "{stage}"
 `), 0o644))
 	return dir
+}
+
+func TestParseRunOptions_ScalarLabelsPreserveSpaces(t *testing.T) {
+	v := viper.New()
+	v.Set("labels", "team = platform,owner=platform engineering")
+	opts, err := ParseRunOptions(v)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"team": "platform", "owner": "platform engineering"}, opts.Labels)
 }
