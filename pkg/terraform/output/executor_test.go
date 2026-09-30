@@ -309,30 +309,50 @@ func TestExecutor_ExecuteWithSections_WorkspaceSelectFails_NewSucceeds(t *testin
 }
 
 // TestExecutor_ExecuteWithSections_PassVarsReachesRunnerEnv is an integration-level
-// regression test for issue #1412. It exercises the full ExecuteWithSections path
-// (ExtractComponentConfig → SetupEnvironment → SetEnv) and asserts the component's
-// vars reach the runner as TF_VAR_* when init.pass_vars is enabled, so the internal
-// `terraform init` can satisfy init-time variable dependencies.
+// regression test for issues #1412 and #3231. It exercises the full ExecuteWithSections path
+// (ExtractComponentConfig -> SetupEnvironment -> SetEnv/init) and asserts that, when init.pass_vars
+// is enabled, the component's vars reach the init subprocess as TF_VAR_* (so init-time variable
+// dependencies resolve) while runner.SetEnv never sees a TF_VAR_* key (terraform-exec rejects them).
 func TestExecutor_ExecuteWithSections_PassVarsReachesRunnerEnv(t *testing.T) {
-	run := func(passVars bool) map[string]string {
+	type observed struct {
+		runnerEnv   map[string]string
+		initEnv     map[string]string
+		initCalls   int
+		initReq     *InitWithVarsRequest
+		runnerInits int // Calls to runner.Init (pass_vars=false only).
+	}
+
+	run := func(passVars bool) *observed {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
 		mockDescriber := NewMockComponentDescriber(ctrl)
 		mockRunner := NewMockTerraformRunner(ctrl)
+		obs := &observed{}
 
-		var capturedEnv map[string]string
 		mockRunner.EXPECT().SetEnv(gomock.Any()).DoAndReturn(func(env map[string]string) error {
-			capturedEnv = env
-			return nil
+			obs.runnerEnv = env
+			return realRuleSetEnv(env)
 		}).AnyTimes()
-		mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+		// With pass_vars the mock has no Init expectation, so any runner.Init call fails the test.
+		if !passVars {
+			mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(context.Context, ...tfexec.InitOption) error { obs.runnerInits++; return nil },
+			).Times(1)
+		}
 		mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 		mockRunner.EXPECT().Output(gomock.Any()).Return(nil, nil)
 
-		exec := NewExecutor(mockDescriber, WithRunnerFactory(
-			func(workdir, executable string) (TerraformRunner, error) { return mockRunner, nil },
-		))
+		exec := NewExecutor(
+			mockDescriber,
+			WithRunnerFactory(func(workdir, executable string) (TerraformRunner, error) { return mockRunner, nil }),
+			WithInitWithVars(func(_ context.Context, req *InitWithVarsRequest) error {
+				obs.initCalls++
+				obs.initReq = req
+				obs.initEnv = req.Env
+				return nil
+			}),
+		)
 
 		atmosConfig := validAtmosConfig(t)
 		atmosConfig.Components.Terraform.Init.PassVars = passVars
@@ -342,15 +362,26 @@ func TestExecutor_ExecuteWithSections_PassVarsReachesRunnerEnv(t *testing.T) {
 
 		_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
 		require.NoError(t, err)
-		return capturedEnv
+		return obs
 	}
 
 	withPassVars := run(true)
-	assert.Equal(t, "9.4.1", withPassVars["TF_VAR_aks_version"],
-		"pass_vars=true must forward component vars to the runner as TF_VAR_*")
+	require.Equal(t, 1, withPassVars.initCalls, "pass_vars=true must run init through the vars-aware seam")
+	assert.Equal(t, 0, withPassVars.runnerInits, "pass_vars=true must not call runner.Init")
+	assert.Equal(t, "9.4.1", withPassVars.initEnv["TF_VAR_aks_version"],
+		"pass_vars=true must forward component vars to the init subprocess as TF_VAR_*")
+	assert.NotEmpty(t, withPassVars.initReq.Dir)
+	assert.NotEmpty(t, withPassVars.initReq.Executable)
+	assert.Empty(t, tfexec.ProhibitedEnv(withPassVars.runnerEnv),
+		"runner.SetEnv must not receive keys terraform-exec prohibits (TF_VAR_*)")
+	for k := range withPassVars.runnerEnv {
+		assert.False(t, strings.HasPrefix(k, "TF_VAR_"), "runner env leaked %s", k)
+	}
 
 	withoutPassVars := run(false)
-	_, ok := withoutPassVars["TF_VAR_aks_version"]
+	assert.Equal(t, 0, withoutPassVars.initCalls, "pass_vars=false must not use the vars-aware init seam")
+	assert.Equal(t, 1, withoutPassVars.runnerInits, "pass_vars=false must init through the runner")
+	_, ok := withoutPassVars.runnerEnv["TF_VAR_aks_version"]
 	assert.False(t, ok, "pass_vars=false must not forward vars as TF_VAR_*")
 }
 
