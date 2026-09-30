@@ -67,12 +67,13 @@ func describeNamedChangeSet(ctx context.Context, client CloudFormationClient, st
 	}
 
 	return &changeSetResult{
-		ChangeSetID:   stringValue(out.ChangeSetId),
-		ChangeSetName: changeSetName,
-		StackID:       stringValue(out.StackId),
-		Status:        out.Status,
-		StatusReason:  stringValue(out.StatusReason),
-		Changes:       out.Changes,
+		ChangeSetID:    stringValue(out.ChangeSetId),
+		ChangeSetName:  changeSetName,
+		StackID:        stringValue(out.StackId),
+		Status:         out.Status,
+		StatusReason:   stringValue(out.StatusReason),
+		Changes:        out.Changes,
+		OnStackFailure: out.OnStackFailure,
 	}, nil
 }
 
