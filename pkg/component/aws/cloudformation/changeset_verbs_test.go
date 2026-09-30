@@ -197,6 +197,48 @@ func TestRunChangesetExecute_Success(t *testing.T) {
 	assert.Equal(t, string(cfntypes.StackStatusUpdateComplete), summary["final_status"])
 }
 
+// Named changesets must retain their stored failure policy. AWS rejects an
+// execution that combines OnStackFailure with DisableRollback, while an UPDATE
+// without a stored policy must still honor disable_rollback from the stack.
+func TestRunChangesetExecute_RollbackOptions(t *testing.T) {
+	tests := []struct {
+		name            string
+		onStackFailure  cfntypes.OnStackFailure
+		disableRollback bool
+		wantDisable     *bool
+	}{
+		{name: "CREATE do nothing", onStackFailure: cfntypes.OnStackFailureDoNothing, disableRollback: true},
+		{name: "CREATE rollback", onStackFailure: cfntypes.OnStackFailureRollback, disableRollback: true},
+		{name: "CREATE delete", onStackFailure: cfntypes.OnStackFailureDelete, disableRollback: true},
+		{name: "UPDATE disable rollback", disableRollback: true, wantDisable: awsBool(true)},
+		{name: "UPDATE default rollback"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewMockCloudFormationClient(gomock.NewController(t))
+			executeErr := errors.New("stop after checking execution options")
+			gomock.InOrder(
+				client.EXPECT().DescribeChangeSet(gomock.Any(), &cloudformation.DescribeChangeSetInput{
+					ChangeSetName: awsString("cs-1"), StackName: awsString("vpc"),
+				}).Return(&cloudformation.DescribeChangeSetOutput{
+					ChangeSetId: awsString("cs-id-1"), Status: cfntypes.ChangeSetStatusCreateComplete,
+					OnStackFailure: tt.onStackFailure,
+				}, nil),
+				client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+				client.EXPECT().ExecuteChangeSet(gomock.Any(), &cloudformation.ExecuteChangeSetInput{
+					ChangeSetName: awsString("cs-1"), StackName: awsString("vpc"), DisableRollback: tt.wantDisable,
+				}).Return(nil, executeErr),
+			)
+
+			spec := &stackSpec{StackName: "vpc", DisableRollback: tt.disableRollback}
+			summary, err := runChangesetExecute(context.Background(), client, spec, "cs-1", map[string]any{})
+			require.ErrorIs(t, err, executeErr)
+			assert.Equal(t, "cs-id-1", summary["changeset_id"])
+			assert.Equal(t, "cs-1", summary["changeset_name"])
+		})
+	}
+}
+
 // runChangesetExecute must propagate a describeNamedChangeSet failure without
 // ever calling ExecuteChangeSet.
 func TestRunChangesetExecute_DescribeError(t *testing.T) {
