@@ -519,6 +519,7 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		return summary, nil
 	}
 	summary["changeset_id"] = result.ChangeSetID
+	summary["changeset_name"] = result.ChangeSetName
 	summary["no_op"] = result.NoOp
 
 	if err := applyPostDeployPolicy(octx, client, spec, result); err != nil {
