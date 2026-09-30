@@ -128,6 +128,7 @@ func TestRequireConfirmation_DeclinedAborts(t *testing.T) {
 // stackset create/update/delete must each prompt for confirmation, using
 // their own distinct verb, and must skip the prompt when --auto-approve is set.
 func TestRequireConfirmation_StackSetOperationsPrompt(t *testing.T) {
+	stubConfirmOperation(t, true, nil)
 	tests := []struct {
 		op       Operation
 		wantVerb string
@@ -237,7 +238,7 @@ func TestRequireConfirmation_NonTerminalAbortsWithoutPrompt(t *testing.T) {
 	originalConfirm := confirmOperation
 	confirmOperation = func(string) (bool, error) { t.Fatal("non-terminal input must not prompt"); return true, nil }
 	t.Cleanup(func() { confirmOperation = originalConfirm })
-	for _, operation := range []Operation{OperationApply, OperationDelete, OperationChangesetExecute} {
+	for _, operation := range []Operation{OperationApply, OperationDelete, OperationChangesetExecute, OperationStackSetCreate, OperationStackSetUpdate, OperationStackSetDelete} {
 		err := requireConfirmation(operation, "vpc", nil)
 		require.ErrorIs(t, err, errUtils.ErrUserAborted)
 		assert.True(t, errUtils.HasHint(err, "--auto-approve"))
