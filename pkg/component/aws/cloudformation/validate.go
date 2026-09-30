@@ -3,6 +3,8 @@ package cloudformation
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -47,7 +49,7 @@ func validateComponentConfig(config map[string]any) error {
 
 	if templatePresent {
 		if err := sanityCheckInlineTemplate(templateRaw); err != nil {
-			return fmt.Errorf("stack %q: %w", stackName, err)
+			return inlineTemplateError(stackName, templateRaw, err)
 		}
 	}
 
@@ -188,4 +190,30 @@ func validateTemplate(ctx context.Context, client CloudFormationClient, spec *st
 	}
 	ui.Success(fmt.Sprintf("%s: template is valid", spec.StackName))
 	return nil
+}
+
+// inlineTemplateError explains the path/template distinction for file-looking
+// values without changing validation or adding hints to malformed inline bodies.
+func inlineTemplateError(stackName string, raw any, err error) error {
+	value, ok := raw.(string)
+	if ok && looksLikeTemplateFileRef(value) {
+		return errUtils.Build(errUtils.ErrInvalidAwsCloudFormationSettings).
+			WithCause(err).
+			WithExplanationf("Stack %q: template is an inline body, not a file path.", stackName).
+			WithHintf("Use path: %s to reference a template file.", strings.TrimSpace(value)).
+			Err()
+	}
+	return fmt.Errorf("stack %q: %w", stackName, err)
+}
+
+func looksLikeTemplateFileRef(value string) bool {
+	if strings.ContainsAny(value, "\n\r:{}") {
+		return false
+	}
+	switch strings.ToLower(filepath.Ext(strings.TrimSpace(value))) {
+	case ".yaml", ".yml", ".json", ".template":
+		return true
+	default:
+		return false
+	}
 }

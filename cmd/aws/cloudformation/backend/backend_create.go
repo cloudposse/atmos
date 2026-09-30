@@ -49,6 +49,7 @@ var createCmd = &cobra.Command{
 			Identity:    identity,
 			Target:      target,
 			AutoApprove: autoApprove,
+			DryRun:      dryRunRequested(cmd, v),
 		})
 	},
 }
@@ -92,6 +93,7 @@ type createOrUpdateArgs struct {
 	Identity    string
 	Target      string
 	AutoApprove bool
+	DryRun      bool
 }
 
 // executeCreateOrUpdate is shared by `create` and `update`: both provision the
@@ -108,6 +110,10 @@ func executeCreateOrUpdate(ctx context.Context, args createOrUpdateArgs) error {
 			WithExplanation("--stack flag is required").
 			WithHint("Specify a stack with --stack or -s flag").
 			Err()
+	}
+
+	if args.DryRun {
+		return nil
 	}
 
 	atmosConfig, info, err := configInit.InitConfigAndAuth(args.Component, args.Stack, args.Identity)

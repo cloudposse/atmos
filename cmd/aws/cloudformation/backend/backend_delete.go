@@ -54,6 +54,7 @@ Requires the --force flag for safety. This action cannot be undone.`,
 			Identity:  identity,
 			Target:    target,
 			Force:     force,
+			DryRun:    dryRunRequested(cmd, v),
 		})
 	},
 }
@@ -99,6 +100,7 @@ type deleteRequest struct {
 	Identity  string
 	Target    string
 	Force     bool
+	DryRun    bool
 }
 
 func executeDelete(ctx context.Context, req deleteRequest) error {
@@ -107,6 +109,10 @@ func executeDelete(ctx context.Context, req deleteRequest) error {
 			WithExplanation("--stack flag is required").
 			WithHint("Specify a stack with --stack or -s flag").
 			Err()
+	}
+
+	if req.DryRun {
+		return nil
 	}
 
 	atmosConfig, info, err := configInit.InitConfigAndAuth(req.Component, req.Stack, req.Identity)
