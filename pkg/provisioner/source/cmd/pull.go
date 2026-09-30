@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // PullCommand creates a pull command for the given component type.
@@ -100,6 +101,11 @@ func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.S
 		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
 			WithExplanation("--stack flag is required").
 			Err()
+	}
+
+	if sourceDryRun(cmd) {
+		ui.Info(fmt.Sprintf("Dry run: would pull source for %s in stack %s", component, stack))
+		return nil
 	}
 
 	opts := &CommonOptions{

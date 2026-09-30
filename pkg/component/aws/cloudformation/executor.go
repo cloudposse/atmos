@@ -233,22 +233,16 @@ type operationHandler func(octx *opContext, client CloudFormationClient, spec *s
 // operationHandlers maps every non-render Operation to its handler. A map
 // dispatch keeps runOperation a flat lookup instead of a long switch.
 var operationHandlers = map[Operation]operationHandler{
-	OperationValidate: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
-		return runValidate(octx, client, spec, summary)
-	},
-	OperationDiff: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
-		return runDiff(octx, client, spec, summary)
-	},
-	OperationApply: runApply,
+	OperationValidate: runValidate,
+	OperationDiff:     runDiff,
+	OperationApply:    runApply,
 	OperationDelete: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 		return runDelete(octx.Ctx, client, octx.Flags, spec, summary)
 	},
 	OperationOutput: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 		return runOutput(octx.Ctx, client, spec.StackName, octx.Flags, summary)
 	},
-	OperationChangesetCreate: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
-		return runChangesetCreate(octx, client, spec, summary)
-	},
+	OperationChangesetCreate: runChangesetCreate,
 	OperationChangesetExecute: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 		return runChangesetExecute(octx.Ctx, client, spec, changesetNameFlag(octx.Flags), summary)
 	},
@@ -287,14 +281,15 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 		summary["template"] = spec.TemplateBody
 		return summary, data.Write(spec.TemplateBody)
 	}
-	if operation == OperationFmt {
-		return runFmt(spec, octx.Flags, summary)
-	}
 
 	// Even diff/validate can write remote changesets or packaged templates.
 	// Stop before confirmation and client creation for every dry-run operation.
 	if octx.Info.DryRun {
 		return summary, nil
+	}
+
+	if operation == OperationFmt {
+		return runFmt(spec, octx.Flags, summary)
 	}
 
 	if err := requireConfirmation(operation, spec.StackName, octx.Flags); err != nil {
