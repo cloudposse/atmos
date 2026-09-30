@@ -118,3 +118,40 @@ func TestComponentFunc_CloudFormationBranch_CacheKeyIncludesIdentity(t *testing.
 	outputsB := resultB.(map[string]any)[cfg.OutputsSectionName].(map[string]any)
 	assert.Equal(t, "vpc-identity-b", outputsB["VpcId"])
 }
+
+// Repeated eager references reuse only their own identity's cached outputs.
+func TestComponentFunc_CloudFormationBranch_ReusesIdentityCache(t *testing.T) {
+	clearComponentFuncSyncMap(t)
+	ac := setupAwsCloudFormationOutputFixture(t)
+	getter := NewMockCloudFormationOutputsGetter(gomock.NewController(t))
+	stubCloudFormationOutputsGetter(t, getter)
+	for _, profile := range []string{"first", "second"} {
+		getter.EXPECT().GetOutputs(gomock.Any(), "us-east-1", "test-vpc", &schema.AWSAuthContext{Profile: profile}).
+			Return(map[string]any{"VpcId": profile}, nil).Times(1)
+	}
+	for _, profile := range []string{"first", "second", "first", "second"} {
+		info := &schema.ConfigAndStacksInfo{AuthContext: &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: profile}}}
+		value, err := componentFunc(&ac, info, "vpc", "test")
+		require.NoError(t, err)
+		require.Equal(t, profile, value.(map[string]any)[cfg.OutputsSectionName].(map[string]any)["VpcId"])
+	}
+}
+
+// Cached values remain usable when there are no outputs or diagnostic YAML
+// rendering fails; neither case should trigger a fresh provider request.
+func TestComponentFunc_CacheLoggingPreservesResults(t *testing.T) {
+	for name, sections := range map[string]map[string]any{
+		"no outputs":           {cfg.VarsSectionName: map[string]any{"id": "cached"}},
+		"unrenderable outputs": {cfg.OutputsSectionName: yamlMarshalError{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			clearComponentFuncSyncMap(t)
+			ac := setupAwsCloudFormationOutputFixture(t)
+			stubCloudFormationOutputsGetter(t, NewMockCloudFormationOutputsGetter(gomock.NewController(t)))
+			componentFuncSyncMap.Store("test-vpc-", sections)
+			value, err := componentFunc(&ac, nil, "vpc", "test")
+			require.NoError(t, err)
+			require.Equal(t, sections, value)
+		})
+	}
+}
