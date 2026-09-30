@@ -139,7 +139,7 @@ func runLogs(ctx context.Context, client CloudFormationClient, stackName string,
 
 	var allEvents []cfntypes.StackEvent
 	for _, name := range flattenStackNames(root) {
-		events, _, err := pollStackEvents(ctx, client, name, map[string]bool{})
+		events, _, err := pollStackEvents(ctx, client, name, map[string]bool{}, OperationLogs)
 		if err != nil {
 			return summary, err
 		}
@@ -196,12 +196,10 @@ func renderEventChart(events []cfntypes.StackEvent) {
 // loop apply/delete use internally, exposed as its own verb for attaching to
 // an operation already in progress, including one started outside Atmos.
 func runWatch(ctx context.Context, client CloudFormationClient, stackName string, summary map[string]any) (map[string]any, error) {
-	// No baseline: runWatch attaches to an operation this process didn't start
-	// (possibly already terminal, possibly kicked off outside Atmos entirely),
-	// so there's no "before the mutating call" moment to snapshot from here.
-	// seenInProgress alone still covers the case this verb targets: attaching
-	// while the operation is genuinely still running.
-	status, err := streamStackEvents(ctx, client, stackName, nil)
+	// Watching attaches to an existing operation, so its existing history is
+	// intentionally fresh relative to an empty, valid baseline. This allows an
+	// already-terminal operation to finish without waiting for new events.
+	status, err := streamStackEvents(ctx, client, stackName, eventBaseline{valid: true}, OperationWatch)
 	if err != nil {
 		return summary, err
 	}
