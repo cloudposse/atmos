@@ -326,9 +326,10 @@ accept `--auto-approve` to skip it; `deploy` implies `--auto-approve`, matching 
 
 Large templates, nested-stack templates, and local assets (e.g. Lambda source) that a CloudFormation
 API call can't accept inline must be uploaded to S3 and the template rewritten to reference them
-before a real deploy — this is what `aws cloudformation package` and Rain's `pkg` do. This is a
-**deploy-time** concern owned by this component type's `apply`/`deploy` pipeline, and the packaging
-destination is itself **a provision target, not a settings field**: a **`kind: aws/s3`** target carrying
+before creating a change set — this is what `aws cloudformation package` and Rain's `pkg` do.
+Packaging runs before `plan`, `diff`, explicit `changeset create`, and `apply`/`deploy`, so previews
+use the same packaged template as deployment. The packaging destination is itself **a provision
+target, not a settings field**: a **`kind: aws/s3`** target carrying
 its own destination config (`bucket`/`prefix`, optional `region`), exactly as `kind: git` carries
 `repository`/`path`. There is no separate `settings.aws_cloudformation.s3_bucket` — one construct
 declares every delivery destination. This extends the shared `ProvisionTarget` struct with the
@@ -343,8 +344,8 @@ How the targets interact:
   When no `provision:` section is declared, an implicit default target of this kind applies,
   mirroring kubernetes' implicit `cluster` target — zero config for the common case. When packaging
   is needed, assets upload to the component's `kind: aws/s3` target before
-  `CreateStack`/`ExecuteChangeSet`. Resolution is implicit when the component declares exactly one
-  `kind: aws/s3` target; with several, the deploy-style target names its packaging store explicitly
+  `CreateChangeSet`, including preview runs. Resolution is implicit when the component declares
+  exactly one `kind: aws/s3` target; with several, the deploy-style target names its packaging store explicitly
   (`packaging: <target-name>`), and an ambiguous setup is an error with a hint — never a silent
   guess.
 - **`kind: git`** (GitOps delivery): packages through the same `kind: aws/s3` target first (the
@@ -356,6 +357,12 @@ How the targets interact:
 - A packaged deploy with **no `kind: aws/s3` target declared** fails with an actionable hint (add the
   target, or see [Artifact Bucket Provisioning](#artifact-bucket-provisioning-backend) for
   provisioning the bucket). Small templates that fit inline need no `kind: aws/s3` target at all.
+
+**Preview artifact retention.** Packaging uploads are content-addressed and may be reused by later
+previews or deployments. Atmos retains them after a preview finishes, even when it deletes the
+preview change set; it does not automatically remove their S3 objects. Operators own cleanup and
+bucket lifecycle rules, and must retain any objects still referenced by pending change sets or
+deployed templates (including nested templates and assets needed for updates or rollback).
 
 **Transport and convergence — no dependency on the Artifacts PRD.** Everything packaging needs in
 Phase 1 already ships today: the native-CI artifact store (`pkg/ci/artifact`, `aws/s3` backend —
@@ -571,7 +578,13 @@ exporting secrets as environment variables does not apply. Instead:
 
 - Secrets flow into **`parameters:` values** via `!secret` (see the `DbPassword` line in
   [Public Interface](#public-interface)), resolved at stack-processing time and passed directly in the
-  `CreateStack`/`CreateChangeSet` API call's parameter list.
+  `CreateChangeSet` API call's parameter list. **Every parameter receiving a secret must declare
+  `NoEcho: true` in the CloudFormation template.** Template authors must enforce this requirement:
+  Atmos receives resolved parameter values without reliable secret-origin metadata and cannot
+  automatically reject every secret-fed parameter lacking `NoEcho`. Atmos output masking cannot
+  protect a plaintext value returned directly by AWS. When a secret should not enter the parameter list,
+  use a supported Secrets Manager or SSM secure-string dynamic reference in the resource property
+  instead, subject to the restrictions below.
 - CloudFormation's own `NoEcho` masks the parameter value (as `****`) in the AWS Console and in
   `DescribeStacks`/`DescribeStackEvents`/`DescribeChangeSet` API responses — but only at that
   parameter-echo surface: a NoEcho parameter's value can still resurface unmasked in a stack's
@@ -645,13 +658,17 @@ required for a working `plan`/`apply`/`delete` loop.
 `disable_rollback: true` maps to whichever of `CreateChangeSet`'s `OnStackFailure` (stack creation)
 or `ExecuteChangeSet`'s `DisableRollback` (stack update) applies to the changeset's detected type —
 the two are mutually exclusive on a single changeset, so only one is ever set. `stack_policy` has no
-`CreateChangeSet`/`ExecuteChangeSet` parameter at all; it's applied via a follow-up `SetStackPolicy`
-call after a successful apply, the same "no changeset parameter, so it's a follow-up call" shape
-[termination_protection](#delete-semantics) uses. This ordering means a configured `stack_policy`
-does **not** govern the update that just executed — CloudFormation has no API to set a stack policy
-before or during a changeset execution — it only takes effect for the *next* update onward. Operators
-relying on `stack_policy` to protect specific resources from a given deploy must set it in a prior,
-separate apply.
+`CreateChangeSet`/`ExecuteChangeSet` parameter at all. For an existing stack, reconcile the configured
+policy with `SetStackPolicy` **before `ExecuteChangeSet`**, including explicit `changeset execute`,
+so it governs the pending update. A failure to set the policy aborts execution. If the policy blocks
+an update, report the AWS failure and resulting stack status; never weaken the policy or retry with
+an override automatically. The operator must change the proposed update or explicitly revise the
+configured policy before retrying. Setting a policy does not make it temporary: it remains associated
+with the stack even if execution subsequently fails.
+
+For a new stack, apply the policy after successful creation, protecting subsequent updates; it does
+not restrict initial resource creation. Omission of `stack_policy` leaves an existing policy in place.
+See [AWS SetStackPolicy](https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_SetStackPolicy.html).
 
 ### Validate Semantics
 
@@ -683,7 +700,7 @@ its own design, not through this verb.
   field and re-apply first (or use an explicit `--disable-termination-protection` escape hatch that
   calls `UpdateTerminationProtection` before deleting). Silent auto-disable would defeat the point of
   the setting.
-- **Applying `termination_protection`**: like `stack_policy`, neither `CreateChangeSet` nor
+- **Applying `termination_protection`**: neither `CreateChangeSet` nor
   `ExecuteChangeSet` has a termination-protection parameter, so `termination_protection` is
   reconciled via a follow-up `UpdateTerminationProtection` call after every successful apply —
   unconditionally, not just when `true`, so unsetting it in config actually disables it on the next
@@ -1014,7 +1031,7 @@ builder with a self-contained hint per `docs/errors.md`:
 - **Secrets**: full participation in declarative secrets — `secrets.vars` declarations, `!secret`
   resolution into `parameters:`, and NoEcho-aware masking, per
   [Secrets & NoEcho](#secrets--noecho). Nothing secret-related is CFN-specific except the NoEcho
-  masking rule.
+  template requirement and masking rule.
 - **Stores**: both directions work through existing generic machinery. *Read*: `!store`/`!store.get`
   resolve anywhere in the component's config, including `parameters:` values. *Write*: a
   `kind: store` hook on `after.aws/cloudformation.apply` publishes stack Outputs to any configured
@@ -1089,6 +1106,9 @@ approved first. This section exists so the follow-up work has an unambiguous tar
   described component retains every first-class section** (`template`/`parameters`/`capabilities`/
   `tags`/`stack_policy`) — guarding all four wiring families in
   [Registry & Whitelist Wiring](#registry--whitelist-wiring), since section-drop failures are silent.
+- Stack-policy tests assert `SetStackPolicy` precedes execution on updates, policy-setting failure
+  prevents execution, blocked updates surface their failure without an override, and new stacks
+  receive their policy after creation. Cover both apply and explicit change-set execution.
 - Masking tests: `NoEcho`-fed parameter values and resolved `!secret` values never appear unmasked in
   `plan`/`diff`/`describe` output (see [Secrets & NoEcho](#secrets--noecho)).
 - Target: >85% coverage per the project-wide coverage mandate.
