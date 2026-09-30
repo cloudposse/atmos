@@ -11,6 +11,13 @@ import File from "@site/src/components/File";
 import Intro from "@site/src/components/Intro";
 import Experimental from "@site/src/components/Experimental";
 
+
+:::caution Unreleased CloudFormation support
+This documentation previews the implementation in [PR #3157](https://github.com/cloudposse/atmos/pull/3157).
+The documentation-only revision does not register `atmos aws cloudformation` or its `cfn` alias.
+Use a build containing that implementation before running these examples.
+:::
+
 <Intro>
   Define CloudFormation stacks in stack manifests when you want Atmos to
   deploy them alongside Terraform, Helm, Kubernetes, Helmfile, Packer, and
@@ -276,6 +283,6 @@ components:
 
 ## Related
 
-- [`atmos aws cloudformation`](/cli/commands/aws/cloudformation) command reference
+- [upcoming `atmos aws cloudformation` implementation](https://github.com/cloudposse/atmos/pull/3157)
 - [CloudFormation `atmos.yaml` configuration](/cli/configuration/components/aws-cloudformation)
 - [Component dependencies](/stacks/dependencies/components)
