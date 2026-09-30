@@ -115,7 +115,7 @@ func runChangesetExecute(ctx context.Context, client CloudFormationClient, spec 
 		return summary, err
 	}
 
-	status, err := streamStackEvents(ctx, client, spec.StackName, baseline)
+	status, err := streamStackEvents(ctx, client, spec.StackName, baseline, OperationChangesetExecute)
 	if err != nil {
 		return summary, err
 	}

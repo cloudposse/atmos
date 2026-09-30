@@ -1346,8 +1346,12 @@ func TestOperationHandlers_ChangesetExecute_ThreadsChangesetNameFlag(t *testing.
 		),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
-		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
-		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{
+			StackEvents: []cfntypes.StackEvent{{EventId: awsString("new-operation"), ResourceStatus: cfntypes.ResourceStatusUpdateComplete}},
+		}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
+		}, nil),
 	)
 
 	spec := &stackSpec{StackName: "vpc"}
@@ -1355,8 +1359,9 @@ func TestOperationHandlers_ChangesetExecute_ThreadsChangesetNameFlag(t *testing.
 
 	handler, ok := operationHandlers[OperationChangesetExecute]
 	require.True(t, ok)
-	_, err := handler(octx, client, spec, map[string]any{})
+	summary, err := handler(octx, client, spec, map[string]any{})
 	require.NoError(t, err)
+	assert.Equal(t, string(cfntypes.StackStatusUpdateComplete), summary["final_status"])
 	require.NotNil(t, gotChangeSetName)
 	assert.Equal(t, "my-named-cs", *gotChangeSetName)
 }
