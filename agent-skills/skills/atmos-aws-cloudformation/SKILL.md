@@ -25,7 +25,7 @@ stable.
 | Terraform/OpenTofu orchestration (contrast: HCL + state file vs. CFN's own stack/changeset state) | [atmos-terraform](../atmos-terraform/SKILL.md) |
 | Component architecture, inheritance, catalogs, `dependencies.components` DAG ordering | [atmos-components](../atmos-components/SKILL.md) |
 | AWS credentials / identities for the SDK client and per-target auth overrides | [atmos-auth](../atmos-auth/SKILL.md) |
-| Lifecycle hooks around `diff`/`apply`/`delete` | [atmos-hooks](../atmos-hooks/SKILL.md) |
+| Lifecycle hooks around `diff`/`apply`/`delete`/`drift detect`/`drift describe` | [atmos-hooks](../atmos-hooks/SKILL.md) |
 | Native CI job summaries | [atmos-ci](../atmos-ci/SKILL.md) |
 | `!secret` values flowing into `parameters:` | [atmos-secrets](../atmos-secrets/SKILL.md) |
 | `kind: git` GitOps delivery target mechanics | [atmos-git](../atmos-git/SKILL.md) |
