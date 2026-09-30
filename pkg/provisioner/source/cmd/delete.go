@@ -89,6 +89,11 @@ func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *fl
 		return err
 	}
 
+	if sourceDryRun(cmd) {
+		ui.Info(fmt.Sprintf("Dry run: would delete source for %s in stack %s", component, deleteOpts.Stack))
+		return nil
+	}
+
 	// Initialize config and get component info with global flags.
 	atmosConfig, componentConfig, err := initDeleteContext(component, deleteOpts.Stack, &deleteOpts.GlobalFlags)
 	if err != nil {
