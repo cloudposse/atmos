@@ -164,22 +164,30 @@ func runLogs(ctx context.Context, client CloudFormationClient, stackName string,
 	return summary, nil
 }
 
-// renderEventChart groups events by logical resource ID and prints each
+// renderEventChart groups events by stack and logical resource ID and prints each
 // resource's status transitions on one line — a compact per-resource timeline
 // rather than a flat chronological event stream.
 func renderEventChart(events []cfntypes.StackEvent) {
-	order := []string{}
-	byResource := map[string][]string{}
+	type resourceKey struct {
+		stackID   string
+		logicalID string
+	}
+	order := []resourceKey{}
+	byResource := map[resourceKey][]string{}
 	for i := range events {
 		e := &events[i]
-		id := stringValue(e.LogicalResourceId)
-		if _, seen := byResource[id]; !seen {
-			order = append(order, id)
+		key := resourceKey{stackID: stringValue(e.StackId), logicalID: stringValue(e.LogicalResourceId)}
+		if _, seen := byResource[key]; !seen {
+			order = append(order, key)
 		}
-		byResource[id] = append(byResource[id], string(e.ResourceStatus))
+		byResource[key] = append(byResource[key], string(e.ResourceStatus))
 	}
-	for _, id := range order {
-		_ = data.Writeln(fmt.Sprintf("%-30s %s", id, strings.Join(byResource[id], " -> ")))
+	for _, key := range order {
+		label := key.logicalID
+		if key.stackID != "" {
+			label = key.stackID + "/" + label
+		}
+		_ = data.Writeln(fmt.Sprintf("%-30s %s", label, strings.Join(byResource[key], " -> ")))
 	}
 }
 
