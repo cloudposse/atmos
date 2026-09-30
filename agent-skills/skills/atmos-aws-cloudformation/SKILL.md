@@ -89,7 +89,7 @@ chart-style plugin system, unlike native Helm).
 | `parameters` | `map[string]any`, normalized at the API boundary: scalars stringified, lists comma-joined for `List<Type>`. `UsePreviousValue` isn't expressible — Atmos config is always the source of truth. |
 | `capabilities` | Acknowledged IAM capabilities, e.g. `CAPABILITY_IAM`, `CAPABILITY_AUTO_EXPAND` (macros/SAM). |
 | `tags` | `map[string]string` tags on the stack — distinct from Atmos's own component `tags`/`--tags`. |
-| `stack_policy.file` | Stack policy JSON path. Applied via `SetStackPolicy` *after* apply — protects the *next* update. |
+| `stack_policy.file` | Stack policy JSON path. Set before executing an UPDATE change set (apply/deploy or explicit changeset execute), so it protects that update; set after successful CREATE. A policy-setting error stops a pending update, and policy-blocked updates fail without an automatic override. |
 | `role_arn` | The CloudFormation **service role**, not caller credentials — `CreateChangeSet`'s `RoleARN`. |
 | `notification_arns` | SNS topic ARNs CloudFormation publishes stack events to. |
 | `disable_rollback` | Prevents automatic rollback on stack creation/update failure. |
@@ -325,9 +325,17 @@ Secrets flow into **`parameters:` values** via `!secret`, resolved at stack-proc
 passed directly in the `CreateChangeSet` parameter list — there is no subprocess to receive `env:`,
 so the shell-out pattern of exporting secrets as environment variables doesn't apply to the
 CloudFormation API call itself (`env:` still works normally for hooks/`!exec`/template functions).
-CloudFormation's own `NoEcho` only hides a parameter from the AWS Console — it does not redact the
-value from API responses — so Atmos additionally registers `NoEcho`-declared parameter values with
-its own masker by value, covering changeset rendering, `describe` output, `output` results, and logs.
+Template authors must set `NoEcho: true` on secret-bearing parameters. CloudFormation masks those
+parameter values in the console and stack/change-set description API responses, but not values
+exposed through `Outputs`, template/resource `Metadata`, or resource primary identifiers. Keep
+secrets and derived values out of those destinations. Prefer supported Secrets Manager or SSM
+secure-string dynamic references when plaintext should stay out of the parameter list; these still
+require care to avoid exposing resolved values in resource identifiers or outputs.
+
+Atmos additionally registers `NoEcho` parameter values with its local output masker. This is
+literal-value masking, not data-flow tracking or protection for direct AWS API responses. The
+resolved-value pipeline does not preserve reliable secret-origin metadata, so Atmos cannot
+automatically reject every secret-bearing parameter missing `NoEcho`.
 See [atmos-secrets](../atmos-secrets/SKILL.md) for `!secret` mechanics.
 
 ## Migrating from Rain or Raw CloudFormation
