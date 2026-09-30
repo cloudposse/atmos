@@ -1,0 +1,52 @@
+name: Windows acceptance runtime diagnostic
+on:
+  push:
+    branches: [osterman/cfn-windows-runtime-diagnostic]
+permissions:
+  contents: read
+jobs:
+  acceptance-runtime:
+    name: ${{ matrix.mode }} (Go ${{ matrix.go }})
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: baseline
+            go: 1.26.6
+            flags: ''
+            cgo: '0'
+          - mode: checkptr
+            go: 1.26.6
+            flags: '-gcflags=all=-d=checkptr=2'
+            cgo: '0'
+          - mode: race
+            go: 1.26.6
+            flags: '-race'
+            cgo: '1'
+          - mode: patch-release
+            go: 1.26.8
+            flags: ''
+            cgo: '0'
+    env:
+      CGO_ENABLED: ${{ matrix.cgo }}
+      GOFIPS140: latest
+      GOPROXY: https://proxy.golang.org
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/windows-dns-guard
+      - uses: ./.github/actions/windows-gnu-tar
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+      - name: Record toolchain
+        run: go env
+      - name: Repeat acceptance orchestration with unchanged test parallelism
+        run: go test ${{ matrix.flags }} -v -count=10 -shuffle=on -parallel=2 -timeout=20m ./internal/ci/acceptance
