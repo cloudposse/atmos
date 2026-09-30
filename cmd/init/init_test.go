@@ -923,36 +923,51 @@ func TestInitCmd_RunE_MergeStrategyInvalidValueRejected(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
 }
 
-// TestInitCmd_RunE_MaxChangesOutOfRangeRejected covers --max-changes's manual
-// range validation (0-100, checked directly in RunE since pkg/flags has no
-// built-in numeric-range validation option): a value outside that range must
-// be rejected with errUtils.ErrInvalidFlagValue before any generation work
-// starts, mirroring TestInitCmd_RunE_UpdateStrategyInvalidValueRejected
-// above.
-func TestInitCmd_RunE_MaxChangesOutOfRangeRejected(t *testing.T) {
-	tests := []struct {
-		name  string
-		value string
-	}{
-		{name: "above 100", value: "101"},
-		{name: "negative", value: "-1"},
-	}
+// TestInitCmd_RunE_MaxChangesNegativeRejected covers --max-changes's manual
+// range validation (non-negative only; there is no upper bound because the
+// underlying computed change percentage isn't capped at 100 either -- see
+// engine.Processor.SetMaxChanges's doc comment -- checked directly in RunE
+// since pkg/flags has no built-in numeric-range validation option): a
+// negative value must be rejected with errUtils.ErrInvalidFlagValue before
+// any generation work starts, mirroring
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected above.
+func TestInitCmd_RunE_MaxChangesNegativeRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Cleanup(func() { viper.Reset() })
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("max-changes", "-1"))
 
-			cmd := &cobra.Command{}
-			initParser.RegisterFlags(cmd)
-			require.NoError(t, cmd.Flags().Set("interactive", "false"))
-			require.NoError(t, cmd.Flags().Set("max-changes", tt.value))
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
 
-			err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
 
-			require.Error(t, err)
-			assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
-		})
-	}
+// TestInitCmd_RunE_MaxChangesAboveHundredAccepted covers the flip side of the
+// above: --max-changes has no upper bound, so a value above 100 (previously
+// rejected before this was changed to an unbounded flag) must be accepted,
+// not rejected -- proven here by pairing it with the pre-existing
+// --base-ref/--update-strategy=rendered mutual-exclusion check
+// (TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected): if max-changes were
+// still rejecting values above 100, this would fail with
+// errUtils.ErrInvalidFlagValue instead of reaching that later check.
+func TestInitCmd_RunE_MaxChangesAboveHundredAccepted(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, cmd.Flags().Set("base-ref", "some-ref"))
+	require.NoError(t, cmd.Flags().Set("max-changes", "1000"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
 }
 
 // TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected covers the explicit

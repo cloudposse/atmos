@@ -374,36 +374,44 @@ func TestScaffoldGenerateRunE_MergeStrategyInvalidValueRejected(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
 }
 
-// TestScaffoldGenerateRunE_MaxChangesOutOfRangeRejected covers --max-changes's
-// manual range validation (0-100, checked directly in RunE since pkg/flags
-// has no built-in numeric-range validation option): a value outside that
-// range must be rejected with errUtils.ErrInvalidFlagValue before any
-// generation work starts, mirroring
+// TestScaffoldGenerateRunE_MaxChangesNegativeRejected covers --max-changes's
+// manual range validation (non-negative only; there is no upper bound
+// because the underlying computed change percentage isn't capped at 100
+// either -- see engine.Processor.SetMaxChanges's doc comment -- checked
+// directly in RunE since pkg/flags has no built-in numeric-range validation
+// option): a negative value must be rejected with errUtils.ErrInvalidFlagValue
+// before any generation work starts, mirroring
 // TestScaffoldGenerateRunE_UpdateStrategyInvalidValueRejected above.
-func TestScaffoldGenerateRunE_MaxChangesOutOfRangeRejected(t *testing.T) {
-	tests := []struct {
-		name  string
-		value string
-	}{
-		{name: "above 100", value: "101"},
-		{name: "negative", value: "-1"},
-	}
+func TestScaffoldGenerateRunE_MaxChangesNegativeRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Cleanup(func() { viper.Reset() })
+	cmd := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("max-changes", "-1"))
 
-			cmd := &cobra.Command{}
-			scaffoldGenerateParser.RegisterFlags(cmd)
-			require.NoError(t, cmd.Flags().Set("dry-run", "true"))
-			require.NoError(t, cmd.Flags().Set("max-changes", tt.value))
+	err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", t.TempDir()})
 
-			err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", t.TempDir()})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
 
-			require.Error(t, err)
-			assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
-		})
-	}
+// TestScaffoldGenerateRunE_MaxChangesAboveHundredAccepted covers the flip
+// side of the above: --max-changes has no upper bound, so a value above 100
+// (previously rejected before this was changed to an unbounded flag) must be
+// accepted, not rejected.
+func TestScaffoldGenerateRunE_MaxChangesAboveHundredAccepted(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("set", "project_name=demo"))
+	require.NoError(t, cmd.Flags().Set("max-changes", "1000"))
+
+	err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.NoError(t, err)
 }
 
 // TestScaffoldGenerateRunE_BaseRefWithRenderedStrategyRejected covers the

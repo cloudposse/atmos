@@ -152,8 +152,9 @@ record (a different file, at a different path — it stores that generation's re
 the template's field definitions).
 
 `--max-changes` (default `50`) caps the percentage of changed lines a three-way merge is allowed
-to touch before `--update` fails outright instead of applying it; raise it (up to `100`) to allow
-larger merges through.
+to touch before `--update` fails outright instead of applying it. `0` disables this check
+entirely (guaranteed to never fail); any other value is compared against a computed percentage
+with no upper bound, so raising it only makes a hard failure less likely, never impossible.
 
 ## Project Initialization
 

@@ -175,10 +175,12 @@ generation's recorded answers, not the template's field definitions).
 
   <dt>`--max-changes` (default `50`)</dt>
   <dd>
-    Maximum percentage (`0`-`100`) of changed lines allowed in a `--update` three-way merge before
-    it fails instead of applying. Lower it to be stricter about how much a merge is allowed to
-    touch; raise it (up to `100`) to allow larger merges through — conflicts still write markers
-    for `--merge-strategy=manual` to resolve. Configurable via `ATMOS_INIT_MAX_CHANGES`.
+    Maximum percentage of changed lines allowed in a `--update` three-way merge before it fails
+    instead of applying. `0` disables this check entirely — the merge is never rejected for having
+    too many changes (conflicts still write markers for `--merge-strategy=manual` to resolve). Any
+    other value is compared against a computed change percentage that has no upper bound, so no
+    positive value is a guaranteed bypass the way `0` is — raising it only makes a hard failure
+    less likely, not impossible. Configurable via `ATMOS_INIT_MAX_CHANGES`.
   </dd>
 
   <dt>`--skip-hooks`</dt>

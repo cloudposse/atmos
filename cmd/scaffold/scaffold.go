@@ -135,10 +135,10 @@ If no target directory is specified, you will be prompted for one.`,
 				Err()
 		}
 		maxChanges := v.GetInt("max-changes")
-		if maxChanges < 0 || maxChanges > 100 {
+		if maxChanges < 0 {
 			return errUtils.Build(errUtils.ErrInvalidFlagValue).
-				WithExplanationf("`--max-changes` must be between 0 and 100, got: %d", maxChanges).
-				WithHint("Lower values fail sooner on conflicting changes; higher values are more lenient. `0` disables the threshold check entirely, same as `100` (never fails on threshold)").
+				WithExplanationf("`--max-changes` must be non-negative, got: %d", maxChanges).
+				WithHint("`0` disables the threshold check entirely (guaranteed to never fail); any positive value is compared against a computed change percentage that has no upper bound, so no positive value is a guaranteed bypass the way `0` is").
 				WithContext("flag", "max-changes").
 				WithContext("value", fmt.Sprintf("%d", maxChanges)).
 				WithExitCode(2).
@@ -308,7 +308,7 @@ func init() {
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
 		flags.WithStringFlag("update-strategy", "", "tracked", "Where --update's 3-way merge base comes from: tracked (the target's own git history at --base-ref, default), rendered (a pristine re-render of the template at the ref that produced what's currently on disk, using its recorded answers; requires a prior generation's scaffold.yaml record, no git dependency)"),
 		flags.WithValidValues("update-strategy", "tracked", "rendered"),
-		flags.WithIntFlag("max-changes", "", engine.DefaultMergeThreshold, "Maximum percentage of changed lines allowed in a 3-way merge during --update before failing (0-100)"),
+		flags.WithIntFlag("max-changes", "", engine.DefaultMergeThreshold, "Maximum percentage of changed lines allowed in a 3-way merge during --update before failing; 0 disables this check entirely, no upper bound"),
 		flags.WithEnvVars("max-changes", "ATMOS_SCAFFOLD_MAX_CHANGES"),
 		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
 		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
