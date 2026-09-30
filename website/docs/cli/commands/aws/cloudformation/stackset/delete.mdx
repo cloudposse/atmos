@@ -79,6 +79,12 @@ operation is polled every 3 seconds until it reaches a terminal status
 (`SUCCEEDED`/`FAILED`/`STOPPED`), and the command times out after 30 minutes
 if it hasn't.
 
+Before deletion, Atmos describes the existing StackSet to determine its
+permission model. Deleting instances currently supports `SELF_MANAGED`
+permissions only. A `SERVICE_MANAGED` StackSet with instances is rejected
+before anything is deleted; remove those instances with AWS CloudFormation
+first. Empty service-managed StackSets can still be deleted with Atmos.
+
 :::note
 `stackset delete` does not fire `before`/`after` hook events — only
 [`apply`](/cli/commands/aws/cloudformation/apply),

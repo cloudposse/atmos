@@ -348,6 +348,9 @@ func TestRunStackSetUpdate_OperationFails(t *testing.T) {
 func TestRunStackSetDelete_ZeroInstances_SkipsDeleteInstances(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOutput{
+		StackSet: &cfntypes.StackSet{PermissionModel: cfntypes.PermissionModelsSelfManaged},
+	}, nil)
 	client.EXPECT().ListStackInstances(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackInstancesOutput{}, nil)
 	client.EXPECT().DeleteStackInstances(gomock.Any(), gomock.Any()).Times(0)
 	client.EXPECT().DeleteStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackSetOutput{}, nil)
@@ -367,6 +370,9 @@ func TestRunStackSetDelete_WithInstances_CallsDeleteInstances(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOutput{
+		StackSet: &cfntypes.StackSet{PermissionModel: cfntypes.PermissionModelsSelfManaged},
+	}, nil)
 	client.EXPECT().ListStackInstances(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackInstancesOutput{
 		Summaries: []cfntypes.StackInstanceSummary{
 			{Account: awsString("111111111111"), Region: awsString("us-east-1")},
@@ -396,6 +402,9 @@ func TestRunStackSetDelete_WithInstances_CallsDeleteInstances(t *testing.T) {
 func TestRunStackSetDelete_DeleteInstancesError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOutput{
+		StackSet: &cfntypes.StackSet{PermissionModel: cfntypes.PermissionModelsSelfManaged},
+	}, nil)
 	client.EXPECT().ListStackInstances(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackInstancesOutput{
 		Summaries: []cfntypes.StackInstanceSummary{
 			{Account: awsString("111111111111"), Region: awsString("us-east-1")},
@@ -412,6 +421,9 @@ func TestRunStackSetDelete_DeleteInstancesError(t *testing.T) {
 func TestRunStackSetDelete_DeleteStackSetError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOutput{
+		StackSet: &cfntypes.StackSet{PermissionModel: cfntypes.PermissionModelsSelfManaged},
+	}, nil)
 	client.EXPECT().ListStackInstances(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackInstancesOutput{}, nil)
 	client.EXPECT().DeleteStackSet(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
 
@@ -425,6 +437,9 @@ func TestRunStackSetDelete_DeleteStackSetError(t *testing.T) {
 func TestRunStackSetDelete_ListInstancesError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOutput{
+		StackSet: &cfntypes.StackSet{PermissionModel: cfntypes.PermissionModelsSelfManaged},
+	}, nil)
 	client.EXPECT().ListStackInstances(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
 	// No DeleteStackInstances/DeleteStackSet expectations: a call would fail
 	// via gomock's unexpected-call panic, proving the error short-circuited.
@@ -442,6 +457,9 @@ func TestRunStackSetDelete_OperationPollFails(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOutput{
+		StackSet: &cfntypes.StackSet{PermissionModel: cfntypes.PermissionModelsSelfManaged},
+	}, nil)
 	client.EXPECT().ListStackInstances(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackInstancesOutput{
 		Summaries: []cfntypes.StackInstanceSummary{
 			{Account: awsString("111111111111"), Region: awsString("us-east-1")},

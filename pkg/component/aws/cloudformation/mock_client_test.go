@@ -261,6 +261,26 @@ func (mr *MockCloudFormationClientMockRecorder) DescribeStackResourceDrifts(ctx,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeStackResourceDrifts", reflect.TypeOf((*MockCloudFormationClient)(nil).DescribeStackResourceDrifts), varargs...)
 }
 
+// DescribeStackSet mocks base method.
+func (m *MockCloudFormationClient) DescribeStackSet(ctx context.Context, params *cloudformation.DescribeStackSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStackSetOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeStackSet", varargs...)
+	ret0, _ := ret[0].(*cloudformation.DescribeStackSetOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeStackSet indicates an expected call of DescribeStackSet.
+func (mr *MockCloudFormationClientMockRecorder) DescribeStackSet(ctx, params any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeStackSet", reflect.TypeOf((*MockCloudFormationClient)(nil).DescribeStackSet), varargs...)
+}
+
 // DescribeStackSetOperation mocks base method.
 func (m *MockCloudFormationClient) DescribeStackSetOperation(ctx context.Context, params *cloudformation.DescribeStackSetOperationInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStackSetOperationOutput, error) {
 	m.ctrl.T.Helper()

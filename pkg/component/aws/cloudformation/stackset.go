@@ -129,6 +129,13 @@ func toStringSlice(v any) []string {
 // runStackSetCreate creates the StackSet, then creates stack instances in the
 // configured accounts/regions when any are declared.
 func runStackSetCreate(ctx context.Context, client CloudFormationClient, spec *stackSpec, ssCfg *stackSetConfig, summary map[string]any) (map[string]any, error) {
+	// Validate instance targeting before creating the StackSet to avoid leaving
+	// an empty StackSet behind when the instance request cannot be supported.
+	if len(ssCfg.Accounts) > 0 && len(ssCfg.Regions) > 0 {
+		if err := validateStackSetInstancePermissionModel(cfntypes.PermissionModels(ssCfg.PermissionModel)); err != nil {
+			return summary, err
+		}
+	}
 	_, err := client.CreateStackSet(ctx, &cloudformation.CreateStackSetInput{
 		StackSetName:          awsString(spec.StackName),
 		TemplateBody:          awsString(spec.TemplateBody),
@@ -198,11 +205,22 @@ func runStackSetUpdate(ctx context.Context, client CloudFormationClient, spec *s
 // runStackSetDelete deletes every stack instance (required before a StackSet
 // itself can be deleted), then deletes the StackSet.
 func runStackSetDelete(ctx context.Context, client CloudFormationClient, stackSetName string, summary map[string]any) (map[string]any, error) {
+	// Deletion does not require a local target; use the existing StackSet's model.
+	out, err := client.DescribeStackSet(ctx, &cloudformation.DescribeStackSetInput{StackSetName: awsString(stackSetName)})
+	if err != nil {
+		return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
+	}
+	if out.StackSet == nil {
+		return summary, fmt.Errorf("%w: DescribeStackSet returned no StackSet for %s", errUtils.ErrAwsCloudFormationStackSetFailed, stackSetName)
+	}
 	instances, err := listStackSetInstances(ctx, client, stackSetName)
 	if err != nil {
 		return summary, err
 	}
 	if len(instances) > 0 {
+		if err := validateStackSetInstancePermissionModel(out.StackSet.PermissionModel); err != nil {
+			return summary, err
+		}
 		if err := deleteStackSetInstancesByRegion(ctx, client, stackSetName, instances); err != nil {
 			return summary, err
 		}
@@ -214,6 +232,15 @@ func runStackSetDelete(ctx context.Context, client CloudFormationClient, stackSe
 	_ = data.Writeln(fmt.Sprintf("%s: stackset deleted", stackSetName))
 	summary["stackset_name"] = stackSetName
 	return summary, nil
+}
+
+// validateStackSetInstancePermissionModel prevents unsupported service-managed
+// instance requests. Empty StackSets do not need an instance operation.
+func validateStackSetInstancePermissionModel(model cfntypes.PermissionModels) error {
+	if model == cfntypes.PermissionModelsServiceManaged {
+		return fmt.Errorf("%w: SERVICE_MANAGED StackSet instance targeting is not supported; manage its instances with AWS CloudFormation", errUtils.ErrInvalidAwsCloudFormationSettings)
+	}
+	return nil
 }
 
 // runStackSetInstances lists a StackSet's stack instances.

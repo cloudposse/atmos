@@ -87,6 +87,11 @@ If the resolved target declares only `accounts` or only `regions` (not both),
 created. Creating instances later requires deleting and re-creating the
 StackSet with both fields set; there is no separate "add instances" verb.
 
+Instance targeting currently supports `SELF_MANAGED` permissions only. A
+`SERVICE_MANAGED` target with both `accounts` and `regions` is rejected before
+any AWS resources are created. Service-managed targets without both fields
+can still create an empty StackSet; manage their instances with AWS CloudFormation.
+
 The `CreateStackInstances` operation is polled every 3 seconds until it
 reaches a terminal status (`SUCCEEDED`/`FAILED`/`STOPPED`), and the command
 times out after 30 minutes if it hasn't.
