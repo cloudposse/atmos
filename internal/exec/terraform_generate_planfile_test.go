@@ -23,8 +23,20 @@ func setupPlanfileFixture(t *testing.T) string {
 	fixtureRoot := t.TempDir()
 	stacksPath := filepath.Join(fixtureRoot, "scenarios", "terraform-generate-planfile")
 	componentPath := filepath.Join(fixtureRoot, "components", "terraform", "mock")
-	require.NoError(t, os.CopyFS(stacksPath, os.DirFS(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-generate-planfile"))))
-	require.NoError(t, os.CopyFS(componentPath, os.DirFS(filepath.Join("..", "..", "tests", "fixtures", "components", "terraform", "mock"))))
+	// Copy only immutable inputs: another test process may be writing generated
+	// state or plans into the shared component while this fixture is prepared.
+	for _, relative := range []string{
+		"scenarios/terraform-generate-planfile/atmos.yaml",
+		"scenarios/terraform-generate-planfile/stacks/deploy/nonprod.yaml",
+		"components/terraform/mock/main.tf",
+	} {
+		relative = filepath.FromSlash(relative)
+		content, err := os.ReadFile(filepath.Join("..", "..", "tests", "fixtures", relative))
+		require.NoError(t, err)
+		destination := filepath.Join(fixtureRoot, relative)
+		require.NoError(t, os.MkdirAll(filepath.Dir(destination), 0o755))
+		require.NoError(t, os.WriteFile(destination, content, 0o600))
+	}
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 	return componentPath
