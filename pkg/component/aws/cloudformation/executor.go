@@ -193,9 +193,9 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 
 	switch operation {
 	case OperationValidate:
-		return summary, validateTemplate(octx.Ctx, client, spec.TemplateBody)
+		return runValidate(octx, client, spec, summary)
 	case OperationDiff:
-		return runDiff(octx.Ctx, client, spec, summary)
+		return runDiff(octx, client, spec, summary)
 	case OperationApply:
 		return runApply(octx, client, spec, summary)
 	case OperationDelete:
@@ -209,8 +209,11 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 
 // runDiff creates (or reuses) a changeset and renders the predicted changes
 // without executing it.
-func runDiff(ctx context.Context, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
-	result, err := createChangeSet(ctx, client, spec)
+func runDiff(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+	if err := prepareTemplateForAPI(octx, spec, summary); err != nil {
+		return summary, err
+	}
+	result, err := createChangeSet(octx.Ctx, client, spec)
 	if err != nil {
 		return summary, err
 	}

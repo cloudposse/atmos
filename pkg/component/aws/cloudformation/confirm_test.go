@@ -2,6 +2,7 @@ package cloudformation
 
 import (
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/charmbracelet/huh"
@@ -16,6 +17,9 @@ import (
 func stubConfirmOperation(t *testing.T, confirmed bool, err error) {
 	t.Helper()
 	original := confirmOperation
+	originalTerminal := stdinIsTerminal
+	stdinIsTerminal = func() bool { return true }
+	t.Cleanup(func() { stdinIsTerminal = originalTerminal })
 	confirmOperation = func(_ string) (bool, error) { return confirmed, err }
 	t.Cleanup(func() { confirmOperation = original })
 }
@@ -110,4 +114,22 @@ func TestDefaultConfirmOperation_OtherError(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, sentinel)
 	assert.NotErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+func TestRequireConfirmation_NonTerminalAbortsWithoutPrompt(t *testing.T) {
+	stdin, err := os.CreateTemp(t.TempDir(), "stdin")
+	require.NoError(t, err)
+	defer stdin.Close()
+	original := os.Stdin
+	os.Stdin = stdin
+	t.Cleanup(func() { os.Stdin = original })
+	originalConfirm := confirmOperation
+	confirmOperation = func(string) (bool, error) { t.Fatal("non-terminal input must not prompt"); return true, nil }
+	t.Cleanup(func() { confirmOperation = originalConfirm })
+	for _, operation := range []Operation{OperationApply, OperationDelete} {
+		err := requireConfirmation(operation, "vpc", nil)
+		require.ErrorIs(t, err, errUtils.ErrUserAborted)
+		assert.True(t, errUtils.HasHint(err, "--auto-approve"))
+		require.NoError(t, requireConfirmation(operation, "vpc", map[string]any{"auto-approve": true}))
+	}
 }

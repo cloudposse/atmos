@@ -52,27 +52,8 @@ func deliverApply(octx *opContext, client CloudFormationClient, spec *stackSpec)
 		summary[targetKey] = selected.Kind
 	}
 
-	// Package before delivery whenever the template needs it (exceeds
-	// CloudFormation's inline TemplateBody limit) or an aws/s3 target was
-	// selected directly -- regardless of which kind ultimately receives it.
-	// A direct-deploy target (kind: aws/cloudformation) needs the resulting
-	// TemplateURL just as much as an external (e.g. git) target needs the
-	// packaged reference: CreateChangeSet rejects a TemplateBody over 51,200
-	// bytes just as surely as embedding that same oversized body verbatim in
-	// a delivered artifact would be wasteful and duplicate the packaging this
-	// step already did.
-	if needsPackaging(spec.TemplateBody) || selected.Kind == kindAwsS3 {
-		s3Target, err := resolvePackagingTarget(provisionSection, selected)
-		if err != nil {
-			return summary, nil, err
-		}
-		pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, octx.Info, s3Target, spec.TemplateBody)
-		if err != nil {
-			return summary, nil, err
-		}
-		summary["package_url"] = pkg.URL
-		summary["package_sha256"] = pkg.SHA256
-		spec.TemplateURL = pkg.URL
+	if err := packageIfNeeded(octx, provisionSection, selected, spec, summary); err != nil {
+		return summary, nil, err
 	}
 
 	if selected.Kind == cfg.CloudFormationComponentType {
@@ -87,6 +68,46 @@ func deliverApply(octx *opContext, client CloudFormationClient, spec *stackSpec)
 
 	// Any other kind (e.g. git): deliver the packaged reference generically.
 	return summary, nil, deliverToExternalTarget(octx, selected, spec, summary)
+}
+
+// packageIfNeeded shares template upload handling across apply, diff, and validate.
+// Inline templates need no upload unless an S3 publish target was selected.
+// A direct-deploy target needs TemplateURL just as much as an external delivery
+// target: CreateChangeSet rejects TemplateBody over 51,200 bytes. Packaging first
+// also prevents embedding an oversized body in a delivered artifact after that
+// same template was already uploaded.
+func packageIfNeeded(octx *opContext, provisionSection map[string]any, selected *target.SelectedTarget, spec *stackSpec, summary map[string]any) error {
+	if !needsPackaging(spec.TemplateBody) && selected.Kind != kindAwsS3 {
+		return nil
+	}
+	s3Target, err := resolvePackagingTarget(provisionSection, selected)
+	if err != nil {
+		return err
+	}
+	pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, octx.Info, s3Target, spec.TemplateBody)
+	if err != nil {
+		return err
+	}
+	summary["package_url"] = pkg.URL
+	summary["package_sha256"] = pkg.SHA256
+	spec.TemplateURL = pkg.URL
+	return nil
+}
+
+// prepareTemplateForAPI packages oversized templates before preview or validation.
+// It only selects a provision target when an upload is needed; an inline template
+// can be inspected without a deployment destination or packaging configuration.
+func prepareTemplateForAPI(octx *opContext, spec *stackSpec, summary map[string]any) error {
+	if spec.TemplateURL != "" || !needsPackaging(spec.TemplateBody) {
+		return nil
+	}
+	provisionSection, _ := octx.Info.ComponentSection[cfg.ProvisionSectionName].(map[string]any)
+	flagTarget, _ := octx.Flags[targetKey].(string)
+	selected, err := target.SelectTargetWithDefault(provisionSection, flagTarget, "default", cfg.CloudFormationComponentType)
+	if err != nil {
+		return err
+	}
+	return packageIfNeeded(octx, provisionSection, selected, spec, summary)
 }
 
 // deployDirect executes the direct-deploy path: create (or reuse) a changeset

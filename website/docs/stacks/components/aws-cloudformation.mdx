@@ -136,7 +136,11 @@ system, unlike native Helm.
   </dd>
 
   <dt>`timeout_in_minutes`</dt>
-  <dd>Bounds how long stack creation may run before CloudFormation rolls back.</dd>
+  <dd>
+    Accepted for compatibility, but ignored with a warning: the CloudFormation
+    changeset APIs do not support a stack timeout. Atmos stops watching after
+    60 minutes; this does not cancel the AWS operation.
+  </dd>
 </dl>
 
 ## Example
