@@ -473,9 +473,11 @@ semantics as changesets provide, without requiring users to manage changesets by
 deploy pipeline: create + review in one job, execute in another).
 
 Templates using macros/transforms (`Fn::Transform`, `AWS::Serverless` a.k.a. SAM) work through this
-same changeset flow with no special-cased handling: `CreateChangeSet` expands the macro as part of
-computing the changeset given `CAPABILITY_AUTO_EXPAND` in `capabilities:`, the same as any other
-required capability.
+same changeset flow with no special-cased handling: `CreateChangeSet` expands macros while computing
+the changeset. `CAPABILITY_AUTO_EXPAND` is not required for this flow and has no effect on
+[`CreateChangeSet`](https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_CreateChangeSet.html).
+It is required when directly creating or updating a stack containing macros without first reviewing
+a changeset. IAM resources still require `CAPABILITY_IAM` or `CAPABILITY_NAMED_IAM`, as applicable.
 
 ### Live Progress Streaming
 
