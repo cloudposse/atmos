@@ -16,7 +16,9 @@ import (
 )
 
 // tfVarEnvPrefix is the environment variable prefix Terraform/OpenTofu use for
-// variable values (see addTerraformVarsToEnv in environment.go).
+// variable values (see addTerraformVarsToEnv in environment.go). Entries with this
+// prefix are forwarded to the init subprocess only; they are stripped before
+// runner.SetEnv because terraform-exec rejects them (see withoutTerraformVarEnv).
 const tfVarEnvPrefix = "TF_VAR_"
 
 // ensureInitialized implements Atmos's "smart init" policy for a single terraform
@@ -133,8 +135,9 @@ func (e *Executor) runOutputWithInitRecovery(
 }
 
 // buildAutoInitInputs assembles autoinit.Inputs from config and the subprocess
-// environment map that was (or will be) passed to the terraform runner via
-// SetEnv, so the fingerprint reflects the exact environment terraform/tofu sees.
+// full environment map (including any TF_VAR_* entries from init.pass_vars), so the
+// fingerprint reflects the exact environment terraform/tofu init sees. Callers must
+// pass the unfiltered map, not the TF_VAR-free copy handed to runner.SetEnv.
 func buildAutoInitInputs(config *ComponentConfig, environMap map[string]string) *autoinit.Inputs {
 	in := &autoinit.Inputs{
 		ComponentPath: config.ComponentPath,
@@ -144,7 +147,7 @@ func buildAutoInitInputs(config *ComponentConfig, environMap map[string]string) 
 		// `env:` entry that clears an inherited value to "") from the key simply not being in
 		// environMap at all; a miss falls back to os.Getenv inside autoinit itself (see
 		// Inputs.EnvLookup's doc comment), so there is no need to duplicate that fallback here.
-		// This must reflect exactly what runner.SetEnv(environMap) hands to the terraform/tofu
+		// This must reflect exactly what the full environMap hands to the terraform/tofu
 		// subprocess -- otherwise the fingerprint can record a stale inherited value while
 		// terraform actually receives an explicit empty override, and smart init would then
 		// wrongly skip a required re-init.
