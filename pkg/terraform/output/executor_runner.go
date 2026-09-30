@@ -81,7 +81,7 @@ func (e *Executor) runInitOnce(
 	// it must not see leftover stderr from an earlier, already-handled command (e.g. a prior
 	// successful init/workspace-select, or a prior failed `output` this init is recovering from).
 	stderrCapture.Reset()
-	err := runner.Init(ctx, buildInitOptions(reconfigure, upgrade)...)
+	err := runTerraformInit(ctx, runner, reconfigure, upgrade)
 	if err == nil {
 		log.Debug("Completed terraform init", "component", component, "stack", stack)
 		return nil
@@ -104,7 +104,7 @@ func (e *Executor) runInitOnce(
 		"component", component, "stack", stack, "matched", diag.Matched,
 		"reconfigure", reconfigure || rec.WithReconfigure, "upgrade", upgrade || rec.WithUpgrade)
 
-	retryErr := runner.Init(ctx, buildInitOptions(reconfigure || rec.WithReconfigure, upgrade || rec.WithUpgrade)...)
+	retryErr := runTerraformInit(ctx, runner, reconfigure || rec.WithReconfigure, upgrade || rec.WithUpgrade)
 	if retryErr != nil {
 		return wrapErrorWithStderr(errUtils.Build(errUtils.ErrTerraformInit).WithCause(retryErr).Err(), stderrCapture)
 	}
