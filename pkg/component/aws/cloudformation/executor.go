@@ -184,7 +184,7 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 
 	if operation == OperationRender {
 		summary["template"] = spec.TemplateBody
-		return summary, nil
+		return summary, data.Write(spec.TemplateBody)
 	}
 
 	// Even diff/validate can write remote changesets or packaged templates.
@@ -302,7 +302,7 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 	summary["changeset_id"] = result.ChangeSetID
 	summary["no_op"] = result.NoOp
 
-	if spec.StackPolicyBody != "" {
+	if spec.StackPolicyBody != "" && (result.NoOp || result.ChangeSetType == cfntypes.ChangeSetTypeCreate) {
 		if err := setStackPolicy(octx.Ctx, client, spec); err != nil {
 			return summary, err
 		}

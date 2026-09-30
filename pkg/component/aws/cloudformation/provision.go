@@ -121,6 +121,10 @@ func deployDirect(ctx context.Context, client CloudFormationClient, spec *stackS
 		return result, nil
 	}
 
+	if _, err := prepareStackPolicy(ctx, client, spec, result); err != nil {
+		return result, err
+	}
+
 	// Captured immediately before ExecuteChangeSet -- see preOperationEventBaseline
 	// -- so streamStackEvents can tell a fast create/update's own events apart
 	// from anything already present on the stack.
