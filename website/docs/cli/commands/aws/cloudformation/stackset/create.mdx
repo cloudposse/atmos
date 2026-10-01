@@ -100,6 +100,12 @@ times out after 30 minutes if it hasn't.
 :::note
 `stackset create` does not fire `before`/`after` hook events — only
 [`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff), and
-[`delete`](/cli/commands/aws/cloudformation/delete) do.
+[`diff`](/cli/commands/aws/cloudformation/diff),
+[`delete`](/cli/commands/aws/cloudformation/delete),
+[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
+[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
 :::
+
+Quote every account ID as a 12-digit string, for example `accounts: ["012345678901"]`.
+Numeric values, mixed-type lists and malformed region names are rejected before creating or
+updating a StackSet. Static dry-run performs the same checks for known target values.

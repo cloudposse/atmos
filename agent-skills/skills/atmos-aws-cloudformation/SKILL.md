@@ -108,7 +108,7 @@ chart-style plugin system, unlike native Helm).
 | `atmos aws cloudformation apply <component> -s <stack>` | Executes the changeset (`ExecuteChangeSet`), creating or updating the stack — never a direct `CreateStack`/`UpdateStack` call. Streams per-resource stack events live and ends with a rendered Outputs summary. |
 | `atmos aws cloudformation deploy <component> -s <stack>` | Alias for `apply` with `--auto-approve` defaulted to `true`. |
 | `atmos aws cloudformation delete <component> -s <stack>` | `DeleteStack`, respecting termination protection — see [Delete Safety](#delete-safety--termination-protection). |
-| `atmos aws cloudformation output <component> -s <stack> [key]` | Renders the deployed stack's Outputs (all, or one by key) via `DescribeStacks` — the same view `apply`/`deploy` render at completion. Alias: `outputs`. |
+| `atmos aws cloudformation output <component> -s <stack>` | Renders the deployed stack's Outputs (all keys) via `DescribeStacks` — the same view `apply`/`deploy` render at completion. Alias: `outputs`. |
 | `atmos aws cloudformation fmt <component> -s <stack> [--check]` | Canonically formats the local template in place (comment-preserving YAML round-trip, no shell-out). `--check` reports without writing, for CI. |
 | `atmos aws cloudformation list` | Lists CloudFormation stacks in the active identity's account/region via `ListStacks`, including stacks Atmos doesn't manage. |
 
@@ -127,9 +127,15 @@ that works with every verb.
 `output` supports the full standard format set shared with `atmos terraform output`: `json`, `yaml`,
 `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table` (default on a TTY), and `github` (GitHub
 Actions `$GITHUB_OUTPUT` syntax via `atmos aws cloudformation output vpc -s dev --format=github`),
-plus `--flatten` and `--uppercase` key options. Outputs sourced from `NoEcho`-declared template
-parameters are masked by value wherever they reappear (changeset rendering, `describe` output,
-`output` results, logs) — not just at the original parameter field.
+plus `--flatten` and `--uppercase` key options. No positional output key is accepted.
+
+With masking enabled, standalone output and apply summaries read the deployed template
+(`cloudformation:GetTemplate`) and redact outputs that reference NoEcho parameters, including
+intrinsics and indirect resource/condition dependencies. Known parameter/default values are also
+registered with the masker. Missing or invalid sensitivity metadata fails before output is printed.
+This works without a local template or source download, including when configured values are stale.
+`--mask=false` explicitly disables presentation masking. Internal component output lookups retain
+real values. Arbitrary transformed secrets without a detectable dependency cannot be recognized.
 
 ## Changesets
 
@@ -318,7 +324,8 @@ Terraform-only). See [atmos-ci](../atmos-ci/SKILL.md) for the native-CI plumbing
 
 Five lifecycle pairs fire hook events: `before`/`after` × `diff` (`plan` normalizes to `diff`),
 `apply` (`deploy` normalizes to `apply`), `delete`, `drift detect`, and `drift describe` — e.g.
-`after.aws/cloudformation.apply`. Every other verb — `render`, `validate`, `output`, `fmt`, `tree`,
+`after.aws/cloudformation.apply`, `before.aws/cloudformation.drift-detect`, and
+`after.aws/cloudformation.drift-describe`. Hyphens inside drift command names are meaningful. Every other verb — `render`, `validate`, `output`, `fmt`, `tree`,
 `logs`, `watch`, `changeset *`, `get *`, `stackset *`, `list`, `backend *`, and `source *` — does
 not fire hook events. See [atmos-hooks](../atmos-hooks/SKILL.md) for the `hooks:` block shape.
 
@@ -330,8 +337,8 @@ console and stack/change-set descriptions, not `Outputs`, template/resource `Met
 identifiers. Keep secrets and derived values out of these surfaces, also when using supported
 Secrets Manager/SSM secure-string dynamic references to avoid plaintext parameters.
 
-Atmos masks registered values locally; it neither filters direct AWS responses nor tracks derived
-values. Resolution loses origin, so Atmos cannot reliably reject secret-fed parameters missing `NoEcho`.
+Atmos masks registered values locally and conservatively redacts sensitive deployed outputs at
+the presentation boundary; direct AWS responses remain outside this protection. Resolution loses origin, so Atmos cannot reliably reject secret-fed parameters missing `NoEcho`.
 
 ## Migrating from Rain or Raw CloudFormation
 
@@ -356,3 +363,12 @@ Rain-verb-to-`atmos aws cloudformation`-verb cross-reference (`fmt`→`fmt`, `ca
   upload today — automatic packaging only covers the template body itself.
 - Use the Floci `aws/emulator` identity (see `examples/cloudformation/`) to develop and test with
   zero AWS credentials before pointing at a real account.
+
+## Static dry-run
+
+`--dry-run` defers YAML functions, Go templates, source downloads, authentication and hooks,
+including with `render` and bulk/affected selection. It validates known static fields and reports
+execution-dependent checks as deferred. Use a normal `render` to inspect a provisioned template.
+Bulk deletion reverses dependency order so consumers can still resolve producer outputs.
+Named changeset execution enables configured termination protection after successful completion,
+just as apply does; false never disables existing protection.

@@ -88,3 +88,8 @@ atmos aws cloudformation stackset instances vpc -s dev
 to every existing instance without changing which accounts/regions have one. `stackset delete` and
 `stackset instances` act directly on `stack_name` and don't resolve or require a `provision.targets`
 entry. `create`/`update`/`delete` prompt for confirmation (skip with `--auto-approve`).
+
+Account IDs must be quoted 12-digit strings, including leading zeroes. Numeric or mixed-type
+accounts and malformed regions fail before mutation, including during static dry-run. Omitted
+target dimensions remain supported. The S3 target's prefix is applied once to both the uploaded
+object and its TemplateURL; metadata sidecars use the same effective key.

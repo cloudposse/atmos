@@ -13,12 +13,9 @@ components:
       stack_name: "atmos-cfn-demo-{{ .vars.stage }}"
       parameters:
         Stage: "{{ .vars.stage }}"
-      # Live-verifies which aws/cloudformation verbs actually fire hook
-      # events: only diff/apply/delete (and their plan/deploy aliases) do,
-      # per eventsFor() in pkg/component/aws/cloudformation/executor.go —
-      # every other verb dispatches through runOperation without ever
-      # calling runWithHooks. Each entry appends its event name to
-      # $ATMOS_HOOK_MARKER_FILE via scripts/hook_marker.py.
+      # Lifecycle hooks fire for diff/apply/delete and drift detect/describe,
+      # including plan/deploy aliases. Each marker appends its event name to
+      # ATMOS_HOOK_MARKER_FILE through scripts/hook_marker.py.
       hooks:
         mark-before-diff:
           events: ["before.aws/cloudformation.diff"]
