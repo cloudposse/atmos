@@ -226,5 +226,8 @@ end-to-end activation against a real eligible role remains a manual verification
 ### Deferred (non-goals or follow-ups)
 
 - Capping `duration` at the role's PIM activation-policy maximum pre-flight (would require the
-  `roleManagementPolicyAssignments` API); today an over-long duration surfaces a clear ARM error.
+  `roleManagementPolicyAssignments` API) - tracked in
+  [#3238](https://github.com/cloudposse/atmos/issues/3238). Today an over-long duration is rejected
+  by ARM server-side; the create-failure path surfaces ARM's message plus an actionable hint to
+  lower `duration`, so the gap is only the pre-flight clamp.
 - Entra directory roles, PIM for Groups, and configuring approvers remain out of scope (Section 3).

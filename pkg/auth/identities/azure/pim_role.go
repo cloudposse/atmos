@@ -257,16 +257,29 @@ func (i *pimRoleIdentity) submitActivation(ctx context.Context, client PIMClient
 		return "", "", err
 	}
 	requestName := i.newRequestName()
+	isoDuration := i.isoDuration()
 	result, err := client.CreateActivationRequest(ctx, &ActivationRequest{
 		RequestName:           requestName,
 		PrincipalID:           principalID,
 		RoleDefinitionID:      i.roleDefinitionID,
 		EligibilityScheduleID: eligibilityID,
 		Justification:         justification,
-		Duration:              i.isoDuration(),
+		Duration:              isoDuration,
 	})
 	if err != nil {
-		return "", "", err
+		// ARM enforces the role's PIM activation-policy maximum server-side and rejects a
+		// too-long window. Atmos does not yet pre-flight that cap (tracked as a follow-up),
+		// so surface an actionable hint alongside ARM's own message.
+		b := errUtils.Build(errUtils.ErrAzurePIMActivationFailed).
+			WithCause(err).
+			WithExplanationf("Could not file the PIM activation request for identity '%s'", i.name).
+			WithHint("If the role enforces a shorter window, lower 'duration' to within the role's PIM activation-policy maximum").
+			WithContext(azureCloud.LogFieldIdentity, i.name).
+			WithExitCode(1)
+		if isoDuration != "" {
+			b = b.WithContext(principalDurationKey, isoDuration)
+		}
+		return "", "", b.Err()
 	}
 	log.Debug("Submitted PIM activation request", azureCloud.LogFieldIdentity, i.name, logKeyRequest, requestName, "status", result.Status)
 	return requestName, result.Status, nil

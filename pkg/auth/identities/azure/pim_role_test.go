@@ -5,12 +5,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	crerrors "github.com/cockroachdb/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -356,6 +359,24 @@ func TestPIMRole_ActivationTimeout(t *testing.T) {
 
 	_, err := id.Authenticate(context.Background(), testAzureCreds())
 	require.ErrorIs(t, err, errUtils.ErrAzurePIMActivationTimeout)
+}
+
+func TestPIMRole_CreateRequestFailsWithDurationHint(t *testing.T) {
+	// ARM rejects a too-long window; the error carries both sentinels (the activation
+	// failure and the underlying request failure) plus an actionable duration hint.
+	mock := &mockPIMClient{
+		eligFound:      true,
+		eligScheduleID: testEligID,
+		createErr:      fmt.Errorf("%w: PUT returned 400: ExpirationTooLong", errUtils.ErrAzurePIMRequestFailed),
+	}
+	id := newTestIdentity(t, defaultPrincipal(), mock)
+
+	_, err := id.Authenticate(context.Background(), testAzureCreds())
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMActivationFailed)
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMRequestFailed, "underlying ARM cause is preserved")
+
+	joined := strings.Join(crerrors.GetAllHints(err), " ")
+	assert.Contains(t, joined, "duration", "activation-create failure must hint at lowering the duration")
 }
 
 func TestPIMRole_ActivationFailed(t *testing.T) {
