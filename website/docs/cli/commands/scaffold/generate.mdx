@@ -263,7 +263,7 @@ option list (no constraint, any value accepted) at runtime instead of erroring; 
 looks back only one hop -- it does not chase labels through a chain of dynamic references, nor
 through the template-expression form, both of which fall back to `label == value`.
 
-## Loading External Data with `!include`
+## Loading External Data with `!include` and Other YAML Functions
 
 The [`!include`](/functions/yaml/include) YAML function, already available in stack manifests, also
 works in `scaffold.yaml` -- resolving before schema validation, so it can be used anywhere a literal
@@ -298,6 +298,21 @@ generation output -- it's never copied into the generated project, the same way 
 itself never is. `!include` also accepts everything it does in a stack manifest: a remote `git::`,
 `oci://`, or `https://` source works the same way, with no such exclusion needed since a remote
 source is never part of the local template directory to begin with.
+
+Besides `!include`/[`!include.raw`](/functions/yaml/include.raw), `scaffold.yaml` resolves a fixed
+set of other YAML functions that need no stack, component, or backend context --
+[`!env`](/functions/yaml/env), [`!exec`](/functions/yaml/exec),
+[`!random`](/functions/yaml/random), [`!cwd`](/functions/yaml/cwd), the `!git.*`/
+[`!repo-root`](/functions/yaml/repo-root) family ([`!git.root`](/functions/yaml/git.root),
+[`!git.sha`](/functions/yaml/git.sha), [`!git.ref`](/functions/yaml/git.ref),
+[`!git.branch`](/functions/yaml/git.branch), [`!git.repository`](/functions/yaml/git.repository),
+[`!git.owner`](/functions/yaml/git.owner), [`!git.name`](/functions/yaml/git.name),
+[`!git.host`](/functions/yaml/git.host), [`!git.url`](/functions/yaml/git.url)), and
+[`!literal`](/functions/yaml/literal) (useful for a field value that looks like a Go template
+expression but should be taken as-is). Any other YAML function -- one that needs real stack,
+component, or backend context Atmos doesn't have while loading `scaffold.yaml`, such as
+`!terraform.state`, `!store`, or `!secret` -- is rejected with a clear error naming the tag, rather
+than silently left unresolved.
 
 ## Dynamic File Generation
 

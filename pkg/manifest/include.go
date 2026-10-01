@@ -1,8 +1,6 @@
 package manifest
 
 import (
-	"strings"
-
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -52,14 +50,17 @@ func WithIncludeResolution(atmosConfig *schema.AtmosConfiguration, file string, 
 	}
 }
 
-// resolveIncludeTags resolves every !include/!include.raw tag found
-// anywhere in data's document tree, returning the re-serialized, fully
-// resolved YAML bytes. Deliberately narrower than the stack-manifest tag
-// walker this mirrors (pkg/utils's processCustomTagsInner) -- it only
-// recognizes !include/!include.raw, leaves every other tag (including
-// Atmos's other YAML functions, which need real stack/backend context a
-// manifest load has no business invoking) completely untouched, and never
-// rejects an unrecognized tag as unsupported.
+// resolveIncludeTags resolves every tag scaffold.yaml supports (see
+// utils.ScaffoldTagPolicy) found anywhere in data's document tree,
+// returning the re-serialized, fully resolved YAML bytes. Walks via the
+// shared tag walker (pkg/utils/yaml_tag_walker.go) the stack-manifest loader
+// also uses, under scaffold's own policy: !include/!include.raw and a fixed
+// set of context-free tags (!env, !exec, !random, !cwd, the !git.* family,
+// !literal) resolve immediately; anything else (!terraform.state, !store,
+// !secret, etc. -- tags needing real stack/component/backend context a
+// manifest load has no business invoking) is a hard error naming the tag,
+// never silently left unresolved or deferred to a phase scaffold.yaml has
+// none of.
 func resolveIncludeTags(atmosConfig *schema.AtmosConfiguration, data []byte, file string, consumedPaths *[]string) ([]byte, error) {
 	defer perf.Track(atmosConfig, "manifest.resolveIncludeTags")()
 
@@ -71,7 +72,10 @@ func resolveIncludeTags(atmosConfig *schema.AtmosConfiguration, data []byte, fil
 			Err()
 	}
 
-	if err := walkIncludeTags(atmosConfig, &doc, file, consumedPaths); err != nil {
+	policy := utils.ScaffoldTagPolicy(func(path string) {
+		recordConsumedPath(consumedPaths, path)
+	})
+	if err := utils.WalkYAMLTags(atmosConfig, &doc, file, policy); err != nil {
 		return nil, err
 	}
 
@@ -79,57 +83,10 @@ func resolveIncludeTags(atmosConfig *schema.AtmosConfiguration, data []byte, fil
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrManifestParse).
 			WithCause(err).
-			WithExplanationf("Failed to re-serialize `%s` after resolving !include", file).
+			WithExplanationf("Failed to re-serialize `%s` after resolving its YAML tags", file).
 			Err()
 	}
 	return resolved, nil
-}
-
-// walkIncludeTags recurses through node's tree, resolving every
-// !include/!include.raw tag it finds in place. This recursion exists to
-// find every !include tag anywhere in the ORIGINAL document (e.g. one
-// nested several levels deep inside spec.fields[]), not to chase a
-// transitively-included file's own !include tags -- those are never
-// actually reachable: !include's local/remote fetch decodes the included
-// file's content generically (into a plain Go map/slice/string, the same
-// way any other !include result does), and a custom YAML tag like
-// !include does not survive that decode. A literal !include inside an
-// included file therefore always resolves to inert, unprocessed text, not
-// a second round of resolution -- there is no path resolution question to
-// get right for it, and no risk of runaway/cyclic recursion either, since
-// a real !include tag can only ever be found once per occurrence in the
-// original document. The consumedPaths slice, when non-nil, collects each
-// tag's raw path argument as encountered -- see WithIncludeResolution's
-// doc comment.
-func walkIncludeTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string, consumedPaths *[]string) error {
-	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
-		return walkIncludeTags(atmosConfig, node.Content[0], file, consumedPaths)
-	}
-
-	for _, n := range node.Content {
-		tag := strings.TrimSpace(n.Tag)
-		val := strings.TrimSpace(n.Value)
-
-		switch tag {
-		case utils.AtmosYamlFuncInclude:
-			recordConsumedPath(consumedPaths, val)
-			if err := utils.ProcessIncludeTag(atmosConfig, n, val, file); err != nil {
-				return err
-			}
-		case utils.AtmosYamlFuncIncludeRaw:
-			recordConsumedPath(consumedPaths, val)
-			if err := utils.ProcessIncludeRawTag(atmosConfig, n, val, file); err != nil {
-				return err
-			}
-		}
-
-		if len(n.Content) > 0 {
-			if err := walkIncludeTags(atmosConfig, n, file, consumedPaths); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 // recordConsumedPath appends val's raw path argument to consumedPaths (a

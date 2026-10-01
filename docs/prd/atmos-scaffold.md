@@ -89,6 +89,24 @@ and `pkg/generator/` for the source of truth on current behavior.
 - ❌ A `--max-changes` CLI flag — the merger has an internal conflict-percentage
   threshold (hardcoded default, currently 50%), but it isn't exposed as a flag
 
+**Implemented since the above was written**:
+- ✅ `!include`/`!include.raw` and a fixed set of other context-free YAML functions
+  (`!env`, `!exec`, `!random`, `!cwd`, the `!git.*`/`!repo-root` family, `!literal`) in
+  `scaffold.yaml`, resolved before schema validation via a shared tag walker
+  (`pkg/utils.WalkYAMLTags`/`ScaffoldTagPolicy`) extracted from the stack-manifest loader's
+  own tag dispatcher, rather than a bespoke `!include`-only one. Any other YAML function
+  (one needing real stack/component/backend context, e.g. `!terraform.state`, `!store`,
+  `!secret`) is rejected with a clear error naming the tag, never silently left unresolved.
+  See `pkg/function/tag.ScaffoldYAML` for the canonical supported-tag list.
+  - Deliberately **not** done as part of this work, left as a follow-up: migrating
+    `pkg/config/process_yaml.go` (`atmos.yaml`'s own loader) onto the same shared walker.
+    Its handlers write into a `viper.Viper` sink rather than a `yaml.Node`, and — found
+    while investigating this — that file also uses a different YAML library
+    (`go.yaml.in/yaml/v3`) than `pkg/utils`/`pkg/manifest` (`gopkg.in/yaml.v3`), so even
+    the smaller fix of pointing its own `handleInclude` at the shared
+    `utils.ProcessIncludeTag` isn't a same-type drop-in; it would need an explicit
+    conversion step or a library migration first.
+
 ## Goals
 
 ### Primary Goals
