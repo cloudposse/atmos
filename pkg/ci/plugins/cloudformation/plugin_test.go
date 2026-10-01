@@ -56,10 +56,12 @@ func (f *fakeWriter) WriteSummary(content string) error {
 	return f.err
 }
 
+// TestPlugin_GetType fixes the registry key used to route CloudFormation hooks to this plugin.
 func TestPlugin_GetType(t *testing.T) {
 	assert.Equal(t, "aws/cloudformation", (&Plugin{}).GetType())
 }
 
+// TestPlugin_GetHookBindings requires handlers for all five supported after-operation events.
 func TestPlugin_GetHookBindings(t *testing.T) {
 	bindings := (&Plugin{}).GetHookBindings()
 	require.Len(t, bindings, 5)
@@ -79,6 +81,8 @@ func TestPlugin_GetHookBindings(t *testing.T) {
 	}
 }
 
+// TestPlugin_BuildTemplateContext checks that operation identity, resource counts, output, and command
+// errors reach summary templates.
 func TestPlugin_BuildTemplateContext(t *testing.T) {
 	ctx := (&Plugin{}).buildTemplateContext(&plugin.HookContext{
 		Command:      "diff",
@@ -108,6 +112,8 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 	assert.Equal(t, []string{"diff failed"}, ctx.Result.Errors)
 }
 
+// TestPlugin_BuildTemplateContext_FallsBackToHookContextInfo preserves component and stack identity
+// when no aggregate result is available.
 func TestPlugin_BuildTemplateContext_FallsBackToHookContextInfo(t *testing.T) {
 	// No Aggregate provided (or the wrong type) — Component/Stack must still
 	// come from ctx.Info rather than panicking or leaving them empty.
@@ -125,6 +131,8 @@ func TestPlugin_BuildTemplateContext_FallsBackToHookContextInfo(t *testing.T) {
 	assert.False(t, ctx.Result.HasErrors)
 }
 
+// TestPlugin_BuildTemplateContext_AggregateErrorFallback surfaces an aggregate error even when the
+// hook has no command error.
 func TestPlugin_BuildTemplateContext_AggregateErrorFallback(t *testing.T) {
 	// When there's no CommandError but the aggregate result carries its own
 	// Error (e.g. a failed drift-detect API call surfaced by the operation
@@ -141,6 +149,8 @@ func TestPlugin_BuildTemplateContext_AggregateErrorFallback(t *testing.T) {
 	assert.Equal(t, []string{"AccessDenied: not authorized to perform cloudformation:DetectStackDrift"}, ctx.Result.Errors)
 }
 
+// TestPlugin_BuildTemplateContext_DriftFields preserves the measured drift status and count for
+// rendering.
 func TestPlugin_BuildTemplateContext_DriftFields(t *testing.T) {
 	ctx := (&Plugin{}).buildTemplateContext(&plugin.HookContext{
 		Command: "drift-detect",
@@ -155,6 +165,8 @@ func TestPlugin_BuildTemplateContext_DriftFields(t *testing.T) {
 	assert.Equal(t, 2, ctx.DriftedCount)
 }
 
+// TestAggregateResult_HandlesValuePointerAndMissing accepts both result representations and safely
+// defaults absent or unrelated aggregates.
 func TestAggregateResult_HandlesValuePointerAndMissing(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -190,6 +202,7 @@ func TestAggregateResult_HandlesValuePointerAndMissing(t *testing.T) {
 	}
 }
 
+// TestIsSummaryEnabled distinguishes an explicit opt-out from nil or unset configuration.
 func TestIsSummaryEnabled(t *testing.T) {
 	enabled := true
 	disabled := false
@@ -220,6 +233,8 @@ func TestIsSummaryEnabled(t *testing.T) {
 	}
 }
 
+// TestTemplateRendering_Diff requires a usable reproduction command and the actual resource-change
+// count in the embedded summary.
 func TestTemplateRendering_Diff(t *testing.T) {
 	ctx := (&Plugin{}).buildTemplateContext(&plugin.HookContext{
 		Command: "diff",
@@ -241,6 +256,8 @@ func TestTemplateRendering_Diff(t *testing.T) {
 	assert.Contains(t, rendered, "Resource changes: **3**")
 }
 
+// TestTemplateRendering_DriftDetectFailed retains drift measurements and the operation error in a
+// failure summary.
 func TestTemplateRendering_DriftDetectFailed(t *testing.T) {
 	ctx := (&Plugin{}).buildTemplateContext(&plugin.HookContext{
 		Command:      "drift-detect",
@@ -265,6 +282,8 @@ func TestTemplateRendering_DriftDetectFailed(t *testing.T) {
 	assert.Contains(t, rendered, "drift check failed")
 }
 
+// TestPlugin_OnAfterOperation_SummaryDisabled verifies that an explicit opt-out produces no summary
+// output.
 func TestPlugin_OnAfterOperation_SummaryDisabled(t *testing.T) {
 	// When ci.summary.enabled is explicitly false, no template is rendered
 	// and the writer is never invoked.
@@ -282,6 +301,7 @@ func TestPlugin_OnAfterOperation_SummaryDisabled(t *testing.T) {
 	assert.Empty(t, writer.summary)
 }
 
+// TestPlugin_OnAfterOperation_NoOutputWriter permits CI providers that do not support summary output.
 func TestPlugin_OnAfterOperation_NoOutputWriter(t *testing.T) {
 	// A CI provider that doesn't support summaries (OutputWriter returns
 	// nil) must be a silent no-op, not a nil-pointer panic.
@@ -294,6 +314,8 @@ func TestPlugin_OnAfterOperation_NoOutputWriter(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestPlugin_OnAfterOperation_EmptyTemplateName skips output when neither the command nor
+// configuration selects a template.
 func TestPlugin_OnAfterOperation_EmptyTemplateName(t *testing.T) {
 	// No command and no configured summary template resolves to an empty
 	// template name, which must skip rendering entirely without an error.
@@ -309,6 +331,8 @@ func TestPlugin_OnAfterOperation_EmptyTemplateName(t *testing.T) {
 	assert.Empty(t, writer.summary)
 }
 
+// TestPlugin_OnAfterOperation_RendersAndWritesSummary exercises embedded rendering through the
+// provider output writer.
 func TestPlugin_OnAfterOperation_RendersAndWritesSummary(t *testing.T) {
 	// The success path: a real diff summary is rendered from the embedded
 	// template and handed to the CI provider's writer verbatim.
@@ -333,6 +357,8 @@ func TestPlugin_OnAfterOperation_RendersAndWritesSummary(t *testing.T) {
 	assert.Contains(t, writer.summary, "Resource changes: **3**")
 }
 
+// TestPlugin_OnAfterOperation_UsesConfiguredTemplateOverride gives the configured template precedence
+// over the operation default.
 func TestPlugin_OnAfterOperation_UsesConfiguredTemplateOverride(t *testing.T) {
 	// ci.summary.template overrides the command-derived template name.
 	writer := &fakeWriter{}
@@ -348,6 +374,8 @@ func TestPlugin_OnAfterOperation_UsesConfiguredTemplateOverride(t *testing.T) {
 	assert.Contains(t, writer.summary, "CloudFormation Delete Summary")
 }
 
+// TestPlugin_OnAfterOperation_RenderErrorWrapsSentinel requires template failures to be identifiable
+// without writing a partial summary.
 func TestPlugin_OnAfterOperation_RenderErrorWrapsSentinel(t *testing.T) {
 	// An unknown template name (no embedded template) must surface as
 	// errUtils.ErrTemplateEvaluation, and the writer must never be called.
@@ -364,6 +392,8 @@ func TestPlugin_OnAfterOperation_RenderErrorWrapsSentinel(t *testing.T) {
 	assert.Empty(t, writer.summary)
 }
 
+// TestPlugin_OnAfterOperation_WriteSummaryErrorWrapsSentinel preserves both the CI write
+// classification and the underlying provider error.
 func TestPlugin_OnAfterOperation_WriteSummaryErrorWrapsSentinel(t *testing.T) {
 	// A writer failure (e.g. CI platform API error) must surface as
 	// errUtils.ErrCISummaryWriteFailed with the underlying cause preserved.
@@ -380,6 +410,8 @@ func TestPlugin_OnAfterOperation_WriteSummaryErrorWrapsSentinel(t *testing.T) {
 	assert.ErrorIs(t, err, sentinel)
 }
 
+// TestTemplateRendering_ReproductionCommandsAndCleanDrift checks public CLI spellings across every
+// summary and requires an explicit zero for known clean drift.
 func TestTemplateRendering_ReproductionCommandsAndCleanDrift(t *testing.T) {
 	for _, command := range []string{"diff", "apply", "delete", "drift-detect", "drift-describe"} {
 		t.Run(command, func(t *testing.T) {

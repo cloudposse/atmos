@@ -749,6 +749,8 @@ func TestValidateOperationArgs_AcceptsIncludeDependentsWithAffected(t *testing.T
 	require.NoError(t, err)
 }
 
+// TestCIFlagReachesOperation verifies that each summary-producing operation forwards the explicit CI
+// flag.
 func TestCIFlagReachesOperation(t *testing.T) {
 	for _, operation := range []string{"diff", "apply", "delete", "drift-detect", "drift-describe"} {
 		t.Run(operation, func(t *testing.T) {

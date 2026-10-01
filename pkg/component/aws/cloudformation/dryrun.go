@@ -33,6 +33,8 @@ func validateDryRun(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigA
 	return nil
 }
 
+// deferredExpression recognizes configured template delimiters and Atmos YAML tags without parsing or
+// evaluating their contents.
 func deferredExpression(config *schema.AtmosConfiguration, value string) bool {
 	left, right := "{{", "}}"
 	if config != nil && len(config.Templates.Settings.Delimiters) == 2 {
@@ -51,6 +53,8 @@ func deferredExpression(config *schema.AtmosConfiguration, value string) bool {
 	return false
 }
 
+// staticTargetValues omits deferred target expressions from dry-run validation while retaining static
+// values, including malformed ones.
 func staticTargetValues(config *schema.AtmosConfiguration, value any) any {
 	if text, ok := value.(string); ok && deferredExpression(config, text) {
 		return nil
@@ -68,6 +72,8 @@ func staticTargetValues(config *schema.AtmosConfiguration, value any) any {
 	return value
 }
 
+// staticStackSetProvision copies target maps before removing deferred account and region expressions,
+// preserving the caller's configuration.
 func staticStackSetProvision(atmosConfig *schema.AtmosConfiguration, section map[string]any) map[string]any {
 	provision, _ := section["provision"].(map[string]any)
 	rawTargets, _ := provision["targets"].(map[string]any)

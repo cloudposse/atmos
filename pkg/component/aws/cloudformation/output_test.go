@@ -47,6 +47,8 @@ func TestDescribeStackOutputs_NoStack(t *testing.T) {
 	assert.Empty(t, outputs)
 }
 
+// TestRunOutputMasksDeployedNoEcho requires both emitted output and the returned summary to redact
+// deployed NoEcho references while retaining public values.
 func TestRunOutputMasksDeployedNoEcho(t *testing.T) {
 	t.Cleanup(iolib.Reset)
 	client := NewMockCloudFormationClient(gomock.NewController(t))
@@ -69,6 +71,8 @@ Outputs:
 	assert.Contains(t, out, "public-value")
 }
 
+// TestMaskStackOutputsExpressions covers direct and indirect intrinsic references plus known secret
+// values without mutating dependency outputs.
 func TestMaskStackOutputsExpressions(t *testing.T) {
 	for _, expression := range []string{
 		"!Ref Password", "{Ref: Password}", "!Sub 'prefix-${Password}'",
@@ -104,6 +108,8 @@ Outputs:
 	}
 }
 
+// TestMaskStackOutputsInvalidMetadata requires malformed sensitivity metadata to return an error
+// without exposing output values.
 func TestMaskStackOutputsInvalidMetadata(t *testing.T) {
 	for _, body := range []string{"", "not-an-object", "[one, two]", "[invalid", "Parameters: []", "Outputs: invalid"} {
 		t.Run(body, func(t *testing.T) {
@@ -115,6 +121,8 @@ func TestMaskStackOutputsInvalidMetadata(t *testing.T) {
 	}
 }
 
+// TestPresentedStackOutputsMetadataFailureAndOptOut requires metadata failures to suppress output
+// unless masking was explicitly disabled.
 func TestPresentedStackOutputsMetadataFailureAndOptOut(t *testing.T) {
 	for _, enabled := range []bool{true, false} {
 		t.Run(fmt.Sprint(enabled), func(t *testing.T) {
@@ -146,6 +154,8 @@ func TestPresentedStackOutputsMetadataFailureAndOptOut(t *testing.T) {
 	}
 }
 
+// TestOutputMaskingFreshProcess verifies every output format with no previously registered secrets,
+// using deployed NoEcho metadata alone.
 func TestOutputMaskingFreshProcess(t *testing.T) {
 	if format := os.Getenv("_ATMOS_TEST_CF_OUTPUT"); format != "" {
 		client := NewMockCloudFormationClient(gomock.NewController(t))
@@ -172,6 +182,8 @@ func TestOutputMaskingFreshProcess(t *testing.T) {
 	}
 }
 
+// TestMaskStackOutputsMissingOutputMetadata redacts outputs whose sensitivity cannot be established
+// while preserving the raw dependency map.
 func TestMaskStackOutputsMissingOutputMetadata(t *testing.T) {
 	iolib.Reset()
 	t.Cleanup(iolib.Reset)

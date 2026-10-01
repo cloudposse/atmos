@@ -9,6 +9,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestMetadataCacheIdentityPreservesSourceQuery distinguishes source versions using the original URI
+// while keeping credentials and query values out of diagnostics.
 func TestMetadataCacheIdentityPreservesSourceQuery(t *testing.T) {
 	const redacted = "https://example.test/template.yaml"
 	const original = "https://cache-user:original-secret@example.test/template.yaml?version=1&token=original-token"

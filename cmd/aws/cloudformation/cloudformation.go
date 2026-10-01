@@ -455,6 +455,8 @@ func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 	})
 }
 
+// getOperationFlags preserves typed operation options when dispatching Cobra commands to the component
+// provider.
 func getOperationFlags(cmd *cobra.Command) map[string]any {
 	result := make(map[string]any)
 	for _, name := range []string{flagAll, flagAffected, "ci", "include-dependents", "clone-target-ref", flagAutoApprove, "disable-termination-protection", "flatten", "uppercase", "fail-on-drift", "original", "check", "chart", "follow"} {

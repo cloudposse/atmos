@@ -20,6 +20,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestSourceInferenceRejectsAmbiguousProvisionedResults requires an explicit path for empty, missing,
+// nested, or multiple-file source results.
 func TestSourceInferenceRejectsAmbiguousProvisionedResults(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
@@ -56,6 +58,8 @@ func TestSourceInferenceRejectsAmbiguousProvisionedResults(t *testing.T) {
 	}
 }
 
+// TestSourceInferenceIgnoresProvisioningMetadata allows hidden provisioning metadata alongside the
+// single inferred template.
 func TestSourceInferenceIgnoresProvisioningMetadata(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".metadata"), []byte("{}"), 0o600))
@@ -65,6 +69,8 @@ func TestSourceInferenceIgnoresProvisioningMetadata(t *testing.T) {
 	assert.Equal(t, "template.yaml", name)
 }
 
+// TestNamedChangesetProtectionFailureIsReportedAfterCompletion preserves the successful deployment
+// status while reporting a subsequent protection failure.
 func TestNamedChangesetProtectionFailureIsReportedAfterCompletion(t *testing.T) {
 	client := NewMockCloudFormationClient(gomock.NewController(t))
 	denied := errors.New("termination protection denied")
@@ -82,6 +88,8 @@ func TestNamedChangesetProtectionFailureIsReportedAfterCompletion(t *testing.T) 
 	assert.Equal(t, string(cfntypes.StackStatusCreateComplete), summary["final_status"])
 }
 
+// TestDriftDescribeCountsOnlyModifiedAndDeletedAcrossPages excludes clean and unchecked resources from
+// the count passed to CI.
 func TestDriftDescribeCountsOnlyModifiedAndDeletedAcrossPages(t *testing.T) {
 	client := NewMockCloudFormationClient(gomock.NewController(t))
 	first := []cfntypes.StackResourceDrift{{StackResourceDriftStatus: cfntypes.StackResourceDriftStatusInSync}, {StackResourceDriftStatus: cfntypes.StackResourceDriftStatusModified}}
@@ -99,6 +107,8 @@ func TestDriftDescribeCountsOnlyModifiedAndDeletedAcrossPages(t *testing.T) {
 	assert.Equal(t, 2, result.DriftedCount)
 }
 
+// TestStackSetMalformedTargetStopsBeforeMutation rejects invalid account and region types before API
+// writes in normal execution and during dry-run validation.
 func TestStackSetMalformedTargetStopsBeforeMutation(t *testing.T) {
 	for _, operation := range []Operation{OperationStackSetCreate, OperationStackSetUpdate} {
 		for _, field := range []string{"accounts", "regions"} {
@@ -123,6 +133,8 @@ func TestStackSetMalformedTargetStopsBeforeMutation(t *testing.T) {
 	}
 }
 
+// TestOutputMaskingFollowsYAMLAliases traces aliased NoEcho references while retaining public values
+// and the original output map.
 func TestOutputMaskingFollowsYAMLAliases(t *testing.T) {
 	body := `Parameters:
   Password: {Type: String, NoEcho: true}

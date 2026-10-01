@@ -17,6 +17,8 @@ func describeStackOutputs(ctx context.Context, client CloudFormationClient, stac
 	return outputs, err
 }
 
+// describeStackOutputValues retrieves raw outputs and deployed parameters together so presentation can
+// determine sensitivity without changing dependency values.
 func describeStackOutputValues(ctx context.Context, client CloudFormationClient, stackName string) (map[string]any, []cfntypes.Parameter, error) {
 	defer perf.Track(nil, "cloudformation.describeStackOutputs")()
 

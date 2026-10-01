@@ -136,6 +136,8 @@ func TestStackSetConfigFromTarget(t *testing.T) {
 	})
 }
 
+// TestStackSetTargetStrings accepts omitted or quoted account targets and rejects malformed region
+// types and values.
 func TestStackSetTargetStrings(t *testing.T) {
 	for _, input := range []any{nil, []any{}, "012345678901", []string{"012345678901"}, []any{"012345678901"}} {
 		values, err := stackSetTargetStrings("fleet", "accounts", input, stackSetAccountPattern)
@@ -814,6 +816,8 @@ func TestNilIfEmpty(t *testing.T) {
 	assert.Equal(t, "value", *got)
 }
 
+// TestResolveStackSetTargetRejectsMalformedAccounts requires quoted account identifiers and an error
+// naming the invalid target field.
 func TestResolveStackSetTargetRejectsMalformedAccounts(t *testing.T) {
 	for _, accounts := range []any{539916835077, []any{539916835077}, []any{"539916835077", false}, "123", "", map[string]any{"id": "539916835077"}} {
 		_, err := resolveStackSetTarget(map[string]any{"targets": map[string]any{"fleet": map[string]any{"kind": kindAwsStackSet, "accounts": accounts}}}, "")
