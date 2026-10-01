@@ -13,9 +13,11 @@ Beyond the native component types, Atmos lets you define **custom component type
 </Intro>
 
 :::note
-Native CloudFormation support is planned in [PR #3157](https://github.com/cloudposse/atmos/pull/3157).
-The [CloudFormation component preview](/stacks/components/aws-cloudformation) describes
-that implementation; the documentation-only revision does not register its commands.
+CloudFormation is no longer an example of a tool you'd wire up this way — it's
+a native, built-in component type (currently experimental). See
+[CloudFormation Components](/stacks/components/aws-cloudformation) and the
+[`atmos aws cloudformation`](/cli/commands/aws/cloudformation)
+command reference instead of building a custom wrapper for it.
 :::
 
 Custom component types are defined through [custom commands](/cli/configuration/commands). Unlike the native types, which ship with built-in orchestration, a custom type is one you wire up yourself: you declare the type on a custom command and supply the execution `steps`, while Atmos handles stack resolution, inheritance, and configuration merging exactly as it does for native components.

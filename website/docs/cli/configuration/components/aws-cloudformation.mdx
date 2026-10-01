@@ -11,13 +11,6 @@ import File from "@site/src/components/File";
 import Intro from "@site/src/components/Intro";
 import Experimental from "@site/src/components/Experimental";
 
-
-:::caution Unreleased CloudFormation support
-This documentation previews the implementation in [PR #3157](https://github.com/cloudposse/atmos/pull/3157).
-The documentation-only revision does not register `atmos aws cloudformation` or its `cfn` alias.
-Use a build containing that implementation before running these examples.
-:::
-
 <Intro>
   Tell Atmos where native `aws/cloudformation` component files live. This
   project-wide setting keeps stack files focused on what to deploy, while
@@ -83,7 +76,7 @@ components:
 There is no per-component account override outside stack sets — the account is
 always the active identity's account.
 
-See the [upcoming `atmos aws cloudformation` implementation](https://github.com/cloudposse/atmos/pull/3157)
-and the
+See the [`atmos aws cloudformation`](/cli/commands/aws/cloudformation)
+command reference and the
 [CloudFormation stack configuration](/stacks/components/aws-cloudformation) for
 component-level fields.

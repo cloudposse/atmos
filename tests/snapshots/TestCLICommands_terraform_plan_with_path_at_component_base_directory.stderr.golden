@@ -2,10 +2,16 @@
 
 # Error
 
-**Error:** failed to resolve component from path: path component type does not match command
+**Error:** failed to resolve component from path: path is not within Atmos component directories
 
-Path resolves to packer component but command expects terraform component You ran: atmos terraform <command> . The path points to: packer component
+Path /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform is not within any configured component directories
 
-💡 Run the correct command for this component type
+Configured component base paths:
+
+  • Terraform: components/terraform
+  • Helmfile: components/helmfile
+  • Packer: components/packer
+
+💡 Change to a component directory and use . or provide a path within one of the component directories above
 
 💡 Make sure the path is within your component directories
