@@ -1779,6 +1779,14 @@ var (
 	ErrInvalidGitHubEndpointURL = errors.New("invalid GitHub endpoint URL")
 )
 
+// Release notes update errors.
+var (
+	// ErrReleaseTagMissing prevents updating notes without a tag to preserve.
+	ErrReleaseTagMissing = errors.New("release tag is missing")
+	// ErrReleaseTagMismatch indicates GitHub did not preserve the tag during a notes update.
+	ErrReleaseTagMismatch = errors.New("release tag changed during notes update")
+)
+
 // GitHub mock test-helper errors (tests/testhelpers/httpmock).
 var (
 	// ErrMockFailWithTimesNegative indicates a test called FailWithTimes with a negative
