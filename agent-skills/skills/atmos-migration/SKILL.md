@@ -8,6 +8,7 @@ references:
   - references/from-native-terraform.md
   - references/from-terraform-workspaces.md
   - references/remote-state-bridge.md
+  - references/to-native-ci.md
 ---
 
 # Migrating to Atmos
@@ -73,6 +74,7 @@ different reference:
 | Multiple TF root modules in scattered dirs                           | [from-native-terraform.md](references/from-native-terraform.md) |
 | `terraform.workspace`-driven environments with shared state backend  | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
 | Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
+| CI/CD built on generic/third-party GitHub Actions (setup-terraform, configure-aws-credentials, dflook/terraform-github-actions, tfcmt, security-scan/lint/notify steps, etc.) | [to-native-ci.md](references/to-native-ci.md) |
 
 The remote-state-bridge pattern is what makes **progressive, component-by-component migration**
 possible. Without it, a team is forced into a big-bang cutover. Cover it any time the user has
@@ -161,6 +163,7 @@ those questions to the right skill:
 - **Authentication / provider credentials** → [atmos-auth](../atmos-auth/SKILL.md)
 - **Validation policies (OPA, JSON Schema)** → [atmos-validation](../atmos-validation/SKILL.md)
 - **CI/CD with affected-detection** → [atmos-ci](../atmos-ci/SKILL.md)
+- **Migrating an existing GitHub Actions Terraform pipeline (setup-terraform, configure-aws-credentials, dflook, tfcmt) to Native CI** → [to-native-ci.md](references/to-native-ci.md)
 - **Cross-component data sharing via stores** → [atmos-stores](../atmos-stores/SKILL.md)
 
 ## Anti-Patterns
@@ -186,3 +189,5 @@ Things to push back on if a user (or another agent) proposes them during migrati
   workspaces to stacks without losing state
 - [References/remote-state-bridge.md](references/remote-state-bridge.md) -- the dummy-component
   and abstract-component patterns for reading state from un-migrated or external Terraform
+- [References/to-native-ci.md](references/to-native-ci.md) -- mapping third-party GitHub Actions
+  (setup-terraform, configure-aws-credentials, dflook, tfcmt) to Atmos Native CI

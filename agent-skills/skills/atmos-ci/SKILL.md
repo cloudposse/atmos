@@ -32,6 +32,7 @@ Atmos commands directly.
 | Tool versions, `dependencies.tools`, explicit job tool installs, PATH behavior | [atmos-toolchain](../atmos-toolchain/SKILL.md) |
 | OIDC providers, identities, trust policies, cloud auth conventions | [atmos-auth](../atmos-auth/SKILL.md) |
 | Profile mechanics for `ATMOS_PROFILE` and `--profile` | [atmos-profiles](../atmos-profiles/SKILL.md) |
+| Migrating an existing non-Atmos GitHub Actions Terraform pipeline (setup-terraform, configure-aws-credentials, dflook, tfcmt) to Native CI | [atmos-migration/references/to-native-ci.md](../atmos-migration/references/to-native-ci.md) |
 
 ## Native CI First
 
