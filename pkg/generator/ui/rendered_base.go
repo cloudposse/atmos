@@ -176,8 +176,8 @@ type templateDeletionResult struct {
 // spec.When-true, actually-attempted files -- see checkDuplicateRenderedPath),
 // so no separate "new file set" needs computing here. Every file under
 // ui.renderedBaseRoot not in newPaths is a deletion candidate, handled by
-// processDeletionCandidate. force is forwarded to it unchanged -- see that
-// function's own doc comment for what it does here.
+// processDeletionCandidate. The force argument is forwarded to it unchanged
+// -- see that function's own doc comment for what it does here.
 func (ui *InitUI) handleTemplateDeletions(targetPath string, newPaths map[string]string, force bool) (templateDeletionResult, error) {
 	if ui.renderedBaseRoot == "" {
 		return templateDeletionResult{}, nil
@@ -241,21 +241,7 @@ func (ui *InitUI) processDeletionCandidate(targetPath, relPath string, force boo
 	}
 	targetFullPath := filepath.Join(targetPath, relPath)
 
-	// Refuse to read through or remove a symlink at the deletion-candidate
-	// path, mirroring engine.validateWriteTarget's write-side protection: a
-	// symlink here could otherwise make the byte-comparison below read
-	// content from outside the target directory entirely.
-	if info, lstatErr := os.Lstat(targetFullPath); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
-		symlinkErr := errUtils.Build(errUtils.ErrSymlinkWrite).
-			WithExplanationf("Refusing to inspect `%s` for deletion: it's a symlink", relPath).
-			WithHint("Remove the symlink manually if it's no longer needed, or replace it with a real file").
-			WithContext("file_path", relPath).
-			WithExitCode(2).
-			Err()
-		ui.writeOutput(fileStatusFormat,
-			ui.errorStyle.Render(ui.xMark),
-			relPath,
-			ui.grayStyle.Render(fmt.Sprintf("(error: %v)", symlinkErr)))
+	if symlinkErr := ui.refuseSymlinkDeletionCandidate(relPath, targetFullPath); symlinkErr != nil {
 		return false, symlinkErr
 	}
 
@@ -270,37 +256,104 @@ func (ui *InitUI) processDeletionCandidate(targetPath, relPath string, force boo
 
 	locallyModified := !bytes.Equal(oldContent, currentContent)
 	if locallyModified && !force {
-		conflictErr := errUtils.Build(errUtils.ErrMergeConflict).
-			WithExplanationf("`%s` was removed from the template but has local modifications", relPath).
-			WithHint("Resolve manually: delete the file if it's no longer needed, or keep it -- future updates won't touch it again since the template no longer generates it").
-			WithHint("Or re-run with `--force` to delete it anyway").
-			WithContext("file_path", relPath).
-			WithExitCode(1).
-			Err()
-		ui.writeOutput(fileStatusFormat,
-			ui.errorStyle.Render(ui.xMark),
-			relPath,
-			ui.grayStyle.Render(fmt.Sprintf("(error: %v)", conflictErr)))
-		return false, conflictErr
+		return false, ui.reportDeletionConflict(relPath)
 	}
 
-	status := deletedStatus
-	switch {
-	case locallyModified && ui.processor.DryRun:
-		status = dryRunForcedDeleteStatus
-	case locallyModified:
-		status = forcedDeletedStatus
-	case ui.processor.DryRun:
-		status = dryRunDeleteStatus
+	if err := ui.deleteCandidate(targetFullPath, relPath, locallyModified); err != nil {
+		return false, err
 	}
+	return true, nil
+}
+
+// deletionStatusLabel picks the per-file status label deleteCandidate
+// reports, per this file's deletedStatus/dryRunDeleteStatus/
+// forcedDeletedStatus/dryRunForcedDeleteStatus constants (see ui.go) -- split
+// out of deleteCandidate purely to keep processDeletionCandidate's own
+// cyclomatic complexity down.
+func deletionStatusLabel(locallyModified, dryRun bool) string {
+	switch {
+	case locallyModified && dryRun:
+		return dryRunForcedDeleteStatus
+	case locallyModified:
+		return forcedDeletedStatus
+	case dryRun:
+		return dryRunDeleteStatus
+	default:
+		return deletedStatus
+	}
+}
+
+// deleteCandidate performs (or, in dry-run, only reports) the deletion
+// processDeletionCandidate has already decided on -- either the file was
+// unmodified, or force overrode a local-edit conflict (locallyModified tracks
+// which, purely to pick the right status label via deletionStatusLabel).
+func (ui *InitUI) deleteCandidate(targetFullPath, relPath string, locallyModified bool) error {
+	status := deletionStatusLabel(locallyModified, ui.processor.DryRun)
 	if !ui.processor.DryRun {
 		if removeErr := os.Remove(targetFullPath); removeErr != nil {
-			return false, fmt.Errorf("failed to delete `%s`: %w", relPath, removeErr)
+			return fmt.Errorf("failed to delete `%s`: %w", relPath, removeErr)
 		}
 	}
 	ui.writeOutput(fileStatusFormat,
 		ui.successStyle.Render(ui.checkmark),
 		relPath,
 		ui.grayStyle.Render(status))
-	return true, nil
+	return nil
+}
+
+// refuseSymlinkDeletionCandidate reports (and returns) an error if
+// targetFullPath is a symlink, mirroring engine.validateWriteTarget's
+// write-side protection: a symlink here could otherwise make
+// processDeletionCandidate's byte-comparison read content from outside the
+// target directory entirely. Returns nil when it's a plain file, and also
+// when the path has already vanished (a race between the caller's own
+// fileExistsAt check and here) -- processDeletionCandidate's own
+// os.ReadFile calls right after this surface that case properly. Any other
+// Lstat failure (e.g. permission denied) is returned as a real error instead
+// of silently treated as a plain file.
+func (ui *InitUI) refuseSymlinkDeletionCandidate(relPath, targetFullPath string) error {
+	info, lstatErr := os.Lstat(targetFullPath)
+	switch {
+	case os.IsNotExist(lstatErr):
+		// Vanished between the caller's own fileExistsAt check and here (a
+		// race) -- processDeletionCandidate's own os.ReadFile calls right
+		// after this surface that properly, so nothing to report here.
+		return nil
+	case lstatErr != nil:
+		return fmt.Errorf("failed to check `%s`: %w", relPath, lstatErr)
+	case info.Mode()&os.ModeSymlink == 0:
+		return nil
+	}
+
+	symlinkErr := errUtils.Build(errUtils.ErrSymlinkWrite).
+		WithExplanationf("Refusing to inspect `%s` for deletion: it's a symlink", relPath).
+		WithHint("Remove the symlink manually if it's no longer needed, or replace it with a real file").
+		WithContext("file_path", relPath).
+		WithExitCode(2).
+		Err()
+	ui.writeOutput(fileStatusFormat,
+		ui.errorStyle.Render(ui.xMark),
+		relPath,
+		ui.grayStyle.Render(fmt.Sprintf("(error: %v)", symlinkErr)))
+	return symlinkErr
+}
+
+// reportDeletionConflict reports (and returns) the unresolved-merge-conflict
+// error for a deletion candidate with surviving local edits and force=false
+// (see processDeletionCandidate's own doc comment for what force=true does
+// instead), reusing the same "✗ path (error: ...)" shape a real content
+// conflict already uses -- see merge_update.go's mergeFile.
+func (ui *InitUI) reportDeletionConflict(relPath string) error {
+	conflictErr := errUtils.Build(errUtils.ErrMergeConflict).
+		WithExplanationf("`%s` was removed from the template but has local modifications", relPath).
+		WithHint("Resolve manually: delete the file if it's no longer needed, or keep it -- future updates won't touch it again since the template no longer generates it").
+		WithHint("Or re-run with `--force` to delete it anyway").
+		WithContext("file_path", relPath).
+		WithExitCode(1).
+		Err()
+	ui.writeOutput(fileStatusFormat,
+		ui.errorStyle.Render(ui.xMark),
+		relPath,
+		ui.grayStyle.Render(fmt.Sprintf("(error: %v)", conflictErr)))
+	return conflictErr
 }
