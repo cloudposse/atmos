@@ -139,6 +139,7 @@ func newTestIdentity(t *testing.T, principal map[string]any, mock *mockPIMClient
 	p.isTTY = func() bool { return false }
 	p.promptFunc = func(string) (string, error) { return "", errors.New("no prompt in test") }
 	p.lookupJustification = func() string { return "" }
+	p.warn = func(string) {} // no-op by default; warning tests override to capture.
 	p.pollInterval = 0
 	return p
 }
@@ -679,7 +680,7 @@ func TestPIMRole_IsoDuration(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {
-			id := &pimRoleIdentity{duration: tt.in}
+			id := &pimRoleIdentity{duration: tt.in, warn: func(string) {}}
 			assert.Equal(t, tt.want, id.isoDuration())
 		})
 	}
@@ -756,4 +757,75 @@ func TestDefaultIsTTY(t *testing.T) {
 	// In the test harness stdin is not an interactive terminal; the call must not panic
 	// and should report false.
 	assert.False(t, defaultIsTTY())
+}
+
+func TestPIMRole_ConsumesJustification(t *testing.T) {
+	id := newTestIdentity(t, defaultPrincipal(), &mockPIMClient{})
+	assert.True(t, id.ConsumesJustification(), "azure/pim-role records a supplied justification")
+}
+
+func TestPIMRole_WarnsWhenAlreadyActiveWithSuppliedJustification(t *testing.T) {
+	tests := []struct {
+		name          string
+		supplied      string
+		expectWarning bool
+	}{
+		{name: "supplied justification warns", supplied: "per-invocation reason", expectWarning: true},
+		{name: "no supplied justification is silent", supplied: "", expectWarning: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockPIMClient{activeExists: true}
+			id := newTestIdentity(t, defaultPrincipal(), mock)
+			id.lookupJustification = func() string { return tt.supplied }
+			var warnings []string
+			id.warn = func(msg string) { warnings = append(warnings, msg) }
+
+			_, err := id.Authenticate(context.Background(), testAzureCreds())
+			require.NoError(t, err)
+			assert.Equal(t, 0, mock.createCalls)
+			if tt.expectWarning {
+				require.Len(t, warnings, 1)
+				assert.Contains(t, warnings[0], "already active")
+			} else {
+				assert.Empty(t, warnings)
+			}
+		})
+	}
+}
+
+func TestPIMRole_WarnsWhenResumingWithSuppliedJustification(t *testing.T) {
+	tests := []struct {
+		name          string
+		supplied      string
+		expectWarning bool
+	}{
+		{name: "supplied justification warns", supplied: "per-invocation reason", expectWarning: true},
+		{name: "no supplied justification is silent", supplied: "", expectWarning: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockPIMClient{
+				eligFound:      true,
+				eligScheduleID: testEligID,
+				pendingFound:   true,
+				pendingName:    "existing-request",
+				statuses:       []string{pimStatusProvisioned},
+			}
+			id := newTestIdentity(t, defaultPrincipal(), mock)
+			id.lookupJustification = func() string { return tt.supplied }
+			var warnings []string
+			id.warn = func(msg string) { warnings = append(warnings, msg) }
+
+			_, err := id.Authenticate(context.Background(), testAzureCreds())
+			require.NoError(t, err)
+			assert.Equal(t, 0, mock.createCalls, "resume must not create a new request")
+			if tt.expectWarning {
+				require.Len(t, warnings, 1)
+				assert.Contains(t, warnings[0], "pending")
+			} else {
+				assert.Empty(t, warnings)
+			}
+		})
+	}
 }

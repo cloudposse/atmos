@@ -18,6 +18,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -65,6 +66,7 @@ type pimRoleIdentity struct {
 	isTTY               func() bool
 	promptFunc          func(identityName string) (string, error)
 	lookupJustification func() string
+	warn                func(msg string) // User-facing warning (ui.Warning); overridden in tests.
 	pollInterval        time.Duration
 	maxPollAttempts     int
 }
@@ -93,6 +95,7 @@ func NewPIMRoleIdentity(name string, config *schema.Identity) (authTypes.Identit
 		isTTY:               defaultIsTTY,
 		promptFunc:          defaultJustificationPrompt,
 		lookupJustification: func() string { return viper.GetString(justificationViperKey) },
+		warn:                ui.Warning, // User-facing advisory (stderr, visible regardless of log level).
 		pollInterval:        defaultPIMPollInterval,
 		maxPollAttempts:     defaultPIMMaxPollAttempts,
 	}
@@ -205,27 +208,10 @@ func (i *pimRoleIdentity) Authenticate(ctx context.Context, baseCreds authTypes.
 		return nil, err
 	}
 
-	azureCreds, ok := baseCreds.(*authTypes.AzureCredentials)
-	if !ok {
-		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
-			WithExplanationf("Azure PIM role identity '%s' requires Azure credentials from the parent identity", i.name).
-			WithHint("Chain this identity from an Azure identity via 'via.identity' or 'via.provider'").
-			WithExitCode(2).
-			Err()
-	}
-
-	principalID, err := azureCloud.ExtractObjectIDFromToken(azureCreds.AccessToken)
+	principalID, client, err := i.resolvePrincipalAndClient(baseCreds)
 	if err != nil {
-		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
-			WithCause(err).
-			WithExplanationf("Could not determine the principal object id for PIM activation on identity '%s'", i.name).
-			WithHint("The parent identity must provide a management access token (JWT) carrying an 'oid' claim").
-			WithExitCode(1).
-			Err()
+		return nil, err
 	}
-
-	baseURL := azureCloud.GetCloudEnvironment(azureCreds.CloudEnvironment).ResourceManagerEndpoint()
-	client := i.newClient(nil, azureCreds.AccessToken, i.scope, baseURL)
 
 	// Step 1: short-circuit if the role is already active at scope.
 	active, err := client.ActiveAssignmentExists(ctx, i.roleDefinitionID)
@@ -233,6 +219,9 @@ func (i *pimRoleIdentity) Authenticate(ctx context.Context, baseCreds authTypes.
 		return nil, err
 	}
 	if active {
+		if i.justificationSupplied() {
+			i.warn(fmt.Sprintf("PIM role for identity %q is already active; the supplied --justification was not recorded because no new activation request was filed.", i.name))
+		}
 		log.Debug("PIM role already active, skipping activation", azureCloud.LogFieldIdentity, i.name, "scope", i.scope)
 		return baseCreds, nil
 	}
@@ -260,6 +249,33 @@ func (i *pimRoleIdentity) Authenticate(ctx context.Context, baseCreds authTypes.
 	return baseCreds, nil
 }
 
+// resolvePrincipalAndClient validates the parent Azure credentials, resolves the principal
+// object id from the management token, and builds a PIM client targeting the correct ARM
+// endpoint for the credential's cloud environment.
+func (i *pimRoleIdentity) resolvePrincipalAndClient(baseCreds authTypes.ICredentials) (string, PIMClient, error) {
+	azureCreds, ok := baseCreds.(*authTypes.AzureCredentials)
+	if !ok {
+		return "", nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithExplanationf("Azure PIM role identity '%s' requires Azure credentials from the parent identity", i.name).
+			WithHint("Chain this identity from an Azure identity via 'via.identity' or 'via.provider'").
+			WithExitCode(2).
+			Err()
+	}
+
+	principalID, err := azureCloud.ExtractObjectIDFromToken(azureCreds.AccessToken)
+	if err != nil {
+		return "", nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithCause(err).
+			WithExplanationf("Could not determine the principal object id for PIM activation on identity '%s'", i.name).
+			WithHint("The parent identity must provide a management access token (JWT) carrying an 'oid' claim").
+			WithExitCode(1).
+			Err()
+	}
+
+	baseURL := azureCloud.GetCloudEnvironment(azureCreds.CloudEnvironment).ResourceManagerEndpoint()
+	return principalID, i.newClient(nil, azureCreds.AccessToken, i.scope, baseURL), nil
+}
+
 // activate issues (or resumes) the self-activation request and waits for it to provision.
 func (i *pimRoleIdentity) activate(ctx context.Context, client PIMClient, principalID, eligibilityID string) error {
 	// Step 3: resume an in-flight request rather than creating a duplicate.
@@ -270,6 +286,9 @@ func (i *pimRoleIdentity) activate(ctx context.Context, client PIMClient, princi
 
 	var status string
 	if pending {
+		if i.justificationSupplied() {
+			i.warn(fmt.Sprintf("Attached to an existing pending PIM request for identity %q; the supplied --justification was not applied (the original request's justification stands).", i.name))
+		}
 		log.Debug("Attaching to pending PIM activation request", azureCloud.LogFieldIdentity, i.name, logKeyRequest, requestName)
 		if status, err = client.GetRequestStatus(ctx, requestName); err != nil {
 			return err
@@ -357,6 +376,19 @@ func (i *pimRoleIdentity) waitForActivation(ctx context.Context, client PIMClien
 	}
 }
 
+// ConsumesJustification implements types.JustificationConsumer: this identity records a
+// supplied justification when it files a new PIM activation request. The auth manager uses
+// this to decide whether a supplied --justification would otherwise go unused.
+func (i *pimRoleIdentity) ConsumesJustification() bool { return true }
+
+// justificationSupplied reports whether a per-invocation justification was explicitly
+// supplied via --justification / ATMOS_AUTH_JUSTIFICATION (the "justification" viper key),
+// as opposed to a configured principal.justification default. Only an explicitly supplied
+// value warrants an "unused" warning when activation is skipped or resumed.
+func (i *pimRoleIdentity) justificationSupplied() bool {
+	return strings.TrimSpace(i.lookupJustification()) != ""
+}
+
 // resolveJustification resolves the activation justification in precedence order:
 // the --justification flag or ATMOS_AUTH_JUSTIFICATION env (both via the "justification"
 // viper key, so a per-invocation reason wins), then the configured principal.justification
@@ -392,7 +424,7 @@ func (i *pimRoleIdentity) isoDuration() string {
 	}
 	d, err := time.ParseDuration(i.duration)
 	if err != nil {
-		log.Warn("Invalid duration for PIM activation, using policy default", principalDurationKey, i.duration)
+		i.warn(fmt.Sprintf("Invalid duration %q for PIM activation on identity %q; using the role's policy default.", i.duration, i.name))
 		return ""
 	}
 	return goDurationToISO8601(d)
