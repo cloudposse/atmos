@@ -231,12 +231,30 @@ func (ui *InitUI) processDeletionCandidate(targetPath, relPath string) (deleted 
 	if !fileExistsAt(targetPath, relPath) {
 		return false, nil
 	}
+	targetFullPath := filepath.Join(targetPath, relPath)
+
+	// Refuse to read through or remove a symlink at the deletion-candidate
+	// path, mirroring engine.validateWriteTarget's write-side protection: a
+	// symlink here could otherwise make the byte-comparison below read
+	// content from outside the target directory entirely.
+	if info, lstatErr := os.Lstat(targetFullPath); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		symlinkErr := errUtils.Build(errUtils.ErrSymlinkWrite).
+			WithExplanationf("Refusing to inspect `%s` for deletion: it's a symlink", relPath).
+			WithHint("Remove the symlink manually if it's no longer needed, or replace it with a real file").
+			WithContext("file_path", relPath).
+			WithExitCode(2).
+			Err()
+		ui.writeOutput(fileStatusFormat,
+			ui.errorStyle.Render(ui.xMark),
+			relPath,
+			ui.grayStyle.Render(fmt.Sprintf("(error: %v)", symlinkErr)))
+		return false, symlinkErr
+	}
 
 	oldContent, err := os.ReadFile(filepath.Join(ui.renderedBaseRoot, relPath))
 	if err != nil {
 		return false, fmt.Errorf("failed to read the old rendered base for `%s`: %w", relPath, err)
 	}
-	targetFullPath := filepath.Join(targetPath, relPath)
 	currentContent, err := os.ReadFile(targetFullPath)
 	if err != nil {
 		return false, fmt.Errorf("failed to read `%s`: %w", relPath, err)
