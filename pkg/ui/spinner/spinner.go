@@ -471,6 +471,20 @@ func (s *Spinner) Update(message string) {
 	s.program.Send(manualUpdateMsg{message: message})
 }
 
+// Println prints a line above the live spinner line, permanently, without
+// interrupting the spinner. In non-interactive output it's just ui.Writeln.
+func (s *Spinner) Println(line string) {
+	if !s.isTTY || s.program == nil {
+		ui.Writeln(line)
+		return
+	}
+	// Construct the native print message synchronously so the event loop receives
+	// it before a subsequent stop. Returning tea.Println from Update would run
+	// another asynchronous command that could be reordered or overtaken by quit.
+	// Send also handles an already-exited program; Program.Println blocks there.
+	s.program.Send(tea.Println(line)())
+}
+
 // Stop stops the spinner without displaying a completion message.
 // Use Success() or Error() instead to show a completion status.
 // Stop is idempotent and safe to call multiple times.

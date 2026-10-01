@@ -79,7 +79,7 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 		typeChanged := cmd.Flags().Changed("type")
 
 		stack := v.GetString("stack")
-		labels, labelsErr := pkgtags.ParseLabelsFlag(v.GetString("labels"))
+		labels, labelsErr := pkgtags.ParseLabelsFlag(pkgtags.ReadLabelsFlag(v))
 		if labelsErr != nil {
 			return labelsErr
 		}
@@ -402,7 +402,7 @@ func init() {
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
 		flags.WithStringFlag("tags", "", "", "Update only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
 		flags.WithStringFlag("stack", "s", "", "Update only components belonging to the specified stack"),
-		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
+		flags.WithStringSliceFlag("labels", "", nil, vendorLabelsFlagHelp),
 		flags.WithBoolFlag("check", "", false, "Dry run: show available updates without modifying files"),
 		flags.WithBoolFlag("pull", "", false, "After updating versions, run 'atmos vendor pull'"),
 		flags.WithBoolFlag("all", "", false, "Update all discoverable vendor sources (the default when no selector is given)"),
@@ -597,19 +597,19 @@ func setPullComponentFlags(cmd *cobra.Command, component string) error {
 	return nil
 }
 
-// resetUnchangedFlag clears name's value back to "" and marks it Changed=false, rather than merely
-// calling cmd.Flags().Set (which unconditionally marks a flag Changed=true, even when set to "").
-// This distinction matters if any Changed()-sensitive flag reader is ever added to
-// ExecuteVendorPullCommand (internal/exec/vendor.go) in the future - a plain cmd.Flags().Set("")
-// would leave that flag spuriously marked Changed after this per-component pull loop, even though
-// the user never actually passed it. "tags" has no such Changed() reader today but is reset this
-// way defensively, in case one is added later.
+// resetUnchangedFlag clears a selector's value and Changed bit before delegating to
+// vendor pull. Slice flags must be replaced because Set("") appends no elements to
+// an already changed slice, leaving the previous selector active.
 func resetUnchangedFlag(cmd *cobra.Command, name string) error {
 	f := cmd.Flags().Lookup(name)
 	if f == nil {
 		return nil
 	}
-	if err := f.Value.Set(""); err != nil {
+	if slice, ok := f.Value.(pflag.SliceValue); ok {
+		if err := slice.Replace(nil); err != nil {
+			return err
+		}
+	} else if err := f.Value.Set(""); err != nil {
 		return err
 	}
 	f.Changed = false

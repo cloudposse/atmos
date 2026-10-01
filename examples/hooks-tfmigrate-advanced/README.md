@@ -1,3 +1,8 @@
+---
+title: TFMigrate Hook (Advanced)
+tags: [Hooks]
+---
+
 # `hooks-tfmigrate-advanced`
 
 Extends [`hooks-tfmigrate`](../hooks-tfmigrate/) to cover the rest of tfmigrate's

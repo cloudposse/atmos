@@ -2,6 +2,7 @@ package vendor
 
 import (
 	"bytes"
+	"errors"
 	stdio "io"
 	"os"
 	"path/filepath"
@@ -1929,4 +1930,36 @@ func TestSplitTags(t *testing.T) {
 			assert.Equal(t, tt.want, splitTags(tt.csv))
 		})
 	}
+}
+
+func TestResetUnchangedFlag_ClearsSlice(t *testing.T) {
+	cmd := &cobra.Command{Use: "update"}
+	cmd.Flags().StringSlice("labels", nil, "")
+	require.NoError(t, cmd.Flags().Set("labels", "team=platform"))
+	require.NoError(t, cmd.Flags().Set("labels", "owner=engineering"))
+	require.NoError(t, resetUnchangedFlag(cmd, "labels"))
+	labels, err := cmd.Flags().GetStringSlice("labels")
+	require.NoError(t, err)
+	assert.Empty(t, labels)
+	assert.False(t, cmd.Flags().Changed("labels"))
+}
+
+type failingSliceReset struct {
+	pflag.SliceValue
+	pflag.Value
+	err error
+}
+
+func (f failingSliceReset) Replace(_ []string) error { return f.err }
+
+func TestResetUnchangedFlag_ReplaceError(t *testing.T) {
+	cmd := &cobra.Command{Use: "update"}
+	cmd.Flags().StringSlice("labels", nil, "")
+	require.NoError(t, cmd.Flags().Set("labels", "team=platform"))
+	flag := cmd.Flags().Lookup("labels")
+	expected := errors.New("cannot replace labels")
+	flag.Value = failingSliceReset{SliceValue: flag.Value.(pflag.SliceValue), Value: flag.Value, err: expected}
+	require.ErrorIs(t, resetUnchangedFlag(cmd, "labels"), expected)
+	assert.True(t, flag.Changed)
+	assert.Equal(t, "[team=platform]", flag.Value.String())
 }

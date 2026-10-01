@@ -11,10 +11,6 @@ cast:
 
 ## Notes
 
-The catalog currently uses the file-based `template: template.yaml` configuration. Backend
-commands, automatic bucket provisioning, `path:`, and the inline-template example require the
-[phase 4 implementation](https://github.com/cloudposse/atmos/pull/3137).
-
 This example deploys a real, minimal CloudFormation stack (a single `AWS::SSM::Parameter`
 resource) through the native **`aws/cloudformation`** component type — SDK-native, no
 `aws`/`rain` binary shell-out — against a **local AWS sandbox**: no AWS account or credentials

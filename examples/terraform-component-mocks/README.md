@@ -1,3 +1,8 @@
+---
+title: Terraform Component Mocks
+tags: [Terraform, Components]
+---
+
 # Terraform component mocks
 
 This example lets `app` consume `vpc`'s output either from real Terraform state or from a component-owned mock.
