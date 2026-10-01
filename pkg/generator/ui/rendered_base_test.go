@@ -403,7 +403,7 @@ func TestSetupUpdateBase_Rendered_PropagatesRenderFailure(t *testing.T) {
 func TestHandleTemplateDeletions_NoRenderedBaseRoot_NoOp(t *testing.T) {
 	ui := createTestUI(t)
 
-	result, err := ui.handleTemplateDeletions(t.TempDir(), map[string]string{})
+	result, err := ui.handleTemplateDeletions(t.TempDir(), map[string]string{}, false)
 
 	require.NoError(t, err)
 	assert.Zero(t, result.successCount)
@@ -423,7 +423,7 @@ func TestHandleTemplateDeletions_DeletesCleanRemoval(t *testing.T) {
 	targetPath := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "old.txt"), []byte("old content\n"), 0o644))
 
-	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{})
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, false)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.successCount)
@@ -446,7 +446,7 @@ func TestHandleTemplateDeletions_ConflictOnLocalEdit(t *testing.T) {
 	targetPath := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "old.txt"), []byte("locally edited content\n"), 0o644))
 
-	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{})
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, false)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
@@ -457,6 +457,33 @@ func TestHandleTemplateDeletions_ConflictOnLocalEdit(t *testing.T) {
 	content, readErr := os.ReadFile(filepath.Join(targetPath, "old.txt"))
 	require.NoError(t, readErr)
 	assert.Equal(t, "locally edited content\n", string(content), "local edits must survive untouched")
+}
+
+// TestHandleTemplateDeletions_ForceResolvesLocalEditConflict is a regression
+// test for a finding from a field-test pass: --force could not resolve a
+// deletion conflict at all, unlike every other conflict in this subsystem
+// (--force already means "the template's choice wins" for a content
+// conflict -- see merge.ResolveConflictStrategy). force=true must now delete
+// the file through the local edits instead of leaving an unresolved
+// conflict.
+func TestHandleTemplateDeletions_ForceResolvesLocalEditConflict(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "old.txt"), []byte("locally edited content\n"), 0o644))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, true)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.successCount)
+	assert.Zero(t, result.errorCount)
+	assert.Empty(t, result.failedPaths)
+
+	_, statErr := os.Stat(filepath.Join(targetPath, "old.txt"))
+	assert.True(t, os.IsNotExist(statErr), "--force must delete the file despite local edits")
 }
 
 // TestHandleTemplateDeletions_AlreadyAbsent_NoOp confirms a path that's
@@ -471,7 +498,7 @@ func TestHandleTemplateDeletions_AlreadyAbsent_NoOp(t *testing.T) {
 	targetPath := t.TempDir()
 	// old.txt deliberately never written to targetPath.
 
-	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{})
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, false)
 
 	require.NoError(t, err)
 	assert.Zero(t, result.successCount)
@@ -500,7 +527,7 @@ func TestHandleTemplateDeletions_RefusesSymlinkDeletionCandidate(t *testing.T) {
 	symlinkPath := filepath.Join(targetPath, "old.txt")
 	require.NoError(t, os.Symlink(outsideFile, symlinkPath))
 
-	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{})
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, false)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrSymlinkWrite)
@@ -525,7 +552,7 @@ func TestHandleTemplateDeletions_StillWantedPathIsUntouched(t *testing.T) {
 	targetPath := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "kept.txt"), []byte("different content\n"), 0o644))
 
-	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{"kept.txt": "kept.txt"})
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{"kept.txt": "kept.txt"}, false)
 
 	require.NoError(t, err)
 	assert.Zero(t, result.successCount)
@@ -548,7 +575,7 @@ func TestHandleTemplateDeletions_DryRunDoesNotDelete(t *testing.T) {
 	targetPath := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "old.txt"), []byte("old content\n"), 0o644))
 
-	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{})
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, false)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.successCount)

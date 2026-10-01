@@ -176,8 +176,9 @@ type templateDeletionResult struct {
 // spec.When-true, actually-attempted files -- see checkDuplicateRenderedPath),
 // so no separate "new file set" needs computing here. Every file under
 // ui.renderedBaseRoot not in newPaths is a deletion candidate, handled by
-// processDeletionCandidate.
-func (ui *InitUI) handleTemplateDeletions(targetPath string, newPaths map[string]string) (templateDeletionResult, error) {
+// processDeletionCandidate. force is forwarded to it unchanged -- see that
+// function's own doc comment for what it does here.
+func (ui *InitUI) handleTemplateDeletions(targetPath string, newPaths map[string]string, force bool) (templateDeletionResult, error) {
 	if ui.renderedBaseRoot == "" {
 		return templateDeletionResult{}, nil
 	}
@@ -200,7 +201,7 @@ func (ui *InitUI) handleTemplateDeletions(targetPath string, newPaths map[string
 			return nil
 		}
 
-		deleted, candidateErr := ui.processDeletionCandidate(targetPath, relPath)
+		deleted, candidateErr := ui.processDeletionCandidate(targetPath, relPath, force)
 		switch {
 		case candidateErr != nil:
 			result.errorCount++
@@ -222,12 +223,19 @@ func (ui *InitUI) handleTemplateDeletions(targetPath string, newPaths map[string
 
 // processDeletionCandidate handles one path the template no longer generates
 // (see handleTemplateDeletions): deletes it when the on-disk copy still
-// matches the old pristine render exactly, reports an unresolved merge
-// conflict when local edits survive (reusing errUtils.ErrMergeConflict and
-// the same "✗ path (error: ...)" shape a real content conflict already
-// uses -- see merge_update.go's mergeFile -- rather than a new reporting
-// shape), and silently no-ops when the file is already gone.
-func (ui *InitUI) processDeletionCandidate(targetPath, relPath string) (deleted bool, err error) {
+// matches the old pristine render exactly, and silently no-ops when the file
+// is already gone.
+//
+// When local edits survive, force decides the outcome: false (default)
+// reports an unresolved merge conflict (reusing errUtils.ErrMergeConflict and
+// the same "✗ path (error: ...)" shape a real content conflict already uses
+// -- see merge_update.go's mergeFile -- rather than a new reporting shape);
+// true deletes it anyway. This mirrors --force's existing meaning elsewhere
+// in this subsystem ("on conflict, the template's choice wins" -- see
+// merge.ResolveConflictStrategy) -- here the template's choice is deletion,
+// so --force deletes through the local edits instead of leaving them as an
+// unresolved conflict.
+func (ui *InitUI) processDeletionCandidate(targetPath, relPath string, force bool) (deleted bool, err error) {
 	if !fileExistsAt(targetPath, relPath) {
 		return false, nil
 	}
@@ -260,10 +268,12 @@ func (ui *InitUI) processDeletionCandidate(targetPath, relPath string) (deleted 
 		return false, fmt.Errorf("failed to read `%s`: %w", relPath, err)
 	}
 
-	if !bytes.Equal(oldContent, currentContent) {
+	locallyModified := !bytes.Equal(oldContent, currentContent)
+	if locallyModified && !force {
 		conflictErr := errUtils.Build(errUtils.ErrMergeConflict).
 			WithExplanationf("`%s` was removed from the template but has local modifications", relPath).
 			WithHint("Resolve manually: delete the file if it's no longer needed, or keep it -- future updates won't touch it again since the template no longer generates it").
+			WithHint("Or re-run with `--force` to delete it anyway").
 			WithContext("file_path", relPath).
 			WithExitCode(1).
 			Err()
@@ -275,10 +285,18 @@ func (ui *InitUI) processDeletionCandidate(targetPath, relPath string) (deleted 
 	}
 
 	status := deletedStatus
-	if ui.processor.DryRun {
+	switch {
+	case locallyModified && ui.processor.DryRun:
+		status = dryRunForcedDeleteStatus
+	case locallyModified:
+		status = forcedDeletedStatus
+	case ui.processor.DryRun:
 		status = dryRunDeleteStatus
-	} else if removeErr := os.Remove(targetFullPath); removeErr != nil {
-		return false, fmt.Errorf("failed to delete `%s`: %w", relPath, removeErr)
+	}
+	if !ui.processor.DryRun {
+		if removeErr := os.Remove(targetFullPath); removeErr != nil {
+			return false, fmt.Errorf("failed to delete `%s`: %w", relPath, removeErr)
+		}
 	}
 	ui.writeOutput(fileStatusFormat,
 		ui.successStyle.Render(ui.checkmark),

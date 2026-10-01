@@ -99,9 +99,13 @@ const (
 	dryRunUpdateStatus = "(would update)"
 
 	// Per-file status labels for a file the template stopped generating (see
-	// handleTemplateDeletions).
-	deletedStatus      = "(deleted)"
-	dryRunDeleteStatus = "(would delete)"
+	// handleTemplateDeletions). The "forced" variants apply when local edits
+	// survived but --force deleted it anyway instead of leaving it as an
+	// unresolved conflict (see processDeletionCandidate).
+	deletedStatus            = "(deleted)"
+	dryRunDeleteStatus       = "(would delete)"
+	forcedDeletedStatus      = "(deleted --force, had local modifications)"
+	dryRunForcedDeleteStatus = "(would delete --force, had local modifications)"
 )
 
 // fileExistsAt reports whether a file (not directory) already exists at
@@ -1768,7 +1772,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// only -- see handleTemplateDeletions's own doc comment). A no-op for every
 	// other strategy/mode, folded into the same counters as any other entry
 	// above so the summary line and error branch below need no special-casing.
-	deletionResult, deleteErr := ui.handleTemplateDeletions(targetPath, seenRenderedPaths)
+	deletionResult, deleteErr := ui.handleTemplateDeletions(targetPath, seenRenderedPaths, force)
 	successCount += deletionResult.successCount
 	errorCount += deletionResult.errorCount
 	failedFiles = append(failedFiles, deletionResult.failedPaths...)
