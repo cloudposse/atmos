@@ -16,6 +16,13 @@ const (
 	ProviderKindAzureDeviceCode  = "azure/device-code"
 	ProviderKindAzureInteractive = "azure/interactive"
 
+	// Azure identity kinds.
+	// IdentityKindAzureSubscription scopes an Azure identity to a subscription.
+	IdentityKindAzureSubscription = "azure/subscription"
+	// IdentityKindAzurePIMRole activates a PIM-eligible Azure resource role for the
+	// principal established by the parent identity (just-in-time elevation).
+	IdentityKindAzurePIMRole = "azure/pim-role"
+
 	// GCP provider kinds.
 	ProviderKindGCPADC                        = "gcp/adc"
 	ProviderKindGCPOIDC                       = "gcp/oidc"
