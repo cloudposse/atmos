@@ -10,6 +10,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestDryRunValidatesStaticTargetValuesWithoutMutatingInputs defers dynamic expressions, rejects
+// malformed static entries, and preserves nested input configuration.
 func TestDryRunValidatesStaticTargetValuesWithoutMutatingInputs(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
@@ -41,12 +43,16 @@ func TestDryRunValidatesStaticTargetValuesWithoutMutatingInputs(t *testing.T) {
 	}
 }
 
+// TestDryRunStackSetMissingProvisionIsValidationError requires delivery-target configuration even when
+// execution is deferred.
 func TestDryRunStackSetMissingProvisionIsValidationError(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"stack_name": "fleet", "path": "unprovisioned.yaml"}}
 	err := validateDryRun(&schema.AtmosConfiguration{}, info, nil, OperationStackSetUpdate)
 	require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
 }
 
+// TestDryRunRecognizesConfiguredTemplateDelimiters defers custom-delimited templates and target values
+// without rewriting the input.
 func TestDryRunRecognizesConfiguredTemplateDelimiters(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
 	config.Templates.Settings.Delimiters = []string{"[[", "]]"}
@@ -59,6 +65,8 @@ func TestDryRunRecognizesConfiguredTemplateDelimiters(t *testing.T) {
 	assert.Equal(t, accounts, target["accounts"])
 }
 
+// TestDryRunDoesNotSuppressInvalidStaticParameters rejects malformed parameters even when the template
+// file will not be read.
 func TestDryRunDoesNotSuppressInvalidStaticParameters(t *testing.T) {
 	section := map[string]any{"stack_name": "fleet", "path": "unprovisioned.yaml", "parameters": map[string]any{"Invalid": map[string]any{"nested": "value"}}}
 	err := validateDryRun(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentSection: section}, nil, OperationApply)

@@ -20,7 +20,8 @@ Real AWS testing at 6a8791b4dcaf7ababa00756acb585e947c28798d exposed failures th
 - Preserve query-sensitive source cache identity independently of redacted provenance metadata.
 - Match canonical drift hook names, forward `--ci` through the parser, count only modified/deleted resources, distinguish unknown/unchecked/clean drift, and render valid reproduction commands.
 - Isolate startup-banner tests from the process-tree notice sentinel inherited by `atmos test`, preserving the assertions and runtime behavior.
-- Correct CLI/skill documentation, update the release notes/roadmap, and regenerate affected CloudFormation help recordings.
+- Correct CLI/skill documentation, update the release notes/roadmap, and regenerate affected CloudFormation help recordings. Move detailed operational examples into a skill reference to satisfy the 20 KB entrypoint limit.
+- Document changed function and regression-test contracts to address CodeRabbit's documentation warning, without changing non-comment Go tokens.
 
 ## Validation
 
@@ -39,7 +40,7 @@ A fresh binary repeated the AWS repros in dev and sandbox using an isolated fixt
 
 All owned resources were destroyed through Atmos. Independent inventories confirmed no owned active stacks (including StackSet children), StackSets, SSM parameters, IAM roles or S3 buckets remained in either account. The source cache was deleted and loopback server terminated. Local fixture, ownership ledger and cleanup proof are retained under `.context/field-test-cfn-remediation-20261001/` beside the repair checkout.
 
-The repository-wide short test run, latest-head cross-platform CI, Codecov and CodeRabbit checks are delivery gates in progress, not yet claimed complete in this record.
+The repository-wide short runner exceeded its fixed five-minute acceptance timeout; broader local validation uses the configurable acceptance runner with short-test selection and its standard 40-minute budget. A fresh shared clone initially failed go-git object lookups; copying Git objects locally and setting a fixed terminal width resolved the targeted checkout-dependent failures without code changes. Latest-head cross-platform CI, authoritative Codecov coverage and CodeRabbit review results are tracked on [PR #3100](https://github.com/cloudposse/atmos/pull/3100).
 
 ## Follow-ups
 

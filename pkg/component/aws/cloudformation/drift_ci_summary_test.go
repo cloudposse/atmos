@@ -19,6 +19,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestDriftDescribeRendersActualResourceStatusInCISummary follows paginated API results through the
+// real CI writer, distinguishing clean, unchecked, missing, and drifted results.
 func TestDriftDescribeRendersActualResourceStatusInCISummary(t *testing.T) {
 	tests := []struct {
 		name       string

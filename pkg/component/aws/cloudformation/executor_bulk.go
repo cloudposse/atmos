@@ -21,6 +21,8 @@ var (
 	affectedCloudFormationComponentsFunc = affectedCloudFormationComponents
 )
 
+// executeBulk discovers the dependency graph without resolving YAML functions, then executes producers
+// first for apply and consumers first for delete.
 func executeBulk(
 	ctx *component.ExecutionContext,
 	atmosConfig *schema.AtmosConfiguration,
@@ -111,6 +113,8 @@ func graphSelectionForBulk(
 	}, nil
 }
 
+// affectedCloudFormationComponents selects changed components without resolving output dependencies
+// that may not exist until execution.
 func affectedCloudFormationComponents(
 	ctx *component.ExecutionContext,
 	atmosConfig *schema.AtmosConfiguration,

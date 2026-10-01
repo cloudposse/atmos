@@ -36,6 +36,8 @@ type outputSensitivityTemplate struct {
 	Outputs    map[string]yaml.Node `yaml:"Outputs"`
 }
 
+// maskStackOutputs returns a sanitized copy using deployed NoEcho dependencies; unknown output
+// definitions are redacted conservatively.
 func maskStackOutputs(body string, parameters []cfntypes.Parameter, outputs map[string]any) (map[string]any, error) {
 	doc, err := parseOutputSensitivity(body)
 	if err != nil {
@@ -62,6 +64,8 @@ func maskStackOutputs(body string, parameters []cfntypes.Parameter, outputs map[
 	return presented, nil
 }
 
+// registerOutputSecrets seeds NoEcho identifiers and registers known default or deployed values,
+// excluding AWS's redaction placeholder.
 func registerOutputSecrets(doc *outputSensitivityTemplate, parameters []cfntypes.Parameter) map[string]bool {
 	sensitive := make(map[string]bool)
 	for name, parameter := range doc.Parameters {
@@ -81,6 +85,8 @@ func registerOutputSecrets(doc *outputSensitivityTemplate, parameters []cfntypes
 	return sensitive
 }
 
+// propagateOutputSensitivity marks nodes that depend on known sensitive identifiers and reports
+// whether another propagation pass is needed.
 func propagateOutputSensitivity(nodes map[string]yaml.Node, sensitive map[string]bool) bool {
 	changed := false
 	for name := range nodes {
@@ -117,6 +123,8 @@ func nodeReferencesSensitive(node *yaml.Node, sensitive map[string]bool, seen ma
 	return false
 }
 
+// parseOutputSensitivity requires structured deployed metadata and suppresses parser details that
+// could expose template literals.
 func parseOutputSensitivity(body string) (*outputSensitivityTemplate, error) {
 	var root yaml.Node
 	if err := yaml.Unmarshal([]byte(body), &root); err != nil {
@@ -133,6 +141,8 @@ func parseOutputSensitivity(body string) (*outputSensitivityTemplate, error) {
 	return &doc, nil
 }
 
+// referencesIdentifier recognizes direct names, dotted attributes, and substitution references when
+// tracing sensitive dependencies.
 func referencesIdentifier(value, name string) bool {
 	return value == name || strings.HasPrefix(value, name+".") || strings.Contains(value, "${"+name+"}") || strings.Contains(value, "${"+name+".")
 }

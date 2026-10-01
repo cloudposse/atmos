@@ -14,6 +14,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestOperationSummary_ChangesetNameReachesCI verifies that diff and apply summaries carry the
+// generated change-set name sent to AWS, rather than its returned ID.
 func TestOperationSummary_ChangesetNameReachesCI(t *testing.T) {
 	tests := []struct {
 		operation Operation
@@ -46,6 +48,8 @@ func TestOperationSummary_ChangesetNameReachesCI(t *testing.T) {
 	}
 }
 
+// expectChangesetCIFlow captures the submitted change-set name and models preview cleanup or
+// successful execution for CI summary tests.
 func expectChangesetCIFlow(t *testing.T, client *MockCloudFormationClient, operation Operation, createdName *string) {
 	t.Helper()
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)

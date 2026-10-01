@@ -14,6 +14,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestCloudformationCIModeEnabled covers explicit operation flags and truthy CI environment values,
+// including conflicting environment settings.
 func TestCloudformationCIModeEnabled(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -41,6 +43,8 @@ func TestCloudformationCIModeEnabled(t *testing.T) {
 	}
 }
 
+// TestRunCIHook_ApplySuccess verifies that successful apply metadata and the explicit CI override
+// reach the shared hook dispatcher.
 func TestRunCIHook_ApplySuccess(t *testing.T) {
 	original := runCIHooks
 	t.Cleanup(func() { runCIHooks = original })
@@ -88,6 +92,8 @@ func TestRunCIHook_ApplySuccess(t *testing.T) {
 	assert.Equal(t, 0, result.ExitCode)
 }
 
+// TestRunCIHook_ApplyFailure retains the command error, nonzero exit code, and available stack
+// identity in the CI result.
 func TestRunCIHook_ApplyFailure(t *testing.T) {
 	original := runCIHooks
 	t.Cleanup(func() { runCIHooks = original })
@@ -127,6 +133,8 @@ func TestRunCIHook_ApplyFailure(t *testing.T) {
 	assert.Equal(t, "dev-vpc", result.StackName)
 }
 
+// TestRunCIHook_Diff transfers the preview resource-change count into the aggregate consumed by CI
+// templates.
 func TestRunCIHook_Diff(t *testing.T) {
 	original := runCIHooks
 	t.Cleanup(func() { runCIHooks = original })
@@ -154,6 +162,8 @@ func TestRunCIHook_Diff(t *testing.T) {
 	assert.Equal(t, "dev-vpc", result.StackName)
 }
 
+// TestRunCIHook_DriftDetect transfers the measured stack drift status and resource count into the CI
+// aggregate.
 func TestRunCIHook_DriftDetect(t *testing.T) {
 	original := runCIHooks
 	t.Cleanup(func() { runCIHooks = original })
@@ -186,6 +196,8 @@ func TestRunCIHook_DriftDetect(t *testing.T) {
 	assert.Equal(t, "dev-vpc", result.StackName)
 }
 
+// TestRunCIHook_EmptyEventNoOp prevents operations without an associated event from invoking the CI
+// dispatcher.
 func TestRunCIHook_EmptyEventNoOp(t *testing.T) {
 	original := runCIHooks
 	t.Cleanup(func() { runCIHooks = original })
@@ -200,6 +212,8 @@ func TestRunCIHook_EmptyEventNoOp(t *testing.T) {
 	assert.False(t, called)
 }
 
+// TestRunCIHook_SwallowsHookError checks that a failing CI integration does not panic during operation
+// completion.
 func TestRunCIHook_SwallowsHookError(t *testing.T) {
 	original := runCIHooks
 	t.Cleanup(func() { runCIHooks = original })
@@ -220,12 +234,16 @@ func TestRunCIHook_SwallowsHookError(t *testing.T) {
 	assert.True(t, called)
 }
 
+// TestPopulateCloudFormationCIResultFromSummary_NilSummary keeps an absent operation summary safe for
+// CI result construction.
 func TestPopulateCloudFormationCIResultFromSummary_NilSummary(t *testing.T) {
 	result := &schema.CloudFormationCIResult{}
 	populateCloudFormationCIResultFromSummary(result, nil)
 	assert.Equal(t, &schema.CloudFormationCIResult{}, result)
 }
 
+// TestPopulateCloudFormationCIResultFromSummary_DriftCounts preserves explicit zero and nonzero
+// measurements instead of counting all returned resource records.
 func TestPopulateCloudFormationCIResultFromSummary_DriftCounts(t *testing.T) {
 	for _, count := range []int32{0, 2} {
 		result := &schema.CloudFormationCIResult{}
@@ -237,6 +255,8 @@ func TestPopulateCloudFormationCIResultFromSummary_DriftCounts(t *testing.T) {
 	}
 }
 
+// TestSummaryLen accepts slices of different element types and treats absent or nonslice summary
+// values as empty.
 func TestSummaryLen(t *testing.T) {
 	tests := []struct {
 		name  string

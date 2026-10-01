@@ -108,6 +108,8 @@ func TestRunOperation_DryRunRenderStillReturnsTemplate(t *testing.T) {
 	assert.Equal(t, spec.TemplateBody, summary["template"])
 }
 
+// TestExecuteSingle_DryRunRenderDoesNotProvision ensures render dry runs stop before source
+// provisioning.
 func TestExecuteSingle_DryRunRenderDoesNotProvision(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "template.yaml"), []byte("Resources: {}"), 0o644))

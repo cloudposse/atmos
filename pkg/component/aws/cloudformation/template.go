@@ -90,6 +90,8 @@ func inferSourceTemplatePath(componentPath string) (string, error) {
 	return name, nil
 }
 
+// resolveTemplateBody preserves inline templates, infers a missing source filename when unambiguous,
+// and loads the resolved file into the stack specification.
 func resolveTemplateBody(componentPath string, spec *stackSpec) error {
 	if spec.TemplateBody != "" {
 		return nil

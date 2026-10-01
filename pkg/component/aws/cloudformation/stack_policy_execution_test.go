@@ -22,6 +22,8 @@ func TestApplyStackPolicyExecutionOrdering(t *testing.T) {
 	})
 }
 
+// testStackPolicyExecutionOrdering checks policy and termination-protection ordering across create,
+// update, and policy-failure paths for both apply entry points.
 func testStackPolicyExecutionOrdering(t *testing.T, named bool, run func(CloudFormationClient, *stackSpec) error) {
 	t.Helper()
 	oldInterval := eventPollInterval

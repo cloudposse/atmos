@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestSourceOnlyTemplateInference resolves the single provisioned template without requiring an
+// explicit component path setting.
 func TestSourceOnlyTemplateInference(t *testing.T) {
 	dir := t.TempDir()
 	body := "Resources: {}\n"
@@ -28,6 +30,8 @@ func TestSourceOnlyTemplateInference(t *testing.T) {
 	assert.Equal(t, body, spec.TemplateBody)
 }
 
+// TestSourceOnlyHTTPTemplateAndDeployedReads checks escaped filenames and cache reuse against a
+// loopback source, with no downloads for deployed-stack operations.
 func TestSourceOnlyHTTPTemplateAndDeployedReads(t *testing.T) {
 	dir := t.TempDir()
 	var requests atomic.Int64
