@@ -5,9 +5,9 @@ authors: [osterman]
 tags: [enhancement, dx]
 ---
 
-A local plan rarely depends on infrastructure that is entirely missing or entirely deployed. Usually the VPC exists, the database has not been created yet, and the cluster is somewhere in between. Until now, [component mocks](/stacks/components/mocks) forced an all-or-nothing choice: with `--use-mocks`, every Terraform lookup returned its mock, even for components whose real state was sitting in the backend.
+A local plan rarely depends on infrastructure that is entirely missing or entirely deployed. For example, the VPC exists, the database has not been created yet, and the cluster is somewhere in between. Until now, [component mocks](/stacks/components/mocks) forced an all-or-nothing choice: with `--use-mocks`, every Terraform lookup returned its mock, even for components whose real state was sitting in the backend.
 
-With `--use-mocks`, mocks are now fallbacks. Real state wins whenever it exists, and a mock fills in only for a component that has not been provisioned or an output that is missing.
+By default, `--use-mocks` now treats mocks as fallbacks. Real state wins whenever it exists, and a mock fills in only for a component that has not been provisioned or an output that is missing.
 
 <!--truncate-->
 
@@ -17,16 +17,16 @@ Mocks were designed to let a plan or `describe component` run before its depende
 
 ## The Fix
 
-With `--use-mocks`, each lookup now resolves in this order:
+The behavior is configurable. In the new default `fallback` mode, each lookup resolves in this order:
 
 1. The real value, when the referenced component's state exists and declares the output.
 2. The component's mock, when the state is not provisioned or the output is missing.
 3. A YQ `//` default in the expression, if one is present.
-4. The original error.
+4. The same result as without mocks: the not-provisioned error, or `null` for an output missing from applied state.
 
 Mocks never hide real problems. Credential, network, and backend failures still fail the command instead of quietly returning a mock value. As before, only `atmos terraform plan` and `atmos describe component` accept `--use-mocks`; apply, deploy, and destroy reject it.
 
-The previous behavior is still available for runs that must stay hermetic, such as an offline review or a machine without cloud credentials. In `always` mode, lookups resolve from mocks only and never initialize Terraform, authenticate, or read a backend.
+The other mode, `always`, keeps the previous behavior for runs that must stay hermetic, such as an offline review or a machine without cloud credentials. In `always` mode, lookups resolve from mocks only and never initialize Terraform, authenticate, or read a backend. Choose the mode per run with the flag, or set a project default with [`mocks.mode`](/cli/configuration/components/terraform), as shown below.
 
 ## How to Use It
 
@@ -62,7 +62,7 @@ components:
       mode: always   # fallback (default) | always
 ```
 
-The [`mocks.mode`](/cli/configuration/components/terraform) setting can also be set with `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`. A value passed to the flag wins over the environment variable, which wins over `atmos.yaml`.
+The `mocks.mode` setting can also be set with `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`. A value passed to the flag wins over the environment variable, which wins over `atmos.yaml`.
 
 ### Upgrading
 
