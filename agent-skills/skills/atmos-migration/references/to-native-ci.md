@@ -300,6 +300,9 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    permissions:
+      contents: read
+      id-token: write
     env:
       ATMOS_PROFILE: github
     steps:

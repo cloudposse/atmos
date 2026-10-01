@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Terragrunt, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration; also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos toolchain, migrating AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, and okta-aws-cli into atmos auth, and migrating third-party GitHub Actions CI pipelines (setup-terraform, configure-aws-credentials, dflook/terraform-github-actions, tfcmt) to Atmos Native CI."
+description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Terragrunt, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration; also covers migrating tool-version management from mise or Aqua CLI, migrating AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, and okta-aws-cli into atmos auth, and migrating third-party GitHub Actions CI (dflook, tfcmt, cloud OIDC actions) to Atmos Native CI."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -43,18 +43,14 @@ and let Atmos call the existing task runner while individual tasks are migrated.
 For Terraform repositories, Atmos can adopt the existing file layout. Start with the smallest
 change that gives value and add structure as needed.
 
-This skill also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos
-toolchain -- see [from-mise.md](references/from-mise.md) and
-[from-aqua.md](references/from-aqua.md) in the routing table below.
-
 For full tutorials for end users, see:
 
 - [Migrating from Native Terraform](https://atmos.tools/migration/native-terraform)
 - [Migrating from Terraform Workspaces](https://atmos.tools/migration/terraform-workspaces)
 - [Migrating from Terragrunt](https://atmos.tools/migration/terragrunt) -- see
-  [from-terragrunt.md](references/from-terragrunt.md) for the agent-actionable recipes
-- Migrating from Terramate -- covered by this skill via
-  [references/from-terramate.md](references/from-terramate.md) (no atmos.tools tutorial yet)
+  [from-terragrunt.md](references/from-terragrunt.md) for agent recipes
+- Migrating from Terramate -- see [from-terramate.md](references/from-terramate.md)
+  (no atmos.tools tutorial yet)
 - [Migrating from Makefiles](https://atmos.tools/migration/makefile)
 - [Migrating from Justfiles](https://atmos.tools/migration/justfile)
 - [Migrating from Taskfile.yml](https://atmos.tools/migration/taskfile)
@@ -119,7 +115,7 @@ reference file:
 | Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`)               | [from-terragrunt.md](references/from-terragrunt.md) |
 | mise config (`mise.toml`, `.mise.toml`, `.mise/config.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
 | `aqua.yaml` (Aqua CLI) for tool versions                             | [from-aqua.md](references/from-aqua.md) |
-| CI/CD built on generic/third-party GitHub Actions (setup-terraform, configure-aws-credentials, dflook/terraform-github-actions, tfcmt, security-scan/lint/notify steps, etc.) | [to-native-ci.md](references/to-native-ci.md) |
+| CI on third-party GitHub Actions (setup-terraform, configure-aws-credentials, dflook, tfcmt) | [to-native-ci.md](references/to-native-ci.md) |
 
 The remote-state-bridge pattern makes progressive migration possible. It lets a team migrate one
 component at a time. Without it, the team must migrate everything at once. Use this pattern when
@@ -276,9 +272,8 @@ to the correct skill:
 - **Add validation policies, such as OPA or JSON Schema.** Use
   [atmos-validation](../atmos-validation/SKILL.md).
 - **Set up CI/CD with affected-component detection.** Use [atmos-ci](../atmos-ci/SKILL.md).
-- **Migrate an existing (non-Atmos) GitHub Actions Terraform pipeline** (setup-terraform,
-  configure-aws-credentials, dflook, tfcmt) to Native CI. Use
-  [to-native-ci.md](references/to-native-ci.md).
+- **Migrate third-party GitHub Actions CI** (setup-terraform, configure-aws-credentials, dflook,
+  tfcmt) to Native CI. Use [to-native-ci.md](references/to-native-ci.md).
 - **Share data between components through a store.** Use
   [atmos-stores](../atmos-stores/SKILL.md).
 
