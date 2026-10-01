@@ -53,6 +53,9 @@ GLOBAL FLAGS
                                              flags using the sentinel pattern, and missing positional arguments
                                              (requires TTY, disabled in CI) (default true)
 
+      --justification string                 Reason recorded for privileged auth actions such as PIM role activation (--
+                                             justification=REASON)
+
       --logs-file string                     The file to write Atmos logs to. Logs can be written to any file or any
                                              standard file descriptor, including '/dev/stdout', '/dev/stderr' and
                                              '/dev/null' (default /dev/stderr)
