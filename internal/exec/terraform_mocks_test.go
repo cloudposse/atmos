@@ -10,8 +10,10 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
@@ -145,18 +147,20 @@ func installMockGetters(t *testing.T) (*MockTerraformStateGetter, *MockTerraform
 
 var errMocksAccessDenied = errors.New("access denied")
 
-// expectStateLookup registers one GetState call returning (value, err).
-func expectStateLookup(stateMock *MockTerraformStateGetter, value any, err error) {
+// expectStateLookup registers one GetState call that must receive the given output expression
+// and returns (value, err).
+func expectStateLookup(stateMock *MockTerraformStateGetter, expr string, value any, err error) {
 	stateMock.EXPECT().
-		GetState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		GetState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq(expr), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(value, err).
 		Times(1)
 }
 
-// expectOutputLookup registers one GetOutput call returning (value, exists, err).
-func expectOutputLookup(outputMock *MockTerraformOutputGetter, value any, exists bool, err error) {
+// expectOutputLookup registers one GetOutput call that must receive the given output expression
+// and returns (value, exists, err).
+func expectOutputLookup(outputMock *MockTerraformOutputGetter, expr string, value any, exists bool, err error) {
 	outputMock.EXPECT().
-		GetOutput(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		GetOutput(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq(expr), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(value, exists, err).
 		Times(1)
 }
@@ -169,82 +173,135 @@ type mocksFallbackCase struct {
 	useMocks bool
 	// input is the YAML function expression; stack is always dev.
 	input string
-	// lookupValue / lookupExists / lookupErr are what the real getter returns; skipLookup means
-	// the getter must not be called at all (always mode).
-	lookupValue  any
-	lookupExists bool
-	lookupErr    error
-	skipLookup   bool
-	want         any
-	wantErrIs    error
-	wantErrText  string
-	notErrText   string
+	// lookupExpr is the output expression the real getter must receive. Empty means the whole
+	// output map is requested (terraformAllOutputsExpression), which is what fallback mode does
+	// for a component that declares mocks.
+	lookupExpr string
+	// lookupValue / lookupErr are what the real getter returns; skipLookup means the getter must
+	// not be called at all (always mode, or mock loading failed first).
+	lookupValue any
+	lookupErr   error
+	skipLookup  bool
+	want        any
+	wantErrIs   error
+	wantErrText string
+	notErrText  string
 }
 
 func mocksFallbackCases(function string) []mocksFallbackCase {
 	notProvisioned := fmt.Errorf("component not provisioned: %w", errUtils.ErrTerraformStateNotProvisioned)
 	outputMissing := fmt.Errorf("no such output: %w", errUtils.ErrTerraformOutputNotFound)
+	fb := schema.TerraformMocksModeFallback
 	return []mocksFallbackCase{
 		{
-			name: "fallback: real value wins even when the mock is declared", mode: schema.TerraformMocksModeFallback, useMocks: true,
-			input: function + " vpc vpc_id", lookupValue: "vpc-real", lookupExists: true, want: "vpc-real",
+			name: "fallback: real value wins even when the mock is declared", mode: fb, useMocks: true,
+			input: function + " vpc vpc_id", lookupValue: map[string]any{"vpc_id": "vpc-real"}, want: "vpc-real",
 		},
 		{
-			name: "fallback: real value for a complex expression wins", mode: schema.TerraformMocksModeFallback, useMocks: true,
-			input: function + " vpc '.network.cidr'", lookupValue: "192.168.0.0/16", lookupExists: true, want: "192.168.0.0/16",
+			name: "fallback: real value wins over the mock and the YQ default", mode: fb, useMocks: true,
+			input: function + ` vpc '.vpc_id // "vpc-default"'`, lookupValue: map[string]any{"vpc_id": "vpc-real"}, want: "vpc-real",
 		},
 		{
-			name: "fallback: not provisioned resolves from the mock", mode: schema.TerraformMocksModeFallback, useMocks: true,
+			name: "fallback: real value for a complex expression wins", mode: fb, useMocks: true,
+			input: function + " vpc '.network.cidr'", lookupValue: map[string]any{"network": map[string]any{"cidr": "192.168.0.0/16"}}, want: "192.168.0.0/16",
+		},
+		{
+			name: "fallback: provisioned state missing the output resolves from the mock before the YQ default", mode: fb, useMocks: true,
+			input: function + ` vpc '.vpc_id // "vpc-default"'`, lookupValue: map[string]any{"other": "x"}, want: "vpc-local",
+		},
+		{
+			name: "fallback: provisioned state missing the output resolves from the mock for a direct name", mode: fb, useMocks: true,
+			input: function + " vpc vpc_id", lookupValue: map[string]any{"other": "x"}, want: "vpc-local",
+		},
+		{
+			name: "fallback: provisioned state with a nil outputs map resolves from the mock", mode: fb, useMocks: true,
+			input: function + " vpc vpc_id", lookupValue: nil, want: "vpc-local",
+		},
+		{
+			name: "fallback: provisioned state missing the output and the mock uses the YQ default", mode: fb, useMocks: true,
+			input: function + ` vpc '.missing_id // "vpc-default"'`, lookupValue: map[string]any{"other": "x"}, want: "vpc-default",
+		},
+		{
+			name: "fallback: provisioned state missing a list output resolves an indexed expression from the mock", mode: fb, useMocks: true,
+			input: function + " vpc '.private_subnet_ids[0]'", lookupValue: map[string]any{}, want: "subnet-a",
+		},
+		{
+			name: "fallback: real outputs overlay the mocks per top-level output", mode: fb, useMocks: true,
+			input: function + " vpc '.private_subnet_ids[1]'", lookupValue: map[string]any{"vpc_id": "vpc-real", "private_subnet_ids": []any{"real-a", "real-b"}}, want: "real-b",
+		},
+		{
+			name: "fallback: a real top-level output replaces the whole mocked nested map", mode: fb, useMocks: true,
+			input: function + " vpc '.network.cidr'", lookupValue: map[string]any{"network": map[string]any{"name": "real"}}, want: nil,
+		},
+		{
+			name: "fallback: explicit null in the real outputs is a hit and is not replaced by the mock", mode: fb, useMocks: true,
+			input: function + " vpc vpc_id", lookupValue: map[string]any{"vpc_id": nil}, want: nil,
+		},
+		{
+			name: "fallback: provisioned output missing in real and mocks with no default is nil", mode: fb, useMocks: true,
+			input: function + " vpc missing", lookupValue: map[string]any{"other": "x"}, want: nil,
+		},
+		{
+			name: "fallback: not provisioned resolves from the mock", mode: fb, useMocks: true,
 			input: function + " vpc vpc_id", lookupErr: notProvisioned, want: "vpc-local",
 		},
 		{
-			name: "fallback: output not found resolves from the mock", mode: schema.TerraformMocksModeFallback, useMocks: true,
+			name: "fallback: output not found resolves from the mock", mode: fb, useMocks: true,
 			input: function + " vpc vpc_id", lookupErr: outputMissing, want: "vpc-local",
 		},
 		{
-			name: "fallback: nested mock path resolves on a miss", mode: schema.TerraformMocksModeFallback, useMocks: true,
+			name: "fallback: nested mock path resolves when not provisioned", mode: fb, useMocks: true,
 			input: function + " vpc '.network.cidr'", lookupErr: notProvisioned, want: "10.0.0.0/16",
 		},
 		{
-			name: "fallback: mock beats the YQ default", mode: schema.TerraformMocksModeFallback, useMocks: true,
+			name: "fallback: indexed mock path resolves when not provisioned", mode: fb, useMocks: true,
+			input: function + " vpc '.private_subnet_ids[0]'", lookupErr: notProvisioned, want: "subnet-a",
+		},
+		{
+			name: "fallback: mock beats the YQ default when not provisioned", mode: fb, useMocks: true,
 			input: function + ` vpc '.vpc_id // "default"'`, lookupErr: notProvisioned, want: "vpc-local",
 		},
 		{
-			name: "fallback: explicit null mock is a hit", mode: schema.TerraformMocksModeFallback, useMocks: true,
+			name: "fallback: explicit null mock is a hit", mode: fb, useMocks: true,
 			input: function + " vpc nullable_output", lookupErr: notProvisioned, want: nil,
 		},
 		{
-			name: "fallback: no mock declared and a YQ default uses the default", mode: schema.TerraformMocksModeFallback, useMocks: true,
-			input: function + ` app '.missing // "yq-fallback"'`, lookupErr: notProvisioned, want: "yq-fallback",
-		},
-		{
-			name: "fallback: mocks do not declare the output and a YQ default uses the default", mode: schema.TerraformMocksModeFallback, useMocks: true,
+			name: "fallback: mocks do not declare the output and a YQ default uses the default", mode: fb, useMocks: true,
 			input: function + ` vpc '.missing // "yq-fallback"'`, lookupErr: notProvisioned, want: "yq-fallback",
 		},
 		{
-			name: "fallback: no mock declared and no default keeps the original error", mode: schema.TerraformMocksModeFallback, useMocks: true,
-			input: function + " app vpc_id", lookupErr: notProvisioned, wantErrIs: errUtils.ErrTerraformStateNotProvisioned,
-			notErrText: "does not declare `mocks`",
-		},
-		{
-			name: "fallback: mock does not declare the output and no default keeps the original error", mode: schema.TerraformMocksModeFallback, useMocks: true,
+			name: "fallback: mock does not declare the output and no default keeps the original error", mode: fb, useMocks: true,
 			input: function + " vpc missing", lookupErr: notProvisioned, wantErrIs: errUtils.ErrTerraformStateNotProvisioned,
 			notErrText: "is not declared",
 		},
 		{
-			name: "fallback: non-recoverable error is returned and the mock is not consulted", mode: schema.TerraformMocksModeFallback, useMocks: true,
-			// A component that cannot be described proves the mock lookup never ran.
-			input: function + " does-not-exist vpc_id", lookupErr: errMocksAccessDenied, wantErrIs: errMocksAccessDenied,
-			notErrText: "failed to load mocks",
+			name: "fallback: a complex expression that resolves to nothing keeps the original error", mode: fb, useMocks: true,
+			input: function + " vpc '.missing[0]'", lookupErr: notProvisioned, wantErrIs: errUtils.ErrTerraformStateNotProvisioned,
 		},
 		{
-			name: "fallback: mock loading failure keeps the original sentinel", mode: schema.TerraformMocksModeFallback, useMocks: true,
-			input: function + " does-not-exist vpc_id", lookupErr: notProvisioned, wantErrIs: errUtils.ErrTerraformStateNotProvisioned,
-			wantErrText: "failed to load mocks",
+			name: "fallback: no mocks declared and a YQ default uses the default through the plain lookup", mode: fb, useMocks: true,
+			input: function + ` app '.missing // "yq-fallback"'`, lookupExpr: `.missing // "yq-fallback"`, lookupErr: notProvisioned, want: "yq-fallback",
 		},
 		{
-			name: "mocks off: a recoverable miss never reads mocks even in fallback mode", mode: schema.TerraformMocksModeFallback, useMocks: false,
-			input: function + " vpc vpc_id", lookupErr: notProvisioned, wantErrIs: errUtils.ErrTerraformStateNotProvisioned,
+			name: "fallback: no mocks declared and no default keeps the original error through the plain lookup", mode: fb, useMocks: true,
+			input: function + " app vpc_id", lookupExpr: "vpc_id", lookupErr: notProvisioned, wantErrIs: errUtils.ErrTerraformStateNotProvisioned,
+			notErrText: "does not declare `mocks`",
+		},
+		{
+			name: "fallback: no mocks declared returns the real value through the plain lookup", mode: fb, useMocks: true,
+			input: function + " app vpc_id", lookupExpr: "vpc_id", lookupValue: "vpc-real", want: "vpc-real",
+		},
+		{
+			name: "fallback: non-recoverable error is returned and the mock is not used", mode: fb, useMocks: true,
+			input: function + " vpc vpc_id", lookupErr: errMocksAccessDenied, wantErrIs: errMocksAccessDenied,
+		},
+		{
+			name: "fallback: mock loading failure is returned before the real lookup", mode: fb, useMocks: true,
+			input: function + " does-not-exist vpc_id", skipLookup: true, wantErrText: "failed to load mocks",
+		},
+		{
+			name: "mocks off: a recoverable miss never reads mocks even in fallback mode", mode: fb, useMocks: false,
+			input: function + " vpc vpc_id", lookupExpr: "vpc_id", lookupErr: notProvisioned, wantErrIs: errUtils.ErrTerraformStateNotProvisioned,
 		},
 		{
 			name: "always: mock resolves without calling the real getter", mode: schema.TerraformMocksModeAlways, useMocks: true,
@@ -261,6 +318,13 @@ func mocksFallbackCases(function string) []mocksFallbackCase {
 	}
 }
 
+func (c *mocksFallbackCase) expectedLookupExpr() string {
+	if c.lookupExpr == "" {
+		return terraformAllOutputsExpression
+	}
+	return c.lookupExpr
+}
+
 func assertMocksFallbackResult(t *testing.T, tt *mocksFallbackCase, got any, err error) {
 	t.Helper()
 
@@ -270,6 +334,7 @@ func assertMocksFallbackResult(t *testing.T, tt *mocksFallbackCase, got any, err
 		return
 	}
 	require.Error(t, err)
+	assert.Nil(t, got)
 	if tt.wantErrIs != nil {
 		assert.ErrorIs(t, err, tt.wantErrIs)
 	}
@@ -287,7 +352,7 @@ func TestTerraformStateComponentMocksModes(t *testing.T) {
 			atmosConfig := newMocksFixtureConfig(t, tt.mode)
 			stateMock, _ := installMockGetters(t)
 			if !tt.skipLookup {
-				expectStateLookup(stateMock, tt.lookupValue, tt.lookupErr)
+				expectStateLookup(stateMock, tt.expectedLookupExpr(), tt.lookupValue, tt.lookupErr)
 			}
 
 			got, err := processTagTerraformState(atmosConfig, tt.input, "dev", &schema.ConfigAndStacksInfo{UseMocks: tt.useMocks})
@@ -303,7 +368,7 @@ func TestTerraformOutputComponentMocksModes(t *testing.T) {
 			atmosConfig := newMocksFixtureConfig(t, tt.mode)
 			_, outputMock := installMockGetters(t)
 			if !tt.skipLookup {
-				expectOutputLookup(outputMock, tt.lookupValue, tt.lookupExists, tt.lookupErr)
+				expectOutputLookup(outputMock, tt.expectedLookupExpr(), tt.lookupValue, tt.lookupErr == nil && tt.lookupValue != nil, tt.lookupErr)
 			}
 
 			got, err := processTagTerraformOutput(atmosConfig, tt.input, "dev", &schema.ConfigAndStacksInfo{UseMocks: tt.useMocks})
@@ -314,24 +379,25 @@ func TestTerraformOutputComponentMocksModes(t *testing.T) {
 }
 
 // TestTerraformOutputComponentMocksFallbackOnMissingOutput covers the non-error miss for
-// !terraform.output: the getter succeeds but reports the output does not exist.
+// !terraform.output: the getter succeeds but reports that no output map exists.
 func TestTerraformOutputComponentMocksFallbackOnMissingOutput(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		useMocks bool
-		want     any
+		name       string
+		input      string
+		useMocks   bool
+		lookupExpr string
+		want       any
 	}{
-		{name: "mock resolves a missing output", input: "!terraform.output vpc vpc_id", useMocks: true, want: "vpc-local"},
-		{name: "no mock for the output returns nil like before", input: "!terraform.output vpc missing", useMocks: true, want: nil},
-		{name: "no mock and a YQ default uses the default", input: `!terraform.output app '.missing // "yq-fallback"'`, useMocks: true, want: "yq-fallback"},
-		{name: "mocks off keeps returning nil", input: "!terraform.output vpc vpc_id", useMocks: false, want: nil},
+		{name: "mock resolves a missing output map", input: "!terraform.output vpc vpc_id", useMocks: true, lookupExpr: terraformAllOutputsExpression, want: "vpc-local"},
+		{name: "no mock for the output returns nil like before", input: "!terraform.output vpc missing", useMocks: true, lookupExpr: terraformAllOutputsExpression, want: nil},
+		{name: "no mocks declared and a YQ default uses the default", input: `!terraform.output app '.missing // "yq-fallback"'`, useMocks: true, lookupExpr: `.missing // "yq-fallback"`, want: "yq-fallback"},
+		{name: "mocks off keeps returning nil", input: "!terraform.output vpc vpc_id", useMocks: false, lookupExpr: "vpc_id", want: nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := newMocksFixtureConfig(t, schema.TerraformMocksModeFallback)
 			_, outputMock := installMockGetters(t)
-			expectOutputLookup(outputMock, nil, false, nil)
+			expectOutputLookup(outputMock, tt.lookupExpr, nil, false, nil)
 
 			got, err := processTagTerraformOutput(atmosConfig, tt.input, "dev", &schema.ConfigAndStacksInfo{UseMocks: tt.useMocks})
 
@@ -341,28 +407,105 @@ func TestTerraformOutputComponentMocksFallbackOnMissingOutput(t *testing.T) {
 	}
 }
 
-// TestTerraformStateComponentMocksFallbackOnNilDirectOutput covers Terraform dropping a null output
-// from state: a nil result for a direct output name is a recoverable miss, but a nil result for a
-// complex expression is left alone.
-func TestTerraformStateComponentMocksFallbackOnNilDirectOutput(t *testing.T) {
+// TestTerraformOutputComponentMocksWrapsRecoverableError verifies that, when nothing resolves, the
+// original recoverable terraform.output error keeps its component, stack, and output context.
+func TestTerraformOutputComponentMocksWrapsRecoverableError(t *testing.T) {
+	atmosConfig := newMocksFixtureConfig(t, schema.TerraformMocksModeFallback)
+	_, outputMock := installMockGetters(t)
+	expectOutputLookup(outputMock, terraformAllOutputsExpression, nil, false, fmt.Errorf("not yet: %w", errUtils.ErrTerraformStateNotProvisioned))
+
+	got, err := processTagTerraformOutput(atmosConfig, "!terraform.output vpc missing", "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
+
+	require.ErrorIs(t, err, errUtils.ErrTerraformStateNotProvisioned)
+	assert.Nil(t, got)
+	assert.Contains(t, err.Error(), "failed to get terraform output for component vpc in stack dev, output missing")
+}
+
+// TestTerraformStateComponentMocksDoesNotMutateInputs verifies the mocks and the (possibly cached)
+// real output map handed back by the getter are left untouched by the merge, in both directions.
+func TestTerraformStateComponentMocksDoesNotMutateInputs(t *testing.T) {
+	t.Run("through the state getter", func(t *testing.T) {
+		atmosConfig := newMocksFixtureConfig(t, schema.TerraformMocksModeFallback)
+		stateMock, _ := installMockGetters(t)
+		realOutputs := map[string]any{"vpc_id": "vpc-real", "extra": map[string]any{"k": "v"}}
+		expectStateLookup(stateMock, terraformAllOutputsExpression, realOutputs, nil)
+
+		got, err := processTagTerraformState(atmosConfig, "!terraform.state vpc private_subnet_ids", "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
+
+		require.NoError(t, err)
+		assert.Equal(t, []any{"subnet-a", "subnet-b"}, got)
+		assert.Equal(t, map[string]any{"vpc_id": "vpc-real", "extra": map[string]any{"k": "v"}}, realOutputs, "real map must not gain the mocked keys")
+	})
+
+	t.Run("merge helper isolates the result from both sources", func(t *testing.T) {
+		mocks := map[string]any{"vpc_id": "vpc-local", "mock_only": "m"}
+		realOutputs := map[string]any{"vpc_id": "vpc-real", "real_only": "r"}
+		lookup := &terraformStateLookup{stack: "dev", component: "vpc", output: "vpc_id"}
+
+		got, err := resolveTerraformOutputWithMocks(&schema.AtmosConfiguration{}, lookup, mocks, realOutputs, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "vpc-real", got)
+		assert.Equal(t, map[string]any{"vpc_id": "vpc-local", "mock_only": "m"}, mocks, "mocks must not receive real outputs")
+		assert.Equal(t, map[string]any{"vpc_id": "vpc-real", "real_only": "r"}, realOutputs, "real map must not receive mocks")
+
+		// Mutating the sources afterwards must not matter to a later evaluation either.
+		mocks["vpc_id"] = "changed"
+		realOutputs["vpc_id"] = "changed"
+		got, err = resolveTerraformOutputWithMocks(&schema.AtmosConfiguration{}, lookup, map[string]any{"vpc_id": "vpc-local"}, map[string]any{}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "vpc-local", got)
+	})
+}
+
+// TestTerraformAllOutputsExpression verifies the expression used to fetch the whole output map
+// returns the full map and is reported as an existing output by the output layer, unlike a bare `.`.
+func TestTerraformAllOutputsExpression(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	outputs := map[string]any{
+		"vpc_id":             "vpc-real",
+		"private_subnet_ids": []any{"subnet-a", "subnet-b"},
+		"network":            map[string]any{"cidr": "10.0.0.0/16"},
+	}
+
+	t.Run("backend variable returns the whole map", func(t *testing.T) {
+		got, err := tb.GetTerraformBackendVariable(atmosConfig, outputs, terraformAllOutputsExpression)
+		require.NoError(t, err)
+		assert.Equal(t, outputs, got)
+	})
+
+	t.Run("output layer reports the whole map as existing", func(t *testing.T) {
+		got, exists, err := tfoutput.GetStaticRemoteStateOutput(atmosConfig, "vpc", "dev", outputs, terraformAllOutputsExpression)
+		require.NoError(t, err)
+		assert.True(t, exists)
+		assert.Equal(t, outputs, got)
+	})
+
+	t.Run("an empty map still reports as existing", func(t *testing.T) {
+		got, exists, err := tfoutput.GetStaticRemoteStateOutput(atmosConfig, "vpc", "dev", map[string]any{}, terraformAllOutputsExpression)
+		require.NoError(t, err)
+		assert.True(t, exists)
+		assert.Empty(t, got)
+	})
+}
+
+func TestTopLevelOutputKey(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		want  any
+		output string
+		want   string
 	}{
-		{name: "direct output name resolves from the mock", input: "!terraform.state vpc vpc_id", want: "vpc-local"},
-		{name: "complex expression keeps the nil result", input: "!terraform.state vpc '.network.cidr'", want: nil},
+		{output: "vpc_id", want: "vpc_id"},
+		{output: ".vpc_id", want: "vpc_id"},
+		{output: `.vpc_id // "x"`, want: "vpc_id"},
+		{output: ".network.cidr", want: "network"},
+		{output: ".private_subnet_ids[0]", want: "private_subnet_ids"},
+		{output: "  .padded  ", want: "padded"},
+		{output: ".", want: ""},
+		{output: "", want: ""},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			atmosConfig := newMocksFixtureConfig(t, schema.TerraformMocksModeFallback)
-			stateMock, _ := installMockGetters(t)
-			expectStateLookup(stateMock, nil, nil)
-
-			got, err := processTagTerraformState(atmosConfig, tt.input, "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
-
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
+		t.Run(tt.output, func(t *testing.T) {
+			assert.Equal(t, tt.want, topLevelOutputKey(tt.output))
 		})
 	}
 }

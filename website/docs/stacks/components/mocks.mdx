@@ -75,6 +75,7 @@ With the `vpc` example above:
 | `vpc` never applied | `vpc-local` (from `mocks`) |
 | `vpc` applied, but it has no `vpc_id` output | `vpc-local` (from `mocks`) |
 | `vpc` never applied, `vpc` declares no `mocks` | The normal not-provisioned error |
+| `vpc` applied, no `vpc_id` output, and no `vpc_id` mock | `null`, the same as without mocks |
 | Backend returns an access-denied or network error | The error. Mocks never hide it |
 
 The precedence is: real value, then mock, then a YQ `//` default, then the original error.

@@ -102,45 +102,84 @@ func processTagTerraformOutputWithContext(
 	return lookupTerraformOutput(atmosConfig, stackInfo, &terraformStateLookup{yamlFunc: input, stack: stack, component: component, output: output})
 }
 
-// lookupTerraformOutput reads the real Terraform output and, when `--use-mocks` runs in fallback
-// mode, falls back to the component mocks on a recoverable miss. Precedence: real value, then
-// mock, then YQ `//` default, then the original error (or nil for a missing output).
+// lookupTerraformOutput reads the real Terraform output. When `--use-mocks` runs in fallback mode
+// and the component declares mocks, the whole real output map is merged over the mocks and the
+// expression is evaluated against the result (see lookupTerraformOutputWithMocks). Otherwise the
+// plain real lookup runs, with a YQ `//` default rescuing a recoverable error or a missing output.
 func lookupTerraformOutput(
 	atmosConfig *schema.AtmosConfiguration,
 	stackInfo *schema.ConfigAndStacksInfo,
 	lookup *terraformStateLookup,
 ) (any, error) {
+	mocks, err := declaredFallbackMocks(atmosConfig, stackInfo, lookup)
+	if err != nil {
+		return nil, err
+	}
+	if mocks != nil {
+		return lookupTerraformOutputWithMocks(atmosConfig, stackInfo, lookup, mocks)
+	}
+
 	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
 
 	value, exists, err := outputGetter.GetOutput(atmosConfig, lookup.stack, lookup.component, lookup.output, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
 	if err != nil {
-		return handleTerraformOutputError(atmosConfig, stackInfo, lookup, err)
+		return handleTerraformOutputError(atmosConfig, lookup, err)
 	}
 
-	// If the output doesn't exist, try the component mocks (fallback mode) and then a YQ default.
+	// If the output doesn't exist, try the YQ default.
 	if !exists {
-		return handleMissingTerraformOutput(atmosConfig, stackInfo, lookup)
+		return handleMissingTerraformOutput(atmosConfig, lookup)
 	}
 
 	// value may be nil here if the terraform output is legitimately null, which is valid.
 	return value, nil
 }
 
-// handleTerraformOutputError resolves a failed output lookup. Only recoverable terraform errors
-// (state not provisioned, output not found) may be rescued by a component mock (fallback mode) or
-// a YQ default; non-recoverable errors (API failures, auth errors, infrastructure issues) fail hard.
-func handleTerraformOutputError(
+// wrapTerraformOutputError adds the component, stack, and output context to a failed output lookup.
+func wrapTerraformOutputError(lookup *terraformStateLookup, err error) error {
+	return fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", lookup.component, lookup.stack, lookup.output, err)
+}
+
+// lookupTerraformOutputWithMocks fetches the whole real output map and evaluates the expression
+// against it overlaid on the component mocks. A recoverable error (state not provisioned, output
+// not found) is treated as an empty real map and kept (wrapped) as the error to report when
+// nothing resolves; anything else (auth, network, backend) is returned unchanged so mocks never
+// hide it.
+func lookupTerraformOutputWithMocks(
 	atmosConfig *schema.AtmosConfiguration,
 	stackInfo *schema.ConfigAndStacksInfo,
 	lookup *terraformStateLookup,
+	mocks map[string]any,
+) (any, error) {
+	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
+
+	whole, exists, err := outputGetter.GetOutput(atmosConfig, lookup.stack, lookup.component, terraformAllOutputsExpression, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
+	if err != nil {
+		wrapped := wrapTerraformOutputError(lookup, err)
+		if !isRecoverableTerraformError(err) {
+			return nil, wrapped
+		}
+		return resolveTerraformOutputWithMocks(atmosConfig, lookup, mocks, nil, wrapped)
+	}
+
+	var realOutputs map[string]any
+	if exists {
+		realOutputs, _ = whole.(map[string]any)
+	}
+	return resolveTerraformOutputWithMocks(atmosConfig, lookup, mocks, realOutputs, nil)
+}
+
+// handleTerraformOutputError resolves a failed output lookup. Only recoverable terraform errors
+// (state not provisioned, output not found) may be rescued by a YQ default; non-recoverable errors
+// (API failures, auth errors, infrastructure issues) fail hard.
+func handleTerraformOutputError(
+	atmosConfig *schema.AtmosConfiguration,
+	lookup *terraformStateLookup,
 	err error,
 ) (any, error) {
-	wrapped := fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", lookup.component, lookup.stack, lookup.output, err)
+	wrapped := wrapTerraformOutputError(lookup, err)
 	if !isRecoverableTerraformError(err) {
 		return nil, wrapped
-	}
-	if mocked, handled, mockErr := resolveTerraformMockFallback(atmosConfig, stackInfo, lookup, wrapped); handled {
-		return mocked, mockErr
 	}
 	if !hasYqDefault(lookup.output) {
 		return nil, wrapped
@@ -159,16 +198,12 @@ func handleTerraformOutputError(
 	return defaultValue, nil
 }
 
-// handleMissingTerraformOutput resolves an output that does not exist in state: a component mock
-// (fallback mode) wins, then a YQ default, and otherwise nil (backward compatible).
+// handleMissingTerraformOutput resolves an output that does not exist in state: a YQ default wins,
+// and otherwise nil (backward compatible).
 func handleMissingTerraformOutput(
 	atmosConfig *schema.AtmosConfiguration,
-	stackInfo *schema.ConfigAndStacksInfo,
 	lookup *terraformStateLookup,
 ) (any, error) {
-	if mocked, handled, mockErr := resolveTerraformMockFallback(atmosConfig, stackInfo, lookup, nil); handled {
-		return mocked, mockErr
-	}
 	if !hasYqDefault(lookup.output) {
 		// No default available, return nil (backward compatible).
 		return nil, nil

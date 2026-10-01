@@ -133,9 +133,10 @@ when it exists, and the producer's `mocks:` value is used only when the componen
 or the output is missing. Credential, network, and backend errors still fail. The precedence is real
 value, then mock, then the caller's `//` default, then the original error.
 
-`--use-mocks` values: absent or `--use-mocks=false` is off; `--use-mocks`, `--use-mocks=true`, or
-`ATMOS_USE_MOCKS=true` is on using the configured mode; `--use-mocks=fallback` or `--use-mocks=always`
-is on and overrides the configured mode for that run. Mode `always` is the hermetic behavior: lookups
+`--use-mocks` values: absent or `--use-mocks=false` is off; `--use-mocks` or `--use-mocks=true`
+is on using the configured mode; `--use-mocks=fallback` or `--use-mocks=always`
+is on and overrides the configured mode for that run. `ATMOS_USE_MOCKS` accepts the same values for
+`atmos terraform plan` only; `atmos describe component` reads the flag, not the variable. Mode `always` is the hermetic behavior: lookups
 resolve from `mocks:` only and never initialize Terraform, authenticate, or read a backend, and a
 missing `mocks:` map or output is an error (a `//` default still rescues it). The mode also comes from
 `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`. Unpinned projects default to `fallback`; projects whose

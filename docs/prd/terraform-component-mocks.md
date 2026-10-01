@@ -66,14 +66,14 @@ The setting accepts `fallback` or `always` and can also be set with `ATMOS_COMPO
 
 ### `fallback` mode
 
-Atmos runs the real lookup first (authentication, backend read, caches) and falls back to the component's `mocks` only when the miss is recoverable. A miss is recoverable when the referenced component's state is not provisioned or the requested output is missing. This is the same classification YQ `//` defaults use.
+Atmos still runs the real lookup (authentication, backend read, caches) and uses the component's `mocks` only to fill gaps. A gap is recoverable: the referenced component's state is not provisioned, or the requested output is missing. This is the same classification YQ `//` defaults use.
 
-1. Real value found: return it. A declared mock is ignored.
-2. Recoverable miss: load the referenced component with template and YAML-function processing disabled, evaluate the requested output expression against its literal `mocks` map, and return the result when the output is declared. Atmos logs the substitution at debug level.
-3. Mock also missing: continue down the normal path. A YQ `//` default applies if present; otherwise the original not-provisioned or output-not-found error is returned. A missing `mocks` map or undeclared output is not itself an error in this mode, because the original error explains the problem better.
+1. The referenced component declares no `mocks`: the lookup behaves exactly as it does without `--use-mocks`.
+2. The component declares `mocks`: Atmos loads them with template and YAML-function processing disabled, reads the component's full set of real outputs, and overlays the real outputs on the mocks. Each real top-level output replaces the mock of the same name. The requested expression, including any YQ `//` default, is evaluated against that merged map. A real value therefore always wins, a declared mock fills a missing output, and a `//` default applies only when neither exists. This holds for indexed and filtered expressions as well as plain output names.
+3. Neither a real value, a mock, nor a `//` default exists: the result is the same as without mocks. A component that was never applied returns the not-provisioned error; an output missing from provisioned state resolves to `null` without an error. A missing `mocks` map or undeclared output is not itself an error in this mode.
 4. Non-recoverable error (credentials, network, backend failures): return the error unchanged. Mocks never hide these.
 
-Precedence: real value, then mock, then YQ `//` default, then error.
+Precedence: real value, then mock, then YQ `//` default, then the normal not-provisioned error or `null`.
 
 ### `always` mode
 

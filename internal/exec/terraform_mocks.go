@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -71,8 +70,8 @@ func describeComponentMocks(
 // The second return value reports whether always-mode mock resolution was active.
 // In that mode a missing component mock or output is an error; callers must never
 // fall back to remote state while the user explicitly requested hermetic mocks.
-// In `fallback` mode this reports inactive: the real lookup runs first and
-// resolveTerraformMockFallback consults the mocks only on a recoverable miss.
+// In `fallback` mode this reports inactive: the Terraform lookups merge the mocks under the
+// real outputs instead (see resolveTerraformOutputWithMocks).
 func resolveTerraformMockOutput(
 	atmosConfig *schema.AtmosConfiguration,
 	stackInfo *schema.ConfigAndStacksInfo,
@@ -141,66 +140,94 @@ func defaultUndeclaredMocks(mocks map[string]any, stack, component, output strin
 	return map[string]any{}, nil
 }
 
-// resolveTerraformMockFallback is called by the Terraform YAML functions on a recoverable miss
-// (state not provisioned, output not found, or a null direct output). When --use-mocks runs in
-// `fallback` mode and the component declares the output, it returns the mock value.
-//
-// The second return value reports whether the lookup was resolved here; when false the caller
-// continues down its existing path (YQ default, then the original error). An absent mock is not
-// an error in fallback mode. The cause argument is the original lookup error (nil for a silent miss); it is
-// joined with a mock-loading failure so the original sentinel stays matchable.
-func resolveTerraformMockFallback(
+// terraformAllOutputsExpression is the YQ identity expression used to fetch the whole real
+// output map from a Terraform state/output getter, so the entire map comes back through the
+// same cached, authenticated, and masked lookup path as any other expression.
+const terraformAllOutputsExpression = "."
+
+// declaredFallbackMocks returns the referenced component's mocks when --use-mocks runs in
+// `fallback` mode and the component declares a `mocks` map. It returns nil (and no error) when
+// mocks are off, the mode is not fallback, or the component declares none; callers then use the
+// plain real lookup unchanged.
+func declaredFallbackMocks(
 	atmosConfig *schema.AtmosConfiguration,
 	stackInfo *schema.ConfigAndStacksInfo,
 	lookup *terraformStateLookup,
-	cause error,
-) (any, bool, error) {
+) (map[string]any, error) {
 	if !terraformMocksEnabledInMode(atmosConfig, stackInfo, schema.TerraformMocksModeFallback) {
-		return nil, false, nil
+		return nil, nil
 	}
-
-	value, found, err := lookupTerraformMock(atmosConfig, lookup.stack, lookup.component, lookup.output)
-	if err != nil {
-		return nil, true, errors.Join(cause, err)
-	}
-	if !found {
-		return nil, false, nil
-	}
-
-	log.Debug(
-		"Terraform YAML function resolved from component mocks (fallback)",
-		"component", lookup.component,
-		"stack", lookup.stack,
-		"output", lookup.output,
-	)
-	return value, true, nil
+	return describeComponentMocks(atmosConfig, lookup.stack, lookup.component)
 }
 
-// lookupTerraformMock evaluates output against the referenced component's `mocks` map. Found is
-// false when the component declares no mocks or the mocks do not declare the requested output.
-func lookupTerraformMock(
+// resolveTerraformOutputWithMocks evaluates the caller's expression against the component mocks
+// overlaid with the real outputs (real wins per top-level output) in `fallback` mode. Precedence
+// is therefore: real value, then component mock, then YQ `//` default, then the original lookup
+// error (or nil for an output missing from provisioned state).
+//
+// The realOutputs argument is the whole real output map (nil when the state is not provisioned or the
+// output map is absent) and realErr is the recoverable lookup error that produced it, if any.
+// Neither the mocks nor the real map is mutated: the merge works on a shallow copy.
+func resolveTerraformOutputWithMocks(
 	atmosConfig *schema.AtmosConfiguration,
-	stack string,
-	component string,
-	output string,
-) (value any, found bool, err error) {
-	mocks, err := describeComponentMocks(atmosConfig, stack, component)
-	if err != nil || mocks == nil {
-		return nil, false, err
+	lookup *terraformStateLookup,
+	mocks map[string]any,
+	realOutputs map[string]any,
+	realErr error,
+) (any, error) {
+	merged := make(map[string]any, len(mocks)+len(realOutputs))
+	for key, value := range mocks {
+		merged[key] = value
+	}
+	for key, value := range realOutputs {
+		merged[key] = value
 	}
 
-	value, err = tb.GetTerraformBackendVariable(atmosConfig, mocks, output)
+	value, err := tb.GetTerraformBackendVariable(atmosConfig, merged, lookup.output)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to resolve mocked Terraform output %q for component %q in stack %q: %w", output, component, stack, err)
+		return nil, fmt.Errorf("failed to evaluate Terraform output %q for component %q in stack %q against component mocks: %w", lookup.output, lookup.component, lookup.stack, err)
 	}
-	if value != nil {
-		return value, true, nil
+	if value == nil {
+		return nil, missingTerraformOutputWithMocks(merged, lookup.output, realErr)
 	}
 
-	// A nil value is a hit only for a simple output path the mocks explicitly declare (an
-	// explicit null). Complex YQ expressions that yield nil count as a miss.
-	exists, decidable := mockPathExists(mocks, output)
-	return nil, decidable && exists, nil
+	if key := topLevelOutputKey(lookup.output); key != "" {
+		_, inReal := realOutputs[key]
+		_, inMocks := mocks[key]
+		if !inReal && inMocks {
+			log.Debug(
+				"Terraform YAML function resolved from component mocks (fallback)",
+				"component", lookup.component,
+				"stack", lookup.stack,
+				"output", lookup.output,
+			)
+		}
+	}
+	return value, nil
+}
+
+// missingTerraformOutputWithMocks decides what a nil result means after evaluating against the
+// merged outputs. An explicit null declared in the mocks or the real outputs is a hit. Otherwise
+// the original recoverable lookup error is preserved (unless a YQ default already ran), and an
+// output that is simply missing from provisioned state resolves to nil (backward compatible).
+func missingTerraformOutputWithMocks(merged map[string]any, output string, realErr error) error {
+	if exists, decidable := mockPathExists(merged, output); decidable && exists {
+		return nil
+	}
+	if realErr != nil && !hasYqDefault(output) {
+		return realErr
+	}
+	return nil
+}
+
+// topLevelOutputKey returns the first path segment of a YQ output expression (for example
+// "vpc_id" for `.vpc_id // "x"` or `vpc_id`), or an empty string when none can be determined.
+func topLevelOutputKey(output string) string {
+	output = strings.TrimPrefix(strings.TrimSpace(output), yqPathSeparator)
+	if end := strings.IndexAny(output, ".[]{}|/ \t\n\r\"'()"); end >= 0 {
+		output = output[:end]
+	}
+	return output
 }
 
 // isDirectMockOutputReference reports whether an expression names one top-level

@@ -12442,10 +12442,18 @@
         "mode": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "",
+                "fallback",
+                "always"
+              ]
             },
             {
               "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
             }
           ],
           "description": "Mode controls how `--use-mocks` resolves a lookup: `fallback` (default since 2026-10-01;\na project pinned to an earlier edition gets `always` restored) uses the real value when\nit exists and the component mock only when the state is not provisioned or the output is\nmissing, and `always` resolves every lookup from the mocks without reading real state."

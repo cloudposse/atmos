@@ -812,6 +812,12 @@ func TestExtractYqValue(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, exists)
 	assert.Nil(t, val)
+
+	// Test the bare identity expression: it returns the whole map and always exists.
+	val, exists, err = extractYqValue(atmosConfig, data, ".", "test context")
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, data, val)
 }
 
 func TestGetStaticRemoteStateOutput(t *testing.T) {
@@ -833,6 +839,12 @@ func TestGetStaticRemoteStateOutput(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, exists)
 	assert.Nil(t, val)
+
+	// Test the bare identity expression: it returns the whole static remote state.
+	val, exists, err = GetStaticRemoteStateOutput(atmosConfig, "comp", "stack", remoteState, ".")
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, remoteState, val)
 }
 
 func TestExecutor_ExecuteWithSections_QuietMode(t *testing.T) {

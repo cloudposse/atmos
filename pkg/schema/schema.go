@@ -896,7 +896,7 @@ type TerraformMocks struct {
 	// a project pinned to an earlier edition gets `always` restored) uses the real value when
 	// it exists and the component mock only when the state is not provisioned or the output is
 	// missing, and `always` resolves every lookup from the mocks without reading real state.
-	Mode TerraformMocksMode `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	Mode TerraformMocksMode `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode" jsonschema:"enum=,enum=fallback,enum=always"`
 }
 
 // TerraformMocksMode controls how component mocks are resolved when `--use-mocks` is set.

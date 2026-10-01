@@ -130,46 +130,67 @@ func terraformLookupAuth(atmosConfig *schema.AtmosConfiguration, stackInfo *sche
 	return authContext, authManager
 }
 
-// lookupTerraformState reads the real Terraform state and, when `--use-mocks` runs in fallback
-// mode, falls back to the component mocks on a recoverable miss. Precedence: real value, then
-// mock, then YQ `//` default, then the original error.
+// lookupTerraformState reads the real Terraform state. When `--use-mocks` runs in fallback mode and
+// the component declares mocks, the whole real output map is merged over the mocks and the
+// expression is evaluated against the result (see lookupTerraformStateWithMocks). Otherwise the
+// plain real lookup runs, with a YQ `//` default rescuing a recoverable error.
 func lookupTerraformState(
 	atmosConfig *schema.AtmosConfiguration,
 	stackInfo *schema.ConfigAndStacksInfo,
 	lookup *terraformStateLookup,
 ) (any, error) {
+	mocks, err := declaredFallbackMocks(atmosConfig, stackInfo, lookup)
+	if err != nil {
+		return nil, err
+	}
+	if mocks != nil {
+		return lookupTerraformStateWithMocks(atmosConfig, stackInfo, lookup, mocks)
+	}
+
 	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
 
 	value, err := stateGetter.GetState(atmosConfig, lookup.yamlFunc, lookup.stack, lookup.component, lookup.output, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
 	if err != nil {
-		return handleTerraformStateError(atmosConfig, stackInfo, lookup, err)
-	}
-
-	// Terraform drops null outputs from state, so a nil result for a direct output name means the
-	// output is missing; that is a recoverable miss the same way an unprovisioned state is.
-	if value == nil && isDirectMockOutputReference(lookup.output) {
-		if mocked, handled, mockErr := resolveTerraformMockFallback(atmosConfig, stackInfo, lookup, nil); handled {
-			return mocked, mockErr
-		}
+		return handleTerraformStateError(atmosConfig, lookup, err)
 	}
 
 	return value, nil
 }
 
-// handleTerraformStateError resolves a failed state lookup: a recoverable error may be rescued by
-// a component mock (fallback mode) and then by a YQ default; anything else fails unchanged.
-func handleTerraformStateError(
+// lookupTerraformStateWithMocks fetches the whole real output map and evaluates the expression
+// against it overlaid on the component mocks. A recoverable error (state not provisioned, output
+// not found) is treated as an empty real map; anything else (auth, network, backend) is returned
+// unchanged so mocks never hide it.
+func lookupTerraformStateWithMocks(
 	atmosConfig *schema.AtmosConfiguration,
 	stackInfo *schema.ConfigAndStacksInfo,
+	lookup *terraformStateLookup,
+	mocks map[string]any,
+) (any, error) {
+	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
+
+	whole, err := stateGetter.GetState(atmosConfig, lookup.yamlFunc, lookup.stack, lookup.component, terraformAllOutputsExpression, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
+	if err != nil && !isRecoverableTerraformError(err) {
+		return nil, err
+	}
+
+	var realOutputs map[string]any
+	if err == nil {
+		realOutputs, _ = whole.(map[string]any)
+	}
+	return resolveTerraformOutputWithMocks(atmosConfig, lookup, mocks, realOutputs, err)
+}
+
+// handleTerraformStateError resolves a failed state lookup: a recoverable error may be rescued by
+// a YQ default; anything else fails unchanged.
+func handleTerraformStateError(
+	atmosConfig *schema.AtmosConfiguration,
 	lookup *terraformStateLookup,
 	err error,
 ) (any, error) {
 	if !isRecoverableTerraformError(err) {
 		// Non-recoverable error: auth, network, or backend failures are never masked.
 		return nil, err
-	}
-	if mocked, handled, mockErr := resolveTerraformMockFallback(atmosConfig, stackInfo, lookup, err); handled {
-		return mocked, mockErr
 	}
 	if !hasYqDefault(lookup.output) {
 		return nil, err
