@@ -479,6 +479,40 @@ func TestHandleTemplateDeletions_AlreadyAbsent_NoOp(t *testing.T) {
 	assert.Empty(t, result.failedPaths)
 }
 
+// TestHandleTemplateDeletions_RefusesSymlinkDeletionCandidate is a
+// regression test for a bug found during field-testing: processDeletionCandidate
+// read a deletion candidate's content with no symlink check, unlike
+// engine.validateWriteTarget's write-side protection against exactly this.
+// A symlink at the candidate path let the byte-comparison transparently read
+// content from outside the target directory. It must now refuse to inspect a
+// symlink at all, leaving it untouched and reporting an error instead.
+func TestHandleTemplateDeletions_RefusesSymlinkDeletionCandidate(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	outsideDir := t.TempDir()
+	outsideFile := filepath.Join(outsideDir, "secret.txt")
+	require.NoError(t, os.WriteFile(outsideFile, []byte("outside content\n"), 0o644))
+
+	symlinkPath := filepath.Join(targetPath, "old.txt")
+	require.NoError(t, os.Symlink(outsideFile, symlinkPath))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrSymlinkWrite)
+	assert.Zero(t, result.successCount)
+	assert.Equal(t, 1, result.errorCount)
+
+	_, lstatErr := os.Lstat(symlinkPath)
+	require.NoError(t, lstatErr, "the symlink must be left untouched")
+	_, outsideStatErr := os.Stat(outsideFile)
+	require.NoError(t, outsideStatErr, "the file the symlink points to must be left untouched")
+}
+
 // TestHandleTemplateDeletions_StillWantedPathIsUntouched confirms a path the
 // new render still wants (present in newPaths) is never treated as a
 // deletion candidate, even if it happens to also exist in the old render.
