@@ -71,6 +71,20 @@ type MergeResult struct {
 func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	defer perf.Track(nil, "merge.TextMerger.Merge")()
 
+	// base/theirs are frequently sourced from a fresh git clone of the
+	// template (e.g. --update-strategy=rendered, or any initial fetch),
+	// which on a checkout with core.autocrlf=true (the default Git-for-Windows
+	// install option) rewrites committed LF line endings to CRLF. ours is the
+	// user's own file on disk, untouched by that checkout, and keeps whatever
+	// style it already had. Left unnormalized, that mismatch makes every
+	// untouched line look changed, inflating calculateChangePercentage far
+	// past the real edit size -- so normalize all three to LF before diffing,
+	// then restore ours' original style on a clean (marker-free) result.
+	oursHadCRLF := strings.Contains(ours, "\r\n")
+	base = normalizeLineEndings(base)
+	ours = normalizeLineEndings(ours)
+	theirs = normalizeLineEndings(theirs)
+
 	// Perform the 3-way merge using diff3.
 	// Parameter order: (mine/ours, original/base, yours/theirs).
 	//
@@ -129,12 +143,28 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 		}
 	}
 
+	// Only restore ours' original CRLF style on a clean result: a manual
+	// conflict still carries diff3's own bare-LF marker lines
+	// ("<<<<<<< Ours", "=======", ">>>>>>> Theirs"), and blindly expanding
+	// those to CRLF would break the exact-match marker detection in
+	// HasUnresolvedConflictMarkers.
+	if oursHadCRLF && !hasConflicts {
+		mergedContent = strings.ReplaceAll(mergedContent, newlineSeparator, "\r\n")
+	}
+
 	return &MergeResult{
 		Content:       mergedContent,
 		HasConflicts:  hasConflicts,
 		HasMarkers:    hasConflicts,
 		ConflictCount: conflictCount,
 	}, nil
+}
+
+// normalizeLineEndings collapses CRLF to LF. This lets content from a git
+// checkout be compared against a file written directly to disk without
+// line-ending noise.
+func normalizeLineEndings(s string) string {
+	return strings.ReplaceAll(s, "\r\n", newlineSeparator)
 }
 
 // applyConflictStrategy auto-resolves every conflict block to the chosen
