@@ -491,6 +491,24 @@ These flags are available across multiple commands but not universally:
         Using the equals syntax (`--identity=admin`) is unambiguous and works in all contexts.
         :::
     </dd>
+
+    <dt>`--justification`</dt>
+    <dd>
+        Supply a human-readable reason recorded for privileged authentication actions, such as [Azure PIM role activation](/cli/configuration/auth/identities#pim-role-activation).
+        - Can also use the `ATMOS_AUTH_JUSTIFICATION` environment variable
+        - Auth-level (not kind-specific), so it is portable across implementations
+
+        It overrides any per-identity default. Resolution order: `--justification` > `ATMOS_AUTH_JUSTIFICATION` > the identity's `principal.justification` > interactive prompt.
+
+        **Examples:**
+        ```bash
+        # Provide a justification for the invocation
+        atmos auth login --identity=prod-contributor --justification="planned change window"
+
+        # Non-interactive (CI) via the environment variable
+        ATMOS_AUTH_JUSTIFICATION="change CP-1234" atmos auth exec --identity=prod-contributor -- terraform plan
+        ```
+    </dd>
 </dl>
 
 ### Processing Flags
