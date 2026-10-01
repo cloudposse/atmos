@@ -1,0 +1,84 @@
+---
+slug: scaffold-include
+title: "Use !include and other YAML functions in scaffold templates"
+authors: [jorrite]
+tags: [feature]
+---
+
+Two fields in the same scaffold template often need the exact same list of choices — a license
+picker and a region list are both really just "options sourced from some small reference table."
+Until now, that table had nowhere to live but inside `scaffold.yaml` itself, copied into every
+field that needed it. And a value as simple as the current git branch, an environment variable, or
+a random suffix had no path into a template at all, short of prompting the user for it by hand.
+
+<!--truncate-->
+
+## The Problem
+
+Small pieces of reference data — license choices, region codes, a naming convention lookup — show
+up constantly in real scaffold templates, and they rarely stay confined to one field. A `select`
+field needs them as `{label, value}` options; a file elsewhere in the same template needs the raw
+table to look values up by key. Duplicating that table by hand, once per field that needs it, means
+every future edit has to find and update every copy — and a missed one quietly drifts out of sync
+with the rest. Beyond reference data, templates also commonly need small dynamic values — the
+user's git branch or commit SHA, an environment variable, a random suffix for a resource name —
+with no way to derive any of them automatically.
+
+## The Fix
+
+`scaffold.yaml` now resolves a set of [Atmos YAML functions](/functions/yaml) — the same
+explicit-tag mechanism stack manifests already use — anywhere it currently accepts a literal
+value: `options:`, a `type: computed` field's `value:`, or a `matrix:` axis.
+
+- [`!include`](/functions/yaml/include)/[`!include.raw`](/functions/yaml/include.raw) pulls in a
+  local or remote file, optionally reshaped with a YQ filter.
+- [`!env`](/functions/yaml/env) reads an environment variable, [`!random`](/functions/yaml/random)
+  generates a random number, and [`!cwd`](/functions/yaml/cwd) reads the current working directory.
+- The `!git.*`/[`!repo-root`](/functions/yaml/repo-root) family exposes the current git branch,
+  commit SHA, repository name, and more.
+- [`!literal`](/functions/yaml/literal) preserves a value exactly as written, bypassing scaffold's
+  own template evaluation — useful when a value legitimately contains `{{ }}` and shouldn't be
+  treated as a template expression.
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: license
+      type: select
+      options: !include "./lib/licenses.yaml '. | to_entries | map({\"label\": .value.full_name, \"value\": .key})'"
+
+    - name: license_lookup
+      type: computed
+      value: !include ./lib/licenses.yaml
+
+    - name: branch
+      type: computed
+      value: !git.branch
+```
+
+A locally-included file that exists solely to be included is automatically excluded from generated
+output, the same way `scaffold.yaml` itself is. `atmos scaffold validate` resolves everything too,
+not just `generate`, so a missing file, a bad filter, or a malformed value is caught up front.
+
+Not every YAML function is available here: anything that needs real stack, component, or backend
+context (`!terraform.state`, `!store`, `!secret`, `!exec`, and similar) is rejected with a clear
+error instead. A template's `scaffold.yaml` is often resolved just to show its name and description
+in `atmos scaffold list` or the interactive picker — before a user has chosen or generated
+anything — so only functions that are safe to run in that situation are supported.
+
+## How to Use It
+
+Add any of the functions above anywhere `options:`, a computed field's
+`value:` (see [Computed Fields](/cli/commands/scaffold/generate#computed-fields)), or a matrix axis
+currently accepts a literal value. See the full
+[`examples/scaffolding-yaml-functions`](https://github.com/cloudposse/atmos/tree/main/examples/scaffolding-yaml-functions)
+example, or the
+[Loading External Data with `!include` and Other YAML Functions](/cli/commands/scaffold/generate#loading-external-data-with-include-and-other-yaml-functions)
+section of the `atmos scaffold generate` docs.
+
+## Get Involved
+
+See the
+[`atmos scaffold generate`](/cli/commands/scaffold/generate#loading-external-data-with-include-and-other-yaml-functions)
+docs for the full reference, or [open an issue](https://github.com/cloudposse/atmos/issues) with
+feedback.

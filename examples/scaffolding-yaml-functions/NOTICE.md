@@ -4,3 +4,5 @@
 This project is licensed under **{{ (index .Config.license_lookup .Config.license).full_name }}**.
 
 See: {{ (index .Config.license_lookup .Config.license).url }}
+
+Generated from branch `{{ .Config.generated_from_branch }}` by {{ .Config.maintainer }}.
