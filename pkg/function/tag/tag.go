@@ -294,3 +294,46 @@ func IsAtmosConfigYAML(yamlTag string) bool {
 	}
 	return false
 }
+
+// ScaffoldYAML returns the YAML tags supported while resolving scaffold.yaml
+// manifests. Mirrors AtmosConfigYAML's "no stack context available" set,
+// since scaffold.yaml -- like atmos.yaml -- is fully resolved once with no
+// later evaluation phase, but swaps Unset (a stack-inheritance override
+// concept scaffold.yaml's field/answer merge has no equivalent for) for
+// Literal (bypassing scaffold's own Go-template evaluation of a field
+// value, a real need atmos.yaml has no equivalent concern for).
+func ScaffoldYAML() []string {
+	defer perf.Track(nil, "tag.ScaffoldYAML")()
+
+	return []string{
+		ToYAML(Include),
+		ToYAML(IncludeRaw),
+		ToYAML(Env),
+		ToYAML(Exec),
+		ToYAML(Random),
+		ToYAML(Cwd),
+		ToYAML(RepoRoot),
+		ToYAML(GitRoot),
+		ToYAML(GitSha),
+		ToYAML(GitBranch),
+		ToYAML(GitRef),
+		ToYAML(GitRepository),
+		ToYAML(GitOwner),
+		ToYAML(GitName),
+		ToYAML(GitHost),
+		ToYAML(GitURL),
+		ToYAML(Literal),
+	}
+}
+
+// IsScaffoldYAML checks if a YAML tag is supported by scaffold.yaml resolution.
+func IsScaffoldYAML(yamlTag string) bool {
+	defer perf.Track(nil, "tag.IsScaffoldYAML")()
+
+	for _, tag := range ScaffoldYAML() {
+		if yamlTag == tag {
+			return true
+		}
+	}
+	return false
+}
