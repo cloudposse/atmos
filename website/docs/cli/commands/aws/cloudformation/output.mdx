@@ -87,3 +87,17 @@ atmos aws cloudformation output --affected --base origin/main
 :::note
 `outputs` is accepted as an alias for `output`.
 :::
+
+## Masking
+
+With masking enabled, `output` and apply summaries require `cloudformation:GetTemplate` in addition
+to `cloudformation:DescribeStacks`. Atmos reads deployed NoEcho metadata without loading a local
+template or provisioning its source. Outputs referencing NoEcho parameters, including intrinsic
+expressions and indirect resource/condition dependencies, are conservatively redacted. Known
+parameter/default literals are masked too. Unreadable or malformed metadata stops presentation
+before raw values are printed. This also protects outputs when local parameters have changed.
+
+`--mask=false` explicitly disables presentation masking. Internal YAML output lookups retain real
+values for component dependencies. Arbitrary transformed secrets without detectable template
+references cannot be recognized; keep secrets out of CloudFormation Outputs. The command accepts
+one component argument and renders all output keys.
