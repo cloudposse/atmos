@@ -51,6 +51,10 @@ type Flags struct {
 
 	// Authentication.
 	Identity IdentitySelector
+	// Justification is a human-supplied reason recorded for privileged auth actions
+	// (for example Azure PIM role activation). It is an auth-level concern, portable
+	// across implementations (--justification / ATMOS_AUTH_JUSTIFICATION).
+	Justification string
 	// Note: GitHubToken is NOT a global flag. It is only used by toolchain commands,
 	// and is registered locally on the toolchain command in cmd/toolchain/toolchain.go.
 
