@@ -78,14 +78,15 @@ auth:
       principal:
         role_definition_id: "/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c"
         scope: "/subscriptions/00000000-0000-0000-0000-000000000000"
-        duration: "8h"               # Go-style; converted to the ISO-8601 the API wants, capped at the PIM policy max
+        duration: "8h"               # Go-style; converted to ISO-8601. Azure rejects values over the role's policy max (Atmos does not pre-cap; see §5)
         justification: "planned change window"   # optional default; see care points
 ```
 
 Principal fields: `role_definition_id` (required, full role definition id - the API needs the id, not a
 name), `scope` (required - subscription, resource group, or resource ARM id), `duration` (optional Go-style
-duration converted to the `scheduleInfo` ISO-8601 the API requires, capped at the role's PIM activation-policy
-maximum), `justification` (optional default). `via.identity` chains from the identity whose token holds the
+duration converted to the `scheduleInfo` ISO-8601 the API requires; Atmos sends it as-is without pre-capping,
+and Azure rejects a value over the role's PIM activation-policy maximum - see the §5 deferred follow-up),
+`justification` (optional default). `via.identity` chains from the identity whose token holds the
 eligibility; `via.provider` is allowed but less common.
 
 ### Authentication flow

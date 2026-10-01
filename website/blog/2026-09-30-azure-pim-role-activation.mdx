@@ -72,7 +72,7 @@ auth:
       principal:
         role_definition_id: "/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c"
         scope: "/subscriptions/00000000-0000-0000-0000-000000000000"
-        duration: "8h"               # converted to the ISO-8601 the API wants, capped by policy
+        duration: "8h"               # converted to ISO-8601; Azure enforces the role's policy maximum
         justification: "planned change window"
 ```
 
