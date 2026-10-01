@@ -116,6 +116,8 @@ func TestPrintStartupStatus_NoOpWhenAlreadyShown(t *testing.T) {
 }
 
 func TestPrintStartupStatus_NoOpOutsideCI(t *testing.T) {
+	// Atmos custom commands pass this process-tree sentinel to test binaries.
+	t.Setenv(noticesShownEnvVar, "")
 	restore := ci.SwapRegistryForTest()
 	defer restore()
 	ci.Register(&fakeProvider{detected: false})
@@ -128,6 +130,8 @@ func TestPrintStartupStatus_NoOpOutsideCI(t *testing.T) {
 }
 
 func TestPrintStartupStatus_PrintsWhenInCI(t *testing.T) {
+	// Atmos custom commands pass this process-tree sentinel to test binaries.
+	t.Setenv(noticesShownEnvVar, "")
 	restore := ci.SwapRegistryForTest()
 	defer restore()
 	ci.Register(&fakeProvider{detected: true})

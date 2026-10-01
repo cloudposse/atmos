@@ -19,6 +19,7 @@ Real AWS testing at 6a8791b4dcaf7ababa00756acb585e947c28798d exposed failures th
 - Apply S3 prefixes once, reject numeric/malformed StackSet targets before mutation, and infer an unambiguous provisioned template file.
 - Preserve query-sensitive source cache identity independently of redacted provenance metadata.
 - Match canonical drift hook names, forward `--ci` through the parser, count only modified/deleted resources, distinguish unknown/unchecked/clean drift, and render valid reproduction commands.
+- Isolate startup-banner tests from the process-tree notice sentinel inherited by `atmos test`, preserving the assertions and runtime behavior.
 - Correct CLI/skill documentation, update the release notes/roadmap, and regenerate affected CloudFormation help recordings.
 
 ## Validation
@@ -28,6 +29,7 @@ Failing regressions were reproduced before their fixes. Tests exercise real stac
 Passed locally:
 
 - Affected CloudFormation, source provisioner, hooks, CI plugin, schema and command package suites.
+- Startup-banner package under the inherited sentinel/FIPS environment with five shuffled repetitions, and through the actual Atmos test command.
 - Repeated behavioral regressions with `-race -shuffle=on` (three or five repetitions depending on the suite).
 - `go build ./...`, `atmos build`, `atmos lint --changed` (zero issues), and `npm run build`.
 - CloudFormation help recording generation/validation through the repository's casts command.
