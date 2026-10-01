@@ -56,6 +56,7 @@ type describeComponentFlags struct {
 	processTemplates     bool
 	processYamlFunctions bool
 	useMocks             bool
+	mocksMode            string
 	query                string
 	skip                 []string
 	provenance           bool
@@ -84,7 +85,11 @@ func parseDescribeComponentFlags(cmd *cobra.Command) (describeComponentFlags, er
 	if f.processYamlFunctions, err = flags.GetBool("process-functions"); err != nil {
 		return f, err
 	}
-	if f.useMocks, err = flags.GetBool("use-mocks"); err != nil {
+	rawUseMocks, err := flags.GetString("use-mocks")
+	if err != nil {
+		return f, err
+	}
+	if f.useMocks, f.mocksMode, err = cfg.ParseUseMocksFlag(rawUseMocks); err != nil {
 		return f, err
 	}
 	if f.query, err = flags.GetString("query"); err != nil {
@@ -280,6 +285,7 @@ func getRunnableDescribeComponentCmd(
 			ProcessTemplates:     f.processTemplates,
 			ProcessYamlFunctions: f.processYamlFunctions,
 			UseMocks:             f.useMocks,
+			MocksMode:            f.mocksMode,
 			Skip:                 f.skip,
 			Query:                f.query,
 			Format:               f.format,
@@ -365,7 +371,8 @@ func init() {
 	describeComponentCmd.PersistentFlags().String("file", "", "Write the result to the file")
 	describeComponentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
-	describeComponentCmd.PersistentFlags().Bool("use-mocks", false, "Resolve Terraform state/output YAML functions from component mocks instead of remote state. Supported only by plan and describe commands")
+	describeComponentCmd.PersistentFlags().String("use-mocks", "", "Resolve Terraform state/output YAML functions from component mocks. Set a mode with =fallback (real state first, mocks only when missing) or =always (mocks only); a bare flag uses components.terraform.mocks.mode. Supported only by plan and describe commands")
+	describeComponentCmd.PersistentFlags().Lookup("use-mocks").NoOptDefVal = cfg.UseMocksTrue
 	describeComponentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Show where configuration values originated (enabled by default; disable with --provenance=false or describe.provenance in atmos.yaml)")
 	describeComponentErrorModeParser = newDescribeErrorModeParser()

@@ -62,6 +62,11 @@ components:
     plan:
       skip_planfile: false
 
+    # Component mocks (used only with --use-mocks)
+    mocks:
+      # fallback: real state wins, mocks fill gaps. always: mocks only, never read state (fallback | always)
+      mode: fallback
+
     # Provider plugin caching (enabled by default)
     plugin_cache: true
     plugin_cache_dir: ""  # Uses ~/.cache/atmos/terraform/plugins by default
@@ -184,6 +189,22 @@ components:
     **Environment variables:** `ATMOS_COMPONENTS_TERRAFORM_INIT_MODE`, `ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE`, `ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE`
     **Command-line flags:** `--init-mode`, `--init-reconfigure`, `--init-upgrade`
     **Default:** `auto` for all three
+  </dd>
+
+  <dt>`mocks.mode`</dt>
+  <dd>
+    Controls how [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output) lookups use a component's [`mocks`](/stacks/components/mocks) when you pass `--use-mocks` to `atmos terraform plan` or `atmos describe component`. Without `--use-mocks`, this setting has no effect.
+
+    - **`fallback`** — Atmos reads the real state or output first and returns it when it exists. The component's `mocks` value is used only when the referenced component's state is not provisioned or the requested output is missing. Credential, network, and backend errors still fail. When neither a real value nor a mock exists, a YQ `//` default applies, otherwise the original error is returned.
+    - **`always`** — Lookups resolve from `mocks` only. Atmos never initializes Terraform, authenticates, or reads a backend for those lookups, and a missing mock is an error (a YQ `//` default still applies).
+
+    The default is `fallback` for unpinned projects and projects pinned to a [config edition](/cli/configuration/edition) on or after October 1, 2026. Pinning an earlier edition restores `always`, the behavior bare `--use-mocks` had before this setting existed, with no config changes.
+
+    The effective value resolves in this order (highest wins): the `--use-mocks=fallback` or `--use-mocks=always` flag value, the `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE` environment variable, the value in `atmos.yaml`, then the edition-aware default. A bare `--use-mocks`, `--use-mocks=true`, or `ATMOS_USE_MOCKS=true` turns mocks on using the resolved `mocks.mode` and does not change it.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`
+    **Command-line flag:** `--use-mocks=<mode>` (per run, on `atmos terraform plan` and `atmos describe component`)
+    **Default:** `fallback` (`always` when pinned to an edition before 2026-10-01)
   </dd>
 
   <dt>`plan.skip_planfile`</dt>

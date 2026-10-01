@@ -137,7 +137,11 @@ func validateTerraformMockFlags(cmd_ *cobra.Command) error {
 		return nil
 	}
 
-	useMocks, err := cmd_.Flags().GetBool("use-mocks")
+	rawUseMocks, err := cmd_.Flags().GetString("use-mocks")
+	if err != nil {
+		return err
+	}
+	useMocks, _, err := cfg.ParseUseMocksFlag(rawUseMocks)
 	if err != nil || !useMocks {
 		return err
 	}

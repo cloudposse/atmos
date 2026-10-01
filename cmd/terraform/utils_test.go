@@ -142,7 +142,7 @@ func TestTerraformRunWithOptionsMockGuards(t *testing.T) {
 
 func TestValidateTerraformMockFlagsBeforeHooks(t *testing.T) {
 	cmd := &cobra.Command{Use: "apply"}
-	cmd.Flags().Bool("use-mocks", true, "")
+	cmd.Flags().String("use-mocks", "true", "")
 	cmd.Flags().Bool("process-functions", true, "")
 
 	err := validateTerraformMockFlags(cmd)
@@ -154,26 +154,37 @@ func TestValidateTerraformMockFlags(t *testing.T) {
 	tests := []struct {
 		name             string
 		command          *cobra.Command
-		useMocks         bool
+		useMocks         string
 		processFunctions bool
 		wantErr          string
+		wantErrIs        error
 	}{
 		{name: "nil command"},
 		{name: "command without mock flag", command: &cobra.Command{Use: "plan"}},
 		{name: "mocks disabled", command: &cobra.Command{Use: "apply"}, processFunctions: true},
-		{name: "mocks require function processing", command: &cobra.Command{Use: "plan"}, useMocks: true, wantErr: "requires --process-functions=true"},
-		{name: "mocks require plan", command: &cobra.Command{Use: "apply"}, useMocks: true, processFunctions: true, wantErr: "supported only by `atmos terraform plan`"},
-		{name: "valid mock plan", command: &cobra.Command{Use: "plan"}, useMocks: true, processFunctions: true},
+		{name: "mocks explicitly false on apply", command: &cobra.Command{Use: "apply"}, useMocks: "false", processFunctions: true},
+		{name: "mocks require function processing", command: &cobra.Command{Use: "plan"}, useMocks: "true", wantErr: "requires --process-functions=true"},
+		{name: "mocks require plan", command: &cobra.Command{Use: "apply"}, useMocks: "true", processFunctions: true, wantErr: "supported only by `atmos terraform plan`"},
+		{name: "apply rejects fallback", command: &cobra.Command{Use: "apply"}, useMocks: "fallback", processFunctions: true, wantErr: "supported only by `atmos terraform plan`"},
+		{name: "deploy rejects always", command: &cobra.Command{Use: "deploy"}, useMocks: "always", processFunctions: true, wantErr: "supported only by `atmos terraform plan`"},
+		{name: "valid mock plan", command: &cobra.Command{Use: "plan"}, useMocks: "true", processFunctions: true},
+		{name: "valid fallback plan", command: &cobra.Command{Use: "plan"}, useMocks: "fallback", processFunctions: true},
+		{name: "valid always plan", command: &cobra.Command{Use: "plan"}, useMocks: "always", processFunctions: true},
+		{name: "invalid value is rejected", command: &cobra.Command{Use: "plan"}, useMocks: "sometimes", processFunctions: true, wantErrIs: errUtils.ErrInvalidFlagValue},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.command != nil && tt.name != "command without mock flag" {
-				tt.command.Flags().Bool("use-mocks", tt.useMocks, "")
+				tt.command.Flags().String("use-mocks", tt.useMocks, "")
 				tt.command.Flags().Bool("process-functions", tt.processFunctions, "")
 			}
 
 			err := validateTerraformMockFlags(tt.command)
+			if tt.wantErrIs != nil {
+				assert.ErrorIs(t, err, tt.wantErrIs)
+				return
+			}
 			if tt.wantErr == "" {
 				assert.NoError(t, err)
 				return
@@ -206,7 +217,7 @@ func TestIsCompoundTerraformCommandWithoutComponent(t *testing.T) {
 
 func TestRunBeforeHooksRejectsInvalidMocksBeforeResolution(t *testing.T) {
 	cmd := &cobra.Command{Use: "apply"}
-	cmd.Flags().Bool("use-mocks", true, "")
+	cmd.Flags().String("use-mocks", "true", "")
 	cmd.Flags().Bool("process-functions", true, "")
 
 	err := runBeforeHooks(h.HookEvent("before.terraform.apply"), cmd, nil)

@@ -131,8 +131,10 @@ FLAGS
 
       --upload-status                Upload plan status to Atmos Pro
 
-      --use-mocks                    Resolve Terraform state/output YAML functions from component mocks instead of
-                                     remote state. Supported only by plan and describe commands
+      --use-mocks string             Resolve Terraform state/output YAML functions from component mocks. Set a mode
+                                     with =fallback (real state first, mocks only when missing) or =always (mocks
+                                     only); a bare flag uses components.terraform.mocks.mode. Supported only by plan
+                                     and describe commands
 
 
 GLOBAL FLAGS

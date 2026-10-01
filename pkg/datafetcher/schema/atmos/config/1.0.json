@@ -11784,6 +11784,20 @@
             }
           ]
         },
+        "mocks": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformMocks"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Mocks configures how `--use-mocks` resolves Terraform state/output lookups against a\ncomponent's literal `mocks` map."
+        },
         "plan": {
           "anyOf": [
             {
@@ -12422,6 +12436,23 @@
       },
       "type": "object",
       "description": "TerraformLint configures TFLint for Terraform components. Config may be an\nabsolute path or a path relative to the Atmos base path."
+    },
+    "TerraformMocks": {
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mode controls how `--use-mocks` resolves a lookup: `fallback` (default since 2026-10-01;\na project pinned to an earlier edition gets `always` restored) uses the real value when\nit exists and the component mock only when the state is not provisioned or the output is\nmissing, and `always` resolves every lookup from the mocks without reading real state."
+        }
+      },
+      "type": "object",
+      "description": "TerraformMocks configures component mock resolution for `--use-mocks`."
     },
     "TerraformPlan": {
       "properties": {

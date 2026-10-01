@@ -76,7 +76,7 @@ func TestGetRunnableDescribeComponentCmd_MissingStackTriggersPrompt(t *testing.T
 	testCmd.Flags().String("file", "", "")
 	testCmd.Flags().Bool("process-templates", true, "")
 	testCmd.Flags().Bool("process-functions", true, "")
-	testCmd.Flags().Bool("use-mocks", false, "")
+	testCmd.Flags().String("use-mocks", "", "")
 	testCmd.Flags().String("query", "", "")
 	testCmd.Flags().StringSlice("skip", nil, "")
 	testCmd.Flags().Bool("provenance", false, "")
@@ -214,7 +214,7 @@ func TestGetRunnableDescribeComponentCmd_StackPromptErrorPropagates(t *testing.T
 	testCmd.Flags().String("file", "", "")
 	testCmd.Flags().Bool("process-templates", true, "")
 	testCmd.Flags().Bool("process-functions", true, "")
-	testCmd.Flags().Bool("use-mocks", false, "")
+	testCmd.Flags().String("use-mocks", "", "")
 	testCmd.Flags().String("query", "", "")
 	testCmd.Flags().StringSlice("skip", nil, "")
 	testCmd.Flags().Bool("provenance", false, "")
@@ -603,5 +603,60 @@ func TestDescribeComponentCmd_AuthManager(t *testing.T) {
 		// Verify error is not due to auth manager initialization issues.
 		errStr := err.Error()
 		assert.NotContains(tk, errStr, "auth manager creation failed", "Auth manager should initialize without errors")
+	}
+}
+
+// TestParseDescribeComponentFlags_UseMocks covers the string-valued --use-mocks flag: a bare flag
+// means "true" (use the configured mocks mode), and fallback/always also override the mode.
+func TestParseDescribeComponentFlags_UseMocks(t *testing.T) {
+	// The registered flag must treat a bare --use-mocks as "true".
+	registered := describeComponentCmd.PersistentFlags().Lookup("use-mocks")
+	require.NotNil(t, registered)
+	assert.Equal(t, "true", registered.NoOptDefVal)
+
+	tests := []struct {
+		name         string
+		args         []string
+		wantUseMocks bool
+		wantMode     string
+		wantErr      bool
+	}{
+		{name: "absent", args: nil},
+		{name: "false", args: []string{"--use-mocks=false"}},
+		{name: "bare flag", args: []string{"--use-mocks"}, wantUseMocks: true},
+		{name: "bare flag before positional", args: []string{"--use-mocks", "vpc"}, wantUseMocks: true},
+		{name: "true", args: []string{"--use-mocks=true"}, wantUseMocks: true},
+		{name: "fallback", args: []string{"--use-mocks=fallback"}, wantUseMocks: true, wantMode: "fallback"},
+		{name: "always", args: []string{"--use-mocks=always"}, wantUseMocks: true, wantMode: "always"},
+		{name: "invalid", args: []string{"--use-mocks=sometimes"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testCmd := &cobra.Command{Use: "component"}
+			testCmd.Flags().String("stack", "", "")
+			testCmd.Flags().String("format", "yaml", "")
+			testCmd.Flags().String("file", "", "")
+			testCmd.Flags().Bool("process-templates", true, "")
+			testCmd.Flags().Bool("process-functions", true, "")
+			testCmd.Flags().String("use-mocks", "", "")
+			testCmd.Flags().Lookup("use-mocks").NoOptDefVal = "true"
+			testCmd.Flags().String("query", "", "")
+			testCmd.Flags().StringSlice("skip", nil, "")
+			testCmd.Flags().Bool("provenance", false, "")
+			require.NoError(t, testCmd.ParseFlags(tt.args))
+			if len(tt.args) == 2 {
+				assert.Equal(t, []string{"vpc"}, testCmd.Flags().Args(), "a positional argument must not be consumed as the flag value")
+			}
+
+			f, err := parseDescribeComponentFlags(testCmd)
+
+			if tt.wantErr {
+				assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantUseMocks, f.useMocks)
+			assert.Equal(t, tt.wantMode, f.mocksMode)
+		})
 	}
 }

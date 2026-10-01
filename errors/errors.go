@@ -239,6 +239,7 @@ var (
 	ErrTerraformInitUpgradeRequired     = errors.New("terraform init -upgrade is required to satisfy provider or module constraints")
 	ErrInitFingerprint                  = errors.New("failed to compute terraform init fingerprint")
 	ErrInitMarker                       = errors.New("failed to read or write terraform init marker")
+	ErrInvalidMocksMode                 = errors.New("invalid components.terraform.mocks.mode (expected fallback or always)")
 	ErrInvalidInitMode                  = errors.New("invalid components.terraform.init.mode (expected auto, always, or never)")
 	ErrInvalidInitReconfigure           = errors.New("invalid components.terraform.init.reconfigure (expected auto, always, or never)")
 	ErrInvalidInitUpgrade               = errors.New("invalid components.terraform.init.upgrade (expected auto, always, or never)")

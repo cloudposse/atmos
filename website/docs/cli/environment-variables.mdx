@@ -182,6 +182,18 @@ These environment variables configure Atmos behavior and can override settings i
     - **YAML Path:** `components.terraform.init.pass_vars`
   </dd>
 
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`</dt>
+  <dd>
+    Controls how [component mocks](/stacks/components/mocks) are used when `--use-mocks` is passed: `fallback` (real state wins, mocks fill gaps) or `always` (mocks only). Defaults to `fallback`, or `always` for projects pinned to a [config edition](/cli/configuration/edition) before 2026-10-01.
+
+    - **YAML Path:** `components.terraform.mocks.mode`
+  </dd>
+
+  <dt>`ATMOS_USE_MOCKS`</dt>
+  <dd>
+    Turns on [component mocks](/stacks/components/mocks) for `atmos terraform plan`, the same as passing `--use-mocks`. Accepts the same values as the flag: `true` uses the mode from `components.terraform.mocks.mode`, while `fallback` or `always` override it for the run. `atmos describe component` does not read this variable; pass `--use-mocks` instead.
+  </dd>
+
   <dt>`ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE`</dt>
   <dd>
     Skip writing the plan to a file by not passing the `-out` flag.

@@ -298,6 +298,11 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE", foundEnvVarMessage,
+		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode, &atmosConfig.Components.Terraform.Mocks.Mode); err != nil {
+		return err
+	}
+
 	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", foundEnvVarMessage,
 		schema.TerraformInitReconfigure.IsValid, errUtils.ErrInvalidInitReconfigure, &atmosConfig.Components.Terraform.Init.Reconfigure); err != nil {
 		return err
@@ -827,6 +832,10 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 	}
 	if err := applyInitEnumFlag(configAndStacksInfo.InitUpgrade, InitUpgradeFlag,
 		schema.TerraformInitUpgrade.IsValid, errUtils.ErrInvalidInitUpgrade, &atmosConfig.Components.Terraform.Init.Upgrade); err != nil {
+		return err
+	}
+	if err := applyInitEnumFlag(configAndStacksInfo.MocksMode, UseMocksFlag,
+		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode, &atmosConfig.Components.Terraform.Mocks.Mode); err != nil {
 		return err
 	}
 	if len(configAndStacksInfo.PlanSkipPlanfile) > 0 {

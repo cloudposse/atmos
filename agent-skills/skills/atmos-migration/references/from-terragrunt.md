@@ -172,15 +172,18 @@ atmos describe component eks-cluster -s dev --use-mocks
 ```
 
 With `--use-mocks`, `!terraform.state vpc vpc_id` and `!terraform.output vpc vpc_id`
-resolve from `vpc`'s `mocks` map instead of real state, with no Terraform init,
-authentication, or backend read at all. Without `--use-mocks`, the same expression
-resolves the real value as usual. This matches Terragrunt's
-`mock_outputs_allowed_terraform_commands` scoping more closely than a default-value
-expression does: `--use-mocks` is rejected outright on `apply`, `deploy`, and
-`destroy`, so a mock value can never reach a mutating Terraform operation, and an
-undeclared `mocks` entry is a hard error rather than a silent fallback. A working,
-provider-free reference lives at `examples/terraform-component-mocks` in the Atmos
-repository.
+behave like Terragrunt's `mock_outputs`: they return the real value when `vpc` has been
+applied and use `vpc`'s `mocks` value only when `vpc` has no state or the output is missing
+(mode `fallback`, the default). Credential, network, and backend errors still fail.
+Without `--use-mocks`, the same expression resolves the real value as usual. This matches
+Terragrunt's `mock_outputs_allowed_terraform_commands` scoping more closely than a
+default-value expression does: only `atmos terraform plan` and `atmos describe component`
+accept `--use-mocks`, and it is rejected outright on `apply`, `deploy`, and `destroy`, so a
+mock value can never reach a mutating Terraform operation. For hermetic runs that must never
+read state or authenticate, pass `--use-mocks=always` or set
+`components.terraform.mocks.mode: always`; in that mode an undeclared `mocks` entry is a
+hard error unless the expression has a `//` default. A working, provider-free reference
+lives at `examples/terraform-component-mocks` in the Atmos repository.
 
 Reserve the YQ-default pattern (`!terraform.state vpc '.vpc_id // "vpc-mock1234"'`)
 for the narrower case of a placeholder that should also apply during a normal,

@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 
-	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -100,68 +99,97 @@ func processTagTerraformOutputWithContext(
 		return value, mockErr
 	}
 
-	// Extract authContext and authManager from stackInfo if available.
-	var authContext *schema.AuthContext
-	var authManager any
-	if stackInfo != nil {
-		authContext = stackInfo.AuthContext
-		authManager = stackInfo.AuthManager
-		// Propagate AuthDisabled downstream even when no AuthManager was created (mirrors
-		// !terraform.state): the wrapper's stack info tells the output getter to skip resolving
-		// the target component's own auth section.
-		if authdeferred.IsDeferred(atmosConfig.AuthManager) || (authManager == nil && stackInfo.AuthDisabled) {
-			authManager = &authContextWrapper{stackInfo: stackInfo}
-		}
-	}
+	return lookupTerraformOutput(atmosConfig, stackInfo, &terraformStateLookup{yamlFunc: input, stack: stack, component: component, output: output})
+}
 
-	value, exists, err := outputGetter.GetOutput(atmosConfig, stack, component, output, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
+// lookupTerraformOutput reads the real Terraform output and, when `--use-mocks` runs in fallback
+// mode, falls back to the component mocks on a recoverable miss. Precedence: real value, then
+// mock, then YQ `//` default, then the original error (or nil for a missing output).
+func lookupTerraformOutput(
+	atmosConfig *schema.AtmosConfiguration,
+	stackInfo *schema.ConfigAndStacksInfo,
+	lookup *terraformStateLookup,
+) (any, error) {
+	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
+
+	value, exists, err := outputGetter.GetOutput(atmosConfig, lookup.stack, lookup.component, lookup.output, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
 	if err != nil {
-		// Only use YQ defaults for recoverable terraform errors (state not provisioned, output not found).
-		// Non-recoverable errors (API failures, auth errors, infrastructure issues) should fail hard.
-		if isRecoverableTerraformError(err) && hasYqDefault(output) {
-			log.Debug(
-				"Evaluating YQ default for recoverable error",
-				log.FieldFunction, input,
-				"error", err.Error(),
-			)
-			// Evaluate YQ against an empty map to get the default value.
-			defaultValue, yqErr := evaluateYqDefault(atmosConfig, output)
-			if yqErr != nil {
-				// If YQ evaluation fails, return the original error.
-				return nil, fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", component, stack, output, err)
-			}
-			return defaultValue, nil
-		}
-		return nil, fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", component, stack, output, err)
+		return handleTerraformOutputError(atmosConfig, stackInfo, lookup, err)
 	}
 
-	// If the output doesn't exist, check if we can use YQ default.
+	// If the output doesn't exist, try the component mocks (fallback mode) and then a YQ default.
 	if !exists {
-		if hasYqDefault(output) {
-			log.Debug(
-				"Evaluating YQ default for non-existent output",
-				log.FieldFunction, input,
-				"component", component,
-				"stack", stack,
-				"output", output,
-			)
-			// Evaluate YQ against an empty map to get the default value.
-			defaultValue, yqErr := evaluateYqDefault(atmosConfig, output)
-			if yqErr != nil {
-				// If YQ evaluation fails, return nil (backward compatible).
-				log.Debug(
-					"YQ default evaluation failed, returning nil",
-					log.FieldFunction, input,
-					"error", yqErr.Error(),
-				)
-				return nil, nil
-			}
-			return defaultValue, nil
-		}
-		// No default available, return nil (backward compatible).
-		return nil, nil
+		return handleMissingTerraformOutput(atmosConfig, stackInfo, lookup)
 	}
 
 	// value may be nil here if the terraform output is legitimately null, which is valid.
 	return value, nil
+}
+
+// handleTerraformOutputError resolves a failed output lookup. Only recoverable terraform errors
+// (state not provisioned, output not found) may be rescued by a component mock (fallback mode) or
+// a YQ default; non-recoverable errors (API failures, auth errors, infrastructure issues) fail hard.
+func handleTerraformOutputError(
+	atmosConfig *schema.AtmosConfiguration,
+	stackInfo *schema.ConfigAndStacksInfo,
+	lookup *terraformStateLookup,
+	err error,
+) (any, error) {
+	wrapped := fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", lookup.component, lookup.stack, lookup.output, err)
+	if !isRecoverableTerraformError(err) {
+		return nil, wrapped
+	}
+	if mocked, handled, mockErr := resolveTerraformMockFallback(atmosConfig, stackInfo, lookup, wrapped); handled {
+		return mocked, mockErr
+	}
+	if !hasYqDefault(lookup.output) {
+		return nil, wrapped
+	}
+	log.Debug(
+		"Evaluating YQ default for recoverable error",
+		log.FieldFunction, lookup.yamlFunc,
+		"error", err.Error(),
+	)
+	// Evaluate YQ against an empty map to get the default value.
+	defaultValue, yqErr := evaluateYqDefault(atmosConfig, lookup.output)
+	if yqErr != nil {
+		// If YQ evaluation fails, return the original error.
+		return nil, wrapped
+	}
+	return defaultValue, nil
+}
+
+// handleMissingTerraformOutput resolves an output that does not exist in state: a component mock
+// (fallback mode) wins, then a YQ default, and otherwise nil (backward compatible).
+func handleMissingTerraformOutput(
+	atmosConfig *schema.AtmosConfiguration,
+	stackInfo *schema.ConfigAndStacksInfo,
+	lookup *terraformStateLookup,
+) (any, error) {
+	if mocked, handled, mockErr := resolveTerraformMockFallback(atmosConfig, stackInfo, lookup, nil); handled {
+		return mocked, mockErr
+	}
+	if !hasYqDefault(lookup.output) {
+		// No default available, return nil (backward compatible).
+		return nil, nil
+	}
+	log.Debug(
+		"Evaluating YQ default for non-existent output",
+		log.FieldFunction, lookup.yamlFunc,
+		"component", lookup.component,
+		"stack", lookup.stack,
+		"output", lookup.output,
+	)
+	// Evaluate YQ against an empty map to get the default value.
+	defaultValue, yqErr := evaluateYqDefault(atmosConfig, lookup.output)
+	if yqErr != nil {
+		// If YQ evaluation fails, return nil (backward compatible).
+		log.Debug(
+			"YQ default evaluation failed, returning nil",
+			log.FieldFunction, lookup.yamlFunc,
+			"error", yqErr.Error(),
+		)
+		return nil, nil
+	}
+	return defaultValue, nil
 }
