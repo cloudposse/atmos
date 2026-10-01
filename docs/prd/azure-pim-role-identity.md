@@ -1,6 +1,6 @@
 # Azure PIM Role Activation (`azure/pim-role`)
 
-**Status**: Implemented **Last Updated**: 2026-09-30 **Owners**: Atmos auth subsystem
+**Status**: Implemented **Last Updated**: 2026-10-01 **Owners**: Atmos auth subsystem
 
 **Upstream references** (verified via Microsoft docs):
 
@@ -86,7 +86,8 @@ Principal fields: `role_definition_id` (required, full role definition id - the 
 name), `scope` (required - subscription, resource group, or resource ARM id), `duration` (optional Go-style
 duration converted to the `scheduleInfo` ISO-8601 the API requires; Atmos sends it as-is without pre-capping,
 and Azure rejects a value over the role's PIM activation-policy maximum - see the §5 deferred follow-up),
-`justification` (optional default). `via.identity` chains from the identity whose token holds the
+`justification` (optional default, overridden per-invocation by the `--justification` global flag or
+`ATMOS_AUTH_JUSTIFICATION`). `via.identity` chains from the identity whose token holds the
 eligibility; `via.provider` is allowed but less common.
 
 ### Authentication flow
@@ -122,10 +123,15 @@ the AKS exec plugin, or an MCP server.
   would spam PIM and hit request throttling.
 - **Idempotency while pending** (step 4): a second invocation during `PendingApproval` attaches to the
   existing request instead of creating a duplicate.
-- **Justification, interactive vs non-interactive**: justification is human-supplied. In an interactive
+- **Justification, interactive vs non-interactive**: justification is human-supplied and is an **auth-level
+  concern** (not PIM-specific), so it is exposed as the global `--justification` flag and the
+  `ATMOS_AUTH_JUSTIFICATION` environment variable - portable across future privileged-auth implementations.
+  Resolution order: `--justification` > `ATMOS_AUTH_JUSTIFICATION` > the identity's `principal.justification`
+  default > interactive prompt (so a per-invocation reason overrides the configured default). In an interactive
   session, prompt for it; in a non-interactive chain (CI, `atmos auth exec`, an MCP server starting up), take
-  it from a flag or environment variable (for example `--justification` / `ATMOS_PIM_JUSTIFICATION`), and
-  refuse clearly when elevation is required, no justification is supplied, and no prompt can be shown.
+  it from the flag or env var, and refuse clearly when elevation is required, no justification is supplied, and
+  no prompt can be shown. The flag/env reach the identity through the auth chain via the `justification` viper
+  key (the identity reads it; the flag is bound in `pkg/flags`).
 - **Long waits**: `Authenticate` is normally fast, but waiting on a human approver is not. Bound the wait,
   show visible progress, and make it resumable - a later invocation attaches to the pending request rather
   than starting over.
@@ -165,8 +171,8 @@ eligible role is a manual verification step.
 - A second run within the activation window is a no-op (no duplicate request); `atmos auth whoami` reflects the
   chain.
 - An ineligible principal gets an error that distinguishes "not eligible" from "activation failed".
-- A non-interactive invocation without a justification fails fast with guidance to supply the flag or
-  environment variable.
+- A non-interactive invocation without a justification fails fast with guidance to pass `--justification` or
+  set `ATMOS_AUTH_JUSTIFICATION`.
 - A role requiring approval produces a bounded wait with visible progress, and a later invocation attaches to
   the pending request rather than restarting it.
 
@@ -195,10 +201,16 @@ Unified Authentication initiative.
   exported `azureCloud.ExtractObjectIDFromToken` (`pkg/auth/cloud/azure/token_oid.go`).
 - **Cloud endpoint helper** `CloudEnvironment.ResourceManagerEndpoint()` in
   `pkg/auth/cloud/azure/cloud_environments.go`.
+- **Global `--justification` flag** + `ATMOS_AUTH_JUSTIFICATION` env added in `pkg/flags/global/flags.go`,
+  `pkg/flags/global_builder.go`, and `pkg/flags/standard_parser.go` (auth-level, like `--identity`).
 - **Duration** Go-style `duration` is converted to ISO-8601 (`8h` -> `PT8H`); an empty/invalid
   duration is omitted so ARM applies the policy default.
-- **Justification** resolved from `principal.justification` -> `ATMOS_PIM_JUSTIFICATION` (read via
-  viper's ATMOS_ automatic-env binding) -> interactive prompt (TTY) -> a fail-fast error.
+- **Justification** is an auth-level global flag `--justification` plus `ATMOS_AUTH_JUSTIFICATION`
+  (registered in `pkg/flags/global_builder.go`, both bound to the `justification` viper key; stored on
+  `global.Flags.Justification`). Resolution order in the identity's `resolveJustification`:
+  `--justification` / `ATMOS_AUTH_JUSTIFICATION` (via the viper key, so flag > env) ->
+  `principal.justification` default -> interactive prompt (TTY) -> fail-fast error. The flag reaches the
+  identity through the viper key (how other auth code reads global flags, e.g. `viper.GetBool("interactive")`).
 - **Error sentinels** in `errors/errors.go`: `ErrAzurePIMNotEligible`,
   `ErrAzurePIMJustificationRequired`, `ErrAzurePIMActivationFailed`,
   `ErrAzurePIMActivationTimeout`, `ErrAzurePIMRequestFailed`.
@@ -213,6 +225,10 @@ Unified Authentication initiative.
   `TestPIMRole_NotEligible`.
 - Non-interactive without justification fails fast with guidance ->
   `ErrAzurePIMJustificationRequired`. `TestPIMRole_NonInteractiveWithoutJustification`.
+- `--justification` / `ATMOS_AUTH_JUSTIFICATION` supply and override the justification ->
+  `TestPIMRole_JustificationFromFlagOrEnv`, `TestPIMRole_FlagOrEnvOverridesConfigJustification`,
+  `TestPIMRole_DefaultJustificationLookupReadsViperKey`; flag/env->viper-key binding in
+  `pkg/flags` `TestGlobalOptionsBuilder_Justification`.
 - Approval-gated role: bounded wait, resumable -> `waitForActivation` + pending-request resume.
   `TestPIMRole_PendingThenProvisioned`, `TestPIMRole_ResumePendingRequest`,
   `TestPIMRole_ActivationTimeout`.
@@ -220,8 +236,9 @@ Unified Authentication initiative.
 ### Tests and coverage
 
 `pkg/auth/identities/azure/pim_role_test.go`, `pim_client_test.go`,
-`pkg/auth/cloud/azure/token_oid_test.go`, a `ResourceManagerEndpoint` test, and a factory case.
-Package `pkg/auth/identities/azure` coverage is 87.0%. All ARM interaction is mocked; a live
+`pkg/auth/cloud/azure/token_oid_test.go`, a `ResourceManagerEndpoint` test, a factory case, and the
+`--justification` flag/env binding test in `pkg/flags/global_builder_test.go`.
+Package `pkg/auth/identities/azure` coverage is 88.1%. All ARM interaction is mocked; a live
 end-to-end activation against a real eligible role remains a manual verification step.
 
 ### Deferred (non-goals or follow-ups)

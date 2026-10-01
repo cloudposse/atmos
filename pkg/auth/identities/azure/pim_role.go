@@ -21,10 +21,12 @@ import (
 )
 
 const (
-	// Environment variable consulted for a non-interactive activation justification
-	// (CI, `atmos auth exec`, MCP startup). Read through viper's ATMOS_ env binding.
-	pimJustificationEnvVar   = "ATMOS_PIM_JUSTIFICATION"
-	pimJustificationViperKey = "pim_justification"
+	// Justification is an auth-level concern (portable across implementations), supplied
+	// per-invocation via the --justification global flag or the ATMOS_AUTH_JUSTIFICATION
+	// environment variable. Both resolve to the "justification" viper key, so viper gives
+	// flag > env precedence automatically.
+	authJustificationEnvVar = "ATMOS_AUTH_JUSTIFICATION"
+	justificationViperKey   = "justification"
 
 	// Principal config field keys for an azure/pim-role identity.
 	principalRoleDefinitionIDKey = "role_definition_id"
@@ -90,7 +92,7 @@ func NewPIMRoleIdentity(name string, config *schema.Identity) (authTypes.Identit
 		newRequestName:      uuid.NewString,
 		isTTY:               defaultIsTTY,
 		promptFunc:          defaultJustificationPrompt,
-		lookupJustification: func() string { return viper.GetString(pimJustificationViperKey) },
+		lookupJustification: func() string { return viper.GetString(justificationViperKey) },
 		pollInterval:        defaultPIMPollInterval,
 		maxPollAttempts:     defaultPIMMaxPollAttempts,
 	}
@@ -355,14 +357,17 @@ func (i *pimRoleIdentity) waitForActivation(ctx context.Context, client PIMClien
 	}
 }
 
-// resolveJustification resolves the activation justification from config, environment, or
-// an interactive prompt, refusing clearly when none is available non-interactively.
+// resolveJustification resolves the activation justification in precedence order:
+// the --justification flag or ATMOS_AUTH_JUSTIFICATION env (both via the "justification"
+// viper key, so a per-invocation reason wins), then the configured principal.justification
+// default, then an interactive prompt - refusing clearly when none is available
+// non-interactively.
 func (i *pimRoleIdentity) resolveJustification() (string, error) {
-	if strings.TrimSpace(i.justification) != "" {
-		return i.justification, nil
-	}
 	if v := strings.TrimSpace(i.lookupJustification()); v != "" {
 		return v, nil
+	}
+	if strings.TrimSpace(i.justification) != "" {
+		return i.justification, nil
 	}
 	if i.isTTY() {
 		if v, err := i.promptFunc(i.name); err == nil {
@@ -373,7 +378,7 @@ func (i *pimRoleIdentity) resolveJustification() (string, error) {
 	}
 	return "", errUtils.Build(errUtils.ErrAzurePIMJustificationRequired).
 		WithExplanationf("Activating role for identity '%s' requires a justification", i.name).
-		WithHint(fmt.Sprintf("Set the %s environment variable, or add 'justification' to the identity principal", pimJustificationEnvVar)).
+		WithHint(fmt.Sprintf("Pass --justification=REASON, set %s, or add 'justification' to the identity principal", authJustificationEnvVar)).
 		WithContext(azureCloud.LogFieldIdentity, i.name).
 		WithExitCode(2).
 		Err()

@@ -215,6 +215,7 @@ func (p *StandardParser) buildStandardOptions(parsedConfig *ParsedConfig, compon
 			Cast:            GetString(parsedConfig.Flags, "cast"),
 			Pager:           GetPagerSelector(parsedConfig.Flags, "pager"),
 			Identity:        GetIdentitySelector(parsedConfig.Flags, "identity"),
+			Justification:   GetString(parsedConfig.Flags, "justification"),
 			ProfilerEnabled: GetBool(parsedConfig.Flags, "profiler-enabled"),
 			ProfilerPort:    GetInt(parsedConfig.Flags, "profiler-port"),
 			ProfilerHost:    GetString(parsedConfig.Flags, "profiler-host"),

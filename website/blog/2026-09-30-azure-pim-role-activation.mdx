@@ -83,10 +83,17 @@ atmos auth login --identity prod-contributor
 atmos auth exec --identity prod-contributor -- terraform plan
 ```
 
-In a non-interactive context (CI, a running MCP server) where no `justification` default is set in
-config, supply one with the `ATMOS_PIM_JUSTIFICATION` environment variable. If a role requires
-approval, the login bounds its wait and shows progress; a later invocation picks up the pending
-request instead of starting over.
+Need a different reason for a specific run? Pass the `--justification` global flag (or set the
+`ATMOS_AUTH_JUSTIFICATION` environment variable) - it overrides the configured default:
+
+```shell
+atmos auth exec --identity prod-contributor --justification "incident INC-123" -- terraform apply
+```
+
+In a non-interactive context (CI, a running MCP server) with no justification available at all, the
+login fails fast and tells you to pass `--justification` or set `ATMOS_AUTH_JUSTIFICATION`. If a role
+requires approval, the login bounds its wait and shows progress; a later invocation picks up the
+pending request instead of starting over.
 
 This covers Azure *resource* roles. Entra directory roles and PIM for Groups activate through
 different APIs and will be separate identity kinds.

@@ -327,12 +327,12 @@ auth:
   <dd>Optional. Go-style activation duration (for example `8h`), converted to the ISO-8601 the API requires. Azure enforces the role's PIM activation-policy maximum server-side, so a longer value is rejected by Azure - Atmos does not pre-clamp it. When omitted, the role's policy default applies.</dd>
 
   <dt>`principal.justification`</dt>
-  <dd>Optional default justification. When unset, the justification is read from the `ATMOS_PIM_JUSTIFICATION` environment variable, or prompted for in an interactive session.</dd>
+  <dd>Optional default justification recorded with the activation. A per-invocation justification from the `--justification` global flag or the `ATMOS_AUTH_JUSTIFICATION` environment variable overrides this default. Resolution order: `--justification` > `ATMOS_AUTH_JUSTIFICATION` > `principal.justification` > interactive prompt.</dd>
 </dl>
 
 Unlike assume-role, `azure/pim-role` mints no new credentials. Azure RBAC evaluates roles by object id at request time, so the activation elevates the existing principal server-side and the identity returns the parent credentials unchanged, now carrying the active role. This lets it sit transparently in a chain ahead of `atmos terraform`, `atmos auth exec`, the AKS exec plugin, or an MCP server.
 
-On authentication it short-circuits if an active assignment already covers the scope (so it does not re-request every command), attaches to a pending approval request instead of filing a duplicate, and reports a missing eligibility distinctly from a failed activation. In a non-interactive context with no justification, it fails fast with guidance to set `ATMOS_PIM_JUSTIFICATION`.
+On authentication it short-circuits if an active assignment already covers the scope (so it does not re-request every command), attaches to a pending approval request instead of filing a duplicate, and reports a missing eligibility distinctly from a failed activation. In a non-interactive context with no justification, it fails fast with guidance to pass `--justification` or set `ATMOS_AUTH_JUSTIFICATION`.
 
 :::note
 This covers Azure *resource* roles. Entra directory roles and PIM for Groups activate through different APIs and are separate (future) identity kinds.

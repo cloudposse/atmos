@@ -257,7 +257,6 @@ func TestPIMRole_NotEligible(t *testing.T) {
 func TestPIMRole_NonInteractiveWithoutJustification(t *testing.T) {
 	principal := defaultPrincipal()
 	delete(principal, "justification")
-	t.Setenv("ATMOS_PIM_JUSTIFICATION", "")
 
 	mock := &mockPIMClient{eligFound: true, eligScheduleID: testEligID}
 	id := newTestIdentity(t, principal, mock)
@@ -267,7 +266,7 @@ func TestPIMRole_NonInteractiveWithoutJustification(t *testing.T) {
 	assert.Equal(t, 0, mock.createCalls, "no request should be filed without a justification")
 }
 
-func TestPIMRole_JustificationFromEnv(t *testing.T) {
+func TestPIMRole_JustificationFromFlagOrEnv(t *testing.T) {
 	principal := defaultPrincipal()
 	delete(principal, "justification")
 
@@ -277,23 +276,42 @@ func TestPIMRole_JustificationFromEnv(t *testing.T) {
 		createResult:   ActivationResult{Status: pimStatusProvisioned},
 	}
 	id := newTestIdentity(t, principal, mock)
-	// The env lookup seam resolves ATMOS_PIM_JUSTIFICATION in production (via viper).
-	id.lookupJustification = func() string { return "env-supplied reason" }
+	// The seam resolves --justification / ATMOS_AUTH_JUSTIFICATION (via the "justification"
+	// viper key) in production.
+	id.lookupJustification = func() string { return "flag-or-env reason" }
 
 	_, err := id.Authenticate(context.Background(), testAzureCreds())
 	require.NoError(t, err)
 	require.NotNil(t, mock.createdReq)
-	assert.Equal(t, "env-supplied reason", mock.createdReq.Justification)
+	assert.Equal(t, "flag-or-env reason", mock.createdReq.Justification)
 }
 
-func TestPIMRole_DefaultJustificationLookupReadsViper(t *testing.T) {
-	// The default env-lookup seam resolves ATMOS_PIM_JUSTIFICATION through viper's
-	// ATMOS_ automatic-env binding (configured globally in cmd/root.go).
+func TestPIMRole_FlagOrEnvOverridesConfigJustification(t *testing.T) {
+	// New precedence: a per-invocation --justification/ATMOS_AUTH_JUSTIFICATION overrides
+	// the configured principal.justification default.
+	principal := defaultPrincipal() // has justification: "planned change window"
+	mock := &mockPIMClient{
+		eligFound:      true,
+		eligScheduleID: testEligID,
+		createResult:   ActivationResult{Status: pimStatusProvisioned},
+	}
+	id := newTestIdentity(t, principal, mock)
+	id.lookupJustification = func() string { return "per-invocation reason" }
+
+	_, err := id.Authenticate(context.Background(), testAzureCreds())
+	require.NoError(t, err)
+	require.NotNil(t, mock.createdReq)
+	assert.Equal(t, "per-invocation reason", mock.createdReq.Justification,
+		"flag/env must override the configured principal.justification")
+}
+
+func TestPIMRole_DefaultJustificationLookupReadsViperKey(t *testing.T) {
+	// The default seam reads the "justification" viper key (which the --justification global
+	// flag and ATMOS_AUTH_JUSTIFICATION env both resolve to; that binding is covered by the
+	// pkg/flags tests).
 	viper.Reset()
 	t.Cleanup(viper.Reset)
-	viper.SetEnvPrefix("ATMOS")
-	viper.AutomaticEnv()
-	t.Setenv("ATMOS_PIM_JUSTIFICATION", "from-viper-env")
+	viper.Set(justificationViperKey, "from-viper-key")
 
 	cfg := &schema.Identity{
 		Kind:      authTypes.IdentityKindAzurePIMRole,
@@ -302,13 +320,12 @@ func TestPIMRole_DefaultJustificationLookupReadsViper(t *testing.T) {
 	}
 	id, err := NewPIMRoleIdentity("x", cfg)
 	require.NoError(t, err)
-	assert.Equal(t, "from-viper-env", id.(*pimRoleIdentity).lookupJustification())
+	assert.Equal(t, "from-viper-key", id.(*pimRoleIdentity).lookupJustification())
 }
 
 func TestPIMRole_JustificationFromPrompt(t *testing.T) {
 	principal := defaultPrincipal()
 	delete(principal, "justification")
-	t.Setenv("ATMOS_PIM_JUSTIFICATION", "")
 
 	mock := &mockPIMClient{
 		eligFound:      true,
