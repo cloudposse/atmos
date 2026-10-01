@@ -1178,17 +1178,19 @@ that richer tier remains Terraform-only). Two new lifecycle hook events round ou
 [hook event enumeration](#auth-hooks-secrets-stores--workflow-integration): `before.`/`after.`
 `aws/cloudformation.drift-detect` and `before.`/`after.` `aws/cloudformation.drift-describe` (the
 `diff`/`apply`/`delete` events already exist from Phase 1). Activation is identical to every other
-native CI plugin: `ci.enabled: true` in `atmos.yaml`, auto-detected in a CI environment, or forced
-with `--ci`/`ATMOS_CI=true`.
+native CI plugin: set `ci.enabled: true` in `atmos.yaml`, then use a detected CI provider or force
+CI mode with `--ci`/`ATMOS_CI=true`. Forced CI mode uses the generic provider when no platform is
+detected; it does not override `ci.enabled: false`.
 *Future Work* (not scheduled in any phase): CI events for changesets
 (`changeset-create`/`changeset-execute`/etc.) and stack sets, and routing CloudFormation drift
 results into the Atmos Pro dashboard — the `pro.AtmosProAPIClient.UploadInstanceStatus` pipeline
 Terraform's drift detection already uses — for parity with Terraform. CloudFormation drift supports
-`--fail-on-drift` gating and native CI job summaries in `$GITHUB_STEP_SUMMARY`; Atmos Pro uploads
+`--fail-on-drift` gating and native CI summaries through the selected provider; Atmos Pro uploads
 remain deferred.
 *Success criteria*: `atmos aws cloudformation diff/apply/delete` and
-`atmos aws cloudformation drift detect/describe` each emit a compact `$GITHUB_STEP_SUMMARY` job
-summary when run with `--ci` or inside a detected CI environment, matching the Kubernetes/Helmfile
+`atmos aws cloudformation drift detect/describe` each emit a compact summary when CI is active and
+`ci.summary.enabled` is not false. GitHub Actions writes to `$GITHUB_STEP_SUMMARY`; the generic
+provider writes to `$ATMOS_CI_SUMMARY` when set, otherwise stderr. This matches the Kubernetes/Helmfile
 summary tier, with no output variables, status checks, PR comments, or artifacts produced.
 
 ## Risks & Mitigation
