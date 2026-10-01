@@ -165,6 +165,7 @@ type TemplateContext struct {
 	DriftedCount    int
 }
 
+// isSummaryEnabled defaults summaries to enabled unless configuration explicitly disables them.
 func isSummaryEnabled(atmosConfig *schema.AtmosConfiguration) bool {
 	if atmosConfig == nil {
 		return true

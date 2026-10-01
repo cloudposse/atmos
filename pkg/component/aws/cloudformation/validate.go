@@ -216,6 +216,8 @@ func looksLikeTemplateFileRef(value string) bool {
 	}
 }
 
+// hasFileTemplate accepts an explicit path or a source whose filename can be determined after
+// provisioning.
 func hasFileTemplate(config map[string]any) bool {
 	path, _ := config[cfg.TemplatePathSectionName].(string)
 	return path != "" || source.HasSource(config)

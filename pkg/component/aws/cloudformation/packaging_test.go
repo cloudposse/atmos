@@ -309,6 +309,8 @@ func TestUploadPackage_UploadError(t *testing.T) {
 	assert.Contains(t, err.Error(), "access denied")
 }
 
+// TestUploadPackageRealBackendPrefix compares the returned URL with actual SDK upload paths, including
+// nested and escaped prefixes and metadata sidecars.
 func TestUploadPackageRealBackendPrefix(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "test")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")

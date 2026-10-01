@@ -50,6 +50,8 @@ func captureStdout(t *testing.T, fn func()) string {
 	return string(buf[:n])
 }
 
+// TestEventsFor checks lifecycle hook pairs, including hyphenated drift verbs, and excludes local
+// render from lifecycle events.
 func TestEventsFor(t *testing.T) {
 	tests := []struct {
 		operation  Operation
@@ -211,6 +213,8 @@ func expectDescribeStacksWithVpcIDOutput(client *MockCloudFormationClient, outpu
 	}, nil)
 }
 
+// TestRunOutput preserves a public deployed output in the operation summary after loading its
+// sensitivity metadata.
 func TestRunOutput(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
@@ -1803,6 +1807,8 @@ func expectVpcOutputTemplate(client *MockCloudFormationClient) {
 	)
 }
 
+// installLocalOnlyExecutionStubs supplies a local template and fails immediately if a local operation
+// attempts AWS authentication.
 func installLocalOnlyExecutionStubs(t *testing.T, tempDir string, operation Operation) {
 	t.Helper()
 	installExecutorSeamStubs(t, executorSeamStubs{
