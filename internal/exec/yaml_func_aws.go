@@ -2,10 +2,15 @@ package exec
 
 import (
 	"context"
+	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	awsOrg "github.com/cloudposse/atmos/pkg/aws/organization"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -193,4 +198,104 @@ func processTagAwsOrganizationID(
 
 	log.Debug("Resolved !aws.organization_id", "organization_id", orgInfo.ID)
 	return orgInfo.ID, nil
+}
+
+// parseAwsCloudFormationOutputArgs parses `!aws.cloudformation.output`'s
+// `component [stack] output-key` arguments, defaulting Stack to currentStack
+// when omitted. The result's Expression field holds the output key.
+func parseAwsCloudFormationOutputArgs(input, currentStack string) (fnparser.TerraformArgs, error) {
+	str, err := getStringAfterTag(input, u.AtmosYamlFuncAwsCloudFormationOutput)
+	if err != nil {
+		return fnparser.TerraformArgs{}, err
+	}
+
+	parsed, err := fnparser.ParseTerraform(str)
+	if err != nil {
+		return fnparser.TerraformArgs{}, err
+	}
+	if parsed.Stack == "" {
+		parsed.Stack = currentStack
+	}
+	return parsed, nil
+}
+
+// processTagAwsCloudFormationOutputWithContext processes the
+// `!aws.cloudformation.output` YAML tag: the Terraform<->CloudFormation
+// interop bridge, sibling to !terraform.output. Syntax is `component [stack]
+// output-key`, reusing the same "component [stack] expression" grammar
+// (fnparser.ParseTerraform is not Terraform-specific despite the name — it's
+// this shared 2-3-token shape).
+func processTagAwsCloudFormationOutputWithContext(
+	atmosConfig *schema.AtmosConfiguration,
+	input string,
+	currentStack string,
+	resolutionCtx *ResolutionContext,
+	stackInfo *schema.ConfigAndStacksInfo,
+) (any, error) {
+	defer perf.Track(atmosConfig, "exec.processTagAwsCloudFormationOutputWithContext")()
+
+	log.Debug(execAWSYAMLFunction, functionKey, input)
+
+	parsed, err := parseAwsCloudFormationOutputArgs(input, currentStack)
+	if err != nil {
+		return nil, err
+	}
+	component, stack, output := parsed.Component, parsed.Stack, parsed.Expression
+
+	cleanup, err := trackOutputDependency(atmosConfig, resolutionCtx, component, stack, "aws.cloudformation.output", input)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	authDisabled := authdeferred.AuthDisabled(atmosConfig.AuthManager) || (stackInfo != nil && stackInfo.AuthDisabled)
+	resolvedAuthManager, err := resolveCloudFormationOutputAuth(atmosConfig, component, stack, stackInfo)
+	if err != nil {
+		return nil, err
+	}
+	var callerContext *schema.AuthContext
+	if stackInfo != nil {
+		callerContext = stackInfo.AuthContext
+	}
+	resolvedAuthContext := resolvedTargetAuthContext(atmosConfig, resolvedAuthManager, callerContext, authDisabled)
+
+	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		AtmosConfig:          atmosConfig,
+		ResolveSecrets:       stackInfo == nil || !stackInfo.SecretsMaskOnly,
+		AuthManager:          resolvedAuthManager,
+		AuthDisabled:         authDisabled,
+		Component:            component,
+		Stack:                stack,
+		ComponentType:        cfg.CloudFormationComponentType,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe aws/cloudformation component %s in stack %s: %w", component, stack, err)
+	}
+
+	outputs, err := cloudFormationOutputsForSections(atmosConfig, component, sections, resolvedAuthContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get aws/cloudformation output for component %s in stack %s, output %s: %w", component, stack, output, err)
+	}
+
+	return outputs[output], nil
+}
+
+// resolveCloudFormationOutputAuth resolves the target identity before any output
+// read. Resolver errors are fatal; they must not select the caller's credentials.
+func resolveCloudFormationOutputAuth(ac *schema.AtmosConfiguration, component, stack string, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+	if authdeferred.AuthDisabled(ac.AuthManager) || (info != nil && info.AuthDisabled) {
+		return nil, nil
+	}
+	var parent auth.AuthManager
+	if info != nil {
+		parent, _ = info.AuthManager.(auth.AuthManager)
+		// Deferred resolution needs the caller's auth configuration, not just its
+		// already-resolved credentials, to bind inherited defaults to the target.
+		if parent == nil || authdeferred.IsDeferred(ac.AuthManager) {
+			parent = &authContextWrapper{stackInfo: info}
+		}
+	}
+	return resolveAuthManagerForNestedComponent(ac, component, stack, parent)
 }

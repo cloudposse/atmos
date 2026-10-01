@@ -32,12 +32,12 @@ func DeleteCommand(config *Config) *cobra.Command {
 
 This command removes the component directory that was created by 'atmos %s source pull'.
 
-If component is not specified, prompts interactively for selection.`, config.TypeLabel, config.ComponentType),
+If component is not specified, prompts interactively for selection.`, config.TypeLabel, config.CLI()),
 		Example: fmt.Sprintf(`  # Delete vendored source
   atmos %s source delete vpc --stack dev --force
 
   # Interactive: prompts for component and stack
-  atmos %s source delete`, config.ComponentType, config.ComponentType),
+  atmos %s source delete`, config.CLI(), config.CLI()),
 		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executeDelete(cmd, args, config, parser)
@@ -87,6 +87,11 @@ func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *fl
 	deleteOpts, err := parseDeleteFlags(cmd, parser, component)
 	if err != nil {
 		return err
+	}
+
+	if sourceDryRun(cmd) {
+		ui.Info(fmt.Sprintf("Dry run: would delete source for %s in stack %s", component, deleteOpts.Stack))
+		return nil
 	}
 
 	// Initialize config and get component info with global flags.

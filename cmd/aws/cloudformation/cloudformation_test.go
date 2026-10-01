@@ -47,7 +47,7 @@ func (p *recordingProvider) GetAvailableCommands() []string { return nil }
 func configuredOperationCommand(t *testing.T, name string, values map[string]string) *cobra.Command {
 	t.Helper()
 
-	cmd := newOperationCommand(name, name)
+	cmd := newOperationCommand(name, name, name)
 	for flagName, value := range values {
 		require.NoError(t, cmd.Flags().Set(flagName, value))
 	}
@@ -64,7 +64,10 @@ func TestCloudFormationCmdAttributes(t *testing.T) {
 	for _, c := range CloudFormationCmd.Commands() {
 		subcommands = append(subcommands, c.Name())
 	}
-	assert.ElementsMatch(t, []string{"render", "plan", "diff", "apply", "deploy", "delete", "validate", "output"}, subcommands)
+	assert.ElementsMatch(t, []string{
+		"render", "plan", "diff", "apply", "deploy", "delete", "validate", "output",
+		"changeset", "drift", "fmt", "get", "list", "source",
+	}, subcommands)
 
 	// "output" registers the "outputs" alias.
 	for _, c := range CloudFormationCmd.Commands() {
@@ -79,7 +82,7 @@ func TestCloudFormationCmdRunEShowsUsage(t *testing.T) {
 }
 
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
-	renderCmd := newOperationCommand("render", "Render")
+	renderCmd := newOperationCommand("render", "render", "Render")
 	for _, name := range []string{
 		"all", "affected", "include-dependents", "repo-path", "base", "ref", "sha",
 		"ssh-key", "ssh-key-password", "clone-target-ref", "tags", "labels",
@@ -91,7 +94,7 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	assert.Nil(t, renderCmd.Flag("retain-resources"))
 	assert.Nil(t, renderCmd.Flag("format"))
 
-	applyCmd := newOperationCommand("apply", "Apply")
+	applyCmd := newOperationCommand("apply", "apply", "Apply")
 	assert.NotNil(t, applyCmd.Flag("all"))
 	assert.NotNil(t, applyCmd.Flag("auto-approve"))
 	assert.Equal(t, "false", applyCmd.Flag("auto-approve").DefValue)
@@ -100,18 +103,18 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	require.NoError(t, applyCmd.Args(applyCmd, nil), "the missing component must reach the interactive prompt flow")
 	require.Error(t, applyCmd.Args(applyCmd, []string{"app", "extra"}))
 
-	deployCmd := newOperationCommand("deploy", "Deploy")
+	deployCmd := newOperationCommand("deploy", subCommandApply, "Deploy")
 	require.NotNil(t, deployCmd.Flag("auto-approve"))
 	assert.Equal(t, "true", deployCmd.Flag("auto-approve").DefValue, "deploy defaults --auto-approve to true")
 	assert.NotNil(t, deployCmd.Flag("target"))
 
-	deleteCmd := newOperationCommand("delete", "Delete")
+	deleteCmd := newOperationCommand("delete", "delete", "Delete")
 	assert.NotNil(t, deleteCmd.Flag("auto-approve"))
 	assert.NotNil(t, deleteCmd.Flag("retain-resources"))
 	assert.NotNil(t, deleteCmd.Flag("disable-termination-protection"))
 	assert.Nil(t, deleteCmd.Flag("target"), "--target is only for apply/deploy")
 
-	outputCmd := newOperationCommand("output", "Show output")
+	outputCmd := newOperationCommand("output", "output", "Show output")
 	require.NotNil(t, outputCmd.Flag("format"))
 	assert.Equal(t, "table", outputCmd.Flag("format").DefValue)
 	assert.NotNil(t, outputCmd.Flag("flatten"))
@@ -123,7 +126,7 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 func TestSelectionFlagsAndComponentCompletion(t *testing.T) {
 	for _, flag := range []string{"all", "affected", "tags", "labels"} {
 		t.Run(flag, func(t *testing.T) {
-			cmd := newOperationCommand("apply", "Apply")
+			cmd := newOperationCommand("apply", "apply", "Apply")
 			assert.False(t, hasSelectionFlags(cmd))
 			if flag == "all" || flag == "affected" {
 				require.NoError(t, cmd.Flags().Set(flag, "true"))
@@ -134,7 +137,7 @@ func TestSelectionFlagsAndComponentCompletion(t *testing.T) {
 		})
 	}
 
-	cmd := newOperationCommand("apply", "Apply")
+	cmd := newOperationCommand("apply", "apply", "Apply")
 	components, directive := componentArgCompletion(cmd, []string{"already-provided"}, "")
 	assert.Nil(t, components)
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
@@ -148,7 +151,7 @@ func TestComponentArgCompletionResolvesConfiguredComponents(t *testing.T) {
 		cfnListAllComponents = originalList
 	})
 
-	cmd := newOperationCommand("apply", "Apply")
+	cmd := newOperationCommand("apply", "apply", "Apply")
 	cfnInitCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
 		return schema.AtmosConfiguration{}, nil
 	}
@@ -203,7 +206,7 @@ func TestValidateOperationArgs(t *testing.T) {
 	}{
 		{
 			name:    "single component",
-			command: newOperationCommand("apply", "Apply"),
+			command: newOperationCommand("apply", "apply", "Apply"),
 			args:    []string{"app"},
 		},
 		{
@@ -227,12 +230,12 @@ func TestValidateOperationArgs(t *testing.T) {
 		},
 		{
 			name:    "missing component",
-			command: newOperationCommand("apply", "Apply"),
+			command: newOperationCommand("apply", "apply", "Apply"),
 			wantErr: "requires exactly one component argument unless --all, --affected, --tags, or --labels is set",
 		},
 		{
 			name:    "too many components",
-			command: newOperationCommand("apply", "Apply"),
+			command: newOperationCommand("apply", "apply", "Apply"),
 			args:    []string{"app", "other"},
 			wantErr: "requires exactly one component argument unless --all, --affected, --tags, or --labels is set",
 		},
@@ -313,7 +316,7 @@ func TestGetOperationFlags(t *testing.T) {
 }
 
 func TestGetOperationFlagsOmitsEmptyRetainResources(t *testing.T) {
-	cmd := newOperationCommand("delete", "Delete")
+	cmd := newOperationCommand("delete", "delete", "Delete")
 
 	flags := getOperationFlags(cmd)
 
@@ -349,7 +352,7 @@ func TestBuildConfigAndStacksInfoPopulatesTagsAndLabels(t *testing.T) {
 }
 
 func TestBuildConfigAndStacksInfoWithNoTagsOrLabels(t *testing.T) {
-	cmd := newOperationCommand("apply", "Apply")
+	cmd := newOperationCommand("apply", "apply", "Apply")
 
 	info := buildConfigAndStacksInfo(cmd)
 
@@ -358,7 +361,7 @@ func TestBuildConfigAndStacksInfoWithNoTagsOrLabels(t *testing.T) {
 }
 
 func TestApplySelectionFlagsReadsStackDryRunAllAffected(t *testing.T) {
-	cmd := newOperationCommand("apply", "Apply")
+	cmd := newOperationCommand("apply", "apply", "Apply")
 	cmd.Flags().String("stack", "", "")
 	cmd.Flags().Bool("dry-run", false, "")
 	require.NoError(t, cmd.Flags().Set("stack", "tenant-env-stage"))
@@ -401,7 +404,7 @@ func TestInitConfigAndStacksInfo(t *testing.T) {
 }
 
 func TestInitConfigAndStacksInfoNoArgs(t *testing.T) {
-	cmd := newOperationCommand("render", "Render")
+	cmd := newOperationCommand("render", "render", "Render")
 
 	info := initConfigAndStacksInfo(cmd, "render", nil)
 
@@ -411,7 +414,7 @@ func TestInitConfigAndStacksInfoNoArgs(t *testing.T) {
 }
 
 func TestApplySelectionFlagsReadsAffected(t *testing.T) {
-	cmd := newOperationCommand("apply", "Apply")
+	cmd := newOperationCommand("apply", "apply", "Apply")
 	cmd.Flags().String("stack", "", "")
 	cmd.Flags().Bool("dry-run", false, "")
 	require.NoError(t, cmd.Flags().Set("affected", "true"))
@@ -432,7 +435,7 @@ func TestNewOperationCommandRunEInvokesRunOperation(t *testing.T) {
 		}
 	})
 
-	cmd := newOperationCommand("apply", "Apply")
+	cmd := newOperationCommand("apply", "apply", "Apply")
 	require.NotNil(t, cmd.RunE)
 
 	require.NoError(t, cmd.RunE(cmd, []string{"app"}))
@@ -462,4 +465,47 @@ func TestRunOperationDelegatesToRegisteredProvider(t *testing.T) {
 	assert.Equal(t, []string{"app"}, ctx.Args)
 	assert.Equal(t, "json", ctx.Flags["format"])
 	assert.Equal(t, "app", ctx.ConfigAndStacksInfo.ComponentFromArg)
+}
+
+// The fmt operation command must register the fmt-only --check flag (via
+// operationSpecificFlagOptions's "fmt" case), defaulting to false.
+func TestOperationSpecificFlagOptions_Fmt_RegistersCheckFlag(t *testing.T) {
+	fmtCmd := newOperationCommand("fmt", "fmt", "Format the local template in place")
+
+	checkFlag := fmtCmd.Flag("check")
+	require.NotNil(t, checkFlag, "expected fmt to register --check")
+	assert.Equal(t, "false", checkFlag.DefValue)
+
+	// --check is fmt-only: an unrelated operation must not pick it up.
+	applyCmd := newOperationCommand("apply", subCommandApply, "Create or update the stack")
+	assert.Nil(t, applyCmd.Flag("check"), "--check must be fmt-only")
+}
+
+// getOperationFlags must surface fmt's --check flag as a bool, both when set
+// and when left at its default.
+func TestGetOperationFlags_IncludesCheck(t *testing.T) {
+	fmtCmd := newOperationCommand("fmt", "fmt", "Format the local template in place")
+	require.NoError(t, fmtCmd.Flags().Set("check", "true"))
+
+	flags := getOperationFlags(fmtCmd)
+	assert.Equal(t, true, flags["check"])
+
+	fmtCmdDefault := newOperationCommand("fmt", "fmt", "Format the local template in place")
+	flags = getOperationFlags(fmtCmdDefault)
+	assert.Equal(t, false, flags["check"])
+}
+
+// CloudFormationCmd must mount the fmt subcommand, registered via
+// subCommandOperations' "fmt" -> OperationFmt entry (exercised end-to-end
+// through cmd registration rather than the internal map directly, since the
+// map itself lives in pkg/component/aws/cloudformation and is covered there).
+func TestCloudFormationCmd_RegistersFmtSubcommand(t *testing.T) {
+	var found *cobra.Command
+	for _, sub := range CloudFormationCmd.Commands() {
+		if sub.Name() == "fmt" {
+			found = sub
+		}
+	}
+	require.NotNil(t, found, "expected `atmos aws cloudformation fmt` to be registered")
+	assert.NotNil(t, found.Flag("check"))
 }

@@ -56,12 +56,23 @@ func setStackPolicy(ctx context.Context, client CloudFormationClient, spec *stac
 
 // prepareStackPolicy protects existing resources before a changeset executes.
 // Its result says whether policy installation must wait for successful creation.
+// DescribeChangeSet does not expose its type, so named executions check stack
+// status only when a policy is configured. REVIEW_IN_PROGRESS has no resources.
 func prepareStackPolicy(ctx context.Context, client CloudFormationClient, spec *stackSpec, result *changeSetResult) (bool, error) {
 	if spec.StackPolicyBody == "" {
 		return false, nil
 	}
 	if result.ChangeSetType == cfntypes.ChangeSetTypeCreate {
 		return true, nil
+	}
+	if result.ChangeSetType == "" {
+		exists, err := stackExists(ctx, client, spec.StackName)
+		if err != nil {
+			return false, wrapAPICallError(spec.StackName, err)
+		}
+		if !exists {
+			return true, nil
+		}
 	}
 	return false, setStackPolicy(ctx, client, spec)
 }
