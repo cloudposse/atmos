@@ -307,8 +307,9 @@ components:
 
 ## Native CI Summaries
 
-When `ci.enabled: true` and Atmos runs in a supported CI provider (e.g. GitHub Actions), a native CI
-plugin (`pkg/ci/plugins/cloudformation`) writes a compact Markdown job summary for `diff`, `apply`,
+When `ci.enabled: true`, `ci.summary.enabled: true` (the default), and Atmos runs in a supported CI
+provider (e.g. GitHub Actions), the native plugin (`pkg/ci/plugins/cloudformation`) writes a compact
+Markdown job summary for `diff`, `apply`,
 `delete`, `drift detect`, and `drift describe` — the same summaries-only tier Kubernetes and Helmfile
 occupy (no `$GITHUB_OUTPUT`, commit statuses, PR comments, or artifacts; that richer tier remains
 Terraform-only). See [atmos-ci](../atmos-ci/SKILL.md) for the native-CI plumbing this rides on.
