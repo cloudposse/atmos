@@ -373,7 +373,7 @@ func (p *Processor) deletedByUser(file File, fullPath, renderedPath string) (*Fi
 	return &FileSkippedError{
 		Path:         file.Path,
 		RenderedPath: renderedPath,
-		Reason:       "it existed previously but was removed locally; not recreating it",
+		Reason:       "it existed previously but was removed locally; not recreating it (pass --recreate-deleted to always recreate it)",
 	}, nil
 }
 
