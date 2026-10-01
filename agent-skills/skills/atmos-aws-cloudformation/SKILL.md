@@ -144,9 +144,10 @@ atmos aws cloudformation changeset delete vpc -s dev --changeset-name=<name>
 ```
 
 `changeset execute` and `changeset delete` prompt for confirmation (skip with `--auto-approve`), same
-as top-level `apply`/`delete`. Templates using macros/transforms (`Fn::Transform`, SAM) work through
-this same flow — declare the required capability (typically `CAPABILITY_AUTO_EXPAND`) in
-`capabilities:`.
+as top-level `apply`/`delete`. Change-set creation expands macros/transforms (`Fn::Transform`, SAM);
+`CAPABILITY_AUTO_EXPAND` has no effect here. It is required for direct macro-based `CreateStack`/
+`UpdateStack` calls without change-set review. Declare applicable `CAPABILITY_IAM`/`CAPABILITY_NAMED_IAM`
+acknowledgments in `capabilities:` independently.
 
 ## Drift Detection
 
@@ -157,9 +158,11 @@ atmos aws cloudformation drift describe vpc -s dev
 
 `drift detect` runs `DetectStackDrift`/polls `DescribeStackDriftDetectionStatus`; `drift describe`
 renders the results of the most recent detection (`DescribeStackResourceDrifts`). `--fail-on-drift`
-exits non-zero when drift is found, for CI gating — drift is not a hard failure by default. Native CI
-also publishes drift summaries to `$GITHUB_STEP_SUMMARY` when CI is enabled. Atmos Pro dashboard
-uploads through `UploadInstanceStatus` remain future work.
+exits non-zero when drift is found, for CI gating — drift is not a hard failure by default. With
+`ci.enabled: true` and summaries enabled, native CI writes drift summaries to `$GITHUB_STEP_SUMMARY`
+in GitHub Actions. When `--ci`/`ATMOS_CI=true` forces CI without a detected platform, the generic
+provider writes to `$ATMOS_CI_SUMMARY` when set, otherwise stderr. Atmos Pro dashboard uploads through
+`UploadInstanceStatus` remain future work.
 
 ## Delivery Targets (Backend Management)
 
