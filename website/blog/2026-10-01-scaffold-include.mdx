@@ -61,10 +61,16 @@ output, the same way `scaffold.yaml` itself is. `atmos scaffold validate` resolv
 not just `generate`, so a missing file, a bad filter, or a malformed value is caught up front.
 
 Not every YAML function is available here: anything that needs real stack, component, or backend
-context (`!terraform.state`, `!store`, `!secret`, `!exec`, and similar) is rejected with a clear
-error instead. A template's `scaffold.yaml` is often resolved just to show its name and description
-in `atmos scaffold list` or the interactive picker — before a user has chosen or generated
-anything — so only functions that are safe to run in that situation are supported.
+context (`!terraform.state`, `!store`, `!secret`, and similar) is rejected with a clear error
+instead. A template's `scaffold.yaml` is often resolved just to show its name and description in
+`atmos scaffold list` or the interactive picker — before a user has chosen or generated anything —
+so only functions that are safe to run in that situation are supported.
+
+The [`!exec`](/functions/yaml/exec) function is excluded for a different reason: it needs no stack
+context at all, but `scaffold.yaml` is resolved for every template configured in `atmos.yaml` just
+to populate the list and picker, not only the one a user actually generates — so allowing shell
+execution there would let any configured template, including a shared or vendored one, run
+arbitrary code merely by being listed.
 
 ## How to Use It
 
