@@ -1,6 +1,6 @@
 # Azure PIM Role Activation (`azure/pim-role`)
 
-**Status**: Proposed **Last Updated**: 2026-09-30 **Owners**: Atmos auth subsystem
+**Status**: Implemented **Last Updated**: 2026-09-30 **Owners**: Atmos auth subsystem
 
 **Upstream references** (verified via Microsoft docs):
 
@@ -168,3 +168,63 @@ eligible role is a manual verification step.
   environment variable.
 - A role requiring approval produces a bounded wait with visible progress, and a later invocation attaches to
   the pending request rather than restarting it.
+
+## 5. Implementation status
+
+Implemented 2026-09-30. Blog: `website/blog/2026-09-30-azure-pim-role-activation.mdx`
+(slug `azure-pim-role-activation`). Roadmap: "Just-in-time PIM role activation (azure/pim-role)" under the
+Unified Authentication initiative.
+
+### What shipped
+
+- **Identity kind constant** `IdentityKindAzurePIMRole = "azure/pim-role"` in
+  `pkg/auth/types/constants.go` (alongside a new `IdentityKindAzureSubscription`), registered in
+  `pkg/auth/factory/factory.go`.
+- **Identity** `pkg/auth/identities/azure/pim_role.go` implements the full `Identity` interface.
+  `Authenticate` runs the PRD flow (resolve object id -> short-circuit if active -> require
+  eligibility -> resume-or-create request -> poll to `Provisioned`) and returns the parent
+  credentials unchanged (pass-through). Chains from `via.identity` or `via.provider`.
+- **PIM client** `pkg/auth/identities/azure/pim_client.go` is the ARM REST surface behind a
+  `PIMClient` interface (the dependency-injection seam). The live `armPIMClient` targets the
+  Resource Manager endpoint for the credential's cloud environment (public/usgov/china) with
+  api-version `2020-10-01`, filters list calls with `$filter=asTarget()`, and PUTs a
+  `SelfActivate` `roleAssignmentScheduleRequest`. The HTTP transport is itself injectable
+  (`httpDoer`) so request building is unit-tested without a network.
+- **Principal object id** resolved from the parent management token's `oid` claim via a new
+  exported `azureCloud.ExtractObjectIDFromToken` (`pkg/auth/cloud/azure/token_oid.go`).
+- **Cloud endpoint helper** `CloudEnvironment.ResourceManagerEndpoint()` in
+  `pkg/auth/cloud/azure/cloud_environments.go`.
+- **Duration** Go-style `duration` is converted to ISO-8601 (`8h` -> `PT8H`); an empty/invalid
+  duration is omitted so ARM applies the policy default.
+- **Justification** resolved from `principal.justification` -> `ATMOS_PIM_JUSTIFICATION` (read via
+  viper's ATMOS_ automatic-env binding) -> interactive prompt (TTY) -> a fail-fast error.
+- **Error sentinels** in `errors/errors.go`: `ErrAzurePIMNotEligible`,
+  `ErrAzurePIMJustificationRequired`, `ErrAzurePIMActivationFailed`,
+  `ErrAzurePIMActivationTimeout`, `ErrAzurePIMRequestFailed`.
+
+### Acceptance criteria mapping
+
+- Activates on authentication; inherited by every consumer -> `Authenticate` pass-through + chain
+  wiring. Covered by `TestPIMRole_EligibleAndActivates`.
+- Second run within the window is a no-op -> step-1 active-assignment short-circuit.
+  `TestPIMRole_AlreadyActive_NoOp`.
+- Ineligible principal gets a distinct "not eligible" error -> `ErrAzurePIMNotEligible`.
+  `TestPIMRole_NotEligible`.
+- Non-interactive without justification fails fast with guidance ->
+  `ErrAzurePIMJustificationRequired`. `TestPIMRole_NonInteractiveWithoutJustification`.
+- Approval-gated role: bounded wait, resumable -> `waitForActivation` + pending-request resume.
+  `TestPIMRole_PendingThenProvisioned`, `TestPIMRole_ResumePendingRequest`,
+  `TestPIMRole_ActivationTimeout`.
+
+### Tests and coverage
+
+`pkg/auth/identities/azure/pim_role_test.go`, `pim_client_test.go`,
+`pkg/auth/cloud/azure/token_oid_test.go`, a `ResourceManagerEndpoint` test, and a factory case.
+Package `pkg/auth/identities/azure` coverage is 87.0%. All ARM interaction is mocked; a live
+end-to-end activation against a real eligible role remains a manual verification step.
+
+### Deferred (non-goals or follow-ups)
+
+- Capping `duration` at the role's PIM activation-policy maximum pre-flight (would require the
+  `roleManagementPolicyAssignments` API); today an over-long duration surfaces a clear ARM error.
+- Entra directory roles, PIM for Groups, and configuring approvers remain out of scope (Section 3).

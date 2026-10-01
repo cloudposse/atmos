@@ -278,13 +278,30 @@ var (
 	ErrAzurePermissionDenied  = errors.New("permission denied accessing Azure blob")
 
 	// Azure authentication errors.
-	ErrAzureOIDClaimNotFound       = errors.New("oid claim not found in token")
-	ErrAzureUsernameClaimNotFound  = errors.New("no username claim found in token (tried upn, unique_name, email)")
-	ErrAzureInvalidJWTFormat       = errors.New("invalid JWT format")
-	ErrAzureExpirationTimeEmpty    = errors.New("expiration time is empty")
-	ErrAzureTimeParseFailure       = errors.New("unable to parse time: tried RFC3339, local time formats, and Unix timestamp")
-	ErrAzureNoAccountsInCache      = errors.New("no accounts found in cache")
-	ErrAzureNoAccountForTenant     = errors.New("no account found for tenant")
+	ErrAzureOIDClaimNotFound      = errors.New("oid claim not found in token")
+	ErrAzureUsernameClaimNotFound = errors.New("no username claim found in token (tried upn, unique_name, email)")
+	ErrAzureInvalidJWTFormat      = errors.New("invalid JWT format")
+	ErrAzureExpirationTimeEmpty   = errors.New("expiration time is empty")
+	ErrAzureTimeParseFailure      = errors.New("unable to parse time: tried RFC3339, local time formats, and Unix timestamp")
+	ErrAzureNoAccountsInCache     = errors.New("no accounts found in cache")
+	ErrAzureNoAccountForTenant    = errors.New("no account found for tenant")
+
+	// Azure PIM (Privileged Identity Management) role activation errors.
+	// ErrAzurePIMNotEligible indicates the principal has no eligible assignment for the
+	// requested role at the requested scope, so there is nothing to activate.
+	ErrAzurePIMNotEligible = errors.New("principal is not eligible for the requested PIM role at the given scope")
+	// ErrAzurePIMJustificationRequired indicates activation needs a justification but none
+	// was supplied and no interactive prompt could be shown (CI, exec, MCP startup).
+	ErrAzurePIMJustificationRequired = errors.New("a justification is required to activate the PIM role")
+	// ErrAzurePIMActivationFailed indicates the PIM self-activation request was denied or
+	// otherwise failed server-side.
+	ErrAzurePIMActivationFailed = errors.New("PIM role activation failed")
+	// ErrAzurePIMActivationTimeout indicates the bounded wait for a pending activation
+	// (for example awaiting an approver) elapsed before the role became active.
+	ErrAzurePIMActivationTimeout = errors.New("timed out waiting for PIM role activation to complete")
+	// ErrAzurePIMRequestFailed indicates an ARM PIM REST call returned an unexpected status.
+	ErrAzurePIMRequestFailed = errors.New("request to the Azure PIM API failed")
+
 	ErrBackendConfigRequired       = errors.New("backend configuration is required")
 	ErrBackendTypeRequired         = errors.New("backend_type is required")
 	ErrBackendSectionMissing       = errors.New("no 'backend' section configured")

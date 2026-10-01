@@ -1,0 +1,99 @@
+---
+slug: azure-pim-role-activation
+title: "Activate a PIM-eligible Azure role as part of your identity chain"
+date: 2026-09-30T12:00:00.000Z
+authors: [aknysh]
+tags: [feature, security]
+---
+
+More and more Azure resource roles are handed out as PIM-eligible rather than standing: you hold
+the role only after you activate it, for a time-boxed window, with a justification. That activation
+is a multi-step REST dance against Azure Resource Manager - enumerate what you are eligible for,
+file a self-activation request, then poll until it provisions - and there is no native `az` command
+for activating an eligible Azure *resource* role. So every working session starts with hand-rolled
+`az rest` calls or a third-party script before you can actually run anything.
+
+<!--truncate-->
+
+## The Problem
+
+Just-in-time access is the right default for privileged roles, but the activation step lands on the
+operator every single session, outside the tool they actually came to use. You want to run a plan
+against production; first you have to remember the role definition id, the scope, a justification,
+and the sequence of REST calls to turn your eligibility into an active assignment - and redo it
+when the window expires. Worse, nothing downstream benefits from a single place that performs the
+elevation: the credential your tooling consumes is the same either way, so there is no natural seam
+to hang "activate my role, then run" on. Atmos already modeled the two things this needs - becoming
+something more privileged through [identity chaining](/cli/configuration/auth/identities#identity-chaining),
+and credential time-boxing - but Azure only had the `azure/subscription` identity. There was no way to
+express the elevation at all.
+
+## The Fix
+
+A new [`azure/pim-role`](/cli/configuration/auth/identities#pim-role-activation) identity chains from an existing
+Azure identity and, on authentication, runs the Azure Resource Manager PIM self-activation for a
+role you are eligible for - scoped and time-boxed by config. Because the elevation lives in the
+identity chain, every consumer inherits it with no extra wiring: `atmos terraform`, `atmos auth
+exec`, the AKS kubeconfig exec plugin, and MCP servers all just see the role active.
+
+Unlike assuming a role, `azure/pim-role` mints no new credentials. Azure RBAC evaluates roles by
+object id at request time, not as token claims, so the activation elevates the principal you already
+authenticated as - server-side - and the identity hands back the parent credentials unchanged, now
+carrying the active role. That is what lets it sit transparently anywhere in a chain.
+
+It is also careful about not being noisy:
+
+- **It does not re-request on every command.** If an active assignment already covers the scope, it
+  returns immediately instead of filing another request and tripping PIM throttling.
+- **It resumes instead of duplicating.** If a request for the same role and scope is already waiting
+  on an approver, a later run attaches to that pending request rather than starting a new one.
+- **It refuses clearly when it cannot proceed.** A missing eligibility is reported as "not eligible"
+  (this activates an eligibility, it does not grant one), distinct from an activation that failed.
+  In a non-interactive context with no justification, it fails fast and tells you how to supply one.
+
+## How to Use It
+
+Add a `azure/pim-role` identity that elevates from an identity you already have:
+
+```yaml
+auth:
+  identities:
+    azure-dev:
+      kind: azure/subscription
+      via:
+        provider: azure-interactive
+      principal:
+        subscription_id: "00000000-0000-0000-0000-000000000000"
+
+    prod-contributor:
+      kind: azure/pim-role
+      via:
+        identity: azure-dev          # elevate from who I already am
+      principal:
+        role_definition_id: "/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c"
+        scope: "/subscriptions/00000000-0000-0000-0000-000000000000"
+        duration: "8h"               # converted to the ISO-8601 the API wants, capped by policy
+        justification: "planned change window"
+```
+
+Then authenticate or run as usual - the role activates as part of the chain:
+
+```shell
+atmos auth login --identity prod-contributor
+atmos auth exec --identity prod-contributor -- terraform plan
+```
+
+In a non-interactive context (CI, a running MCP server) where no `justification` default is set in
+config, supply one with the `ATMOS_PIM_JUSTIFICATION` environment variable. If a role requires
+approval, the login bounds its wait and shows progress; a later invocation picks up the pending
+request instead of starting over.
+
+This covers Azure *resource* roles. Entra directory roles and PIM for Groups activate through
+different APIs and will be separate identity kinds.
+
+## Get Involved
+
+The `azure/pim-role` identity is part of the broader [Atmos Auth](/cli/configuration/auth) effort to
+make least-privilege, just-in-time access something you configure once and forget. If you run PIM in
+Azure, try it against an eligible role and let us know how it fits your workflow in
+[GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

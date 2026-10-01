@@ -283,6 +283,61 @@ The Azure subscription identity inherits credentials from the provider and sets 
 For a detailed walkthrough with examples, see the [Azure Authentication Tutorial](/tutorials/azure-authentication).
 :::
 
+## PIM Role Activation
+
+For activating a [PIM-eligible](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-resource-roles-activate-your-roles) Azure **resource** role just-in-time. The identity chains from an existing Azure identity and, on authentication, runs the Azure Resource Manager PIM self-activation for a role the authenticated principal is eligible for.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    azure-dev:
+      kind: azure/subscription
+      via:
+        provider: azure-interactive
+      principal:
+        subscription_id: "00000000-0000-0000-0000-000000000000"
+
+    prod-contributor:
+      kind: azure/pim-role
+      via:
+        identity: azure-dev          # Elevate from an identity you already have
+      principal:
+        role_definition_id: "/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c"
+        scope: "/subscriptions/00000000-0000-0000-0000-000000000000"
+        duration: "8h"               # Optional; Go-style, converted to ISO-8601, capped by policy
+        justification: "planned change window"   # Optional default
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `azure/pim-role`.</dd>
+
+  <dt>`via.identity`</dt>
+  <dd>**Required** (or `via.provider`). The Azure identity whose token holds the eligibility to activate. `via.provider` is also accepted but less common.</dd>
+
+  <dt>`principal.role_definition_id`</dt>
+  <dd>**Required.** The full role definition id (the API needs the id, not a name).</dd>
+
+  <dt>`principal.scope`</dt>
+  <dd>**Required.** The scope to activate at - a subscription, resource group, or resource ARM id.</dd>
+
+  <dt>`principal.duration`</dt>
+  <dd>Optional. Go-style activation duration (for example `8h`), converted to the ISO-8601 the API requires and capped at the role's PIM activation-policy maximum. When omitted, the policy default applies.</dd>
+
+  <dt>`principal.justification`</dt>
+  <dd>Optional default justification. When unset, the justification is read from the `ATMOS_PIM_JUSTIFICATION` environment variable, or prompted for in an interactive session.</dd>
+</dl>
+
+Unlike assume-role, `azure/pim-role` mints no new credentials. Azure RBAC evaluates roles by object id at request time, so the activation elevates the existing principal server-side and the identity returns the parent credentials unchanged, now carrying the active role. This lets it sit transparently in a chain ahead of `atmos terraform`, `atmos auth exec`, the AKS exec plugin, or an MCP server.
+
+On authentication it short-circuits if an active assignment already covers the scope (so it does not re-request every command), attaches to a pending approval request instead of filing a duplicate, and reports a missing eligibility distinctly from a failed activation. In a non-interactive context with no justification, it fails fast with guidance to set `ATMOS_PIM_JUSTIFICATION`.
+
+:::note
+This covers Azure *resource* roles. Entra directory roles and PIM for Groups activate through different APIs and are separate (future) identity kinds.
+:::
+
 </TabItem>
 <TabItem value="gcp" label="GCP">
 

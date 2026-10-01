@@ -196,8 +196,14 @@ See [Migrating from Leapp](/tutorials/migrating-from-leapp) for AWS examples.
 - Device Code Flow (browser-based)
 - OIDC (workload identity for CI/CD)
 - Service Principals (client credentials)
+- Interactive Browser (authorization code + PKCE)
+- [PIM role activation](/cli/configuration/auth/identities#pim-role-activation) (just-in-time elevation of an eligible Azure resource role)
 
 See [Azure Authentication](/tutorials/azure-authentication) for detailed Azure configuration.
+
+:::note PIM role activation
+When logging into an [`azure/pim-role`](/cli/configuration/auth/identities#pim-role-activation) identity, the role is activated as part of the login. A justification is read from the identity's `principal.justification`, then the `ATMOS_PIM_JUSTIFICATION` environment variable, then an interactive prompt. In a non-interactive context (CI, `atmos auth exec`) with no justification available, login fails fast with guidance to set `ATMOS_PIM_JUSTIFICATION`. If the role requires approval, the login bounds its wait; a later invocation resumes the pending request instead of filing a duplicate.
+:::
 
 ## See Also
 
