@@ -175,7 +175,7 @@ func resolveTerraformOutputWithMocks(
 	realOutputs map[string]any,
 	realErr error,
 ) (any, error) {
-	merged := make(map[string]any, len(mocks)+len(realOutputs))
+	merged := make(map[string]any)
 	for key, value := range mocks {
 		merged[key] = value
 	}

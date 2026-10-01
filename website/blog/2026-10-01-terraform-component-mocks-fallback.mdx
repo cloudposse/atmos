@@ -62,7 +62,7 @@ components:
       mode: always   # fallback (default) | always
 ```
 
-The `mocks.mode` setting can also be set with `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`. A value passed to the flag wins over the environment variable, which wins over `atmos.yaml`.
+The `mocks.mode` setting can also be set with `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`. An explicit mode passed with the flag, such as `--use-mocks=fallback` or `--use-mocks=always`, wins over the environment variable, which wins over `atmos.yaml`. A bare `--use-mocks` turns mocks on and keeps the configured mode.
 
 ### Upgrading
 
