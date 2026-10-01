@@ -299,6 +299,11 @@ itself never is. `!include` also accepts everything it does in a stack manifest:
 `oci://`, or `https://` source works the same way, with no such exclusion needed since a remote
 source is never part of the local template directory to begin with.
 
+Included content is not processed transitively: a literal `!include` tag written inside an
+included file's own content is never resolved, and stays as inert, unprocessed text. This matches
+stack manifests, which share the same underlying `!include` implementation and the same
+limitation.
+
 Besides `!include`/[`!include.raw`](/functions/yaml/include.raw), `scaffold.yaml` resolves a fixed
 set of other YAML functions that need no stack, component, or backend context --
 [`!env`](/functions/yaml/env), [`!random`](/functions/yaml/random), [`!cwd`](/functions/yaml/cwd),
