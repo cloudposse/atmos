@@ -25,6 +25,10 @@ const (
 	secondsPerMinute = 60
 )
 
+// defaultARMRequestTimeout bounds a single ARM request when the caller injects no HTTP
+// client, so a stalled endpoint cannot hang authentication indefinitely.
+const defaultARMRequestTimeout = 30 * time.Second
+
 // pimStatusProvisioned is the terminal success status for an activation request:
 // the role is active and the assignment schedule instance exists.
 const pimStatusProvisioned = "Provisioned"
@@ -115,10 +119,12 @@ type armPIMClient struct {
 }
 
 // NewARMPIMClient-equivalent constructor. Builds a live PIM client for a scope, using the
-// given management token and ARM base URL; doer defaults to http.DefaultClient when nil.
+// given management token and ARM base URL. When doer is nil it defaults to an HTTP client
+// with a finite timeout (not http.DefaultClient, which has none) so a stalled ARM endpoint
+// or proxy cannot hang `auth login`/`auth exec` when the caller's context has no deadline.
 func newARMPIMClient(doer httpDoer, token, scope, baseURL string) *armPIMClient {
 	if doer == nil {
-		doer = http.DefaultClient
+		doer = &http.Client{Timeout: defaultARMRequestTimeout}
 	}
 	return &armPIMClient{
 		doer:       doer,

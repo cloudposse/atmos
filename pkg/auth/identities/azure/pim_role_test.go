@@ -139,7 +139,6 @@ func newTestIdentity(t *testing.T, principal map[string]any, mock *mockPIMClient
 	p.isTTY = func() bool { return false }
 	p.promptFunc = func(string) (string, error) { return "", errors.New("no prompt in test") }
 	p.lookupJustification = func() string { return "" }
-	p.sleep = func(time.Duration) {}
 	p.pollInterval = 0
 	return p
 }
@@ -389,6 +388,24 @@ func TestPIMRole_ActivationFailed(t *testing.T) {
 
 	_, err := id.Authenticate(context.Background(), testAzureCreds())
 	require.ErrorIs(t, err, errUtils.ErrAzurePIMActivationFailed)
+}
+
+func TestPIMRole_PollRespectsContextCancellation(t *testing.T) {
+	mock := &mockPIMClient{
+		eligFound:      true,
+		eligScheduleID: testEligID,
+		createResult:   ActivationResult{Status: "PendingApproval"},
+		statuses:       []string{"PendingApproval"},
+	}
+	id := newTestIdentity(t, defaultPrincipal(), mock)
+	// A long interval forces the poll wait to resolve via ctx cancellation, not the timer.
+	id.pollInterval = 10 * time.Second
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := id.Authenticate(ctx, testAzureCreds())
+	require.ErrorIs(t, err, context.Canceled, "a canceled context must stop the poll wait promptly")
 }
 
 func TestPIMRole_InvalidBaseCreds(t *testing.T) {

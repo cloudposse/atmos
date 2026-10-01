@@ -94,19 +94,19 @@ eligibility; `via.provider` is allowed but less common.
 
 1. **Resolve** the principal object id from `baseCreds`.
 2. **Short-circuit if already active** - `GET roleAssignmentScheduleInstances` at scope filtered to the
-   principal and role; if an active instance already covers the scope, return `baseCreds` unchanged. This
-   keeps the identity from filing a request on every command.
+    principal and role; if an active instance already covers the scope, return `baseCreds` unchanged. This
+    keeps the identity from filing a request on every command.
 3. **Enumerate eligibility** - `GET roleEligibilityScheduleInstances` at scope (`$filter=asTarget()`); find
-   the matching eligible assignment and its `roleEligibilityScheduleId`. A missing eligibility is a distinct,
-   actionable error: this kind *activates* an eligibility, it does not grant one.
+    the matching eligible assignment and its `roleEligibilityScheduleId`. A missing eligibility is a distinct,
+    actionable error: this kind *activates* an eligibility, it does not grant one.
 4. **Attach to a pending request** - if a `roleAssignmentScheduleRequest` for this principal, role, and scope
-   is `PendingApproval`, attach to it rather than creating a duplicate.
+    is `PendingApproval`, attach to it rather than creating a duplicate.
 5. **Self-activate** - `PUT roleAssignmentScheduleRequests/{guid}` (api-version `2020-10-01`) with
-   `requestType: SelfActivate`, the principal and role-definition ids, the linked eligibility schedule id, the
-   justification, and `scheduleInfo.expiration` (`AfterDuration`, the configured duration).
+    `requestType: SelfActivate`, the principal and role-definition ids, the linked eligibility schedule id, the
+    justification, and `scheduleInfo.expiration` (`AfterDuration`, the configured duration).
 6. **Poll** `PendingApproval -> Provisioned`, then return `baseCreds`. Note that Azure RBAC propagation can
-   lag the `Provisioned` status by a few minutes server-side; consumers that hit a transient `403` immediately
-   after activation should retry rather than treat it as a failure.
+    lag the `Provisioned` status by a few minutes server-side; consumers that hit a transient `403` immediately
+    after activation should retry rather than treat it as a failure.
 
 ### Credential model (pass-through)
 

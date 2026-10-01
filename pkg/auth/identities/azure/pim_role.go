@@ -63,7 +63,6 @@ type pimRoleIdentity struct {
 	isTTY               func() bool
 	promptFunc          func(identityName string) (string, error)
 	lookupJustification func() string
-	sleep               func(time.Duration)
 	pollInterval        time.Duration
 	maxPollAttempts     int
 }
@@ -92,7 +91,6 @@ func NewPIMRoleIdentity(name string, config *schema.Identity) (authTypes.Identit
 		isTTY:               defaultIsTTY,
 		promptFunc:          defaultJustificationPrompt,
 		lookupJustification: func() string { return viper.GetString(pimJustificationViperKey) },
-		sleep:               time.Sleep,
 		pollInterval:        defaultPIMPollInterval,
 		maxPollAttempts:     defaultPIMMaxPollAttempts,
 	}
@@ -309,7 +307,14 @@ func (i *pimRoleIdentity) waitForActivation(ctx context.Context, client PIMClien
 		}
 
 		log.Debug("Waiting for PIM activation", azureCloud.LogFieldIdentity, i.name, logKeyRequest, requestName, "status", status, "attempt", attempt)
-		i.sleep(i.pollInterval)
+
+		// Wait between polls, but honor context cancellation (Ctrl-C or a canceled parent)
+		// instead of blocking for the full interval in time.Sleep.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(i.pollInterval):
+		}
 
 		var err error
 		status, err = client.GetRequestStatus(ctx, requestName)
