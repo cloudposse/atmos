@@ -213,8 +213,32 @@ components:
 ```
 </File>
 
-If you have an existing Rain/CloudFormation parameters JSON file, pull it in with `!include`
-instead of retyping the values:
+Atmos `parameters:` requires a map from parameter names to values. If your existing JSON file
+already uses that format, include it directly. If it uses the AWS CLI
+`ParameterKey`/`ParameterValue` array format, convert it to a map first and keep the original
+file for your existing workflow.
+
+For example, convert this AWS CLI parameter array:
+
+```json
+[
+  {"ParameterKey": "CidrBlock", "ParameterValue": "10.0.0.0/16"},
+  {"ParameterKey": "Environment", "ParameterValue": "dev"}
+]
+```
+
+into a new parameter-map file:
+
+<File title="params/dev-parameters.json">
+```json
+{
+  "CidrBlock": "10.0.0.0/16",
+  "Environment": "dev"
+}
+```
+</File>
+
+Include the converted file in the stack:
 
 <File title="stacks/deploy/dev.yaml">
 ```yaml
@@ -230,7 +254,13 @@ components:
 </File>
 
 The [`!include` function](/functions/yaml/include) parses JSON/YAML natively and resolves paths
-relative to the stack file — nothing about the parameters file needs to change.
+relative to the stack file. It does not convert AWS CLI parameter arrays into maps. Do not include
+an AWS CLI array directly: the current parameter handling silently ignores its values, leaving
+those parameters unspecified.
+
+The AWS API's `UsePreviousValue` flag cannot be set through Atmos's `parameters:` map. Supply
+explicit values instead; entries using that flag must be replaced with the intended values before
+conversion. `UsePreviousValue` is not a literal parameter value.
 
 ### Step 5: Run Atmos
 
@@ -268,7 +298,7 @@ Outputs, so you get that view both at deploy time and on demand afterward with
 |---|---|---|
 | **Templates** | `.yaml`/`.json`, optionally with `!Rain::*` directives | Same templates, directives resolved to plain CloudFormation |
 | **CLI** | `rain deploy/diff/watch/fmt/ls/bootstrap/...` | `atmos aws cloudformation <verb>` (alias `cfn`) — see the [verb cross-reference](#1-rain--atmos-verb-cross-reference) |
-| **Config** | `--params` flags or a parameters JSON file | Stack YAML `parameters:` (or `!include` the same JSON file unchanged) |
+| **Config** | `--params` flags or a parameters JSON file | Stack YAML `parameters:` map (or `!include` a JSON map; convert AWS CLI arrays first); `UsePreviousValue` is unsupported |
 | **Artifact bucket** | Auto-created silently on first use | Explicit `atmos aws cloudformation backend create`, or opt-in `provision.backend.enabled: true` |
 | **Environments** | Separate command invocations per stack name | Stack YAML files, with inheritance and imports |
 | **Cross-stack values** | Manual `aws cloudformation describe-stacks` calls | `atmos aws cloudformation output`, or `!aws.cloudformation.output` for cross-component consumption |
@@ -277,7 +307,8 @@ Outputs, so you get that view both at deploy time and on demand afterward with
 
 - Your CloudFormation templates work as-is, once any `!Rain::` directives are resolved
 - Your resource definitions, intrinsic functions (`!Ref`, `!GetAtt`, `!Sub`, ...), and capabilities are untouched
-- Your existing parameters JSON file works unchanged via `!include`
+- Parameter values can be reused through `!include`: convert AWS CLI arrays to maps and replace
+  `UsePreviousValue` entries with explicit values
 
 ### What You Added
 
@@ -526,7 +557,10 @@ see the [directive mapping table](#step-2-resolve-rain-directives-if-any).
 </FAQItem>
 
 <FAQItem question="Can I keep using my parameters JSON file?">
-**Yes.** Use [`!include`](/functions/yaml/include) to pull it directly into the component's
+**Yes, if it contains a parameter map.** Files containing AWS CLI
+`ParameterKey`/`ParameterValue` arrays must first be converted to maps, as shown in the migration
+example above. The `UsePreviousValue` API flag is unsupported here; supply explicit parameter
+values instead. Use [`!include`](/functions/yaml/include) to load the map into the component's
 `parameters:` section:
 
 ```yaml
