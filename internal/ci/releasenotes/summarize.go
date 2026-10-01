@@ -58,17 +58,17 @@ type Result struct {
 // release body over 125,000 characters cannot even be written - condenses
 // each one (with the model when p.OpenAIAPIKey is set, otherwise
 // FallbackSummary), renders the org template's <details> shape, and updates
-// the release. Any returned error means the release was left as it was;
-// callers on a "never break the release path" budget should log and move
-// on - see magefiles/ci_release_notes.go.
+// the release while preserving its tag. An update or response-verification error
+// may occur after GitHub has applied the write; callers should log the error
+// rather than report success - see magefiles/ci_release_notes.go.
 func SummarizeRelease(ctx context.Context, client HTTPClient, p *SummarizeParams) (Result, error) {
 	defer perf.Track(nil, "releasenotes.SummarizeRelease")()
 
-	body, err := GetReleaseBody(ctx, client, p.GHToken, p.Release)
+	release, err := GetRelease(ctx, client, p.GHToken, p.Release)
 	if err != nil {
 		return Result{}, err
 	}
-	entries, err := ParseDraftedBody(body)
+	entries, err := ParseDraftedBody(release.Body)
 	if err != nil {
 		return Result{}, fmt.Errorf("releasenotes: parse release %s: %w", p.Release.ID, err)
 	}
@@ -101,7 +101,8 @@ func SummarizeRelease(ctx context.Context, client HTTPClient, p *SummarizeParams
 		_, err = io.WriteString(out, rendered)
 		return res, err
 	}
-	return res, UpdateReleaseBody(ctx, client, p.GHToken, p.Release, rendered)
+	release.Body = rendered
+	return res, UpdateReleaseBody(ctx, client, p.GHToken, p.Release, release)
 }
 
 // degradeIfTooLarge re-renders entries as bare bullets - release-drafter's
