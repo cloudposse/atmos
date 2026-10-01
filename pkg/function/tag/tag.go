@@ -302,6 +302,15 @@ func IsAtmosConfigYAML(yamlTag string) bool {
 // concept scaffold.yaml's field/answer merge has no equivalent for) for
 // Literal (bypassing scaffold's own Go-template evaluation of a field
 // value, a real need atmos.yaml has no equivalent concern for).
+//
+// Exec is deliberately excluded, unlike AtmosConfigYAML (which does include
+// it): scaffold.yaml's metadata (name/description/version) is resolved for
+// EVERY configured template just to populate `atmos scaffold list` and the
+// interactive template picker -- not only the one a user actually selects
+// or generates -- so allowing arbitrary shell execution here would let any
+// configured template (including a shared/vendored one from a catalog) run
+// code merely by being listed, not just generated. AtmosConfigYAML has no
+// equivalent "resolved just to list" trigger for atmos.yaml itself.
 func ScaffoldYAML() []string {
 	defer perf.Track(nil, "tag.ScaffoldYAML")()
 
@@ -309,7 +318,6 @@ func ScaffoldYAML() []string {
 		ToYAML(Include),
 		ToYAML(IncludeRaw),
 		ToYAML(Env),
-		ToYAML(Exec),
 		ToYAML(Random),
 		ToYAML(Cwd),
 		ToYAML(RepoRoot),

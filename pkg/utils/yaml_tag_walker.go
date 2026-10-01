@@ -215,7 +215,12 @@ func simpleTagHandler(resolve func(fullTagValue string) (any, error)) TagHandler
 // available yet" problem. !unset is excluded (scaffold.yaml has no
 // stack-manifest-style inheritance chain for it to override) and !literal is
 // included (bypassing scaffold's own Go-template evaluation of a field
-// value, a real and stack-context-free need) in its place.
+// value, a real and stack-context-free need) in its place. !exec is
+// excluded too, unlike AtmosConfigYAML -- see fntag.ScaffoldYAML's own doc
+// comment: scaffold.yaml is resolved for every configured template just to
+// populate `atmos scaffold list`/the interactive picker, not only the one
+// actually selected, so allowing shell execution here would let any
+// configured template run code merely by being listed.
 //
 // The onInclude callback, when non-nil, is invoked with each
 // !include/!include.raw tag's raw path argument as encountered, before
@@ -243,7 +248,6 @@ func ScaffoldTagPolicy(onInclude func(path string)) TagWalkPolicy {
 			AtmosYamlFuncIncludeRaw:    includeRawHandler,
 			AtmosYamlFuncLiteral:       handleLiteralTag,
 			AtmosYamlFuncEnv:           simpleTagHandler(func(s string) (any, error) { return ProcessTagEnv(s, nil) }),
-			AtmosYamlFuncExec:          simpleTagHandler(ProcessTagExec),
 			AtmosYamlFuncRandom:        simpleTagHandler(func(s string) (any, error) { return ProcessTagRandom(s) }),
 			AtmosYamlFuncCwd:           simpleTagHandler(func(s string) (any, error) { return ProcessTagCwd(s) }),
 			AtmosYamlFuncGitRoot:       simpleTagHandler(func(s string) (any, error) { return atmosGit.ProcessTagRoot(s) }),

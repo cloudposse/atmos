@@ -72,8 +72,15 @@ spec:
 	assert.Equal(t, "hello-from-env", m.Spec.Source)
 }
 
-// TestLoad_WithIncludeResolution_ExecTagResolves proves !exec resolves.
-func TestLoad_WithIncludeResolution_ExecTagResolves(t *testing.T) {
+// TestLoad_WithIncludeResolution_ExecTagRejected proves !exec is rejected
+// rather than resolved, unlike every other context-free tag -- deliberately
+// excluded from ScaffoldTagPolicy because scaffold.yaml is resolved for
+// every configured template just to populate `atmos scaffold list`/the
+// interactive picker, not only the one actually selected or generated (see
+// fntag.ScaffoldYAML's doc comment). Allowing shell execution here would let
+// any configured template (including a shared/vendored one) run arbitrary
+// code merely by being listed.
+func TestLoad_WithIncludeResolution_ExecTagRejected(t *testing.T) {
 	registerTestKind(t)
 
 	dir := t.TempDir()
@@ -82,14 +89,14 @@ kind: AtmosTestConfig
 metadata:
   name: x
 spec:
-  source: !exec echo scaffold-exec-ok
+  source: !exec echo should-not-run
 `)
 	atmosConfig := &schema.AtmosConfiguration{BasePath: dir, BasePathAbsolute: dir}
 	manifestFile := filepath.Join(dir, "manifest.yaml")
 
-	m, err := Load[testSpec](testKind, data, WithIncludeResolution(atmosConfig, manifestFile, nil))
-	require.NoError(t, err)
-	assert.Equal(t, "scaffold-exec-ok", m.Spec.Source)
+	_, err := Load[testSpec](testKind, data, WithIncludeResolution(atmosConfig, manifestFile, nil))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrUnsupportedYamlTag))
 }
 
 // TestLoad_WithIncludeResolution_RandomTagResolves proves !random resolves
