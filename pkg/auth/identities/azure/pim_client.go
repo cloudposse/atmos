@@ -111,11 +111,13 @@ type httpDoer interface {
 // armPIMClient is the live PIMClient backed by the Azure Resource Manager REST API,
 // authenticated with the management token the parent identity already acquired.
 type armPIMClient struct {
-	doer       httpDoer
-	token      string
-	scope      string // ARM scope id, e.g. /subscriptions/{id}.
-	baseURL    string // ARM endpoint, e.g. https://management.azure.com.
-	apiVersion string
+	doer           httpDoer
+	token          string
+	scope          string // ARM scope id, e.g. /subscriptions/{id}.
+	baseURL        string // ARM endpoint, e.g. https://management.azure.com.
+	apiVersion     string
+	expectedScheme string // Expected request scheme (from baseURL); enforced before sending the bearer.
+	expectedHost   string // Expected request host (from baseURL); enforced before sending the bearer.
 }
 
 // NewARMPIMClient-equivalent constructor. Builds a live PIM client for a scope, using the
@@ -126,12 +128,21 @@ func newARMPIMClient(doer httpDoer, token, scope, baseURL string) *armPIMClient 
 	if doer == nil {
 		doer = &http.Client{Timeout: defaultARMRequestTimeout}
 	}
+	baseURL = strings.TrimSuffix(baseURL, "/")
+	// Record the intended origin so do() can fail closed if a crafted scope redirects the
+	// credential-bearing request to a different host (URL user-information injection).
+	scheme, host := "", ""
+	if parsed, err := url.Parse(baseURL); err == nil {
+		scheme, host = parsed.Scheme, parsed.Host
+	}
 	return &armPIMClient{
-		doer:       doer,
-		token:      token,
-		scope:      strings.TrimSuffix(scope, "/"),
-		baseURL:    strings.TrimSuffix(baseURL, "/"),
-		apiVersion: pimAPIVersion,
+		doer:           doer,
+		token:          token,
+		scope:          strings.TrimSuffix(scope, "/"),
+		baseURL:        baseURL,
+		apiVersion:     pimAPIVersion,
+		expectedScheme: scheme,
+		expectedHost:   host,
 	}
 }
 
@@ -271,6 +282,31 @@ func (c *armPIMClient) list(ctx context.Context, collection string) ([]armSchedu
 // Do performs a single ARM request and returns the raw response body on 2xx. The filter
 // argument, when non-empty, is sent as the OData `$filter` query parameter.
 func (c *armPIMClient) do(ctx context.Context, method, path, filter string, body any) ([]byte, error) {
+	req, err := c.newRequest(ctx, method, path, filter, body)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.doer.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAzurePIMRequestFailed, err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: reading response: %w", errUtils.ErrAzurePIMRequestFailed, err)
+	}
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("%w: %s %s returned %d: %s", errUtils.ErrAzurePIMRequestFailed, method, path, resp.StatusCode, snippet(raw))
+	}
+	return raw, nil
+}
+
+// newRequest builds the ARM request, enforces the credential-bearing request stays on the
+// intended ARM origin, and attaches the bearer token and content headers.
+func (c *armPIMClient) newRequest(ctx context.Context, method, path, filter string, body any) (*http.Request, error) {
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -291,25 +327,20 @@ func (c *armPIMClient) do(ctx context.Context, method, path, filter string, body
 	if err != nil {
 		return nil, fmt.Errorf("%w: building request: %w", errUtils.ErrAzurePIMRequestFailed, err)
 	}
+
+	// Fail closed before attaching the bearer token: the scope is interpolated into the URL,
+	// so a crafted value (for example `@attacker.example/...`) can demote the ARM host to URL
+	// user-information and redirect the request to an attacker-controlled host. Refuse to send
+	// credentials anywhere other than the intended ARM origin.
+	if req.URL.Scheme != c.expectedScheme || req.URL.Host != c.expectedHost || req.URL.User != nil {
+		return nil, fmt.Errorf("%w: refusing to send credentials to %q://%q (expected %q://%q)",
+			errUtils.ErrAzurePIMInvalidScope, req.URL.Scheme, req.URL.Host, c.expectedScheme, c.expectedHost)
+	}
+
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.doer.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAzurePIMRequestFailed, err)
-	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: reading response: %w", errUtils.ErrAzurePIMRequestFailed, err)
-	}
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("%w: %s %s returned %d: %s", errUtils.ErrAzurePIMRequestFailed, method, path, resp.StatusCode, snippet(raw))
-	}
-	return raw, nil
+	return req, nil
 }
 
 // snippet trims an ARM error body to a short, log-safe excerpt.

@@ -301,6 +301,11 @@ var (
 	ErrAzurePIMActivationTimeout = errors.New("timed out waiting for PIM role activation to complete")
 	// ErrAzurePIMRequestFailed indicates an ARM PIM REST call returned an unexpected status.
 	ErrAzurePIMRequestFailed = errors.New("request to the Azure PIM API failed")
+	// ErrAzurePIMInvalidScope indicates the configured scope is not a valid ARM resource path
+	// or would redirect the credential-bearing ARM request to an unexpected host. Rejecting it
+	// prevents a crafted scope (for example one injecting URL user-information) from sending the
+	// parent bearer token to an attacker-controlled host.
+	ErrAzurePIMInvalidScope = errors.New("invalid Azure PIM scope")
 
 	ErrBackendConfigRequired       = errors.New("backend configuration is required")
 	ErrBackendTypeRequired         = errors.New("backend_type is required")

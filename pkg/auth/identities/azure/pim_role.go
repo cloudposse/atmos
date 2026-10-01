@@ -158,10 +158,41 @@ func (i *pimRoleIdentity) Validate() error {
 			WithExitCode(2).
 			Err()
 	}
+	if err := validateScope(i.scope); err != nil {
+		return err
+	}
 	if i.config.Via == nil || (i.config.Via.Provider == "" && i.config.Via.Identity == "") {
 		return fmt.Errorf("%w: Azure PIM role identity requires via.provider or via.identity", errUtils.ErrInvalidIdentityConfig)
 	}
 	return nil
+}
+
+// validateScope rejects a scope that is not a plain ARM resource path. The scope is
+// interpolated into the credential-bearing ARM request URL, so a value that injects URL
+// authority or user-information (for example `@attacker.example/...` or `//host/...`) could
+// redirect the parent bearer token to an attacker-controlled host. ARM scopes always begin
+// with `/` and never contain `@`, whitespace, or a scheme.
+func validateScope(scope string) error {
+	switch {
+	case !strings.HasPrefix(scope, "/"):
+		return scopeError(scope, "scope must be an absolute ARM resource path beginning with '/'")
+	case strings.HasPrefix(scope, "//"):
+		return scopeError(scope, "scope must not begin with '//' (protocol-relative URL)")
+	case strings.ContainsAny(scope, "@ \t\r\n?#\\"):
+		return scopeError(scope, "scope must not contain '@', whitespace, '?', '#', or '\\'")
+	case strings.Contains(scope, "://"):
+		return scopeError(scope, "scope must be a path, not a URL")
+	}
+	return nil
+}
+
+func scopeError(scope, hint string) error {
+	return errUtils.Build(errUtils.ErrAzurePIMInvalidScope).
+		WithExplanationf("Invalid PIM 'scope': %q", scope).
+		WithHint(hint).
+		WithHint("Example: /subscriptions/00000000-0000-0000-0000-000000000000").
+		WithExitCode(2).
+		Err()
 }
 
 // Authenticate activates the eligible PIM role and returns the parent credentials unchanged.

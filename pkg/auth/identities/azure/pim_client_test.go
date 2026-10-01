@@ -204,6 +204,22 @@ func TestARMPIMClient_BadJSON(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrAzurePIMRequestFailed)
 }
 
+func TestARMPIMClient_RefusesHostInjection(t *testing.T) {
+	// A crafted scope that demotes the ARM host to URL user-information and points the request
+	// at an attacker host. The client must fail closed BEFORE sending the bearer token.
+	called := false
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		called = true
+		return jsonResponse(http.StatusOK, `{"value":[]}`), nil
+	}}
+	c := newARMPIMClient(doer, "test-token", "@collector.example/subscriptions/x", "https://management.azure.com")
+
+	_, err := c.ActiveAssignmentExists(context.Background(), testRoleDefID)
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMInvalidScope)
+	assert.False(t, called, "no request (and no bearer token) must reach a non-ARM host")
+	assert.Empty(t, doer.requests, "the request must never be dispatched")
+}
+
 func TestNewARMPIMClient_Defaults(t *testing.T) {
 	c := newARMPIMClient(nil, "tok", testScope+"/", "https://management.azure.com/")
 	assert.NotNil(t, c.doer)

@@ -482,6 +482,49 @@ func TestPIMRole_Validate(t *testing.T) {
 	}
 }
 
+func TestValidateScope(t *testing.T) {
+	valid := []string{
+		"/subscriptions/00000000-0000-0000-0000-000000000000",
+		"/subscriptions/x/resourceGroups/rg1",
+		"/providers/Microsoft.Management/managementGroups/mg1",
+	}
+	for _, s := range valid {
+		t.Run("valid/"+s, func(t *testing.T) {
+			require.NoError(t, validateScope(s))
+		})
+	}
+
+	invalid := []string{
+		"@collector.example/subscriptions/x",  // URL user-information injection.
+		"//collector.example/subscriptions/x", // Protocol-relative.
+		"https://collector.example/x",         // Full URL.
+		"subscriptions/x",                     // Missing leading slash.
+		"/subscriptions/x@evil.example",       // Embedded '@'.
+		"/subscriptions/x y",                  // Whitespace.
+		"/subscriptions/x?api-version=evil",   // Query injection.
+	}
+	for _, s := range invalid {
+		t.Run("invalid/"+s, func(t *testing.T) {
+			require.ErrorIs(t, validateScope(s), errUtils.ErrAzurePIMInvalidScope)
+		})
+	}
+}
+
+func TestPIMRole_RejectsMaliciousScope(t *testing.T) {
+	principal := defaultPrincipal()
+	principal["scope"] = "@collector.example/subscriptions/x"
+	mock := &mockPIMClient{eligFound: true, eligScheduleID: testEligID}
+	id := newTestIdentity(t, principal, mock)
+	// Guard: a rejected scope must never reach the ARM client.
+	id.newClient = func(_ httpDoer, _, _, _ string) PIMClient {
+		t.Fatalf("client must not be constructed for an invalid scope")
+		return nil
+	}
+
+	_, err := id.Authenticate(context.Background(), testAzureCreds())
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMInvalidScope)
+}
+
 func TestPIMRole_GetProviderName(t *testing.T) {
 	tests := []struct {
 		name    string
