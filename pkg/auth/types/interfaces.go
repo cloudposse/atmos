@@ -182,6 +182,16 @@ type Identity interface {
 	SetRealm(realm string)
 }
 
+// JustificationConsumer is implemented by identities that record a per-invocation
+// justification for a privileged action (for example azure/pim-role, which sends it with a
+// PIM activation request). The auth manager uses it to warn when `--justification` /
+// `ATMOS_AUTH_JUSTIFICATION` is supplied but no identity in the authentication chain consumes
+// it, so an explicitly supplied reason never goes silently unrecorded.
+type JustificationConsumer interface {
+	// ConsumesJustification reports whether this identity records a supplied justification.
+	ConsumesJustification() bool
+}
+
 // AuthManager manages the overall authentication process.
 type AuthManager interface {
 	// GetCachedCredentials retrieves valid cached credentials for the specified identity.
