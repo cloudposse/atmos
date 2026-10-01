@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -26,15 +27,23 @@ type ReleaseRef struct {
 	ID   string
 }
 
-// GetReleaseBody fetches ref's current release body via the REST API.
-func GetReleaseBody(ctx context.Context, client HTTPClient, token string, ref ReleaseRef) (string, error) {
-	defer perf.Track(nil, "releasenotes.GetReleaseBody")()
+// ReleaseContent holds the release notes and the tag that must survive a notes update.
+type ReleaseContent struct {
+	Body    string `json:"body"`
+	TagName string `json:"tag_name"`
+}
+
+// GetRelease fetches ref's current release body and tag via the REST API.
+func GetRelease(ctx context.Context, client HTTPClient, token string, ref ReleaseRef) (ReleaseContent, error) {
+	defer perf.Track(nil, "releasenotes.GetRelease")()
 
 	req, err := newGitHubRequest(ctx, http.MethodGet, token, ref, nil)
 	if err != nil {
-		return "", err
+		return ReleaseContent{}, err
 	}
-	return fetchBodyField(client, req, "release "+ref.ID)
+	var release ReleaseContent
+	err = fetchGitHubJSON(client, req, "release "+ref.ID, &release)
+	return release, err
 }
 
 // GetPullRequestBody fetches one pull request's description via the REST
@@ -50,45 +59,45 @@ func GetPullRequestBody(ctx context.Context, client HTTPClient, token, repo stri
 	if err != nil {
 		return "", fmt.Errorf("releasenotes: build request for PR #%d: %w", number, err)
 	}
-	return fetchBodyField(client, req, fmt.Sprintf("PR #%d", number))
+	var pr struct {
+		Body string `json:"body"`
+	}
+	err = fetchGitHubJSON(client, req, fmt.Sprintf("PR #%d", number), &pr)
+	return pr.Body, err
 }
 
-// fetchBodyField performs a GET whose JSON response carries a "body" field
-// (releases and pull requests both do) and returns that field; what names
-// the resource in errors.
-func fetchBodyField(client HTTPClient, req *http.Request, what string) (string, error) {
+// fetchGitHubJSON performs a GET and decodes the response; what names the resource in errors.
+func fetchGitHubJSON(client HTTPClient, req *http.Request, what string, result any) error {
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("releasenotes: get %s: %w", what, err)
+		return fmt.Errorf("releasenotes: get %s: %w", what, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("releasenotes: read %s response: %w", what, err)
+		return fmt.Errorf("releasenotes: read %s response: %w", what, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%w: get %s returned %s: %s", errGitHubRequestFailed, what, resp.Status, string(body))
+		return fmt.Errorf("%w: get %s returned %s: %s", errGitHubRequestFailed, what, resp.Status, string(body))
 	}
 
-	var parsed struct {
-		Body string `json:"body"`
+	if err := json.Unmarshal(body, result); err != nil {
+		return fmt.Errorf("releasenotes: decode %s: %w", what, err)
 	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return "", fmt.Errorf("releasenotes: decode %s: %w", what, err)
-	}
-	return parsed.Body, nil
+	return nil
 }
 
-// UpdateReleaseBody sets ref's release body. Every other field is left
-// untouched (tag_name, draft, prerelease, ...), since the API only updates
-// fields present in the request payload.
-func UpdateReleaseBody(ctx context.Context, client HTTPClient, token string, ref ReleaseRef, body string) error {
+// UpdateReleaseBody sets ref's release body and explicitly preserves its fetched
+// tag_name: omitting it can reset a draft's tag to GitHub's untagged placeholder.
+// The response must confirm the tag survived. Other metadata is omitted.
+func UpdateReleaseBody(ctx context.Context, client HTTPClient, token string, ref ReleaseRef, release ReleaseContent) error {
 	defer perf.Track(nil, "releasenotes.UpdateReleaseBody")()
 
-	payload, err := json.Marshal(struct {
-		Body string `json:"body"`
-	}{Body: body})
+	if strings.TrimSpace(release.TagName) == "" {
+		return fmt.Errorf("%w: release %s", errUtils.ErrReleaseTagMissing, ref.ID)
+	}
+	payload, err := json.Marshal(release)
 	if err != nil {
 		return fmt.Errorf("releasenotes: encode release %s update: %w", ref.ID, err)
 	}
@@ -106,6 +115,13 @@ func UpdateReleaseBody(ctx context.Context, client HTTPClient, token string, ref
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("%w: update release %s returned %s: %s", errGitHubRequestFailed, ref.ID, resp.Status, string(respBody))
+	}
+	var updated ReleaseContent
+	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		return fmt.Errorf("releasenotes: decode release %s update: %w", ref.ID, err)
+	}
+	if updated.TagName != release.TagName {
+		return fmt.Errorf("%w: release %s expected %q, got %q", errUtils.ErrReleaseTagMismatch, ref.ID, release.TagName, updated.TagName)
 	}
 	return nil
 }
