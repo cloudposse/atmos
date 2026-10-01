@@ -26,7 +26,7 @@ templates:
 scaffold:
   templates:
     example:
-      description: Example scaffold template for demonstration
+      description: Load shared data via !include and other YAML functions like !env and !git.branch
       source: "."
 
 # Logging.
