@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -55,8 +56,37 @@ func EnvironToMap() map[string]string {
 	return SliceToMap(os.Environ())
 }
 
+// CanonicalEnvKey returns the map key to use for an environment variable name when
+// building a map[string]string from an env-var slice that may later be converted
+// back to a slice for subprocess execution. On Windows, PATH is case-insensitive at
+// the OS level and the OS supplies it under its own native casing ("Path") while
+// Atmos code writes "PATH"; without normalization the two would survive as separate
+// map entries whose relative order in the resulting slice — and therefore which one
+// downstream subprocess creation treats as authoritative — would depend on Go's
+// randomized map iteration order. Only PATH is normalized: every other environment
+// variable name is left exactly as given, on every platform, because names are
+// otherwise case-sensitive by convention (e.g. Terraform's TF_CLI_ARGS_<command>
+// variables intentionally use a lowercase command-name suffix) and rewriting them
+// would silently break exact-case lookups.
+func CanonicalEnvKey(key string) string {
+	defer perf.Track(nil, "env.CanonicalEnvKey")()
+
+	return canonicalEnvKeyForGOOS(key, runtime.GOOS)
+}
+
+// canonicalEnvKeyForGOOS is CanonicalEnvKey parameterized by GOOS so the Windows
+// case-insensitive behavior can be unit-tested from any host platform.
+func canonicalEnvKeyForGOOS(key, goos string) string {
+	if goos == "windows" && strings.EqualFold(key, "PATH") {
+		return "PATH"
+	}
+	return key
+}
+
 // SliceToMap converts environment variables from KEY=value slice form to a map.
 // Malformed entries without "=" are ignored. Later duplicate keys overwrite earlier ones.
+// Keys are canonicalized via CanonicalEnvKey so case-variant spellings of the same
+// variable (e.g. Windows' "Path" vs. Atmos's "PATH") collapse into one entry.
 func SliceToMap(env []string) map[string]string {
 	defer perf.Track(nil, "env.SliceToMap")()
 
@@ -69,7 +99,7 @@ func SliceToMap(env []string) map[string]string {
 		if !ok {
 			continue
 		}
-		envMap[key] = value
+		envMap[CanonicalEnvKey(key)] = value
 	}
 	return envMap
 }
@@ -244,7 +274,7 @@ func EnvironToMapFiltered(excludeKeys []string, excludePrefixes []string) map[st
 		}
 
 		if !excluded {
-			envMap[k] = v
+			envMap[CanonicalEnvKey(k)] = v
 		}
 	}
 	return envMap

@@ -293,7 +293,15 @@ func TestExtractComponentConfig(t *testing.T) {
 			assert.Contains(t, filepath.ToSlash(config.ComponentPath), filepath.ToSlash(tt.expectedComponentPathSuffix),
 				"expected path to contain %s, got %s", tt.expectedComponentPathSuffix, config.ComponentPath)
 			assert.Equal(t, tt.autoGenerateBackend, config.AutoGenerateBackend)
-			assert.Equal(t, tt.initRunReconfigure, config.InitRunReconfigure)
+			// The legacy init_run_reconfigure bool folds into EffectiveInitReconfigure:
+			// false maps to "never", true maps to "auto" (never "always").
+			expectedReconfigure := schema.TerraformInitReconfigureAuto
+			if !tt.initRunReconfigure {
+				expectedReconfigure = schema.TerraformInitReconfigureNever
+			}
+			assert.Equal(t, expectedReconfigure, config.InitReconfigure)
+			assert.Equal(t, schema.TerraformInitModeAuto, config.InitMode)
+			assert.Equal(t, schema.TerraformInitUpgradeAuto, config.InitUpgrade)
 
 			if tt.expectedBackendType != "" {
 				assert.Equal(t, tt.expectedBackendType, config.BackendType)
@@ -387,24 +395,26 @@ func TestExtractComponentPath_ContainmentGuard(t *testing.T) {
 			"workdir": map[string]any{"enabled": true},
 		},
 	}
-	// Inject path traversal via the component argument (incorporated into BuildPath).
+	// Inject path traversal via the stack argument (incorporated into BuildPath
+	// as "<stack>-<component>"). Component-name traversal is no longer a valid
+	// vector here: BuildPath now sanitizes "/" out of the component name (see
+	// docs/fixes/2026-08-05-workdir-nested-component-path-depth.md), so a "/"
+	// or "../"-laden component collapses into a single safe path segment
+	// before this guard would ever need to fire. Stack names aren't
+	// sanitized the same way, so they're what still needs this guard.
 	// Use enough ".." repetitions to escape any reasonable t.TempDir() depth.
-	traversalComponent := "../../../../../../../../../../evil"
+	traversalStack := "../../../../../../../../../../evil"
 
-	path, err := extractComponentPath(atmosConfig, traversalSections, traversalComponent, "dev")
-	require.NoError(t, err, "containment guard must not return an error — it falls back to componentPath")
+	path, err := extractComponentPath(atmosConfig, traversalSections, "vpc", traversalStack)
 
-	// The returned path must not escape BasePath.
-	absBase, _ := filepath.Abs(atmosConfig.BasePath)
-	sep := string(filepath.Separator)
-	escaped := !strings.HasPrefix(path, absBase+sep) && path != absBase
-	assert.False(t, escaped,
-		"extractComponentPath must not return a path outside BasePath; got %q, base %q", path, absBase)
-
-	// The guard must have fired and returned the componentPath fallback, not the
-	// workdir path. Workdir paths contain ".workdir"; the component path does not.
-	assert.NotContains(t, filepath.ToSlash(path), ".workdir",
-		"containment guard must return componentPath (not workdirPath) when traversal escapes BasePath")
+	// The guard must fail closed: a rejected workdir path must surface as an
+	// error, never silently redirect to componentPath (the *source* component
+	// directory), which would risk mixing up stacks or reusing the wrong local
+	// state. The traversal is rejected by BuildPath's validateStackForPath
+	// (a "." or ".." stack path segment), which wraps errUtils.ErrPathTraversal.
+	require.Error(t, err, "containment guard must surface an error instead of falling back to componentPath")
+	require.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	assert.Empty(t, path, "extractComponentPath must return an empty path on error")
 }
 
 func TestExtractComponentPath_ContainmentGuard_AcceptsLegitimate(t *testing.T) {
@@ -449,7 +459,7 @@ func TestExtractComponentConfig_ReadsAutoProvisionWorkdirForOutputs(t *testing.T
 		"component_path": mockPath,
 	}
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs = false
 
 	config, err := ExtractComponentConfig(atmosConfig, sections, "mock", "test")
@@ -630,7 +640,7 @@ func TestExtractComponentPath(t *testing.T) {
 			},
 			// extractComponentPath is called with component="comp" (the instance name).
 			// BuildPath falls back to the instance name when atmos_component is absent.
-			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-comp"),
+			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-comp-0b439c8f"),
 		},
 		{
 			name:     "workdir enabled with atmos_component uses instance name in path",
@@ -645,7 +655,7 @@ func TestExtractComponentPath(t *testing.T) {
 					"workdir": map[string]any{"enabled": true},
 				},
 			},
-			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-my-vpc"),
+			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-my-vpc-c66da8ca"),
 		},
 		{
 			name:     "component with folder prefix",
@@ -718,4 +728,43 @@ func TestExtractComponentPath(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExtractComponentConfig_InitPolicy verifies that an explicit
+// components.terraform.init.{mode,reconfigure,upgrade} setting takes precedence
+// over the legacy init_run_reconfigure bool and is surfaced on ComponentConfig
+// via the Effective* accessors.
+func TestExtractComponentConfig_InitPolicy(t *testing.T) {
+	tempDir := t.TempDir()
+	sections := map[string]any{
+		cfg.CommandSectionName:   "/usr/bin/terraform",
+		cfg.WorkspaceSectionName: "test-ws",
+		cfg.ComponentSectionName: "vpc",
+		"component_info": map[string]any{
+			"component_type": "terraform",
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+				// Legacy setting would resolve to "never"; the explicit init.*
+				// settings below must win instead.
+				InitRunReconfigure: false,
+				Init: schema.TerraformInit{
+					Mode:        schema.TerraformInitModeAlways,
+					Reconfigure: schema.TerraformInitReconfigureAlways,
+					Upgrade:     schema.TerraformInitUpgradeAlways,
+				},
+			},
+		},
+	}
+
+	config, err := ExtractComponentConfig(atmosConfig, sections, "test-component", "test-stack")
+	require.NoError(t, err)
+	assert.Equal(t, schema.TerraformInitModeAlways, config.InitMode)
+	assert.Equal(t, schema.TerraformInitReconfigureAlways, config.InitReconfigure)
+	assert.Equal(t, schema.TerraformInitUpgradeAlways, config.InitUpgrade)
 }

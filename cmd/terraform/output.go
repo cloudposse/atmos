@@ -8,14 +8,17 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	exec "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	envfmt "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
+	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
@@ -42,7 +45,25 @@ Without --format, passes through to native terraform/tofu output command.
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/output
   https://opentofu.org/docs/cli/commands/output`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		return runBeforeHooks(h.BeforeTerraformOutput, cmd, args)
+	},
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
+		// Reset before any early return so the deferred hook and PostRunE read
+		// consistent state.
+		wasMultiComponentExecution = false
+
+		// On failure, run after hooks with error context. Cobra skips PostRunE on
+		// error, so this is the only place the after.terraform.output hook fires
+		// when reading outputs fails. In multi-component mode the per-component
+		// hook already fired for each component, so the global error call is
+		// suppressed to avoid double-firing.
+		defer func() {
+			if runErr != nil && !wasMultiComponentExecution {
+				runHooksOnErrorWithOutput(h.AfterTerraformOutput, cmd, args, runErr, "")
+			}
+		}()
+
 		v := viper.GetViper()
 		if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
@@ -55,6 +76,14 @@ For complete Terraform/OpenTofu documentation, see:
 			return terraformRun(terraformCmd, cmd, args)
 		}
 		return outputRunWithFormat(cmd, args, format)
+	},
+	PostRunE: func(cmd *cobra.Command, args []string) error {
+		// In multi-component mode, per-component hooks already fired inside the
+		// affected/all/query dispatch. Calling them again here would double-fire.
+		if wasMultiComponentExecution {
+			return nil
+		}
+		return runHooksWithOutput(h.AfterTerraformOutput, cmd, args, "")
 	},
 }
 
@@ -110,6 +139,12 @@ func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndS
 		ProfilesFromArg:         globalFlags.Profile,
 		ComponentFromArg:        info.ComponentFromArg,
 		Stack:                   info.Stack,
+		// Init override flags (--init-mode/--init-reconfigure/--init-upgrade), registered via
+		// outputParser since `output` doesn't pull in the full BackendExecutionFlags set. These
+		// flow into atmosConfig.Components.Terraform.Init via setFeatureFlags.
+		InitMode:        v.GetString("init-mode"),
+		InitReconfigure: v.GetString("init-reconfigure"),
+		InitUpgrade:     v.GetString("init-upgrade"),
 	}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
@@ -119,7 +154,29 @@ func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndS
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	// setupTerraformAuth only sets info.AuthManager; copy the resolved credentials onto
+	// info.AuthContext so tfoutput.GetComponentOutputs can export them to the subprocess.
+	populateAuthContextFromManager(&info, authManager)
 	return &info, &atmosConfig, authManager, nil
+}
+
+// populateAuthContextFromManager copies the AuthContext resolved by the auth manager (from --identity)
+// onto info, mirroring how the main terraform execution path populates it. It is a no-op when
+// info.AuthContext is already set, the manager is nil or not an auth.AuthManager, or the manager
+// has no stack info or auth context.
+func populateAuthContextFromManager(info *schema.ConfigAndStacksInfo, authManager any) {
+	if info.AuthContext != nil {
+		return
+	}
+	manager, ok := authManager.(auth.AuthManager)
+	if !ok || manager == nil {
+		return
+	}
+	stackInfo := manager.GetStackInfo()
+	if stackInfo == nil || stackInfo.AuthContext == nil {
+		return
+	}
+	info.AuthContext = stackInfo.AuthContext
 }
 
 // executeOutputWithFormat retrieves and formats terraform outputs.
@@ -246,6 +303,10 @@ func init() {
 		flags.WithStringFlag("output-file", "o", "", "Write output to file instead of stdout"),
 		flags.WithBoolFlag("uppercase", "u", false, "Convert keys to uppercase (useful for env vars)"),
 		flags.WithBoolFlag("flatten", "", false, "Flatten nested maps into key_subkey format"),
+		// `output` doesn't pull in shared.WithBackendExecutionFlags(), so the tri-state init
+		// override flags are registered directly here (shared.WithInitOverrideFlags()) to
+		// support `atmos terraform output --init-mode=never`.
+		shared.WithInitOverrideFlags(),
 		flags.WithEnvVars("format", "ATMOS_TERRAFORM_OUTPUT_FORMAT"),
 		flags.WithEnvVars("output-file", "ATMOS_TERRAFORM_OUTPUT_FILE"),
 		flags.WithEnvVars("uppercase", "ATMOS_TERRAFORM_OUTPUT_UPPERCASE"),

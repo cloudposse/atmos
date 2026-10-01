@@ -347,6 +347,12 @@ func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.
 		}
 	}
 
+	if g.OnRetry != nil {
+		shouldRetry = func(err error) bool {
+			return matchesRetryableGitError(err) || (g.RetryAuthErrors && matchesAuthFailure(err))
+		}
+	}
+
 	// Skip retry if no config, or if MaxAttempts is explicitly set to 1 (single attempt).
 	// nil MaxAttempts means unlimited retries, so we should proceed with retry logic.
 	if cfg == nil || (cfg.MaxAttempts != nil && *cfg.MaxAttempts == 1) {
@@ -358,12 +364,17 @@ func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.
 		attempt++
 		// exec.Cmd can only run once, so we need to recreate it for retries.
 		if attempt > 1 {
+			if g.OnRetry != nil {
+				g.OnRetry(attempt)
+			}
 			// Recreate the command for retry - cmd.Path and cmd.Args are from the original git command.
 			//nolint:gosec // G204: cmd.Path is the git binary path, cmd.Args are git arguments - both from trusted sources
 			newCmd := exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
 			newCmd.Dir = cmd.Dir
 			newCmd.Env = cmd.Env
-			log.Info("Retrying git command", "attempt", attempt, "command", cmd.Path)
+			if g.OnRetry == nil {
+				log.Info("Retrying git command", "attempt", attempt, "command", cmd.Path)
+			}
 			return getRunCommand(newCmd)
 		}
 		return getRunCommand(cmd)
@@ -373,6 +384,9 @@ func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.
 		// We brokered the token and still got rejected after the bounded window: this is no
 		// longer "not propagated yet" — most likely the STS trust policy does not grant this
 		// repo, or the token was revoked. Surface it instead of leaving a bare git error.
+		if g.OnRetry != nil {
+			return fmt.Errorf("GitHub token still rejected after the brokered-auth retry window; verify the STS trust policy grants this repository and that the token was not revoked: %w", err)
+		}
 		log.Error("GitHub token still rejected after the brokered-auth retry window; verify the STS trust policy grants this repository and that the token was not revoked", "error", err)
 	}
 	return err
@@ -381,6 +395,15 @@ func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.
 // isRetryableGitError determines if a git error should trigger a retry.
 // It checks for transient network errors, rate limiting, and other recoverable failures.
 func isRetryableGitError(err error) bool {
+	if matchesRetryableGitError(err) {
+		log.Warn("Retryable git error detected", "error", err)
+		return true
+	}
+	return false
+}
+
+// matchesRetryableGitError classifies without writing into a caller-owned progress region.
+func matchesRetryableGitError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -390,6 +413,15 @@ func isRetryableGitError(err error) bool {
 	transientPatterns := []string{
 		"connection reset",
 		"connection refused",
+		// Resolver and connect failures in git's own wording. A hosted CI
+		// runner whose DNS proxy briefly drops a query reports these, and they
+		// clear on the next attempt just like a reset connection does.
+		"could not resolve host",
+		"no such host",
+		"could not connect to server",
+		"failed to connect to",
+		"network is unreachable",
+		"name resolution",
 		"timeout",
 		"timed out",
 		"eof",
@@ -408,7 +440,6 @@ func isRetryableGitError(err error) bool {
 
 	for _, pattern := range transientPatterns {
 		if strings.Contains(errStr, pattern) {
-			log.Warn("Retryable git error detected", "error", err)
 			return true
 		}
 	}
@@ -548,18 +579,32 @@ func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 	ref := params.ref
 	depth := params.depth
 
+	// `git clone --branch --depth` rejects a commit SHA outright (it only accepts a
+	// branch or tag name for a shallow clone). Use a shallow `git fetch <sha>` instead
+	// -- git supports fetching a specific reachable commit that way, and GitHub/GitLab/
+	// Bitbucket all allow it for public repos -- so SHA-pinned sources (e.g. the
+	// scaffold catalog, pinned to the build commit) stay as fast as any other shallow
+	// clone instead of silently falling back to a full clone of the whole history.
+	if depth > 0 && ref != "" && gitCommitIDRegex.MatchString(ref) {
+		if err := g.cloneShallowCommit(params); err != nil {
+			// Some git hosts reject `fetch <sha>` for a commit not at a ref tip
+			// (e.g. `uploadpack.allowReachableSHA1InWant` isn't enabled). Fall
+			// back to a normal full clone instead of failing outright, mirroring
+			// the cleanup/retry behavior of the other failure paths here.
+			log.Trace("Shallow commit fetch failed, falling back to full clone", "error", err, "ref", ref)
+			fallbackParams := *params
+			fallbackParams.depth = 0
+			return g.clone(&fallbackParams)
+		}
+		return nil
+	}
+
 	args := append(cloneFlagArgs(ref, depth), gitArgSeparator, u.String(), dst)
 
 	cmd := exec.CommandContext(ctx, gitCommand, args...)
 	setupGitEnv(cmd, sshKeyFile)
 	err := g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
-		// A shallow clone of a specific ref requires a named ref (branch or tag) rather than a
-		// commit SHA; flag that case with a clearer hint. We can't recognize it precisely without
-		// hard-coding git's human-readable output, so this is a heuristic.
-		if depth > 0 && ref != "" && gitCommitIDRegex.MatchString(ref) {
-			return fmt.Errorf("%w (note that setting 'depth' requires 'ref' to be a branch or tag name)", err)
-		}
 		return err
 	}
 
@@ -572,6 +617,53 @@ func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 			}
 			return err
 		}
+	}
+	return nil
+}
+
+// cloneShallowCommit fetches a single commit SHA into dst without a full clone:
+// `git init` + `git remote add` + `git fetch --depth <n> <sha>` + `git checkout
+// FETCH_HEAD`. Used instead of `clone` when the ref looks like a commit SHA, since
+// `git clone --branch --depth` does not accept one.
+func (g *CustomGitGetter) cloneShallowCommit(params *gitOperationParams) error {
+	ctx := params.ctx
+	dst := params.dst
+	sshKeyFile := params.sshKeyFile
+	u := params.u
+	ref := params.ref
+	depth := params.depth
+
+	cleanup := func() {
+		if removeErr := os.RemoveAll(dst); removeErr != nil {
+			log.Trace("Failed to remove git repository during cleanup", "error", removeErr, "dir", dst)
+		}
+	}
+
+	cmd := exec.CommandContext(ctx, gitCommand, "init", dst)
+	if err := g.getRunCommandWithRetry(ctx, cmd); err != nil {
+		return err
+	}
+
+	// #nosec G204 -- The URL is validated and we use "--" separator to prevent command injection.
+	cmd = exec.CommandContext(ctx, gitCommand, "remote", "add", originRemote, gitArgSeparator, u.String())
+	cmd.Dir = dst
+	if err := g.getRunCommandWithRetry(ctx, cmd); err != nil {
+		cleanup()
+		return err
+	}
+
+	// #nosec G204 -- ref is from query parameters and we use "--" separator to prevent command injection.
+	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, "--depth", strconv.Itoa(depth), gitArgSeparator, ref)
+	cmd.Dir = dst
+	setupGitEnv(cmd, sshKeyFile)
+	if err := g.getRunCommandWithRetry(ctx, cmd); err != nil {
+		cleanup()
+		return err
+	}
+
+	if err := g.checkout(ctx, dst, "FETCH_HEAD"); err != nil {
+		cleanup()
+		return err
 	}
 	return nil
 }

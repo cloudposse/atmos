@@ -41,9 +41,9 @@ func (m *MockConfigInitializer) EXPECT() *MockConfigInitializerMockRecorder {
 }
 
 // InitConfigAndAuth mocks base method.
-func (m *MockConfigInitializer) InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
+func (m *MockConfigInitializer) InitConfigAndAuth(component, stack, identity string, componentPrompted, stackPrompted bool) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InitConfigAndAuth", component, stack, identity)
+	ret := m.ctrl.Call(m, "InitConfigAndAuth", component, stack, identity, componentPrompted, stackPrompted)
 	ret0, _ := ret[0].(*schema.AtmosConfiguration)
 	ret1, _ := ret[1].(*schema.AuthContext)
 	ret2, _ := ret[2].(error)
@@ -51,9 +51,9 @@ func (m *MockConfigInitializer) InitConfigAndAuth(component, stack, identity str
 }
 
 // InitConfigAndAuth indicates an expected call of InitConfigAndAuth.
-func (mr *MockConfigInitializerMockRecorder) InitConfigAndAuth(component, stack, identity any) *gomock.Call {
+func (mr *MockConfigInitializerMockRecorder) InitConfigAndAuth(component, stack, identity, componentPrompted, stackPrompted any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitConfigAndAuth", reflect.TypeOf((*MockConfigInitializer)(nil).InitConfigAndAuth), component, stack, identity)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitConfigAndAuth", reflect.TypeOf((*MockConfigInitializer)(nil).InitConfigAndAuth), component, stack, identity, componentPrompted, stackPrompted)
 }
 
 // MockProvisioner is a mock of Provisioner interface.

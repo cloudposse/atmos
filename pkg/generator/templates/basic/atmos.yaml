@@ -1,0 +1,26 @@
+# Atmos CLI configuration.
+# https://atmos.tools/cli/configuration
+
+# Base path for components, stacks, and workflows.
+base_path: "."
+
+components:
+  terraform:
+    # Path to Terraform components (relative to `base_path`).
+    base_path: "components/terraform"
+
+stacks:
+  # Path to stack files (relative to `base_path`).
+  base_path: "stacks"
+  # Stack files to include when searching for stacks.
+  included_paths:
+    - "**/*"
+  # Stack files that are imported by other stacks but are not stacks themselves.
+  excluded_paths:
+    - "**/_defaults.yaml"
+  # Template that derives the stack name from stack variables.
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

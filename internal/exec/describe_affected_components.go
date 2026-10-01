@@ -3,6 +3,7 @@ package exec
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -335,92 +336,31 @@ func processTerraformComponentsIndexed(
 	return affected, nil
 }
 
-// processHelmfileComponentsIndexed processes Helmfile components using the files index.
-//
-//nolint:cyclop,dupl,funlen // Similar structure to processPackerComponentsIndexed but for different component type
-func processHelmfileComponentsIndexed(
-	stackName string,
-	helmfileSection map[string]any,
-	remoteStacks *map[string]any,
-	currentStacks *map[string]any,
-	atmosConfig *schema.AtmosConfiguration,
-	filesIndex *changedFilesIndex,
-	patternCache *componentPathPatternCache,
-	includeSpaceliftAdminStacks bool,
-	includeSettings bool,
-	excludeLocked bool,
-) ([]schema.Affected, error) {
-	var affected []schema.Affected
-
-	for componentName, compSection := range helmfileSection {
-		componentSection, ok := compSection.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
-		if hasMetadata {
-			if shouldSkipComponent(metadataSection, componentName, excludeLocked) {
-				continue
-			}
-
-			if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, metadataSection, sectionNameMetadata) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-					&componentSection, affectedReasonStackMetadata, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		// Resolve the component folder for path matching.
-		component := GetComponentFolder(&componentSection, componentName)
-
-		changed, err := isComponentFolderChangedIndexed(component, cfg.HelmfileComponentType, atmosConfig, filesIndex, patternCache)
-		if err != nil {
-			return nil, err
-		}
-		if changed {
-			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-				&componentSection, affectedReasonComponent, false, nil, includeSettings)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// Check the comparable component sections (vars, env, source, provision, ...) via the
-		// shared section table. `metadata` is handled above; `settings` is handled below
-		// because it also drives dependency checks.
-		err = checkComponentSections(
-			&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-			&componentSection, remoteStacks, currentStacks,
-			false, includeSettings,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
-			err := checkSettingsAndDependenciesIndexed(
-				&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-				&componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
-				includeSpaceliftAdminStacks, includeSettings,
-			)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return affected, nil
+// simpleAffectedComponentTypes are the non-Terraform component types whose affected-detection has no
+// type-specific logic, so they all share processSimpleComponentsIndexed. Terraform, Kubernetes, and
+// Helm are handled by dedicated processors (Spacelift/Atlantis, Kubernetes manifests, Helm values
+// files) and are intentionally absent here. See #3203.
+var simpleAffectedComponentTypes = []string{
+	cfg.HelmfileComponentType,
+	cfg.PackerComponentType,
+	cfg.AnsibleComponentType,
+	cfg.ContainerComponentType,
+	cfg.EmulatorComponentType,
 }
 
-// processPackerComponentsIndexed processes Packer components using the files index.
+// processSimpleComponentsIndexed processes a non-Terraform component type whose affected-detection
+// has no type-specific logic. For each component it compares metadata, checks whether the
+// component's source folder changed (a no-op for types with no filesystem source, e.g. emulator),
+// compares the shared component sections (vars, env, source, provision, ...), and checks
+// settings/dependencies. Terraform, Kubernetes, and Helm have dedicated processors with extra logic
+// (Spacelift/Atlantis wiring, Kubernetes manifests, Helm values files); every other
+// affected-eligible type (helmfile, packer, ansible, container, emulator) routes here. See #3203.
 //
-//nolint:cyclop,dupl,funlen // Similar structure to processHelmfileComponentsIndexed but for different component type
-func processPackerComponentsIndexed(
+//nolint:funlen // Straightforward per-component checks; splitting would reduce readability.
+func processSimpleComponentsIndexed(
+	componentType string,
 	stackName string,
-	packerSection map[string]any,
+	section map[string]any,
 	remoteStacks *map[string]any,
 	currentStacks *map[string]any,
 	atmosConfig *schema.AtmosConfiguration,
@@ -432,7 +372,7 @@ func processPackerComponentsIndexed(
 ) ([]schema.Affected, error) {
 	var affected []schema.Affected
 
-	for componentName, compSection := range packerSection {
+	for componentName, compSection := range section {
 		componentSection, ok := compSection.(map[string]any)
 		if !ok {
 			continue
@@ -444,8 +384,8 @@ func processPackerComponentsIndexed(
 				continue
 			}
 
-			if !isEqual(remoteStacks, stackName, cfg.PackerComponentType, componentName, metadataSection, sectionNameMetadata) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
+			if !isEqual(remoteStacks, stackName, componentType, componentName, metadataSection, sectionNameMetadata) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, componentType,
 					&componentSection, affectedReasonStackMetadata, false, nil, includeSettings)
 				if err != nil {
 					return nil, err
@@ -456,12 +396,12 @@ func processPackerComponentsIndexed(
 		// Resolve the component folder for path matching.
 		component := GetComponentFolder(&componentSection, componentName)
 
-		changed, err := isComponentFolderChangedIndexed(component, cfg.PackerComponentType, atmosConfig, filesIndex, patternCache)
+		changed, err := isComponentFolderChangedIndexed(component, componentType, atmosConfig, filesIndex, patternCache)
 		if err != nil {
 			return nil, err
 		}
 		if changed {
-			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, componentType,
 				&componentSection, affectedReasonComponent, false, nil, includeSettings)
 			if err != nil {
 				return nil, err
@@ -472,7 +412,7 @@ func processPackerComponentsIndexed(
 		// shared section table. `metadata` is handled above; `settings` is handled below
 		// because it also drives dependency checks.
 		err = checkComponentSections(
-			&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
+			&affected, atmosConfig, componentName, stackName, componentType,
 			&componentSection, remoteStacks, currentStacks,
 			false, includeSettings,
 		)
@@ -480,15 +420,17 @@ func processPackerComponentsIndexed(
 			return nil, err
 		}
 
-		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
-			err := checkSettingsAndDependenciesIndexed(
-				&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
-				&componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
-				includeSpaceliftAdminStacks, includeSettings,
-			)
-			if err != nil {
-				return nil, err
-			}
+		// Always run the settings/dependencies check, even when there is no settings section: a
+		// component can declare file/folder dependencies (dependencies.components) without any
+		// settings, and those must still be checked. The settings-equality comparison inside is
+		// guarded on the settings section being present. See #3204.
+		settingsSection, _ := componentSection[cfg.SettingsSectionName].(map[string]any)
+		if err := checkSettingsAndDependenciesIndexed(
+			&affected, atmosConfig, componentName, stackName, componentType,
+			&componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
+			includeSpaceliftAdminStacks, includeSettings,
+		); err != nil {
+			return nil, err
 		}
 	}
 
@@ -590,6 +532,7 @@ func addKubernetesSectionAffected(
 		{sectionNamePaths, affectedReasonStackPaths},
 		{sectionNameManifests, affectedReasonStackManifests},
 		{sectionNameRender, affectedReasonStackRender},
+		{cfg.ValidateSectionName, fmt.Sprintf("stack.%s", cfg.ValidateSectionName)},
 	}...)
 	sections = appendSectionChecks(sections, resolveComponentSectionChecks(atmosConfig)...)
 
@@ -603,9 +546,13 @@ func addKubernetesSectionAffected(
 	for _, section := range sections {
 		value, ok := (*componentSection)[section.section]
 		if !ok {
-			continue
-		}
-		if isSectionValueEqual(locator, value, section.section) {
+			// validate is presence-sensitive: removing it locally (reverting to the
+			// enabled default) while the remote stack still has it explicitly set is
+			// itself a behavior change and must be detected, not silently skipped.
+			if section.section != cfg.ValidateSectionName || !locator.sectionPresent(section.section) {
+				continue
+			}
+		} else if isSectionValueEqual(locator, value, section.section) {
 			continue
 		}
 		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.KubernetesComponentType,
@@ -670,6 +617,14 @@ func processHelmComponentsIndexed(
 			}
 		}
 
+		if helmValuesFileChanged(component, componentSection, atmosConfig, filesIndex) {
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmComponentType,
+				&componentSection, affectedReasonStackValuesFile, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		if err := addHelmSectionAffected(&affected, atmosConfig, componentName, stackName, &componentSection, remoteStacks, currentStacks, includeSpaceliftAdminStacks, includeSettings); err != nil {
 			return nil, err
 		}
@@ -687,6 +642,56 @@ func processHelmComponentsIndexed(
 	}
 
 	return affected, nil
+}
+
+// helmValuesFileChanged reports whether a native Helm component consumes a
+// values file changed by the compared git refs. Relative paths are resolved
+// from the physical component directory, matching Helm values loading. The
+// target may live outside the Helm component base path, so lookup uses the
+// complete changed-file set rather than the component-path index.
+func helmValuesFileChanged(
+	component string,
+	componentSection map[string]any,
+	atmosConfig *schema.AtmosConfiguration,
+	filesIndex *changedFilesIndex,
+) bool {
+	if filesIndex == nil {
+		return false
+	}
+
+	componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath, component)
+	for _, ref := range stringSlice(componentSection[cfg.ValuesFilesSectionName]) {
+		path := ref
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(componentPath, path)
+		}
+		absPath, err := filepath.Abs(path)
+		if err == nil && filesIndex.isChangedFile(absPath) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func stringSlice(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		result := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if str, ok := item.(string); ok && str != "" {
+				result = append(result, str)
+			}
+		}
+		return result
+	case string:
+		if typed != "" {
+			return []string{typed}
+		}
+	}
+	return nil
 }
 
 func addHelmSectionAffected(
@@ -787,8 +792,21 @@ func checkSettingsAndDependenciesIndexed(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 ) error {
-	// Check settings section changes.
-	if !isEqual(remoteStacks, stackName, componentType, componentName, settingsSection, cfg.SettingsSectionName) {
+	// Check settings section changes when EITHER ref has a settings section: HEAD
+	// (settingsSection != nil, which also covers an explicitly emptied `settings: {}`) or BASE (the
+	// remote component has the key). This detects a settings section that was added, modified,
+	// emptied, or removed. When neither ref has one, skip: comparing a nil local against an absent
+	// remote via isEqual returns false (isEqual yields false whenever the remote section is absent),
+	// which would falsely flag every settings-less component. The dependency check below still runs
+	// regardless (dependencies.components can be declared without settings). See #3204.
+	settingsLocator := remoteComponentLocator{
+		remoteStacks:  remoteStacks,
+		stackName:     stackName,
+		componentType: componentType,
+		componentName: componentName,
+	}
+	if (settingsSection != nil || settingsLocator.sectionPresent(cfg.SettingsSectionName)) &&
+		!isEqual(remoteStacks, stackName, componentType, componentName, settingsSection, cfg.SettingsSectionName) {
 		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, componentType,
 			componentSection, affectedReasonStackSettings, includeSpaceliftAdminStacks, currentStacks, includeSettings)
 		if err != nil {
@@ -796,7 +814,8 @@ func checkSettingsAndDependenciesIndexed(
 		}
 	}
 
-	// Check settings.depends_on using indexed version.
+	// Check file/folder dependencies (dependencies.components and legacy settings.depends_on),
+	// independent of whether a settings section is present.
 	return checkDependencyChangesIndexed(
 		affected, atmosConfig, componentName, stackName, componentType,
 		componentSection, settingsSection, filesIndex,

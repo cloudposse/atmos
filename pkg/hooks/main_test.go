@@ -18,6 +18,14 @@ import (
 //   - _ATMOS_TEST_WRITE_OUTPUT: write the value of _ATMOS_TEST_OUTPUT_BODY to
 //     the path in $ATMOS_OUTPUT_FILE, then exit 0. Lets tests simulate a tool
 //     that produces structured side-channel output.
+//   - _ATMOS_TEST_ECHO_STDOUT: write the value of _ATMOS_TEST_STDOUT_BODY to
+//     os.Stdout, then exit 0. Lets tests simulate a tool that emits structured
+//     output to stdout (e.g. tflint --format=sarif) so the engine's
+//     CaptureStdout redirect can be verified cross-platform via os.Executable().
+//   - _ATMOS_TEST_ECHO_STDERR: write the value of _ATMOS_TEST_STDERR_BODY to
+//     os.Stderr, then exit 0. Lets tests verify subprocess stderr routing.
+//   - _ATMOS_TEST_WRITE_CWD: write the subprocess working directory and
+//     ATMOS_COMPONENT_PATH to ATMOS_OUTPUT_FILE, separated by a newline.
 func TestMain(m *testing.M) {
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
 		os.Exit(1)
@@ -30,6 +38,28 @@ func TestMain(m *testing.M) {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
+		}
+		os.Exit(0)
+	}
+	if os.Getenv("_ATMOS_TEST_ECHO_STDOUT") == "1" {
+		fmt.Fprint(os.Stdout, os.Getenv("_ATMOS_TEST_STDOUT_BODY"))
+	}
+	if os.Getenv("_ATMOS_TEST_ECHO_STDERR") == "1" {
+		fmt.Fprint(os.Stderr, os.Getenv("_ATMOS_TEST_STDERR_BODY"))
+	}
+	if os.Getenv("_ATMOS_TEST_ECHO_STDOUT") == "1" || os.Getenv("_ATMOS_TEST_ECHO_STDERR") == "1" {
+		os.Exit(0)
+	}
+	if os.Getenv("_ATMOS_TEST_WRITE_CWD") == "1" {
+		out := os.Getenv("ATMOS_OUTPUT_FILE")
+		wd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(out, []byte(wd+"\n"+os.Getenv("ATMOS_COMPONENT_PATH")), 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 		os.Exit(0)
 	}

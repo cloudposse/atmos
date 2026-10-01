@@ -1,0 +1,39 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: azure-landing-zone
+  description: Azure landing zone — dev/staging/prod environments with resource group, virtual network, subnet, and NSG, provisioned on the local emulator.
+  author: Cloud Posse
+  version: 1.0.0
+spec:
+  delimiters: ["[[", "]]"]
+  fields:
+    - name: project_name
+      label: Project name
+      description: Name of the project; used in resource names.
+      type: input
+      default: my-azure-landing-zone
+      required: true
+      validation:
+        pattern: "^[a-z][a-z0-9-]{1,30}$"
+        message: Use lowercase letters, digits, and hyphens (2-31 characters).
+    - name: location
+      label: Azure location
+      description: Azure region/location for resources.
+      type: select
+      default: eastus
+      required: true
+      options:
+        - eastus
+        - westus2
+        - centralus
+        - westeurope
+    - name: terraform_command
+      label: Terraform binary
+      description: Which binary Atmos invokes for Terraform operations.
+      type: select
+      default: terraform
+      required: true
+      options:
+        - terraform
+        - tofu

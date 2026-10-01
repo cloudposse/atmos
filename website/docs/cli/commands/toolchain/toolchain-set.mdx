@@ -29,8 +29,12 @@ atmos toolchain set <tool> <version>
 atmos toolchain set terraform 1.11.4
 atmos toolchain set hashicorp/terraform 1.11.4
 atmos toolchain set terraform  # Interactive version selection
-atmos toolchain set --file /path/to/.tool-versions kubectl 1.28.0
+atmos toolchain --tool-versions=/path/to/.tool-versions set kubectl 1.28.0
 ```
+
+To target a `.tool-versions` file other than the default, use the `toolchain` parent command's
+persistent `--tool-versions` flag (or the `ATMOS_TOOL_VERSIONS` environment variable) before the
+`set` subcommand, as shown above.
 
 ## Arguments
 
@@ -51,10 +55,9 @@ atmos toolchain set --file /path/to/.tool-versions kubectl 1.28.0
 
 ## Flags
 
-<dl>
-    <dt>`--file`  <em>(optional)</em></dt>
-    <dd>
-        Path to tool-versions file (defaults to global --tool-versions-file)
-    </dd>
+`toolchain set` has no flags of its own. To use a `.tool-versions` file other than the default,
+pass the `toolchain` parent command's persistent `--tool-versions` flag, for example:
 
-</dl>
+```shell
+atmos toolchain --tool-versions=/path/to/.tool-versions set kubectl 1.28.0
+```

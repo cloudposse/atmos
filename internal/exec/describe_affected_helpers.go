@@ -42,6 +42,34 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	authManager auth.AuthManager,
 	authDisabled bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	return ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
+		atmosConfig, ref, sha, sshKeyPath, sshKeyPassword, includeSpaceliftAdminStacks, includeSettings,
+		stack, processTemplates, processYamlFunctions, skip, excludeLocked, authManager, authDisabled,
+		DescribeStacksErrorOptions{},
+	)
+}
+
+// ExecuteDescribeAffectedWithTargetRefCloneWithOptions is ExecuteDescribeAffectedWithTargetRefClone plus
+// opt-in graceful degradation for recoverable per-value YAML function errors (see DescribeStacksErrorOptions).
+//
+//nolint:revive,gocognit,cyclop,funlen // Signature/body intentionally mirror ExecuteDescribeAffectedWithTargetRefClone with one added options parameter.
+func ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	ref string,
+	sha string,
+	sshKeyPath string,
+	sshKeyPassword string,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+	stack string,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
+	excludeLocked bool,
+	authManager auth.AuthManager,
+	authDisabled bool,
+	errOptions DescribeStacksErrorOptions,
+) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefClone")()
 
 	localRepo, err := g.GetLocalRepo()
@@ -166,6 +194,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		excludeLocked,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -208,6 +237,33 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	excludeLocked bool,
 	authManager auth.AuthManager,
 	authDisabled bool,
+) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	return ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
+		atmosConfig, ref, sha, targetBranch, includeSpaceliftAdminStacks, includeSettings,
+		stack, processTemplates, processYamlFunctions, skip, excludeLocked, authManager, authDisabled,
+		DescribeStacksErrorOptions{},
+	)
+}
+
+// ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions is ExecuteDescribeAffectedWithTargetRefCheckout plus
+// opt-in graceful degradation for recoverable per-value YAML function errors (see DescribeStacksErrorOptions).
+//
+//nolint:revive,funlen // Signature/body intentionally mirror ExecuteDescribeAffectedWithTargetRefCheckout with one added options parameter.
+func ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	ref string,
+	sha string,
+	targetBranch string,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+	stack string,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
+	excludeLocked bool,
+	authManager auth.AuthManager,
+	authDisabled bool,
+	errOptions DescribeStacksErrorOptions,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefCheckout")()
 
@@ -273,6 +329,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		excludeLocked,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -301,6 +358,31 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	excludeLocked bool,
 	authManager auth.AuthManager,
 	authDisabled bool,
+) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	return ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
+		atmosConfig, targetRefPath, includeSpaceliftAdminStacks, includeSettings,
+		stack, processTemplates, processYamlFunctions, skip, excludeLocked, authManager, authDisabled,
+		DescribeStacksErrorOptions{},
+	)
+}
+
+// ExecuteDescribeAffectedWithTargetRepoPathWithOptions is ExecuteDescribeAffectedWithTargetRepoPath plus
+// opt-in graceful degradation for recoverable per-value YAML function errors (see DescribeStacksErrorOptions).
+//
+//nolint:revive,funlen // Signature/body intentionally mirror ExecuteDescribeAffectedWithTargetRepoPath with one added options parameter.
+func ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	targetRefPath string,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+	stack string,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
+	excludeLocked bool,
+	authManager auth.AuthManager,
+	authDisabled bool,
+	errOptions DescribeStacksErrorOptions,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRepoPath")()
 
@@ -347,6 +429,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		excludeLocked,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err

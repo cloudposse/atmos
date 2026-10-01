@@ -1,0 +1,64 @@
+---
+slug: concurrent-vendoring
+title: "Faster Vendoring with Concurrent Downloads"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+import CastEmbed from '@site/src/components/CastEmbed'
+
+Waiting for each component download to finish before the next begins adds up in
+large repositories. Atmos vendoring now prepares independent packages concurrently
+and shows their progress together, while keeping destination writes in declaration
+order.
+
+<!--truncate-->
+
+<CastEmbed src="/casts/demo/fixtures/concurrent-vendoring/pull.cast" title="Concurrent vendoring and cleanup" chrome controls scrubber />
+
+## The Problem
+
+A repository can contain many component sources, mixins, and targets. Fetching
+these one at a time leaves the network idle between jobs and makes a large update
+hard to follow. Overlapping destinations also mean downloads cannot simply copy
+files whenever they finish.
+
+## The Fix
+
+[Vendor pull](/cli/commands/vendor/pull) prepares up to four packages at once and
+installs them in declaration order. Local sources wait for earlier writes before
+being read. [Vendor update](/cli/commands/vendor/vendor-update) checks upstream
+versions concurrently and preserves the order and formatting of manifest edits.
+
+The shared progress display shows active phases, download percentages when the total
+size is known, retries, and completed results. A ready package is waiting for its turn
+to install. The overall bar advances during downloads with known sizes and when
+packages become ready, with equal weight for preparation and installation. The
+completed count advances only after processing finishes. CI receives plain result
+lines, and structured update reports stay on stdout.
+
+The [vendor clean](/cli/commands/vendor/vendor-clean) command displays relative paths
+and preserves every lock entry when removing vendored files. Recorded versions,
+checksums, and provenance remain available for the next pull. Fully cleaned packages
+reinstall without drift warnings; partial deletion and modified files still trigger checks.
+
+## How to Use It
+
+```shell
+atmos vendor pull --max-concurrency 8
+atmos vendor update --check --max-concurrency 8
+atmos vendor update --pull --max-concurrency 8
+```
+
+Set [`vendor.max_concurrency`](/cli/configuration/vendor#concurrency) in `atmos.yaml`
+or use `ATMOS_VENDOR_MAX_CONCURRENCY`. Explicit flags take precedence over the
+environment and configuration. Set one worker for serial execution.
+
+Projects with an [edition pin](/cli/configuration/edition) before `2026-09-15` keep
+one worker by default. All editions receive the progress display, and explicit
+concurrency settings override the pin.
+
+## Get Involved
+
+Try the commands on your component catalog and share feedback in
+[Atmos GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

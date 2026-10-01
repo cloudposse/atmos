@@ -1,0 +1,10 @@
+[
+  {
+    "action": "aquasecurity/trivy-action",
+    "description": "The aquasecurity GitHub organization has enabled an IP allow list that blocks API access (git ref/tag lookups) from GitHub-hosted Actions runner IPs, for any caller, on any of their repos, including public ones — this is not specific to our token or workflow. Verified independently: the exact same 403 is reported against the sibling aquasecurity/tfsec-action, and trivy-cache-action's issue tracker explicitly confirms 'aquasecurity GitHub org now has IP allow list enabled, blocking API access'. Manually confirmed our pinned SHA is correct (dereferenced the v0.36.0 annotated tag directly against the GitHub API from a non-Actions IP; it matches) — this entry only silences the automated drift check, which the API access restriction makes impossible to run in CI, not the underlying security property.",
+    "references": [
+      "https://github.com/aquasecurity/tfsec-action/issues/24",
+      "https://github.com/yogeshlonkar/trivy-cache-action/issues/136"
+    ]
+  }
+]

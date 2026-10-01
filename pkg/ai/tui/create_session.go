@@ -33,6 +33,8 @@ type createSessionForm struct {
 func newCreateSessionForm() createSessionForm {
 	ti := textinput.New()
 	ti.Placeholder = "Enter session name"
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetBorderColor()))
+	ti.PlaceholderStyle = theme.GetCurrentStyles().Muted
 	ti.Focus()
 	ti.CharLimit = sessionNameCharLimit
 	ti.Width = sessionNameWidth
@@ -188,22 +190,7 @@ func (m *ChatModel) handleSessionCreated(msg sessionCreatedMsg) {
 	m.createForm = newCreateSessionForm()
 
 	// Add welcome message.
-	m.addMessage(roleAssistant, `I'm here to help you with your Atmos infrastructure management. I can:
-
-• Describe components and their configurations
-• List available components and stacks
-• Validate stack configurations
-• Generate Terraform plans (read-only)
-• Answer questions about Atmos concepts and best practices
-• Help debug configuration issues
-
-Try asking me something like:
-- "List all available components"
-- "Describe the vpc component in the dev stack"
-- "What are Atmos stacks?"
-- "How do I validate my stack configuration?"
-
-What would you like to know?`)
+	m.addWelcomeMessage()
 	m.updateViewportContent()
 }
 
@@ -223,7 +210,7 @@ func (m *ChatModel) createSessionView() string {
 // renderCreateFormTitle renders the form title.
 func (m *ChatModel) renderCreateFormTitle(content *strings.Builder) {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 		Bold(true).
 		Padding(1, 2)
 	content.WriteString(titleStyle.Render("Create New Session"))
@@ -237,7 +224,7 @@ func (m *ChatModel) renderCreateFormError(content *strings.Builder) {
 	}
 
 	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorRed)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error)).
 		Padding(0, 2)
 	content.WriteString(errorStyle.Render(fmt.Sprintf("\u274c Error: %s", m.createForm.error)))
 	content.WriteString(newlineChar + newlineChar)
@@ -252,7 +239,7 @@ func (m *ChatModel) renderCreateFormNameInput(content *strings.Builder) {
 
 	labelStyle := lipgloss.NewStyle().
 		Padding(0, 2).
-		Foreground(lipgloss.Color(theme.ColorGreen))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
 
 	content.WriteString(labelStyle.Render(nameLabel))
 	content.WriteString(newlineChar)
@@ -269,7 +256,7 @@ func (m *ChatModel) renderCreateFormProviderList(content *strings.Builder) {
 
 	labelStyle := lipgloss.NewStyle().
 		Padding(0, 2).
-		Foreground(lipgloss.Color(theme.ColorGreen))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
 
 	content.WriteString(labelStyle.Render(providerLabel))
 	content.WriteString(newlineChar)
@@ -293,17 +280,17 @@ func (m *ChatModel) renderCreateFormProviderOption(index int, provider ProviderW
 		prefix = "\u25cf "
 		if m.createForm.focusedField == 1 {
 			style = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(theme.ColorGreen)).
+				Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).
 				Bold(true).
 				Padding(0, 4)
 		} else {
 			style = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(theme.ColorCyan)).
+				Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 				Padding(0, 4)
 		}
 	} else {
 		style = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 			Padding(0, 4)
 	}
 
@@ -314,7 +301,7 @@ func (m *ChatModel) renderCreateFormProviderOption(index int, provider ProviderW
 // renderCreateFormHelp renders the help text.
 func (m *ChatModel) renderCreateFormHelp(content *strings.Builder) {
 	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Italic(true).
 		Padding(0, 2)
 

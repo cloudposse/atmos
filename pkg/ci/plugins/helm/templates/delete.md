@@ -10,6 +10,31 @@
 | Release | `{{ .ReleaseName }}` |
 | Namespace | `{{ .Namespace }}` |
 
+{{ with .Lifecycle }}
+
+### Release lifecycle
+
+{{ if eq (index . "reason") "external_target" }}
+
+| Field | Value |
+| --- | --- |
+| Deleted | `false` |
+| Target kind | `{{ index . "target_kind" }}` |
+| Reason | `external_target` |
+
+{{ else }}
+
+| Field | Value |
+| --- | --- |
+| Operation | `{{ index . "operation" }}` |
+| Wait strategy | `{{ index (index . "wait") "strategy" }}` |
+| Timeout | `{{ index . "timeout" }}` |
+| Chart hooks enabled | `{{ index . "chart_hooks" }}` |
+
+{{ end }}
+
+{{ end }}
+
 To reproduce locally:
 
 ```shell

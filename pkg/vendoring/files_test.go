@@ -141,19 +141,21 @@ func TestFindSource(t *testing.T) {
 func TestComponentVersionPath(t *testing.T) {
 	file := writeFile(t, t.TempDir(), "vendor.yaml", versionPathFixture)
 
-	path, err := ComponentVersionPath(file, "vpc")
+	path, declaringFile, err := ComponentVersionPath(file, "vpc")
 	require.NoError(t, err)
 	assert.Equal(t, "spec.sources[0].version", path)
+	assert.Equal(t, file, declaringFile)
 
-	path, err = ComponentVersionPath(file, "eks")
+	path, declaringFile, err = ComponentVersionPath(file, "eks")
 	require.NoError(t, err)
 	assert.Equal(t, "spec.sources[1].version", path)
+	assert.Equal(t, file, declaringFile)
 }
 
 func TestComponentVersionPath_NotFound(t *testing.T) {
 	file := writeFile(t, t.TempDir(), "vendor.yaml", versionPathFixture)
 
-	_, err := ComponentVersionPath(file, "missing")
+	_, _, err := ComponentVersionPath(file, "missing")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
 }
@@ -161,9 +163,33 @@ func TestComponentVersionPath_NotFound(t *testing.T) {
 func TestComponentVersionPath_MissingFile(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist.yaml")
 
-	_, err := ComponentVersionPath(missing, "vpc")
+	_, _, err := ComponentVersionPath(missing, "vpc")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, atmosyaml.ErrReadFile)
+}
+
+// TestComponentVersionPath_ImportOnlyComponent is a regression test for a
+// field-test finding: a component declared only in an imported manifest (not
+// the root vendorFile) was reported as "not found" even though `vendor
+// config list` could see it, because ComponentVersionPath only ever searched
+// vendorFile itself. It must now be resolved via the import chain, with the
+// declaring (imported) file returned alongside the path.
+func TestComponentVersionPath_ImportOnlyComponent(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "vendor"), 0o755))
+	root := writeFile(t, dir, "vendor.yaml", mainWithImports)
+	imported := writeFile(t, filepath.Join(dir, "vendor"), "terraform.yaml", importedManifest)
+
+	path, declaringFile, err := ComponentVersionPath(root, "vpc")
+	require.NoError(t, err)
+	assert.Equal(t, "spec.sources[0].version", path)
+	assert.Equal(t, imported, declaringFile)
+
+	// The root-declared component still resolves against the root file.
+	path, declaringFile, err = ComponentVersionPath(root, "root-comp")
+	require.NoError(t, err)
+	assert.Equal(t, "spec.sources[0].version", path)
+	assert.Equal(t, root, declaringFile)
 }
 
 func TestSetComponentVersion_PreservesFormatting(t *testing.T) {
@@ -215,6 +241,32 @@ func TestSetComponentVersion_InvalidYAML(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrParseVendorFile)
 	assert.NotErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound, "invalid YAML must not be reported as component-not-found")
+}
+
+// TestSetComponentVersion_ImportOnlyComponent is a regression test for a
+// field-test finding: `atmos vendor set <component>` could not update a
+// component declared only in an imported manifest, because SetComponentVersion
+// always wrote to vendorFile regardless of which file actually declared the
+// component. The write must now land in the declaring (imported) file, and
+// the root file must be left untouched.
+func TestSetComponentVersion_ImportOnlyComponent(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "vendor"), 0o755))
+	root := writeFile(t, dir, "vendor.yaml", mainWithImports)
+	imported := writeFile(t, filepath.Join(dir, "vendor"), "terraform.yaml", importedManifest)
+
+	rootBefore, err := os.ReadFile(root)
+	require.NoError(t, err)
+
+	require.NoError(t, SetComponentVersion(root, "vpc", "v3.0.0"))
+
+	got, err := atmosyaml.GetFile(imported, "spec.sources[0].version")
+	require.NoError(t, err)
+	assert.Equal(t, "v3.0.0", got, "version updated in the imported file that declares the component")
+
+	rootAfter, err := os.ReadFile(root)
+	require.NoError(t, err)
+	assert.Equal(t, string(rootBefore), string(rootAfter), "root manifest must be untouched")
 }
 
 func TestCollectManifestFiles_CyclicImportsTerminate(t *testing.T) {

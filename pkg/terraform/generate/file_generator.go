@@ -117,11 +117,13 @@ func GenerateFiles(
 // Shows individual files that changed, plus a summary line.
 func emitSummary(results []GenerateResult, isClean bool, componentDir string) { //nolint:revive,cyclop
 	var createdFiles, updatedFiles, deletedFiles []string
+	var fileErrors []error
 	var unchanged, errors int
 
 	for _, r := range results {
 		if r.Error != nil { //nolint:nestif,gocritic
 			errors++
+			fileErrors = append(fileErrors, r.Error)
 		} else if r.Deleted {
 			deletedFiles = append(deletedFiles, r.Filename)
 		} else if r.Skipped {
@@ -150,6 +152,13 @@ func emitSummary(results []GenerateResult, isClean bool, componentDir string) { 
 	for _, f := range deletedFiles {
 		ui.Successf("Deleted `%s`", filepath.Join(relDir, f))
 	}
+	// Show each file-generation error's actual message. The summary line below only
+	// ever reported a bare count ("1 errors") with the underlying cause discarded —
+	// silently dropping exactly the detail needed to tell a real render/write failure
+	// apart from, say, a stale YAML-function value.
+	for _, err := range fileErrors {
+		ui.Errorf("%s", err)
+	}
 
 	// Build summary parts, omitting any zero counts.
 	var parts []string
@@ -169,13 +178,25 @@ func emitSummary(results []GenerateResult, isClean bool, componentDir string) { 
 		parts = append(parts, fmt.Sprintf("%d errors", errors))
 	}
 
-	// Show summary line.
+	// Show summary line. A real generation error must not read as a success, even
+	// when other files in the same component generated cleanly.
 	summary := strings.Join(parts, ", ")
-	if isClean {
-		ui.Successf("Cleaned `%s` (%s)", relDir, summary)
+	verb, hasErrors := summaryVerb(isClean, errors)
+	if hasErrors {
+		ui.Errorf("%s `%s` (%s)", verb, relDir, summary)
 	} else {
-		ui.Successf("Generated `%s` (%s)", relDir, summary)
+		ui.Successf("%s `%s` (%s)", verb, relDir, summary)
 	}
+}
+
+// summaryVerb picks emitSummary's headline verb ("Generated"/"Cleaned") and reports
+// whether the summary line must use error styling (errors > 0), independent of isClean.
+func summaryVerb(isClean bool, errors int) (verb string, hasErrors bool) {
+	verb = "Generated"
+	if isClean {
+		verb = "Cleaned"
+	}
+	return verb, errors > 0
 }
 
 // fileContext holds context for file generation operations.

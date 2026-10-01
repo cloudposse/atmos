@@ -41,6 +41,12 @@ var ErrGitHubTokenRequired = errors.New("GitHub token required")
 // Use GetGitHubTokenOrError if you need to require authentication.
 func GetGitHubToken() string {
 	defer perf.Track(nil, "github.GetGitHubToken")()
+	return GetGitHubTokenContext(context.Background())
+}
+
+// GetGitHubTokenContext resolves an optional token while honoring caller cancellation.
+func GetGitHubTokenContext(ctx context.Context) string {
+	defer perf.Track(nil, "github.GetGitHubTokenContext")()
 
 	// First, try the standard Atmos token detection (CLI flag + env vars).
 	if token := httpClient.GetGitHubTokenFromEnv(); token != "" {
@@ -48,7 +54,7 @@ func GetGitHubToken() string {
 	}
 
 	// Fall back to GitHub CLI if installed.
-	if token := getGitHubTokenFromCLI(); token != "" {
+	if token := GetGitHubTokenFromCLIContext(ctx); token != "" {
 		log.Debug("Using GitHub token from gh CLI")
 		return token
 	}
@@ -70,15 +76,28 @@ func GetGitHubTokenOrError() (string, error) {
 	return token, nil
 }
 
-// getGitHubTokenFromCLI attempts to get a token from the GitHub CLI.
+// GetGitHubTokenFromCLI attempts to get a token from the GitHub CLI.
 // Returns empty string if the CLI is not installed, not authenticated, or disabled.
 //
 // The CLI binary is configurable via the ATMOS_GITHUB_CLI environment variable
 // (defaults to "gh"). Setting it to an empty value disables the fallback, and
 // setting it to a nonexistent binary forces the unauthenticated/anonymous path
 // (useful for exercising public access).
-func getGitHubTokenFromCLI() string {
-	defer perf.Track(nil, "github.getGitHubTokenFromCLI")()
+//
+// Exported so other packages needing GitHub CLI token resolution (e.g. the git-clone
+// token injection in pkg/downloader) can call the same fallback without duplicating it.
+func GetGitHubTokenFromCLI() string {
+	defer perf.Track(nil, "github.GetGitHubTokenFromCLI")()
+	return GetGitHubTokenFromCLIContext(context.Background())
+}
+
+// GetGitHubTokenFromCLIContext bounds the CLI lookup by both caller cancellation
+// and the existing five-second CLI timeout. Cancellation leaves the token empty.
+func GetGitHubTokenFromCLIContext(parent context.Context) string {
+	defer perf.Track(nil, "github.GetGitHubTokenFromCLIContext")()
+	if parent.Err() != nil {
+		return ""
+	}
 
 	cli := gitHubCLIBinary()
 	if cli == "" {
@@ -87,7 +106,7 @@ func getGitHubTokenFromCLI() string {
 	}
 
 	// Try to get token from the GitHub CLI with timeout to prevent hanging.
-	ctx, cancel := context.WithTimeout(context.Background(), ghCLITimeout)
+	ctx, cancel := context.WithTimeout(parent, ghCLITimeout)
 	defer cancel()
 	cmd := commander.CommandContext(ctx, cli, "auth", "token")
 	output, err := cmd.Output()
@@ -103,6 +122,18 @@ func getGitHubTokenFromCLI() string {
 	}
 
 	return token
+}
+
+// SetCommanderForTesting overrides the package-level GitHub CLI command executor, for tests
+// in other packages that exercise GetGitHubTokenFromCLI indirectly (e.g.
+// pkg/downloader's git-clone token injection). Returns a restore func the caller must invoke
+// (typically via t.Cleanup) to put the original commander back.
+func SetCommanderForTesting(c execpkg.CommandExecutor) (restore func()) {
+	defer perf.Track(nil, "github.SetCommanderForTesting")()
+
+	orig := commander
+	commander = c
+	return func() { commander = orig }
 }
 
 // gitHubCLIBinary returns the GitHub CLI binary name to use for token lookups.

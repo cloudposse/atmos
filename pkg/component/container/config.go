@@ -16,45 +16,13 @@ import (
 
 const (
 	// DefaultBasePath is the conventional location for container component build
-	// contexts and assets.
+	// contexts and assets, used when `components.container.base_path` is unset.
 	defaultBasePath = "components/container"
 	// DefaultProtocol is assumed for a port mapping with no explicit protocol.
 	defaultProtocol = "tcp"
 	// DefaultMountType is assumed for a mount with no explicit type.
 	defaultMountType = "bind"
 )
-
-// Config is the global configuration for the container component kind, stored
-// under `components.container` in atmos.yaml and read via the Plugins map.
-type Config struct {
-	// BasePath is the base directory for container component assets.
-	BasePath string `mapstructure:"base_path"`
-}
-
-// DefaultConfig returns the default global container component configuration.
-func DefaultConfig() Config {
-	defer perf.Track(nil, "container.DefaultConfig")()
-
-	return Config{BasePath: defaultBasePath}
-}
-
-// parseConfig decodes a raw global-config value (from the Plugins map) into a
-// typed Config.
-func parseConfig(raw any) (Config, error) {
-	var config Config
-	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		Result:           &config,
-		WeaklyTypedInput: true,
-		TagName:          "mapstructure",
-	})
-	if err != nil {
-		return Config{}, fmt.Errorf("%w: create config decoder: %w", errUtils.ErrComponentConfigInvalid, err)
-	}
-	if err := decoder.Decode(raw); err != nil {
-		return Config{}, fmt.Errorf("%w: decode container config: %w", errUtils.ErrComponentConfigInvalid, err)
-	}
-	return config, nil
-}
 
 // ContainerSpec is the resolved, per-instance container component configuration.
 // Its build/run shapes reuse the workflow container-step structs so component
@@ -163,6 +131,31 @@ func (s *ContainerSpec) ToBuildConfig() *ctr.BuildConfig {
 		Target:     s.Build.Target,
 		NoCache:    s.Build.NoCache,
 		Pull:       s.Build.Pull,
+		Driver:     toDriverConfig(s.Build.Driver),
+		Cache:      toCacheConfig(s.Build.Cache),
+	}
+}
+
+// toDriverConfig maps the schema driver spec onto a runtime DriverConfig.
+func toDriverConfig(d *schema.ContainerDriverConfig) *ctr.DriverConfig {
+	if d == nil {
+		return nil
+	}
+	return &ctr.DriverConfig{
+		Name:     d.Name,
+		Provider: d.Provider,
+		Opts:     d.Opts,
+	}
+}
+
+// toCacheConfig maps the schema cache spec onto a runtime CacheConfig.
+func toCacheConfig(c *schema.ContainerCacheConfig) *ctr.CacheConfig {
+	if c == nil {
+		return nil
+	}
+	return &ctr.CacheConfig{
+		From: c.From,
+		To:   c.To,
 	}
 }
 

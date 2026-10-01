@@ -1,0 +1,43 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  # Display name only. The template is invoked by its catalog key `aws/landing-zone`.
+  name: aws-landing-zone
+  description: AWS landing zone — dev/staging/prod environments with a conventional per-environment baseline (audit trail, KMS, SSM parameters, monitoring, IAM), provisioned end to end on the local emulator.
+  author: Cloud Posse
+  version: 2.0.0
+spec:
+  # Square-bracket delimiters so generated files can contain literal Go-template
+  # syntax (e.g. `name_template: "{{ .vars.stage }}"` in atmos.yaml) without the
+  # engine treating it as an unrendered scaffold variable.
+  delimiters: ["[[", "]]"]
+  fields:
+    - name: project_name
+      label: Project name
+      description: Name of the project; used in resource names and the state bucket.
+      type: input
+      default: my-landing-zone
+      required: true
+      validation:
+        pattern: "^[a-z][a-z0-9-]{1,30}$"
+        message: Use lowercase letters, digits, and hyphens (2-31 characters).
+    - name: region
+      label: Primary AWS region
+      description: Default AWS region for the project.
+      type: select
+      default: us-east-1
+      required: true
+      options:
+        - us-east-1
+        - us-west-2
+        - eu-west-1
+        - ap-southeast-1
+    - name: terraform_command
+      label: Terraform binary
+      description: Which binary Atmos invokes for Terraform operations.
+      type: select
+      default: terraform
+      required: true
+      options:
+        - terraform
+        - tofu

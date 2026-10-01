@@ -3,6 +3,7 @@ package step
 import (
 	"bytes"
 	"context"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -455,6 +456,34 @@ func TestSpinHandler_RunCommand(t *testing.T) {
 		err := spinHandler.runCommand(ctx, opts, &stdout, &stderr)
 		assert.Error(t, err)
 	})
+}
+
+func TestSpinHandler_StreamsOutputToComponentWriters(t *testing.T) {
+	initSpinTestIO(t)
+	handler, ok := Get("spin")
+	require.True(t, ok)
+	spinHandler := handler.(*SpinHandler)
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	var stdout, stderr bytes.Buffer
+	ctx := WithOutputSuppressed(t.Context())
+	vars := NewVariables()
+	vars.OutputWriters = OutputWriters{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	vars.Env["_ATMOS_STEP_FAKE"] = "spin-output"
+	result, err := spinHandler.Execute(ctx, &schema.WorkflowStep{
+		Name:    "run",
+		Title:   "Run",
+		Command: executable,
+	}, vars)
+
+	require.NoError(t, err)
+	assert.Contains(t, stdout.String(), "spin-stdout")
+	assert.Contains(t, stderr.String(), "spin-stderr")
+	assert.Contains(t, result.Metadata["stdout"], "spin-stdout")
+	assert.Contains(t, result.Metadata["stderr"], "spin-stderr")
 }
 
 // TestSpinHandler_Execute exercises the full Execute orchestration. In a non-TTY

@@ -1,3 +1,23 @@
 vars:
   region: us-east-2
   environment: ue2
+
+# Literal producer outputs used by `terraform plan --use-mocks`. Keep them in
+# the regional mixin so a cold plan has provider-shaped values for this region.
+components:
+  terraform:
+    kms-key:
+      mocks:
+        key_arn: arn:aws:kms:us-east-2:000000000000:key/00000000-0000-0000-0000-000000000000
+    s3-bucket:
+      mocks:
+        bucket_id: mock-assets
+    dynamodb-table:
+      mocks:
+        table_name: mock-state
+    sns-topic:
+      mocks:
+        topic_arn: arn:aws:sns:us-east-2:000000000000:mock-events
+    sqs-queue:
+      mocks:
+        queue_url: http://localhost:4566/000000000000/mock-events

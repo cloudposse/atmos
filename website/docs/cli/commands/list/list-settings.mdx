@@ -54,6 +54,9 @@ The command is particularly useful for:
 
   <dt>`--process-functions`</dt>
   <dd>Enable/disable YAML functions processing in Atmos stack manifests (default `true`). YAML functions include `!terraform.state`, `!terraform.output`, `!store`, `!aws.*`, etc. This is distinct from Go template functions like `atmos.Component(...)`, which are controlled by `--process-templates`.<br/>Environment variable: `ATMOS_PROCESS_FUNCTIONS`</dd>
+
+  <dt>`--error-mode`</dt>
+  <dd>How to handle unavailable requested values, including missing Terraform state and unavailable implicit authentication (default `warn`). `warn` substitutes `(computed)` and prints one summary; `silent` omits the summary; `strict` fails. Default identities authenticate only when an evaluated value needs credentials. Explicit `--identity` or `ATMOS_IDENTITY` failures, malformed configuration, invalid expressions, and dependency cycles remain fatal.<br/>Environment variable: `ATMOS_LIST_ERROR_MODE`</dd>
 </dl>
 
 ## Examples

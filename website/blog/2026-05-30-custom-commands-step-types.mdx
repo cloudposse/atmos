@@ -28,7 +28,7 @@ Previously, building interactive CLI experiences required shell scripts and exte
 
 **For workflows:** Define multi-step automation with user prompts, confirmations, and rich feedback.
 
-**For custom commands:** Users discover your interactive commands via `atmos help` and get a polished experience.
+**For custom commands:** Users discover your interactive commands via [`atmos help`](/cli/commands/help) and get a polished experience.
 
 ## How to Use It
 
@@ -57,7 +57,7 @@ workflows:
         content: "Deployment to {{ .steps.env.value }} completed!"
 ```
 
-Run with: `atmos workflow deploy -f deploy`
+Run with: [`atmos workflow deploy -f deploy`](/cli/commands/workflow)
 
 ### Custom Command Example
 

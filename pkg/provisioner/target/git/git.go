@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -18,6 +19,7 @@ import (
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
+	"github.com/cloudposse/atmos/pkg/ui"
 
 	// Blank import registers the "cli" git provider (the only v1 backend) so
 	// atmosgit.NewProvider("cli") resolves wherever the git target is compiled in.
@@ -28,6 +30,12 @@ const (
 	dirPerm  = 0o755
 	filePerm = 0o600
 )
+
+// newProvider resolves the git.Provider implementation for a resolved repository's
+// provider name. It is a package-level var (not a direct atmosgit.NewProvider call at
+// each use site) so tests can install a deterministic double via setTestProvider,
+// without touching the real git registry or invoking the git binary.
+var newProvider = atmosgit.NewProvider
 
 func init() {
 	target.Register(target.KindGit, &gitProvisioner{})
@@ -44,6 +52,25 @@ type config struct {
 	CommitMessage string
 	Signing       string
 	PullRequest   bool
+	// Split selects file-vs-directory semantics for Path: true fans out one file
+	// per manifest under Path (a directory); false writes Path as a single
+	// multi-document YAML file. nil defers to resolveSplit's extension inference.
+	Split *bool
+}
+
+// manifestPathRE matches a manifest-looking filename in the last path segment,
+// used by resolveSplit to infer single-file mode when Split is left unset.
+var manifestPathRE = regexp.MustCompile(`(?i)\.(ya?ml|json)$`)
+
+// resolveSplit implements the Split tri-state: an explicit target-config value
+// wins; otherwise the last path segment is matched against manifestPathRE — a
+// match defaults to single-file mode, no match preserves the unconditional
+// directory-fan-out default every existing configuration already relies on.
+func resolveSplit(split *bool, path string) bool {
+	if split != nil {
+		return *split
+	}
+	return !manifestPathRE.MatchString(filepath.Base(path))
 }
 
 // repoSession bundles the resolved repository and its execution context for a
@@ -60,7 +87,10 @@ type repoSession struct {
 func (g *gitProvisioner) Deliver(ctx context.Context, in *target.DeliverInput) error {
 	defer perf.Track(in.AtmosConfig, "target.git.Deliver")()
 
-	cfg := parseConfig(in.TargetConfig)
+	cfg, err := parseConfig(in.TargetConfig)
+	if err != nil {
+		return err
+	}
 
 	if cfg.PullRequest {
 		return fmt.Errorf("%w: target %q", errUtils.ErrGitPullRequestNotSupported, in.TargetName)
@@ -76,7 +106,7 @@ func (g *gitProvisioner) Deliver(ctx context.Context, in *target.DeliverInput) e
 		return err
 	}
 
-	provider, err := atmosgit.NewProvider(resolved.Provider)
+	provider, err := newProvider(resolved.Provider)
 	if err != nil {
 		return err
 	}
@@ -96,7 +126,7 @@ func (g *gitProvisioner) Deliver(ctx context.Context, in *target.DeliverInput) e
 		return err
 	}
 
-	if err := writeArtifact(resolved.Workdir, cfg.Path, &in.Artifact); err != nil {
+	if err := writeArtifact(resolved.Workdir, cfg.Path, &in.Artifact, resolveSplit(cfg.Split, cfg.Path)); err != nil {
 		return err
 	}
 
@@ -110,7 +140,10 @@ func (g *gitProvisioner) Deliver(ctx context.Context, in *target.DeliverInput) e
 func (g *gitProvisioner) Fetch(ctx context.Context, in *target.FetchInput) (target.ProvisionArtifact, error) {
 	defer perf.Track(in.AtmosConfig, "target.git.Fetch")()
 
-	cfg := parseConfig(in.TargetConfig)
+	cfg, err := parseConfig(in.TargetConfig)
+	if err != nil {
+		return target.ProvisionArtifact{}, err
+	}
 
 	resolved, err := atmosgit.ResolveRepository(&in.AtmosConfig.Git, cfg.Repository)
 	if err != nil {
@@ -122,7 +155,7 @@ func (g *gitProvisioner) Fetch(ctx context.Context, in *target.FetchInput) (targ
 		return target.ProvisionArtifact{}, err
 	}
 
-	provider, err := atmosgit.NewProvider(resolved.Provider)
+	provider, err := newProvider(resolved.Provider)
 	if err != nil {
 		return target.ProvisionArtifact{}, err
 	}
@@ -214,44 +247,72 @@ func walkManagedDir(root string) (map[string][]byte, error) {
 
 // reconcile clones the repository if absent, otherwise fetches and fast-forwards.
 func reconcile(ctx context.Context, s *repoSession) error {
-	return s.provider.Clone(ctx, &atmosgit.CloneOptions{
-		RepoContext:  s.rc,
-		URI:          s.resolved.URI,
-		Depth:        s.resolved.Clone.Depth,
-		Filter:       s.resolved.Clone.Filter,
-		SingleBranch: s.resolved.Clone.SingleBranch,
-		Submodules:   s.resolved.Clone.Submodules,
+	stderr, err := atmosgit.CaptureStderr(s.provider, func() error {
+		return s.provider.Clone(ctx, &atmosgit.CloneOptions{
+			RepoContext:  s.rc,
+			URI:          s.resolved.URI,
+			Depth:        s.resolved.Clone.Depth,
+			Filter:       s.resolved.Clone.Filter,
+			SingleBranch: s.resolved.Clone.SingleBranch,
+			Submodules:   s.resolved.Clone.Submodules,
+		})
 	})
+	return atmosgit.WrapOperationError(
+		"clone/reconcile Git repository",
+		s.rc.Workdir,
+		stderr,
+		err,
+		"Confirm the configured branch exists and has commits, and that the resolved identity has read access.",
+	)
 }
 
 // commitAndPush stages the managed path, commits any changes, and pushes when a
 // commit was created.
 func commitAndPush(ctx context.Context, s *repoSession, cfg *config, artifact *target.ProvisionArtifact) error {
-	result, err := s.provider.Commit(ctx, &atmosgit.CommitOptions{
-		RepoContext: s.rc,
-		Message:     cfg.CommitMessage,
-		Paths:       []string{cfg.Path},
-		Signing:     signingMode(cfg, s.resolved),
-		Author:      s.resolved.Author,
-		Trailers:    trailers(artifact),
+	var result atmosgit.CommitResult
+	stderr, err := atmosgit.CaptureStderr(s.provider, func() error {
+		res, commitErr := s.provider.Commit(ctx, &atmosgit.CommitOptions{
+			RepoContext: s.rc,
+			Message:     cfg.CommitMessage,
+			Paths:       []string{cfg.Path},
+			Signing:     signingMode(cfg, s.resolved),
+			Author:      s.resolved.Author,
+			Trailers:    trailers(artifact),
+		})
+		if res != nil {
+			result = *res
+		}
+		return commitErr
 	})
 	if err != nil {
-		return err
+		return atmosgit.WrapOperationError("commit Git changes", s.rc.Workdir, stderr, err, "")
 	}
 	if !result.Committed {
 		// Nothing changed in the managed path; a no-op is a clean success.
 		return nil
 	}
 
-	return s.provider.Push(ctx, &atmosgit.PushOptions{
-		RepoContext: s.rc,
-		Retries:     s.resolved.PushRetries,
+	stderr, err = atmosgit.CaptureStderr(s.provider, func() error {
+		return s.provider.Push(ctx, &atmosgit.PushOptions{
+			RepoContext: s.rc,
+			Retries:     s.resolved.PushRetries,
+		})
 	})
+	return atmosgit.WrapOperationError(
+		"push Git repository",
+		s.rc.Workdir,
+		stderr,
+		err,
+		"Run 'atmos git status' and 'atmos git pull' on the configured repository before retrying.",
+	)
 }
 
-// writeArtifact replaces the managed subtree under <workdir>/<path> with the
-// artifact files, so removals propagate deterministically.
-func writeArtifact(workdir, path string, artifact *target.ProvisionArtifact) error {
+// writeArtifact replaces the managed path <workdir>/<path> with the artifact
+// files, so removals propagate deterministically. When split is true, path is
+// a directory root fanned out into one file per artifact entry (unchanged,
+// historical behavior). When split is false, path is the exact output file: all
+// artifact entries are merged into a single multi-document YAML file.
+func writeArtifact(workdir, path string, artifact *target.ProvisionArtifact, split bool) error {
 	// Guard against deleting the worktree root: ValidateRepoRelativePath resolves
 	// root-equivalent paths ("", ".", "./", "a/..") to the worktree root, and a
 	// subsequent os.RemoveAll there would destroy the entire repository (including
@@ -264,8 +325,13 @@ func writeArtifact(workdir, path string, artifact *target.ProvisionArtifact) err
 	if err != nil {
 		return err
 	}
+	warnOnSplitModeFlip(absPath, path, split)
 	if err := os.RemoveAll(absPath); err != nil {
 		return fmt.Errorf("%w: clearing managed path %q: %w", errUtils.ErrGitArtifactWrite, path, err)
+	}
+
+	if !split {
+		return writeSingleArtifactFile(absPath, path, artifact)
 	}
 
 	for _, rel := range sortedFileKeys(artifact.Files) {
@@ -284,11 +350,67 @@ func writeArtifact(workdir, path string, artifact *target.ProvisionArtifact) err
 	return nil
 }
 
+// warnOnSplitModeFlip surfaces a warning when the existing content at absPath
+// (a file left by a prior split:false delivery, or a directory left by a prior
+// split:true delivery) doesn't match the delivery mode about to be written.
+// writeArtifact always replaces whatever is at path unconditionally (by
+// design: it's the managed path, and the result is git-committed and
+// revertable), but a silent recursive delete of a whole directory tree on a
+// one-line config change is easy to miss without a log line calling it out.
+func warnOnSplitModeFlip(absPath, path string, split bool) {
+	info, err := os.Stat(absPath)
+	if err != nil {
+		// Nothing there yet (or unreadable) -- no prior mode to flip from.
+		return
+	}
+	existingIsDir := info.IsDir()
+	if existingIsDir == split {
+		return
+	}
+	if existingIsDir {
+		ui.Warningf("replacing existing managed directory %q with a single file: split mode changed to false", path)
+	} else {
+		ui.Warningf("replacing existing managed file %q with a directory: split mode changed to true", path)
+	}
+}
+
+// writeSingleArtifactFile merges every artifact file (in deterministic order)
+// into one multi-document YAML stream and writes it to absPath (repo-relative
+// path, for error messages) as a single file.
+func writeSingleArtifactFile(absPath, path string, artifact *target.ProvisionArtifact) error {
+	keys := sortedFileKeys(artifact.Files)
+	docs := make([][]byte, 0, len(keys))
+	for _, rel := range keys {
+		docs = append(docs, artifact.Files[rel])
+	}
+	merged := target.MergeYAMLDocuments(docs)
+
+	if err := os.MkdirAll(filepath.Dir(absPath), dirPerm); err != nil {
+		return fmt.Errorf("%w: creating directory for %q: %w", errUtils.ErrGitArtifactWrite, path, err)
+	}
+	if err := os.WriteFile(absPath, merged, filePerm); err != nil {
+		return fmt.Errorf("%w: writing %q: %w", errUtils.ErrGitArtifactWrite, path, err)
+	}
+	return nil
+}
+
 // parseConfig extracts the git target settings from the merged target block.
-func parseConfig(block map[string]any) config {
+// A "split" key present with a non-bool value is a fail-closed error rather
+// than a silent ignore: kubernetes validate/apply/deploy resolve this config
+// directly and never go through the stricter Atmos manifest JSON Schema check
+// that atmos validate stacks/describe stacks run, so this is the only gate
+// that catches a typo'd (e.g. quoted) split value on that path.
+func parseConfig(block map[string]any) (config, error) {
 	cfg := config{
 		Repository: stringField(block, "repository"),
 		Path:       stringField(block, "path"),
+	}
+	if raw, present := block["split"]; present {
+		split, ok := raw.(bool)
+		if !ok {
+			return config{}, fmt.Errorf("%w: got %T", errUtils.ErrGitTargetSplitInvalid, raw)
+		}
+		cfg.Split = &split
 	}
 	if auth, ok := block["auth"].(map[string]any); ok {
 		cfg.Identity = stringField(auth, "identity")
@@ -300,7 +422,7 @@ func parseConfig(block map[string]any) config {
 	if pr, ok := block["pull_request"].(map[string]any); ok {
 		cfg.PullRequest, _ = pr["enabled"].(bool)
 	}
-	return cfg
+	return cfg, nil
 }
 
 // identityFor resolves the auth identity: the target override, else the repository default.

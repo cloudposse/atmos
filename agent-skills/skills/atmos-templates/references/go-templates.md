@@ -243,6 +243,25 @@ home: '{{ env "HOME" }}'
 profile: '{{ env "AWS_PROFILE" | default "default" }}'
 ```
 
+## Atmos's Own Functions
+
+Registered alongside Sprig and Gomplate in every FuncMap Atmos builds (stack configs,
+locals, secrets/store references, scaffold templates, toolchain assets).
+
+### `collectKeys`
+
+Distinct from Sprig's own `keys` above (which takes multiple maps and returns their
+unsorted, non-deduped union): `collectKeys` takes one map, returns its keys sorted, and
+supports a nested mode.
+
+```yaml
+# top-level keys, sorted
+environments: '{{ collectKeys .vars.environments }}'
+
+# nested: collect "regions" from every value in .vars.environments, flattened and deduplicated
+regions: '{{ collectKeys .vars.environments "regions" }}'
+```
+
 ## Gomplate Functions
 
 When `templates.settings.gomplate.enabled: true`, all Gomplate functions are available.
@@ -382,12 +401,12 @@ tags:
 ## Performance Considerations
 
 1. `atmos.Component` requires resolving the full component context and potentially running
-   `terraform output`, which initializes Terraform and downloads providers
+    `terraform output`, which initializes Terraform and downloads providers
 2. `atmos.GomplateDatasource` caches results per execution (use it instead of `datasource`)
 3. `atmos.Store` caches results per store/stack/component/key combination
 4. All Atmos template functions cache results within a single CLI command execution
 5. Functions like `atmos describe stacks` evaluate all templates, so heavy use of
-   `atmos.Component` can significantly slow these commands
+    `atmos.Component` can significantly slow these commands
 
 ## Safety Guidelines
 

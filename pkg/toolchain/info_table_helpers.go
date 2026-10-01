@@ -23,9 +23,9 @@ func buildVersionRows(versions []string, defaultVersion string, showInstalled bo
 		// Set status indicator.
 		switch {
 		case row.isDefault:
-			row.status = theme.Styles.Checkmark.String() // Checkmark for default.
+			row.status = theme.GetCurrentStyles().Checkmark.String() // Checkmark for default.
 		case row.isInstalled:
-			row.status = theme.Styles.Checkmark.String() // Checkmark for installed.
+			row.status = theme.GetCurrentStyles().Checkmark.String() // Checkmark for installed.
 		default:
 			row.status = " " // No indicator for available-only.
 		}
@@ -93,7 +93,7 @@ func applyTableStyles(t *table.Model) {
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorBorder)).
+		BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
 		BorderBottom(true).
 		Bold(true)
 	s.Cell = s.Cell.PaddingLeft(1).PaddingRight(1)

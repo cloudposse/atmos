@@ -243,10 +243,10 @@ components:
         source_ami_filter:
           name: "amazon-eks-node-1.28-*"
           owner: "602401143452"  # Amazon EKS
-      settings:
-        depends_on:
-          - component: ami-ubuntu-base
-            type: packer
+      dependencies:
+        components:
+          - name: ami-ubuntu-base
+            kind: packer
 
     docker-base:
       metadata:
@@ -496,7 +496,7 @@ components:
 
 5. **Clean Up:** Include cleanup scripts to reduce image size and remove sensitive data.
 
-6. **Use Dependencies:** Define `depends_on` when images need to be built in a specific order.
+6. **Use Dependencies:** Define `dependencies.components` when images need to be built in a specific order.
 
 7. **Centralize Defaults:** Define common settings in catalog defaults and override only when necessary.
 
@@ -508,4 +508,4 @@ components:
 - [Configure Environment](/stacks/env)
 - [Passing Secrets](/cli/configuration/secrets)
 - [`!secret` function](/functions/yaml/secret)
-- [depends_on](/stacks/settings/depends_on)
+- [Component Dependencies](/stacks/dependencies/components)

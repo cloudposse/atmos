@@ -2,6 +2,9 @@ package errors
 
 import (
 	"fmt"
+	"math"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -9,6 +12,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
@@ -67,6 +71,23 @@ func TestFormat_ErrorWithHint(t *testing.T) {
 	assert.Contains(t, result, "test error")
 	assert.Contains(t, result, "💡")
 	assert.Contains(t, result, "Try running --help")
+}
+
+// TestFormat_ErrorWithAngleBracketPlaceholderInHint is an end-to-end
+// regression test through the real rendering pipeline: a hint containing a
+// raw "<file>" placeholder used to render as "pass --config ." -- the
+// terminal markdown renderer parsed it as an inline HTML tag and silently
+// stripped it. It must now survive rendering as literal text.
+func TestFormat_ErrorWithAngleBracketPlaceholderInHint(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	err := Build(errors.New("could not locate an editable atmos.yaml")).
+		WithHint("Run from a directory containing atmos.yaml, or pass --config <file>.").
+		Err()
+
+	result := Format(err, DefaultFormatterConfig())
+
+	assert.Contains(t, result, "pass --config <file>.")
+	assert.NotContains(t, result, "pass --config .")
 }
 
 func TestFormat_ErrorWithMultilineHintList(t *testing.T) {
@@ -174,6 +195,32 @@ func TestShouldUseColor(t *testing.T) {
 	// We just verify it returns a boolean without panicking.
 	result := shouldUseColor()
 	assert.IsType(t, false, result)
+}
+
+func TestShouldUseColorInCI(t *testing.T) {
+	t.Setenv("CI", "true")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("FORCE_COLOR", "")
+
+	assert.True(t, shouldUseColor(), "CI output supports ANSI color without a TTY")
+}
+
+func TestFormatInCIUsesColorUnlessDisabled(t *testing.T) {
+	t.Setenv("CI", "true")
+	t.Setenv("NO_COLOR", "")
+
+	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	result := Format(errors.New("test error"), DefaultFormatterConfig())
+	assert.Contains(t, result, "\x1b[", "CI error output should retain ANSI styling")
+
+	t.Setenv("NO_COLOR", "1")
+	result = Format(errors.New("test error"), DefaultFormatterConfig())
+	assert.NotContains(t, result, "\x1b[", "NO_COLOR must override CI color support")
 }
 
 func TestWrapText(t *testing.T) {
@@ -374,6 +421,37 @@ func TestFormat_WithExplanationNoColorIsPlaintext(t *testing.T) {
 	assert.Contains(t, result, "The selected stack prod was not found.")
 }
 
+// backgroundRGBPattern matches a truecolor background SGR sequence (e.g.
+// "48;2;51;32;79") so tests can assert on the actual gradient color a
+// rendered callout line used.
+var backgroundRGBPattern = regexp.MustCompile(`48;2;(\d+);(\d+);(\d+)`)
+
+// backgroundRGB extracts the first truecolor background sequence in a
+// rendered line.
+func backgroundRGB(t *testing.T, line string) (r, g, b int) {
+	t.Helper()
+	match := backgroundRGBPattern.FindStringSubmatch(line)
+	require.Lenf(t, match, 4, "expected a 48;2;r;g;b background sequence in line: %q", line)
+
+	r, err := strconv.Atoi(match[1])
+	require.NoError(t, err)
+	g, err = strconv.Atoi(match[2])
+	require.NoError(t, err)
+	b, err = strconv.Atoi(match[3])
+	require.NoError(t, err)
+	return r, g, b
+}
+
+// colorDistance returns the Euclidean distance between two RGB colors, used
+// to compare how close (or far) two gradient samples are relative to the
+// gradient's total start-to-end span.
+func colorDistance(r1, g1, b1, r2, g2, b2 int) float64 {
+	dr := float64(r1 - r2)
+	dg := float64(g1 - g2)
+	db := float64(b1 - b2)
+	return math.Sqrt(dr*dr + dg*dg + db*db)
+}
+
 func TestRenderExplanationCallout_ColorAddsGradientBackground(t *testing.T) {
 	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -386,8 +464,97 @@ func TestRenderExplanationCallout_ColorAddsGradientBackground(t *testing.T) {
 	assert.Contains(t, callout, "\x1b[")
 	assert.Contains(t, callout, "first line")
 	assert.Contains(t, callout, "second line")
+	// The first line always starts at the gradient's pure start color.
 	assert.Contains(t, callout, "48;2;51;32;79")
-	assert.Contains(t, callout, "48;2;18;60;92")
+	assert.Contains(t, callout, "38;2;247;250;252")
+}
+
+// TestRenderExplanationCallout_ShortCalloutIsSubtleGradient guards against the
+// two-tone regression: a 2-line callout (the common case for real error
+// explanations/hints, which typically wrap to 2-3 lines) must not jump
+// straight from the gradient's pure start color to its pure end color. The
+// two lines should be close, blended shades from a wider virtual gradient,
+// not the two maximally distant extremes.
+func TestRenderExplanationCallout_ShortCalloutIsSubtleGradient(t *testing.T) {
+	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(previousProfile)
+	})
+
+	callout := renderExplanationCallout("first line\nsecond line", 80, true)
+	lines := strings.Split(callout, newline)
+	require.Len(t, lines, 2)
+
+	r1, g1, b1 := backgroundRGB(t, lines[0])
+	r2, g2, b2 := backgroundRGB(t, lines[1])
+
+	startR, startG, startB := parseHexColor(explanationGradientStart)
+	endR, endG, endB := parseHexColor(explanationGradientEnd)
+	fullDistance := colorDistance(startR, startG, startB, endR, endG, endB)
+
+	// The second line must not be the pure end color -- that was the two-tone bug.
+	assert.False(t, r2 == endR && g2 == endG && b2 == endB,
+		"second line must not use the gradient's pure end color %d,%d,%d", endR, endG, endB)
+
+	// The two lines should be close to each other relative to the full gradient
+	// span, not maximally distant (i.e. not one pure endpoint each).
+	stepDistance := colorDistance(r1, g1, b1, r2, g2, b2)
+	assert.Lessf(t, stepDistance, fullDistance*0.5,
+		"adjacent callout lines should be close shades, got distance %.1f of a %.1f total gradient span", stepDistance, fullDistance)
+}
+
+// TestRenderExplanationCallout_LongCalloutKeepsFullGradient ensures the fix
+// for short callouts does not regress the many-line case, which already
+// renders a smooth gradient across the full start-to-end color range.
+func TestRenderExplanationCallout_LongCalloutKeepsFullGradient(t *testing.T) {
+	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(previousProfile)
+	})
+
+	text := strings.Join([]string{"line one", "line two", "line three", "line four", "line five", "line six"}, newline)
+	callout := renderExplanationCallout(text, 80, true)
+	lines := strings.Split(callout, newline)
+	require.Len(t, lines, 6)
+
+	startR, startG, startB := parseHexColor(explanationGradientStart)
+	endR, endG, endB := parseHexColor(explanationGradientEnd)
+
+	firstR, firstG, firstB := backgroundRGB(t, lines[0])
+	lastR, lastG, lastB := backgroundRGB(t, lines[len(lines)-1])
+	assert.Equal(t, startR, firstR)
+	assert.Equal(t, startG, firstG)
+	assert.Equal(t, startB, firstB)
+	assert.Equal(t, endR, lastR)
+	assert.Equal(t, endG, lastG)
+	assert.Equal(t, endB, lastB)
+
+	// Verify visible progression between every consecutive pair of lines
+	// (not a flat, unchanging color).
+	for i := 1; i < len(lines); i++ {
+		prevR, prevG, prevB := backgroundRGB(t, lines[i-1])
+		curR, curG, curB := backgroundRGB(t, lines[i])
+		assert.Falsef(t, prevR == curR && prevG == curG && prevB == curB,
+			"expected visible color progression between line %d and %d", i-1, i)
+	}
+}
+
+func TestRenderExplanationCallout_RestoresColorsAfterNestedReset(t *testing.T) {
+	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(previousProfile)
+	})
+
+	const background = explanationGradientStart
+	reset := "\x1b[0m"
+	callout := renderExplanationCallout("before"+reset+"after", 80, true)
+
+	assert.Contains(t, callout, reset+calloutColorPrefix(background))
+	assert.Contains(t, callout, "48;2;51;32;79")
+	assert.Contains(t, callout, "38;2;247;250;252")
 }
 
 func TestExplanationMarkdownLineLength_ReservesPaddingForColor(t *testing.T) {
@@ -474,7 +641,9 @@ func TestFormat_SectionOrder(t *testing.T) {
 	config := DefaultFormatterConfig()
 	config.Verbose = true
 
-	result := Format(err, config)
+	// Strip ANSI since CI-enabled color rendering can split a section marker
+	// (e.g. "## Example") across separate escape-coded spans.
+	result := stripANSI(Format(err, config))
 
 	// Find positions of each section.
 	errorPos := strings.Index(result, "# Error")
@@ -502,7 +671,9 @@ func TestFormat_ExampleAndHintsSeparation(t *testing.T) {
 
 	config := DefaultFormatterConfig()
 
-	result := Format(err, config)
+	// Strip ANSI since CI-enabled color rendering can split a section marker
+	// (e.g. "## Example") across separate escape-coded spans.
+	result := stripANSI(Format(err, config))
 
 	// Should keep example content separate from standalone hints.
 	assert.Contains(t, result, "## Example")
@@ -579,7 +750,9 @@ func TestFormat_ContextMarkdownTable(t *testing.T) {
 	config := DefaultFormatterConfig()
 	config.Verbose = true
 
-	result := Format(err, config)
+	// Strip ANSI since CI-enabled color rendering can split a section marker
+	// (e.g. "## Context") across separate escape-coded spans.
+	result := stripANSI(Format(err, config))
 
 	// Should have Context section (Glamour renders markdown tables with box-drawing chars).
 	assert.Contains(t, result, "## Context")
@@ -624,7 +797,9 @@ func TestFormat_VerboseStackTrace(t *testing.T) {
 	config := DefaultFormatterConfig()
 	config.Verbose = true
 
-	result := Format(err, config)
+	// Strip ANSI since CI-enabled color rendering can split a section marker
+	// (e.g. "## Stack Trace") across separate escape-coded spans.
+	result := stripANSI(Format(err, config))
 
 	// Should contain Stack Trace section in verbose mode.
 	// Glamour renders code fences as styled blocks, so we just check for section header and content.
@@ -884,7 +1059,7 @@ func TestResolveFormatterWidth(t *testing.T) {
 	}
 }
 
-func TestResolveFormatterWidth_HonorsConfiguredWidth(t *testing.T) {
+func TestResolveFormatterWidth_CapsAtDetectedWidthWhenNarrower(t *testing.T) {
 	originalConfig := atmosConfig
 	originalDetectWidth := detectFormatterTerminalWidth
 	defer func() {
@@ -901,10 +1076,34 @@ func TestResolveFormatterWidth_HonorsConfiguredWidth(t *testing.T) {
 		return 100
 	}
 
-	assert.Equal(t, 160, resolveFormatterWidth(DefaultFormatterConfig()))
+	// max_width is a ceiling, not a fixed width -- when the real terminal is
+	// narrower than the configured max, the narrower width must win so
+	// padded content (like the title pill) doesn't wrap onto extra lines.
+	assert.Equal(t, 100, resolveFormatterWidth(DefaultFormatterConfig()))
 }
 
-func TestResolveFormatterWidth_IgnoresDetectedDefaultWidth(t *testing.T) {
+func TestResolveFormatterWidth_UsesConfiguredWidthWhenNarrowerThanDetected(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+
+	atmosConfig = &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{MaxWidth: 100},
+		},
+	}
+	detectFormatterTerminalWidth = func() int {
+		return 160
+	}
+
+	// When the terminal is wider than the configured max, the max caps it.
+	assert.Equal(t, 100, resolveFormatterWidth(DefaultFormatterConfig()))
+}
+
+func TestResolveFormatterWidth_ConfiguredWidthWinsEvenWhenItMatchesDetected(t *testing.T) {
 	originalConfig := atmosConfig
 	originalDetectWidth := detectFormatterTerminalWidth
 	defer func() {
@@ -921,7 +1120,30 @@ func TestResolveFormatterWidth_IgnoresDetectedDefaultWidth(t *testing.T) {
 		return 80
 	}
 
-	assert.Equal(t, DefaultMarkdownWidth, resolveFormatterWidth(DefaultFormatterConfig()))
+	// Configured width should still be honored even when it happens to equal
+	// the detected width -- there's no reason to distrust it in that case.
+	assert.Equal(t, 80, resolveFormatterWidth(DefaultFormatterConfig()))
+}
+
+func TestResolveFormatterWidth_UsesDetectedWidthWhenNoConfigOverride(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+
+	atmosConfig = nil
+	detectFormatterTerminalWidth = func() int {
+		return 90
+	}
+
+	// With no explicit config override, the actual detected terminal width
+	// must be used -- not the hardcoded DefaultMarkdownWidth. Regression test
+	// for a bug where the detected width was computed but never returned,
+	// causing content to be padded to 120 columns in narrower terminals and
+	// wrap onto extra visual lines.
+	assert.Equal(t, 90, resolveFormatterWidth(DefaultFormatterConfig()))
 }
 
 func TestResolveFormatterWidth_FallsBackToDefaultMarkdownWidth(t *testing.T) {

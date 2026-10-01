@@ -1,20 +1,26 @@
 package exec
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"gopkg.in/yaml.v3"
 
-	"github.com/cloudposse/atmos/pkg/auth"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 func TestBuildTerraformDependencyGraph(t *testing.T) {
@@ -179,6 +185,203 @@ func TestBuildTerraformDependencyGraph_WithDisabledComponents(t *testing.T) {
 	assert.Equal(t, "enabled", enabledNode.Component)
 }
 
+func TestBuildTerraformDependencyGraphModernDependencies(t *testing.T) {
+	tests := []struct {
+		name       string
+		dependency map[string]any
+		target     map[string]any
+		wantErr    error
+		wantEdge   bool
+	}{
+		{
+			name:       "optional present",
+			dependency: map[string]any{"name": "vpc", "required": false},
+			target:     map[string]any{},
+			wantEdge:   true,
+		},
+		{
+			name:       "optional missing",
+			dependency: map[string]any{"name": "missing", "required": false},
+		},
+		{
+			name:       "optional disabled",
+			dependency: map[string]any{"name": "disabled", "required": false},
+			target:     map[string]any{"metadata": map[string]any{"enabled": false}},
+		},
+		{
+			name:       "required missing",
+			dependency: map[string]any{"name": "missing"},
+			wantErr:    errUtils.ErrDependencyTargetNotFound,
+		},
+		{
+			name:       "required disabled",
+			dependency: map[string]any{"name": "disabled"},
+			target:     map[string]any{"metadata": map[string]any{"enabled": false}},
+			wantErr:    errUtils.ErrDependencyTargetUnavailable,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			terraform := map[string]any{
+				"app": map[string]any{
+					"dependencies": map[string]any{
+						"components": []any{test.dependency},
+					},
+				},
+				"vpc": map[string]any{},
+			}
+			if test.target != nil {
+				terraform["disabled"] = test.target
+			}
+			stacks := map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{"terraform": terraform},
+				},
+			}
+
+			graph, err := buildTerraformDependencyGraph(&schema.AtmosConfiguration{}, stacks, &schema.ConfigAndStacksInfo{})
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			app, exists := graph.GetNode("app-dev")
+			require.True(t, exists)
+			if test.wantEdge {
+				require.Equal(t, []string{"vpc-dev"}, app.Dependencies)
+				require.True(t, app.OptionalDependencies["vpc-dev"])
+			} else {
+				require.Empty(t, app.Dependencies)
+			}
+		})
+	}
+}
+
+func TestBuildTerraformDependencyGraphModernDependencyCustomDelimiter(t *testing.T) {
+	manifest := map[string]any{}
+	require.NoError(t, yaml.Unmarshal([]byte(`
+settings:
+  templates:
+    settings:
+      enabled: true
+      delimiters: ["[[", "]]"]
+components:
+  terraform:
+    app:
+      dependencies:
+        components:
+          - name: monitoring
+            required: "[[ .dependencyRequired ]]"
+`), &manifest))
+
+	settingsYAML, err := yaml.Marshal(manifest["settings"])
+	require.NoError(t, err)
+	var settings schema.Settings
+	require.NoError(t, yaml.Unmarshal(settingsYAML, &settings))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: settings.Templates,
+	}
+	components, ok := manifest["components"].(map[string]any)
+	require.True(t, ok)
+	terraformComponents, ok := components["terraform"].(map[string]any)
+	require.True(t, ok)
+	componentSection, ok := terraformComponents["app"].(map[string]any)
+	require.True(t, ok)
+	componentSectionYAML, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+		componentSection,
+		atmosConfig.Templates.Settings.Delimiters,
+	)
+	require.NoError(t, err)
+	rendered, err := ProcessTmplWithDatasources(
+		atmosConfig,
+		&schema.ConfigAndStacksInfo{},
+		settings,
+		"component.yaml",
+		componentSectionYAML,
+		map[string]any{"dependencyRequired": false},
+		false,
+	)
+	require.NoError(t, err)
+
+	var app map[string]any
+	require.NoError(t, yaml.Unmarshal([]byte(rendered), &app))
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"app":        app,
+					"monitoring": map[string]any{},
+				},
+			},
+		},
+	}
+
+	graph, err := buildTerraformDependencyGraph(atmosConfig, stacks, &schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+	node, exists := graph.GetNode("app-dev")
+	require.True(t, exists)
+	require.Equal(t, []string{"monitoring-dev"}, node.Dependencies)
+	require.True(t, node.OptionalDependencies["monitoring-dev"])
+}
+
+func TestBuildTerraformDependencyGraphModernCrossStackDependency(t *testing.T) {
+	stacks := map[string]any{
+		"core": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{"vpc": map[string]any{}},
+			},
+		},
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"app": map[string]any{
+						"dependencies": map[string]any{
+							"components": []any{
+								map[string]any{"name": "vpc", "stack": "core", "required": false},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := buildTerraformDependencyGraph(&schema.AtmosConfiguration{}, stacks, &schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+	app, exists := graph.GetNode("app-dev")
+	require.True(t, exists)
+	require.Equal(t, []string{"vpc-core"}, app.Dependencies)
+	require.True(t, app.OptionalDependencies["vpc-core"])
+}
+
+func TestBuildTerraformDependencyGraphModernEmptyPreventsLegacyFallback(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{},
+					"app": map[string]any{
+						"dependencies": map[string]any{
+							"components": []any{},
+						},
+						"settings": map[string]any{
+							"depends_on": []any{"vpc"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := buildTerraformDependencyGraph(&schema.AtmosConfiguration{}, stacks, &schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+	app, exists := graph.GetNode("app-dev")
+	require.True(t, exists)
+	require.Empty(t, app.Dependencies)
+}
+
 func TestApplyFiltersToGraph(t *testing.T) {
 	// Create a test graph.
 	graph := dependency.NewGraph()
@@ -339,6 +542,163 @@ func TestExecuteTerraformAll_DryRunHappyPath(t *testing.T) {
 	})
 }
 
+// TestExecuteTerraformAll_ReportedSameStackOrder reproduces the reported
+// eight-component same-stack graph with the real describe-stacks and scheduler pipeline. Each
+// declaration variant must produce the same dependency-safe execution order.
+// DryRun keeps the test hermetic: no Terraform binary, backend, or state is used.
+func TestExecuteTerraformAll_ReportedSameStackOrder(t *testing.T) {
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-apply-all-dependencies"))
+
+	for _, stack := range []string{"reported-order", "reported-order-alias", "reported-order-legacy"} {
+		t.Run(stack, func(t *testing.T) {
+			summaryPath := filepath.Join(t.TempDir(), "execution-summary.json")
+			info := &schema.ConfigAndStacksInfo{
+				All:                      true,
+				Stack:                    stack,
+				ComponentType:            config.TerraformComponentType,
+				SubCommand:               "plan",
+				DryRun:                   true,
+				MaxConcurrency:           1,
+				TerraformPlanSummaryFile: summaryPath,
+			}
+
+			require.NoError(t, ExecuteTerraformAll(info))
+			assertReportedSameStackOrder(t, summaryPath, stack)
+		})
+	}
+}
+
+type reportedTerraformExecutionSummary struct {
+	Results []reportedTerraformExecutionResult `json:"results"`
+}
+
+type reportedTerraformExecutionResult struct {
+	Component  string `json:"component"`
+	Stack      string `json:"stack"`
+	StartedAt  string `json:"started_at"`
+	FinishedAt string `json:"finished_at"`
+}
+
+func assertReportedSameStackOrder(t *testing.T, summaryPath, stack string) {
+	t.Helper()
+
+	data, err := os.ReadFile(summaryPath)
+	require.NoError(t, err)
+
+	var summary reportedTerraformExecutionSummary
+	require.NoError(t, json.Unmarshal(data, &summary))
+	require.Len(t, summary.Results, 8)
+
+	expectedComponents := []string{
+		"platform-kms",
+		"platform-efs",
+		"uds-rds",
+		"cloudposse-irsa-dbeaver-external-secrets",
+		"cloudposse-irsa-external-secrets",
+		"platform-cluster-codepipeline-app",
+		"platform-datasync",
+		"platform-uds-pkg-dbeaver",
+	}
+	positions := make(map[string]int, len(summary.Results))
+	startedAt := make(map[string]time.Time, len(summary.Results))
+	finishedAt := make(map[string]time.Time, len(summary.Results))
+	for index, result := range summary.Results {
+		require.Equal(t, stack, result.Stack)
+		positions[result.Component] = index
+
+		startedAt[result.Component], err = time.Parse(time.RFC3339Nano, result.StartedAt)
+		require.NoError(t, err, "missing start time for %s", result.Component)
+		finishedAt[result.Component], err = time.Parse(time.RFC3339Nano, result.FinishedAt)
+		require.NoError(t, err, "missing finish time for %s", result.Component)
+	}
+	require.Len(t, positions, len(expectedComponents))
+	for _, component := range expectedComponents {
+		require.Contains(t, positions, component)
+	}
+
+	dependencies := map[string][]string{
+		"uds-rds": {"platform-kms"},
+		"cloudposse-irsa-dbeaver-external-secrets": {"platform-kms", "uds-rds"},
+		"cloudposse-irsa-external-secrets":         {"platform-kms", "uds-rds"},
+		"platform-cluster-codepipeline-app":        {"platform-efs", "platform-kms", "uds-rds"},
+		"platform-datasync":                        {"platform-efs"},
+		"platform-uds-pkg-dbeaver":                 {"cloudposse-irsa-dbeaver-external-secrets", "uds-rds"},
+	}
+
+	for dependent, prerequisites := range dependencies {
+		for _, prerequisite := range prerequisites {
+			require.Less(t, positions[prerequisite], positions[dependent], "%s must execute before %s", prerequisite, dependent)
+			// A dry-run step can start and finish within one Windows clock tick, so
+			// equality is valid here. The result positions above establish the
+			// required execution order; this check ensures the timing data does not
+			// contradict it.
+			require.False(t, finishedAt[prerequisite].After(startedAt[dependent]), "%s must finish no later than %s starts", prerequisite, dependent)
+		}
+	}
+}
+
+// TestExecuteTerraformAll_MissingSecretFailsDuringPreflight proves that graph execution
+// resolves !secret before it hands any node to the scheduler. DryRun would otherwise make
+// this fixture succeed without invoking Terraform, so the store-resolution error can only
+// originate from the describe-stacks preflight.
+func TestExecuteTerraformAll_MissingSecretFailsDuringPreflight(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "components", "terraform", "app"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(`
+base_path: "."
+components:
+  terraform:
+    base_path: components/terraform
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(`
+components:
+  terraform:
+    app:
+      secrets:
+        vars:
+          API_KEY:
+            store: missing-secrets-store
+            required: true
+      vars:
+        api_key: !secret API_KEY
+`), 0o600))
+
+	t.Chdir(root)
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+
+	err := ExecuteTerraformAll(&schema.ConfigAndStacksInfo{
+		ComponentType:    config.TerraformComponentType,
+		SubCommand:       "plan",
+		DryRun:           true,
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	})
+	require.ErrorIs(t, err, secrets.ErrStoreNotFound)
+}
+
+func TestTerraformPreflightDescribeError_MissingSecretIsActionable(t *testing.T) {
+	cause := errors.Join(secrets.ErrSecretMissing, errors.New("API_KEY is absent from its configured backend"))
+	err := terraformPreflightDescribeError(cause)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrExecuteDescribeStacks)
+	assert.ErrorIs(t, err, secrets.ErrSecretMissing)
+	assert.Contains(t, cockroachErrors.GetAllHints(err), "TITLE:Terraform preflight failed")
+	assert.Contains(t, cockroachErrors.GetAllHints(err), "Initialize the reported secret, then rerun the Terraform command.")
+	assert.Contains(t, cockroachErrors.GetAllDetails(err), "A required `!secret` could not be resolved before Terraform started.")
+}
+
 // TestExecuteTerraformAll_AuthManagerResolverWired exercises the
 // `if authManager != nil` branch that was added in this PR to mirror the
 // #2081 fix for `--query`/`--components`. The existing happy-path test
@@ -359,18 +719,19 @@ func TestExecuteTerraformAll_AuthManagerResolverWired(t *testing.T) {
 
 	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-apply-affected"))
 
+	ctrl := gomock.NewController(t)
+	mgr := types.NewMockAuthManager(ctrl)
+	// The bridge records the selected identity via GetChain, and
+	// ExecuteDescribeStacks calls GetStackInfo while processing each stack.
+	// The fixture has no auth-dependent YAML functions, so no other
+	// AuthManager methods should be invoked.
+	mgr.EXPECT().GetChain().Return([]string{"terraform"}).MinTimes(1)
+	mgr.EXPECT().GetStackInfo().Return(nil).AnyTimes()
+
+	mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+	mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(mgr, nil)
 	original := authManagerFactory
-	authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
-		ctrl := gomock.NewController(t)
-		mgr := types.NewMockAuthManager(ctrl)
-		// The bridge records the selected identity via GetChain, and
-		// ExecuteDescribeStacks calls GetStackInfo while processing each stack.
-		// The fixture has no auth-dependent YAML functions, so no other
-		// AuthManager methods should be invoked.
-		mgr.EXPECT().GetChain().Return([]string{"terraform"}).MinTimes(1)
-		mgr.EXPECT().GetStackInfo().Return(nil).AnyTimes()
-		return mgr, nil
-	}
+	authManagerFactory = mockFactory
 	t.Cleanup(func() { authManagerFactory = original })
 
 	info := &schema.ConfigAndStacksInfo{
@@ -399,10 +760,11 @@ func TestExecuteTerraformAll_AuthManagerCreationError(t *testing.T) {
 	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-apply-affected"))
 
 	sentinel := errors.New("simulated auth manager init failure")
+	ctrl := gomock.NewController(t)
+	mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+	mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, sentinel)
 	original := authManagerFactory
-	authManagerFactory = func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error) {
-		return nil, sentinel
-	}
+	authManagerFactory = mockFactory
 	t.Cleanup(func() { authManagerFactory = original })
 
 	info := &schema.ConfigAndStacksInfo{

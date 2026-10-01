@@ -1175,6 +1175,35 @@ func TestWithAtmosConfig(t *testing.T) {
 	})
 }
 
+// TestWithForceLockFile verifies WithForceLockFile enables lock-file writes regardless of
+// what WithAtmosConfig resolved, while deliberately leaving verifyAgainstLock false -- the
+// `atmos toolchain lock` command must be able to overwrite/refresh its own previously
+// recorded checksums, unlike a normal `install` with toolchain.use_lock_file enabled.
+func TestWithForceLockFile(t *testing.T) {
+	t.Run("forces useLockFile on and verifyAgainstLock off, overriding WithAtmosConfig", func(t *testing.T) {
+		inst := &Installer{resolver: &DefaultToolResolver{}}
+		config := &schema.AtmosConfiguration{
+			Toolchain: schema.Toolchain{UseLockFile: true},
+		}
+		WithAtmosConfig(config)(inst)
+		require.True(t, inst.verifyAgainstLock, "precondition: WithAtmosConfig sets verifyAgainstLock when use_lock_file is on")
+
+		WithForceLockFile()(inst)
+
+		assert.True(t, inst.useLockFile)
+		assert.False(t, inst.verifyAgainstLock, "lock's own force-write path must never verify against its own prior entry")
+	})
+
+	t.Run("enables useLockFile even when config never set it", func(t *testing.T) {
+		inst := &Installer{}
+
+		WithForceLockFile()(inst)
+
+		assert.True(t, inst.useLockFile)
+		assert.False(t, inst.verifyAgainstLock)
+	})
+}
+
 func TestWithConfiguredRegistry(t *testing.T) {
 	inst := &Installer{}
 	mockReg := &mockRegistryForInstaller{}

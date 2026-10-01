@@ -1,0 +1,70 @@
+---
+title: Component Output Mocks
+sidebar_label: mocks
+sidebar_class_name: command
+description: Supply literal Terraform output values for local plans and component inspection without reading remote state.
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Declare literal outputs on a component and opt into using them for
+[`!terraform.state`](/functions/yaml/terraform.state) and
+[`!terraform.output`](/functions/yaml/terraform.output) lookups during local plans or configuration inspection.
+</Intro>
+
+## Usage
+
+Declare `mocks` on the component that produces the outputs:
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      mocks:
+        vpc_id: vpc-local
+        private_subnet_ids: [subnet-a, subnet-b]
+    app:
+      vars:
+        vpc_id: !terraform.state vpc vpc_id
+        first_subnet: !terraform.output vpc '.private_subnet_ids[0]'
+```
+</File>
+
+Enable mock lookups explicitly:
+
+```shell
+atmos describe component app -s dev --use-mocks
+atmos terraform plan app -s dev --use-mocks
+```
+
+The lookups return `vpc-local` and `subnet-a` without accessing the VPC’s backend
+or initializing Terraform for that lookup. Running the app’s plan can still require
+its own provider credentials and infrastructure access.
+
+## Configuration Reference
+
+<dl>
+  <dt>`mocks`</dt>
+  <dd>A map of output names to literal values on the producer component. Templates and YAML
+  functions inside the map are not evaluated. The map follows component inheritance and deep merging.</dd>
+  <dt>`--use-mocks`</dt>
+  <dd>Opt-in flag for `atmos terraform plan` and `atmos describe component`; default `false`.
+  YAML function processing must remain enabled. Other Terraform commands reject the flag.</dd>
+</dl>
+
+## Missing Outputs
+
+Missing mock maps or outputs produce errors rather than falling back to real state.
+An explicit YQ default can supply the missing value:
+
+```yaml
+vars:
+  vpc_id: !terraform.state vpc '.vpc_id // "vpc-local"'
+```
+
+Without `--use-mocks`, lookups use their normal state/output source. This feature does
+not simulate providers or provision resources. See the
+[component mocks example](/examples/terraform-component-mocks) for a producer and consumer configuration.

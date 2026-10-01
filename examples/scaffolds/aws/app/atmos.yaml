@@ -1,0 +1,71 @@
+# atmos:template
+# Atmos configuration for [[ .Config.project_name ]] (AWS app SDLC).
+# https://atmos.tools/cli/configuration
+
+base_path: "./"
+
+components:
+  terraform:
+    command: [[ .Config.terraform_command ]]
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+auth:
+  identities:
+    local:
+      kind: aws/emulator
+      emulator: aws
+      default: true
+    # Real AWS instead of the local emulator: uncomment, fill in credentials
+    # (or swap for aws/permission-set with an SSO provider), and run with
+    # `--identity aws` -- or move `default: true` here once configured. Never
+    # commit real access keys; use !env or a shared credentials profile.
+    # https://atmos.tools/cli/commands/auth
+    # aws:
+    #   kind: aws/user
+    #   credentials:
+    #     access_key_id: !env AWS_ACCESS_KEY_ID
+    #     secret_access_key: !env AWS_SECRET_ACCESS_KEY
+    #     region: "[[ .Config.region ]]"
+
+ci:
+  enabled: true
+  output:
+    enabled: true
+  summary:
+    enabled: true
+  annotations:
+    enabled: true
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+commands:
+  - name: test
+    description: Validate stacks, then provision and destroy every app environment on the local emulator.
+    steps:
+      - atmos validate stacks
+      - atmos emulator up aws -s dev
+      - atmos terraform apply app -s dev -auto-approve
+      - atmos terraform destroy app -s dev -auto-approve
+      - atmos emulator down aws -s dev
+      - atmos emulator up aws -s staging
+      - atmos terraform apply app -s staging -auto-approve
+      - atmos terraform destroy app -s staging -auto-approve
+      - atmos emulator down aws -s staging
+      - atmos emulator up aws -s prod
+      - atmos terraform apply app -s prod -auto-approve
+      - atmos terraform destroy app -s prod -auto-approve
+      - atmos emulator down aws -s prod

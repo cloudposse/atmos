@@ -13,7 +13,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -103,7 +102,7 @@ func (h *JUnitHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 
 	// Always print a concise result line so local (non-CI) runs see something.
 	passed := report.Tests - report.Failures - report.Errors - report.Skipped
-	ui.Writef("JUnit: %d tests, %d passed, %d failed, %d errored, %d skipped (%d file(s))\n",
+	vars.UI().Writef("JUnit: %d tests, %d passed, %d failed, %d errored, %d skipped (%d file(s))\n",
 		report.Tests, passed, report.Failures, report.Errors, report.Skipped, fileCount)
 
 	return NewStepResult(fmt.Sprintf("%d passed, %d failed", passed, report.Failures+report.Errors)), nil
@@ -117,9 +116,9 @@ func (h *JUnitHandler) loadReport(step *schema.WorkflowStep, vars *Variables) (j
 	seen := make(map[string]struct{})
 
 	for _, pattern := range step.Files {
-		resolved, err := vars.Resolve(pattern)
+		resolved, err := h.ResolveInWorkingDirectory(step, vars, pattern, "files")
 		if err != nil {
-			return junit.Report{}, 0, fmt.Errorf("step '%s': failed to resolve files pattern %q: %w", step.Name, pattern, err)
+			return junit.Report{}, 0, err
 		}
 		matches, err := filepath.Glob(resolved)
 		if err != nil {

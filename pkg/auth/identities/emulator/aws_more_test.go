@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -39,8 +40,10 @@ func TestPostAuthenticate_AWSRegionFallsBackToDefault(t *testing.T) {
 // surfaces from setAWSAuthContext rather than being swallowed.
 func TestPostAuthenticate_AWSResolverErrorPropagates(t *testing.T) {
 	id := newAWSIdentity(t)
-	id.SetStack("dev")
-	id.SetEmulatorResolver(&fakeResolver{err: errUtils.ErrEmulatorNotRunning})
+	resolverErr := errUtils.Build(errUtils.ErrEmulatorNotRunning).
+		WithHint("Start it with `atmos emulator up aws -s local`.").
+		Err()
+	id.SetEmulatorResolver(&fakeResolver{err: resolverErr})
 
 	ac := &schema.AuthContext{}
 	err := id.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
@@ -48,5 +51,6 @@ func TestPostAuthenticate_AWSResolverErrorPropagates(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrEmulatorNotRunning)
+	assert.Contains(t, cockroachErrors.GetAllHints(err), "Start it with `atmos emulator up aws -s local`.")
 	assert.Nil(t, ac.AWS, "auth context left unpopulated on resolver error")
 }

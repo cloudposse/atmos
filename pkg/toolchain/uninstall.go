@@ -14,7 +14,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -191,7 +190,7 @@ func handleToolNotFound(owner, repo, version string, err error, showProgressBar 
 	// If the binary is not found, treat as success (idempotent delete)
 	if errors.Is(err, ErrToolNotFound) || os.IsNotExist(err) {
 		if showProgressBar {
-			ui.Successf("%s/%s@%s not installed", owner, repo, version)
+			ui.Successf("`%s/%s@%s` not installed", owner, repo, version)
 		}
 		return nil
 	}
@@ -200,9 +199,9 @@ func handleToolNotFound(owner, repo, version string, err error, showProgressBar 
 
 // showUninstallProgress displays progress indicators during uninstall.
 func showUninstallProgress() {
-	spinner := bspinner.New()
-	fps.Apply(&spinner)
-	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
+	spinner := ui.NewSpinner()
+
+	progressBar := ui.NewProgress()
 
 	// Show progress for finding tool
 	bar := progressBar.ViewAs(progressFindingTool)
@@ -222,27 +221,27 @@ func handleUninstallError(owner, repo, version string, err error, showProgressBa
 	// If the binary is already gone, treat as success
 	if errors.Is(err, ErrToolNotFound) || os.IsNotExist(err) {
 		if showProgressBar {
-			ui.Successf("%s/%s@%s not installed", owner, repo, version)
+			ui.Successf("`%s/%s@%s` not installed", owner, repo, version)
 		}
 		return nil
 	}
 	if showProgressBar {
-		ui.Errorf("%s/%s@%s failed to uninstall: %v", owner, repo, version, err)
+		ui.Errorf("`%s/%s@%s` failed to uninstall: %v", owner, repo, version, err)
 	}
 	return err
 }
 
 // showUninstallCompletion displays completion message after successful uninstall.
 func showUninstallCompletion(owner, repo, version string) {
-	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
-	spinner := bspinner.New()
-	fps.Apply(&spinner)
+	progressBar := ui.NewProgress()
+	spinner := ui.NewSpinner()
+
 	bar := progressBar.ViewAs(1.0)
 	printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
 	time.Sleep(100 * time.Millisecond)
 	// Clear the line before printing the summary
 	resetLine()
-	ui.Successf("%s/%s@%s uninstalled", owner, repo, version)
+	ui.Successf("`%s/%s@%s` uninstalled", owner, repo, version)
 }
 
 // uninstallToolInfo holds information about a tool to uninstall.
@@ -345,11 +344,11 @@ func collectInstalledTools(toolVersions *ToolVersions, installer *Installer) []u
 
 // processToolUninstalls uninstalls each tool and returns the results.
 func processToolUninstalls(installedTools []uninstallToolInfo, installer *Installer) uninstallResult {
-	spinner := bspinner.New()
-	spinner.Spinner = bspinner.Dot
+	spinner := ui.NewSpinner()
+
 	styles := theme.GetCurrentStyles()
 	spinner.Style = styles.Spinner
-	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
+	progressBar := ui.NewProgress()
 
 	var result uninstallResult
 	for i, tool := range installedTools {
@@ -369,17 +368,20 @@ func processToolUninstall(tool uninstallToolInfo, installer *Installer, result *
 	_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
 	if err != nil {
 		result.alreadyRemoved++
-		return fmt.Sprintf("%s/%s@%s not installed", tool.owner, tool.repo, tool.version), true
+		return fmt.Sprintf("`%s/%s@%s` not installed", tool.owner, tool.repo, tool.version), true
 	}
 
 	err = uninstallSingleTool(installer, tool.owner, tool.repo, tool.version, false)
 	if err == nil {
 		result.installed++
-		return fmt.Sprintf("Uninstalled %s/%s@%s", tool.owner, tool.repo, tool.version), true
+		// Tool specs must be code-wrapped before passing through ui.Success:
+		// Glamour otherwise parses the @version suffix as an email autolink and
+		// drops it from the rendered toast.
+		return fmt.Sprintf("Uninstalled `%s/%s@%s`", tool.owner, tool.repo, tool.version), true
 	}
 
 	result.failed++
-	return fmt.Sprintf("Uninstall failed %s/%s@%s: %v", tool.owner, tool.repo, tool.version, err), false
+	return fmt.Sprintf("Uninstall failed `%s/%s@%s`: %v", tool.owner, tool.repo, tool.version, err), false
 }
 
 // showToolUninstallProgress displays progress for the current tool uninstall.

@@ -180,6 +180,14 @@ func TestSandboxExcludesArtifacts(t *testing.T) {
 	tfplanPath := filepath.Join(componentDir, "test.planfile")
 	require.NoError(t, os.WriteFile(tfplanPath, []byte("plan"), 0o644))
 
+	// A bare plan-output file, e.g. from `terraform plan -out=new.plan` run
+	// directly against this component rather than a sandboxed copy of it.
+	planPath := filepath.Join(componentDir, "new.plan")
+	require.NoError(t, os.WriteFile(planPath, []byte("plan"), 0o644))
+
+	tfplanExtPath := filepath.Join(componentDir, "new.tfplan")
+	require.NoError(t, os.WriteFile(tfplanExtPath, []byte("plan"), 0o644))
+
 	// Create atmos.yaml in the workdir.
 	atmosYaml := filepath.Join(tempWorkdir, "atmos.yaml")
 	atmosContent := `
@@ -204,6 +212,26 @@ components:
 	assert.NoDirExists(t, filepath.Join(sandboxComponentDir, ".terraform"), ".terraform directory should not be copied")
 	assert.NoFileExists(t, filepath.Join(sandboxComponentDir, "test.terraform.tfvars.json"), "tfvars.json should not be copied")
 	assert.NoFileExists(t, filepath.Join(sandboxComponentDir, "test.planfile"), "planfile should not be copied")
+	assert.NoFileExists(t, filepath.Join(sandboxComponentDir, "new.plan"), ".plan file should not be copied")
+	assert.NoFileExists(t, filepath.Join(sandboxComponentDir, "new.tfplan"), ".tfplan file should not be copied")
+}
+
+// TestCopyFileToleratesVanishedSource ensures that copying a directory whose
+// listing includes a file that's deleted before the copy reaches it (as can
+// happen when another test concurrently runs terraform directly against a
+// shared fixture component) is treated as "nothing to copy", not a hard
+// failure - matching the TestDoubleHyphenStackNotOverwritten failure
+// observed on Windows CI where a stray "new.plan" vanished mid-copy.
+func TestCopyFileToleratesVanishedSource(t *testing.T) {
+	tempDir := t.TempDir()
+	vanishedSrc := filepath.Join(tempDir, "vanished.plan")
+	dst := filepath.Join(tempDir, "dst", "vanished.plan")
+
+	// The source file never existed (simulating it having been deleted
+	// between the directory listing and the copy).
+	err := copyFile(vanishedSrc, dst)
+	require.NoError(t, err, "copying a vanished source file should not error")
+	assert.NoFileExists(t, dst, "no destination file should be created for a vanished source")
 }
 
 func TestSandboxWithSymlinks(t *testing.T) {

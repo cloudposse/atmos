@@ -104,8 +104,9 @@ func init() {
 	for _, c := range []*cobra.Command{stackConfigGetCmd, stackConfigSetCmd, stackConfigDeleteCmd, stackConfigFormatCmd} {
 		registerStackEditFlags(c)
 	}
-	stackConfigSetCmd.Flags().StringVar(&flagType, "type", atmosyaml.TypeString,
-		"Value type: string, int, bool, float, null, or yaml (raw literal)")
+	stackConfigSetCmd.Flags().StringVar(&flagType, "type", atmosyaml.TypeAuto,
+		"Value type: auto, string, int, bool, float, null, or yaml (raw literal). "+
+			"auto infers from the existing value at the path, falling back to string.")
 
 	registerStackEditFlags(stackConfigListCmd)
 	stackConfigListCmd.Flags().StringVarP(&flagFormat, "format", "f", "paths", "Output format: paths, table, json, yaml, csv, tsv")

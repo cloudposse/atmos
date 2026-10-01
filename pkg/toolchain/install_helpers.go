@@ -125,8 +125,13 @@ func handleInstallSuccess(result installResult, installer *Installer) {
 		return
 	}
 
-	// Calculate directory size for the installed version.
-	versionDir := filepath.Dir(result.binaryPath)
+	// Calculate directory size for the installed version. Compute the version
+	// dir directly from owner/repo/version rather than deriving it from
+	// result.binaryPath: for a onedir (multi-file) install, binaryPath resolves
+	// to the real entrypoint nested inside the preserved .pkg tree, so
+	// filepath.Dir(binaryPath) would only cover its immediate parent, not the
+	// whole installed tree.
+	versionDir := filepath.Join(installer.GetBinDir(), result.owner, result.repo, result.version)
 	sizeStr := ""
 	if dirSize, err := calculateDirectorySize(versionDir); err == nil {
 		sizeStr = fmt.Sprintf(" (%s)", formatBytes(dirSize))

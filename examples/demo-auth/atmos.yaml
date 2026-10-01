@@ -1,9 +1,5 @@
 base_path: "./"
 
-schemas:
-  atmos:
-    manifest: "schemas/atmos-manifest.json"
-
 components:
   terraform:
     base_path: "components/terraform"

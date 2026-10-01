@@ -47,6 +47,21 @@ func TestMirrorCmdRunAll(t *testing.T) {
 	orig := mirrorRun
 	t.Cleanup(func() { mirrorRun = orig })
 
+	// mirrorCmd is a package-level singleton, and Options.All is read via
+	// v.GetBool("all") (viper's flag binding), which honors the flag's
+	// Changed state rather than its value alone. Passing --all here sets
+	// Changed=true; without restoring it, a later test that never passes
+	// --all (e.g. TestMirrorCmdRunSingle) would still observe All=true
+	// under -shuffle=on, since a flag omitted from a later Execute() call
+	// keeps whatever value/Changed state the previous parse left it in.
+	allFlag := mirrorCmd.Flags().Lookup("all")
+	origAllValue := allFlag.Value.String()
+	origAllChanged := allFlag.Changed
+	t.Cleanup(func() {
+		_ = mirrorCmd.Flags().Set("all", origAllValue)
+		allFlag.Changed = origAllChanged
+	})
+
 	var got tfmirror.Options
 	mirrorRun = func(o tfmirror.Options) error {
 		got = o

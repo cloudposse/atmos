@@ -4,6 +4,7 @@ description: "Atmos Git and GitOps: git.repositories, clone/pull/status/diff/com
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ci-automation
 ---
 
 # Atmos Git
@@ -36,8 +37,7 @@ git:
         author:
           name: Atmos Bot
           email: atmos@example.com
-        signing:
-          mode: auto
+        signing: auto               # auto | always | never
 ```
 
 Use identities or `github/sts` for private GitHub access. Do not put tokens in repository URIs.
@@ -62,7 +62,7 @@ repository.
 ## GitOps Guidance
 
 - Use managed repositories for deployment repos, generated config repos, and promotion workflows.
-- Use signed commits where repository policy requires them; prefer `signing.mode: auto` unless the
+- Use signed commits where repository policy requires them; prefer `commit.signing: auto` unless the
   workflow requires `always` or `never`.
 - Use `github/sts` in CI so Git subprocesses receive short-lived GitHub App credentials.
 - Use `atmos pro commit` when CI-generated commits must trigger follow-on GitHub Actions workflows.
@@ -85,5 +85,4 @@ credentials against untrusted code. Opt in explicitly and only with a documented
 `--allow-unsafe-fork`, `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION`, or
 `ci.allow_unsafe_fork_execution: true`; the bypass logs a prominent warning so it stays visible in
 CI logs and easy to grep for in review. Prefer `pull_request` (not `pull_request_target`) for
-workflows that clone and plan fork contributions, since `pull_request` withholds fork secrets. See
-`docs/prd/native-ci/framework/fork-pr-trust-gate.md` for the full design.
+workflows that clone and plan fork contributions, since `pull_request` withholds fork secrets.

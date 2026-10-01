@@ -23,9 +23,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
   `diff` uses the same stack inputs as deployment: `provider`, `paths`,
   `manifests`, `vars`, `env`, Auth, hooks, and dependencies.
   <div>
-    <PrimaryCTA to="/stacks/components/kubernetes">
-      Stack Configuration
-    </PrimaryCTA>
+    <PrimaryCTA to="/stacks/components/kubernetes">Stack Configuration</PrimaryCTA>
   </div>
 </ActionCard>
 
@@ -112,6 +110,6 @@ are omitted from the diff so their data is never printed or written to the summa
   `--labels` <em>(optional)</em>
 </dt>
 <dd>
-  Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+  Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
 </dd>
 </dl>

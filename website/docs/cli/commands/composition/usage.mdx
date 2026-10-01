@@ -21,8 +21,9 @@ that are fulfilled in the selected stack.
 
 <Terminal>
 ```shell
-# List declarations, or include fulfillment details for one stack
+# Discover declared compositions and the stacks where each is available
 atmos composition list
+# Include fulfillment details for one stack
 atmos composition list -s <stack>
 
 # Validate declarations, or validate fulfillment for one stack
@@ -42,7 +43,7 @@ Atmos selects all compositions that have at least one fulfilled member in the se
 
 | Command | Stack required | Description |
 |---------|----------------|-------------|
-| `list` | Optional | Shows declared compositions by default. With `-s <stack>`, also shows which declared services are fulfilled in that stack. |
+| `list` | Optional | Shows declared compositions and the stacks where each has fulfilled members. With `-s <stack>`, also shows which declared services are fulfilled in that stack. |
 | `validate` | Optional | Validates one composition or all compositions. With `-s <stack>`, includes stack fulfillment details. |
 | `up` | Yes | Creates or starts fulfilled members. |
 | `down` | Yes | Stops and removes fulfilled members. |
@@ -53,9 +54,12 @@ Atmos selects all compositions that have at least one fulfilled member in the se
 | `ps` | Yes | Shows running state for fulfilled members. |
 | `logs` | Yes | Shows logs for fulfilled members. |
 
-Lifecycle and read commands fail clearly when `--stack` is omitted. `list` and `validate` are the
-exceptions: both can run without a stack, and both accept `-s, --stack` when you want stack-specific
-fulfillment details.
+Lifecycle and read commands require a stack. Use the `STACKS` column from `atmos composition list` to
+discover valid values. In an interactive terminal with `--interactive`, omitting
+`--stack` opens a picker containing only stacks that fulfill the requested composition (or any
+composition when the argument is omitted). In scripts, CI, and non-interactive terminals, they fail
+clearly when `--stack` is omitted. `list` and `validate` are the exceptions: both can run without a
+stack, and both accept `-s, --stack` when you want stack-specific fulfillment details.
 
 ## Ordering
 
@@ -94,7 +98,7 @@ A bare `--tail` means all available lines. Use `--tail=N` to limit output to the
 ## Examples
 
 ```shell
-# Show every declared composition
+# Show every declared composition and its available stacks
 atmos composition list
 
 # Show declared compositions and fulfillment in the local stack

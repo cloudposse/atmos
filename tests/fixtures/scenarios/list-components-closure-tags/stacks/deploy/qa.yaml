@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Stack for the dependents-direction conservative-evaluation regression test
+# (stacks_closure_test.go): `batch` declares a TEMPLATED dependency, so the
+# lightweight closure pass cannot build its edge and the reverse direction
+# conservatively evaluates it (see dependencies.UnresolvedDependencySources).
+# The template resolves to eks/karpenter — OUTSIDE the istio dependents
+# closure — so this stack lands in the scoped result's evaluated stacks while
+# staying absent from the final closure. `list stacks` must not show it.
+# Tagged `qa-only` so it is never seeded by the istio-chain tests.
+
+vars:
+  stage: qa
+
+components:
+  terraform:
+    batch:
+      metadata:
+        component: mock
+        tags:
+          - qa-only
+      vars:
+        upstream_component: eks/karpenter
+      settings:
+        depends_on:
+          1:
+            component: "{{ .vars.upstream_component }}"
+            stack: prod

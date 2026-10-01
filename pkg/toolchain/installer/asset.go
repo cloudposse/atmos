@@ -2,6 +2,7 @@ package installer
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -10,7 +11,9 @@ import (
 	sprig "github.com/Masterminds/sprig/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	github "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/templatefuncs"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
@@ -42,6 +45,10 @@ func (i *Installer) buildAssetURLForPlatform(tool *registry.Tool, version, goos,
 		return i.buildHTTPAssetURLForPlatform(tool, version, goos, goarch)
 	case "github_release":
 		return i.buildGitHubReleaseURLForPlatform(tool, version, goos, goarch)
+	case "github_archive":
+		return i.buildGitHubArchiveURL(tool, version)
+	case "github_content":
+		return i.buildGitHubContentURL(tool, version)
 	default:
 		return "", fmt.Errorf("%w: unsupported tool type: %s", ErrInvalidToolSpec, tool.Type)
 	}
@@ -94,10 +101,66 @@ func (i *Installer) buildGitHubReleaseURLForPlatform(tool *registry.Tool, versio
 		assetName = ensureWindowsExeExtensionForOS(assetName, goos)
 	}
 
-	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
-		tool.RepoOwner, tool.RepoName, data.Version, assetName)
+	// Toolchain release assets use the toolchain endpoints (ATMOS_TOOLCHAIN_GITHUB_URL), not
+	// the repo endpoints: aqua-registry tool releases live on public github.com even for GHES
+	// users, by default.
+	url := github.ToolchainEndpoints().ReleaseAssetURL(tool.RepoOwner, tool.RepoName, data.Version, assetName)
 
 	return url, nil
+}
+
+// buildGitHubArchiveURL builds an asset URL for github_archive type tools.
+// Matches upstream aquaproj/aqua behavior: always uses GitHub's tag archive endpoint
+// with .tar.gz format. The Asset, URL, Format, and FormatOverrides fields are
+// intentionally ignored (Aqua's GetFormat() hardcodes "tar.gz" for github_archive).
+// See: https://github.com/aquaproj/aqua/blob/main/pkg/download/github_archive.go.
+func (i *Installer) buildGitHubArchiveURL(tool *registry.Tool, version string) (string, error) {
+	defer perf.Track(nil, "Installer.buildGitHubArchiveURL")()
+
+	if tool.RepoOwner == "" || tool.RepoName == "" {
+		return "", fmt.Errorf("%w: RepoOwner and RepoName must be set for github_archive type (got RepoOwner=%q, RepoName=%q)",
+			ErrInvalidToolSpec, tool.RepoOwner, tool.RepoName)
+	}
+
+	data := buildTemplateData(tool, version)
+	return github.ToolchainEndpoints().ArchiveURL(tool.RepoOwner, tool.RepoName, data.Version), nil
+}
+
+// buildGitHubContentURL builds an asset URL for github_content type tools.
+// Matches upstream aquaproj/aqua behavior: downloads a single file from a repo
+// at a tag via raw.githubusercontent.com. The Asset, URL, Format, and
+// FormatOverrides fields are intentionally ignored for this type.
+// See: https://github.com/aquaproj/aqua/blob/main/pkg/download/github_content.go.
+func (i *Installer) buildGitHubContentURL(tool *registry.Tool, version string) (string, error) {
+	defer perf.Track(nil, "Installer.buildGitHubContentURL")()
+
+	if err := validateGitHubContentFields(tool); err != nil {
+		return "", err
+	}
+	data := buildTemplateData(tool, version)
+	return formatGitHubContentURL(tool.RepoOwner, tool.RepoName, data.Version, tool.Path), nil
+}
+
+// validateGitHubContentFields verifies that a github_content tool has the
+// required RepoOwner, RepoName, and Path fields. Pure function: no I/O, no state.
+func validateGitHubContentFields(tool *registry.Tool) error {
+	if tool.RepoOwner == "" || tool.RepoName == "" || tool.Path == "" {
+		return fmt.Errorf("%w: RepoOwner, RepoName, and Path must be set for github_content type (got RepoOwner=%q, RepoName=%q, Path=%q)",
+			ErrInvalidToolSpec, tool.RepoOwner, tool.RepoName, tool.Path)
+	}
+	// Path is a repo-relative URL segment (always forward-slash, regardless of
+	// host OS), so use the "path" package rather than "path/filepath" here.
+	if path.IsAbs(tool.Path) || strings.Contains(tool.Path, "..") {
+		return fmt.Errorf("%w: Path must be a relative repository path for github_content type (got Path=%q)",
+			ErrInvalidToolSpec, tool.Path)
+	}
+	return nil
+}
+
+// formatGitHubContentURL formats a raw content URL (raw.githubusercontent.com by default, or
+// the toolchain endpoints' equivalent) from its component parts.
+func formatGitHubContentURL(owner, repo, version, path string) string {
+	return github.ToolchainEndpoints().RawURL(owner, repo, version, path)
 }
 
 // archiveExtensions contains known archive file extensions.
@@ -213,6 +276,9 @@ func assetTemplateFuncs() template.FuncMap {
 	}
 	funcs["replace"] = func(old, new, s string) string {
 		return strings.ReplaceAll(s, old, new)
+	}
+	for k, v := range templatefuncs.FuncMap() {
+		funcs[k] = v
 	}
 
 	return funcs

@@ -1,0 +1,514 @@
+{
+  "jobs": [
+    {
+      "completed_at": "2026-09-03T14:57:24Z",
+      "conclusion": "success",
+      "name": "[magefiles] unit tests",
+      "status": "completed",
+      "steps": [
+        {
+          "completed_at": "2026-09-03T14:56:09Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T14:56:15Z",
+          "conclusion": "success",
+          "name": "Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T14:56:23Z",
+          "conclusion": "success",
+          "name": "Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T14:57:14Z",
+          "conclusion": "success",
+          "name": "Run magefiles unit tests with coverage",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T14:57:15Z",
+          "conclusion": "success",
+          "name": "Upload magefiles coverage report artifact",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T14:57:20Z",
+          "conclusion": "success",
+          "name": "Run tools/noticegen unit tests with coverage",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T14:57:20Z",
+          "conclusion": "success",
+          "name": "Upload tools/noticegen coverage report artifact",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T14:57:23Z",
+          "conclusion": "success",
+          "name": "Post Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T14:57:23Z",
+          "conclusion": "success",
+          "name": "Post Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T14:57:23Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "completed_at": "2026-09-03T15:11:04Z",
+      "conclusion": "success",
+      "name": "[kubernetes] e2e tests (macos-15)",
+      "status": "completed",
+      "steps": [
+        {
+          "completed_at": "2026-09-03T15:02:04Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:02:10Z",
+          "conclusion": "success",
+          "name": "Pre Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:02:10Z",
+          "conclusion": "success",
+          "name": "Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:02:17Z",
+          "conclusion": "success",
+          "name": "Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:02:42Z",
+          "conclusion": "success",
+          "name": "Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:03:35Z",
+          "conclusion": "success",
+          "name": "Download Go dependencies",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:09:04Z",
+          "conclusion": "success",
+          "name": "Run Kubernetes end-to-end tests",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:10:50Z",
+          "conclusion": "success",
+          "name": "Post Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:10:51Z",
+          "conclusion": "success",
+          "name": "Post Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:10:53Z",
+          "conclusion": "success",
+          "name": "Post Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:10:57Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "completed_at": "2026-09-03T16:29:15Z",
+      "conclusion": "cancelled",
+      "name": "Acceptance Tests (windows, shard 6/10)",
+      "status": "completed",
+      "steps": [
+        {
+          "completed_at": "2026-09-03T15:19:16Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:19:28Z",
+          "conclusion": "success",
+          "name": "Pre Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:19:29Z",
+          "conclusion": "success",
+          "name": "Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:20:03Z",
+          "conclusion": "success",
+          "name": "Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:20:04Z",
+          "conclusion": "success",
+          "name": "Add GNU tar to PATH (significantly faster than windows tar)",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:20:37Z",
+          "conclusion": "success",
+          "name": "Set up Atmos (install build artifact for windows)",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:20:44Z",
+          "conclusion": "success",
+          "name": "Cache Atmos toolchain",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:21:14Z",
+          "conclusion": "success",
+          "name": "Install Terraform, OpenTofu, Packer, Helm, and Helmfile",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:21:16Z",
+          "conclusion": "success",
+          "name": "Verify Terraform, OpenTofu, Packer, Helm, and Helmfile",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:21:21Z",
+          "conclusion": "success",
+          "name": "Install helm-diff plugin",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:21:33Z",
+          "conclusion": "success",
+          "name": "Check atmos.exe integrity",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:29:03Z",
+          "conclusion": "success",
+          "name": "Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:29:03Z",
+          "conclusion": "skipped",
+          "name": "Get dependencies",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:29:03Z",
+          "conclusion": "skipped",
+          "name": "Verify function parser coverage",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:29:03Z",
+          "conclusion": "skipped",
+          "name": "Verify Terraform example syntax",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:29:03Z",
+          "conclusion": "skipped",
+          "name": "Acceptance tests with coverage",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:36:32Z",
+          "conclusion": "success",
+          "name": "Acceptance tests",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:36:32Z",
+          "conclusion": "skipped",
+          "name": "Upload native coverage artifact",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:36:38Z",
+          "conclusion": "success",
+          "name": "Post Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:39:02Z",
+          "conclusion": "success",
+          "name": "Post Cache Atmos toolchain",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:39:02Z",
+          "conclusion": "success",
+          "name": "Post Set up Atmos (install build artifact for windows)",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:39:04Z",
+          "conclusion": "success",
+          "name": "Post Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:39:16Z",
+          "conclusion": "success",
+          "name": "Post Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:39:16Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "completed_at": "2026-09-03T16:29:15Z",
+      "conclusion": "cancelled",
+      "name": "Acceptance Tests (windows, shard 2/10)",
+      "status": "completed",
+      "steps": [
+        {
+          "completed_at": "2026-09-03T15:19:17Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:19:28Z",
+          "conclusion": "success",
+          "name": "Pre Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:19:28Z",
+          "conclusion": "success",
+          "name": "Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:19:43Z",
+          "conclusion": "success",
+          "name": "Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:19:44Z",
+          "conclusion": "success",
+          "name": "Add GNU tar to PATH (significantly faster than windows tar)",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:20:40Z",
+          "conclusion": "success",
+          "name": "Set up Atmos (install build artifact for windows)",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:20:56Z",
+          "conclusion": "success",
+          "name": "Cache Atmos toolchain",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:21:24Z",
+          "conclusion": "success",
+          "name": "Install Terraform, OpenTofu, Packer, Helm, and Helmfile",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:21:26Z",
+          "conclusion": "success",
+          "name": "Verify Terraform, OpenTofu, Packer, Helm, and Helmfile",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:21:32Z",
+          "conclusion": "success",
+          "name": "Install helm-diff plugin",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:21:34Z",
+          "conclusion": "success",
+          "name": "Check atmos.exe integrity",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:27:00Z",
+          "conclusion": "success",
+          "name": "Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:27:00Z",
+          "conclusion": "skipped",
+          "name": "Get dependencies",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:27:00Z",
+          "conclusion": "skipped",
+          "name": "Verify function parser coverage",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:27:00Z",
+          "conclusion": "skipped",
+          "name": "Verify Terraform example syntax",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:27:00Z",
+          "conclusion": "skipped",
+          "name": "Acceptance tests with coverage",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:32:28Z",
+          "conclusion": "success",
+          "name": "Acceptance tests",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:32:28Z",
+          "conclusion": "skipped",
+          "name": "Upload native coverage artifact",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:32:34Z",
+          "conclusion": "success",
+          "name": "Post Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:37:55Z",
+          "conclusion": "success",
+          "name": "Post Cache Atmos toolchain",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:37:56Z",
+          "conclusion": "success",
+          "name": "Post Set up Atmos (install build artifact for windows)",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:37:59Z",
+          "conclusion": "success",
+          "name": "Post Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:38:10Z",
+          "conclusion": "success",
+          "name": "Post Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:38:10Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "completed_at": "2026-09-03T16:29:29Z",
+      "conclusion": "failure",
+      "name": "Acceptance Tests (windows)",
+      "status": "completed",
+      "steps": [
+        {
+          "completed_at": "2026-09-03T16:29:19Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:29:24Z",
+          "conclusion": "success",
+          "name": "Pre Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:29:24Z",
+          "conclusion": "success",
+          "name": "Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:29:27Z",
+          "conclusion": "failure",
+          "name": "Check per-OS test matrix result",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:29:27Z",
+          "conclusion": "skipped",
+          "name": "Check terraform-registry-cache result",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:29:28Z",
+          "conclusion": "success",
+          "name": "Post Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:29:28Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "completed_at": "2026-09-03T16:29:15Z",
+      "conclusion": "skipped",
+      "name": "release",
+      "status": "completed",
+      "steps": []
+    },
+    {
+      "completed_at": "2026-09-03T16:29:15Z",
+      "conclusion": "skipped",
+      "name": "Upload acceptance coverage to Codecov",
+      "status": "completed",
+      "steps": []
+    }
+  ]
+}

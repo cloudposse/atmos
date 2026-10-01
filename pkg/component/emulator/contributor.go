@@ -48,16 +48,7 @@ func (providerContributor) Contribute(ctx context.Context, genCtx *generator.Gen
 		return nil, nil
 	}
 
-	info := schema.ConfigAndStacksInfo{
-		Stack:            genCtx.Stack,
-		ComponentFromArg: emulatorRef,
-		ComponentType:    cfg.EmulatorComponentType,
-	}
-	r, err := prepare(&info)
-	if err != nil {
-		return nil, err
-	}
-	_, profile, err := r.manager().Resolve(ctx, &r.spec, genCtx.Stack, emulatorRef)
+	profile, err := resolveEmulatorProfile(ctx, emulatorRef)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +61,7 @@ func (providerContributor) Contribute(ctx context.Context, genCtx *generator.Gen
 
 // emulatorBinding reports whether the component in genCtx is bound to an emulator
 // identity whose target has a Terraform provider fragment, returning the Terraform
-// provider name and the referenced emulator component name.
+// provider name and the referenced emulator INSTANCE value.
 func emulatorBinding(genCtx *generator.GeneratorContext) (providerName, emulatorRef string, ok bool) {
 	if genCtx == nil || genCtx.AtmosConfig == nil || genCtx.StackInfo == nil {
 		return "", "", false

@@ -4,6 +4,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestGetGenerateFilenamesForComponent tests that the function extracts filenames correctly.
@@ -228,4 +232,42 @@ func TestGetGenerateFilenamesForComponent_FilenamePatterns(t *testing.T) {
 	for _, expected := range expectedFiles {
 		assert.Contains(t, result, expected)
 	}
+}
+
+// TestFindStacksMapForGenerate verifies the adapter wrapper forwards its arguments to
+// FindStacksMap and returns the same stacksMap/rawStackConfigs, deliberately discarding only the
+// deferred-contexts return value (see FindStacksMapForGenerate's doc comment: its only caller,
+// the bulk `generate:`-section preview, never resolves deferred YAML functions).
+func TestFindStacksMapForGenerate(t *testing.T) {
+	atmosConfig := setupSharedCacheFixture(t)
+
+	stacksMap, rawStackConfigs, err := FindStacksMapForGenerate(&atmosConfig, false)
+	require.NoError(t, err)
+	require.NotEmpty(t, stacksMap, "must return the real stacks map, not an empty stub")
+	require.NotEmpty(t, rawStackConfigs)
+
+	expectedStacksMap, expectedRawStackConfigs, _, expectedErr := FindStacksMap(&atmosConfig, false)
+	require.NoError(t, expectedErr)
+	assert.Equal(t, expectedStacksMap, stacksMap, "must return the exact same stacksMap as FindStacksMap")
+	assert.Equal(t, expectedRawStackConfigs, rawStackConfigs, "must return the exact same rawStackConfigs as FindStacksMap")
+}
+
+// TestProcessStacksForGenerate verifies the adapter wrapper forwards its arguments to
+// ProcessStacks and resolves the same component configuration.
+func TestProcessStacksForGenerate(t *testing.T) {
+	atmosConfig := setupSharedCacheFixture(t)
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "my-explicit-stack",
+		ComponentType:    cfg.TerraformComponentType,
+	}
+
+	result, err := ProcessStacksForGenerate(&atmosConfig, info, true, false, false, nil, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, result.ComponentSection, "must return a real, populated component section")
+
+	vars, ok := result.ComponentSection[cfg.VarsSectionName].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "10.0.0.0/16", vars["cidr"], "must resolve the component's own vars from the fixture stack")
 }

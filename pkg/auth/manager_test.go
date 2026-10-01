@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -443,6 +445,9 @@ func TestManager_GetCachedCredentials_Paths(t *testing.T) {
 }
 
 func TestManager_Whoami_WithCachedCredentials(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
 	// Test that Whoami successfully retrieves cached credentials when available.
 	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
 	m := &manager{
@@ -469,6 +474,9 @@ func TestManager_Whoami_WithCachedCredentials(t *testing.T) {
 }
 
 func TestManager_Whoami_FallbackAuthenticationFails(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
 	// Test that Whoami returns error when both GetCachedCredentials and Authenticate fail.
 	// This covers the case where no cached credentials exist and reauthentication also fails.
 	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
@@ -503,6 +511,9 @@ func TestManager_Whoami_FallbackAuthenticationFails(t *testing.T) {
 }
 
 func TestManager_Whoami_FallbackAuthenticationSucceeds(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
 	// Test that Whoami succeeds via fallback authentication when no cached credentials exist.
 	// This covers the case where provider credentials exist (e.g., in AWS files) and can be used
 	// to derive identity credentials without interactive prompts.
@@ -886,6 +897,9 @@ func TestManager_Authenticate_Errors(t *testing.T) {
 }
 
 func TestManager_Authenticate_SuccessFlow(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
 	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
 	called := false
 
@@ -914,7 +928,38 @@ func TestManager_Authenticate_SuccessFlow(t *testing.T) {
 	assert.True(t, called, "PostAuthenticate should be called")
 }
 
+func TestManager_Authenticate_PostAuthenticatePreservesHints(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	postAuthErr := errUtils.Build(errUtils.ErrEmulatorNotRunning).
+		WithHint("Start it with `atmos emulator up aws -s local`.").
+		Err()
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{"p": {Kind: "aws/iam-identity-center"}},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		providers:       map[string]types.Provider{"p": &testProvider{name: "p", creds: &testCreds{}}},
+		identities:      map[string]types.Identity{"dev": stubPSIdentity{provider: "p", out: &testCreds{}, postErr: postAuthErr}},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
+
+	_, err := m.Authenticate(types.WithSuppressAuthErrors(context.Background(), true), "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	assert.ErrorIs(t, err, errUtils.ErrEmulatorNotRunning)
+	assert.Contains(t, cockroachErrors.GetAllHints(err), "Start it with `atmos emulator up aws -s local`.")
+}
+
 func TestManager_Authenticate_UsesCachedTargetCredentials(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
 	now := ptrTime(time.Now().UTC().Add(30 * time.Minute))
 
 	// Pre-seed store with valid creds for target identity.
@@ -941,6 +986,9 @@ func TestManager_Authenticate_UsesCachedTargetCredentials(t *testing.T) {
 }
 
 func TestManager_Authenticate_ExpiredCredentials(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
 	// Create expired credentials.
 	expiredTime := ptrTime(time.Now().UTC().Add(-time.Hour))
 
@@ -969,6 +1017,52 @@ func TestManager_Authenticate_ExpiredCredentials(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "dev", info.Identity)
 	assert.True(t, called, "PostAuthenticate should be called for fresh authentication")
+}
+
+func TestManager_Authenticate_PostAuthenticateErrorDoesNotPrint(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{"p": {Kind: "aws/iam-identity-center"}},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		providers:       map[string]types.Provider{"p": &testProvider{name: "p", creds: &testCreds{}}},
+		identities:      map[string]types.Identity{"dev": stubPSIdentity{provider: "p", out: &testCreds{}, postErr: assert.AnError}},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+		// Close both pipe endpoints even if an assertion below fails early via
+		// require, so we never leak file descriptors.
+		_ = w.Close()
+		_ = r.Close()
+	})
+
+	_, err = m.Authenticate(context.Background(), "dev")
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	require.ErrorIs(t, err, assert.AnError)
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, details[0], "Post-authentication failed.")
+
+	require.NoError(t, w.Close())
+	os.Stderr = oldStderr
+
+	var output bytes.Buffer
+	_, err = io.Copy(&output, r)
+	require.NoError(t, err)
+	require.Empty(t, output.String(), "Authenticate must return post-authentication errors for the command boundary to render")
 }
 
 func TestManager_ListProviders(t *testing.T) {
@@ -1897,6 +1991,9 @@ func TestManager_SetupAuthLogging_RestoresState(t *testing.T) {
 }
 
 func TestManager_AuthenticateProvider_Success(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
 	// Create test credentials with expiration.
 	exp := time.Now().Add(time.Hour)
 	creds := &testCreds{exp: &exp}
@@ -1935,6 +2032,9 @@ func TestManager_AuthenticateProvider_ProviderNotFound(t *testing.T) {
 }
 
 func TestManager_AuthenticateProvider_CaseInsensitive(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
 	// Test that provider name lookup is case-insensitive.
 	provider := &testProvider{
 		name:  "Test-Provider",
@@ -1961,6 +2061,9 @@ func TestManager_AuthenticateProvider_CaseInsensitive(t *testing.T) {
 }
 
 func TestManager_AuthenticateProvider_AuthenticationFailure(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
 	provider := &testProvider{
 		name:    "test-provider",
 		authErr: fmt.Errorf("authentication failed"),

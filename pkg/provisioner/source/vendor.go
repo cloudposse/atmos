@@ -28,12 +28,25 @@ type VendorSourceOption func(*vendorSourceOptions)
 
 type vendorSourceOptions struct {
 	replaceTarget bool
+	baseDir       string
 }
 
 // WithReplaceTarget controls whether VendorSource may replace an existing target directory.
 func WithReplaceTarget(replace bool) VendorSourceOption {
 	return func(opts *vendorSourceOptions) {
 		opts.replaceTarget = replace
+	}
+}
+
+// WithBaseDir anchors a relative local-path source against baseDir instead of
+// the process's current working directory. Callers that already resolve a
+// working directory for the target path (e.g. the workdir step, which
+// anchors `path` to `working_directory`) should pass the same directory here
+// so a relative `source` resolves consistently with `path` instead of
+// silently falling back to the process cwd.
+func WithBaseDir(baseDir string) VendorSourceOption {
+	return func(opts *vendorSourceOptions) {
+		opts.baseDir = baseDir
 	}
 }
 
@@ -79,7 +92,7 @@ func VendorSource(
 	// Normalize the URI for go-getter using the same logic as regular vendoring.
 	uri = vendor.NormalizeURI(uri)
 	if vendor.IsLocalPath(uri) && !filepath.IsAbs(uri) {
-		absURI, err := filepath.Abs(uri)
+		absURI, err := resolveLocalSourcePath(uri, vendorOpts.baseDir)
 		if err != nil {
 			return errUtils.Build(errUtils.ErrSourceInvalidSpec).
 				WithCause(err).
@@ -238,10 +251,7 @@ func downloadOCISource(ctx context.Context, atmosConfig *schema.AtmosConfigurati
 
 // downloadGoGetterSource fetches a non-OCI source via the go-getter downloader.
 func downloadGoGetterSource(atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
-	downloadOpts := []downloader.GoGetterOption{}
-	if sourceSpec.Retry != nil {
-		downloadOpts = append(downloadOpts, downloader.WithRetryConfig(sourceSpec.Retry))
-	}
+	downloadOpts := []downloader.GoGetterOption{downloader.WithRetryConfig(effectiveRetryConfig(sourceSpec))}
 	dl := downloader.NewGoGetterDownloader(atmosConfig, downloadOpts...)
 	if err := dl.Fetch(uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout); err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
@@ -252,6 +262,48 @@ func downloadGoGetterSource(atmosConfig *schema.AtmosConfiguration, sourceSpec *
 			Err()
 	}
 	return nil
+}
+
+// Bounded default retry policy for source downloads that do not configure
+// their own `retry:`. A `terraform plan` that provisions its component source
+// just in time shouldn't fail on a single dropped DNS query or reset
+// connection -- the same blip a hosted CI runner hits a few times a day --
+// so git operations get three attempts with short exponential backoff.
+// Only transient transport failures are retried (see the git getter's
+// retry predicate); authentication and "not found" errors still fail fast.
+const (
+	defaultSourceRetryAttempts     = 3
+	defaultSourceRetryInitialDelay = 1 * time.Second
+	defaultSourceRetryMaxDelay     = 8 * time.Second
+	defaultSourceRetryMultiplier   = 2.0
+	defaultSourceRetryJitter       = 0.2
+)
+
+// defaultSourceRetryConfig returns the policy described above.
+func defaultSourceRetryConfig() *schema.RetryConfig {
+	attempts := defaultSourceRetryAttempts
+	initialDelay := defaultSourceRetryInitialDelay
+	maxDelay := defaultSourceRetryMaxDelay
+	multiplier := defaultSourceRetryMultiplier
+	jitter := defaultSourceRetryJitter
+	return &schema.RetryConfig{
+		MaxAttempts:     &attempts,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+		Multiplier:      &multiplier,
+		RandomJitter:    &jitter,
+		BackoffStrategy: schema.BackoffExponential,
+	}
+}
+
+// effectiveRetryConfig returns the source's own `retry:` when it configured
+// one, otherwise the bounded default. An explicit `max_attempts: 1` is how a
+// source opts out of retrying entirely.
+func effectiveRetryConfig(sourceSpec *schema.VendorComponentSource) *schema.RetryConfig {
+	if sourceSpec != nil && sourceSpec.Retry != nil {
+		return sourceSpec.Retry
+	}
+	return defaultSourceRetryConfig()
 }
 
 func localDirectorySource(uri string) (string, bool, error) {
@@ -436,6 +488,16 @@ func resolveSourceURI(sourceSpec *schema.VendorComponentSource) string {
 	}
 
 	return uri
+}
+
+// resolveLocalSourcePath anchors a relative local-path uri against baseDir when
+// set, otherwise against the process's current working directory (historical
+// behavior, matched by filepath.Abs).
+func resolveLocalSourcePath(uri, baseDir string) (string, error) {
+	if baseDir != "" {
+		return filepath.Join(baseDir, uri), nil
+	}
+	return filepath.Abs(uri)
 }
 
 // copyToTarget copies downloaded source to target directory using the shared vendor copy logic.

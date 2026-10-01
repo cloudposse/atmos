@@ -166,12 +166,13 @@ Environment variables merge in this order (later values win):
 1. System environment
 2. Global env from `atmos.yaml`
 3. Workflow-level `env`
-4. Step-level `env`
-5. Auth identity environment (if `identity` specified)
+4. Exported variables set by earlier [`type: env`](/workflows/steps/type/env) steps
+5. Step-level `env`
+6. Auth identity environment (if `identity` specified)
 
 ### Scoping
 
-Each step runs as a separate subprocess. Step-level `env` and shell `export` commands only affect that step and do not persist to subsequent steps.
+Each step runs as a separate subprocess. Step-level `env` and shell `export` commands only affect that step and do not persist to subsequent steps. A `type: env` step exports its values to the remaining steps by default; set `export: false` to keep a value available only to later `{{ .env.NAME }}` templates.
 
 ## CLI Environment Variables
 

@@ -72,6 +72,8 @@ func printHelpForTopic(ctx *helpRenderContext, cmd *cobra.Command, topic helpTop
 		printCompatibilityFlags(ctx.writer, cmd, ctx.styles)
 	case helpTopicAll:
 		printFullHelp(ctx, cmd)
+	case helpTopicHidden:
+		printHiddenCommands(ctx, cmd)
 	default:
 		printDefaultHelp(ctx, cmd)
 	}
@@ -96,17 +98,28 @@ func printFullHelp(ctx *helpRenderContext, cmd *cobra.Command) {
 }
 
 func printDefaultHelp(ctx *helpRenderContext, cmd *cobra.Command) {
+	// settings.terminal.help.filter=false restores the pre-filter full help
+	// (FLAGS + GLOBAL FLAGS, no topic hint) — the behavior before PR #2696,
+	// journaled in pkg/edition so an edition pin can restore it too.
+	if ctx.atmosConfig != nil && !ctx.atmosConfig.Settings.Terminal.Help.Filter {
+		printFullHelp(ctx, cmd)
+		return
+	}
 	printCommonHelpSections(ctx, cmd)
 	printLocalFlagsOnly(ctx.writer, cmd, ctx.atmosConfig, ctx.styles)
 	printCompatibilityFlags(ctx.writer, cmd, ctx.styles)
 	printFooter(ctx.writer, cmd, ctx.styles)
-	printHelpTopicHint(ctx.writer, ctx.styles)
+	printHelpTopicHint(ctx.writer, ctx.styles, cmd)
 }
 
-func printHelpTopicHint(w io.Writer, styles *helpStyles) {
+func printHelpTopicHint(w io.Writer, styles *helpStyles, cmd *cobra.Command) {
 	defer perf.Track(nil, "cmd.printHelpTopicHint")()
 
 	usageMsg := "Use `--help=usage` for examples or `--help=all` for all flags and full help."
+	if len(hiddenSubcommands(cmd)) > 0 {
+		usageMsg = "Use `--help=usage` for examples, `--help=all` for all flags and full help, " +
+			"or `--help=hidden` to list hidden subcommands."
+	}
 	usageMsg = renderMarkdownDescription(usageMsg)
 	fmt.Fprintf(w, "\n%s\n", styles.muted.Render(usageMsg))
 }

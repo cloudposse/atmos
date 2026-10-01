@@ -13,7 +13,7 @@ stacks:
   included_paths:
     - "**/*"
   excluded_paths: []
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 logs:
   level: Info

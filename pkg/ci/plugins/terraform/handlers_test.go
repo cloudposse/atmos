@@ -52,6 +52,7 @@ type mockProvider struct {
 	updateRunCalls []*provider.UpdateCheckRunOptions
 	commentCalls   []*provider.PostCommentOptions
 	annotateCalls  [][]provider.Annotation
+	annotateErr    error
 	commentErr     error
 	commentResult  *provider.Comment
 	nextID         int64
@@ -60,7 +61,16 @@ type mockProvider struct {
 // Annotate implements provider.Annotator, capturing the emitted annotations.
 func (m *mockProvider) Annotate(annotations []provider.Annotation) error {
 	m.annotateCalls = append(m.annotateCalls, annotations)
-	return nil
+	return m.annotateErr
+}
+
+// nonAnnotatingProvider wraps a provider.Provider without exposing Annotate,
+// simulating a CI provider that doesn't implement provider.Annotator. Embedding
+// the interface (rather than a concrete type) promotes only its declared
+// method set, so the underlying mockProvider's Annotate method is not
+// promoted and a type assertion to provider.Annotator correctly fails.
+type nonAnnotatingProvider struct {
+	provider.Provider
 }
 
 func newMockProvider() *mockProvider {
@@ -597,6 +607,173 @@ func TestOnBeforePlan_CheckEnabled(t *testing.T) {
 	require.Len(t, mp.checkRunCalls, 1)
 	assert.Equal(t, provider.CheckRunStateInProgress, mp.checkRunCalls[0].Status)
 	assert.Equal(t, "atmos/plan/dev/vpc", mp.checkRunCalls[0].Name)
+}
+
+// TestOnBeforePlan_SkipsWithoutComponent regression-tests issue #3007: a
+// bulk (--affected/--all) invocation's global before-hook fires before
+// components are resolved, so ComponentFromArg is empty. It must be skipped
+// cleanly instead of creating a status with no component that nothing can
+// ever update.
+func TestOnBeforePlan_SkipsWithoutComponent(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "",
+		},
+	}
+
+	err := p.onBeforePlan(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestCreateCheckRun_SkipsWithoutComponent asserts createCheckRun itself
+// returns the invariant-guard sentinel (rather than creating a malformed
+// status) when the component or stack is unresolved.
+func TestCreateCheckRun_SkipsWithoutComponent(t *testing.T) {
+	tests := []struct {
+		name string
+		info *schema.ConfigAndStacksInfo
+	}{
+		{name: "empty component", info: &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: ""}},
+		{name: "empty stack", info: &schema.ConfigAndStacksInfo{Stack: "", ComponentFromArg: "vpc"}},
+		{name: "both empty", info: &schema.ConfigAndStacksInfo{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Plugin{}
+			mp := newMockProvider()
+
+			ctx := &plugin.HookContext{
+				Config:   &schema.AtmosConfiguration{},
+				Provider: mp,
+				Command:  "plan",
+				Info:     tt.info,
+			}
+
+			err := p.createCheckRun(ctx)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+			assert.Empty(t, mp.checkRunCalls)
+		})
+	}
+}
+
+// TestUpdateCheckRun_SkipsWithoutComponent mirrors
+// TestCreateCheckRun_SkipsWithoutComponent for the after-side update path,
+// including the per-operation statuses nested inside it.
+func TestUpdateCheckRun_SkipsWithoutComponent(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "",
+			ComponentFromArg: "",
+		},
+	}
+
+	err := p.updateCheckRun(ctx, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+	assert.Empty(t, mp.updateRunCalls)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestCreateCheckRun_InvalidStatusContext covers the FormatStatusContext
+// error branch added to createCheckRun: requireResolvedComponent passes
+// (Stack/ComponentFromArg are set), but an empty ctx.Command still makes
+// FormatStatusContext reject the context as incomplete, and that error must
+// be wrapped in ErrCICheckRunMissingComponent without ever calling the
+// provider.
+func TestCreateCheckRun_InvalidStatusContext(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{},
+		Provider: mp,
+		Command:  "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+
+	err := p.createCheckRun(ctx)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestUpdateCheckRun_InvalidStatusContext mirrors
+// TestCreateCheckRun_InvalidStatusContext for the after-side update path.
+func TestUpdateCheckRun_InvalidStatusContext(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+
+	err := p.updateCheckRun(ctx, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+	assert.Empty(t, mp.updateRunCalls)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestCreatePerOperationStatuses_SkipsInvalidStatusContext covers the
+// per-operation FormatStatusContext error branch: an empty ctx.Command makes
+// the per-operation status context invalid, so that operation is skipped
+// (logged, not created) instead of calling the provider with a malformed name.
+func TestCreatePerOperationStatuses_SkipsInvalidStatusContext(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{},
+		Provider: mp,
+		Command:  "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+	result := &plugin.OutputResult{
+		Data: &plugin.TerraformOutputData{
+			ResourceCounts: plugin.ResourceCounts{Create: 1},
+		},
+	}
+
+	// Add is explicit here (rather than relying on isStatusEnabled's nil-means-
+	// enabled default) so this test still exercises the invalid-context branch
+	// if that default ever changes.
+	p.createPerOperationStatuses(ctx, result, "atmos", schema.CIChecksStatusesConfig{Add: boolPtr(true)})
+
+	assert.Empty(t, mp.checkRunCalls, "invalid status context must skip the per-operation check run")
 }
 
 func TestOnAfterApply_WritesOutputs(t *testing.T) {
@@ -1706,7 +1883,8 @@ components:
         enabled: true
 `)
 	require.NoError(t, os.MkdirAll(filepath.Join(basePath, "components", "terraform", "vpc"), 0o755))
-	workdirPath := filepath.Join(provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+	workdirPath, err := provWorkdir.BuildPath("", cfg.TerraformComponentType, "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Join(basePath, workdirPath), 0o755))
 	t.Chdir(basePath)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
@@ -1760,7 +1938,8 @@ components:
 	require.NoError(t, os.MkdirAll(filepath.Join(basePath, "components", "terraform", "vpc"), 0o755))
 	// The workdir path exists as a regular file, so workdir resolution fails and
 	// resolveArtifactPath must return "" instead of a bogus planfile path.
-	workdirPath := filepath.Join(provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+	workdirPath, err := provWorkdir.BuildPath("", cfg.TerraformComponentType, "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Join(basePath, filepath.Dir(workdirPath)), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(basePath, workdirPath), []byte("not a directory"), 0o644))
 	t.Chdir(basePath)
@@ -1798,7 +1977,8 @@ func TestApplyResolvedWorkdirArtifactPath(t *testing.T) {
 
 	t.Run("enabled workdir with existing root sets workdir path", func(t *testing.T) {
 		basePath := t.TempDir()
-		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+		workdirPath, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, "vpc", "dev", nil)
+		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 		info := &schema.ConfigAndStacksInfo{
 			FinalComponent:   "vpc",
@@ -1814,7 +1994,9 @@ func TestApplyResolvedWorkdirArtifactPath(t *testing.T) {
 
 	t.Run("enabled workdir with component subpath sets resolved subpath", func(t *testing.T) {
 		basePath := t.TempDir()
-		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-null-label", "exports")
+		workdirRoot, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, "null-label", "dev", nil)
+		require.NoError(t, err)
+		workdirPath := filepath.Join(workdirRoot, "exports")
 		require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 		info := &schema.ConfigAndStacksInfo{
 			BaseComponentPath: "exports",
@@ -1845,7 +2027,8 @@ func TestApplyResolvedWorkdirArtifactPath(t *testing.T) {
 
 	t.Run("enabled workdir with regular file path fails", func(t *testing.T) {
 		basePath := t.TempDir()
-		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+		workdirPath, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, "vpc", "dev", nil)
+		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(filepath.Dir(workdirPath), 0o755))
 		require.NoError(t, os.WriteFile(workdirPath, []byte("not a directory"), 0o644))
 		info := &schema.ConfigAndStacksInfo{
@@ -2028,6 +2211,137 @@ func TestOnAfterDeploy_WithCommandError_RendersFailureSummary(t *testing.T) {
 	assert.Contains(t, rendered, "identity failed: assume role denied", "should surface the command error")
 	assert.NotContains(t, rendered, "No Changes Applied for", "must not fall through to no-changes branch")
 	assert.NotContains(t, rendered, "NO_CHANGE-inactive", "must not use the no-change badge")
+}
+
+// terraformPlanWarningOutput is realistic `terraform plan` stdout containing
+// one deprecation warning with a source locator, used to exercise the
+// onAfter* → emitPlanWarningAnnotations wiring end to end.
+const terraformPlanWarningOutput = `
+Warning: Argument is deprecated
+
+  with aws_s3_bucket.this,
+  on main.tf line 12, in resource "aws_s3_bucket" "this":
+  12:   acl = "private"
+
+Use the aws_s3_bucket_acl resource instead
+
+Plan: 1 to add, 0 to change, 0 to destroy.
+`
+
+func TestOnAfterPlan_EmitsWarningAnnotation(t *testing.T) {
+	p := &Plugin{}
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: newMockProvider(),
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: terraformPlanWarningOutput,
+	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.annotateCalls, 1)
+	require.Len(t, mp.annotateCalls[0], 1)
+	ann := mp.annotateCalls[0][0]
+	assert.Equal(t, provider.AnnotationWarning, ann.Level)
+	assert.Equal(t, "main.tf", ann.Path)
+	assert.Equal(t, 12, ann.StartLine)
+	assert.Equal(t, "terraform plan: warning", ann.Title)
+}
+
+func TestOnAfterApply_EmitsWarningAnnotation(t *testing.T) {
+	p := &Plugin{}
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: newMockProvider(),
+		Command:  "apply",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: terraformPlanWarningOutput,
+	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterApply(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.annotateCalls, 1)
+	assert.Equal(t, "terraform apply: warning", mp.annotateCalls[0][0].Title)
+}
+
+func TestOnAfterDeploy_EmitsWarningAnnotationTitledApply(t *testing.T) {
+	p := &Plugin{}
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: newMockProvider(),
+		Command:  "deploy",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: terraformPlanWarningOutput,
+	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterDeploy(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.annotateCalls, 1)
+	// Deploy overrides ctx.Command to "apply" for templating/parsing; the
+	// annotation title should reflect that, not the literal "deploy".
+	assert.Equal(t, "terraform apply: warning", mp.annotateCalls[0][0].Title)
+	assert.Equal(t, "deploy", ctx.Command, "original command must be restored after the hook returns")
+}
+
+func TestOnAfterPlan_AnnotationsDisabled_SkipsWarningAnnotation(t *testing.T) {
+	p := &Plugin{}
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary:     schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:      schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:      schema.CIChecksConfig{Enabled: boolPtr(false)},
+				Annotations: schema.CIAnnotationsConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: newMockProvider(),
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: terraformPlanWarningOutput,
+	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err)
+
+	assert.Empty(t, mp.annotateCalls)
 }
 
 func TestIsCommentsEnabled(t *testing.T) {

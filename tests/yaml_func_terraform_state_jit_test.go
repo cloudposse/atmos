@@ -29,7 +29,7 @@ func TestTerraformStateJITWorkdir(t *testing.T) {
 	require.True(t, atmosConfig.Initialized, "atmos config should be initialized")
 
 	// consumer has: vars.foo: !terraform.state producer test foo.
-	// This resolves producer's state file from .workdir/terraform/test-producer/.
+	// This resolves producer's state file from .workdir/terraform/test-producer-486d7adf/.
 	componentSection, err := e.ExecuteDescribeComponent(
 		&e.ExecuteDescribeComponentParams{
 			Component:            "consumer",
@@ -71,7 +71,7 @@ func TestTerraformStateJITWorkdirViaAbstractInheritance(t *testing.T) {
 	// inheritor inherits from producer-reader/abstract which has:
 	//   vars.foo: !terraform.state producer test foo
 	// The !terraform.state reference must resolve through the inheritance chain
-	// to producer's JIT workdir state at .workdir/terraform/test-producer/
+	// to producer's JIT workdir state at .workdir/terraform/test-producer-486d7adf/.
 	componentSection, err := e.ExecuteDescribeComponent(
 		&e.ExecuteDescribeComponentParams{
 			Component:            "inheritor",

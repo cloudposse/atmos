@@ -37,6 +37,9 @@ func TestTerraformPlanCI(t *testing.T) {
 	cmd.Stderr = &stderr
 
 	err = cmd.Run()
+	if err != nil {
+		SkipIfTerraformRegistryError(t, stdout.String()+stderr.String())
+	}
 	require.NoError(t, err, "Expected exit code 0.\nStdout: %s\nStderr: %s", stdout.String(), stderr.String())
 
 	// Verify CI check run messages appear on stderr.
@@ -90,6 +93,9 @@ func TestTerraformPlanCIUploadAndPlanfileList(t *testing.T) {
 	planCmd.Stderr = &planStderr
 
 	err = planCmd.Run()
+	if err != nil {
+		SkipIfTerraformRegistryError(t, planStdout.String()+planStderr.String())
+	}
 	require.NoError(t, err, "atmos terraform plan failed.\nStdout: %s\nStderr: %s", planStdout.String(), planStderr.String())
 
 	// Step 2: Verify the planfile was created in the component working dir.

@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
+import useGlobalData from '@docusaurus/useGlobalData';
 import { RiStackLine, RiGraduationCapLine, RiPlugLine } from 'react-icons/ri';
 import './styles.css';
 
@@ -19,31 +20,41 @@ function AIBadge() {
 // Each card links to the doc section that proves its claim.
 const MotionLink = motion(Link);
 
-const capabilities = [
-  {
-    icon: RiStackLine,
-    title: 'Declared, not scripted',
-    desc: 'The tools, workflows, dependencies, and validation — everything you used to script together — is declared and wired end to end. Agents drive one complete system, not a pile of glue scripts.',
-    link: '/stacks',
-    delay: 0,
-  },
-  {
-    icon: RiGraduationCapLine,
-    title: 'Agent Skills',
-    desc: '22 portable skills in the open Agent Skills format hand agents exactly what they need about your stacks, components, and workflows — working across Claude Code, Cursor, Gemini, and Copilot. Publish your own.',
-    link: '/ai/agent-skills',
-    delay: 0.1,
-  },
-  {
-    icon: RiPlugLine,
-    title: 'MCP Server',
-    desc: 'Atmos exposes itself over the Model Context Protocol, so any MCP client — Claude Code, Cursor, VS Code — can query and drive your infrastructure as native tools. No custom integration.',
-    link: '/ai/mcp-server',
-    delay: 0.2,
-  },
-];
+// Live skill count, computed at build time by the file-browser "skills" plugin
+// instance behind /ai/skills — never needs manual updates.
+function useSkillCount() {
+  const globalData = useGlobalData();
+  return globalData['file-browser']?.['skills']?.examples?.length;
+}
 
 function AISection() {
+  const skillCount = useSkillCount();
+  const skillCountLabel = skillCount ? `${skillCount} portable skills` : 'Portable skills';
+
+  const capabilities = [
+    {
+      icon: RiStackLine,
+      title: 'Declared, not scripted',
+      desc: 'The tools, workflows, dependencies, and validation — everything you used to script together — is declared and wired end to end. Agents drive one complete system, not a pile of glue scripts.',
+      link: '/stacks',
+      delay: 0,
+    },
+    {
+      icon: RiGraduationCapLine,
+      title: 'Agent Skills',
+      desc: `${skillCountLabel} in the open Agent Skills format hand agents exactly what they need about your stacks, components, and workflows — working across Claude Code, Cursor, Gemini, and Copilot. Publish your own.`,
+      link: '/ai/skills',
+      delay: 0.1,
+    },
+    {
+      icon: RiPlugLine,
+      title: 'MCP Server',
+      desc: 'Atmos exposes itself over the Model Context Protocol, so any MCP client — Claude Code, Cursor, VS Code — can query and drive your infrastructure as native tools. No custom integration.',
+      link: '/ai/mcp-server',
+      delay: 0.2,
+    },
+  ];
+
   return (
     <section className="ai-section">
       <div className="ai-section-inner">

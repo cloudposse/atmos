@@ -17,6 +17,23 @@ type StepExecutor struct {
 	atmosConfig *schema.AtmosConfiguration
 }
 
+type outputSuppressedContextKey struct{}
+
+// WithOutputSuppressed disables transient step UI for this context.
+func WithOutputSuppressed(ctx context.Context) context.Context {
+	defer perf.Track(nil, "step.WithOutputSuppressed")()
+
+	return context.WithValue(ctx, outputSuppressedContextKey{}, struct{}{})
+}
+
+// OutputSuppressed reports whether transient step UI is disabled for ctx.
+func OutputSuppressed(ctx context.Context) bool {
+	defer perf.Track(nil, "step.OutputSuppressed")()
+
+	_, ok := ctx.Value(outputSuppressedContextKey{}).(struct{})
+	return ok
+}
+
 // NewStepExecutor creates a new step executor.
 func NewStepExecutor() *StepExecutor {
 	defer perf.Track(nil, "step.NewStepExecutor")()
@@ -49,6 +66,13 @@ func (e *StepExecutor) SetAtmosConfig(config *schema.AtmosConfiguration) {
 
 	e.atmosConfig = config
 	e.vars.SetAtmosConfig(config)
+}
+
+// SetOutputWriters routes step subprocess output through component-scoped streams.
+func (e *StepExecutor) SetOutputWriters(writers OutputWriters) {
+	defer perf.Track(nil, "step.StepExecutor.SetOutputWriters")()
+
+	e.vars.OutputWriters = writers
 }
 
 // Variables returns the executor's variable store.

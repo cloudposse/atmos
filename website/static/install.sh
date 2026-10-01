@@ -7,111 +7,198 @@ installed_atmos_path=""
 
 # Function to check if command exists
 command_exists() {
-  command -v "$@" >/dev/null 2>&1
+	command -v "$@" >/dev/null 2>&1
+}
+
+# Retry flags shared by every curl call in this script: transient network
+# blips (connection resets, timeouts) shouldn't fail the whole install.
+# --retry-all-errors (curl 7.71+, June 2020) is needed because plain --retry
+# only retries a narrower default set of conditions that doesn't cover every
+# transient failure (e.g. curl error 35, "Recv failure: Connection was
+# reset") — but older curl builds reject it as an unknown option, which would
+# hard-fail every curl call in this script. Probe for support directly
+# (rather than parsing curl's version string, which varies by build) so this
+# degrades to curl's narrower default retry set on older clients instead of
+# failing outright.
+curl_retry_flags=(--retry 3 --retry-delay 2)
+if command_exists curl && curl --retry-all-errors --version >/dev/null 2>&1; then
+	curl_retry_flags+=(--retry-all-errors)
+fi
+
+# On Windows (Git Bash/MSYS/Cygwin), curl uses the schannel TLS backend, which
+# performs a live OCSP/CRL revocation check on every TLS handshake. Public CA
+# revocation responders are frequently slow or transiently unreachable
+# (corporate proxies, outages), which fails the handshake with
+# CRYPT_E_REVOCATION_OFFLINE even though the certificate itself is valid and
+# the destination is reachable — a well-known schannel-specific class of
+# flakiness, not a sign anything is actually wrong. --ssl-revoke-best-effort
+# (schannel-only, curl 7.70+) still performs the check when a responder is
+# reachable and only skips it when the responder itself is offline/missing —
+# exactly this failure mode — unlike --ssl-no-revoke, which would disable
+# revocation checking unconditionally. Probe for the flag first since
+# non-Windows curl builds aren't schannel-backed and may not support it.
+case "$(uname -s)" in
+	MINGW* | MSYS* | CYGWIN*)
+		if command_exists curl && curl --ssl-revoke-best-effort --version >/dev/null 2>&1; then
+			curl_retry_flags+=(--ssl-revoke-best-effort)
+		fi
+		;;
+esac
+
+# Function to run a command with root privileges if needed, using sudo when available.
+maybe_sudo() {
+	if [ "$(id -u)" -eq 0 ]; then
+		"$@"
+		return
+	fi
+
+	if command_exists sudo; then
+		sudo "$@"
+		return
+	fi
+
+	echo "Error: this step requires root privileges, and 'sudo' is not available." >&2
+	echo "Either re-run this script as root, or install the Atmos binary directly (no root required):" >&2
+	echo "  curl -fsSL https://atmos.tools/install.sh | bash -s -- binary" >&2
+	exit 1
+}
+
+# Require curl before doing anything with it, and error out with a clear
+# message rather than letting an arbitrary curl call fail obscurely.
+require_curl() {
+	if ! command_exists curl; then
+		echo "curl is required but not installed. Please install curl and try again." >&2
+		exit 1
+	fi
 }
 
 # Function to detect package manager
 detect_package_manager() {
-    if command -v brew &> /dev/null; then
-        echo "brew"
-    elif command -v apt-get &> /dev/null; then
-        echo "deb"
-    elif command -v apt &> /dev/null; then
-        echo "alpine"
-    elif command -v yum &> /dev/null; then
-        echo "rpm"
-		elif command -v nix-env &> /dev/null; then
-        echo "nix"
-    else
-        echo "none"
-    fi
+	if command -v brew &> /dev/null; then
+		echo "brew"
+	elif command -v apt-get &> /dev/null; then
+		echo "deb"
+	elif command -v apk &> /dev/null; then
+		echo "alpine"
+	elif command -v yum &> /dev/null; then
+		echo "rpm"
+	elif command -v nix-env &> /dev/null; then
+		echo "nix"
+	else
+		echo "none"
+	fi
 }
 
 # Function for CloudSmith package registry installation
 install_via_cloudsmith() {
-		local package_manager=$(detect_package_manager)
-    curl -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.${package_manager}.sh" | bash
-		case $package_manager in
-			alpine)
-				echo "Using apk installation method..."
-				apk add atmos
-				;;
-			deb)
-				echo "Using apt package manager..."
-				apt-get -y install atmos
-				;;
-			rpm)
-				echo "Using yum installation method..."
-				yum -y install atmos
-				;;
-			*)
-				echo "Invalid method specified. Use 'alpine', 'deb', or 'rpm'."
-				exit 1
-				;;
-		esac
+	require_curl
+	local package_manager
+	package_manager=$(detect_package_manager)
+
+	# Download the setup script to a file before running it, rather than
+	# piping curl directly into bash: curl can't rewind a shell pipe the way
+	# it can rewind a file via -o, so a mid-transfer retry could otherwise
+	# hand bash a truncated-then-repeated (corrupted) script instead of the
+	# complete one.
+	local setup_script
+	setup_script=$(mktemp 2>/dev/null || mktemp -t atmos-cloudsmith-setup)
+	# Clean up on any exit path (download failure, setup-script failure,
+	# interruption), not just the success path below.
+	trap 'rm -f "$setup_script"' EXIT
+	curl "${curl_retry_flags[@]}" -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.${package_manager}.sh" -o "$setup_script"
+	maybe_sudo bash "$setup_script"
+	rm -f "$setup_script"
+	trap - EXIT
+
+	case $package_manager in
+		alpine)
+			echo "Using apk installation method..."
+			maybe_sudo apk add atmos
+			;;
+		deb)
+			echo "Using apt package manager..."
+			maybe_sudo apt-get -y install atmos
+			;;
+		rpm)
+			echo "Using yum installation method..."
+			maybe_sudo yum -y install atmos
+			;;
+		*)
+			echo "Invalid method specified. Use 'alpine', 'deb', or 'rpm'."
+			exit 1
+			;;
+	esac
 }
 
 # Function for binary download installation
 install_via_binary_download() {
-		# Check for curl
-		if ! command_exists curl; then
-			echo "curl is required but not installed. Please install curl and try again."
-			exit 1
-		fi
-    if [ -n "${ATMOS_VERSION:-}" ]; then
-      release="${ATMOS_VERSION#v}"
-    else
-      latest_url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/cloudposse/atmos/releases/latest)
-      release="${latest_url##*/}"
-      release="${release#v}"
-    fi
-    if [ -z "$release" ]; then
-      echo "Unable to determine the latest Atmos release version." >&2
-      exit 1
-    fi
+	require_curl
+	if [ -n "${ATMOS_VERSION:-}" ]; then
+		release="${ATMOS_VERSION#v}"
+	else
+		latest_url=$(curl "${curl_retry_flags[@]}" -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/cloudposse/atmos/releases/latest)
+		release="${latest_url##*/}"
+		release="${release#v}"
+	fi
+	if [ -z "$release" ]; then
+		echo "Unable to determine the latest Atmos release version." >&2
+		exit 1
+	fi
 
-		os=$(uname -s | tr '[:upper:]' '[:lower:]')
-		case "$os" in
-			mingw*|msys*|cygwin*) os="windows" ;;
-		esac
+	os=$(uname -s | tr '[:upper:]' '[:lower:]')
+	case "$os" in
+		mingw*|msys*|cygwin*) os="windows" ;;
+	esac
 
-		arch=$(uname -m)
-		case "$arch" in
-			x86_64) arch="amd64" ;;
-			aarch64|arm64) arch="arm64" ;;
-			i386|i686) arch="386" ;;
-		esac
+	arch=$(uname -m)
+	case "$arch" in
+		x86_64) arch="amd64" ;;
+		aarch64|arm64) arch="arm64" ;;
+		i386|i686) arch="386" ;;
+	esac
 
-    output="atmos"
-    extension=""
-    if [ "$os" = "windows" ]; then
-      output="atmos.exe"
-      extension=".exe"
-    fi
+	output="atmos"
+	extension=""
+	if [ "$os" = "windows" ]; then
+		output="atmos.exe"
+		extension=".exe"
+	fi
 
-    binary_url="https://github.com/cloudposse/atmos/releases/download/v${release}/atmos_${release}_${os}_${arch}${extension}"
-    curl -fsSL "${binary_url}" -o "$output"
-    checksums_url="https://github.com/cloudposse/atmos/releases/download/v${release}/atmos_${release}_SHA256SUMS"
-    expected_sha="$(curl -fsSL "$checksums_url" | awk -v file="atmos_${release}_${os}_${arch}${extension}" '$2 == file {print $1; exit}')"
-    if [ -z "$expected_sha" ]; then
-      echo "Unable to find checksum for atmos_${release}_${os}_${arch}${extension}" >&2
-      exit 1
-    fi
-    if command_exists sha256sum; then
-      actual_sha="$(sha256sum "$output" | awk '{print $1}')"
-    elif command_exists shasum; then
-      actual_sha="$(shasum -a 256 "$output" | awk '{print $1}')"
-    else
-      echo "sha256sum or shasum is required to verify the downloaded Atmos binary." >&2
-      exit 1
-    fi
-    if [ "$actual_sha" != "$expected_sha" ]; then
-      echo "Checksum mismatch for $output" >&2
-      exit 1
-    fi
-    chmod +x "$output"
-    installed_atmos_path="./$output"
-    echo "Atmos installed into $installed_atmos_path, make sure to move it into a directory in your PATH"
+	binary_url="https://github.com/cloudposse/atmos/releases/download/v${release}/atmos_${release}_${os}_${arch}${extension}"
+	curl "${curl_retry_flags[@]}" -fsSL "${binary_url}" -o "$output"
+	checksums_url="https://github.com/cloudposse/atmos/releases/download/v${release}/atmos_${release}_SHA256SUMS"
+
+	# Download the checksums file before parsing it, rather than piping curl
+	# directly into awk: a mid-transfer retry can otherwise hand awk
+	# truncated-then-repeated (corrupted) checksum data instead of the
+	# complete file.
+	checksums_file=$(mktemp 2>/dev/null || mktemp -t atmos-checksums)
+	# Clean up on any exit path (download failure, parsing error,
+	# interruption), not just the success path below.
+	trap 'rm -f "$checksums_file"' EXIT
+	curl "${curl_retry_flags[@]}" -fsSL "$checksums_url" -o "$checksums_file"
+	expected_sha="$(awk -v file="atmos_${release}_${os}_${arch}${extension}" '$2 == file {print $1; exit}' "$checksums_file")"
+	rm -f "$checksums_file"
+	trap - EXIT
+	if [ -z "$expected_sha" ]; then
+		echo "Unable to find checksum for atmos_${release}_${os}_${arch}${extension}" >&2
+		exit 1
+	fi
+	if command_exists sha256sum; then
+		actual_sha="$(sha256sum "$output" | awk '{print $1}')"
+	elif command_exists shasum; then
+		actual_sha="$(shasum -a 256 "$output" | awk '{print $1}')"
+	else
+		echo "sha256sum or shasum is required to verify the downloaded Atmos binary." >&2
+		exit 1
+	fi
+	if [ "$actual_sha" != "$expected_sha" ]; then
+		echo "Checksum mismatch for $output" >&2
+		exit 1
+	fi
+	chmod +x "$output"
+	installed_atmos_path="./$output"
+	echo "Atmos installed into $installed_atmos_path, make sure to move it into a directory in your PATH"
 }
 
 # Function to install via Homebrew
@@ -165,11 +252,21 @@ install_atmos() {
 # Run the installation
 install_atmos
 
-# Check if atmos is installed properly
+# Check if atmos is installed properly.
+# Resolve via the real PATH only (no leading "."): the package managers
+# handled here (brew/nix/apt/yum/apk) always install into a directory
+# already on PATH, and searching "." risks matching an unrelated same-named
+# file in the current directory instead. Even so, normalize to an absolute
+# path here: if the caller's own PATH contains "." or another relative
+# entry, command -v can still return a relative path, which would break
+# once we cd into verify_dir below.
 if [ -n "$installed_atmos_path" ]; then
 	atmos="$(pwd)/${installed_atmos_path#./}"
 else
-	atmos=$(PATH=.:$PATH command -v atmos)
+	atmos="$(command -v atmos)"
+	if [[ "$atmos" != /* ]]; then
+		atmos="$(cd -- "$(dirname -- "$atmos")" && pwd -P)/$(basename -- "$atmos")"
+	fi
 fi
 
 verify_dir=$(mktemp -d 2>/dev/null || mktemp -d -t atmos-verify)

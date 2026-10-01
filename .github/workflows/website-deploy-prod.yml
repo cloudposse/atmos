@@ -9,12 +9,25 @@ on:
     types:
       - released
 
+# Serialize deploys. The merge queue can land several PRs on main minutes apart, and
+# each push triggers a content-aware deploy against the ONE shared origin prefix. Two
+# runs in flight at once race: run A uploads its hashed bundles and index.html, then
+# run B's manifest delta removes A's bundles (they are not in B's build)
+# while A's index.html still references them -- the site goes blank until the next
+# deploy. Only the newest pending run is kept per group; the in-flight run is never
+# cancelled because aborting mid-sync would leave a half-uploaded site.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 env:
   AWS_REGION: us-east-2
   IAM_ROLE_ARN: arn:aws:iam::557075604627:role/cplive-plat-ue2-prod-atmos-docs-gha
   IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-deploy-release
   S3_BUCKET_NAME: cplive-plat-ue2-prod-atmos-docs-origin
   DEPLOYMENT_HOST: atmos.tools
+  # atmos-docs-site-spa (plat-ue2-prod) in cloudposse/infra-live.
+  CLOUDFRONT_DISTRIBUTION_ID: E2WVYUGW40ZPA8
 
 # These permissions are needed to interact with the GitHub's OIDC Token endpoint
 permissions:
@@ -30,44 +43,112 @@ jobs:
       url: https://${{ env.DEPLOYMENT_HOST }}
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            sts.us-east-2.amazonaws.com:443
+            *.actions.githubusercontent.com:443
+            github.com:443
+            api.github.com:443
+            nodejs.org:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            proxy.golang.org:443
+            storage.googleapis.com:443
+            us.i.posthog.com:443
+            cplive-plat-ue2-prod-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
+            cloudfront.amazonaws.com:443
+            api.scorecard.dev:443
+            www.bestpractices.dev:443
+
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.IAM_ROLE_ARN }}
           role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
       - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version-file: "website/.nvmrc"
-
+      # pnpm before Node: setup-node's pnpm-store cache needs the pnpm binary
+      # on PATH to locate the store. Previously nothing cached the store and
+      # `pnpm install --frozen-lockfile` downloaded the full dependency tree
+      # on every run.
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: 9
 
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: "website/.nvmrc"
+          cache: pnpm
+          cache-dependency-path: website/pnpm-lock.yaml
+
+      - name: Set up Go
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: "go.mod"
+
+      # `go run .` below has no prior module cache warm-up, so a single
+      # mid-stream proxy.golang.org reset (e.g. "stream error: ...
+      # INTERNAL_ERROR; received from peer") aborts it outright -- see
+      # docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
+      - name: Download Go modules (with retry)
+        uses: ./.github/actions/go-mod-download-retry
+
+      - name: Publish atmos-manifest schema
+        uses: ./.github/actions/publish-atmos-schema
+        with:
+          schema-name: atmos-manifest
+          subcommand: stack schema
+          s3-bucket: ${{ env.S3_BUCKET_NAME }}
+          release-tag: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+
+      - name: Publish atmos-config schema
+        uses: ./.github/actions/publish-atmos-schema
+        with:
+          schema-name: atmos-config
+          subcommand: config schema
+          s3-bucket: ${{ env.S3_BUCKET_NAME }}
+          release-tag: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+
       - name: Install Dependencies and Build Website
         run: |
           node --version
+          # Wall-clock plugin data changes content-hashed bundles and thousands
+          # of HTML references, defeating the incremental S3 uploader.
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
           cd website
           pnpm install --frozen-lockfile
+          pnpm run test:build-timestamp
           pnpm run build:site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # `s3 sync --delete` can remove hashed JS/CSS bundles that an edge location's
+      # cached `index.html` from the previous deploy still references (the
+      # distribution's default cache behavior floors caching at
+      # cloudfront_min_ttl=60s regardless of origin Cache-Control headers), so this
+      # also invalidates the distribution -- see s3-deploy/action.yml. The deploy
+      # role already has cloudfront:CreateInvalidation on this distribution
+      # (infra-live github-actions-iam-policy.tf).
       - name: Copy Website to S3 Bucket
-        run: |
-          ./.github/scripts/s3-deploy-with-charset.sh \
-            website/build \
-            s3://${{ env.S3_BUCKET_NAME }}/
+        uses: ./.github/actions/s3-deploy
+        with:
+          local-dir: website/build
+          s3-uri: s3://${{ env.S3_BUCKET_NAME }}/
+          cloudfront-distribution-id: ${{ env.CLOUDFRONT_DISTRIBUTION_ID }}
 
       - name: Trigger ReIndexing of atmos.tools and docs.cloudposse.com Docs
         run: |

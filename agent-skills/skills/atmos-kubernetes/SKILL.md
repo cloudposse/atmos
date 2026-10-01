@@ -4,6 +4,7 @@ description: "Native Kubernetes components (experimental): render/plan/diff/appl
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
 # Atmos Native Kubernetes Components
@@ -14,8 +15,8 @@ apply. No `kubectl` or `kustomize` binary is required. This is distinct from Hel
 see [atmos-helm](../atmos-helm/SKILL.md) for charts, or [atmos-helmfile](../atmos-helmfile/SKILL.md)
 for Helmfile-based releases.
 
-This feature is **experimental** (`IsExperimental() == true` in `cmd/kubernetes/kubernetes.go`).
-`kubectl`/`kustomize` names describe manifest-processing *behavior*, not the CLI binaries.
+This feature is **experimental**. `kubectl`/`kustomize` names describe manifest-processing
+*behavior*, not the CLI binaries.
 
 ## Related Skills
 

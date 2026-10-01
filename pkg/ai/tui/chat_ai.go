@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -42,15 +43,16 @@ For example:
 - If you need to search for files, use the search_files tool immediately
 - If you need to execute an Atmos command, use the execute_atmos_command tool immediately
 
-Always take action using tools rather than describing what action you would take.`
+Always take action using tools rather than describing what action you would take.
+
+If atmos_list_stacks returns zero stacks, this is a new Atmos project that doesn't have any
+stacks written yet. Treat this as an opportunity, not an error: proactively offer to help the
+user create their first stack and component rather than just reporting that none exist.`
 
 // buildFilteredMessages builds message history filtered by the current provider.
 // Only includes messages from the current provider session for complete isolation.
 func (m *ChatModel) buildFilteredMessages() []aiTypes.Message {
-	currentProvider := ""
-	if m.sess != nil {
-		currentProvider = m.sess.Provider
-	}
+	currentProvider := m.getCurrentProvider()
 
 	messages := make([]aiTypes.Message, 0, len(m.messages)+1)
 	for _, msg := range m.messages {
@@ -163,7 +165,7 @@ func (m *ChatModel) getAtmosMemory() string {
 
 // handleNoToolsResponse handles the AI response path when no tools are available.
 func (m *ChatModel) handleNoToolsResponse(ctx context.Context, messages []aiTypes.Message) tea.Msg {
-	response, err := m.client.SendMessageWithHistory(ctx, messages)
+	response, err := m.sendAIRequestNoTools(ctx, messages)
 	if err != nil {
 		return aiErrorMsg(formatAPIError(err))
 	}
@@ -183,7 +185,7 @@ func (m *ChatModel) handleActionIntentRetry(reqCtx *aiRequestCtx, response *aiTy
 	})
 
 	// Send the prompt again with caching.
-	retryResponse, err := m.client.SendMessageWithSystemPromptAndTools(reqCtx.ctx, reqCtx.systemPrompt, reqCtx.atmosMemory, reqCtx.messages, reqCtx.availableTools)
+	retryResponse, err := m.sendAIRequest(reqCtx.ctx, reqCtx.systemPrompt, reqCtx.atmosMemory, reqCtx.messages, reqCtx.availableTools)
 	if err != nil {
 		return aiErrorMsg(formatAPIError(err))
 	}
@@ -220,7 +222,7 @@ func (m *ChatModel) handleToolsResponse(ctx context.Context, messages []aiTypes.
 	}
 
 	// Send messages with system prompt and tools (enables caching).
-	response, err := m.client.SendMessageWithSystemPromptAndTools(ctx, reqCtx.systemPrompt, reqCtx.atmosMemory, messages, availableTools)
+	response, err := m.sendAIRequest(ctx, reqCtx.systemPrompt, reqCtx.atmosMemory, messages, availableTools)
 	if err != nil {
 		return aiErrorMsg(formatAPIError(err))
 	}
@@ -282,17 +284,47 @@ func (m *ChatModel) getAIResponseWithContext(userMessage string, ctx context.Con
 	}
 }
 
+// aiCallStepLabel is the turn-step label shown while waiting on the AI provider's response.
+const aiCallStepLabel = "Waiting for AI response..."
+
+// sendTurnStepStarted records a new turn step (AI call or tool execution) beginning.
+func (m *ChatModel) sendTurnStepStarted(kind turnStepKind, label string) {
+	if m.program != nil {
+		m.program.Send(turnStepStartedMsg{kind: kind, label: label, status: turnStepRunning, startedAt: time.Now()})
+	}
+}
+
+// sendTurnStepFinished marks the most recently started turn step complete.
+func (m *ChatModel) sendTurnStepFinished(err error) {
+	if m.program != nil {
+		m.program.Send(turnStepFinishedMsg{err: err})
+	}
+}
+
+// sendAIRequest wraps SendMessageWithSystemPromptAndTools with turn-step progress events.
+func (m *ChatModel) sendAIRequest(ctx context.Context, systemPrompt, atmosMemory string, messages []aiTypes.Message, availableTools []tools.Tool) (*aiTypes.Response, error) {
+	m.sendTurnStepStarted(turnStepKindAICall, aiCallStepLabel)
+	resp, err := m.client.SendMessageWithSystemPromptAndTools(ctx, systemPrompt, atmosMemory, messages, availableTools)
+	m.sendTurnStepFinished(err)
+	return resp, err
+}
+
+// sendAIRequestNoTools wraps SendMessageWithHistory with the same turn-step events, for the
+// path where no tools are registered.
+func (m *ChatModel) sendAIRequestNoTools(ctx context.Context, messages []aiTypes.Message) (string, error) {
+	m.sendTurnStepStarted(turnStepKindAICall, aiCallStepLabel)
+	resp, err := m.client.SendMessageWithHistory(ctx, messages)
+	m.sendTurnStepFinished(err)
+	return resp, err
+}
+
 // executeToolCalls executes tool calls and returns the results.
 func (m *ChatModel) executeToolCalls(ctx context.Context, toolCalls []aiTypes.ToolCall) []*tools.Result {
 	results := make([]*tools.Result, len(toolCalls))
 
 	for i, toolCall := range toolCalls {
 		log.Debugf("Executing tool: %s with params: %v", toolCall.Name, toolCall.Input)
-
-		// Update UI status if possible.
-		if m.program != nil {
-			m.program.Send(statusMsg(fmt.Sprintf("Executing tool: %s...", toolCall.Name)))
-		}
+		m.sendTurnStepStarted(turnStepKindTool, formatToolStepLabel(toolCall))
 
 		// Execute the tool.
 		result, err := m.executor.Execute(ctx, toolCall.Name, toolCall.Input)
@@ -302,9 +334,11 @@ func (m *ChatModel) executeToolCalls(ctx context.Context, toolCalls []aiTypes.To
 				Output:  fmt.Sprintf("Error: %v", err),
 				Error:   err,
 			}
-		} else {
-			results[i] = result
+			m.sendTurnStepFinished(err)
+			continue
 		}
+		results[i] = result
+		m.sendTurnStepFinished(result.Error)
 	}
 
 	return results
@@ -412,7 +446,7 @@ func (m *ChatModel) handleToolExecutionFlowWithAccumulator(ctx context.Context, 
 	atmosMemory := m.getAtmosMemory()
 
 	// Call AI again with tool results to get final response (with caching).
-	finalResponse, err := m.client.SendMessageWithSystemPromptAndTools(ctx, systemPrompt, atmosMemory, messages, availableTools)
+	finalResponse, err := m.sendAIRequest(ctx, systemPrompt, atmosMemory, messages, availableTools)
 	if err != nil {
 		return aiErrorMsg(formatAPIError(err))
 	}
@@ -462,7 +496,7 @@ func (m *ChatModel) handleFollowUpActionIntent(reqCtx *aiRequestCtx, finalRespon
 	})
 
 	// Retry with the prompt (with caching).
-	retryResponse, err := m.client.SendMessageWithSystemPromptAndTools(reqCtx.ctx, reqCtx.systemPrompt, reqCtx.atmosMemory, reqCtx.messages, reqCtx.availableTools)
+	retryResponse, err := m.sendAIRequest(reqCtx.ctx, reqCtx.systemPrompt, reqCtx.atmosMemory, reqCtx.messages, reqCtx.availableTools)
 	if err != nil {
 		return aiErrorMsg(formatAPIError(err))
 	}

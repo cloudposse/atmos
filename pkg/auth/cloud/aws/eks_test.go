@@ -123,3 +123,40 @@ func TestNewEKSClient_InvalidCredentials(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrEKSDescribeCluster)
 }
+
+func TestBuildKubeClusterInfo_WithIdentity(t *testing.T) {
+	info := &EKSClusterInfo{
+		Name:                     "dev-cluster",
+		Endpoint:                 "https://XXXX.gr7.us-east-2.eks.amazonaws.com",
+		CertificateAuthorityData: "LS0tLS1CRUdJTi...",
+		ARN:                      "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster",
+		Region:                   "us-east-2",
+	}
+
+	clusterInfo := BuildKubeClusterInfo(info, "dev-admin")
+
+	assert.Equal(t, "dev-cluster", clusterInfo.Name)
+	assert.Equal(t, "https://XXXX.gr7.us-east-2.eks.amazonaws.com", clusterInfo.Endpoint)
+	assert.Equal(t, "LS0tLS1CRUdJTi...", clusterInfo.CertificateAuthorityData)
+	assert.Equal(t, "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster", clusterInfo.ID)
+	assert.Equal(t, "us-east-2", clusterInfo.Region)
+	assert.Equal(t, "eks", clusterInfo.UserPrefix)
+	assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "dev-cluster", "--region", "us-east-2", "--identity=dev-admin"}, clusterInfo.ExecArgs)
+	require.Len(t, clusterInfo.ExecEnv, 1)
+	assert.Equal(t, "ATMOS_IDENTITY", clusterInfo.ExecEnv[0].Name)
+	assert.Equal(t, "dev-admin", clusterInfo.ExecEnv[0].Value)
+}
+
+func TestBuildKubeClusterInfo_WithoutIdentity(t *testing.T) {
+	info := &EKSClusterInfo{
+		Name:     "dev-cluster",
+		Endpoint: "https://XXXX.gr7.us-east-2.eks.amazonaws.com",
+		ARN:      "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster",
+		Region:   "us-east-2",
+	}
+
+	clusterInfo := BuildKubeClusterInfo(info, "")
+
+	assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "dev-cluster", "--region", "us-east-2"}, clusterInfo.ExecArgs)
+	assert.Empty(t, clusterInfo.ExecEnv)
+}

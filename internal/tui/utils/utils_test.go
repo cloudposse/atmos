@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -249,6 +250,31 @@ func TestPrintStyledTextToSpecifiedOutput(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPrintStyledTextToSpecifiedOutput_MultilinePreservesLineBreaks is the
+// forced-color regression test for the "A\nB" case: writeStyledFigurine must
+// render each line as its own figlet block joined by a real newline, not
+// collapse the line break into a '?' glyph (go-figure has no concept of a
+// multi-line phrase on its own) or crash (go-figure's strict mode calls
+// log.Fatal on an unsanitized '\n'). Asserts the combined "A\nB" render
+// equals "A"'s own render, a literal newline, then "B"'s own render -- with
+// ANSI stripped first, since figurine.Write's rainbow gradient is seeded via
+// rand.Int63n on every call, so the two independent renders of the same
+// glyphs are colored differently even though the shapes match.
+func TestPrintStyledTextToSpecifiedOutput_MultilinePreservesLineBreaks(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("ATMOS_FORCE_COLOR", "1")
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("FORCE_COLOR", "")
+
+	var bufA, bufB, bufCombined bytes.Buffer
+	require.NoError(t, PrintStyledTextToSpecifiedOutput(&bufA, "A"))
+	require.NoError(t, PrintStyledTextToSpecifiedOutput(&bufB, "B"))
+	require.NoError(t, PrintStyledTextToSpecifiedOutput(&bufCombined, "A\nB"))
+
+	want := atmosansi.Strip(bufA.String()) + "\n" + atmosansi.Strip(bufB.String())
+	assert.Equal(t, want, atmosansi.Strip(bufCombined.String()))
 }
 
 func TestRenderMarkdown(t *testing.T) {

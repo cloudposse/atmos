@@ -1,7 +1,8 @@
 package vendor
 
 import (
-	"io"
+	"bytes"
+	"context"
 	"os"
 	"runtime"
 	"strings"
@@ -12,10 +13,12 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
 
@@ -57,15 +60,15 @@ func TestRunUpdateWithSpinner_NonTTY_PropagatesError(t *testing.T) {
 	assert.Nil(t, report)
 }
 
-// TestUpdateSpinnerModel_View_NeverWraps is a regression test for the sibling of
-// internal/exec/vendor_model.go's mixin line-stacking bug: a long, unbroken component name (no
-// spaces to word-wrap at) must never make the live "Checking <name>" status line contain a hard
-// line break, since bubbletea's single-line, carriage-return-based redraw corrupts (stacks
-// duplicate lines in the scrollback) if the rendered line wraps in the real terminal. At widths
-// that exceed the fixed spinner+bar+count overhead the whole composed line must also fit strictly
-// within the terminal width (never equal to it -- see liveLineMargin); at extremely narrow widths
-// (smaller than that fixed overhead, which this fix doesn't shrink) only the no-wrap guarantee is
-// checked.
+// TestUpdateSpinnerModel_View_NeverWraps proves a long, unbroken component name (no spaces to
+// word-wrap at) never makes the live "Checking <name>" status line contain a hard line break,
+// since bubbletea's single-line, carriage-return-based redraw corrupts (stacks duplicate lines in
+// the scrollback) if the rendered line wraps in the real terminal. At widths that exceed the fixed
+// spinner+bar+count overhead the whole composed line must also fit strictly within the terminal
+// width (never equal to it -- see liveLineMargin); at extremely narrow widths (smaller than that
+// fixed overhead, which this fix doesn't shrink) only the no-wrap guarantee is checked.
+//
+// Historical note: this is the sibling of internal/exec/vendor_model.go's mixin line-stacking bug.
 func TestUpdateSpinnerModel_View_NeverWraps(t *testing.T) {
 	longName := "https://raw.githubusercontent.com/cloudposse/terraform-components/mixins/v0.3.2/src/mixins/account-verification.mixin.tf"
 
@@ -90,11 +93,12 @@ func TestUpdateSpinnerModel_View_NeverWraps(t *testing.T) {
 	}
 }
 
-// TestUpdateSpinnerModel_View_NeverTouchesLastColumn is a boundary-focused regression test for the
-// "cursor overlapping the progress bar" bug: at widths exactly matching the fixed
-// spinner+bar+count overhead (so the padded gap saturates the line), the rendered line must still
-// stop at least liveLineMargin columns short of the terminal's true last column, never landing
+// TestUpdateSpinnerModel_View_NeverTouchesLastColumn proves that at widths exactly matching the
+// fixed spinner+bar+count overhead (so the padded gap saturates the line), the rendered line still
+// stops at least liveLineMargin columns short of the terminal's true last column, never landing
 // exactly on it.
+//
+// Historical note: boundary case for the "cursor overlapping the progress bar" bug.
 func TestUpdateSpinnerModel_View_NeverTouchesLastColumn(t *testing.T) {
 	for _, width := range []int{60, 61, 79, 80, 81, 120, 200, 250} {
 		m := &updateSpinnerModel{
@@ -207,16 +211,68 @@ func TestUpdateSpinnerModel_Update_WindowSizeMsg(t *testing.T) {
 	assert.Nil(t, cmd)
 }
 
-// TestUpdateSpinnerModel_Update_KeyMsg proves any keypress quits the spinner program, the same
-// early-exit path runUpdateWithSpinner's doc comment describes (the trigger for the
-// nil-report/nil-err race cmd/vendor/update.go guards against).
+// TestUpdateSpinnerModel_Update_KeyMsg proves ordinary keypresses are ignored. A status display
+// must not silently terminate an update because the user happened to press a key.
 func TestUpdateSpinnerModel_Update_KeyMsg(t *testing.T) {
 	m := newTestUpdateSpinnerModel()
 
-	_, cmd := m.Update(tea.KeyMsg{})
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 
+	updated, ok := newModel.(*updateSpinnerModel)
+	require.True(t, ok)
+	assert.False(t, updated.canceled)
+	assert.Nil(t, cmd)
+}
+
+// TestUpdateSpinnerModel_Update_CtrlC proves the one explicit cancellation control quits the
+// spinner so runUpdateWithSpinner can return a visible cancellation error to the CLI.
+func TestUpdateSpinnerModel_Update_CtrlC(t *testing.T) {
+	m := newTestUpdateSpinnerModel()
+
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+
+	updated, ok := newModel.(*updateSpinnerModel)
+	require.True(t, ok)
+	assert.True(t, updated.canceled)
 	require.NotNil(t, cmd)
 	assert.IsType(t, tea.QuitMsg{}, cmd())
+}
+
+func TestUpdateSpinnerResult_Canceled(t *testing.T) {
+	report, err := updateSpinnerResult(&updateSpinnerModel{canceled: true})
+
+	assert.Nil(t, report)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Contains(t, err.Error(), "vendor update canceled")
+}
+
+// TestUpdateSpinnerResult_NilModel proves a nil final model (bubbletea's Run returning nil
+// without error, which shouldn't happen but must not be silently mistaken for success) surfaces
+// a clear error instead of a nil pointer dereference further down the call chain.
+func TestUpdateSpinnerResult_NilModel(t *testing.T) {
+	report, err := updateSpinnerResult(nil)
+
+	assert.Nil(t, report)
+	require.ErrorIs(t, err, errUtils.ErrSpinnerReturnedNilModel)
+}
+
+// unexpectedTeaModel is a minimal tea.Model stand-in used only to prove updateSpinnerResult
+// rejects a final model of the wrong concrete type instead of panicking on a failed type
+// assertion.
+type unexpectedTeaModel struct{}
+
+func (unexpectedTeaModel) Init() tea.Cmd                       { return nil }
+func (unexpectedTeaModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return unexpectedTeaModel{}, nil }
+func (unexpectedTeaModel) View() string                        { return "" }
+
+// TestUpdateSpinnerResult_UnexpectedModelType proves a final model of the wrong concrete type
+// (a programming error, since only *updateSpinnerModel is ever run) surfaces a clear error
+// instead of a panicking type assertion.
+func TestUpdateSpinnerResult_UnexpectedModelType(t *testing.T) {
+	report, err := updateSpinnerResult(unexpectedTeaModel{})
+
+	assert.Nil(t, report)
+	require.ErrorIs(t, err, errUtils.ErrSpinnerUnexpectedModelType)
 }
 
 // TestUpdateSpinnerModel_Update_SpinnerAndProgressFrames proves the spinner.TickMsg and
@@ -333,47 +389,88 @@ func TestRunUpdateWithSpinner_TTY_RunsSpinnerAndReturnsResult(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = ptmx.Close() }()
 	defer func() { _ = ttyFile.Close() }()
+	require.NoError(t, pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 80}))
 
 	// bubbletea defaults to os.Stdin for input, and (since go test's own stdin isn't a terminal)
 	// falls back to opening /dev/tty directly when it isn't -- unavailable in a headless sandbox
 	// with no controlling terminal at all. Pointing stdin at the same PTY avoids that fallback,
 	// matching what a real controlling-terminal session (or the CLI acceptance test harness's
 	// own PTY, which attaches to all three of the child process's standard streams) looks like.
-	origStdin := os.Stdin
-	os.Stdin = ttyFile
-	defer func() { os.Stdin = origStdin }()
+	originalStdin, originalStderr := os.Stdin, os.Stderr
+	os.Stdin, os.Stderr = ttyFile, ttyFile
+	defer func() { os.Stdin, os.Stderr = originalStdin, originalStderr }()
 
-	origStderr := os.Stderr
-	os.Stderr = ttyFile
-	defer func() { os.Stderr = origStderr }()
-
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	rendered := make(chan struct{})
+	drained := make(chan struct{})
 	// Drain the PTY's master side so the spinner's writes never block on a full PTY buffer.
-	go func() { _, _ = io.Copy(io.Discard, ptmx) }()
+	go func() {
+		defer close(drained)
+		var output bytes.Buffer
+		chunk := make([]byte, 512)
+		observed := false
+		for {
+			n, readErr := ptmx.Read(chunk)
+			output.Write(chunk[:n])
+			visible := ansi.Strip(output.String())
+			if !observed && strings.Contains(visible, "Checking vpc") && strings.Contains(visible, "1/1") {
+				observed = true
+				close(rendered)
+			}
+			if readErr != nil {
+				return
+			}
+		}
+	}()
 
 	want := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{
 		{Component: "vpc", Status: vendoring.StatusUpToDate},
 	}}
-
 	type result struct {
 		report *vendoring.UpdateReport
 		err    error
 	}
 	resultCh := make(chan result, 1)
+	completed := false
+	defer func() {
+		cancel()
+		if !completed {
+			select {
+			case <-resultCh:
+			case <-time.After(5 * time.Second):
+				t.Error("spinner did not finish after test cancellation")
+			}
+		}
+		_ = ttyFile.Close()
+		_ = ptmx.Close()
+		<-drained
+	}()
 	go func() {
 		report, err := runUpdateWithSpinner(func(onProgress vendorProgressFunc) (*vendoring.UpdateReport, error) {
-			if onProgress != nil {
-				onProgress("vpc", 1, 1)
+			if !assert.NotNil(t, onProgress) {
+				return nil, assert.AnError
 			}
-			return want, nil
+			onProgress("vpc", 1, 1)
+			// The width-dependent progress line proves the initial WindowSizeMsg
+			// was consumed. Keep work alive until then so Bubble Tea's unjoined
+			// initial size probe cannot race with closing this test-owned PTY.
+			select {
+			case <-rendered:
+				return want, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
 		})
 		resultCh <- result{report, err}
 	}()
 
 	select {
 	case got := <-resultCh:
+		completed = true
 		require.NoError(t, got.err)
 		assert.Same(t, want, got.report)
 	case <-time.After(5 * time.Second):
-		t.Fatal("runUpdateWithSpinner did not return within 5s under a TTY stderr")
+		t.Fatal("spinner did not render progress and return its result within 5s")
 	}
 }

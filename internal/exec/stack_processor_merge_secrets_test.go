@@ -38,7 +38,10 @@ func secretScopeOf(t *testing.T, section map[string]any, name string) string {
 // stack-scoped, the component-level layers are instance-scoped, and an explicit conflicting scope
 // is rejected as invalid component secrets.
 func TestTagSecretsScopes(t *testing.T) {
+	t.Parallel()
+
 	t.Run("stamps-position-derived-scopes", func(t *testing.T) {
+		t.Parallel()
 		global := secretsSection("DB", nil)
 		base := secretsSection("BASE", nil)
 		component := secretsSection("COMP", nil)
@@ -55,6 +58,7 @@ func TestTagSecretsScopes(t *testing.T) {
 	})
 
 	t.Run("does-not-mutate-input", func(t *testing.T) {
+		t.Parallel()
 		global := secretsSection("DB", nil)
 		_, err := tagSecretsScopes(global, nil, nil, nil)
 		require.NoError(t, err)
@@ -64,6 +68,7 @@ func TestTagSecretsScopes(t *testing.T) {
 	})
 
 	t.Run("explicit-conflicting-scope-rejected", func(t *testing.T) {
+		t.Parallel()
 		// A component-level declaration (positionally instance-scoped) that pins itself to
 		// stack scope is a one-way-rule violation.
 		component := secretsSection("DB", map[string]any{"scope": string(secrets.ScopeStack)})
@@ -79,28 +84,32 @@ func TestTagSecretsScopes(t *testing.T) {
 // stamping, "most-specific wins" scope resolution, conflict rejection, section omission, isolation,
 // and availability across all component types.
 func TestMergeComponentConfigurations_Secrets(t *testing.T) {
+	t.Parallel()
+
 	atmosCfg := &schema.AtmosConfiguration{}
 
 	t.Run("no-secrets-anywhere-omits-section", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
 			AtmosConfig:   atmosCfg,
 		}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
 		require.NoError(t, err)
 		_, present := comp[cfg.SecretsSectionName]
 		assert.False(t, present, "secrets must be absent when no layer declares any")
 	})
 
 	t.Run("global-only-is-stack-scoped", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
 			AtmosConfig:   atmosCfg,
 			GlobalSecrets: secretsSection("DB", nil),
 		}
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
 		require.NoError(t, err)
 		section, ok := comp[cfg.SecretsSectionName].(map[string]any)
 		require.True(t, ok, "secrets section must be present and a map")
@@ -108,6 +117,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 	})
 
 	t.Run("base-only-flows-through", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -115,7 +125,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 		}
 		res := minimalComponentResult()
 		res.BaseComponentSecrets = secretsSection("INHERITED", nil)
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		section, ok := comp[cfg.SecretsSectionName].(map[string]any)
 		require.True(t, ok, "inherited secrets must flow through")
@@ -123,6 +133,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 	})
 
 	t.Run("component-redeclaring-global-pulls-to-instance-scope", func(t *testing.T) {
+		t.Parallel()
 		// Most-specific wins: a stack-level secret re-declared at the component level becomes
 		// instance-scoped.
 		opts := ComponentProcessorOptions{
@@ -133,7 +144,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 		}
 		res := minimalComponentResult()
 		res.ComponentSecrets = secretsSection("DB", nil)
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		section := comp[cfg.SecretsSectionName].(map[string]any)
 		assert.Equal(t, string(secrets.ScopeInstance), secretScopeOf(t, section, "DB"),
@@ -141,6 +152,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 	})
 
 	t.Run("overrides-win-over-component-and-base", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -151,7 +163,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 		res.BaseComponentSecrets = secretsSection("DB", map[string]any{"description": "b"})
 		res.ComponentSecrets = secretsSection("DB", map[string]any{"description": "c"})
 		res.ComponentOverridesSecrets = secretsSection("DB", map[string]any{"description": "o"})
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		section := comp[cfg.SecretsSectionName].(map[string]any)
 		spec := section["vars"].(map[string]any)["DB"].(map[string]any)
@@ -160,6 +172,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 	})
 
 	t.Run("explicit-scope-conflict-is-rejected", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -168,12 +181,13 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 		res := minimalComponentResult()
 		// Component layer pinning a secret to stack scope conflicts with its instance position.
 		res.ComponentSecrets = secretsSection("DB", map[string]any{"scope": string(secrets.ScopeStack)})
-		_, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		_, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrInvalidComponentSecrets)
 	})
 
 	t.Run("available-for-all-component-types", func(t *testing.T) {
+		t.Parallel()
 		// Includes a custom component type ("script") to lock in that secrets work for
 		// custom-component stack config, not just the built-in types.
 		for _, ct := range []string{
@@ -181,6 +195,8 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 			cfg.HelmfileComponentType,
 			cfg.PackerComponentType,
 			cfg.AnsibleComponentType,
+			cfg.KubernetesComponentType,
+			cfg.HelmComponentType,
 			"script",
 		} {
 			opts := ComponentProcessorOptions{
@@ -189,7 +205,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 				AtmosConfig:   atmosCfg,
 				GlobalSecrets: secretsSection("DB", nil),
 			}
-			comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+			comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
 			require.NoError(t, err, "component type %q", ct)
 			_, present := comp[cfg.SecretsSectionName]
 			assert.True(t, present, "secrets section must be present for component type %q", ct)
@@ -197,6 +213,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 	})
 
 	t.Run("result-mutation-does-not-leak-into-source-maps", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -207,7 +224,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentSecrets = baseSecrets
 		res.ComponentSecrets = compSecrets
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 
 		merged := comp[cfg.SecretsSectionName].(map[string]any)["vars"].(map[string]any)["DB"].(map[string]any)
@@ -220,6 +237,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 	})
 
 	t.Run("source-mutation-does-not-leak-into-merged-result", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -230,7 +248,7 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 		res := minimalComponentResult()
 		res.BaseComponentSecrets = baseSecrets
 		res.ComponentSecrets = compSecrets
-		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		merged := comp[cfg.SecretsSectionName].(map[string]any)["vars"].(map[string]any)["DB"].(map[string]any)
 		require.Equal(t, "component", merged["description"], "component wins over base before mutation")

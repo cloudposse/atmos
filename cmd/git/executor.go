@@ -1,18 +1,14 @@
 package git
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
-	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
@@ -38,10 +34,6 @@ type Executor struct {
 	provider atmosgit.Provider
 }
 
-type stderrSwapper interface {
-	SwapStderr(io.Writer) func()
-}
-
 // newExecutor builds an Executor using the named provider from the registry.
 // Pass an empty string to use the default "cli" provider.
 func newExecutor(providerName string) (*Executor, error) {
@@ -65,12 +57,12 @@ func (e *Executor) Init(ctx context.Context, opts *atmosgit.InitOptions, label s
 	reconcile := initWillReconcile(opts)
 	progressMsg := initProgressMessage(label, opts, reconcile)
 	completedMsg := initCompletedMessage(label, opts, reconcile)
-	stderr, err := e.captureStderr(func() error {
+	stderr, err := atmosgit.CaptureStderr(e.provider, func() error {
 		return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
 			return e.provider.Init(ctx, opts)
 		})
 	})
-	return wrapGitOperationError(
+	return atmosgit.WrapOperationError(
 		fmt.Sprintf("initialize Git repository %q", label),
 		opts.Workdir,
 		stderr,
@@ -133,7 +125,7 @@ func (e *Executor) Clone(ctx context.Context, opts *atmosgit.CloneOptions, label
 
 	progressMsg := fmt.Sprintf("Cloning %s", label)
 	completedMsg := fmt.Sprintf("Cloned %s into %s.", label, opts.Workdir)
-	stderr, err := e.captureStderr(func() error {
+	stderr, err := atmosgit.CaptureStderr(e.provider, func() error {
 		return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
 			return e.provider.Clone(ctx, opts)
 		})
@@ -144,7 +136,7 @@ func (e *Executor) Clone(ctx context.Context, opts *atmosgit.CloneOptions, label
 func (e *Executor) CloneWithoutSpinner(ctx context.Context, opts *atmosgit.CloneOptions, label string) error {
 	defer perf.Track(nil, "git.Executor.CloneWithoutSpinner")()
 
-	stderr, err := e.captureStderr(func() error {
+	stderr, err := atmosgit.CaptureStderr(e.provider, func() error {
 		return e.provider.Clone(ctx, opts)
 	})
 	if err != nil {
@@ -155,22 +147,8 @@ func (e *Executor) CloneWithoutSpinner(ctx context.Context, opts *atmosgit.Clone
 	return nil
 }
 
-func (e *Executor) captureStderr(operation func() error) (string, error) {
-	swapper, ok := e.provider.(stderrSwapper)
-	if !ok {
-		return "", operation()
-	}
-
-	var stderr bytes.Buffer
-	restore := swapper.SwapStderr(iolib.MaskWriter(&stderr))
-	defer restore()
-
-	err := operation()
-	return strings.TrimSpace(stderr.String()), err
-}
-
 func wrapCloneError(label, workdir, stderr string, err error) error {
-	return wrapGitOperationError(
+	return atmosgit.WrapOperationError(
 		fmt.Sprintf("clone Git repository %q", label),
 		workdir,
 		stderr,
@@ -179,34 +157,11 @@ func wrapCloneError(label, workdir, stderr string, err error) error {
 	)
 }
 
-func wrapGitOperationError(action, workdir, stderr string, err error, hint string) error {
-	if err == nil {
-		return nil
-	}
-
-	explanation := fmt.Sprintf("Failed to %s.", action)
-	if workdir != "" {
-		explanation = fmt.Sprintf("Failed to %s in %q.", action, workdir)
-	}
-	explanation += "\n\nUnderlying error:\n\n```text\n" + err.Error() + "\n```"
-	if stderr != "" {
-		explanation += "\n\nGit output:\n\n```text\n" + stderr + "\n```"
-	}
-
-	builder := errUtils.Build(err).
-		WithExplanation(explanation).
-		WithExitCode(2)
-	if hint != "" {
-		builder = builder.WithHint(hint)
-	}
-	return builder.Err()
-}
-
 // Pull delegates to the provider.
 func (e *Executor) Pull(ctx context.Context, opts *atmosgit.PullOptions) error {
 	defer perf.Track(nil, "git.Executor.Pull")()
 
-	stderr, err := e.captureStderr(func() error {
+	stderr, err := atmosgit.CaptureStderr(e.provider, func() error {
 		return e.provider.Pull(ctx, opts)
 	})
 	if errors.Is(err, errUtils.ErrGitNoTrackingBranch) {
@@ -218,7 +173,7 @@ func (e *Executor) Pull(ctx context.Context, opts *atmosgit.PullOptions) error {
 			Err()
 	}
 	if err != nil {
-		return wrapGitOperationError(
+		return atmosgit.WrapOperationError(
 			"pull Git repository",
 			opts.Workdir,
 			stderr,
@@ -236,13 +191,13 @@ func (e *Executor) Status(ctx context.Context, opts *atmosgit.StatusOptions) (*a
 	defer perf.Track(nil, "git.Executor.Status")()
 
 	var result *atmosgit.StatusResult
-	stderr, err := e.captureStderr(func() error {
+	stderr, err := atmosgit.CaptureStderr(e.provider, func() error {
 		var opErr error
 		result, opErr = e.provider.Status(ctx, opts)
 		return opErr
 	})
 	if err != nil {
-		return nil, wrapGitOperationError("read Git status", opts.Workdir, stderr, err, "")
+		return nil, atmosgit.WrapOperationError("read Git status", opts.Workdir, stderr, err, "")
 	}
 	return result, nil
 }
@@ -252,13 +207,13 @@ func (e *Executor) Diff(ctx context.Context, opts *atmosgit.DiffOptions) (*atmos
 	defer perf.Track(nil, "git.Executor.Diff")()
 
 	var result *atmosgit.DiffResult
-	stderr, err := e.captureStderr(func() error {
+	stderr, err := atmosgit.CaptureStderr(e.provider, func() error {
 		var opErr error
 		result, opErr = e.provider.Diff(ctx, opts)
 		return opErr
 	})
 	if err != nil {
-		return nil, wrapGitOperationError("show Git diff", opts.Workdir, stderr, err, "")
+		return nil, atmosgit.WrapOperationError("show Git diff", opts.Workdir, stderr, err, "")
 	}
 	return result, nil
 }
@@ -268,13 +223,13 @@ func (e *Executor) Commit(ctx context.Context, opts *atmosgit.CommitOptions) (*a
 	defer perf.Track(nil, "git.Executor.Commit")()
 
 	var result *atmosgit.CommitResult
-	stderr, err := e.captureStderr(func() error {
+	stderr, err := atmosgit.CaptureStderr(e.provider, func() error {
 		var opErr error
 		result, opErr = e.provider.Commit(ctx, opts)
 		return opErr
 	})
 	if err != nil {
-		return nil, wrapGitOperationError("commit Git changes", opts.Workdir, stderr, err, "")
+		return nil, atmosgit.WrapOperationError("commit Git changes", opts.Workdir, stderr, err, "")
 	}
 	return result, nil
 }
@@ -283,11 +238,11 @@ func (e *Executor) Commit(ctx context.Context, opts *atmosgit.CommitOptions) (*a
 func (e *Executor) Push(ctx context.Context, opts *atmosgit.PushOptions) error {
 	defer perf.Track(nil, "git.Executor.Push")()
 
-	stderr, err := e.captureStderr(func() error {
+	stderr, err := atmosgit.CaptureStderr(e.provider, func() error {
 		return e.provider.Push(ctx, opts)
 	})
 	if err != nil {
-		return wrapGitOperationError(
+		return atmosgit.WrapOperationError(
 			"push Git repository",
 			opts.Workdir,
 			stderr,

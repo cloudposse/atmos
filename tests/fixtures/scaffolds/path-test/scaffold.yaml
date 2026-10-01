@@ -1,0 +1,60 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: path-test
+  description: Test configuration for templated file paths with conditional creation
+spec:
+  fields:
+    - name: namespace
+      type: input
+      label: Namespace
+      description: The namespace will be used in file paths and configuration
+      default: default
+    - name: author
+      type: input
+      label: Author
+      description: Author name for the configuration files
+      default: Anonymous
+    - name: description
+      type: input
+      label: Project Description
+      description: Description of what this namespace/project does
+      default: A test project with templated paths
+    - name: cloud_provider
+      type: select
+      label: Cloud Provider
+      description: Cloud provider-specific files will only be created for the selected provider
+      options: ["aws", "gcp", "azure", "none"]
+      default: none
+    - name: aws_region
+      type: select
+      label: AWS Region
+      description: AWS region for resources (only used if cloud_provider is aws)
+      default: us-east-1
+      options: ["us-east-1", "us-east-2", "us-west-1", "us-west-2", "eu-west-1", "eu-west-2", "eu-central-1", "ap-southeast-1", "ap-southeast-2", "ap-northeast-1"]
+    - name: gcp_project_id
+      type: input
+      label: GCP Project ID
+      description: GCP project ID (only used if cloud_provider is gcp)
+      default: ""
+    - name: gcp_region
+      type: select
+      label: GCP Region
+      description: GCP region for resources (only used if cloud_provider is gcp)
+      default: us-central1
+      options: ["us-central1", "us-east1", "us-east4", "us-west1", "us-west2", "europe-west1", "europe-west2", "europe-west3", "asia-southeast1", "asia-east1"]
+    - name: enable_monitoring
+      type: confirm
+      label: Enable Monitoring
+      description: Whether to create monitoring configuration files
+      default: false
+    - name: environment
+      type: input
+      label: Environment
+      description: Environment name (dev, staging, prod, etc.)
+      default: dev
+    - name: subdirectory
+      type: input
+      label: Subdirectory
+      description: Optional subdirectory - if empty, files with this path segment won't be created
+      default: ""

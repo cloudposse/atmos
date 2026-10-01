@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -317,7 +319,14 @@ func TestBuildAndResolveWorkdirPath_ExistingDir(t *testing.T) {
 	componentName := "null-label-exports"
 	subpath := "exports"
 
-	expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, stack+"-"+componentName)
+	// Independent oracle: hand-computed rather than via provWorkdir.BuildPath, so this test
+	// still catches a regression in BuildPath's own encoding. Both this setup and
+	// BuildAndResolveWorkdirPath itself would otherwise call the same BuildPath -- if it
+	// silently produced the wrong segment, setup and assertion would agree with each other
+	// (and each other only) without ever exercising the real encoding contract.
+	// "dev" + "null-label-exports" hashes (sha256, first 8 hex chars) to "83954218" --
+	// verified independently with `printf 'dev\x00null-label-exports' | shasum -a 256`.
+	expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-null-label-exports-83954218")
 	expectedCandidate := filepath.Join(expectedRoot, subpath)
 	require.NoError(t, os.MkdirAll(expectedCandidate, 0o755))
 
@@ -351,7 +360,11 @@ func TestBuildAndResolveWorkdirPath_AllComponentTypes(t *testing.T) {
 			stack := "dev"
 			componentName := "my-component"
 
-			expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, stack+"-"+componentName)
+			// "dev" + "my-component" hashes (sha256, first 8 hex chars) to "586812c3" --
+			// verified independently with `printf 'dev\x00my-component' | shasum -a 256`,
+			// computed here rather than via provWorkdir.BuildPath so this still catches a
+			// regression in BuildPath's own encoding.
+			expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, "dev-my-component-586812c3")
 			require.NoError(t, os.MkdirAll(expectedRoot, 0o755))
 
 			atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
@@ -391,7 +404,11 @@ func TestBuildAndResolveWorkdirPath_AllComponentTypesWithSubpath(t *testing.T) {
 			// segments so we never feed forward slashes into filepath.Join.
 			subpathYAML := "modules/foo"
 
-			workdirRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, stack+"-"+componentName)
+			// "dev" + "my-component" hashes (sha256, first 8 hex chars) to "586812c3" --
+			// verified independently with `printf 'dev\x00my-component' | shasum -a 256`,
+			// computed here rather than via provWorkdir.BuildPath so this still catches a
+			// regression in BuildPath's own encoding.
+			workdirRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, "dev-my-component-586812c3")
 			expectedCandidate := filepath.Join(workdirRoot, "modules", "foo")
 			require.NoError(t, os.MkdirAll(expectedCandidate, 0o755))
 
@@ -421,7 +438,12 @@ func TestBuildAndResolveWorkdirPath_InheritancePointerFallsBack(t *testing.T) {
 	basePath := t.TempDir()
 	stack := "dev"
 	componentName := "demo-cluster-codepipeline-iac"
-	root := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, stack+"-"+componentName)
+	// "dev" + "demo-cluster-codepipeline-iac" hashes (sha256, first 8 hex chars) to
+	// "a654c9b7" -- verified independently with
+	// `printf 'dev\x00demo-cluster-codepipeline-iac' | shasum -a 256`, computed here
+	// rather than via provWorkdir.BuildPath so this still catches a regression in
+	// BuildPath's own encoding.
+	root := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-demo-cluster-codepipeline-iac-a654c9b7")
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	// Note: no "demo-cluster-codepipeline" subdirectory inside root.
 
@@ -449,12 +471,11 @@ func TestBuildAndResolveWorkdirPath_NonExistentDir(t *testing.T) {
 		BaseComponentPath: "exports",
 		ComponentSection:  map[string]any{},
 	}
-	expectedRoot := filepath.Join(
-		atmosConfig.BasePath,
-		provWorkdir.WorkdirPath,
-		cfg.TerraformComponentType,
-		info.Stack+"-"+info.FinalComponent,
-	)
+	// "dev" + "missing-component" hashes (sha256, first 8 hex chars) to "0fc0795a" --
+	// verified independently with `printf 'dev\x00missing-component' | shasum -a 256`,
+	// computed here rather than via provWorkdir.BuildPath so this still catches a
+	// regression in BuildPath's own encoding.
+	expectedRoot := filepath.Join(atmosConfig.BasePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-missing-component-0fc0795a")
 
 	candidate, exists, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
 	require.NoError(t, err)
@@ -472,7 +493,12 @@ func TestBuildAndResolveWorkdirPath_RegularFileAtCandidate(t *testing.T) {
 	componentName := "corrupt"
 	subpath := "exports"
 
-	root := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, stack+"-"+componentName)
+	// root is built via the real BuildPath (not a hand-joined literal) because this test
+	// exercises BuildAndResolveWorkdirPath's stat-handling branch, not BuildPath's own
+	// encoding -- using the real function as the oracle here keeps it correct regardless of
+	// BuildPath's naming formula.
+	root, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, componentName, stack, nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	candidate := filepath.Join(root, subpath)
 	require.NoError(t, os.WriteFile(candidate, []byte("not a directory"), 0o644))
@@ -505,8 +531,11 @@ func TestBuildAndResolveWorkdirPath_StatErrorPropagates(t *testing.T) {
 	subpath := "exports"
 
 	// Create the workdir root, then chmod the parent so the candidate stat
-	// fails with EACCES rather than ENOENT.
-	root := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, stack+"-"+componentName)
+	// fails with EACCES rather than ENOENT. root is built via the real BuildPath (not a
+	// hand-joined literal) because this test exercises BuildAndResolveWorkdirPath's
+	// stat-handling branch, not BuildPath's own encoding.
+	root, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, componentName, stack, nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	require.NoError(t, os.Chmod(root, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
@@ -519,10 +548,33 @@ func TestBuildAndResolveWorkdirPath_StatErrorPropagates(t *testing.T) {
 		ComponentSection:  map[string]any{},
 	}
 
-	_, _, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
+	_, _, err = BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
 		"non-ENOENT stat failures must wrap ErrWorkdirProvision")
+}
+
+// TestBuildAndResolveWorkdirPath_PathTraversalPropagates verifies that when the
+// stack name attempts to escape basePath (e.g. via "../" segments), the
+// errUtils.ErrPathTraversal returned by provWorkdir.BuildPath propagates through
+// BuildAndResolveWorkdirPath as ("", false, err) instead of being silently
+// swallowed. Mirrors provWorkdir.TestBuildPath_RejectsStackTraversal but exercises
+// this package's own error-handling branch added alongside BuildPath's (string,
+// error) signature change.
+func TestBuildAndResolveWorkdirPath_PathTraversalPropagates(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:   "vpc",
+		Stack:            "../../../../../../evil",
+		ComponentSection: map[string]any{},
+	}
+
+	candidate, exists, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrPathTraversal),
+		"a stack name escaping basePath must surface ErrPathTraversal, not be silently resolved")
+	assert.False(t, exists)
+	assert.Empty(t, candidate)
 }
 
 // ProvisionAndResolveComponentPath ──────────────────────────────────────────.
@@ -540,7 +592,7 @@ func TestProvisionAndResolveComponentPath_NoSourceReturnsFallback(t *testing.T) 
 	}
 
 	got, exists, err := ProvisionAndResolveComponentPath(
-		context.Background(), atmosConfig, info, cfg.TerraformComponentType, componentDir,
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, componentDir,
 	)
 
 	require.NoError(t, err)
@@ -567,7 +619,7 @@ func TestProvisionAndResolveComponentPath_NoSourceFallbackIsRegularFile(t *testi
 	}
 
 	_, exists, err := ProvisionAndResolveComponentPath(
-		context.Background(), atmosConfig, info, cfg.TerraformComponentType, regularFile,
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, regularFile,
 	)
 
 	require.Error(t, err)
@@ -591,12 +643,160 @@ func TestProvisionAndResolveComponentPath_NoSourceMissingDir(t *testing.T) {
 	}
 
 	got, exists, err := ProvisionAndResolveComponentPath(
-		context.Background(), atmosConfig, info, cfg.TerraformComponentType, missingDir,
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, missingDir,
 	)
 
 	require.NoError(t, err, "missing dir is not an error — caller decides what to do")
 	assert.False(t, exists)
 	assert.Equal(t, missingDir, got)
+}
+
+// TestProvisionAndResolveComponentPath_LocalComponentWorkdirProvisionedEarly is the
+// regression test for #3192: a LOCAL component (no JIT source) with
+// `provision.workdir.enabled: true` must have its isolated workdir provisioned HERE —
+// before backend.tf.json / varfile generation — so those generated files land in the
+// per-run workdir rather than in the shared source component directory. Previously the
+// workdir provisioner only ran at the before.terraform.init hook (after generation), so
+// generated files were written to the source dir, and concurrent `atmos terraform plan
+// --all` runs raced on the same source backend.tf.json ("JSON data ends prematurely").
+func TestProvisionAndResolveComponentPath_LocalComponentWorkdirProvisionedEarly(t *testing.T) {
+	basePath := t.TempDir()
+	// A local component source on disk (no JIT `source:` declared).
+	sourceDir := filepath.Join(basePath, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent: "vpc",
+		Stack:          "dev",
+		ComponentSection: map[string]any{
+			"component":       "vpc",
+			"atmos_component": "vpc",
+			"atmos_stack":     "dev",
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+		},
+	}
+
+	got, exists, err := ProvisionAndResolveComponentPath(
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, sourceDir,
+	)
+	require.NoError(t, err)
+	assert.True(t, exists, "provisioned workdir must exist on disk")
+
+	// The resolved path must be the isolated workdir, NOT the shared source component dir.
+	workdirRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType)
+	assert.Truef(t, strings.HasPrefix(got, workdirRoot),
+		"resolved path %q must be under the workdir root %q, not the source dir", got, workdirRoot)
+	assert.NotEqual(t, sourceDir, got, "must not resolve to the shared source directory")
+
+	// WorkdirPathKey must be set so downstream backend/varfile writes target the workdir.
+	wp, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	require.True(t, ok, "WorkdirPathKey must be set after early workdir provisioning")
+	assert.True(t, strings.HasPrefix(wp, workdirRoot))
+
+	// The local component files must have been synced into the workdir.
+	assert.FileExists(t, filepath.Join(got, "main.tf"))
+}
+
+// TestProvisionAndResolveComponentPath_NonTerraformWorkdirNotProvisioned is the negative-path
+// counterpart to the test above: the early workdir provisioning is gated to Terraform, because
+// ProvisionWorkdir builds a terraform-specific workdir. A LOCAL non-Terraform (e.g. Helmfile)
+// component with provision.workdir.enabled must NOT be resolved through a terraform workdir — it
+// falls back to its source directory and leaves WorkdirPathKey unset.
+func TestProvisionAndResolveComponentPath_NonTerraformWorkdirNotProvisioned(t *testing.T) {
+	basePath := t.TempDir()
+	sourceDir := filepath.Join(basePath, "components", "helmfile", "nginx")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent: "nginx",
+		Stack:          "dev",
+		ComponentSection: map[string]any{
+			"component":       "nginx",
+			"atmos_component": "nginx",
+			"atmos_stack":     "dev",
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+		},
+	}
+
+	got, exists, err := ProvisionAndResolveComponentPath(
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.HelmfileComponentType, sourceDir,
+	)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, sourceDir, got, "non-Terraform component must resolve to its source dir, not a terraform workdir")
+	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey]
+	assert.False(t, hasWorkdir, "WorkdirPathKey must not be set for a non-Terraform component")
+}
+
+// TestProvisionAndResolveComponentPath_TerraformWorkdirProvisionError exercises the error return
+// when the up-front workdir provisioning fails (here: a workdir-enabled local component missing the
+// required atmos_stack). The failure must surface wrapped in ErrWorkdirProvision.
+func TestProvisionAndResolveComponentPath_TerraformWorkdirProvisionError(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent: "vpc",
+		Stack:          "dev",
+		ComponentSection: map[string]any{
+			"component":       "vpc",
+			"atmos_component": "vpc",
+			// atmos_stack intentionally omitted → workdir provisioning fails.
+			"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+		},
+	}
+
+	_, exists, err := ProvisionAndResolveComponentPath(
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info,
+		cfg.TerraformComponentType, filepath.Join(basePath, "components", "terraform", "vpc"),
+	)
+
+	require.Error(t, err)
+	assert.False(t, exists)
+	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
+		"workdir provisioning failure must wrap ErrWorkdirProvision")
+}
+
+// TestProvisionAndResolveComponentPath_LocalWorkdirSubpathError exercises the subpath-resolution
+// error return: after the workdir is provisioned, an absolute metadata.component
+// (BaseComponentPath) is rejected by ApplyWorkdirSubpathToSection (metadata.component must be a
+// relative subpath), and the error must propagate wrapped in ErrWorkdirProvision.
+func TestProvisionAndResolveComponentPath_LocalWorkdirSubpathError(t *testing.T) {
+	basePath := t.TempDir()
+	sourceDir := filepath.Join(basePath, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+
+	// t.TempDir() is absolute, so this is an absolute metadata.component subpath — rejected.
+	absSubpath := filepath.Join(t.TempDir(), "abs-subpath")
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:    "vpc",
+		Stack:             "dev",
+		BaseComponentPath: absSubpath,
+		ComponentSection: map[string]any{
+			"component":       "vpc",
+			"atmos_component": "vpc",
+			"atmos_stack":     "dev",
+			"provision":       map[string]any{"workdir": map[string]any{"enabled": true}},
+		},
+	}
+
+	_, exists, err := ProvisionAndResolveComponentPath(
+		context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, sourceDir,
+	)
+
+	require.Error(t, err)
+	assert.False(t, exists)
+	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
+		"absolute metadata.component subpath must wrap ErrWorkdirProvision")
 }
 
 func TestSourceMisplacedUnderMetadata(t *testing.T) {

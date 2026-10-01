@@ -64,10 +64,10 @@ components:
         service_type: LoadBalancer
       env:
         KUBECONFIG: '{{ env "HOME" }}/.kube/config'
-      settings:
-        depends_on:
-          - component: eks
-            type: terraform
+      dependencies:
+        components:
+          - name: eks
+            kind: terraform
 ```
 
 ## Helmfile Directory Structure
@@ -130,6 +130,8 @@ Define defaults for all Helmfile components:
 ```yaml
 # Apply to all Helmfile components
 helmfile:
+  plugins:
+    - diff@v3.15.10
   vars:
     timeout: 600
     atomic: true
@@ -145,6 +147,16 @@ components:
       vars:
         chart_version: "4.7.1"
 ```
+
+Helm CLI `plugins` are inherited in increasing precedence: top-level `helmfile.plugins`,
+base components from `metadata.inherits`, then the component's own `plugins`.
+This also works when defaults are defined in an imported stack file.
+
+Lists follow the effective `settings.list_merge_strategy` (default: `replace`).
+With `replace`, a component's plugin list replaces the inherited list, and `plugins: []`
+clears it. Use `append` to combine the lists; `merge` uses the existing element-wise
+list merge behavior. Atmos installs the resolved plugins before running Helmfile.
+See [`atmos helm plugin`](/cli/commands/helm/plugin) for plugin spec syntax.
 
 ## Complete Example
 
@@ -184,9 +196,9 @@ components:
         replica_count: 3
         service_type: LoadBalancer
         metrics_enabled: true
-      settings:
-        depends_on:
-          - component: cert-manager
+      dependencies:
+        components:
+          - name: cert-manager
 
     prometheus:
       metadata:
@@ -197,9 +209,9 @@ components:
         chart_version: "45.0.0"
         retention: "15d"
         storage_size: "100Gi"
-      settings:
-        depends_on:
-          - component: nginx-ingress
+      dependencies:
+        components:
+          - name: nginx-ingress
 
 ```
 </File>
@@ -320,10 +332,10 @@ components:
         cluster_name: "{{ .terraform_outputs.eks.cluster_name }}"
       env:
         KUBECONFIG: "{{ .terraform_outputs.eks.kubeconfig_path }}"
-      settings:
-        depends_on:
-          - component: eks
-            type: terraform
+      dependencies:
+        components:
+          - name: eks
+            kind: terraform
 ```
 
 ## Values Handling
@@ -360,7 +372,7 @@ releases:
 
 ## Best Practices
 
-1. **Use Dependencies:** Define `depends_on` to ensure Helmfile components deploy after their infrastructure dependencies.
+1. **Use Dependencies:** Define `dependencies.components` to ensure Helmfile components deploy after their infrastructure dependencies.
 
 2. **Centralize Chart Versions:** Define chart versions in catalog defaults and override only when necessary.
 
@@ -380,4 +392,4 @@ releases:
 - [Configure Environment](/stacks/env)
 - [Passing Secrets](/cli/configuration/secrets)
 - [`!secret` function](/functions/yaml/secret)
-- [depends_on](/stacks/settings/depends_on)
+- [Component Dependencies](/stacks/dependencies/components)

@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -23,6 +25,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -30,6 +33,27 @@ var ErrNoLayers = errors.New("the OCI image does not have any layers")
 
 const (
 	targetArtifactType = "application/vnd.atmos.component.terraform.v1+tar+gzip" // Target artifact type for Atmos components.
+
+	// OCI layer downloads are served from a separate blob host and can suffer
+	// short-lived connection resets independently of registry authentication.
+	// Keep retries bounded so callers' existing OCI download deadlines remain
+	// authoritative.
+	ociLayerRetryMaxAttempts  = 3
+	ociLayerRetryInitialDelay = time.Second
+	ociLayerRetryMaxDelay     = 4 * time.Second
+
+	// The initial registry connection (remote.Get, resolving the manifest) can
+	// lose a race against a CI runner's own egress-firewall rule propagation --
+	// observed in production on Harden-Runner block-mode Windows runners: the
+	// WFP allow rule for the registry host is still being installed at the
+	// exact moment the TCP connect happens, producing a transient "forbidden by
+	// its access permissions" dial error milliseconds before the rule takes
+	// effect. Retry with the same bounded backoff already used for layer
+	// downloads, on the same auth (this is independent of, and runs before,
+	// the anonymous-auth fallback for rejected credentials).
+	ociManifestRetryMaxAttempts  = 3
+	ociManifestRetryInitialDelay = time.Second
+	ociManifestRetryMaxDelay     = 4 * time.Second
 )
 
 // opentofuModulePkgArtifactType is the OCI artifactType OpenTofu's native
@@ -50,6 +74,63 @@ var defaultFileSystem = filesystem.NewOSFileSystem()
 // Tests override this to simulate registry responses without spinning up an
 // httptest server. Production code must not reassign it.
 var remoteGet = remote.Get
+
+// ociManifestRetryConfig is the package-level retry config remoteGetWithRetry
+// uses. Tests override this with a zero-delay config to exercise retryable
+// paths without incurring real backoff delays. Production code must not
+// reassign it.
+var ociManifestRetryConfig = defaultOCIManifestRetryConfig()
+
+// ResolvedImage is the immutable registry identity selected for an OCI source.
+// Digest is the descriptor digest for the selected manifest; it is suitable for
+// locks and SBOM provenance, unlike the mutable declared tag/reference.
+type ResolvedImage struct {
+	Reference string
+	Digest    string
+	MediaType string
+}
+
+// ResolveImage authenticates and resolves an OCI reference without extracting
+// layers. It is the public provenance boundary for OCI consumers.
+func ResolveImage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, imageName string) (*ResolvedImage, error) {
+	defer perf.Track(atmosConfig, "oci.ResolveImage")()
+
+	ref, err := name.ParseReference(imageName)
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrInvalidImageReference, err)
+	}
+	descriptor, err := pullImage(ctx, atmosConfig, ref)
+	if err != nil {
+		return nil, err
+	}
+	return &ResolvedImage{Reference: ref.Name(), Digest: descriptor.Digest.String(), MediaType: string(descriptor.MediaType)}, nil
+}
+
+// PinDigest re-expresses imageName with digest bound as an explicit
+// "repo@sha256:..." reference, discarding any tag, so a later fetch of the
+// returned string resolves to the exact manifest identified by digest
+// instead of whatever a mutable tag currently points to. Callers that need
+// to re-fetch reproducibly later should record digest (from ResolveImage)
+// and re-derive the pinned reference via this function rather than storing
+// a tag.
+func PinDigest(imageName, digest string) (string, error) {
+	defer perf.Track(nil, "oci.PinDigest")()
+
+	ref, err := name.ParseReference(imageName)
+	if err != nil {
+		return "", errors.Join(errUtils.ErrInvalidImageReference, err)
+	}
+	// name.Repository.Digest only stores the supplied string; it never
+	// validates it. Route through name.NewDigest so a malformed digest
+	// (an unpinnable manifest reference, or a corrupted persisted rendered
+	// record reaching this exported function) fails here with a clear error
+	// instead of later in ProcessImage's name.ParseReference call.
+	pinned, err := name.NewDigest(ref.Context().Name() + "@" + digest)
+	if err != nil {
+		return "", errors.Join(errUtils.ErrInvalidImageReference, err)
+	}
+	return pinned.Name(), nil
+}
 
 // ProcessImage pulls an OCI image and extracts its layers to the specified
 // destination directory. The context bounds the pull (registry auth plus
@@ -75,7 +156,9 @@ func processImageWithFS(ctx context.Context, atmosConfig *schema.AtmosConfigurat
 
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
-		log.Error("Failed to parse OCI image reference", "image", imageName, "error", err)
+		if !observed(ctx) {
+			log.Error("Failed to parse OCI image reference", "image", imageName, "error", err)
+		}
 		return errors.Join(errUtils.ErrInvalidImageReference, err)
 	}
 
@@ -89,26 +172,37 @@ func processImageWithFS(ctx context.Context, atmosConfig *schema.AtmosConfigurat
 
 	img, err := descriptor.Image()
 	if err != nil {
-		log.Error("Failed to get image descriptor", "image", imageName, "error", err)
+		if !observed(ctx) {
+			log.Error("Failed to get image descriptor", "image", imageName, "error", err)
+		}
 		return fmt.Errorf("%w '%s': %s", errUtils.ErrGetImageDescriptor, imageName, err)
 	}
 
-	checkArtifactType(descriptor, imageName)
+	if !observed(ctx) {
+		checkArtifactType(descriptor, imageName)
+	}
 
 	layers, err := img.Layers()
 	if err != nil {
-		log.Error("Failed to retrieve layers from OCI image", "image", imageName, "error", err)
+		if !observed(ctx) {
+			log.Error("Failed to retrieve layers from OCI image", "image", imageName, "error", err)
+		}
 		return errors.Join(errUtils.ErrGetImageLayers, err)
 	}
 
 	if len(layers) == 0 {
-		log.Warn("OCI image has no layers", "image", imageName)
+		if !observed(ctx) {
+			log.Warn("OCI image has no layers", "image", imageName)
+		}
 		return ErrNoLayers
 	}
 
 	for i, layer := range layers {
-		if err := processLayer(layer, i, destDir); err != nil {
-			return fmt.Errorf("%w %d: %s", errUtils.ErrProcessLayer, i, err)
+		if err := processLayerWithRetry(ctx, layer, i, destDir, defaultOCILayerRetryConfig()); err != nil {
+			return errors.Join(
+				errUtils.ErrProcessLayer,
+				fmt.Errorf("layer %d: %w", i, err),
+			)
 		}
 	}
 
@@ -148,9 +242,11 @@ func pullImage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, ref 
 		authSource = "anonymous"
 	}
 
-	log.Info("Authenticating to OCI registry", "registry", registry, "method", authSource)
+	if !observed(ctx) {
+		log.Info("Authenticating to OCI registry", "registry", registry, "method", authSource)
+	}
 
-	descriptor, err := remoteGet(ref, remote.WithAuth(authMethod), remote.WithContext(ctx))
+	descriptor, err := remoteGetWithRetry(ctx, ref, authMethod, ociManifestRetryConfig)
 	if err == nil {
 		return descriptor, nil
 	}
@@ -160,17 +256,21 @@ func pullImage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, ref 
 	// credentials lack the required scope. Non-auth errors (DNS, TLS, timeouts,
 	// 5xx) skip retry — they need a different remediation.
 	if authMethod != authn.Anonymous && isOCIAuthRejection(err) {
-		anonDescriptor, anonErr := remoteGet(ref, remote.WithAuth(authn.Anonymous), remote.WithContext(ctx))
+		anonDescriptor, anonErr := remoteGetWithRetry(ctx, ref, authn.Anonymous, ociManifestRetryConfig)
 		if anonErr == nil {
-			log.Warn("OCI auth rejected, succeeded with anonymous fallback",
-				"registry", registry, "auth_attempted", authSource)
+			if !observed(ctx) {
+				log.Warn("OCI auth rejected, succeeded with anonymous fallback",
+					"registry", registry, "auth_attempted", authSource)
+			}
 			return anonDescriptor, nil
 		}
 		// Anonymous also failed; fall through and report the original authed
 		// error, which carries the more diagnostic status/body for scope problems.
 	}
 
-	log.Error("Failed to pull OCI image", "image", ref.Name(), "registry", registry, "auth", authSource, "error", err)
+	if !observed(ctx) {
+		log.Error("Failed to pull OCI image", "image", ref.Name(), "registry", registry, "auth", authSource, "error", err)
+	}
 	return nil, buildPullImageError(err, ref, registry, authSource)
 }
 
@@ -217,15 +317,20 @@ func isOCIAuthRejection(err error) bool {
 }
 
 func processLayer(layer v1.Layer, index int, destDir string) error {
+	return processLayerContext(context.Background(), layer, index, destDir)
+}
+
+func processLayerContext(ctx context.Context, layer v1.Layer, index int, destDir string) error {
 	layerDesc, err := layer.Digest()
 	if err != nil {
-		log.Warn("Skipping layer with invalid digest", "index", index, "error", err)
+		if !observed(ctx) {
+			log.Warn("Skipping layer with invalid digest", "index", index, "error", err)
+		}
 		return nil
 	}
 
 	uncompressed, err := layer.Uncompressed()
 	if err != nil {
-		log.Error("Layer decompression failed", "index", index, "digest", layerDesc, "error", err)
 		return errors.Join(errUtils.ErrLayerDecompression, err)
 	}
 	defer uncompressed.Close()
@@ -236,11 +341,130 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 	}
 
 	if err := extract(uncompressed, destDir); err != nil {
-		log.Error("Layer extraction failed", "index", index, "digest", layerDesc, "error", err)
+		if !observed(ctx) {
+			log.Error("Layer extraction failed", "index", index, "digest", layerDesc, "error", err)
+		}
 		return errors.Join(errUtils.ErrLayerExtraction, err)
 	}
 
 	return nil
+}
+
+// remoteGetWithRetry calls remoteGet, retrying only transient connection-level
+// failures (see isRetryableOCIConnectError) on the same auth method. It does
+// not retry registry-level rejections (auth/status errors) -- those are
+// handled by pullImage's separate anonymous-auth fallback, one layer up.
+func remoteGetWithRetry(ctx context.Context, ref name.Reference, authMethod authn.Authenticator, retryConfig *schema.RetryConfig) (*remote.Descriptor, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	attempts := 0
+	var descriptor *remote.Descriptor
+	err := retry.WithPredicate(ctx, retryConfig, func() error {
+		attempts++
+		var getErr error
+		descriptor, getErr = remoteGet(ref, remote.WithAuth(authMethod), remote.WithContext(ctx))
+		if getErr != nil && ctx.Err() == nil && isRetryableOCIConnectError(getErr) && attempts < ociManifestRetryMaxAttempts {
+			if !reportRetry(ctx, attempts+1) {
+				log.Warn("Retrying OCI registry connection after transient failure", "attempt", attempts)
+			}
+		}
+		return getErr
+	}, func(err error) bool {
+		return ctx.Err() == nil && isRetryableOCIConnectError(err)
+	})
+	return descriptor, err
+}
+
+func defaultOCIManifestRetryConfig() *schema.RetryConfig {
+	maxAttempts := ociManifestRetryMaxAttempts
+	initialDelay := ociManifestRetryInitialDelay
+	maxDelay := ociManifestRetryMaxDelay
+	return &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+	}
+}
+
+// isRetryableOCIConnectError reports whether err is a transient network-layer
+// failure (DNS, dial, connection reset/timeout) worth retrying before the
+// registry has even responded -- as opposed to a registry-level auth/status
+// rejection, which isOCIAuthRejection handles via anonymous fallback instead.
+func isRetryableOCIConnectError(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var transportErr *transport.Error
+	if errors.As(err, &transportErr) {
+		// The registry answered (even with an error status): not a
+		// connection-level failure, so leave it to the auth-fallback path.
+		return false
+	}
+	var networkErr net.Error
+	return errors.As(err, &networkErr)
+}
+
+// processLayerWithRetry retries only transient failures while opening an OCI
+// layer stream. Archive extraction failures are deliberately not retried: they
+// may reflect invalid image content and can leave partial files in destDir.
+func processLayerWithRetry(ctx context.Context, layer v1.Layer, index int, destDir string, retryConfig *schema.RetryConfig) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	attempts := 0
+	err := retry.WithPredicate(ctx, retryConfig, func() error {
+		attempts++
+		err := processLayerContext(ctx, layer, index, destDir)
+		if err != nil && ctx.Err() == nil && isRetryableOCILayerError(err) && attempts < ociLayerRetryMaxAttempts {
+			// Do not include the underlying error here: OCI blob errors can contain
+			// signed URLs. The layer index is enough to correlate the retry with the
+			// final error if all attempts fail.
+			if !reportRetry(ctx, attempts+1) {
+				log.Warn("Retrying OCI layer download after transient failure", "index", index, "attempt", attempts)
+			}
+		}
+		return err
+	}, func(err error) bool {
+		return ctx.Err() == nil && isRetryableOCILayerError(err)
+	})
+	if err != nil && !observed(ctx) {
+		log.Error("OCI layer processing failed", "index", index, "retryable", isRetryableOCILayerError(err))
+	}
+	return err
+}
+
+func defaultOCILayerRetryConfig() *schema.RetryConfig {
+	maxAttempts := ociLayerRetryMaxAttempts
+	initialDelay := ociLayerRetryInitialDelay
+	maxDelay := ociLayerRetryMaxDelay
+	return &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+	}
+}
+
+// isRetryableOCILayerError excludes registry status/authentication failures
+// and malformed archives. The former require different credentials while the
+// latter will not be fixed by downloading the same bytes again.
+func isRetryableOCILayerError(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if !errors.Is(err, errUtils.ErrLayerDecompression) {
+		return false
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+
+	var networkErr net.Error
+	return errors.As(err, &networkErr)
 }
 
 // checkArtifactType checks and logs artifact type mismatches.

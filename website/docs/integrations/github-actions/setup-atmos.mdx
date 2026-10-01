@@ -12,7 +12,7 @@ Two ways to make `atmos` available in your GitHub Actions workflows: run the job
 </Intro>
 
 :::tip Recommended: use the container image
-For most workflows, the simplest path is to run the job inside the [official Atmos container](https://github.com/cloudposse/atmos/pkgs/container/atmos) and skip a separate setup step. The image already includes `atmos` plus its toolchain, so the workflow reduces to **checkout + run an `atmos` command**. See the [Native CI page](/ci) for end-to-end examples.
+For most workflows, the simplest path is to run the job inside the [official Atmos container](https://github.com/cloudposse/atmos/pkgs/container/atmos) and skip separate setup steps. The image already includes `atmos`, its toolchain, and the Docker CLI, so Docker-backed Atmos commands can use the runner-provided Docker socket directly. See the [Native CI page](/ci) for end-to-end examples.
 
 ```yaml
 jobs:

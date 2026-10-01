@@ -12,6 +12,8 @@ import (
 )
 
 func TestSearchFilesTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -30,6 +32,8 @@ func TestSearchFilesTool_Interface(t *testing.T) {
 }
 
 func TestSearchFilesTool_Execute_MissingPattern(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -46,6 +50,8 @@ func TestSearchFilesTool_Execute_MissingPattern(t *testing.T) {
 }
 
 func TestSearchFilesTool_Execute_InvalidPattern(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -64,6 +70,8 @@ func TestSearchFilesTool_Execute_InvalidPattern(t *testing.T) {
 }
 
 func TestSearchFilesTool_Execute_Success(t *testing.T) {
+	t.Parallel()
+
 	// Create temp directory with test files.
 	tmpDir := t.TempDir()
 
@@ -100,6 +108,8 @@ func TestSearchFilesTool_Execute_Success(t *testing.T) {
 }
 
 func TestSearchFilesTool_Execute_WithFilePattern(t *testing.T) {
+	t.Parallel()
+
 	// Create temp directory with test files.
 	tmpDir := t.TempDir()
 
@@ -131,6 +141,8 @@ func TestSearchFilesTool_Execute_WithFilePattern(t *testing.T) {
 }
 
 func TestSearchFilesTool_Execute_CaseSensitive(t *testing.T) {
+	t.Parallel()
+
 	// Create temp directory with test file.
 	tmpDir := t.TempDir()
 
@@ -166,6 +178,8 @@ func TestSearchFilesTool_Execute_CaseSensitive(t *testing.T) {
 }
 
 func TestSearchFilesTool_Execute_NoMatches(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	file := filepath.Join(tmpDir, "test.yaml")
@@ -190,6 +204,8 @@ func TestSearchFilesTool_Execute_NoMatches(t *testing.T) {
 }
 
 func TestSearchFilesTool_Execute_WithDotPath(t *testing.T) {
+	t.Parallel()
+
 	// Test explicit path="." to ensure base path access works.
 	tmpDir := t.TempDir()
 
@@ -217,6 +233,8 @@ func TestSearchFilesTool_Execute_WithDotPath(t *testing.T) {
 }
 
 func TestSearchFilesTool_Execute_PathOutsideBase(t *testing.T) {
+	t.Parallel()
+
 	// Create two separate temp directories so path traversal can be tested.
 	tmpDir := t.TempDir()
 
@@ -240,6 +258,8 @@ func TestSearchFilesTool_Execute_PathOutsideBase(t *testing.T) {
 }
 
 func TestExtractSearchParams_Defaults(t *testing.T) {
+	t.Parallel()
+
 	// Only the required "pattern" key — verify defaults are applied.
 	sp, errResult := extractSearchParams(map[string]interface{}{
 		"pattern": "mypattern",
@@ -254,6 +274,8 @@ func TestExtractSearchParams_Defaults(t *testing.T) {
 }
 
 func TestExtractSearchParams_WithAllParams(t *testing.T) {
+	t.Parallel()
+
 	sp, errResult := extractSearchParams(map[string]interface{}{
 		"pattern":        "vpc",
 		"path":           "stacks",
@@ -270,6 +292,8 @@ func TestExtractSearchParams_WithAllParams(t *testing.T) {
 }
 
 func TestExtractSearchParams_EmptyPattern(t *testing.T) {
+	t.Parallel()
+
 	_, errResult := extractSearchParams(map[string]interface{}{
 		"pattern": "",
 	})
@@ -280,6 +304,8 @@ func TestExtractSearchParams_EmptyPattern(t *testing.T) {
 }
 
 func TestExtractSearchParams_MissingPattern(t *testing.T) {
+	t.Parallel()
+
 	_, errResult := extractSearchParams(map[string]interface{}{})
 
 	require.NotNil(t, errResult)
@@ -288,6 +314,8 @@ func TestExtractSearchParams_MissingPattern(t *testing.T) {
 }
 
 func TestBuildSearchResult_WithMatches(t *testing.T) {
+	t.Parallel()
+
 	sp := &searchParams{
 		pattern:     "backend_type",
 		searchPath:  "stacks",
@@ -308,6 +336,8 @@ func TestBuildSearchResult_WithMatches(t *testing.T) {
 }
 
 func TestBuildSearchResult_NoMatches(t *testing.T) {
+	t.Parallel()
+
 	sp := &searchParams{
 		pattern:     "nonexistent",
 		searchPath:  ".",

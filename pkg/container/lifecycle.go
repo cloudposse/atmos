@@ -7,6 +7,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -108,6 +109,16 @@ func UpWithRuntime(ctx context.Context, runtime Runtime, config *NamedConfig) (*
 // upWithRuntime reconciles the desired named container against the given runtime:
 // it reuses a running instance, starts a stopped one, or creates and starts a new
 // one. A created-but-unstartable container is cleaned up best-effort.
+//
+// Known limitation: reusing an existing instance (running or stopped) only starts
+// or leaves it running -- it never reconciles config.Networks (e.g. the shared
+// stack network AttachSharedNetwork populates) against whatever networks the
+// container actually has, since neither Docker nor Podman's CLI treats attaching
+// an existing container to a network as part of "start". A container created
+// before this repo's shared per-stack networking landed, or from an atmos.yaml
+// change, is not retroactively joined to the network; run `atmos container down
+// <component> -s <stack>` once (or `up` again after that) to recreate it with the
+// current network configuration.
 func upWithRuntime(ctx context.Context, runtime Runtime, config *NamedConfig, name string) (*Named, error) {
 	existing, found, err := FindInstance(ctx, runtime, config.Stack, config.ComponentType, config.Component)
 	if err != nil {
@@ -115,6 +126,7 @@ func upWithRuntime(ctx context.Context, runtime Runtime, config *NamedConfig, na
 	}
 	if found {
 		id := containerRef(existing)
+		logReusedNetworkMismatch(id, name, config)
 		if IsContainerRunning(existing.Status) {
 			return &Named{config: *config, runtime: runtime, containerID: id, name: name, AlreadyRunning: true}, nil
 		}
@@ -142,6 +154,21 @@ func upWithRuntime(ctx context.Context, runtime Runtime, config *NamedConfig, na
 		return nil, fmt.Errorf("%w: start container %q: %w", errUtils.ErrContainerRuntimeOperation, containerID, err)
 	}
 	return &Named{config: *config, runtime: runtime, containerID: containerID, name: name}, nil
+}
+
+// logReusedNetworkMismatch logs a Debug hint when an existing container is being
+// reused (started or left running as-is) while the desired config asks for network
+// attachments -- since reuse never applies config.Networks (see upWithRuntime's
+// doc comment), this is the only signal an operator gets that the reused instance
+// may still be missing the shared stack network.
+func logReusedNetworkMismatch(id, name string, config *NamedConfig) {
+	if len(config.Networks) == 0 {
+		return
+	}
+	log.Debug("reusing existing container; its network attachments are not reconciled -- "+
+		fmt.Sprintf("run 'atmos container down %s -s %s' and 'up' again to pick up shared networking changes",
+			config.Component, config.Stack),
+		"container", id, "name", name)
 }
 
 // createNamedContainer creates the named container, honoring the pull policy and

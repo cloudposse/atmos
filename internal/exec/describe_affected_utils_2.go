@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -146,9 +147,10 @@ type remoteComponentLocator struct {
 	componentName string
 }
 
-// section returns the raw value of the named section for the located remote component,
-// and whether it was found.
-func (l remoteComponentLocator) section(sectionName string) (any, bool) {
+// remoteComponentMap resolves the raw section map for the located remote component, and
+// whether the remote component path itself was found (not whether any specific section
+// key exists within it).
+func (l remoteComponentLocator) remoteComponentMap() (map[string]any, bool) {
 	remoteStackSection, ok := (*l.remoteStacks)[l.stackName].(map[string]any)
 	if !ok {
 		return nil, false
@@ -162,10 +164,31 @@ func (l remoteComponentLocator) section(sectionName string) (any, bool) {
 		return nil, false
 	}
 	remoteComponentSection, ok := remoteComponentTypeSection[l.componentName].(map[string]any)
+	return remoteComponentSection, ok
+}
+
+// section returns the raw value of the named section for the located remote component,
+// and whether it was found.
+func (l remoteComponentLocator) section(sectionName string) (any, bool) {
+	m, ok := l.remoteComponentMap()
 	if !ok {
 		return nil, false
 	}
-	return remoteComponentSection[sectionName], true
+	return m[sectionName], true
+}
+
+// sectionPresent reports whether sectionName exists as an explicit key on the located
+// remote component. Unlike section, which defaults an absent key to nil for value
+// comparison, this distinguishes "explicitly set" from "never set" — needed to detect
+// when the LOCAL side removes a section the remote still has (section's ok only reflects
+// whether the remote component path was found, not per-key presence).
+func (l remoteComponentLocator) sectionPresent(sectionName string) bool {
+	m, ok := l.remoteComponentMap()
+	if !ok {
+		return false
+	}
+	_, present := m[sectionName]
+	return present
 }
 
 // isSectionValueEqual compares a local component section value with the corresponding value
@@ -590,13 +613,14 @@ func addDependentsToAffected(
 	onlyInStack string,
 	authManager auth.AuthManager,
 	authDisabled bool,
+	errOptions DescribeStacksErrorOptions,
 ) error {
 	// Resolve all stacks once and build a reverse dependency index — these are the expensive
 	// operations (~1s for large infras). Previously ExecuteDescribeStacks was called inside
 	// ExecuteDescribeDependents for every affected component, causing O(N) full resolutions
 	// (e.g., 2,422 × ~1s = 40+ minutes). The dependency index further eliminates the
 	// O(stacks × components) scan per affected item.
-	stacks, err := ExecuteDescribeStacksWithAuthDisabled(
+	stacks, err := ExecuteDescribeStacksWithOptions(
 		atmosConfig,
 		onlyInStack,
 		nil,
@@ -609,13 +633,18 @@ func addDependentsToAffected(
 		skip,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return err
 	}
 
 	// Build the reverse dependency index once from the cached stacks.
-	depIdx := buildDependencyIndex(stacks)
+	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	depIdx, err := buildDependencyIndexWithError(stacks, leftDelim)
+	if err != nil {
+		return err
+	}
 
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
@@ -804,16 +833,6 @@ func processIncludedInDependenciesForPeerDependencies(dependents *[]schema.Depen
 			if includedInDeps {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-// isComponentInStackAffected checks if a component in a stack is in the affected list, recursively.
-func isComponentInStackAffected(affectedList []schema.Affected, stackSlug string) bool {
-	for i := range affectedList {
-		if affectedList[i].StackSlug == stackSlug {
-			return true
 		}
 	}
 	return false

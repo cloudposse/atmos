@@ -2,6 +2,7 @@ package imports
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -15,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/go-getter"
@@ -105,13 +107,61 @@ func NewRemoteImporter(atmosConfig *schema.AtmosConfiguration, opts ...RemoteImp
 
 // uriToTempName generates a unique temp filename for a URI using SHA256 hashing.
 func uriToTempName(uri string) string {
+	// codeql[go/weak-sensitive-data-hashing] -- hashes an import URI to derive a
+	// deterministic temp-download filename; never used for credential
+	// verification or storage.
 	hash := sha256.Sum256([]byte(uri))
 	return fmt.Sprintf(".download.%x", hash[:8])
+}
+
+// downloadMetaCacheKey derives a FileCache key for a download's freshness metadata,
+// distinct from the content key (uri) itself so the two never collide.
+func downloadMetaCacheKey(uri string) string {
+	return "meta:" + uri
+}
+
+// downloadCacheFresh reports whether a previously downloaded uri is still within ttl,
+// per the freshness metadata written by the last real fetch. An empty ttl, missing
+// metadata, or an unparsable/expired timestamp are all treated as "not fresh".
+func (r *RemoteImporter) downloadCacheFresh(uri, ttl string) bool {
+	if ttl == "" {
+		return false
+	}
+	metaBytes, exists, err := r.cache.Get(downloadMetaCacheKey(uri))
+	if err != nil || !exists {
+		return false
+	}
+	var meta sourceMetadata
+	if err := json.Unmarshal(metaBytes, &meta); err != nil {
+		return false
+	}
+	expired, err := duration.IsExpired(meta.UpdatedAt, ttl)
+	if err != nil || expired {
+		return false
+	}
+	return true
+}
+
+// writeDownloadMeta records that uri was just fetched, for downloadCacheFresh's next check.
+// A write failure is non-critical: the next Download call will just treat the entry as
+// stale and re-fetch, matching GetOrFetch's own best-effort cache-write handling.
+func (r *RemoteImporter) writeDownloadMeta(uri string) {
+	data, err := json.Marshal(sourceMetadata{SourceURI: uri, UpdatedAt: time.Now()})
+	if err != nil {
+		return
+	}
+	_ = r.cache.Set(downloadMetaCacheKey(uri), data)
 }
 
 // Download fetches a remote import and returns the local path.
 // Downloads are cached by URL hash to avoid redundant downloads.
 // Uses file locking and atomic writes for safe concurrent access.
+//
+// Honors the same atmosConfig.Imports.TTL default Resolve does. An empty ttl preserves
+// this cache's historical behavior: once downloaded, a URL is reused indefinitely within
+// this cache directory (no expiry) until the cache is cleared. A non-empty ttl instead
+// expires the cached content after ttl, matching the freshness semantics ensureSourceDir
+// uses for git-subdir imports, so the same setting governs both caching mechanisms.
 func (r *RemoteImporter) Download(uri string) (string, error) {
 	defer perf.Track(nil, "imports.RemoteImporter.Download")()
 
@@ -122,7 +172,13 @@ func (r *RemoteImporter) Download(uri string) (string, error) {
 			Err()
 	}
 
-	// Check in-memory cache first (session-level cache).
+	ttl := ""
+	if r.atmosConfig != nil {
+		ttl = r.atmosConfig.Imports.TTL
+	}
+
+	// Check in-memory cache first (session-level cache) -- always wins within one atmos
+	// invocation regardless of ttl, matching ensureSourceDir's within-run dedup.
 	r.memMu.RLock()
 	if cachedPath, ok := r.memCache[uri]; ok {
 		r.memMu.RUnlock()
@@ -138,9 +194,17 @@ func (r *RemoteImporter) Download(uri string) (string, error) {
 		r.memMu.RUnlock()
 	}
 
+	// A ttl is configured but the cached content (if any) is stale: evict it so
+	// GetOrFetch below treats this as a miss instead of reusing stale content.
+	if ttl != "" && !r.downloadCacheFresh(uri, ttl) {
+		_ = r.cache.Delete(uri)
+	}
+
 	// Use GetOrFetch to properly handle file locking and atomic writes.
 	// This ensures safe concurrent access across multiple atmos processes.
+	fetched := false
 	_, err := r.cache.GetOrFetch(uri, func() ([]byte, error) {
+		fetched = true
 		// Download to a temporary location first, then read the content.
 		// The cache will handle atomic writes and file locking.
 		tempPath := filepath.Join(r.cache.BaseDir(), uriToTempName(uri))
@@ -160,6 +224,12 @@ func (r *RemoteImporter) Download(uri string) (string, error) {
 			Err()
 	}
 
+	// Record freshness only when a real fetch just happened, matching fetchSourceDir's
+	// write-only-on-fetch semantics (not sliding expiration on every cache hit).
+	if fetched && ttl != "" {
+		r.writeDownloadMeta(uri)
+	}
+
 	// Get the final cached path.
 	destPath, _ := r.cache.GetPath(uri)
 
@@ -173,12 +243,18 @@ func (r *RemoteImporter) Download(uri string) (string, error) {
 
 // Resolve fetches a remote import and returns all local stack files it resolves to.
 //
-// The cached source clone is refreshed on every invocation (no cross-run reuse); use
-// ResolveRemoteImportNested with a TTL when cross-run cache reuse is desired.
+// Honors the global atmosConfig.Imports.TTL default (the same setting stack-manifest imports
+// fall back to via ResolveRemoteImportNested) for cross-run reuse of the cloned source repo; an
+// unset TTL refreshes the clone once per invocation, as before.
 func (r *RemoteImporter) Resolve(uri string) ([]RemoteImportMatch, error) {
 	defer perf.Track(nil, "imports.RemoteImporter.Resolve")()
 
-	return r.resolve(uri, "")
+	ttl := ""
+	if r.atmosConfig != nil {
+		ttl = r.atmosConfig.Imports.TTL
+	}
+
+	return r.resolve(uri, ttl)
 }
 
 // resolve fetches a remote import and returns all local stack files it resolves to.

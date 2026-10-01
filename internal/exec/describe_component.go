@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -29,13 +30,18 @@ type DescribeComponentParams struct {
 	Stack                string
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
+	UseMocks             bool
 	Skip                 []string
 	Query                string
 	Format               string
 	File                 string
 	Provenance           bool
-	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
-	AuthDisabled         bool
+	// ProvenanceExplicit marks that --provenance was set on the command line, so
+	// Provenance overrides the `describe.provenance` config default.
+	ProvenanceExplicit bool
+	AuthManager        auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled       bool
+	ErrorMode          string
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_describe_component.go -package=$GOPACKAGE
@@ -79,6 +85,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	format := describeComponentParams.Format
 	file := describeComponentParams.File
 	provenance := describeComponentParams.Provenance
+	errOptions, collector := ErrorOptionsFromMode(describeComponentParams.ErrorMode)
 
 	var err error
 	var atmosConfig schema.AtmosConfiguration
@@ -89,6 +96,19 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	}, true)
 	if err != nil {
 		return err
+	}
+	atmosConfig.AuthManager = describeComponentParams.AuthManager
+	errOptions.EvaluationPaths = deferred.PathsForQuery(query)
+
+	// The --provenance flag overrides the `describe.provenance` config default
+	// (on by default; journaled in pkg/edition, so an edition pin can disable it).
+	// The config default only applies to the human-oriented YAML output with no
+	// --query: provenance renders as annotated YAML, which would corrupt
+	// machine-parseable --format=json output and cannot annotate scalar query
+	// results. An explicit --provenance keeps its pre-existing semantics.
+	if !describeComponentParams.ProvenanceExplicit {
+		defaultApplies := (format == "" || format == "yaml") && query == ""
+		provenance = defaultApplies && atmosConfig.Describe.Provenance
 	}
 
 	// Enable provenance tracking if requested.
@@ -109,9 +129,11 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 			Stack:                stack,
 			ProcessTemplates:     processTemplates,
 			ProcessYamlFunctions: processYamlFunctions,
+			UseMocks:             describeComponentParams.UseMocks,
 			Skip:                 skip,
 			AuthManager:          describeComponentParams.AuthManager,
 			AuthDisabled:         describeComponentParams.AuthDisabled,
+			ErrorOptions:         errOptions,
 		})
 		if err != nil {
 			return err
@@ -119,9 +141,6 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		componentSection = result.ComponentSection
 		mergeContext = result.MergeContext
 		stackFile = result.StackFile
-
-		// Filter out computed fields when provenance is enabled
-		componentSection = FilterComputedFields(componentSection)
 	} else {
 		// Use the standard version
 		componentSection, err = d.executeDescribeComponent(&ExecuteDescribeComponentParams{
@@ -130,13 +149,23 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 			Stack:                stack,
 			ProcessTemplates:     processTemplates,
 			ProcessYamlFunctions: processYamlFunctions,
+			UseMocks:             describeComponentParams.UseMocks,
 			Skip:                 skip,
 			AuthManager:          describeComponentParams.AuthManager,
 			AuthDisabled:         describeComponentParams.AuthDisabled,
+			ErrorOptions:         errOptions,
 		})
 		if err != nil {
 			return err
 		}
+	}
+
+	// Scope the output per `describe.component.filter` ("schema" by default,
+	// journaled in pkg/edition): only the sections a stack manifest can define.
+	// "full" restores every computed internal field. Queries always run against
+	// the full section so existing yq expressions keep working.
+	if query == "" && describeComponentFilter(&atmosConfig) == describeComponentFilterSchema {
+		componentSection = FilterComputedFields(componentSection)
 	}
 
 	var res any
@@ -156,7 +185,11 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		if !ok {
 			return fmt.Errorf("%w: provenance rendering requires a map, got %T", errUtils.ErrInvalidComponent, res)
 		}
-		return d.renderProvenance(resMap, mergeContext, &atmosConfig, stackFile, file)
+		if err = d.renderProvenance(resMap, mergeContext, &atmosConfig, stackFile, file); err != nil {
+			return err
+		}
+		PrintErrorModeSummary(describeComponentParams.ErrorMode, collector)
+		return nil
 	}
 
 	if atmosConfig.Settings.Terminal.IsPagerEnabled() {
@@ -165,6 +198,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		case DescribeConfigFormatError:
 			return err
 		case nil:
+			PrintErrorModeSummary(describeComponentParams.ErrorMode, collector)
 			return nil
 		default:
 			log.Debug("Failed to use pager")
@@ -175,6 +209,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	if err != nil {
 		return err
 	}
+	PrintErrorModeSummary(describeComponentParams.ErrorMode, collector)
 
 	return nil
 }
@@ -229,15 +264,20 @@ type DescribeComponentResult struct {
 
 // ExecuteDescribeComponentParams contains parameters for ExecuteDescribeComponent.
 type ExecuteDescribeComponentParams struct {
+	// ResolveSecrets retrieves actual secrets for internal value-producing callers.
+	// The default preserves credential-free, masked inspection.
+	ResolveSecrets       bool
 	AtmosConfig          *schema.AtmosConfiguration // Optional: Use provided config instead of initializing new one.
 	Component            string
 	Stack                string
 	ComponentType        string // Optional: if set, only try this component type.
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
+	UseMocks             bool
 	Skip                 []string
 	AuthManager          auth.AuthManager
 	AuthDisabled         bool
+	ErrorOptions         DescribeStacksErrorOptions
 }
 
 // ExecuteDescribeComponent describes component config.
@@ -245,15 +285,18 @@ func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[strin
 	defer perf.Track(params.AtmosConfig, "exec.ExecuteDescribeComponent")()
 
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+		ResolveSecrets:       params.ResolveSecrets,
 		AtmosConfig:          params.AtmosConfig,
 		Component:            params.Component,
 		Stack:                params.Stack,
 		ComponentType:        params.ComponentType,
 		ProcessTemplates:     params.ProcessTemplates,
 		ProcessYamlFunctions: params.ProcessYamlFunctions,
+		UseMocks:             params.UseMocks,
 		Skip:                 params.Skip,
 		AuthManager:          params.AuthManager,
 		AuthDisabled:         params.AuthDisabled,
+		ErrorOptions:         params.ErrorOptions,
 	})
 	if err != nil {
 		return nil, err
@@ -405,19 +448,24 @@ func recordImportsProvenance(mergeContext *m.MergeContext, imports []string) {
 
 // DescribeComponentContextParams contains parameters for describing a component with context.
 type DescribeComponentContextParams struct {
+	// ResolveSecrets retrieves actual secrets while retaining output masking.
+	ResolveSecrets       bool
 	AtmosConfig          *schema.AtmosConfiguration
 	Component            string
 	Stack                string
 	ComponentType        string // Optional: if set, only try this component type.
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
+	UseMocks             bool
 	Skip                 []string
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management.
 	AuthDisabled         bool
+	ErrorOptions         DescribeStacksErrorOptions
 }
 
 // componentTypeProcessParams contains parameters for tryProcessWithComponentType.
 type componentTypeProcessParams struct {
+	resolveSecrets       bool
 	atmosConfig          *schema.AtmosConfiguration
 	configAndStacksInfo  schema.ConfigAndStacksInfo
 	componentType        string
@@ -425,16 +473,16 @@ type componentTypeProcessParams struct {
 	processYamlFunctions bool
 	skip                 []string
 	authManager          auth.AuthManager
+	onWarning            func(DegradationWarning)
 }
 
 // tryProcessWithComponentType attempts to process stacks with a specific component type.
 func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.ConfigAndStacksInfo, error) {
 	params.configAndStacksInfo.ComponentType = params.componentType
-	// `describe component` is an inspection command: when masking is enabled (the default),
-	// resolve `!secret` to the mask replacement WITHOUT retrieving from the backend, so the
-	// command needs no credentials for the secret provider.
-	params.configAndStacksInfo.SecretsMaskOnly = iolib.MaskingEnabled()
-	result, err := ProcessStacks(params.atmosConfig, params.configAndStacksInfo, true, params.processTemplates, params.processYamlFunctions, params.skip, params.authManager)
+	// Inspection can avoid provider access, but internal value-producing callers must
+	// retrieve real secrets even when their terminal output is masked.
+	params.configAndStacksInfo.SecretsMaskOnly = !params.resolveSecrets && iolib.MaskingEnabled()
+	result, err := ProcessStacksWithDegradation(params.atmosConfig, params.configAndStacksInfo, true, params.processTemplates, params.processYamlFunctions, params.skip, params.authManager, params.onWarning)
 	result.ComponentSection[cfg.ComponentTypeSectionName] = params.componentType
 	return result, err
 }
@@ -446,13 +494,16 @@ func detectComponentType(
 	params DescribeComponentContextParams,
 ) (schema.ConfigAndStacksInfo, error) {
 	baseParams := componentTypeProcessParams{
+		resolveSecrets:       params.ResolveSecrets,
 		atmosConfig:          atmosConfig,
 		configAndStacksInfo:  *configAndStacksInfo,
 		processTemplates:     params.ProcessTemplates,
 		processYamlFunctions: params.ProcessYamlFunctions,
 		skip:                 params.Skip,
 		authManager:          params.AuthManager,
+		onWarning:            params.ErrorOptions.OnWarning,
 	}
+	baseParams.configAndStacksInfo.EvaluationPaths = params.ErrorOptions.EvaluationPaths
 
 	// If a specific component type is provided, use it directly.
 	if params.ComponentType != "" {
@@ -483,6 +534,9 @@ func detectComponentType(
 		if err == nil {
 			return result, nil
 		}
+		if errors.Is(err, errUtils.ErrDuplicateComponentConfig) {
+			return result, err
+		}
 		if !errors.Is(err, errUtils.ErrInvalidComponent) {
 			return result, err
 		}
@@ -507,6 +561,7 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 	configAndStacksInfo.CliArgs = []string{"describe", "component"}
 	configAndStacksInfo.ComponentSection = make(map[string]any)
 	configAndStacksInfo.AuthDisabled = params.AuthDisabled
+	configAndStacksInfo.UseMocks = params.UseMocks
 
 	var err error
 	atmosConfig := params.AtmosConfig
@@ -572,6 +627,23 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 	}, nil
 }
 
+const (
+	// DescribeComponentFilterSchema limits `describe component` output to the
+	// sections a stack manifest can define.
+	describeComponentFilterSchema = "schema"
+	// DescribeComponentFilterFull includes every internal field Atmos computes.
+	describeComponentFilterFull = "full"
+)
+
+// describeComponentFilter resolves the `describe.component.filter` setting,
+// treating anything other than "full" as the schema-scoped default.
+func describeComponentFilter(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig != nil && atmosConfig.Describe.Component.Filter == describeComponentFilterFull {
+		return describeComponentFilterFull
+	}
+	return describeComponentFilterSchema
+}
+
 // FilterComputedFields removes Atmos-added fields that don't come from stack files.
 // Only keeps fields that are defined in stack YAML files.
 func FilterComputedFields(componentSection map[string]any) map[string]any {
@@ -579,7 +651,18 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 		return map[string]any{}
 	}
 
-	// Fields to keep (from stack files)
+	// Fields to keep (the sections a stack manifest can define).
+	//
+	// NOTE: this is an intentional allowlist, not an exhaustive one. It still omits
+	// several real stack-definable sections (e.g. retry, generate, auth, secrets,
+	// command, backend_type, workspace). Whether to surface those, and whether this
+	// filter should be driven by the manifest schema instead of a hand-maintained
+	// list, is a broader design question tracked separately (see #3223).
+	//
+	// Incremental additions to date: "flags" (field-test finding, PR #2992) and the
+	// native Helm sections chart/values/values_files (#3218). For a Helm component
+	// those Helm sections are the primary configuration and were the visible gap.
+	// See docs/fixes/2026-09-28-describe-component-helm-values-chart.md.
 	fieldsToKeep := map[string]bool{
 		"vars":         true,
 		"settings":     true,
@@ -590,6 +673,12 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 		"providers":    true,
 		"imports":      true,
 		"dependencies": true,
+		"component":    true,
+		"hooks":        true,
+		"flags":        true,
+		"chart":        true, // Native Helm chart reference (#3218).
+		"values":       true, // Native Helm chart values (#3218).
+		"values_files": true, // Native Helm values files (#3218).
 	}
 
 	filtered := make(map[string]any)

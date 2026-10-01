@@ -193,7 +193,7 @@ Stack names appear throughout Atmos:
 
 - **CLI**: `atmos terraform apply vpc -s my-stack-name`
 - **Listing**: `atmos list stacks` shows stack names
-- **Dependencies**: Reference stacks by name in `settings.depends_on`
+- **Dependencies**: Reference stacks by name with `dependencies.components[].stack`
 - **Terraform Workspaces**: Workspace names derive from stack names
 - **Describe Commands**: `atmos describe stacks` uses stack names as keys
 
@@ -216,3 +216,4 @@ Stack names appear throughout Atmos:
 - [Variables (vars)](/stacks/vars)
 - [Terraform Workspaces](/components/terraform/workspaces)
 - [Migrating from Terragrunt](/migration/terragrunt)
+- [Migrating from Terramate](/migration/terramate)

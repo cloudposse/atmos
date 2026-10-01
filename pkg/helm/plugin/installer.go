@@ -9,8 +9,10 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filelock"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -56,9 +58,11 @@ func (execRunner) Run(ctx context.Context, name string, args, extraEnv []string)
 
 // Installer installs and inspects Helm plugins in an Atmos-managed directory.
 type Installer struct {
-	helmBin string
-	dir     string
-	runner  Runner
+	helmBin     string
+	dir         string
+	runner      Runner
+	retryConfig schema.RetryConfig
+	rename      func(string, string) error
 }
 
 // Option configures an Installer.
@@ -101,9 +105,11 @@ func NewInstaller(helmBin string, opts ...Option) *Installer {
 	defer perf.Track(nil, "plugin.NewInstaller")()
 
 	i := &Installer{
-		helmBin: helmBin,
-		dir:     ManagedDir(),
-		runner:  execRunner{},
+		helmBin:     helmBin,
+		dir:         ManagedDir(),
+		runner:      execRunner{},
+		retryConfig: defaultInstallRetryConfig(),
+		rename:      os.Rename,
 	}
 	for _, opt := range opts {
 		opt(i)
@@ -137,17 +143,23 @@ func (i *Installer) EnsurePlugins(ctx context.Context, specs []Spec) (string, er
 			Err()
 	}
 
-	installed, err := i.ListInstalled(ctx)
+	// Only installations sharing this managed directory are serialized. Separate
+	// jobs and directories remain independent, while duplicate installs cannot race.
+	err := filelock.New(filepath.Join(i.dir, ".install.lock")).WithExclusive(ctx, func() error {
+		for _, spec := range specs {
+			installed, err := i.ListInstalled(ctx)
+			if err != nil {
+				return err
+			}
+			if err := i.ensureOne(ctx, spec, installed); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return "", err
 	}
-
-	for _, spec := range specs {
-		if err := i.ensureOne(ctx, spec, installed); err != nil {
-			return "", err
-		}
-	}
-
 	return i.dir, nil
 }
 
@@ -156,41 +168,31 @@ func (i *Installer) ensureOne(ctx context.Context, spec Spec, installed map[stri
 	defer perf.Track(nil, "plugin.Installer.ensureOne")()
 
 	name, curVersion, present := matchInstalled(spec, installed)
-	switch {
-	case present && (spec.IsLatest() || versionsEqual(curVersion, spec.Version)):
-		log.Debug("Helm plugin already installed", "plugin", spec.Name, "version", curVersion)
-		return nil
-	case present:
-		// Pinned version differs: reinstall to honor the declared version.
-		ui.Info("Updating helm plugin `" + spec.Name + "` to " + spec.Version)
-		if err := i.uninstall(ctx, name); err != nil {
-			return err
+	// Repository names need not equal plugin.yaml names. Receipts retain the
+	// source identity for custom plugins whose names cannot be inferred.
+	if !present {
+		for installedName, version := range installed {
+			if receipt, ok := i.installReceipt(installedName); ok && receipt.Source == spec.URL {
+				name, curVersion, present = installedName, version, true
+				break
+			}
 		}
-	default:
+	}
+
+	if present && (spec.IsLatest() || versionsEqual(curVersion, spec.Version)) {
+		// Helm registers metadata before running hooks. Require proof that a prior
+		// Atmos installation completed, rather than trusting partial metadata.
+		if i.hasInstallReceipt(name, spec) {
+			log.Debug("Helm plugin already installed", "plugin", spec.Name, "version", curVersion)
+			return nil
+		}
+	}
+	if present {
+		ui.Info("Updating helm plugin `" + spec.Name + "` to " + spec.Version)
+	} else {
 		ui.Info("Installing helm plugin `" + spec.Name + "`")
 	}
-
-	return i.install(ctx, spec)
-}
-
-// install runs `helm plugin install <url> [--version <tag>]`.
-func (i *Installer) install(ctx context.Context, spec Spec) error {
-	defer perf.Track(nil, "plugin.Installer.install")()
-
-	args := []string{"plugin", "install", spec.URL}
-	if !spec.IsLatest() {
-		args = append(args, "--version", spec.Version)
-	}
-
-	_, stderr, err := i.runner.Run(ctx, i.helmBin, args, i.env())
-	if err != nil {
-		return errUtils.Build(errUtils.ErrHelmPluginInstall).
-			WithCause(err).
-			WithExplanationf("Failed to install helm plugin %q from %s", spec.Name, spec.URL).
-			WithExplanationf("helm reported: %s", strings.TrimSpace(stderr)).
-			Err()
-	}
-	return nil
+	return i.install(ctx, spec, name)
 }
 
 // uninstall runs `helm plugin uninstall <name>`.

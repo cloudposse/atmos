@@ -1,0 +1,55 @@
+---
+title: atmos config validate
+sidebar_label: validate
+sidebar_class_name: command
+id: config-validate
+description: Validate atmos.yaml against its JSON Schema.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Validate the Atmos CLI configuration — `atmos.yaml`, `atmos.d` fragments, and
+project-local [profiles](/cli/configuration/profiles) — against the JSON Schema
+generated from the Atmos configuration code. This is an alias for
+[`atmos validate schema config`](/cli/commands/validate/schema).
+</Intro>
+
+<CastPlayer title="atmos config validate --help" src="/casts/screengrabs/atmos-config-validate--help.cast" static chrome />
+
+The schema is generated from the code that reads the configuration, so it always
+matches the Atmos version you are running. YAML functions (like
+`logs: !include shared.yaml`) validate cleanly, and fragments require no specific
+fields, so partial configs pass standalone. Print the schema itself with
+[`atmos config schema`](/cli/commands/config/config-schema).
+
+## Usage
+
+```shell
+atmos config validate
+```
+
+## Examples
+
+```shell
+# Validate atmos.yaml, atmos.d fragments, and project-local profiles.
+atmos config validate
+
+# Equivalent long form; validates only the `config` schema entry.
+atmos validate schema config
+
+# Validate only changed Atmos configuration files.
+atmos config validate --affected --base origin/main
+atmos config validate --exclude 'tests/fixtures/**'
+```
+
+Exits non-zero when any file fails validation, making it suitable for CI and
+pre-commit hooks. Override the schema or matched files with a `schemas.config`
+entry — see [CLI Configuration Schemas](/cli/configuration/schemas).
+
+`--affected` compares the current worktree with the Git merge-base and validates
+only changed `atmos.yaml` files, fragments, and profiles. On GitHub Actions, the
+pull request base SHA is detected automatically; use `--base` locally when the
+default baseline is not appropriate.
+
+Use repeatable `--exclude <glob>` to omit matching configuration files from full or affected validation.

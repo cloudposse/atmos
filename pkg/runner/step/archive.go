@@ -70,7 +70,7 @@ func (h *ArchiveHandler) Validate(step *schema.WorkflowStep) error {
 func (h *ArchiveHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.ArchiveHandler.Execute")()
 
-	opts, action, err := resolveArchiveOptions(step, vars)
+	opts, action, err := h.resolveArchiveOptions(step, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -85,19 +85,19 @@ func (h *ArchiveHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 		WithMetadata("source", opts.Source), nil
 }
 
-func resolveArchiveOptions(step *schema.WorkflowStep, vars *Variables) (archive.PackOptions, archive.Action, error) {
+func (h *ArchiveHandler) resolveArchiveOptions(step *schema.WorkflowStep, vars *Variables) (archive.PackOptions, archive.Action, error) {
 	source, err := archiveSourceString(step)
 	if err != nil {
 		return archive.PackOptions{}, "", err
 	}
-	source, err = vars.Resolve(source)
+	source, err = h.ResolveInWorkingDirectory(step, vars, source, "source")
 	if err != nil {
-		return archive.PackOptions{}, "", fmt.Errorf("step '%s': failed to resolve source: %w", step.Name, err)
+		return archive.PackOptions{}, "", err
 	}
 
-	destination, err := vars.Resolve(step.Destination)
+	destination, err := h.ResolveInWorkingDirectory(step, vars, step.Destination, "destination")
 	if err != nil {
-		return archive.PackOptions{}, "", fmt.Errorf("step '%s': failed to resolve destination: %w", step.Name, err)
+		return archive.PackOptions{}, "", err
 	}
 	format, err := vars.Resolve(step.Format)
 	if err != nil {

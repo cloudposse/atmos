@@ -32,6 +32,8 @@ func initListTestIO(t *testing.T) {
 // describeStacks returns the provided map/error, and detectRuntime returns rt/err.
 func withListStubs(t *testing.T, stacksMap map[string]any, describeErr error, rt ctr.Runtime, detectErr error) {
 	t.Helper()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("ATMOS_CONTAINER_RUNTIME", "")
 
 	origInit, origDescribe, origDetect := initCliConfig, describeStacks, detectRuntime
 	t.Cleanup(func() {
@@ -172,7 +174,7 @@ func TestAnnotateRunningState_Running(t *testing.T) {
 	defer ctrl.Finish()
 	rt := NewMockRuntime(ctrl)
 
-	rt.EXPECT().List(gomock.Any(), ctr.DiscoveryFilter("dev", "container", "api")).
+	rt.EXPECT().List(gomock.Any(), ctr.ComponentTypeFilter("container")).
 		Return([]ctr.Info{{ID: "cid", Status: "running", Labels: ctr.InstanceLabels("dev", "container", "api")}}, nil)
 
 	rows := []instanceRow{{stack: "dev", component: "api"}}
@@ -186,7 +188,7 @@ func TestAnnotateRunningState_Stopped(t *testing.T) {
 	defer ctrl.Finish()
 	rt := NewMockRuntime(ctrl)
 
-	rt.EXPECT().List(gomock.Any(), ctr.DiscoveryFilter("dev", "container", "api")).
+	rt.EXPECT().List(gomock.Any(), ctr.ComponentTypeFilter("container")).
 		Return([]ctr.Info{{ID: "cid", Status: "exited", Labels: ctr.InstanceLabels("dev", "container", "api")}}, nil)
 
 	rows := []instanceRow{{stack: "dev", component: "api"}}
@@ -205,6 +207,24 @@ func TestAnnotateRunningState_ListError(t *testing.T) {
 	rows := []instanceRow{{stack: "dev", component: "api"}}
 	annotateRunningState(context.Background(), rt, rows)
 	assert.Equal(t, statusUnknown, rows[0].status)
+}
+
+func TestAnnotateRunningState_UsesOneBulkQuery(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	rt := NewMockRuntime(ctrl)
+
+	rt.EXPECT().List(gomock.Any(), ctr.ComponentTypeFilter("container")).Return([]ctr.Info{
+		{Status: "running", Labels: ctr.InstanceLabels("dev", "container", "api")},
+		{Status: "exited", Labels: ctr.InstanceLabels("prod", "container", "worker")},
+		{Status: "running", Labels: ctr.InstanceLabels("other", "container", "ignored")},
+	}, nil).Times(1)
+
+	rows := []instanceRow{{stack: "dev", component: "api"}, {stack: "prod", component: "worker"}, {stack: "dev", component: "missing"}}
+	require.NoError(t, annotateRunningState(context.Background(), rt, rows))
+	assert.Equal(t, statusRunning, rows[0].status)
+	assert.Equal(t, statusStopped, rows[1].status)
+	assert.Equal(t, statusStopped, rows[2].status)
 }
 
 func TestExecuteList_NoComponents(t *testing.T) {
@@ -237,7 +257,7 @@ func TestExecuteList_RendersWithRuntime(t *testing.T) {
 	stacksMap := map[string]any{"dev": containerStack(map[string]string{"api": "api:dev"})}
 	withListStubs(t, stacksMap, nil, rt, nil)
 
-	rt.EXPECT().List(gomock.Any(), ctr.DiscoveryFilter("dev", "container", "api")).
+	rt.EXPECT().List(gomock.Any(), ctr.ComponentTypeFilter("container")).
 		Return([]ctr.Info{{ID: "cid", Status: "running", Labels: ctr.InstanceLabels("dev", "container", "api")}}, nil)
 
 	require.NoError(t, ExecuteList(context.Background(), &schema.ConfigAndStacksInfo{}))

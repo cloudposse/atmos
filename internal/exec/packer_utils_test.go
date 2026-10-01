@@ -11,6 +11,8 @@ import (
 )
 
 func TestCheckPackerConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		atmosConfig *schema.AtmosConfiguration
@@ -50,6 +52,7 @@ func TestCheckPackerConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := checkPackerConfig(tt.atmosConfig)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -64,6 +67,8 @@ func TestCheckPackerConfig(t *testing.T) {
 }
 
 func TestGetPackerTemplateFromSettings(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		settings *schema.AtmosSectionMapType
@@ -118,6 +123,7 @@ func TestGetPackerTemplateFromSettings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := GetPackerTemplateFromSettings(tt.settings)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -130,6 +136,8 @@ func TestGetPackerTemplateFromSettings(t *testing.T) {
 }
 
 func TestGetPackerManifestFromVars(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		vars    *schema.AtmosSectionMapType
@@ -176,6 +184,7 @@ func TestGetPackerManifestFromVars(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := GetPackerManifestFromVars(tt.vars)
 			if tt.wantErr {
 				assert.Error(t, err)

@@ -10,7 +10,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
@@ -71,6 +73,7 @@ type AffectedCommandOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	ExcludeLocked    bool
+	ErrorMode        string // How to handle recoverable errors: "strict" (default), "warn", or "silent".
 
 	// Auth options.
 	IdentityName string // Identity name from --identity flag or ATMOS_IDENTITY env var.
@@ -88,12 +91,16 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 		return fmt.Errorf("failed to initialize config: %w", err)
 	}
 
+	// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+	// list.error_mode, else "warn".
+	opts.ErrorMode = e.ResolveErrorMode(opts.ErrorMode, atmosConfig.List.ErrorMode)
+
 	// Only create auth manager when YAML functions are enabled or identity is explicitly requested.
 	// When functions are disabled (--process-functions=false), there are no YAML functions
 	// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
 	// This matches the gating pattern used by describe stacks/affected/dependents.
 	var authManager auth.AuthManager
-	if opts.ProcessFunctions || opts.IdentityName != "" {
+	if !authdeferred.ConfigureAuth(&atmosConfig, opts.IdentityName) {
 		// Category B: list affected operates on multiple affected components across stacks without a
 		// single target (component, stack) pair. Use the SCAN variant so stack-level defaults
 		// (including defaults declared in imported _defaults.yaml) are discovered. See
@@ -107,6 +114,11 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 	}
 
 	// Get format flag.
+	if authManager == nil {
+		authManager, _ = atmosConfig.AuthManager.(auth.AuthManager)
+	}
+	atmosConfig.AuthManager = authManager
+
 	formatFlag, err := opts.Cmd.Flags().GetString("format")
 	if err != nil {
 		return fmt.Errorf("failed to get format flag: %w", err)
@@ -149,7 +161,12 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 	}
 
 	// Render output for affected components.
-	return renderAffected(&atmosConfig, result.Affected, opts, formatFlag)
+	if err := renderAffected(&atmosConfig, result.Affected, opts, formatFlag); err != nil {
+		return err
+	}
+
+	e.PrintErrorModeSummary(opts.ErrorMode, result.Collector)
+	return nil
 }
 
 // renderAffected renders the affected components to output.
@@ -191,6 +208,7 @@ type affectedResult struct {
 	LocalRef     string
 	RemoteRef    string
 	RemoteRepoID string
+	Collector    *degradation.Collector
 }
 
 // getAffectedComponents calls the existing describe affected logic.
@@ -198,7 +216,8 @@ func getAffectedComponents(atmosConfig *schema.AtmosConfiguration, opts *Affecte
 	defer perf.Track(atmosConfig, "list.getAffectedComponents")()
 
 	authDisabled := opts.IdentityName == cfg.IdentityFlagDisabledValue
-	logicResult, err := executeAffectedLogic(atmosConfig, opts, authManager, authDisabled)
+	errOptions, collector := e.ErrorOptionsFromMode(opts.ErrorMode)
+	logicResult, err := executeAffectedLogic(atmosConfig, opts, authManager, authDisabled, errOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -206,6 +225,7 @@ func getAffectedComponents(atmosConfig *schema.AtmosConfiguration, opts *Affecte
 	result := &affectedResult{
 		Affected:     logicResult.affected,
 		RemoteRepoID: logicResult.remoteRepoID,
+		Collector:    collector,
 	}
 	setRefNames(result, opts, logicResult.localHead)
 	return result, nil
@@ -219,19 +239,19 @@ type affectedLogicResult struct {
 }
 
 // executeAffectedLogic calls the appropriate describe affected function based on options.
-func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
+func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
 	switch {
 	case opts.RepoPath != "":
-		return executeAffectedWithRepoPath(atmosConfig, opts, authManager, authDisabled)
+		return executeAffectedWithRepoPath(atmosConfig, opts, authManager, authDisabled, errOptions)
 	case opts.CloneTargetRef:
-		return executeAffectedWithClone(atmosConfig, opts, authManager, authDisabled)
+		return executeAffectedWithClone(atmosConfig, opts, authManager, authDisabled, errOptions)
 	default:
-		return executeAffectedWithCheckout(atmosConfig, opts, authManager, authDisabled)
+		return executeAffectedWithCheckout(atmosConfig, opts, authManager, authDisabled, errOptions)
 	}
 }
 
-func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
-	affected, _, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
+func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
+	affected, _, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
 		atmosConfig,
 		opts.RepoPath,
 		false, // includeSpaceliftAdminStacks
@@ -243,6 +263,7 @@ func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *A
 		opts.ExcludeLocked,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return nil, err
@@ -250,8 +271,8 @@ func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *A
 	return &affectedLogicResult{affected: affected, localHead: nil, remoteRepoID: repoID}, nil
 }
 
-func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
-	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefClone(
+func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
+	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
 		atmosConfig,
 		opts.Ref,
 		opts.SHA,
@@ -266,6 +287,7 @@ func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *Affe
 		opts.ExcludeLocked,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return nil, err
@@ -273,8 +295,8 @@ func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *Affe
 	return &affectedLogicResult{affected: affected, localHead: localHead, remoteRepoID: repoID}, nil
 }
 
-func executeAffectedWithCheckout(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
-	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefCheckout(
+func executeAffectedWithCheckout(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
+	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 		atmosConfig,
 		opts.Ref,
 		opts.SHA,
@@ -288,6 +310,7 @@ func executeAffectedWithCheckout(atmosConfig *schema.AtmosConfiguration, opts *A
 		opts.ExcludeLocked,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return nil, err

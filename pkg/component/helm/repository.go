@@ -10,9 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofrs/flock"
 	"sigs.k8s.io/yaml"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/cache"
+	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/getter"
 	"helm.sh/helm/v4/pkg/repo/v1"
 )
@@ -20,6 +22,7 @@ import (
 const (
 	repositoryLockTimeout = 30 * time.Second
 	repositoryFilePerm    = 0o600
+	repositoryDirPerm     = 0o700
 )
 
 var (
@@ -39,13 +42,30 @@ func setupHelmRepositories(repositories []chartRepository) error {
 	if repoFile == "" {
 		return nil
 	}
-
-	unlock, err := lockRepositoryFile(repoFile)
-	if err != nil {
+	if err := os.MkdirAll(filepath.Dir(repoFile), repositoryDirPerm); err != nil {
 		return err
 	}
-	defer unlock()
 
+	ctx, cancel := context.WithTimeout(context.Background(), repositoryLockTimeout)
+	defer cancel()
+
+	err := cache.NewFileLockAtPath(repositoryLockPath(repoFile)).WithLockContext(ctx, func() error {
+		return updateRepositories(settings, repoFile, repositories)
+	})
+	if err != nil {
+		if errors.Is(err, errUtils.ErrCacheLocked) {
+			return fmt.Errorf("%w: %q: %w", errHelmRepositoryLockTimeout, repositoryLockPath(repoFile), err)
+		}
+		return err
+	}
+
+	return nil
+}
+
+// updateRepositories loads the repo file, applies each declarative repository entry
+// (downloading its index to validate reachability), and writes the result back to disk.
+// It runs entirely inside setupHelmRepositories' file-lock callback.
+func updateRepositories(settings *cli.EnvSettings, repoFile string, repositories []chartRepository) error {
 	repoConfig, err := loadRepositoryFile(repoFile)
 	if err != nil {
 		return err
@@ -73,28 +93,6 @@ func setupHelmRepositories(repositories []chartRepository) error {
 	}
 
 	return repoConfig.WriteFile(repoFile, repositoryFilePerm)
-}
-
-func lockRepositoryFile(repoFile string) (func(), error) {
-	if err := os.MkdirAll(filepath.Dir(repoFile), os.ModePerm); err != nil && !os.IsExist(err) {
-		return nil, err
-	}
-
-	lockPath := repositoryLockPath(repoFile)
-	fileLock := flock.New(lockPath)
-	ctx, cancel := context.WithTimeout(context.Background(), repositoryLockTimeout)
-	locked, err := fileLock.TryLockContext(ctx, time.Second)
-	cancel()
-	if err != nil {
-		return nil, err
-	}
-	if !locked {
-		return nil, fmt.Errorf("%w: %q", errHelmRepositoryLockTimeout, lockPath)
-	}
-
-	return func() {
-		_ = fileLock.Unlock()
-	}, nil
 }
 
 func repositoryLockPath(repoFile string) string {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -46,8 +47,32 @@ func integrationTargetKey(name string, cfg schema.Integration) string {
 		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
 			return "aws/eks:" + cfg.Spec.Cluster.Name + ":" + cfg.Spec.Cluster.Region
 		}
+	case integrations.KindGCPGKE:
+		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
+			return gkeIntegrationTargetKey(cfg)
+		}
 	}
 	return name
+}
+
+// gkeIntegrationTargetKey builds a cache key that includes GKE output behavior.
+func gkeIntegrationTargetKey(cfg schema.Integration) string {
+	cluster := cfg.Spec.Cluster
+	values := url.Values{
+		"alias":    {cluster.Alias},
+		"location": {cluster.Location},
+		"name":     {cluster.Name},
+		"project":  {cluster.ProjectID},
+	}
+	if cfg.Via != nil {
+		values.Set("identity", cfg.Via.Identity)
+	}
+	if cluster.Kubeconfig != nil {
+		values.Set("mode", cluster.Kubeconfig.Mode)
+		values.Set("path", cluster.Kubeconfig.Path)
+		values.Set("update", cluster.Kubeconfig.Update)
+	}
+	return integrations.KindGCPGKE + ":" + values.Encode()
 }
 
 // triggerIntegrations executes integrations that reference this identity with auto_provision enabled.
@@ -58,7 +83,7 @@ func (m *manager) triggerIntegrations(ctx context.Context, identityName string, 
 	defer perf.Track(nil, "auth.Manager.triggerIntegrations")()
 
 	// Check if integrations should be skipped (when called from ExecuteIntegration or eks-token).
-	if ctx.Value(skipIntegrationsKey) != nil {
+	if IntegrationsSkipped(ctx) {
 		log.Debug("Skipping auto-triggered integrations (explicit execution)", logKeyIdentity, identityName)
 		return
 	}

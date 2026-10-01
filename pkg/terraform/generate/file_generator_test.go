@@ -812,3 +812,29 @@ func TestGetGenerateFilenames(t *testing.T) {
 		})
 	}
 }
+
+// TestSummaryVerb_UsesErrorStyleWhenErrorsPresent verifies emitSummary's headline verb
+// and error-styling decision: a real generation error must be reported with error
+// styling regardless of the clean/generate verb, and the verb itself must track isClean
+// independent of whether there were errors.
+func TestSummaryVerb_UsesErrorStyleWhenErrorsPresent(t *testing.T) {
+	tests := []struct {
+		name        string
+		isClean     bool
+		errors      int
+		wantVerb    string
+		wantIsError bool
+	}{
+		{name: "generate, no errors", isClean: false, errors: 0, wantVerb: "Generated", wantIsError: false},
+		{name: "generate, with errors", isClean: false, errors: 1, wantVerb: "Generated", wantIsError: true},
+		{name: "clean, no errors", isClean: true, errors: 0, wantVerb: "Cleaned", wantIsError: false},
+		{name: "clean, with errors", isClean: true, errors: 2, wantVerb: "Cleaned", wantIsError: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			verb, hasErrors := summaryVerb(tt.isClean, tt.errors)
+			assert.Equal(t, tt.wantVerb, verb)
+			assert.Equal(t, tt.wantIsError, hasErrors)
+		})
+	}
+}

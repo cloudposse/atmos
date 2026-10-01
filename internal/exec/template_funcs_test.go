@@ -20,10 +20,10 @@ func TestFuncMap(t *testing.T) {
 
 	fm := FuncMap(atmosConfig, configAndStacksInfo, ctx, gomplateData)
 
-	// Verify the function map contains expected keys.
+	// Verify the function map contains expected keys: "atmos" plus every
+	// function templatefuncs.FuncMap() registers (e.g. "collectKeys").
 	keys := u.StringKeysFromMap(fm)
-	assert.Equal(t, 1, len(keys), "FuncMap should return exactly one key")
-	assert.Equal(t, "atmos", keys[0], "FuncMap should return 'atmos' key")
+	assert.ElementsMatch(t, []string{"atmos", "collectKeys"}, keys)
 
 	// Verify the atmos function is callable and returns AtmosFuncs.
 	atmosFunc, ok := fm["atmos"]

@@ -1,0 +1,34 @@
+# Atmos CLI configuration for this test fixture.
+# https://atmos.tools/cli/configuration
+
+# Base path for components, stacks and workflows.
+base_path: "."
+
+# Stack configuration.
+stacks:
+  # Path to stack files (relative to base_path).
+  base_path: "stacks"
+  # Stack naming template.
+  name_template: "{{.vars.region}}"
+
+# Template configuration.
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+
+# Register the local `scaffold.yaml` in this directory as the "example"
+# template, so `atmos scaffold generate example <target>` resolves it by
+# name instead of requiring a local path argument.
+scaffold:
+  templates:
+    example:
+      description: Test fixture exercising a free-text matrix axis split via Sprig's splitList
+      source: "."
+
+# Logging.
+logs:
+  level: info

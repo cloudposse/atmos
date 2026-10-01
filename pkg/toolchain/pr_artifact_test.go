@@ -3,6 +3,8 @@ package toolchain
 import (
 	"archive/zip"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -451,6 +453,132 @@ func TestExtractZipFile_WithDirectory(t *testing.T) {
 	assert.Equal(t, "nested content", string(content))
 }
 
+func TestExtractZipFile_RawTraversalName(t *testing.T) {
+	tempDir := t.TempDir()
+	zipPath := filepath.Join(tempDir, "evil.zip")
+	extractDir := filepath.Join(tempDir, "extract")
+	require.NoError(t, os.MkdirAll(extractDir, 0o755))
+
+	// Entry name contains ".." directly; the raw substring guard in extractZipFile
+	// must reject it before sanitizeZipPath is even consulted.
+	createTestZip(t, zipPath, map[string][]byte{
+		"../evil.txt": []byte("malicious"),
+	})
+
+	err := extractZipFile(zipPath, extractDir)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPRArtifactExtractFailed)
+	assert.Contains(t, err.Error(), "Zip Slip")
+}
+
+func TestExtractZipFile_ParentDirCreationFails(t *testing.T) {
+	tempDir := t.TempDir()
+	zipPath := filepath.Join(tempDir, "test.zip")
+	extractDir := filepath.Join(tempDir, "extract")
+	require.NoError(t, os.MkdirAll(extractDir, 0o755))
+
+	// Pre-create a regular file where the entry's parent directory needs to go,
+	// forcing os.MkdirAll(parentDir, ...) to fail with "not a directory".
+	blockedPath := filepath.Join(extractDir, "blocked")
+	require.NoError(t, os.WriteFile(blockedPath, []byte("i am a file, not a dir"), 0o644))
+
+	createTestZip(t, zipPath, map[string][]byte{
+		"blocked/file.txt": []byte("content"),
+	})
+
+	err := extractZipFile(zipPath, extractDir)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPRArtifactExtractFailed)
+	assert.Contains(t, err.Error(), "failed to create parent dir")
+}
+
+func TestExtractZipFile_EntryCreationFails(t *testing.T) {
+	tempDir := t.TempDir()
+	zipPath := filepath.Join(tempDir, "test.zip")
+	extractDir := filepath.Join(tempDir, "extract")
+	require.NoError(t, os.MkdirAll(extractDir, 0o755))
+
+	// Pre-create a directory at the exact destination path of the file entry,
+	// forcing os.Create(destPath) inside extractZipEntry to fail.
+	collidingPath := filepath.Join(extractDir, "file.txt")
+	require.NoError(t, os.MkdirAll(collidingPath, 0o755))
+
+	createTestZip(t, zipPath, map[string][]byte{
+		"file.txt": []byte("content"),
+	})
+
+	err := extractZipFile(zipPath, extractDir)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPRArtifactExtractFailed)
+}
+
+func TestVerifyWithinDestDir(t *testing.T) {
+	baseDir := t.TempDir()
+	cleanDestDir := filepath.Clean(baseDir) + string(os.PathSeparator)
+
+	tests := []struct {
+		name    string
+		path    string
+		wantErr bool
+	}{
+		{
+			name:    "path within dest dir",
+			path:    filepath.Join(baseDir, "sub", "file.txt"),
+			wantErr: false,
+		},
+		{
+			name:    "path exactly at dest dir root",
+			path:    filepath.Clean(baseDir),
+			wantErr: false,
+		},
+		{
+			name:    `path is parent of dest dir (rel == "..")`,
+			path:    filepath.Dir(filepath.Clean(baseDir)),
+			wantErr: true,
+		},
+		{
+			name:    `path is sibling of dest dir (rel starts with "../")`,
+			path:    filepath.Join(filepath.Dir(filepath.Clean(baseDir)), "sibling", "file.txt"),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := verifyWithinDestDir(tt.path, cleanDestDir, "entry.txt")
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, ErrPRArtifactExtractFailed)
+				assert.Contains(t, err.Error(), "escapes destination")
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestExtractZipEntry_PathEscape(t *testing.T) {
+	tempDir := t.TempDir()
+	zipPath := filepath.Join(tempDir, "test.zip")
+	createTestZip(t, zipPath, map[string][]byte{"file.txt": []byte("content")})
+
+	r, err := zip.OpenReader(zipPath)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+
+	// destPath is outside cleanDestDir even though the entry name itself is benign,
+	// forcing extractZipEntry's own adjacent-to-sink guard to reject it.
+	cleanDestDir := filepath.Join(tempDir, "extract") + string(os.PathSeparator)
+	outsidePath := filepath.Join(tempDir, "outside", "file.txt")
+
+	err = extractZipEntry(r.File[0], outsidePath, cleanDestDir)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPRArtifactExtractFailed)
+	assert.Contains(t, err.Error(), "escapes destination")
+}
+
 func TestCopyFile_DestDirNotFound(t *testing.T) {
 	tempDir := t.TempDir()
 	srcPath := filepath.Join(tempDir, "source.txt")
@@ -654,7 +782,11 @@ func TestDownloadPRArtifact_SuccessWithoutToken(t *testing.T) {
 	assert.Empty(t, receivedAuth, "should not send Authorization header without token")
 }
 
-func TestDownloadPRArtifact_WithToken(t *testing.T) {
+// TestDownloadPRArtifact_HTTPOmitsToken pins that downloadPRArtifact never sends the token to
+// a plain-http initial DownloadURL, even when one is configured: sending it there would leak
+// it in cleartext, and a plain-http URL can never be an approved GitHub host anyway (approval
+// requires https -- see allowsPRArtifactToken).
+func TestDownloadPRArtifact_HTTPOmitsToken(t *testing.T) {
 	var receivedAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedAuth = r.Header.Get("Authorization")
@@ -671,7 +803,81 @@ func TestDownloadPRArtifact_WithToken(t *testing.T) {
 	require.NoError(t, err)
 	defer os.Remove(path)
 
+	assert.Empty(t, receivedAuth, "expected no Authorization header sent to a plain-http DownloadURL")
+}
+
+// TestDownloadPRArtifact_ApprovedHTTPSHostSendsToken pins that downloadPRArtifact sends the
+// token to its initial DownloadURL when that URL is https and its host is approved (matches
+// ToolchainEndpoints, here configured via ATMOS_TOOLCHAIN_GITHUB_URL/_API_URL to point at the
+// test server), given that downloadPRArtifact builds its http.Client with no custom Transport
+// and so inherits http.DefaultTransport; swapping that out for the test server's own (which
+// trusts its self-signed certificate) lets the request actually complete over TLS.
+func TestDownloadPRArtifact_ApprovedHTTPSHostSendsToken(t *testing.T) {
+	var receivedAuth string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("content"))
+	}))
+	defer server.Close()
+
+	t.Setenv("ATMOS_TOOLCHAIN_GITHUB_URL", server.URL)
+	t.Setenv("ATMOS_TOOLCHAIN_GITHUB_API_URL", server.URL)
+	origTransport := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = origTransport })
+
+	info := &github.PRArtifactInfo{
+		DownloadURL: server.URL + "/artifact.zip",
+	}
+
+	path, err := downloadPRArtifact(context.Background(), "ghp_test123", info)
+	require.NoError(t, err)
+	defer os.Remove(path)
+
 	assert.Equal(t, "Bearer ghp_test123", receivedAuth)
+}
+
+// TestDownloadPRArtifact_RedirectToUnapprovedHostStripsToken pins that a redirect from the
+// approved initial DownloadURL to an unrelated host -- e.g. GitHub's real archive download
+// redirects to a pre-signed, unauthenticated S3-style blob URL -- never carries the token,
+// even though both legs are https.
+func TestDownloadPRArtifact_RedirectToUnapprovedHostStripsToken(t *testing.T) {
+	var receivedAuthBlob string
+	blobServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuthBlob = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("content"))
+	}))
+	defer blobServer.Close()
+
+	var receivedAuthInitial string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuthInitial = r.Header.Get("Authorization")
+		http.Redirect(w, r, blobServer.URL+"/blob", http.StatusFound)
+	}))
+	defer server.Close()
+
+	t.Setenv("ATMOS_TOOLCHAIN_GITHUB_URL", server.URL)
+	t.Setenv("ATMOS_TOOLCHAIN_GITHUB_API_URL", server.URL)
+
+	certPool := x509.NewCertPool()
+	certPool.AddCert(server.Certificate())
+	certPool.AddCert(blobServer.Certificate())
+	origTransport := http.DefaultTransport
+	http.DefaultTransport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: certPool}}
+	t.Cleanup(func() { http.DefaultTransport = origTransport })
+
+	info := &github.PRArtifactInfo{
+		DownloadURL: server.URL + "/artifact.zip",
+	}
+
+	path, err := downloadPRArtifact(context.Background(), "ghp_test123", info)
+	require.NoError(t, err)
+	defer os.Remove(path)
+
+	assert.Equal(t, "Bearer ghp_test123", receivedAuthInitial, "the approved initial host must still receive the token")
+	assert.Empty(t, receivedAuthBlob, "the unapproved redirect target must never receive the token")
 }
 
 func TestDownloadPRArtifact_AuthError(t *testing.T) {

@@ -28,7 +28,7 @@ For complete Terraform/OpenTofu documentation, see:
 		if err := destroyParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
-		opts, err := ParseTerraformRunOptions(v)
+		opts, err := ParseTerraformRunOptions(v, cmd)
 		if err != nil {
 			return err
 		}

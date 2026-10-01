@@ -12,8 +12,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	smithymiddleware "github.com/aws/smithy-go/middleware"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -107,7 +109,8 @@ func GetToken(ctx context.Context, creds types.ICredentials, clusterName, region
 	// X-Amz-Expires=60 matches aws-iam-authenticator / `aws eks get-token` behavior.
 	presignClient := sts.NewPresignClient(stsClient, func(po *sts.PresignOptions) {
 		po.ClientOptions = append(po.ClientOptions, func(o *sts.Options) {
-			o.APIOptions = append(o.APIOptions,
+			o.APIOptions = append(
+				o.APIOptions,
 				smithyhttp.SetHeaderValue(eksClusterIDHeader, clusterName),
 				addPresignExpiry(eksPresignLifetimeSeconds),
 			)
@@ -129,6 +132,43 @@ func GetToken(ctx context.Context, creds types.ICredentials, clusterName, region
 	expiresAt := time.Now().Add(eksTokenExpiry)
 
 	return token, expiresAt, nil
+}
+
+// BuildKubeClusterInfo adapts an EKSClusterInfo + identity name into the
+// cloud-agnostic kube.ClusterInfo, building the "aws eks token" exec-plugin
+// command line that kube.BuildClusterConfig embeds verbatim.
+func BuildKubeClusterInfo(info *EKSClusterInfo, identityName string) *kube.ClusterInfo {
+	defer perf.Track(nil, "aws.BuildKubeClusterInfo")()
+
+	execArgs := []string{
+		"aws",
+		"eks",
+		"token",
+		"--cluster-name",
+		info.Name,
+		"--region",
+		info.Region,
+	}
+
+	var execEnv []clientcmdapi.ExecEnvVar
+	if identityName != "" {
+		execArgs = append(execArgs, "--identity="+identityName)
+		execEnv = append(execEnv, clientcmdapi.ExecEnvVar{
+			Name:  "ATMOS_IDENTITY",
+			Value: identityName,
+		})
+	}
+
+	return &kube.ClusterInfo{
+		Name:                     info.Name,
+		Endpoint:                 info.Endpoint,
+		CertificateAuthorityData: info.CertificateAuthorityData,
+		ID:                       info.ARN,
+		Region:                   info.Region,
+		UserPrefix:               "eks",
+		ExecArgs:                 execArgs,
+		ExecEnv:                  execEnv,
+	}
 }
 
 // addPresignExpiry returns a middleware that adds X-Amz-Expires to the presigned URL query string.

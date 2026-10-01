@@ -32,14 +32,13 @@ interface Initiative {
 
 interface InitiativeCardProps {
   initiative: Initiative;
-  index?: number;
   /** When true, expand all collapsible milestone sections. */
   expandAllMilestones?: boolean;
 }
 
+/** Display initiative progress with expandable milestones and a detail drawer. */
 export default function InitiativeCard({
   initiative,
-  index = 0,
   expandAllMilestones = false,
 }: InitiativeCardProps): JSX.Element {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -75,13 +74,9 @@ export default function InitiativeCard({
   };
 
   return (
-    <motion.div
+    <div
       id={initiative.id}
       className={styles.initiativeCardWrapper}
-      initial={{ opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-50px' }}
-      transition={{ duration: 0.5, delay: index * 0.1, ease: 'easeOut' }}
     >
       <div
         className={`${styles.initiativeCard} ${isExpanded ? styles.initiativeCardExpanded : ''}`}
@@ -189,6 +184,6 @@ export default function InitiativeCard({
         isOpen={isDrawerOpen}
         onClose={handleDrawerClose}
       />
-    </motion.div>
+    </div>
   );
 }

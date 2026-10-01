@@ -67,10 +67,56 @@ func TestParseConfig(t *testing.T) {
 			},
 		},
 		{
+			name:    "valid http config",
+			cfgName: "atmos-pro",
+			cfg: schema.MCPServerConfig{
+				Type: schema.MCPTransportHTTP,
+				URL:  "https://atmos-pro.com/mcp",
+				Headers: map[string]string{
+					"Authorization": "Bearer token",
+				},
+			},
+			checkFunc: func(t *testing.T, pc *ParsedConfig) {
+				t.Helper()
+				assert.Equal(t, schema.MCPTransportHTTP, pc.Type)
+				assert.Equal(t, "https://atmos-pro.com/mcp", pc.URL)
+				assert.Equal(t, "Bearer token", pc.Headers["Authorization"])
+				assert.Empty(t, pc.Command)
+			},
+		},
+		{
+			name:    "http inferred from url",
+			cfgName: "remote",
+			cfg: schema.MCPServerConfig{
+				URL: "https://example.com/mcp",
+			},
+			checkFunc: func(t *testing.T, pc *ParsedConfig) {
+				t.Helper()
+				assert.Equal(t, schema.MCPTransportHTTP, pc.Type)
+			},
+		},
+		{
 			name:    "empty command returns error",
 			cfgName: "bad",
 			cfg:     schema.MCPServerConfig{},
 			wantErr: errUtils.ErrMCPServerCommandEmpty,
+		},
+		{
+			name:    "http without url returns error",
+			cfgName: "bad-http",
+			cfg: schema.MCPServerConfig{
+				Type: schema.MCPTransportHTTP,
+			},
+			wantErr: errUtils.ErrMCPInvalidTransport,
+		},
+		{
+			name:    "http with non-http url returns error",
+			cfgName: "bad-http",
+			cfg: schema.MCPServerConfig{
+				Type: schema.MCPTransportHTTP,
+				URL:  "file:///tmp/socket",
+			},
+			wantErr: errUtils.ErrMCPInvalidTransport,
 		},
 		{
 			name:    "invalid timeout returns error",

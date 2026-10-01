@@ -69,7 +69,9 @@ func TestGitCloneFlagsBindEnvVars(t *testing.T) {
 
 	t.Setenv("ATMOS_GIT_SINGLE_BRANCH", "true")
 	t.Setenv("ATMOS_GIT_SUBMODULES", "true")
+	t.Setenv("ATMOS_CI", "true")
 
 	assert.True(t, v.GetBool(viperKey(cloneViperPrefix, flagSingleBr)))
 	assert.True(t, v.GetBool(viperKey(cloneViperPrefix, flagSubmodules)))
+	assert.True(t, v.GetBool(viperKey(cloneViperPrefix, flagCI)))
 }

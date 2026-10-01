@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 
@@ -12,6 +13,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// ErrJSONTopLevelNotObject is returned by JSONToMapOfInterfaces when the JSON document
+// decodes to a nil map (for example, a top-level `null`), because the result is not an object.
+var ErrJSONTopLevelNotObject = errors.New("JSON top-level value is not an object")
 
 // PrintAsJSON prints the provided value as a JSON document to the console with syntax highlighting.
 // Use PrintAsJSONSimple for non-TTY output (pipes, redirects) to avoid expensive highlighting.
@@ -93,7 +98,7 @@ func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 	return nil
 }
 
-// ConvertToJSON converts the provided value to a JSON-encoded string
+// ConvertToJSON converts the provided value to a JSON-encoded string.
 func ConvertToJSON(data any) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToJSON")()
 
@@ -104,11 +109,23 @@ func ConvertToJSON(data any) (string, error) {
 		ValidateJsonRawMessage:        true,
 	}
 
-	j, err := jc.Froze().MarshalIndent(data, "", strings.Repeat(" ", 3))
+	// Marshal compact with jsoniter (for its EscapeHTML/SortMapKeys/RawMessage behavior),
+	// then indent with stdlib encoding/json rather than jsoniter's own MarshalIndent: jsoniter
+	// has a long-standing bug where a []interface{} nested more than one level deep (e.g. an
+	// array of objects that themselves contain an array) loses track of the current indent
+	// depth, under-indenting that inner array's elements and closing bracket while the
+	// surrounding structure stays correctly indented. encoding/json.Indent re-indents an
+	// already-valid compact document from scratch, so it isn't subject to that bug.
+	compact, err := jc.Froze().Marshal(data)
 	if err != nil {
 		return "", err
 	}
-	return string(j), nil
+
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, compact, "", strings.Repeat(" ", 3)); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 // ConvertToJSONFast converts the provided value to a JSON-encoded string using 'ConfigFastest' config and json.Marshal without indents
@@ -146,6 +163,31 @@ func ConvertFromJSON(jsonString string) (any, error) {
 	err := jc.Froze().Unmarshal([]byte(jsonString), &data)
 	if err != nil {
 		return "", err
+	}
+	return data, nil
+}
+
+// JSONToMapOfInterfaces takes a JSON-encoded string as input and returns a map of string
+// keys to values. Unlike ConvertFromJSON, it always decodes into a map, so it returns an
+// error for JSON documents whose top-level value is not an object.
+//
+// PUBLIC API — DO NOT REMOVE. This function has no callers inside the Atmos repository, so
+// dead-code sweeps (for example, `go run golang.org/x/tools/cmd/deadcode@latest -test ./...`)
+// will report it as unused. It is retained intentionally because it is part of the public Go
+// API consumed by the external `cloudposse/terraform-provider-utils` provider. It was
+// previously dropped as "dead" code in PR #2608, which broke that provider; see
+// docs/fixes/2026-08-25-restore-public-provider-api-wrappers.md.
+func JSONToMapOfInterfaces(input string) (schema.AtmosSectionMapType, error) {
+	defer perf.Track(nil, "utils.JSONToMapOfInterfaces")()
+
+	var data schema.AtmosSectionMapType
+	if err := json.Unmarshal([]byte(input), &data); err != nil {
+		return nil, err
+	}
+	// A top-level JSON `null` unmarshals into a nil map without error; reject it so callers
+	// always receive a non-nil object or an error, matching this function's documented contract.
+	if data == nil {
+		return nil, ErrJSONTopLevelNotObject
 	}
 	return data, nil
 }

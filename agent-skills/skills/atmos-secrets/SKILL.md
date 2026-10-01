@@ -4,6 +4,7 @@ description: "Atmos Secrets: declarative secrets.vars, !secret, cloud/Vault/1Pas
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: security
 ---
 
 # Atmos Secrets

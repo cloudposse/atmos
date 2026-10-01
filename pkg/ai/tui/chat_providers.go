@@ -35,22 +35,7 @@ func RunChat(opts ChatOptions) error {
 
 	// Add welcome message only if this is a new session (no existing messages).
 	if len(model.messages) == 0 {
-		model.addMessage(roleAssistant, `I'm here to help you with your Atmos infrastructure management. I can:
-
-• Describe components and their configurations
-• List available components and stacks
-• Validate stack configurations
-• Generate Terraform plans (read-only)
-• Answer questions about Atmos concepts and best practices
-• Help debug configuration issues
-
-Try asking me something like:
-- "List all available components"
-- "Describe the vpc component in the dev stack"
-- "What are Atmos stacks?"
-- "How do I validate my stack configuration?"
-
-What would you like to know?`)
+		model.addWelcomeMessage()
 	} else {
 		// Resuming existing session.
 		sessionName := "session"
@@ -176,14 +161,14 @@ func (m *ChatModel) providerSelectView() string {
 	// Title.
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 		MarginBottom(1)
 	content.WriteString(titleStyle.Render("Switch AI Provider"))
 	content.WriteString(newlineChar)
 
 	// Help text.
 	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Margin(0, 0, 1, 0)
 	content.WriteString(helpStyle.Render("\u2191/\u2193: Navigate | Enter: Select | Esc/q: Cancel"))
 	content.WriteString(doubleNewline)
@@ -202,12 +187,16 @@ func (m *ChatModel) providerSelectView() string {
 	return content.String()
 }
 
-// getCurrentProvider returns the name of the currently active provider.
+// getCurrentProvider returns the name of the currently active provider: the persisted
+// session's provider when session persistence is enabled (kept stable across a resumed
+// session), the active atmosConfig default otherwise, or providerAnthropic as a last
+// resort. Session persistence (ai.sessions.enabled) is opt-in and off by default, so the
+// atmosConfig fallback is what makes the common case resolve to a real provider name.
 func (m *ChatModel) getCurrentProvider() string {
 	switch {
 	case m.sess != nil && m.sess.Provider != "":
 		return m.sess.Provider
-	case m.atmosConfig.AI.DefaultProvider != "":
+	case m.atmosConfig != nil && m.atmosConfig.AI.DefaultProvider != "":
 		return m.atmosConfig.AI.DefaultProvider
 	default:
 		return providerAnthropic
@@ -229,10 +218,10 @@ func (m *ChatModel) renderProviderLine(index int, name, description, currentProv
 
 	selectedStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
-		Background(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
+		Background(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 	currentStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGreen))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
 	normalStyle := lipgloss.NewStyle()
 
 	switch {
@@ -268,14 +257,14 @@ func (m *ChatModel) skillSelectView() string {
 	// Title.
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 		MarginBottom(1)
 	content.WriteString(titleStyle.Render("Switch AI Skill"))
 	content.WriteString(newlineChar)
 
 	// Help text.
 	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).
 		Margin(0, 0, 1, 0)
 	content.WriteString(helpStyle.Render("\u2191/\u2193: Navigate | Enter: Select | Esc/q: Cancel"))
 	content.WriteString(doubleNewline)
@@ -316,10 +305,10 @@ func (m *ChatModel) renderSkillLine(index int, skill *skills.Skill, currentSkill
 
 	selectedStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
-		Background(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
+		Background(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 	currentStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGreen))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
 	normalStyle := lipgloss.NewStyle()
 
 	switch {

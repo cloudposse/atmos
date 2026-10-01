@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -65,6 +66,8 @@ func runFindAffectedTF(t *testing.T, atmosConfig *schema.AtmosConfiguration, loc
 // TestFindAffected_EvaluatedSections proves every section in componentSectionChecks is
 // compared, including scalar sections, and reports the expected `affected` reason.
 func TestFindAffected_EvaluatedSections(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		section    string
@@ -91,6 +94,7 @@ func TestFindAffected_EvaluatedSections(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			local := map[string]any{tt.section: tt.localVal}
 			remote := map[string]any{tt.section: tt.remoteVal}
 
@@ -141,6 +145,8 @@ func k8sAtmosConfig() *schema.AtmosConfiguration {
 // The addKubernetesSectionAffected helper is also exercised end-to-end through the full
 // processKubernetesComponentsIndexed pipeline by TestProcessKubernetesComponentsIndexed.
 func TestAddKubernetesSectionAffected(t *testing.T) {
+	t.Parallel()
+
 	const (
 		stackName     = k8sTestStack
 		componentName = k8sTestComponent
@@ -166,6 +172,7 @@ func TestAddKubernetesSectionAffected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			componentSection := map[string]any{tt.section: tt.localVal}
 			remoteStacks := k8sRemoteStacksWith(map[string]any{tt.section: tt.remoteVal})
 
@@ -187,6 +194,8 @@ func TestAddKubernetesSectionAffected(t *testing.T) {
 }
 
 func TestAddKubernetesSectionAffected_SectionsOverrideAddsCustomSection(t *testing.T) {
+	t.Parallel()
+
 	componentSection := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "checkov"}}}
 	remoteStacks := k8sRemoteStacksWith(map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "trivy"}}})
 	atmosConfig := k8sAtmosConfig()
@@ -208,6 +217,8 @@ func TestAddKubernetesSectionAffected_SectionsOverrideAddsCustomSection(t *testi
 // TestAddKubernetesSectionAffected_NoFalsePositives proves identical kubernetes sections do
 // not mark the component affected.
 func TestAddKubernetesSectionAffected_NoFalsePositives(t *testing.T) {
+	t.Parallel()
+
 	const (
 		stackName     = "dev"
 		componentName = "app"
@@ -225,6 +236,7 @@ func TestAddKubernetesSectionAffected_NoFalsePositives(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			componentSection := map[string]any{tc.section: tc.val}
 			remoteStacks := k8sRemoteStacksWith(map[string]any{tc.section: tc.val})
 
@@ -240,6 +252,7 @@ func TestAddKubernetesSectionAffected_NoFalsePositives(t *testing.T) {
 	}
 
 	t.Run("section absent locally is skipped", func(t *testing.T) {
+		t.Parallel()
 		componentSection := map[string]any{}
 		remoteStacks := k8sRemoteStacksWith(map[string]any{sectionNameManifests: map[string]any{"deployment": "a.yaml"}})
 
@@ -252,6 +265,52 @@ func TestAddKubernetesSectionAffected_NoFalsePositives(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, affected)
 	})
+
+	t.Run("validate absent locally and absent remotely is not affected", func(t *testing.T) {
+		t.Parallel()
+		componentSection := map[string]any{}
+		remoteStacks := k8sRemoteStacksWith(map[string]any{})
+
+		var affected []schema.Affected
+		err := addKubernetesSectionAffected(
+			&affected, k8sAtmosConfig(), componentName, stackName,
+			&componentSection, &remoteStacks, &remoteStacks,
+			false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+}
+
+// TestAddKubernetesSectionAffected_ValidateRemoval proves that removing a component-level
+// validate: false locally, while the remote stack still has it explicitly set, is detected
+// as affected. This differs from the other Kubernetes-specific sections
+// (manifests/paths/provider/render), where local absence is silently skipped (see
+// NoFalsePositives above), because removing validate reverts the component from
+// "validation disabled" to the enabled default -- a real behavior change.
+func TestAddKubernetesSectionAffected_ValidateRemoval(t *testing.T) {
+	t.Parallel()
+
+	const (
+		stackName     = k8sTestStack
+		componentName = k8sTestComponent
+	)
+
+	componentSection := map[string]any{}
+	remoteStacks := k8sRemoteStacksWith(map[string]any{cfg.ValidateSectionName: false})
+
+	var affected []schema.Affected
+	err := addKubernetesSectionAffected(
+		&affected, k8sAtmosConfig(), componentName, stackName,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, componentName, affected[0].Component)
+	assert.Equal(t, cfg.KubernetesComponentType, affected[0].ComponentType)
+	assert.Equal(t, fmt.Sprintf("stack.%s", cfg.ValidateSectionName), affected[0].Affected)
 }
 
 // TestProcessKubernetesComponentsIndexed exercises the full kubernetes affected-detection
@@ -260,6 +319,8 @@ func TestAddKubernetesSectionAffected_NoFalsePositives(t *testing.T) {
 // comparison. The local component differs from remote in both metadata.component and vars,
 // so it is reported affected with both reasons accumulated into AffectedAll.
 func TestProcessKubernetesComponentsIndexed(t *testing.T) {
+	t.Parallel()
+
 	const (
 		stackName     = k8sTestStack
 		componentName = k8sTestComponent
@@ -300,6 +361,8 @@ func TestProcessKubernetesComponentsIndexed(t *testing.T) {
 // TestProcessKubernetesComponentsIndexed_NotAffected proves an identical component (same
 // metadata and vars, no changed files) produces no affected results.
 func TestProcessKubernetesComponentsIndexed_NotAffected(t *testing.T) {
+	t.Parallel()
+
 	const (
 		stackName     = k8sTestStack
 		componentName = k8sTestComponent
@@ -333,6 +396,8 @@ func TestProcessKubernetesComponentsIndexed_NotAffected(t *testing.T) {
 // even when its metadata and vars are unchanged. This exercises the indexed
 // component-folder change branch (which depends on the kubernetes base-path resolution).
 func TestProcessKubernetesComponentsIndexed_FolderChanged(t *testing.T) {
+	t.Parallel()
+
 	const (
 		stackName     = k8sTestStack
 		componentName = k8sTestComponent
@@ -372,6 +437,8 @@ func TestProcessKubernetesComponentsIndexed_FolderChanged(t *testing.T) {
 // skipped entirely (the shouldSkipComponent continue branch), even when it differs from
 // remote.
 func TestProcessKubernetesComponentsIndexed_SkipsAbstract(t *testing.T) {
+	t.Parallel()
+
 	const (
 		stackName     = k8sTestStack
 		componentName = k8sTestComponent
@@ -426,6 +493,8 @@ func helmAtmosConfig() *schema.AtmosConfiguration {
 }
 
 func TestAddHelmSectionAffected(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		section    string
@@ -447,6 +516,7 @@ func TestAddHelmSectionAffected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			componentSection := map[string]any{tt.section: tt.localVal}
 			remoteStacks := helmRemoteStacksWith(map[string]any{tt.section: tt.remoteVal})
 
@@ -468,6 +538,8 @@ func TestAddHelmSectionAffected(t *testing.T) {
 }
 
 func TestAddHelmSectionAffected_NoFalsePositives(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name    string
 		section string
@@ -481,6 +553,7 @@ func TestAddHelmSectionAffected_NoFalsePositives(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			componentSection := map[string]any{tc.section: tc.val}
 			remoteStacks := helmRemoteStacksWith(map[string]any{tc.section: tc.val})
 
@@ -496,6 +569,7 @@ func TestAddHelmSectionAffected_NoFalsePositives(t *testing.T) {
 	}
 
 	t.Run("section absent locally is skipped", func(t *testing.T) {
+		t.Parallel()
 		componentSection := map[string]any{}
 		remoteStacks := helmRemoteStacksWith(map[string]any{sectionNameChart: "bitnami/nginx"})
 
@@ -511,6 +585,8 @@ func TestAddHelmSectionAffected_NoFalsePositives(t *testing.T) {
 }
 
 func TestIsComponentSectionEqual(t *testing.T) {
+	t.Parallel()
+
 	remoteStacks := helmRemoteStacksWith(map[string]any{
 		sectionNameChart:  "bitnami/nginx",
 		sectionNameValues: map[string]any{"image": "nginx"},
@@ -526,6 +602,8 @@ func TestIsComponentSectionEqual(t *testing.T) {
 }
 
 func TestProcessHelmComponentsIndexed(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := helmAtmosConfig()
 	helmSection := map[string]any{
 		helmTestComponent: map[string]any{
@@ -559,6 +637,8 @@ func TestProcessHelmComponentsIndexed(t *testing.T) {
 }
 
 func TestProcessHelmComponentsIndexed_NotAffected(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := helmAtmosConfig()
 	identical := map[string]any{
 		sectionNameMetadata: map[string]any{"component": "app-v1"},
@@ -583,6 +663,8 @@ func TestProcessHelmComponentsIndexed_NotAffected(t *testing.T) {
 }
 
 func TestProcessHelmComponentsIndexed_FolderChanged(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := helmAtmosConfig()
 	helmSection := map[string]any{
 		helmTestComponent: map[string]any{
@@ -612,7 +694,65 @@ func TestProcessHelmComponentsIndexed_FolderChanged(t *testing.T) {
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
 }
 
+func TestProcessHelmComponentsIndexed_ValuesFilesChanged(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	atmosConfig := helmAtmosConfig()
+	atmosConfig.BasePath = tempDir
+
+	componentFolder := "shared-chart"
+	componentPath := filepath.Join(tempDir, "components", "helm", componentFolder)
+	valuesFile := filepath.Join(tempDir, "config", "helm", "app-values.yaml")
+	valuesRef, err := filepath.Rel(componentPath, valuesFile)
+	require.NoError(t, err)
+
+	for _, tt := range []struct {
+		name         string
+		valuesFiles  any
+		changedFile  string
+		wantAffected bool
+	}{
+		{name: "relative list", valuesFiles: []any{valuesRef}, changedFile: valuesFile, wantAffected: true},
+		{name: "typed relative list", valuesFiles: []string{valuesRef}, changedFile: valuesFile, wantAffected: true},
+		{name: "scalar", valuesFiles: valuesRef, changedFile: valuesFile, wantAffected: true},
+		{name: "absolute", valuesFiles: []any{valuesFile}, changedFile: valuesFile, wantAffected: true},
+		{name: "unrelated", valuesFiles: []string{valuesRef}, changedFile: filepath.Join(tempDir, "config", "helm", "other-values.yaml")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			identical := map[string]any{
+				cfg.ComponentSectionName: componentFolder,
+				sectionNameChart:         ".",
+				sectionNameValuesF:       tt.valuesFiles,
+			}
+			helmSection := map[string]any{helmTestComponent: identical}
+			remoteStacks := helmRemoteStacksWith(identical)
+			filesIndex := newChangedFilesIndex(atmosConfig, []string{tt.changedFile}, tempDir)
+
+			affected, err := processHelmComponentsIndexed(
+				helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+				atmosConfig, filesIndex, newComponentPathPatternCache(),
+				false, false, false,
+			)
+			require.NoError(t, err)
+
+			if !tt.wantAffected {
+				assert.Empty(t, affected)
+				return
+			}
+
+			require.Len(t, affected, 1)
+			assert.Equal(t, helmTestComponent, affected[0].Component)
+			assert.Equal(t, cfg.HelmComponentType, affected[0].ComponentType)
+			assert.Contains(t, affected[0].AffectedAll, affectedReasonStackValuesFile)
+		})
+	}
+}
+
 func TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := helmAtmosConfig()
 	remoteStacks := helmRemoteStacksWith(map[string]any{
 		sectionNameChart: "bitnami/redis",
@@ -621,6 +761,7 @@ func TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *t
 	patternCache := newComponentPathPatternCache()
 
 	t.Run("abstract skipped", func(t *testing.T) {
+		t.Parallel()
 		helmSection := map[string]any{
 			helmTestComponent: map[string]any{
 				sectionNameMetadata: map[string]any{"type": "abstract"},
@@ -638,6 +779,7 @@ func TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *t
 	})
 
 	t.Run("locked skipped when excluded", func(t *testing.T) {
+		t.Parallel()
 		helmSection := map[string]any{
 			helmTestComponent: map[string]any{
 				sectionNameMetadata: map[string]any{"locked": true},
@@ -655,6 +797,7 @@ func TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *t
 	})
 
 	t.Run("non-map component section skipped", func(t *testing.T) {
+		t.Parallel()
 		affected, err := processHelmComponentsIndexed(
 			helmTestStack, map[string]any{helmTestComponent: "invalid"}, &remoteStacks, &remoteStacks,
 			atmosConfig, filesIndex, patternCache,
@@ -667,7 +810,10 @@ func TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *t
 
 // TestFindAffected_NoFalsePositives guards against spurious affected results.
 func TestFindAffected_NoFalsePositives(t *testing.T) {
+	t.Parallel()
+
 	t.Run("identical section is not affected", func(t *testing.T) {
+		t.Parallel()
 		local := map[string]any{"providers": map[string]any{"aws": map[string]any{"region": "us-east-1"}}}
 		remote := map[string]any{"providers": map[string]any{"aws": map[string]any{"region": "us-east-1"}}}
 
@@ -676,6 +822,7 @@ func TestFindAffected_NoFalsePositives(t *testing.T) {
 	})
 
 	t.Run("identical scalar section is not affected", func(t *testing.T) {
+		t.Parallel()
 		local := map[string]any{"backend_type": "s3"}
 		remote := map[string]any{"backend_type": "s3"}
 
@@ -684,6 +831,7 @@ func TestFindAffected_NoFalsePositives(t *testing.T) {
 	})
 
 	t.Run("empty section on both sides is not affected", func(t *testing.T) {
+		t.Parallel()
 		local := map[string]any{"providers": map[string]any{}}
 		remote := map[string]any{"providers": map[string]any{}}
 
@@ -692,6 +840,7 @@ func TestFindAffected_NoFalsePositives(t *testing.T) {
 	})
 
 	t.Run("section absent on both sides is not affected", func(t *testing.T) {
+		t.Parallel()
 		local := map[string]any{}
 		remote := map[string]any{}
 
@@ -700,6 +849,7 @@ func TestFindAffected_NoFalsePositives(t *testing.T) {
 	})
 
 	t.Run("unknown custom section is not evaluated by default", func(t *testing.T) {
+		t.Parallel()
 		local := map[string]any{"my_custom_section": map[string]any{"x": "1"}}
 		remote := map[string]any{"my_custom_section": map[string]any{"x": "2"}}
 
@@ -708,6 +858,7 @@ func TestFindAffected_NoFalsePositives(t *testing.T) {
 	})
 
 	t.Run("hooks section is not evaluated by default", func(t *testing.T) {
+		t.Parallel()
 		// `hooks` is operational/execution-time behavior, not provisioned infrastructure,
 		// so a change to it must not mark a component as affected by default.
 		local := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "checkov"}}}
@@ -722,6 +873,8 @@ func TestFindAffected_NoFalsePositives(t *testing.T) {
 // built-in defaults: only listed sections are evaluated, custom sections are honored, and
 // default sections that are not listed are ignored.
 func TestFindAffected_SectionsOverride(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		Components: schema.Components{
 			Terraform: schema.Terraform{BasePath: "components/terraform"},
@@ -734,6 +887,7 @@ func TestFindAffected_SectionsOverride(t *testing.T) {
 	}
 
 	t.Run("listed default section is evaluated", func(t *testing.T) {
+		t.Parallel()
 		local := map[string]any{"providers": map[string]any{"aws": map[string]any{"region": "us-east-1"}}}
 		remote := map[string]any{"providers": map[string]any{"aws": map[string]any{"region": "us-west-2"}}}
 
@@ -743,6 +897,7 @@ func TestFindAffected_SectionsOverride(t *testing.T) {
 	})
 
 	t.Run("hooks is evaluated when explicitly listed", func(t *testing.T) {
+		t.Parallel()
 		// `hooks` is not a default, but opting in via the list evaluates it and reports
 		// the `stack.hooks` reason (via the generic `stack.<name>` fallback).
 		local := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "checkov"}}}
@@ -754,6 +909,7 @@ func TestFindAffected_SectionsOverride(t *testing.T) {
 	})
 
 	t.Run("listed custom section is evaluated with generic reason", func(t *testing.T) {
+		t.Parallel()
 		local := map[string]any{"my_custom_section": map[string]any{"x": "1"}}
 		remote := map[string]any{"my_custom_section": map[string]any{"x": "2"}}
 
@@ -763,6 +919,7 @@ func TestFindAffected_SectionsOverride(t *testing.T) {
 	})
 
 	t.Run("default section not listed is ignored", func(t *testing.T) {
+		t.Parallel()
 		// `vars` is a built-in default but is not in the override list.
 		local := map[string]any{"vars": map[string]any{"a": "1"}}
 		remote := map[string]any{"vars": map[string]any{"a": "2"}}
@@ -772,6 +929,7 @@ func TestFindAffected_SectionsOverride(t *testing.T) {
 	})
 
 	t.Run("custom section is ignored without the override", func(t *testing.T) {
+		t.Parallel()
 		// Same custom-section diff, but with default config (no override) -> not affected.
 		local := map[string]any{"my_custom_section": map[string]any{"x": "1"}}
 		remote := map[string]any{"my_custom_section": map[string]any{"x": "2"}}

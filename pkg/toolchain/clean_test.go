@@ -10,7 +10,10 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -139,6 +142,40 @@ func captureCleanTestOutput(t *testing.T, f func()) string {
 	if _, err := buf.ReadFrom(r); err != nil {
 		t.Fatalf("failed to read from pipe: %v", err)
 	}
+
+	return buf.String()
+}
+
+// captureUITestOutput redirects the ui package's output to an in-memory buffer for the duration
+// of f, without forcing TTY mode or touching the real os.Stderr file descriptor. Unlike
+// captureCleanTestOutput's os.Pipe()-based redirect (which is only drained after f returns), a
+// bytes.Buffer never blocks on write -- required for any test that exercises a live,
+// ticker-driven renderer (see batch_progress.go's liveBatchRenderer): with force-tty forcing the
+// renderer active, repeated writes into an os.Pipe that's never concurrently drained can fill the
+// pipe's bounded OS buffer and block forever once the batch takes more than a few seconds,
+// deadlocking the test (observed hanging a full 40 minutes on Windows CI before Go's own test
+// timeout killed it). Use this helper instead of captureCleanTestOutput for any test that runs a
+// real concurrent RunUpdate/RunLock batch and only needs to assert on output content, not exact
+// non-wrapped column widths.
+func captureUITestOutput(t *testing.T, f func()) string {
+	t.Helper()
+
+	// Defensively force TTY detection off regardless of global viper state another test may
+	// have left behind (force-tty is a process-wide setting) -- the live batch renderer must
+	// never activate against this buffer-backed, unread-until-return stream.
+	previousForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", false)
+	t.Cleanup(func() { viper.Set("force-tty", previousForceTTY) })
+
+	var buf bytes.Buffer
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: &bytes.Buffer{}, stderr: &buf}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	if err != nil {
+		t.Fatalf("failed to create IO context: %v", err)
+	}
+	ui.InitFormatter(ioCtx)
+
+	f()
 
 	return buf.String()
 }
@@ -392,5 +429,332 @@ func verifyCleanTestDirectories(t *testing.T, tt cleanTestCase, toolsDir, cacheD
 	}
 	if _, err := os.Stat(tempCacheDir); !os.IsNotExist(err) {
 		t.Errorf("tempCacheDir %s should be deleted", tempCacheDir)
+	}
+}
+
+// setUpRunCleanFixture creates toolsDir/cacheDir/tempCacheDir, each with one file, for RunClean tests.
+func setUpRunCleanFixture(t *testing.T) (toolsDir, cacheDir, tempCacheDir string) {
+	t.Helper()
+
+	base := t.TempDir()
+	toolsDir = filepath.Join(base, "tools")
+	cacheDir = filepath.Join(base, "cache")
+	tempCacheDir = filepath.Join(base, "temp-cache")
+	createCleanTestDir(t, toolsDir, []string{"terraform"}, []string{})
+	createCleanTestDir(t, cacheDir, []string{"download.tar.gz"}, []string{})
+	createCleanTestDir(t, tempCacheDir, []string{"extract.tmp"}, []string{})
+	return toolsDir, cacheDir, tempCacheDir
+}
+
+// assertDirUnchanged asserts that dir still exists and still contains exactly the given entries.
+func assertDirUnchanged(t *testing.T, dir string, wantEntries []string) {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err, "directory %s should still exist", dir)
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.ElementsMatch(t, wantEntries, names, "directory %s contents should be unchanged", dir)
+}
+
+func TestRunClean_DryRun_DeletesNothing(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+
+	var output string
+	require.NotPanics(t, func() {
+		output = captureCleanTestOutput(t, func() {
+			err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{DryRun: true})
+			require.NoError(t, err)
+		})
+	})
+
+	// Nothing should have been deleted.
+	assertDirUnchanged(t, toolsDir, []string{"terraform"})
+	assertDirUnchanged(t, cacheDir, []string{"download.tar.gz"})
+	assertDirUnchanged(t, tempCacheDir, []string{"extract.tmp"})
+
+	assert.Contains(t, output, "Would delete")
+	assert.Contains(t, output, toolsDir)
+	assert.Contains(t, output, cacheDir)
+	assert.Contains(t, output, tempCacheDir)
+}
+
+func TestRunClean_DryRun_CacheOnly_SkipsToolsDir(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+
+	output := captureCleanTestOutput(t, func() {
+		err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{DryRun: true, CacheOnly: true})
+		require.NoError(t, err)
+	})
+
+	// Nothing deleted, and the tools dir isn't even mentioned since --cache-only skips it.
+	assertDirUnchanged(t, toolsDir, []string{"terraform"})
+	assertDirUnchanged(t, cacheDir, []string{"download.tar.gz"})
+	assertDirUnchanged(t, tempCacheDir, []string{"extract.tmp"})
+	assert.NotContains(t, output, toolsDir)
+	assert.Contains(t, output, cacheDir)
+}
+
+func TestRunClean_CacheOnly_LeavesInstalledToolsIntact(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+
+	captureCleanTestOutput(t, func() {
+		err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{CacheOnly: true, Force: true})
+		require.NoError(t, err)
+	})
+
+	// Tools dir must survive --cache-only; cache dirs must be gone.
+	assertDirUnchanged(t, toolsDir, []string{"terraform"})
+	_, err := os.Stat(cacheDir)
+	assert.True(t, os.IsNotExist(err), "cacheDir should be deleted")
+	_, err = os.Stat(tempCacheDir)
+	assert.True(t, os.IsNotExist(err), "tempCacheDir should be deleted")
+}
+
+func TestRunClean_Force_DeletesEverything(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+
+	captureCleanTestOutput(t, func() {
+		err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{Force: true})
+		require.NoError(t, err)
+	})
+
+	for _, dir := range []string{toolsDir, cacheDir, tempCacheDir} {
+		_, err := os.Stat(dir)
+		assert.True(t, os.IsNotExist(err), "%s should be deleted", dir)
+	}
+}
+
+// TestRunClean_NonInteractive_RequiresForce verifies that, without --force and without a TTY,
+// RunClean refuses to delete anything and reports ErrToolchainCleanRequiresConfirmation
+// instead of silently proceeding or hanging on a prompt. It forces the non-interactive branch
+// via the isTTYForStdoutFunc seam rather than depending on whether the test runner itself has a
+// TTY attached (which varies: none in CI, but a real /dev/tty when run manually in a terminal —
+// and the real huh prompt requires an actual /dev/tty it can open, which isn't available here).
+func TestRunClean_NonInteractive_RequiresForce(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+
+	originalIsTTY := isTTYForStdoutFunc
+	isTTYForStdoutFunc = func() bool { return false }
+	t.Cleanup(func() { isTTYForStdoutFunc = originalIsTTY })
+
+	var err error
+	captureCleanTestOutput(t, func() {
+		err = RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{})
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolchainCleanRequiresConfirmation)
+
+	// Nothing should have been deleted.
+	assertDirUnchanged(t, toolsDir, []string{"terraform"})
+	assertDirUnchanged(t, cacheDir, []string{"download.tar.gz"})
+	assertDirUnchanged(t, tempCacheDir, []string{"extract.tmp"})
+}
+
+func TestRunClean_DryRun_NonExistentDirs(t *testing.T) {
+	base := t.TempDir()
+	toolsDir := filepath.Join(base, "missing-tools")
+	cacheDir := filepath.Join(base, "missing-cache")
+	tempCacheDir := filepath.Join(base, "missing-temp-cache")
+
+	output := captureCleanTestOutput(t, func() {
+		err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{DryRun: true})
+		require.NoError(t, err)
+	})
+
+	assert.Contains(t, output, "does not exist")
+}
+
+// overrideCleanConfirmation forces confirmClean past its TTY guard (isTTYForStdoutFunc = true)
+// and stubs the actual interactive prompt result via askCleanConfirmationFunc, restoring both
+// seams via t.Cleanup. This drives RunClean's confirmed/declined/error dispatch logic
+// deterministically without a live /dev/tty -- see askCleanConfirmationFunc's doc comment.
+func overrideCleanConfirmation(t *testing.T, confirmed bool, err error) {
+	t.Helper()
+
+	prevTTY := isTTYForStdoutFunc
+	isTTYForStdoutFunc = func() bool { return true }
+	t.Cleanup(func() { isTTYForStdoutFunc = prevTTY })
+
+	prevAsk := askCleanConfirmationFunc
+	askCleanConfirmationFunc = func() (bool, error) { return confirmed, err }
+	t.Cleanup(func() { askCleanConfirmationFunc = prevAsk })
+}
+
+// TestRunClean_Confirmed_ProceedsWithClean verifies that when the interactive prompt reports
+// "yes", RunClean actually proceeds to delete -- not just that it doesn't error.
+func TestRunClean_Confirmed_ProceedsWithClean(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+	overrideCleanConfirmation(t, true, nil)
+
+	captureCleanTestOutput(t, func() {
+		err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{})
+		require.NoError(t, err)
+	})
+
+	for _, dir := range []string{toolsDir, cacheDir, tempCacheDir} {
+		_, err := os.Stat(dir)
+		assert.True(t, os.IsNotExist(err), "%s should be deleted", dir)
+	}
+}
+
+// TestRunClean_Declined_AbortsWithoutDeleting verifies that when the interactive prompt reports
+// "no", RunClean prints "Clean aborted." and returns nil without deleting anything -- the
+// opts.Force-less, non-dry-run "declined" branch of RunClean that dry-run/force tests can't
+// reach.
+func TestRunClean_Declined_AbortsWithoutDeleting(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+	overrideCleanConfirmation(t, false, nil)
+
+	var output string
+	require.NotPanics(t, func() {
+		output = captureCleanTestOutput(t, func() {
+			err := RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{})
+			require.NoError(t, err)
+		})
+	})
+
+	assert.Contains(t, output, "Clean aborted")
+	assertDirUnchanged(t, toolsDir, []string{"terraform"})
+	assertDirUnchanged(t, cacheDir, []string{"download.tar.gz"})
+	assertDirUnchanged(t, tempCacheDir, []string{"extract.tmp"})
+}
+
+// TestRunClean_ConfirmationPromptError_PropagatesError verifies a prompt failure (e.g. the huh
+// form erroring for a reason other than user-abort) is surfaced to the caller and nothing is
+// deleted, rather than being silently treated as "declined".
+func TestRunClean_ConfirmationPromptError_PropagatesError(t *testing.T) {
+	toolsDir, cacheDir, tempCacheDir := setUpRunCleanFixture(t)
+	promptErr := errUtils.ErrToolchainCleanConfirmation
+	overrideCleanConfirmation(t, false, promptErr)
+
+	var err error
+	captureCleanTestOutput(t, func() {
+		err = RunClean(toolsDir, cacheDir, tempCacheDir, CleanOptions{})
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, promptErr)
+	assertDirUnchanged(t, toolsDir, []string{"terraform"})
+}
+
+// skipIfPermissionChecksAreIneffective skips a test when the process can bypass permission
+// bits, which happens on Windows and when running as root (common for CI container images):
+// os.Geteuid() returns -1 on Windows, so it's safe to call unconditionally on every platform,
+// and a chmod-based test would otherwise pass "successfully" for the wrong reason -- the
+// filesystem operation the test means to force-fail actually succeeds, require.Error fails,
+// and the failure looks like a real regression instead of an environment mismatch.
+func skipIfPermissionChecksAreIneffective(t *testing.T) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits behave differently on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: permission bits are not enforced")
+	}
+}
+
+// TestPreviewClean_ToolsDirPermissionError_PropagatesError verifies previewClean surfaces a
+// real filesystem error (not just "does not exist") wrapped in ErrFileOperation, instead of
+// silently reporting "0 files".
+func TestPreviewClean_ToolsDirPermissionError_PropagatesError(t *testing.T) {
+	skipIfPermissionChecksAreIneffective(t)
+
+	base := t.TempDir()
+	toolsDir := filepath.Join(base, "tools")
+	cacheDir := filepath.Join(base, "cache")
+	tempCacheDir := filepath.Join(base, "temp-cache")
+	createCleanTestDir(t, toolsDir, []string{"file1"}, []string{})
+	createCleanTestDir(t, cacheDir, []string{}, []string{})
+	createCleanTestDir(t, tempCacheDir, []string{}, []string{})
+
+	require.NoError(t, os.Chmod(toolsDir, 0o000))
+	t.Cleanup(func() { resetCleanTestPermissions(t, toolsDir) })
+
+	err := previewClean(toolsDir, cacheDir, tempCacheDir, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileOperation)
+}
+
+// TestPreviewClean_CacheDirPermissionError_PropagatesError mirrors the tools-dir case above for
+// the cache-dir branch of previewClean, reached only after the tools-dir preview succeeds.
+func TestPreviewClean_CacheDirPermissionError_PropagatesError(t *testing.T) {
+	skipIfPermissionChecksAreIneffective(t)
+
+	base := t.TempDir()
+	toolsDir := filepath.Join(base, "tools")
+	cacheDir := filepath.Join(base, "cache")
+	tempCacheDir := filepath.Join(base, "temp-cache")
+	createCleanTestDir(t, toolsDir, []string{}, []string{})
+	createCleanTestDir(t, cacheDir, []string{"cache1"}, []string{})
+	createCleanTestDir(t, tempCacheDir, []string{}, []string{})
+
+	require.NoError(t, os.Chmod(cacheDir, 0o000))
+	t.Cleanup(func() { resetCleanTestPermissions(t, cacheDir) })
+
+	err := previewClean(toolsDir, cacheDir, tempCacheDir, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileOperation)
+}
+
+// TestCleanDir_DangerousPath_RefusesToDelete verifies cleanDir's defensive guard actually
+// refuses to touch a dangerous path (rather than only being exercised indirectly through a
+// caller that never passes one).
+func TestCleanDir_DangerousPath_RefusesToDelete(t *testing.T) {
+	count, err := cleanDir("", true)
+	assert.Equal(t, 0, count)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileOperation)
+	assert.Contains(t, err.Error(), "refusing to delete dangerous path")
+}
+
+// TestCleanDir_FatalRemoveAllFailure_ReturnsError covers the fatal-RemoveAll-failure branch,
+// distinct from the fatal-count-failure branch the pre-existing "PermissionError_ToolsDir" case
+// covers: the directory is readable/listable (so countFiles succeeds) but not writable, so only
+// the deletion step fails.
+func TestCleanDir_FatalRemoveAllFailure_ReturnsError(t *testing.T) {
+	skipIfPermissionChecksAreIneffective(t)
+
+	base := t.TempDir()
+	toolsDir := filepath.Join(base, "tools")
+	createCleanTestDir(t, toolsDir, []string{"file1"}, []string{})
+
+	// r-x (no write): Walk can still list file1, but removing it (or toolsDir itself)
+	// requires write permission on toolsDir, which is intentionally absent here.
+	require.NoError(t, os.Chmod(toolsDir, 0o500))
+	t.Cleanup(func() { resetCleanTestPermissions(t, toolsDir) })
+
+	count, err := cleanDir(toolsDir, true)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileOperation)
+	assert.Equal(t, 1, count, "the file must still have been counted before the failed delete")
+}
+
+// TestIsDangerousPath covers every branch of isDangerousPath directly: the pure string-logic
+// checks don't depend on the host OS, so all of them (including the Windows-drive-root checks)
+// can and should be exercised on every platform this suite runs on.
+func TestIsDangerousPath(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{"empty path", "", true},
+		{"root", "/", true},
+		{"dot", ".", true},
+		{"normal absolute path", filepath.Join(string(filepath.Separator), "home", "user", "tools"), false},
+		{"windows drive root, no separator", "C:", true},
+		{"windows drive root, backslash", `C:\`, true},
+		{"windows non-root path", `C:\Users\test\tools`, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isDangerousPath(tt.path))
+		})
 	}
 }

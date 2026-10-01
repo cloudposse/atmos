@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	ckerrors "github.com/cockroachdb/errors"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -739,8 +741,17 @@ func TestInitCliConfig_BasePathSource_SetForEnvVar(t *testing.T) {
 		"BasePathSource should be 'runtime' when ATMOS_BASE_PATH env var is set")
 }
 
-// TestFindAllStackConfigsInPathsForStack_ErrorWrapping verifies that when GetGlobMatches
-// fails, the error is wrapped with the ErrFailedToFindImport sentinel.
+// TestFindAllStackConfigsInPathsForStack_ErrorWrapping verifies that when every
+// included_paths entry matches nothing (e.g. the whole stacks directory doesn't exist),
+// the function still errors -- with ErrNoStackManifestsFound, not ErrFailedToFindImport.
+//
+// Prior to cloudposse/atmos#2867's fix, a single entry matching nothing surfaced
+// ErrFailedToFindImport directly from inside the per-path loop, which also meant a SECOND,
+// valid included_paths entry earlier in the list would have its already-found matches
+// discarded by this same hard error. Now, an individual entry matching nothing is treated as
+// "nothing here, keep looking" and only the aggregate "nothing matched at all" case (this
+// test: the only entry present matches nothing) errors, with a sentinel describing that
+// outcome directly instead of leaking the glob-matching implementation's own error identity.
 func TestFindAllStackConfigsInPathsForStack_ErrorWrapping(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{
 		StacksBaseAbsolutePath: filepath.Join(os.TempDir(), "nonexistent-stacks-dir-test"),
@@ -759,11 +770,71 @@ func TestFindAllStackConfigsInPathsForStack_ErrorWrapping(t *testing.T) {
 
 	require.Error(t, err)
 
-	assert.True(t, errors.Is(err, errUtils.ErrFailedToFindImport),
-		"Error should wrap ErrFailedToFindImport, got: %v", err)
+	assert.True(t, errors.Is(err, errUtils.ErrNoStackManifestsFound),
+		"Error should wrap ErrNoStackManifestsFound, got: %v", err)
+	assert.Contains(t, err.Error(), "`[", "the path list must be backtick-wrapped as a literal "+
+		"code span so the markdown error renderer doesn't misinterpret the \"**\" glob wildcard "+
+		"(a common included_paths pattern) as emphasis and corrupt the rendered output")
 }
 
-// TestFindAllStackConfigsInPaths_ErrorWrapping verifies error wrapping in the non-stack variant.
+// TestFindAllStackConfigsInPathsForStack_GenuineGlobError verifies that a genuinely invalid
+// glob pattern (not just "matched nothing") still aborts and surfaces the underlying error,
+// rather than being tolerated the way an empty-match ErrFailedToFindImport now is post-#2867.
+func TestFindAllStackConfigsInPathsForStack_GenuineGlobError(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: filepath.Join(os.TempDir(), "nonexistent-stacks-dir-badpattern"),
+	}
+
+	includeStackPaths := []string{
+		filepath.Join(os.TempDir(), "nonexistent-stacks-dir-badpattern", "[invalid"),
+	}
+
+	_, _, _, err := FindAllStackConfigsInPathsForStack(
+		atmosConfig,
+		"test-stack",
+		includeStackPaths,
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.False(t, errors.Is(err, errUtils.ErrNoStackManifestsFound),
+		"a genuine glob syntax error must not be reported as ErrNoStackManifestsFound")
+}
+
+// TestResolveStackGlobMatches_ErrorUsesFailingPattern guards against a bug found during a
+// review pass on cloudposse/atmos#2867/#2868: the original pattern-resolution loop discarded
+// every pattern's own error and, once no matches were found across all of them, only ever
+// retried patterns[0] to decide whether a genuine error had occurred -- silently losing a real
+// error from any pattern after the first. The fixed version checks each pattern's error inline
+// and reports it with that exact pattern (not a hardcoded patterns[0]) in context.
+func TestResolveStackGlobMatches_ErrorUsesFailingPattern(t *testing.T) {
+	dir := filepath.Join(os.TempDir(), "nonexistent-resolve-stack-glob-matches")
+	atmosConfig := &schema.AtmosConfiguration{StacksBaseAbsolutePath: dir}
+
+	// An extension is present so this exercises resolveStackGlobMatches with a single pattern
+	// (no getStackFilePatterns expansion), isolating exactly which pattern the error names.
+	pattern := filepath.Join(dir, "[invalid.yaml")
+	_, err := resolveStackGlobMatches(atmosConfig, pattern)
+
+	require.Error(t, err)
+	assert.False(t, errors.Is(err, errUtils.ErrFailedToFindImport),
+		"a genuine glob syntax error must not be reported as ErrFailedToFindImport")
+
+	// WithContext attaches structured context via errors.WithSafeDetails (for verbose
+	// render/Sentry), not errors.WithDetail -- read it back via GetAllSafeDetails.
+	var contextBlob string
+	for _, payload := range ckerrors.GetAllSafeDetails(err) {
+		for _, d := range payload.SafeDetails {
+			contextBlob += d + " "
+		}
+	}
+	assert.Contains(t, contextBlob, pattern,
+		"the error context must name the actual failing pattern, not a hardcoded patterns[0]")
+}
+
+// TestFindAllStackConfigsInPaths_ErrorWrapping verifies error wrapping in the non-stack
+// variant. See TestFindAllStackConfigsInPathsForStack_ErrorWrapping above for why this is
+// ErrNoStackManifestsFound rather than ErrFailedToFindImport post-#2867.
 func TestFindAllStackConfigsInPaths_ErrorWrapping(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{
 		StacksBaseAbsolutePath: filepath.Join(os.TempDir(), "nonexistent-stacks-dir-test2"),
@@ -781,6 +852,31 @@ func TestFindAllStackConfigsInPaths_ErrorWrapping(t *testing.T) {
 
 	require.Error(t, err)
 
-	assert.True(t, errors.Is(err, errUtils.ErrFailedToFindImport),
-		"Error should wrap ErrFailedToFindImport, got: %v", err)
+	assert.True(t, errors.Is(err, errUtils.ErrNoStackManifestsFound),
+		"Error should wrap ErrNoStackManifestsFound, got: %v", err)
+	assert.Contains(t, err.Error(), "`[", "the path list must be backtick-wrapped as a literal "+
+		"code span so the markdown error renderer doesn't misinterpret the \"**\" glob wildcard "+
+		"(a common included_paths pattern) as emphasis and corrupt the rendered output")
+}
+
+// TestFindAllStackConfigsInPaths_GenuineGlobError is the non-stack-variant counterpart of
+// TestFindAllStackConfigsInPathsForStack_GenuineGlobError above.
+func TestFindAllStackConfigsInPaths_GenuineGlobError(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: filepath.Join(os.TempDir(), "nonexistent-stacks-dir-badpattern2"),
+	}
+
+	includeStackPaths := []string{
+		filepath.Join(os.TempDir(), "nonexistent-stacks-dir-badpattern2", "[invalid"),
+	}
+
+	_, _, err := FindAllStackConfigsInPaths(
+		&atmosConfig,
+		includeStackPaths,
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.False(t, errors.Is(err, errUtils.ErrNoStackManifestsFound),
+		"a genuine glob syntax error must not be reported as ErrNoStackManifestsFound")
 }

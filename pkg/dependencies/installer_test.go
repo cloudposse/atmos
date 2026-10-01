@@ -1,9 +1,11 @@
 package dependencies
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -87,7 +89,8 @@ func TestNewInstaller(t *testing.T) {
 		mockInstall := func(string, bool, bool, bool, bool) error { return nil }
 		mockFileExists := func(string) bool { return true }
 
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(mockRes),
 			WithInstallFunc(mockInstall),
 			WithFileExistsFunc(mockFileExists),
@@ -402,7 +405,8 @@ func TestIsToolInstalled(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resolver, finder := tt.setupMock()
 
-			inst := NewInstaller(tt.config,
+			inst := NewInstaller(
+				tt.config,
 				WithResolver(resolver),
 				WithBinaryPathFinder(finder),
 			)
@@ -693,7 +697,8 @@ func runDuplicateInstallTest(t *testing.T, tc *duplicateInstallTestCase) {
 		Toolchain: schema.Toolchain{InstallPath: toolsDir},
 	}
 
-	inst := NewInstaller(config,
+	inst := NewInstaller(
+		config,
 		WithResolver(resolver),
 		WithBatchInstallFunc(batchInstallFunc),
 		WithBinaryPathFinder(finder),
@@ -728,7 +733,8 @@ func TestEnsureTool(t *testing.T) {
 			},
 		}
 
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(resolver),
 			WithInstallFunc(installFunc),
 			WithBinaryPathFinder(finder),
@@ -757,7 +763,8 @@ func TestEnsureTool(t *testing.T) {
 			},
 		}
 
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(resolver),
 			WithInstallFunc(installFunc),
 			WithBinaryPathFinder(finder),
@@ -786,7 +793,8 @@ func TestEnsureTool(t *testing.T) {
 			},
 		}
 
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(resolver),
 			WithInstallFunc(installFunc),
 			WithBinaryPathFinder(finder),
@@ -984,7 +992,8 @@ func TestBuildToolchainPATH_SkipsInvalidTools(t *testing.T) {
 
 func TestResolveExecutablePath(t *testing.T) {
 	t.Run("returns absolute path unchanged", func(t *testing.T) {
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{}),
 			WithBinaryPathFinder(&mockBinaryPathFinder{}),
 		)
@@ -993,7 +1002,8 @@ func TestResolveExecutablePath(t *testing.T) {
 	})
 
 	t.Run("resolves bare executable from toolchain", func(t *testing.T) {
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{
 				resolveFunc: func(toolName string) (string, string, error) {
 					if toolName == "opentofu" {
@@ -1018,7 +1028,8 @@ func TestResolveExecutablePath(t *testing.T) {
 	})
 
 	t.Run("returns original name when not found in toolchain or PATH", func(t *testing.T) {
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{
 				resolveFunc: func(toolName string) (string, string, error) {
 					return "opentofu", "opentofu", nil
@@ -1037,7 +1048,8 @@ func TestResolveExecutablePath(t *testing.T) {
 	})
 
 	t.Run("skips deps with resolver errors", func(t *testing.T) {
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{
 				resolveFunc: func(toolName string) (string, string, error) {
 					return "", "", errInvalidTool
@@ -1052,7 +1064,8 @@ func TestResolveExecutablePath(t *testing.T) {
 	})
 
 	t.Run("no-op with empty deps", func(t *testing.T) {
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{}),
 			WithBinaryPathFinder(&mockBinaryPathFinder{}),
 		)
@@ -1065,7 +1078,8 @@ func TestResolveExecutablePath(t *testing.T) {
 	t.Run("matches binary with platform extension against bare executable name", func(t *testing.T) {
 		// On Windows, FindBinaryPath returns a path like /path/tofu.exe but the
 		// executable is specified as bare "tofu". The comparison should still match.
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{
 				resolveFunc: func(toolName string) (string, string, error) {
 					if toolName == "opentofu" {
@@ -1390,7 +1404,8 @@ func TestFindInstalledMatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resolver, lister, finder := tt.setupMock()
 
-			inst := NewInstaller(nil,
+			inst := NewInstaller(
+				nil,
 				WithResolver(resolver),
 				WithInstalledVersionLister(lister),
 				WithBinaryPathFinder(finder),
@@ -1411,7 +1426,8 @@ func TestResolveConstraints(t *testing.T) {
 			"opentofu/opentofu":   "1.8.0",
 		}
 
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{}),
 		)
 
@@ -1427,7 +1443,8 @@ func TestResolveConstraints(t *testing.T) {
 		}
 
 		versionListerCalled := false
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{
 				resolveFunc: func(toolName string) (string, string, error) {
 					return "hashicorp", "terraform", nil
@@ -1463,7 +1480,8 @@ func TestResolveConstraints(t *testing.T) {
 			"cloudposse/atmos":    "1.0.0", // Concrete, should not change.
 		}
 
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{
 				resolveFunc: func(toolName string) (string, string, error) {
 					parts := strings.Split(toolName, "/")
@@ -1498,7 +1516,8 @@ func TestResolveConstraints(t *testing.T) {
 // TestResolveOneConstraint tests the resolveOneConstraint method.
 func TestResolveOneConstraint(t *testing.T) {
 	t.Run("invalid constraint returns error", func(t *testing.T) {
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{}),
 		)
 
@@ -1508,7 +1527,8 @@ func TestResolveOneConstraint(t *testing.T) {
 	})
 
 	t.Run("resolver error returns error", func(t *testing.T) {
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{
 				resolveFunc: func(toolName string) (string, string, error) {
 					return "", "", errToolNotFound
@@ -1522,7 +1542,8 @@ func TestResolveOneConstraint(t *testing.T) {
 	})
 
 	t.Run("happy path resolves highest matching version", func(t *testing.T) {
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{
 				resolveFunc: func(toolName string) (string, string, error) {
 					return "hashicorp", "terraform", nil
@@ -1541,7 +1562,8 @@ func TestResolveOneConstraint(t *testing.T) {
 	})
 
 	t.Run("no matching version returns error", func(t *testing.T) {
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{
 				resolveFunc: func(toolName string) (string, string, error) {
 					return "hashicorp", "terraform", nil
@@ -1560,7 +1582,8 @@ func TestResolveOneConstraint(t *testing.T) {
 	})
 
 	t.Run("version lister error returns error", func(t *testing.T) {
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{
 				resolveFunc: func(toolName string) (string, string, error) {
 					return "hashicorp", "terraform", nil
@@ -1583,7 +1606,8 @@ func TestResolveOneConstraint(t *testing.T) {
 func TestFetchAvailableVersionsWithRetry(t *testing.T) {
 	t.Run("success on first attempt", func(t *testing.T) {
 		expected := []string{"1.10.0", "1.10.3"}
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithVersionLister(&mockVersionLister{
 				getAvailableVersionsFunc: func(owner, repo string) ([]string, error) {
 					return expected, nil
@@ -1598,7 +1622,8 @@ func TestFetchAvailableVersionsWithRetry(t *testing.T) {
 
 	t.Run("non-retryable error fails immediately", func(t *testing.T) {
 		callCount := int32(0)
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithVersionLister(&mockVersionLister{
 				getAvailableVersionsFunc: func(owner, repo string) ([]string, error) {
 					atomic.AddInt32(&callCount, 1)
@@ -1617,7 +1642,8 @@ func TestFetchAvailableVersionsWithRetry(t *testing.T) {
 
 	t.Run("HTTP 404 not retried", func(t *testing.T) {
 		callCount := int32(0)
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithVersionLister(&mockVersionLister{
 				getAvailableVersionsFunc: func(owner, repo string) ([]string, error) {
 					atomic.AddInt32(&callCount, 1)
@@ -1637,7 +1663,8 @@ func TestEnsureTools_WithConstraints(t *testing.T) {
 	t.Run("constraint resolved and installed", func(t *testing.T) {
 		var installedSpecs []string
 
-		inst := NewInstaller(nil,
+		inst := NewInstaller(
+			nil,
 			WithResolver(&mockResolver{
 				resolveFunc: func(toolName string) (string, string, error) {
 					return "hashicorp", "terraform", nil
@@ -1675,4 +1702,116 @@ func TestEnsureTools_WithConstraints(t *testing.T) {
 		require.Len(t, installedSpecs, 1)
 		assert.Equal(t, "hashicorp/terraform@1.10.3", installedSpecs[0])
 	})
+}
+
+// TestBuildToolchainPATH_Onedir verifies that a onedir (multi-file) tool's nested
+// entrypoint directory is placed on PATH (so its executable is resolvable), while a
+// flat single-binary tool still contributes its version directory. This exercises
+// the onedir-aware resolution shared with `atmos toolchain env`.
+func TestBuildToolchainPATH_Onedir(t *testing.T) {
+	// Isolate PATH to a non-existent directory so LookPath resolves only via the
+	// toolchain directories we build (no system node/kubectl can mask the result).
+	t.Setenv("PATH", filepath.Join(t.TempDir(), "empty-base"))
+
+	toolsDir := t.TempDir()
+	binDir := filepath.Join(toolsDir, "bin")
+
+	exe := func(name string) string {
+		if runtime.GOOS == "windows" {
+			return name + ".exe"
+		}
+		return name
+	}
+
+	// Fake onedir install: nodejs/node with the executable nested under .pkg, its
+	// real location recorded in the .atmos-onedir.json manifest.
+	nodeVersionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
+	pkgName := fmt.Sprintf("node-v24.18.0-%s-%s", runtime.GOOS, runtime.GOARCH)
+	nodeRel := filepath.Join(".pkg", pkgName, "bin", exe("node"))
+	nodeBinPath := filepath.Join(nodeVersionDir, nodeRel)
+	// npm ships in the same nested bin directory as node; two entrypoints resolving
+	// to one directory must collapse to a single PATH entry.
+	npmRel := filepath.Join(".pkg", pkgName, "bin", exe("npm"))
+	npmBinPath := filepath.Join(nodeVersionDir, npmRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(nodeBinPath), 0o755))
+	require.NoError(t, os.WriteFile(nodeBinPath, []byte("#!/bin/sh\necho v24.18.0\n"), 0o755))
+	require.NoError(t, os.WriteFile(npmBinPath, []byte("#!/bin/sh\necho npm\n"), 0o755))
+	manifest, err := json.Marshal(map[string]any{
+		"entrypoints": map[string]string{"node": nodeRel, "npm": npmRel},
+		"primary":     "node",
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(nodeVersionDir, ".atmos-onedir.json"), manifest, 0o644))
+
+	// Fake flat install: kubernetes/kubectl with the binary directly in the version dir.
+	kubectlVersionDir := filepath.Join(binDir, "kubernetes", "kubectl", "1.31.0")
+	kubectlBinPath := filepath.Join(kubectlVersionDir, exe("kubectl"))
+	require.NoError(t, os.MkdirAll(kubectlVersionDir, 0o755))
+	require.NoError(t, os.WriteFile(kubectlBinPath, []byte("#!/bin/sh\necho kubectl\n"), 0o755))
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{InstallPath: toolsDir},
+	}
+
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"nodejs/node":        "24.18.0",
+		"kubernetes/kubectl": "1.31.0",
+	})
+	require.NoError(t, err)
+
+	entries := strings.Split(result, string(os.PathListSeparator))
+
+	// The onedir node executable's NESTED directory must be on PATH, not the bare
+	// version directory (which holds no executable).
+	assert.Contains(t, entries, filepath.Dir(nodeBinPath), "onedir node entrypoint dir must be on PATH")
+	assert.NotContains(t, entries, nodeVersionDir, "bare version dir must not be the node PATH entry")
+
+	// node and npm share a directory, so it must appear exactly once (deduplicated).
+	nodeDirCount := 0
+	for _, e := range entries {
+		if e == filepath.Dir(nodeBinPath) {
+			nodeDirCount++
+		}
+	}
+	assert.Equal(t, 1, nodeDirCount, "shared onedir entrypoint directory must be deduplicated")
+
+	// The flat kubectl tool still contributes its version directory.
+	assert.Contains(t, entries, kubectlVersionDir, "flat kubectl version dir must be on PATH")
+
+	// The built PATH must actually resolve both executables.
+	t.Setenv("PATH", result)
+
+	resolvedNode, err := osexec.LookPath("node")
+	require.NoError(t, err, "node must be resolvable on the built PATH")
+	assert.Equal(t, nodeBinPath, resolvedNode)
+
+	resolvedKubectl, err := osexec.LookPath("kubectl")
+	require.NoError(t, err, "kubectl must still be resolvable on the built PATH")
+	assert.Equal(t, kubectlBinPath, resolvedKubectl)
+}
+
+// TestBuildToolchainPATH_EmptyPATHNoTrailingSeparator verifies that when the
+// current PATH is empty, the built PATH does not end with a list separator and
+// contains no empty component. A trailing separator is interpreted as "." by
+// exec lookups, which would allow running a binary from the working directory.
+func TestBuildToolchainPATH_EmptyPATHNoTrailingSeparator(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{InstallPath: t.TempDir()},
+	}
+
+	// terraform is not installed here, so it falls back to the bare version dir;
+	// the point is that `paths` is non-empty while the current PATH is empty.
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+	})
+	require.NoError(t, err)
+
+	require.NotEmpty(t, result)
+	assert.NotEqual(t, string(os.PathListSeparator), result[len(result)-1:],
+		"built PATH must not end with a list separator")
+	for _, entry := range strings.Split(result, string(os.PathListSeparator)) {
+		assert.NotEmpty(t, entry, "built PATH must not contain an empty component")
+	}
 }

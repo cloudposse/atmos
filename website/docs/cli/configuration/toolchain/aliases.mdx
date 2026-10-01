@@ -14,6 +14,8 @@ import Note from '@site/src/components/Note';
 Tool aliases provide convenient shorthand names for tools, allowing you to use simple names like `terraform` instead of the full registry path `hashicorp/terraform`.
 </Intro>
 
+Aliases also provide the tool target for [toolchain proxies](/cli/configuration/toolchain/proxies), such as mapping `coreutils` to `uutils/coreutils` before exposing an `ls` command.
+
 <KeyPoints>
 - Define short names for frequently used tools
 - Multiple aliases can point to the same tool

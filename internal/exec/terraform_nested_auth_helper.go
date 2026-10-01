@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -155,6 +156,9 @@ func resolveAuthManagerForNestedComponent(
 	stack string,
 	parentAuthManager auth.AuthManager,
 ) (auth.AuthManager, error) {
+	if authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		return deferredTargetAuth(atmosConfig, component, stack, parentAuthManager)
+	}
 	// Get component configuration WITHOUT processing templates/functions.
 	componentConfig, err := getComponentConfigForAuthResolution(component, stack)
 	if err != nil {
@@ -270,12 +274,15 @@ func createComponentAuthManager(
 	// Use the stack-aware variant so the target component's stack is threaded into manager
 	// construction: stack-scoped identities (e.g. kind: <target>/emulator) need it to resolve
 	// their endpoint and populate the in-process auth context read by `!terraform.state`.
+	// Target component's stack, for stack-scoped (emulator) identities. This is the nested
+	// component's own target, not the top-level prompted component/stack, so prompted flags
+	// are intentionally not threaded here (uses the stable stack-string signature).
 	componentAuthManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfigForStack(
 		identityName,     // Inherited from parent, or empty to trigger auto-detection
 		mergedAuthConfig, // Merged component + global auth
 		cfg.IdentityFlagSelectValue,
 		atmosConfig, // Enable stack-level auth default loading
-		stack,       // Target component's stack, for stack-scoped (emulator) identities
+		stack,
 	)
 	if err != nil {
 		log.Debug(

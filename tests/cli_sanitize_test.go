@@ -140,6 +140,16 @@ func TestSanitizeOutput(t *testing.T) {
 				"DEBU  after",
 			}, "\n"),
 		},
+		{
+			// Regression test: filepath.ToSlash converts every backslash to a
+			// forward slash on Windows (a no-op on Unix), so both an escaped
+			// quote and a JSON unicode escape must survive it unmangled -- and
+			// together, since the protect/restore steps for each run back to
+			// back and must not interfere with each other.
+			name:     "Escaped quote and JSON unicode escape preserved together",
+			input:    `provisioned_by_user: '{{ env \"USER\" }}' \u003e`,
+			expected: `provisioned_by_user: '{{ env \"USER\" }}' \u003e`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -464,6 +474,16 @@ func TestSanitizeOutput_WithCustomReplacements(t *testing.T) {
 				`token-[a-z0-9]+`: "token-REDACTED",
 			},
 			expected: "token-REDACTED and token-REDACTED and token-REDACTED",
+		},
+		{
+			name:     "Preserve quoted provenance template",
+			input:    "provisioned_by_user: '{{ env \"USER\" }}'\nprovisioned_by_user: zack",
+			expected: "provisioned_by_user: '{{ env \"USER\" }}'\nprovisioned_by_user: user",
+		},
+		{
+			name:     "Preserve double-quoted provenance template",
+			input:    "provisioned_by_user: \"{{ env \\\"USER\\\" }}\"\nprovisioned_by_user: zack",
+			expected: "provisioned_by_user: \"{{ env \\\"USER\\\" }}\"\nprovisioned_by_user: user",
 		},
 	}
 

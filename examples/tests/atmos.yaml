@@ -1,0 +1,79 @@
+base_path: ./
+logs:
+  level: Warning
+commands:
+  - name: test
+    description: Run the local post-deployment checks
+    steps:
+      - name: smoke-tests
+        title: Post-deployment tests
+        type: test
+        steps:
+          - name: fixtures
+            title: Fixtures
+            type: require
+            files: [checks/passing.sh]
+          - name: health
+            title: Health
+            type: shell
+            command: sh checks/passing.sh
+
+      - name: announce-success
+        type: say
+        content: Tests passed
+        when: success
+
+    commands:
+      - name: demo
+        description: Demonstrate failures, continuation, parallel checks, and a matrix
+        steps:
+          - name: smoke-tests
+            title: Post-deployment tests
+            type: test
+            steps:
+              - name: health
+                title: Health
+                type: shell
+                command: sh checks/passing.sh
+              - name: endpoints
+                title: Endpoints
+                type: parallel
+                max_concurrency: 2
+                steps:
+                  - name: homepage
+                    title: Homepage
+                    type: shell
+                    command: sh checks/passing.sh
+                  - name: authentication
+                    title: Authentication
+                    type: shell
+                    command: sh checks/failing.sh
+              - name: regions
+                title: Regions
+                type: matrix
+                matrix:
+                  region: [us-east-1, eu-west-1]
+                max_concurrency: 2
+                steps:
+                  - name: response
+                    title: Response
+                    type: shell
+                    command: 'echo "Checking {{ .matrix.region }}"; sleep 0.4'
+
+      - name: verbose
+        description: Show successful test logs too
+        steps:
+          - name: verbose-tests
+            title: Post-deployment tests
+            type: test
+            output: all
+            steps:
+              - name: health
+                title: Health
+                type: shell
+                command: sh checks/passing.sh
+
+          - name: announce-success
+            type: say
+            content: Tests passed
+            when: success

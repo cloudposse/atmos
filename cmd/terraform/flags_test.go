@@ -12,6 +12,8 @@ import (
 )
 
 func TestTerraformFlags(t *testing.T) {
+	t.Parallel()
+
 	registry := TerraformFlags()
 
 	// Should have common flags (stack, dry-run) + Terraform-specific flags including identity.
@@ -37,6 +39,8 @@ func TestTerraformFlags(t *testing.T) {
 	assert.True(t, registry.Has("skip"))
 	assert.True(t, registry.Has("query"))
 	assert.True(t, registry.Has("components"))
+	assert.True(t, registry.Has("tags"))
+	assert.True(t, registry.Has("labels"))
 
 	// Check upload-status flag.
 	uploadFlag := registry.Get("upload-status")
@@ -47,14 +51,20 @@ func TestTerraformFlags(t *testing.T) {
 }
 
 func TestBackendExecutionFlags(t *testing.T) {
+	t.Parallel()
+
 	registry := BackendExecutionFlags()
 
-	// Should have 2 backend execution flags.
-	assert.Equal(t, 2, registry.Count())
+	// Should have 5 backend execution flags: auto-generate-backend-file, init-run-reconfigure,
+	// plus the tri-state init-mode/init-reconfigure/init-upgrade overrides.
+	assert.Equal(t, 5, registry.Count())
 
 	// Should include backend execution flags.
 	assert.True(t, registry.Has("auto-generate-backend-file"), "auto-generate-backend-file should be in BackendExecutionFlags")
 	assert.True(t, registry.Has("init-run-reconfigure"), "init-run-reconfigure should be in BackendExecutionFlags")
+	assert.True(t, registry.Has("init-mode"), "init-mode should be in BackendExecutionFlags")
+	assert.True(t, registry.Has("init-reconfigure"), "init-reconfigure should be in BackendExecutionFlags")
+	assert.True(t, registry.Has("init-upgrade"), "init-upgrade should be in BackendExecutionFlags")
 
 	// Check auto-generate-backend-file flag.
 	autoGenFlag := registry.Get("auto-generate-backend-file")
@@ -71,13 +81,37 @@ func TestBackendExecutionFlags(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "", strFlag.Default)
 	assert.Equal(t, []string{"ATMOS_INIT_RUN_RECONFIGURE"}, strFlag.EnvVars)
+
+	// Check the three tri-state init override flags.
+	initModeFlag := registry.Get("init-mode")
+	require.NotNil(t, initModeFlag)
+	strFlag, ok = initModeFlag.(*flags.StringFlag)
+	require.True(t, ok)
+	assert.Equal(t, "", strFlag.Default)
+	assert.Equal(t, []string{"ATMOS_INIT_MODE"}, strFlag.EnvVars)
+
+	initReconfigureFlag := registry.Get("init-reconfigure")
+	require.NotNil(t, initReconfigureFlag)
+	strFlag, ok = initReconfigureFlag.(*flags.StringFlag)
+	require.True(t, ok)
+	assert.Equal(t, "", strFlag.Default)
+	assert.Equal(t, []string{"ATMOS_INIT_RECONFIGURE"}, strFlag.EnvVars)
+
+	initUpgradeFlag := registry.Get("init-upgrade")
+	require.NotNil(t, initUpgradeFlag)
+	strFlag, ok = initUpgradeFlag.(*flags.StringFlag)
+	require.True(t, ok)
+	assert.Equal(t, "", strFlag.Default)
+	assert.Equal(t, []string{"ATMOS_INIT_UPGRADE"}, strFlag.EnvVars)
 }
 
 func TestTerraformAffectedFlags(t *testing.T) {
+	t.Parallel()
+
 	registry := TerraformAffectedFlags()
 
-	// Should have 7 affected flags.
-	assert.Equal(t, 7, registry.Count())
+	// Should have 8 flags: 7 affected flags + the include-dependencies closure flag.
+	assert.Equal(t, 8, registry.Count())
 
 	// Should include all affected flags.
 	assert.True(t, registry.Has("repo-path"))
@@ -86,7 +120,19 @@ func TestTerraformAffectedFlags(t *testing.T) {
 	assert.True(t, registry.Has("ssh-key"))
 	assert.True(t, registry.Has("ssh-key-password"))
 	assert.True(t, registry.Has("include-dependents"))
+	assert.True(t, registry.Has("include-dependencies"))
 	assert.True(t, registry.Has("clone-target-ref"))
+
+	// The closure flags are depth-carrying strings: bare = unlimited via
+	// NoOptDefVal, =N bounds the expansion.
+	for _, name := range []string{"include-dependents", "include-dependencies"} {
+		closureFlag := registry.Get(name)
+		require.NotNil(t, closureFlag)
+		depthFlag, ok := closureFlag.(*flags.StringFlag)
+		require.True(t, ok, "%s must be a string flag", name)
+		assert.Equal(t, "", depthFlag.Default)
+		assert.Equal(t, flags.ClosureDepthUnlimited, depthFlag.NoOptDefVal)
+	}
 
 	// Check repo-path flag.
 	repoPathFlag := registry.Get("repo-path")
@@ -98,6 +144,8 @@ func TestTerraformAffectedFlags(t *testing.T) {
 }
 
 func TestWithTerraformFlags(t *testing.T) {
+	t.Parallel()
+
 	// Create a standard parser with terraform flags.
 	parser := flags.NewStandardParser(
 		WithTerraformFlags(),
@@ -113,6 +161,8 @@ func TestWithTerraformFlags(t *testing.T) {
 }
 
 func TestWithBackendExecutionFlags(t *testing.T) {
+	t.Parallel()
+
 	// Create a standard parser with backend execution flags.
 	parser := flags.NewStandardParser(
 		WithBackendExecutionFlags(),
@@ -120,13 +170,19 @@ func TestWithBackendExecutionFlags(t *testing.T) {
 
 	registry := parser.Registry()
 
-	// Should have backend execution flags.
-	assert.Equal(t, 2, registry.Count())
+	// Should have backend execution flags: auto-generate-backend-file, init-run-reconfigure,
+	// plus the tri-state init-mode/init-reconfigure/init-upgrade overrides.
+	assert.Equal(t, 5, registry.Count())
 	assert.True(t, registry.Has("auto-generate-backend-file"))
 	assert.True(t, registry.Has("init-run-reconfigure"))
+	assert.True(t, registry.Has("init-mode"))
+	assert.True(t, registry.Has("init-reconfigure"))
+	assert.True(t, registry.Has("init-upgrade"))
 }
 
 func TestWithTerraformAffectedFlags(t *testing.T) {
+	t.Parallel()
+
 	// Create a standard parser with affected flags.
 	parser := flags.NewStandardParser(
 		WithTerraformAffectedFlags(),
@@ -134,14 +190,17 @@ func TestWithTerraformAffectedFlags(t *testing.T) {
 
 	registry := parser.Registry()
 
-	// Should have all affected flags.
-	assert.Equal(t, 7, registry.Count())
+	// Should have all affected flags plus the include-dependencies closure flag.
+	assert.Equal(t, 8, registry.Count())
 	assert.True(t, registry.Has("repo-path"))
 	assert.True(t, registry.Has("ref"))
 	assert.True(t, registry.Has("include-dependents"))
+	assert.True(t, registry.Has("include-dependencies"))
 }
 
 func TestCombinedTerraformFlags(t *testing.T) {
+	t.Parallel()
+
 	// Create a standard parser with terraform, affected, and backend execution flags.
 	parser := flags.NewStandardParser(
 		WithTerraformFlags(),
@@ -172,6 +231,8 @@ func TestCombinedTerraformFlags(t *testing.T) {
 // TestExecutionFlagsProperties verifies that shared execution flags have correct properties.
 // These flags are in TerraformFlags() and shared across all terraform commands.
 func TestExecutionFlagsProperties(t *testing.T) {
+	t.Parallel()
+
 	registry := TerraformFlags()
 
 	tests := []struct {
@@ -213,6 +274,7 @@ func TestExecutionFlagsProperties(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			flag := registry.Get(tc.flagName)
 			require.NotNil(t, flag, "%s flag should be registered", tc.flagName)
 
@@ -237,7 +299,10 @@ func TestExecutionFlagsProperties(t *testing.T) {
 // TestFlagsCobraRegistration verifies that flags are properly registered on Cobra commands.
 // This test ensures the full pipeline from flag definition to CLI availability works.
 func TestFlagsCobraRegistration(t *testing.T) {
+	t.Parallel()
+
 	t.Run("shared terraform flags are visible on cobra command", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		parser := flags.NewStandardParser(WithTerraformFlags())
 		parser.RegisterFlags(cmd)
@@ -257,6 +322,7 @@ func TestFlagsCobraRegistration(t *testing.T) {
 	})
 
 	t.Run("backend execution flags are visible on cobra command", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		parser := flags.NewStandardParser(WithBackendExecutionFlags())
 		parser.RegisterFlags(cmd)
@@ -274,6 +340,7 @@ func TestFlagsCobraRegistration(t *testing.T) {
 	})
 
 	t.Run("affected flags are visible on cobra command", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		parser := flags.NewStandardParser(WithTerraformAffectedFlags())
 		parser.RegisterFlags(cmd)
@@ -298,7 +365,10 @@ func TestFlagsCobraRegistration(t *testing.T) {
 
 // TestFlagsViperBinding verifies that flags are properly bound to Viper for value retrieval.
 func TestFlagsViperBinding(t *testing.T) {
+	t.Parallel()
+
 	t.Run("shared terraform flags bind to viper", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		v := viper.New()
 		parser := flags.NewStandardParser(WithTerraformFlags())
@@ -315,6 +385,7 @@ func TestFlagsViperBinding(t *testing.T) {
 	})
 
 	t.Run("backend execution flags bind to viper", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		v := viper.New()
 		parser := flags.NewStandardParser(WithBackendExecutionFlags())
@@ -331,6 +402,7 @@ func TestFlagsViperBinding(t *testing.T) {
 	})
 
 	t.Run("affected flags bind to viper", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		v := viper.New()
 		parser := flags.NewStandardParser(WithTerraformAffectedFlags())
@@ -363,7 +435,10 @@ func getEnvVarsFromFlag(flag flags.Flag) []string {
 
 // TestFlagsEnvironmentVariables verifies that environment variables are properly configured.
 func TestFlagsEnvironmentVariables(t *testing.T) {
+	t.Parallel()
+
 	t.Run("shared terraform flags have correct env var bindings", func(t *testing.T) {
+		t.Parallel()
 		registry := TerraformFlags()
 
 		envVarTests := []struct {
@@ -387,6 +462,7 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 	})
 
 	t.Run("backend execution flags have correct env var bindings", func(t *testing.T) {
+		t.Parallel()
 		registry := BackendExecutionFlags()
 
 		envVarTests := []struct {
@@ -408,6 +484,7 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 	})
 
 	t.Run("affected flags have correct env var bindings", func(t *testing.T) {
+		t.Parallel()
 		registry := TerraformAffectedFlags()
 
 		envVarTests := []struct {
@@ -436,6 +513,8 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 
 // TestIdentityFlagConfiguration verifies the identity flag has correct NoOptDefVal for interactive selection.
 func TestIdentityFlagConfiguration(t *testing.T) {
+	t.Parallel()
+
 	registry := TerraformFlags()
 	flag := registry.Get("identity")
 	require.NotNil(t, flag)

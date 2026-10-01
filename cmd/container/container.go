@@ -161,10 +161,21 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 	if err := containerParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
 		return err
 	}
+	if parser, ok := componentPromptParsers[cmd]; ok {
+		parsed, err := parser.Parse(cmd.Context(), args)
+		if err != nil {
+			return err
+		}
+		positional, _ := flags.SplitArgsAtDash(cmd, args)
+		if len(positional) == 0 && len(parsed.GetPositionalArgs()) > 0 {
+			args = append([]string{parsed.Component}, args...)
+		}
+	}
 
 	info := initConfigAndStacksInfo(cmd, subCommand, args)
 	provider := component.MustGetProvider(cfg.ContainerComponentType)
 	return provider.Execute(&component.ExecutionContext{
+		Context:             cmd.Context(),
 		ComponentType:       cfg.ContainerComponentType,
 		Component:           info.ComponentFromArg,
 		Stack:               info.Stack,

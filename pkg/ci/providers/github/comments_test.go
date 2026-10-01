@@ -16,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 )
 
 // allHintsJoin returns all hints attached to err joined with newlines so tests
@@ -171,6 +172,42 @@ func TestProvider_PostComment_CreateAlwaysPosts(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, listCalled, "create behavior must skip the list call")
 	assert.True(t, createCalled)
+}
+
+func TestProvider_PostComment_MasksRegisteredSecrets(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+
+	const secret = "comment-secret-ABCD1234"
+	atmosio.RegisterSecret(secret)
+
+	var createdBody string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/owner/repo/issues/42/comments", func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		var payload struct {
+			Body string `json:"body"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+		createdBody = payload.Body
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": 321, "body": payload.Body})
+	})
+
+	p := newTestProvider(t, mux)
+	marker := "<!-- atmos:ci:plan:service:test -->"
+	_, err := p.PostComment(context.Background(), &provider.PostCommentOptions{
+		Owner:    "owner",
+		Repo:     "repo",
+		PRNumber: 42,
+		Marker:   marker,
+		Body:     marker + "\ncredential: " + secret,
+		Behavior: provider.CommentBehaviorCreate,
+	})
+	require.NoError(t, err)
+	assert.Contains(t, createdBody, marker)
+	assert.NotContains(t, createdBody, secret)
+	assert.Contains(t, createdBody, atmosio.MaskReplacement)
 }
 
 func TestProvider_PostComment_UpdateReturnsNotFoundWhenAbsent(t *testing.T) {

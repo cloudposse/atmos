@@ -41,6 +41,10 @@ steps:
 
 The [`matrix`](/workflows/steps/type/matrix) step type shares the same scheduler, failure, and output fields, but first expands a set of axes into generated child steps.
 
+Inside a [`test` step](/workflows/steps/type/test), this group can also run
+noninteractive registered checks such as `http` and `require`. Its expanded
+checks share the test report and failure-only output policy.
+
 ## Fields
 
 <dl>

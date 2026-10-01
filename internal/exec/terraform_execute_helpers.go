@@ -5,6 +5,7 @@ package exec
 // Each function handles one discrete responsibility of the terraform execution pipeline.
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,10 +15,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -29,6 +33,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	"github.com/cloudposse/atmos/pkg/terraform/autoinit"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	"github.com/cloudposse/atmos/pkg/terraform/rc"
@@ -107,21 +112,31 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 			return nil, err
 		}
 		// Wrap unexpected errors (e.g. MergeComponentAuthFromConfig failures) with the sentinel
-		// to match the behaviour of createAndAuthenticateAuthManagerWithDeps.
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
+		// to match the behaviour of createAndAuthenticateAuthManagerWithDeps. When the error names
+		// a missing identity, offer the same profile-selection prompt `atmos auth login` has.
+		return nil, resolveIdentityConfigError(atmosConfig, info, err, errUtils.ErrInvalidAuthConfig)
 	}
 
 	// Create and authenticate the AuthManager using the same injectable creator as
-	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified.
+	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified. Carry
+	// forward prompted component/stack so a later identity-not-found fallback inside
+	// Authenticate can re-inject them into a profile-fallback re-exec.
 	authManager, err := defaultAuthManagerCreator(
-		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, info.Stack,
+		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, auth.ReExecContext{
+			Component:         info.ComponentFromArg,
+			ComponentPrompted: info.ComponentPrompted,
+			Stack:             info.Stack,
+			StackPrompted:     info.StackPrompted,
+		},
 	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
 			errUtils.Exit(errUtils.ExitCodeSIGINT)
 		}
 		// Wrap auth creation failures with the sentinel to match createAndAuthenticateAuthManagerWithDeps.
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
+		// When the error names a missing identity, offer the same profile-selection prompt
+		// `atmos auth login` has.
+		return nil, resolveIdentityConfigError(atmosConfig, info, err, errUtils.ErrFailedToInitializeAuthManager)
 	}
 
 	// Store manager for nested YAML functions (e.g. !terraform.state).
@@ -234,7 +249,13 @@ func SetupComponentAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *sche
 // resolveAndProvisionComponentPath resolves the filesystem path for a terraform component,
 // optionally auto-generates files, performs JIT source provisioning, and validates
 // that the resulting directory actually exists.
-func resolveAndProvisionComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
+// The provision-and-resolve component function is a seam for testing JIT provisioning context propagation.
+var provisionAndResolveTerraformComponentPath = component.ProvisionAndResolveComponentPath
+
+// The before-init provisioner function is a seam for testing context propagation.
+var executeBeforeInitProvisioners = provisioner.ExecuteProvisioners
+
+func resolveAndProvisionComponentPath(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
 	componentPath, err := u.GetComponentPath(atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve component path: %w", err)
@@ -243,10 +264,13 @@ func resolveAndProvisionComponentPath(atmosConfig *schema.AtmosConfiguration, in
 	// Provision source before generating files: when provision.workdir.enabled
 	// is true the resolved path is the workdir, and generated files must land
 	// there rather than in the base component directory.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
-		ctx, atmosConfig, info, cfg.TerraformComponentType, componentPath,
+	componentPath, componentPathExists, err := provisionAndResolveTerraformComponentPath(
+		ctx, writers, atmosConfig, info, cfg.TerraformComponentType, componentPath,
 	)
 	if err != nil {
 		return "", err
@@ -324,9 +348,11 @@ func checkComponentRestrictions(info *schema.ConfigAndStacksInfo) error {
 
 // printAndWriteVarFiles logs component variables and, when not using a pre-existing
 // plan file, writes them to the varfile on disk (path derived from atmosConfig+info).
-// Workspace subcommands do not use varfiles and are skipped entirely.
+// Workspace subcommands do not use varfiles and are skipped, unless init.pass_vars is enabled: the init
+// that runs before a workspace command then receives -var-file, so the varfile must exist even for a
+// component that was never planned.
 func printAndWriteVarFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
-	if info.SubCommand == subcommandWorkspace {
+	if info.SubCommand == subcommandWorkspace && !atmosConfig.Components.Terraform.Init.PassVars {
 		return nil
 	}
 
@@ -347,15 +373,87 @@ func printAndWriteVarFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 // varfile-write and env-assembly steps partition the variables identically.
 func computeTerraformSecretVarKeys(info *schema.ConfigAndStacksInfo) {
 	_, secret := tfvars.Partition(info.ComponentVarsSection, atmosio.ContainsSecret)
-	if len(secret) == 0 {
-		info.TerraformSecretVarKeys = nil
-		return
-	}
 	keys := make(map[string]bool, len(secret))
 	for k := range secret {
 		keys[k] = true
 	}
+
+	// Terraform's `sensitive = true` is an explicit declaration that an input must
+	// not be persisted in a generated tfvars file. When masking is disabled, retain
+	// the established compatibility behavior that keeps typed sensitive values in
+	// JSON rather than coercing them through TF_VAR_ environment variables.
+	if atmosio.MaskingEnabled() {
+		for k := range terraformSensitiveVarKeys(info) {
+			if _, supplied := info.ComponentVarsSection[k]; supplied {
+				keys[k] = true
+			}
+		}
+	}
+
+	if len(keys) == 0 {
+		info.TerraformSecretVarKeys = nil
+		return
+	}
 	info.TerraformSecretVarKeys = keys
+}
+
+// terraformSensitiveVarKeys returns the root-module variable names declared
+// `sensitive = true`. Component metadata is populated during stack processing
+// with terraform-config-inspect, so this adds no extra filesystem parsing on
+// the execution hot path.
+func terraformSensitiveVarKeys(info *schema.ConfigAndStacksInfo) map[string]bool {
+	if info == nil {
+		return nil
+	}
+	componentInfo, ok := info.ComponentSection[componentInfoKey].(map[string]any)
+	if !ok {
+		return nil
+	}
+	module, ok := componentInfo[terraformConfigKey].(*tfconfig.Module)
+	if !ok || module == nil {
+		return nil
+	}
+
+	keys := make(map[string]bool)
+	for name, variable := range module.Variables {
+		if variable != nil && variable.Sensitive {
+			keys[name] = true
+		}
+	}
+	return keys
+}
+
+// rejectComputedTerraformVars ensures display-only degraded values cannot cross
+// into Terraform through either tfvars JSON or TF_VAR_ environment variables.
+func rejectComputedTerraformVars(vars map[string]any) error {
+	for key, value := range vars {
+		if containsComputedTerraformValue(value) {
+			return fmt.Errorf("%w: %q", errUtils.ErrUnresolvedComputedTerraformVar, key)
+		}
+	}
+	return nil
+}
+
+func containsComputedTerraformValue(value any) bool {
+	switch v := value.(type) {
+	case degradation.AtmosComputedValue:
+		return true
+	case *degradation.AtmosComputedValue:
+		return v != nil
+	case map[string]any:
+		for _, child := range v {
+			if containsComputedTerraformValue(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range v {
+			if containsComputedTerraformValue(child) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // diskSafeVars returns ComponentVarsSection with secret-bearing top-level keys removed,
@@ -375,6 +473,21 @@ func diskSafeVars(info *schema.ConfigAndStacksInfo) map[string]any {
 			continue
 		}
 		safe[k] = v
+	}
+	return safe
+}
+
+func varsWithoutKeys(vars map[string]any, excluded map[string]bool) map[string]any {
+	if len(excluded) == 0 {
+		return vars
+	}
+	// `excluded` can include declared inputs that this stack does not supply, so
+	// use the source size as the allocation hint rather than subtracting it.
+	safe := make(map[string]any, len(vars))
+	for k, v := range vars {
+		if !excluded[k] {
+			safe[k] = v
+		}
 	}
 	return safe
 }
@@ -732,7 +845,18 @@ func cloneRCValue(v any) any {
 // shouldRunTerraformInit returns true when a `terraform init` should be executed as a
 // pre-step before the main command.  Init is skipped when: the subcommand is init
 // itself (init runs as the main command), deploy with DeployRunInit=false is configured,
-// or the caller passed the --skip-init flag.
+// the caller passed the --skip-init flag, or components.terraform.init.mode is "never".
+// Note this only gates whether the smart-init decision point (executeTerraformInitCommand)
+// runs at all -- the decision of whether that pre-step actually shells out to `terraform
+// init`, and with which flags, is made by autoinit.Decide once it does run.
+//
+// The init.mode: never check below excludes the workspace subcommand: autoinit.RequestFromInfo
+// forces Decide's decision (Force: true) whenever info.SubCommand == "workspace", independent of
+// init.mode, because workspace select/new needs a freshly reconfigured backend regardless of
+// whether the ordinary pre-command init would otherwise run -- this predates init.mode entirely
+// (see buildInitArgs's history). Gating that decision point out here for mode: never would
+// silently drop that forced reconfigure and break workspace select/new for anyone who set
+// init.mode: never intending only to suppress the ordinary unconditional pre-command init.
 func shouldRunTerraformInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
 	if info.SubCommand == subcommandInit {
 		return false
@@ -744,48 +868,116 @@ func shouldRunTerraformInit(atmosConfig *schema.AtmosConfiguration, info *schema
 		log.Debug("Skipping over 'terraform init' due to '--skip-init' flag being passed")
 		return false
 	}
+	if info.SubCommand != subcommandWorkspace && atmosConfig.Components.Terraform.EffectiveInitMode() == schema.TerraformInitModeNever {
+		log.Debug("Skipping over 'terraform init' due to components.terraform.init.mode: never")
+		return false
+	}
 	return true
 }
 
-// buildInitArgs constructs the argument list for `terraform init`.
+// buildInitArgs constructs the argument list for `terraform init` from an already-computed
+// autoinit.Decision: `init`, then `-reconfigure` when decision.Reconfigure, then `-upgrade`
+// when decision.Upgrade, then `-var-file <varFile>` when Init.PassVars is enabled.
 //
-// For non-workdir components, -reconfigure is added when:
-//   - the component uses the workspace subcommand, or
-//   - InitRunReconfigure is explicitly enabled in atmos.yaml.
+// This replaces a former workdir-specific carve-out that ignored the legacy
+// InitRunReconfigure setting unless the workdir was actually re-provisioned this invocation
+// (WorkdirReprovisionedKey) -- adding -reconfigure unconditionally used to make OpenTofu treat
+// init as a fresh backend initialization and prompt "Do you want to migrate all workspaces?"
+// whenever it saw existing workspace state directories (terraform.tfstate.d/) but no evidence
+// the backend itself had moved; decision.Reconfigure now encodes exactly that rule for every
+// component (not just workdir ones): auto reconfigure compares the current and last-recorded
+// backend fingerprints (see autoinit.Decide), so -reconfigure is added only when the backend
+// configuration actually changed, or a caller explicitly forced it (workspace subcommand, a
+// re-provisioned workdir, or `init.reconfigure: always`).
 //
-// For workdir components, InitRunReconfigure is intentionally ignored when the workdir
-// was not re-provisioned this invocation. The backend configuration for workdir
-// components is always generated deterministically from the same stack config, so it
-// never changes between runs of a preserved workdir. When -reconfigure is combined
-// with existing workspace state directories (terraform.tfstate.d/), OpenTofu treats
-// init as a fresh backend initialization and prompts "Do you want to migrate all
-// workspaces?" — even when the backend is unchanged. The correct signal to add
-// -reconfigure for workdir components is WorkdirReprovisionedKey, which is set only
-// when the workdir was actually wiped and re-downloaded (TTL expired or TTL=0s).
-func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, varFile string) []string {
-	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
-	_, wasReprovisioned := info.ComponentSection[provWorkdir.WorkdirReprovisionedKey]
-
-	var useReconfigure bool
-	if hasWorkdir {
-		// Workdir component: only reconfigure when the workdir was actually wiped.
-		useReconfigure = wasReprovisioned || info.SubCommand == subcommandWorkspace
-	} else {
-		// Non-workdir component: honour global InitRunReconfigure setting.
-		useReconfigure = info.SubCommand == subcommandWorkspace || atmosConfig.Components.Terraform.InitRunReconfigure
+//nolint:gocritic // autoinit.Decision (88 bytes) is passed by value throughout this call chain and its tests; not worth a pointer for a non-hot-path helper.
+func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, varFile string, decision autoinit.Decision) []string {
+	args := []string{subcommandInit}
+	if decision.Reconfigure {
+		args = append(args, "-reconfigure")
 	}
-
-	if useReconfigure {
-		if atmosConfig.Components.Terraform.Init.PassVars {
-			return []string{subcommandInit, "-reconfigure", varFileFlag, varFile}
-		}
-		return []string{subcommandInit, "-reconfigure"}
+	if decision.Upgrade {
+		args = append(args, "-upgrade")
 	}
 	if atmosConfig.Components.Terraform.Init.PassVars {
-		return []string{subcommandInit, varFileFlag, varFile}
+		args = append(args, varFileFlag, varFile)
 	}
-	return []string{"init"}
+	log.Debug("autoinit: init args", logFieldComponent, info.ComponentFromArg, "args", args)
+	return args
 }
+
+// newAutoInitInputs builds this invocation's fingerprint inputs -- the thin internal/exec-local
+// wrapper around autoinit.InputsFromInfo shared by buildInitSubcommandArgs, recordAutoInit, and
+// executeTerraformInitForced.
+func newAutoInitInputs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string) *autoinit.Inputs {
+	return autoinit.InputsFromInfo(atmosConfig, info, componentPath, varFile)
+}
+
+// decideAutoInit resolves atmos.yaml's init policy plus force into an autoinit.Request and
+// returns autoinit.Decide's outcome -- the thin internal/exec-local wrapper around
+// autoinit.RequestFromInfo + autoinit.Decide used by buildInitSubcommandArgs for an explicit
+// `atmos terraform init`.
+func decideAutoInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, in *autoinit.Inputs, force bool) autoinit.Decision {
+	return autoinit.Decide(autoinit.RequestFromInfo(atmosConfig, info, in, force))
+}
+
+// recordAutoInit best-effort records the init marker after a successful init -- the thin
+// internal/exec-local wrapper around autoinit.RecordFromInfo.
+func recordAutoInit(in *autoinit.Inputs, initArgs []string) {
+	autoinit.RecordFromInfo(in, initArgs)
+}
+
+// classifyInitRecovery applies Atmos's init-recovery policy to a failed main command's captured
+// output: classify the diagnostic (autoinit.Classify), then decide whether/how to recover
+// (autoinit.ShouldRecover) given the component's resolved init policy and opt-out signals. Used
+// by recoverFromInitRequired, smart init's plan/apply-time safety net.
+func classifyInitRecovery(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, output string) (autoinit.Recovery, error) {
+	tf := &atmosConfig.Components.Terraform
+	return autoinit.ShouldRecover(
+		autoinit.Classify(output),
+		tf.EffectiveInitMode(),
+		tf.EffectiveInitReconfigure(),
+		tf.EffectiveInitUpgrade(),
+		autoinit.OptedOut(atmosConfig, info),
+	)
+}
+
+// executeTerraformInitForced runs `terraform init` unconditionally with exactly the
+// -reconfigure/-upgrade flags smart-init's plan/apply-time recovery (recoverFromInitRequired)
+// determined were needed, dispatches the after.terraform.init provisioners, and records the
+// resulting marker -- exactly as an implicit init would.
+//
+//nolint:revive // argument-limit: every parameter is load-bearing context from recoverFromInitRequired's forced init/retry.
+func executeTerraformInitForced(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, reconfigure, upgrade bool, opts ...ShellCommandOption) error {
+	defer perf.Track(atmosConfig, "exec.executeTerraformInitForced")()
+
+	args := []string{subcommandInit}
+	if reconfigure {
+		args = append(args, "-reconfigure")
+	}
+	if upgrade {
+		args = append(args, "-upgrade")
+	}
+	if atmosConfig.Components.Terraform.Init.PassVars {
+		args = append(args, varFileFlag, varFile)
+	}
+
+	in := newAutoInitInputs(atmosConfig, info, componentPath, varFile)
+	// Invalidate before attempting: see executeTerraformInitCommand's matching call for why a
+	// forced init that fails must not leave a stale-but-still-matching marker behind.
+	autoinit.InvalidateFromInfo(in)
+	if _, err := runTerraformInitSubprocess(atmosConfig, info, componentPath, args, opts...); err != nil {
+		return err
+	}
+
+	dispatchAfterInit(atmosConfig, info, componentPath, opts...)
+	recordAutoInit(in, args)
+	return nil
+}
+
+// executeTerraformInitForcedFn is a seam for testing recoverFromInitRequired's forced-init
+// recovery path without launching a real subprocess.
+var executeTerraformInitForcedFn = executeTerraformInitForced
 
 // prepareInitExecution performs the pre-init housekeeping:
 //  1. Deletes the .terraform/environment file so Terraform doesn't prompt for workspace selection
@@ -802,21 +994,25 @@ func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAn
 // directories (terraform.tfstate.d/) but no .terraform/environment file and interprets the
 // situation as a backend migration, producing the "Do you want to migrate all workspaces?"
 // prompt on every apply.  Skipping the cleanup for workdir components avoids this.
-func prepareInitExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
+func prepareInitExecution(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
 	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
 	if !isWorkdir {
 		cleanTerraformWorkspace(*atmosConfig, componentPath)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	provisionCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	if err := provisioner.ExecuteProvisioners(
-		ctx,
+	if err := executeBeforeInitProvisioners(
+		provisionCtx,
 		provisioner.HookEvent(beforeTerraformInitEvent),
 		atmosConfig,
 		info.ComponentSection,
 		info.AuthContext,
+		writers,
 	); err != nil {
 		return componentPath, fmt.Errorf("provisioner execution failed: %w", err)
 	}
@@ -839,7 +1035,7 @@ func prepareInitExecution(atmosConfig *schema.AtmosConfiguration, info *schema.C
 // invocation via prepareInitExecution.  These two code paths must never both execute
 // in the same command invocation or provisioners will run twice.
 func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) (string, error) {
-	newPath, err := prepareInitExecution(atmosConfig, info, componentPath)
+	newPath, err := prepareInitExecution(shellCommandContext(opts...), shellCommandOutputWriters(opts...), atmosConfig, info, componentPath)
 	if err != nil {
 		return componentPath, err
 	}
@@ -851,37 +1047,88 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 	return newPath, nil
 }
 
-// executeTerraformInitCommand runs the `terraform init` subprocess against an already-resolved
-// componentPath and dispatches the after.terraform.init provisioners. Unlike
-// executeTerraformInitPhase it does NOT run prepareInitExecution — it skips cleanTerraformWorkspace,
-// the before.terraform.init provisioners, and workdir-path resolution. Callers that have already
-// performed that preparation (e.g. ExecuteTerraformShell, which fires the before.terraform.init
-// provisioners itself) use this directly to avoid running the provisioners twice.
-func executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) error {
-	initArgs := buildInitArgs(atmosConfig, info, varFile)
-	err := executeShellCommandWithRetry(
+// runTerraformInitSubprocess runs `terraform init` (or a forced re-init retry with recovery
+// flags) with args, teeing its stdout+stderr into a buffer so callers can classify the output
+// for smart-init recovery diagnostics. Shared by executeTerraformInitCommand's own init run and
+// executeCommandPipeline's plan/apply-time forced re-init retry -- the one low-level piece both
+// need that pkg/terraform/autoinit itself cannot own, since it talks to ExecuteShellCommandWithRetry
+// and executeStreamingOrShell, both internal/exec concerns.
+func runTerraformInitSubprocess(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, args []string, opts ...ShellCommandOption) (string, error) {
+	var buf bytes.Buffer
+	stdoutW, stderrW := composeRetryCaptureWriters(opts, &buf)
+	captureOpts := append(slices.Clone(opts), WithStdoutCapture(stdoutW), WithStderrCapture(stderrW))
+
+	err := ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
 		"init",
 		func(o ...ShellCommandOption) error {
-			return ExecuteShellCommand(
-				*atmosConfig,
-				info.Command,
-				initArgs,
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				info.RedirectStdErr,
-				o...,
-			)
+			return executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
+				componentPath:  componentPath,
+				args:           args,
+				gatePhase:      subcommandInit,
+				subCommand:     subcommandInit,
+				redirectStdErr: info.RedirectStdErr,
+				shellOpts:      o,
+			})
 		},
-		opts...,
+		captureOpts...,
 	)
-	if err != nil {
-		return err
+	return buf.String(), err
+}
+
+// executeTerraformInitCommand is the "smart init" decision point: it fingerprints this
+// invocation's init inputs, compares them against the marker recorded by the last successful
+// init (autoinit.Decide), and either skips the subprocess entirely or runs it with exactly the
+// flags the decision calls for -- recovering once, via autoinit.RecoverInit, if terraform/tofu's
+// own output says init needs -upgrade or -reconfigure after all. Unlike executeTerraformInitPhase
+// it does NOT run prepareInitExecution — it skips cleanTerraformWorkspace, the
+// before.terraform.init provisioners, and workdir-path resolution. Callers that have already
+// performed that preparation (e.g. ExecuteTerraformShell, which fires the before.terraform.init
+// provisioners itself) use this directly to avoid running the provisioners twice.
+func executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) error {
+	defer perf.Track(atmosConfig, "exec.executeTerraformInitCommand")()
+
+	in := autoinit.InputsFromInfo(atmosConfig, info, componentPath, varFile)
+	decision := autoinit.Decide(autoinit.RequestFromInfo(atmosConfig, info, in, false))
+
+	if !decision.RunInit {
+		info.InitSkipped = true
+		autoinit.AnnounceSkipped(info, decision.Reason)
+		return nil
 	}
 
-	dispatchAfterInit(atmosConfig, info, componentPath)
+	tf := &atmosConfig.Components.Terraform
+	args := autoinit.InitArgs(decision, tf.Init.PassVars, varFile)
+	// Invalidate before attempting: if this init fails, a stale-but-still-matching marker must
+	// not survive it -- see autoinit.InvalidateFromInfo's doc comment. RecordFromInfo below
+	// re-records a fresh marker once (and only once) this attempt or its recovery retry succeeds.
+	autoinit.InvalidateFromInfo(in)
+	output, err := runTerraformInitSubprocess(atmosConfig, info, componentPath, args, opts...)
+	usedArgs := args
+
+	if err != nil {
+		var rec autoinit.Recovery
+		rec, err = autoinit.RecoverInit(autoinit.RecoverInitParams{
+			Output:      output + "\n" + err.Error(),
+			Err:         err,
+			Mode:        tf.EffectiveInitMode(),
+			Reconfigure: tf.EffectiveInitReconfigure(),
+			Upgrade:     tf.EffectiveInitUpgrade(),
+			Rerun: func(r autoinit.Recovery) error {
+				_, rerunErr := runTerraformInitSubprocess(atmosConfig, info, componentPath, autoinit.ApplyRecovery(args, r), opts...)
+				return rerunErr
+			},
+			Warn: func(msg string, kv ...any) { log.Warn(msg, kv...) },
+		})
+		if err != nil {
+			return err
+		}
+		usedArgs = autoinit.ApplyRecovery(args, rec)
+	}
+
+	dispatchAfterInit(atmosConfig, info, componentPath, opts...)
+	autoinit.RecordFromInfo(in, usedArgs)
 
 	return nil
 }
@@ -890,25 +1137,28 @@ func executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *s
 // providers-lock hook) once init has succeeded. It hands them a TerraformExecContext whose
 // runner reuses the same binary, env (incl. TF_CLI_CONFIG_FILE pointing at the live proxy),
 // and working directory as init, so a `providers lock` runs against the already-warm cache.
-// Lock completion is best-effort: a failure is logged, not propagated, so it never fails the
-// user's plan/apply.
-func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) {
+// The runner goes through executeStreamingOrShell (not a raw ExecuteShellCommand) so that,
+// under --ui, `providers lock`'s own provider-fetch/checksum output (e.g. when a registry
+// cache/mirror forces a cross-platform lock) is captured by the same init spinner instead of
+// leaking raw terraform/opentofu output between the "Init … completed" and
+// "Selected … workspace" lines. Lock completion is best-effort: a failure is logged, not
+// propagated, so it never fails the user's plan/apply.
+func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) {
 	execCtx := &provisioner.TerraformExecContext{
 		WorkingDir: componentPath,
 		Run: func(args []string) error {
-			return ExecuteShellCommand(
-				*atmosConfig,
-				info.Command,
-				args,
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				info.RedirectStdErr,
-			)
+			return executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
+				componentPath:  componentPath,
+				args:           args,
+				gatePhase:      subcommandInit,
+				subCommand:     subcommandProvidersLock,
+				redirectStdErr: info.RedirectStdErr,
+				shellOpts:      opts,
+			})
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(shellCommandContext(opts...), 5*time.Minute)
 	defer cancel()
 
 	if err := provisioner.ExecuteProvisioners(
@@ -917,6 +1167,7 @@ func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		atmosConfig,
 		info.ComponentSection,
 		info.AuthContext,
+		shellCommandOutputWriters(opts...),
 		execCtx,
 	); err != nil {
 		log.Warn("Failed to complete multi-platform provider lock", "error", err)

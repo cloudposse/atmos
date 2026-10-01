@@ -74,7 +74,19 @@ module.exports = {
                     items: [
                         'migration/native-terraform',
                         'migration/terragrunt',
-                        'migration/terraform-workspaces'
+                        'migration/terraform-workspaces',
+                        'migration/terramate',
+                        {
+                            type: 'category',
+                            label: 'Task Runners',
+                            collapsible: true,
+                            collapsed: false,
+                            items: [
+                                'migration/makefile',
+                                'migration/justfile',
+                                'migration/taskfile',
+                            ]
+                        }
                     ]
                 },
             ]
@@ -203,7 +215,15 @@ module.exports = {
                 {type: 'doc', id: 'cli/environment-variables', label: 'Environment Variables'},
                 {type: 'doc', id: 'cli/versioning', label: 'Versioning'},
                 {type: 'doc', id: 'projects/layout', label: 'Folder Structure'},
-                {type: 'doc', id: 'ai/ai', label: 'Atmos AI'},
+                {
+                    type: 'category',
+                    label: 'Atmos AI',
+                    link: {type: 'doc', id: 'ai/ai'},
+                    items: [
+                        {type: 'link', label: 'Agent Skills', href: '/ai/skills'},
+                        {type: 'doc', id: 'mcp/mcp', label: 'MCP'},
+                    ]
+                },
                 {type: 'doc', id: 'pro/pro', label: 'Atmos Pro'},
                 {
                     type: 'category',
@@ -387,11 +407,20 @@ module.exports = {
                                     items: [
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/atmos', label: 'atmos'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/shell', label: 'shell'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/script', label: 'script'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/exec', label: 'exec'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/container', label: 'container'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/emulator', label: 'emulator'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/http', label: 'http'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/archive', label: 'archive'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/require', label: 'require'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/workdir', label: 'workdir'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/cast', label: 'cast'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/parallel', label: 'parallel'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/test', label: 'test'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/matrix', label: 'matrix'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/wait', label: 'wait / wait-all'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/cancel', label: 'cancel'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/input', label: 'input'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/confirm', label: 'confirm'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/choose', label: 'choose'},
@@ -407,7 +436,10 @@ module.exports = {
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/join', label: 'join'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/style', label: 'style'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/log', label: 'log'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/junit', label: 'junit'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/hint', label: 'hint'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/alert', label: 'alert'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/say', label: 'say'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/title', label: 'title'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/clear', label: 'clear'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/linebreak', label: 'linebreak'},
@@ -534,7 +566,6 @@ module.exports = {
             collapsible: false,
             collapsed: false,
             items: [
-                {type: 'doc', id: 'ci/ci', label: 'Native CI'},
                 {
                     type: 'autogenerated',
                     dirName: 'integrations/github-actions',
@@ -571,11 +602,20 @@ module.exports = {
                     collapsible: true,
                     collapsed: true,
                     link: {type: 'doc', id: 'intro/why-atmos/why-atmos'},
+                    // This is a sequence; keep the overview only as the category link.
                     items: [
-                        {
-                            type: 'autogenerated',
-                            dirName: 'intro/why-atmos',
-                        },
+                        'intro/why-atmos/stage-0',
+                        'intro/why-atmos/stage-1',
+                        'intro/why-atmos/stage-2',
+                        'intro/why-atmos/stage-3',
+                        'intro/why-atmos/stage-4',
+                        'intro/why-atmos/stage-5',
+                        'intro/why-atmos/stage-6',
+                        'intro/why-atmos/stage-7',
+                        'intro/why-atmos/stage-8',
+                        'intro/why-atmos/stage-9',
+                        'intro/why-atmos/stage-10',
+                        'intro/why-atmos/nirvana',
                     ]
                 },
                 {

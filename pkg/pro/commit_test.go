@@ -43,6 +43,9 @@ func withTempGitRepo(t *testing.T, fn func(dir string)) {
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.email", "test@test.com")
 	runGit(t, dir, "config", "user.name", "test")
+	// Never sign commits in throwaway test repos: signing is slow, needs no verification here, and
+	// flakes on dev machines whose global git config enables commit.gpgsign (e.g. a 1Password agent).
+	runGit(t, dir, "config", "commit.gpgsign", "false")
 
 	origDir, err := os.Getwd()
 	require.NoError(t, err)

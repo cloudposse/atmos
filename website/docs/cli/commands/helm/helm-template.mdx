@@ -60,6 +60,12 @@ atmos helm template --affected --labels cost-center=platform
 
 `--output` and `--output-dir` are only supported when rendering one component.
 
+Use Helm-compatible invocation-only value overrides when rendering:
+
+```shell
+atmos helm template monitoring -s plat-ue2-dev -f preview-values.yaml --set image.tag=2026.09.09
+```
+
 ## Flags
 
 <dl>
@@ -75,6 +81,12 @@ atmos helm template --affected --labels cost-center=platform
   <dt>`--split` <em>(optional)</em></dt>
   <dd>Write one YAML file per object. Requires `--output-dir`.</dd>
 
+  <dt>`--dependency-update` <em>(optional)</em></dt>
+  <dd>Fetch declared chart dependencies when they are missing. This may access dependency repositories and update the chart's <code>charts/</code> directory and lock file.</dd>
+
+  <dt>`-f` / `--values`, `--set`, `--set-string`, `--set-file`, `--set-json`, `--set-literal` <em>(optional)</em></dt>
+  <dd>Repeatable Helm-compatible value overrides for this render. They override stack-resolved values without changing configuration. See <a href="/cli/commands/helm/usage#runtime-value-overrides">runtime value overrides</a>.</dd>
+
   <dt>`--all` <em>(optional)</em></dt>
   <dd>Render all Helm components in dependency order.</dd>
 
@@ -88,7 +100,7 @@ atmos helm template --affected --labels cost-center=platform
   <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 
   <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
 </dl>
 
 :::note

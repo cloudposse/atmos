@@ -13,6 +13,8 @@ import (
 )
 
 func TestProcessCustomTags_AllSupportedTags(t *testing.T) {
+	t.Parallel()
+
 	// Note: This test focuses on verifying the skip functionality
 	// Actual execution of store/terraform functions requires external setup
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -106,6 +108,7 @@ func TestProcessCustomTags_AllSupportedTags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Skip tests that would cause runtime errors.
 			if tt.name == "string starting with exclamation but not a tag" {
 				t.Skipf("Skipping test: unsupported tag '!not-a-tag' would cause program exit")
@@ -130,6 +133,8 @@ func TestProcessCustomTags_AllSupportedTags(t *testing.T) {
 }
 
 func TestProcessCustomTags_TagPrefixes(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	tests := []struct {
@@ -161,6 +166,7 @@ func TestProcessCustomTags_TagPrefixes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Skip tests that would cause program exit due to unsupported tags.
 			if tt.name != "exact tag match" {
 				t.Skipf("Skipping test '%s': would trigger unsupported tag error and exit", tt.name)
@@ -174,6 +180,8 @@ func TestProcessCustomTags_TagPrefixes(t *testing.T) {
 }
 
 func TestProcessNodes_ComplexStructures(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	tests := []struct {
@@ -296,6 +304,7 @@ func TestProcessNodes_ComplexStructures(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := processNodes(atmosConfig, tt.input, "test-stack", tt.skip, nil)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -304,6 +313,8 @@ func TestProcessNodes_ComplexStructures(t *testing.T) {
 }
 
 func TestProcessTagTemplate(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    string
@@ -335,6 +346,7 @@ func TestProcessTagTemplate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := processTagTemplate(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -342,6 +354,8 @@ func TestProcessTagTemplate(t *testing.T) {
 }
 
 func TestProcessCustomTags_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	tests := []struct {
@@ -383,6 +397,7 @@ func TestProcessCustomTags_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Skip tests that would trigger unsupported tag errors.
 			if tt.name == "tag at end of string" || tt.name == "multiple exclamation marks" {
 				t.Skipf("Skipping test '%s': would trigger unsupported tag error", tt.name)
@@ -396,6 +411,8 @@ func TestProcessCustomTags_EdgeCases(t *testing.T) {
 }
 
 func TestProcessNodes_LargeDataStructure(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Create a large nested structure.
@@ -437,6 +454,8 @@ func TestProcessNodes_LargeDataStructure(t *testing.T) {
 }
 
 func TestProcessCustomTags_AllTagsCoverage(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Test that all supported tags are handled using the central list.
@@ -453,6 +472,7 @@ func TestProcessCustomTags_AllTagsCoverage(t *testing.T) {
 
 	for _, tag := range supportedTagsWithArgs {
 		t.Run("tag_"+tag, func(t *testing.T) {
+			t.Parallel()
 			// Test with skip to avoid actual execution.
 			input := tag + " test_value"
 			tagName := tag[1:] // Remove the ! prefix

@@ -1,8 +1,8 @@
-// Package cache is the lifecycle facade for the Terraform registry cache. It is
-// the only package internal/exec touches: it resolves the cache root, builds the
-// storage backend, starts the caching proxy with the provider and module registry
-// mirrors, contributes the network_mirror/host directives to the generated
-// Terraform CLI config, and prints a per-run savings report on shutdown.
+// Package cache is the lifecycle facade for the Terraform registry cache. It
+// resolves the cache root, builds the storage backend, starts the caching proxy
+// with the provider and module registry mirrors, contributes the
+// network_mirror/host directives to the generated Terraform CLI config, and
+// prints a per-run savings report on shutdown.
 //
 // Import as tfcache to avoid colliding with pkg/cache.
 package cache
@@ -57,6 +57,40 @@ type Setup struct {
 	server   *proxy.Server
 	proxyURL string
 	certPath string
+}
+
+// StartForExecution starts and verifies a registry cache for one complete
+// Terraform execution. The returned cleanup is non-nil, intended to be deferred
+// once, and uses a fresh context so cancellation of the execution cannot prevent
+// a graceful proxy shutdown (and its final savings report).
+//
+// Callers that fan one execution out to multiple Terraform subprocesses should
+// share the returned Setup and invoke cleanup once after every subprocess exits.
+func StartForExecution(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Setup, func(), error) {
+	defer perf.Track(atmosConfig, "tfcache.StartForExecution")()
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	setup, err := Start(ctx, atmosConfig)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	if setup == nil {
+		return nil, func() {}, nil
+	}
+
+	cleanup := func() {
+		if closeErr := setup.Close(context.Background()); closeErr != nil {
+			log.Debug("Failed to shut down Terraform registry cache", "error", closeErr)
+		}
+	}
+	if trustErr := setup.VerifyTrust(ctx); trustErr != nil {
+		cleanup()
+		return nil, func() {}, trustErr
+	}
+	return setup, cleanup, nil
 }
 
 // CertPath returns the on-disk path of the proxy's TLS certificate (PEM). Callers

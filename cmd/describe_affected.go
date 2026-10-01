@@ -4,12 +4,28 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// describeAffectedErrorModeParser is the minimal StandardParser wired to the
+// --error-mode flag; see cmd/describe_error_mode_flag.go for why this command
+// doesn't migrate to flags.NewStandardParser wholesale.
+var describeAffectedErrorModeParser *flags.StandardParser
+
+// describeAffectedProcessFlagsParser is the minimal StandardParser wired to the
+// --process-templates and --process-functions flags so they honor the
+// ATMOS_PROCESS_TEMPLATES / ATMOS_PROCESS_FUNCTIONS environment variables; see
+// cmd/describe_affected_process_flags.go.
+var describeAffectedProcessFlagsParser *flags.StandardParser
 
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits.
 var describeAffectedCmd = &cobra.Command{
@@ -46,11 +62,25 @@ func init() {
 		"If set to `false` (default), the target reference will be checked out instead\n"+
 		"This requires that the target reference is already cloned by Git, and the information about it exists in the `.git` directory")
 
-	describeAffectedCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
-	describeAffectedCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
+	// --process-templates and --process-functions are registered via
+	// describeAffectedProcessFlagsParser below (not raw PersistentFlags), so they gain
+	// ATMOS_PROCESS_TEMPLATES / ATMOS_PROCESS_FUNCTIONS environment variable bindings
+	// like the `list` and `terraform` command families. See describe_affected_process_flags.go.
 	describeAffectedCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
 	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Deprecated. Alias for `--logs-level=Debug`")
 	describeAffectedCmd.PersistentFlags().Bool("exclude-locked", false, "Exclude the locked components (`metadata.locked: true`) from the output")
+
+	describeAffectedErrorModeParser = newDescribeErrorModeParser()
+	describeAffectedErrorModeParser.RegisterPersistentFlags(describeAffectedCmd)
+	if err := describeAffectedErrorModeParser.BindToViper(viper.GetViper()); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	describeAffectedProcessFlagsParser = newDescribeAffectedProcessFlagsParser()
+	describeAffectedProcessFlagsParser.RegisterPersistentFlags(describeAffectedCmd)
+	if err := describeAffectedProcessFlagsParser.BindToViper(viper.GetViper()); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
 
 	describeCmd.AddCommand(describeAffectedCmd)
 }
@@ -64,6 +94,20 @@ func getRunnableDescribeAffectedCmd(
 	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
+
+		// Resolve ATMOS_DESCRIBE_ERROR_MODE (via Viper) onto the --error-mode Cobra flag
+		// before parseDescribeAffectedCliArgs reads it, so the legacy cmd.Flags()-based
+		// parsing in internal/exec picks it up.
+		if err := resolveDescribeErrorModeFlag(cmd, viper.GetViper(), describeAffectedErrorModeParser); err != nil {
+			return err
+		}
+
+		// Resolve ATMOS_PROCESS_TEMPLATES / ATMOS_PROCESS_FUNCTIONS (bound to Viper in init) onto
+		// the --process-templates / --process-functions Cobra flags before parseDescribeAffectedCliArgs
+		// reads them, so the legacy cmd.Flags()-based parsing picks up env-sourced values.
+		if err := resolveDescribeAffectedProcessFlags(cmd, viper.GetViper()); err != nil {
+			return err
+		}
 
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
 		if err != nil {
@@ -92,7 +136,7 @@ func getRunnableDescribeAffectedCmd(
 		// tried to disable. See plan: --identity=false not honored in `atmos describe affected`.
 		props.AuthDisabled = identityName == cfg.IdentityFlagDisabledValue
 
-		if props.ProcessYamlFunctions || identityExplicit {
+		if !authdeferred.ConfigureAuth(props.CLIConfig, identityName) && (props.ProcessYamlFunctions || props.ProcessTemplates || identityExplicit || identityName != "") {
 			// Category B: describe affected operates on multiple affected components across stacks
 			// with no single target (component, stack) pair. Use the SCAN wrapper to discover
 			// stack-level defaults (including imported _defaults.yaml). See
@@ -103,6 +147,10 @@ func getRunnableDescribeAffectedCmd(
 			}
 			props.AuthManager = authManager
 		}
+		if props.AuthManager == nil {
+			props.AuthManager, _ = props.CLIConfig.AuthManager.(auth.AuthManager)
+		}
+		props.CLIConfig.AuthManager = props.AuthManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 

@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"regexp"
 	"runtime"
 	"strings"
@@ -69,20 +67,9 @@ func normalizeGitHubVersion(tagName, prefix string, metadataAvailable bool) stri
 func (ar *AquaRegistry) getLatestTag(owner, repo, prefix string, metadataAvailable bool) (string, error) {
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/tags?per_page=1", ar.githubBaseURL, owner, repo)
 
-	resp, err := ar.get(apiURL)
+	body, err := ar.getBytes(apiURL)
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to fetch tags from GitHub: %w", registry.ErrHTTPRequest, err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return "", fmt.Errorf("%w: GitHub API returned status %d", registry.ErrHTTPRequest, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return "", fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, err)
+		return "", err
 	}
 
 	var tags []struct {
@@ -101,21 +88,9 @@ func (ar *AquaRegistry) getLatestTag(owner, repo, prefix string, metadataAvailab
 
 // fetchVersionFromPage fetches releases from a single page and returns the first valid version.
 func (ar *AquaRegistry) fetchVersionFromPage(apiURL, prefix string, metadataAvailable bool) (version, nextURL string, err error) {
-	resp, err := ar.get(apiURL)
+	body, linkHeader, err := ar.getBytesWithLinkHeader(context.Background(), apiURL)
 	if err != nil {
-		return "", "", fmt.Errorf("%w: failed to fetch releases from GitHub: %w", registry.ErrHTTPRequest, err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return "", "", fmt.Errorf("%w: GitHub API returned status %d", registry.ErrHTTPRequest, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	linkHeader := resp.Header.Get("Link")
-	resp.Body.Close()
-	if err != nil {
-		return "", "", fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, err)
+		return "", "", err
 	}
 
 	releases, err := parseReleasesJSON(body)
@@ -182,21 +157,9 @@ func (ar *AquaRegistry) GetAvailableVersionsContext(ctx context.Context, owner, 
 
 // fetchVersionsFromPage fetches all versions from a single page.
 func (ar *AquaRegistry) fetchVersionsFromPage(ctx context.Context, apiURL, prefix string, metadataAvailable bool) (versions []string, nextURL string, err error) {
-	resp, err := ar.getWithContext(ctx, apiURL)
+	body, linkHeader, err := ar.getBytesWithLinkHeader(ctx, apiURL)
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: failed to fetch releases from GitHub: %w", registry.ErrHTTPRequest, err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, "", fmt.Errorf("%w: GitHub API returned status %d", registry.ErrHTTPRequest, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	linkHeader := resp.Header.Get("Link")
-	resp.Body.Close()
-	if err != nil {
-		return nil, "", fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, err)
+		return nil, "", err
 	}
 
 	releases, err := parseReleasesJSON(body)

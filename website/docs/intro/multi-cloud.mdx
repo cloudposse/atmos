@@ -89,7 +89,7 @@ Atmos supports Azure authentication for interactive and CI/CD workflows.
 auth:
   providers:
     azure-interactive:
-      kind: azure/device-code
+      kind: azure/interactive
       spec:
         tenant_id: "12345678-1234-1234-1234-123456789012"
         subscription_id: "87654321-4321-4321-4321-210987654321"
@@ -104,7 +104,7 @@ auth:
 ```
 </File>
 
-**Providers:** `azure/device-code`, `azure/oidc`, `azure/cli`
+**Providers:** `azure/interactive`, `azure/device-code`, `azure/oidc`, `azure/cli`
 **Identities:** `azure/subscription`
 
 ### Stores

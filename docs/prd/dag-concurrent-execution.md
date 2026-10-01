@@ -1,8 +1,8 @@
 # PRD: DAG-Based Concurrent Execution
 
-**Status:** Draft
+**Status:** Mostly shipped. Atmos implements Phases 1–2 in full, and Phase 3's Terraform-routing items — foundation packages, the `pkg/scheduler/` Terraform adapter with `--max-concurrency` on `plan`/`apply`/`deploy`/`destroy`, and the `--affected`/`--query` routing consolidation onto the scheduler — in `pkg/scheduler/scheduler.go`, `pkg/scheduler/adapters/terraform.go`, `internal/exec/terraform_affected.go`, and `internal/exec/terraform_query.go`. Phase 3's multi-type-DAG items (Packer/Ansible scheduler adapters, cross-type `depends_on`) and all of Phase 4 (per-type concurrency limits, critical-path scheduling, a TUI progress display, and resumability) remain open.
 **Version:** 2.0
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-07-11
 **Author:** Erik Osterman
 
 ---
@@ -70,10 +70,10 @@ Terragrunt originally organized units into "run groups" — sets of units at the
 Two problems drove the change:
 
 1. **The "slowest unit" problem.** From the RFC:
-   > *"There is wasted time in a run, as groups execute when they have no dependent groups they are waiting on. A group dependent on another group will only start running when the slowest Unit in the dependency completes."*
+    > *"There is wasted time in a run, as groups execute when they have no dependent groups they are waiting on. A group dependent on another group will only start running when the slowest Unit in the dependency completes."*
 
 2. **Failure blast radius.** From the RFC:
-   > *"Individual Units failing during runs can cause entire groups, and dependent groups to fail, ultimately meaning that individual failing Units can cause widespread failure for a Stack."*
+    > *"Individual Units failing during runs can cause entire groups, and dependent groups to fail, ultimately meaning that individual failing Units can cause widespread failure for a Stack."*
 
 The RFC includes timing diagrams proving that the worst case for runner pool equals the best case for level-based — it can never be slower, only faster.
 
@@ -162,8 +162,8 @@ The industry standard is **modified Kahn's algorithm with a ready queue and work
 2. Seed ready queue with all zero-in-degree nodes (roots)
 3. Workers pull from ready queue (bounded by --max-concurrency)
 4. On node completion:
-   a. Atomically decrement in-degree of all dependents
-   b. Any dependent reaching in-degree 0 enters the ready queue
+    a. Atomically decrement in-degree of all dependents
+    b. Any dependent reaching in-degree 0 enters the ready queue
 5. Repeat until queue empty + all workers idle, OR error
 ```
 
@@ -194,11 +194,8 @@ The real difference shows with **asymmetric diamonds** where branches have diffe
 ### Diamond Dependencies (Fan-Out/Fan-In)
 
 ```
-    A
-   / \
-  B   C
-   \ /
-    D
+A -> B -> D
+A -> C -> D
 ```
 
 Handled naturally by in-degree counting:
@@ -219,10 +216,10 @@ Fully implemented and shipped (#1516):
 - `builder.go` — `GraphBuilder` for constructing graphs
 - `filter.go` — Filter by type, stack, component; connected components
 
-### Dependency-Ordered Execution (`internal/exec/terraform_all.go`)
-- `ExecuteTerraformAll()` — Builds DAG from `settings.depends_on`, executes in topological order
+### Dependency-Ordered Execution (`internal/exec/terraform_all.go`, `pkg/scheduler/`)
+- `ExecuteTerraformAll()` — Builds DAG from `settings.depends_on`/`dependencies.components`, executes via `pkg/scheduler/adapters/terraform.go`
 - `buildTerraformDependencyGraph()` — Constructs graph from stack configs
-- `executeInDependencyOrder()` — **Currently sequential** (iterates sorted nodes one by one)
+- Execution now runs through the ready-queue `Scheduler` (`pkg/scheduler/scheduler.go`) with `--max-concurrency` controlling worker count (default `1`, sequential) — no longer a plain sequential loop
 - Reverse order for `destroy`
 - Cross-stack dependency support
 
@@ -257,12 +254,12 @@ The I/O package provides the stream isolation primitives that per-node output wi
 - Merges environment: system + `atmos.yaml` global env + command-specific env
 - Preserves exit codes: `exec.ExitError` → `errUtils.ExitCodeError`
 - Propagates TTY: injects `ATMOS_FORCE_TTY=true` when parent has TTY
-- `terraform_plan_diff.go` swaps global `os.Stdout` to capture output — race condition under concurrency
+- `terraform_plan_diff.go` no longer swaps global `os.Stdout` to capture output — it now captures via a local `bytes.Buffer` (see Phase 1, shipped), eliminating the concurrency race this section originally flagged
 
-### Routing Gap
-- `--all` for Terraform goes through `ExecuteTerraformAll()` (dependency-aware, sequential)
-- `--components`, `--query` still route through `ExecuteTerraformQuery()` (no DAG awareness)
-- No `--all` equivalent exists for other component types
+### Routing Gap (resolved in Phase 3)
+- `--all` for Terraform goes through `ExecuteTerraformAll()` (dependency-aware, `--max-concurrency` controls parallelism)
+- `--components`, `--query` now route through `ExecuteTerraformQuery()` → `scheduleradapters.ExecuteTerraform()` (DAG-aware via the scheduler, consolidated in Phase 3)
+- No `--all` equivalent exists yet for other component types
 
 ---
 
@@ -649,13 +646,13 @@ Stream injection is a prerequisite for the scheduler, not a future optimization.
 1. **`prefixedWriter`** — follows the exact same `maskedWriter` pattern in `pkg/io/streams.go` (lines 97-124). Wraps an `io.Writer` and prepends a configurable prefix (e.g., `[vpc/tenant1-ue2-dev]`) to each line of output. Line-prefixed output is a general I/O concern reusable beyond scheduling.
 
 2. **`NewOutput()`** — factory that composes an execution-scoped output pipeline:
-   ```go
-   func NewOutput(opts OutputOptions) Output
-   ```
-   Each output pipeline branches after masking and prefixing so the terminal, log file, and capture sinks receive consistently labeled output:
-   - `maskedWriter` → applies secret masking (shared global `Masker` — thread-safe, secrets are process-wide)
-   - `prefixedWriter` → labels each line with the configured prefix
-   - `io.MultiWriter` → fans out the composed writer to terminal, file, and capture sinks
+    ```go
+    func NewOutput(opts OutputOptions) Output
+    ```
+    Each output pipeline branches after masking and prefixing so the terminal, log file, and capture sinks receive consistently labeled output:
+    - `maskedWriter` → applies secret masking (shared global `Masker` — thread-safe, secrets are process-wide)
+    - `prefixedWriter` → labels each line with the configured prefix
+    - `io.MultiWriter` → fans out the composed writer to terminal, file, and capture sinks
 
 **Note on `maskedWriter` vs `dynamicMaskedWriter`:** The `dynamicMaskedWriter` pattern (line 129 of `streams.go`) resolves writers at write time via `getWriter func() io.Writer`. This is needed for the global singletons but NOT for per-node streams — each node has fixed writers. Use the simpler `maskedWriter` directly.
 
@@ -841,13 +838,13 @@ When users enable `--max-concurrency > 1`, understanding the DAG is critical for
 
 ## Phased Rollout
 
-### Phase 1: Foundation Packages
+### Phase 1: Foundation Packages — ✅ Shipped
 1. Create `pkg/process/` with `Runner` interface, `TaskSpec`, `Streams`, `Result`, default exec-based implementation
 2. Extend `pkg/io/` with `prefixedWriter` and `NewOutput()` factory (reuse existing `maskedWriter` pattern)
 3. Refactor `ExecuteShellCommand()` to accept optional `process.Streams` parameter (backward-compatible: `nil` means current behavior)
 4. Eliminate the `os.Stdout` swap pattern in `terraform_plan_diff.go` — replaced by stream injection
 
-### Phase 2: Scheduler + Terraform Adapter
+### Phase 2: Scheduler + Terraform Adapter — ✅ Shipped
 1. Create `pkg/scheduler/` with pure scheduling logic (`Scheduler`, `Node`, `Dispatcher` interface, `AggregateResult`)
 2. Create `pkg/scheduler/orchestrator.go` combining scheduler + process runner + adapter registry
 3. Create `pkg/scheduler/adapters/` with `TerraformAdapter` (Prepare/Finalize calling existing exec functions)
@@ -857,13 +854,13 @@ When users enable `--max-concurrency > 1`, understanding the DAG is critical for
 7. JSON summary output (`--output json`)
 8. Require `-auto-approve` when `--max-concurrency > 1` for `apply`/`destroy`
 
-### Phase 3: Routing Consolidation + Multi-Type DAGs
-1. Converge `--components` and `--query` onto the DAG-backed executor (currently `ExecuteTerraformQuery`)
-2. Unify `--affected` path to use the scheduler
-3. Add `--fail-fast` / `--keep-going` flags
-4. Create `PackerAdapter`, `AnsibleAdapter` (wraps `ComponentProvider`), `ComponentProviderAdapter` for registered types
-5. Extend graph building to include Packer and Ansible nodes
-6. Cross-type `depends_on` syntax (e.g., `component: ami-builder, type: packer`)
+### Phase 3: Routing Consolidation + Multi-Type DAGs — partially shipped
+1. ✅ Shipped — Converge `--components` and `--query` onto the DAG-backed executor (currently `ExecuteTerraformQuery`)
+2. ✅ Shipped — Unify `--affected` path to use the scheduler
+3. ✅ Shipped — Failure-mode handling equivalent to `--fail-fast` / `--keep-going`, implemented as a single `--failure-mode {fail-fast,keep-going}` flag on `plan`/`apply`/`deploy`/`destroy`
+4. Open — Create `PackerAdapter`, `AnsibleAdapter` (wraps `ComponentProvider`), `ComponentProviderAdapter` for registered types
+5. Open — Extend graph building to include Packer and Ansible nodes
+6. Open — Cross-type `depends_on` syntax (e.g., `component: ami-builder, type: packer`)
 
 ### Phase 4: Advanced Scheduling
 1. Per-type concurrency limits (resource pools, like Ninja)
@@ -905,7 +902,7 @@ Notable details from PR #2159 that should be preserved:
 - **No new exec files**: Adapters and orchestrator live in `pkg/scheduler/` and `pkg/scheduler/adapters/`, NOT in `internal/exec/`. The long-term goal is to eliminate `internal/exec/`.
 - **`pkg/process/` vs `pkg/runner/`**: `pkg/process/` is subprocess-level (spawn, streams, signals, exit codes). `pkg/runner/` is task-level (shell tasks, atmos sub-commands). Different abstraction levels, complementary.
 - **Default concurrency**: `1` (sequential, backward-compatible), configurable via `atmos.yaml`, ENV, or CLI flag
-- **Cross-type dependency syntax**: Solved by PR #2193 — new `dependencies.components` format with `kind` field for cross-type dependencies (terraform/helmfile/packer/plugin). The scheduler consumes this format via the graph builder.
+- **Cross-type dependency syntax**: Partially solved. PR #2193 added the `dependencies.components` `kind` field (terraform/helmfile/packer/plugin) at the schema level, and it's normalized/validated today. The Terraform scheduler adapter does not yet consume it, though: `addTerraformDependencies()` (`pkg/scheduler/adapters/terraform.go`) explicitly skips any dependency whose `kind` isn't `terraform` (`if dep.Kind != "" && dep.Kind != cfg.TerraformComponentType { continue }`), so a declared `kind: packer` edge is parsed but never added to the DAG the scheduler executes. Real cross-type scheduling requires the Phase 3 items still open below (`PackerAdapter`, `AnsibleAdapter`, graph building for non-Terraform nodes).
 
 ---
 

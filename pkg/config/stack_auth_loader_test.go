@@ -12,6 +12,8 @@ import (
 )
 
 func TestLoadStackAuthDefaults_EmptyIncludePaths(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		IncludeStackAbsolutePaths: []string{},
 	}
@@ -23,6 +25,8 @@ func TestLoadStackAuthDefaults_EmptyIncludePaths(t *testing.T) {
 }
 
 func TestLoadStackAuthDefaults_WithStackFiles(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory with stack files.
 	tmpDir := t.TempDir()
 
@@ -53,6 +57,8 @@ auth:
 }
 
 func TestLoadStackAuthDefaults_MultipleFilesConflictingDefaults(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory with multiple stack files with DIFFERENT defaults.
 	tmpDir := t.TempDir()
 
@@ -90,6 +96,8 @@ auth:
 }
 
 func TestLoadStackAuthDefaults_MultipleFilesAgreeingDefaults(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory with multiple stack files with the SAME default.
 	tmpDir := t.TempDir()
 
@@ -125,6 +133,8 @@ auth:
 }
 
 func TestLoadStackAuthDefaults_ExcludePaths(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory with stack files.
 	tmpDir := t.TempDir()
 
@@ -162,6 +172,8 @@ auth:
 }
 
 func TestLoadStackAuthDefaults_NoAuthSection(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory with a stack file without auth section.
 	tmpDir := t.TempDir()
 
@@ -185,6 +197,8 @@ vars:
 }
 
 func TestLoadStackAuthDefaults_InvalidYAML(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory with an invalid YAML file.
 	tmpDir := t.TempDir()
 
@@ -210,6 +224,8 @@ auth:
 }
 
 func TestLoadStackAuthDefaults_YAMLWithTemplates(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory with a stack file containing Go templates.
 	// The loader should handle files that can't be parsed due to templates.
 	tmpDir := t.TempDir()
@@ -237,6 +253,8 @@ auth:
 }
 
 func TestMergeStackAuthDefaults_NilAuthConfig(t *testing.T) {
+	t.Parallel()
+
 	stackDefaults := map[string]bool{"test-identity": true}
 
 	// Should not panic.
@@ -244,6 +262,8 @@ func TestMergeStackAuthDefaults_NilAuthConfig(t *testing.T) {
 }
 
 func TestMergeStackAuthDefaults_EmptyDefaults(t *testing.T) {
+	t.Parallel()
+
 	authConfig := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
 			"test-identity": {Kind: "aws/assume-role"},
@@ -257,6 +277,8 @@ func TestMergeStackAuthDefaults_EmptyDefaults(t *testing.T) {
 }
 
 func TestMergeStackAuthDefaults_SetDefault(t *testing.T) {
+	t.Parallel()
+
 	authConfig := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
 			"test-identity": {Kind: "aws/assume-role"},
@@ -272,6 +294,8 @@ func TestMergeStackAuthDefaults_SetDefault(t *testing.T) {
 }
 
 func TestMergeStackAuthDefaults_OverridesAtmosYamlDefault(t *testing.T) {
+	t.Parallel()
+
 	// Identity already has default: false in atmos.yaml.
 	// Stack config sets it to true - stack should take precedence.
 	authConfig := &schema.AuthConfig{
@@ -289,6 +313,8 @@ func TestMergeStackAuthDefaults_OverridesAtmosYamlDefault(t *testing.T) {
 }
 
 func TestMergeStackAuthDefaults_ClearsAtmosYamlDefault(t *testing.T) {
+	t.Parallel()
+
 	// atmos.yaml has identity-a as default.
 	// Stack config sets identity-b as default.
 	// Stack should take precedence - identity-a should lose default, identity-b should gain it.
@@ -310,6 +336,8 @@ func TestMergeStackAuthDefaults_ClearsAtmosYamlDefault(t *testing.T) {
 }
 
 func TestMergeStackAuthDefaults_NoStackDefault_PreservesAtmosYaml(t *testing.T) {
+	t.Parallel()
+
 	// atmos.yaml has a default set.
 	// Stack config has no defaults.
 	// atmos.yaml default should be preserved.
@@ -329,6 +357,8 @@ func TestMergeStackAuthDefaults_NoStackDefault_PreservesAtmosYaml(t *testing.T) 
 }
 
 func TestMergeStackAuthDefaults_IdentityNotInConfig(t *testing.T) {
+	t.Parallel()
+
 	// Auth config doesn't have the identity from stack defaults.
 	authConfig := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
@@ -349,6 +379,8 @@ func TestMergeStackAuthDefaults_IdentityNotInConfig(t *testing.T) {
 }
 
 func TestLoadFileForAuthDefaults_NonYAMLFile(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	// Create a non-YAML file.
@@ -362,6 +394,8 @@ func TestLoadFileForAuthDefaults_NonYAMLFile(t *testing.T) {
 }
 
 func TestLoadFileForAuthDefaults_YMLExtension(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	// Create a .yml file with default identity.
@@ -382,12 +416,16 @@ auth:
 }
 
 func TestGetAllStackFiles_EmptyPatterns(t *testing.T) {
+	t.Parallel()
+
 	files := getAllStackFiles([]string{}, []string{})
 
 	assert.Empty(t, files)
 }
 
 func TestGetAllStackFiles_InvalidPattern(t *testing.T) {
+	t.Parallel()
+
 	// An invalid glob pattern should be skipped without error.
 	files := getAllStackFiles([]string{"/nonexistent/path/*.yaml"}, []string{})
 
@@ -395,6 +433,8 @@ func TestGetAllStackFiles_InvalidPattern(t *testing.T) {
 }
 
 func TestGetAllStackFiles_InvalidExcludePattern(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory with a stack file.
 	tmpDir := t.TempDir()
 
@@ -418,6 +458,8 @@ auth:
 }
 
 func TestLoadFileForAuthDefaults_ReadError(t *testing.T) {
+	t.Parallel()
+
 	// Try to read a non-existent file.
 	defaults, err := loadFileForAuthDefaults("/nonexistent/path/test.yaml")
 
@@ -426,6 +468,8 @@ func TestLoadFileForAuthDefaults_ReadError(t *testing.T) {
 }
 
 func TestHasAnyDefault_AllFalse(t *testing.T) {
+	t.Parallel()
+
 	// Test when all defaults are false.
 	defaults := map[string]bool{
 		"identity-a": false,
@@ -437,6 +481,8 @@ func TestHasAnyDefault_AllFalse(t *testing.T) {
 }
 
 func TestHasAnyDefault_Empty(t *testing.T) {
+	t.Parallel()
+
 	// Test with empty map.
 	defaults := map[string]bool{}
 
@@ -445,6 +491,8 @@ func TestHasAnyDefault_Empty(t *testing.T) {
 }
 
 func TestHasAnyDefault_OneTrue(t *testing.T) {
+	t.Parallel()
+
 	// Test when one default is true.
 	defaults := map[string]bool{
 		"identity-a": false,
@@ -456,6 +504,8 @@ func TestHasAnyDefault_OneTrue(t *testing.T) {
 }
 
 func TestApplyStackDefaults_FalseDefault(t *testing.T) {
+	t.Parallel()
+
 	// Test when stack defaults has an identity set to false.
 	// This should not change the identity's default status.
 	authConfig := &schema.AuthConfig{
@@ -475,6 +525,8 @@ func TestApplyStackDefaults_FalseDefault(t *testing.T) {
 }
 
 func TestLoadStackAuthDefaults_FileReadError(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory.
 	tmpDir := t.TempDir()
 
@@ -520,6 +572,8 @@ auth:
 // ============================================================================
 
 func TestLoadStackAuthDefaults_FollowsImports(t *testing.T) {
+	t.Parallel()
+
 	// Top-level stack manifest imports a _defaults.yaml that declares the default.
 	// The scanner must follow the import and surface the default to the loader.
 	tmpDir := t.TempDir()
@@ -553,6 +607,8 @@ vars:
 }
 
 func TestLoadStackAuthDefaults_FollowsImportsFromExcludedPath(t *testing.T) {
+	t.Parallel()
+
 	// The real-world Issue #2293 layout: _defaults.yaml is in `excluded_paths`
 	// so `getAllStackFiles` filters it out, but it is still referenced via
 	// `import:` from a top-level manifest. The scanner must resolve that import
@@ -591,6 +647,8 @@ import:
 }
 
 func TestLoadStackAuthDefaults_ImportCycleProtection(t *testing.T) {
+	t.Parallel()
+
 	// Two files that import each other. The recursive scanner must terminate
 	// and return a sensible result without infinite recursion.
 	tmpDir := t.TempDir()
@@ -624,6 +682,8 @@ import:
 }
 
 func TestLoadStackAuthDefaults_GlobImports(t *testing.T) {
+	t.Parallel()
+
 	// Glob import should expand and be followed.
 	tmpDir := t.TempDir()
 	stacksDir := filepath.Join(tmpDir, "stacks")
@@ -655,6 +715,8 @@ import:
 }
 
 func TestLoadStackAuthDefaults_TemplatedImportSkipped(t *testing.T) {
+	t.Parallel()
+
 	// Go-template imports cannot be resolved without template context — the
 	// scanner must skip them gracefully rather than erroring.
 	tmpDir := t.TempDir()
@@ -685,6 +747,8 @@ auth:
 }
 
 func TestLoadStackAuthDefaults_ConflictingDefaultsAcrossImportAndFileDiscarded(t *testing.T) {
+	t.Parallel()
+
 	// When the importing file and its imported file declare defaults for
 	// DIFFERENT identities, the merged view of that file contains two
 	// competing defaults. The top-level allAgree check detects the conflict
@@ -727,6 +791,8 @@ auth:
 }
 
 func TestLoadStackAuthDefaults_ExplicitFalseRevokesImportedDefault(t *testing.T) {
+	t.Parallel()
+
 	// An imported _defaults.yaml sets `foo.default: true`. The importing file
 	// overrides it with `foo.default: false`. The scanner must honor the
 	// explicit `false` and NOT report `foo` as a default.
@@ -768,6 +834,8 @@ auth:
 }
 
 func TestLoadStackAuthDefaults_IdentityWithoutDefaultFieldLeavesImportedDefault(t *testing.T) {
+	t.Parallel()
+
 	// An imported _defaults.yaml sets `foo.default: true`. The importing file
 	// mentions `foo` but without a `default` field at all. The scanner must
 	// treat the nil `default` as "not mentioned" and preserve the imported
@@ -808,6 +876,8 @@ auth:
 }
 
 func TestLoadStackAuthDefaults_ImportedDefaultAgreesAcrossStacks(t *testing.T) {
+	t.Parallel()
+
 	// Two top-level stacks import the SAME _defaults.yaml that declares a
 	// default. Both should report the same identity, allAgree passes, and
 	// the default is returned. This is the positive happy-path companion to
@@ -845,6 +915,8 @@ import:
 }
 
 func TestLoadStackAuthDefaults_RelativeImports(t *testing.T) {
+	t.Parallel()
+
 	// `./` and `../` imports must resolve against the importing file's dir,
 	// not the stacks base path.
 	tmpDir := t.TempDir()

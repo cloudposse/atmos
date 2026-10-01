@@ -49,6 +49,7 @@ export default function FilePage({
           example={example}
           routeBasePath={routeBasePath}
           currentPath={fileData.path}
+          titleAsCode={optionsData.titleAsCode}
         />
         <main className={styles.mainContent}>
           <BreadcrumbNav path={fileData.path} routeBasePath={routeBasePath} rootLabel={(optionsData.title || 'Examples').toLowerCase()} />

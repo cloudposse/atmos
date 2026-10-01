@@ -9,7 +9,10 @@ import (
 )
 
 func TestSplitSlice(t *testing.T) {
+	t.Parallel()
+
 	t.Run("splits evenly", func(t *testing.T) {
+		t.Parallel()
 		items := []int{1, 2, 3, 4, 5, 6}
 		chunks := splitSlice(items, 2)
 		require.Len(t, chunks, 3)
@@ -19,6 +22,7 @@ func TestSplitSlice(t *testing.T) {
 	})
 
 	t.Run("splits with remainder", func(t *testing.T) {
+		t.Parallel()
 		items := []int{1, 2, 3, 4, 5}
 		chunks := splitSlice(items, 2)
 		require.Len(t, chunks, 3)
@@ -28,6 +32,7 @@ func TestSplitSlice(t *testing.T) {
 	})
 
 	t.Run("single chunk when items fit", func(t *testing.T) {
+		t.Parallel()
 		items := []int{1, 2, 3}
 		chunks := splitSlice(items, 10)
 		require.Len(t, chunks, 1)
@@ -35,6 +40,7 @@ func TestSplitSlice(t *testing.T) {
 	})
 
 	t.Run("chunk size of 1", func(t *testing.T) {
+		t.Parallel()
 		items := []int{1, 2, 3}
 		chunks := splitSlice(items, 1)
 		require.Len(t, chunks, 3)
@@ -44,18 +50,22 @@ func TestSplitSlice(t *testing.T) {
 	})
 
 	t.Run("zero chunk size defaults to 1", func(t *testing.T) {
+		t.Parallel()
 		items := []int{1, 2}
 		chunks := splitSlice(items, 0)
 		require.Len(t, chunks, 2)
 	})
 
 	t.Run("empty slice", func(t *testing.T) {
+		t.Parallel()
 		chunks := splitSlice([]int{}, 5)
 		assert.Empty(t, chunks)
 	})
 }
 
 func TestMetadataOverhead(t *testing.T) {
+	t.Parallel()
+
 	type testStruct struct {
 		Name  string `json:"name"`
 		Value int    `json:"value"`
@@ -67,7 +77,10 @@ func TestMetadataOverhead(t *testing.T) {
 }
 
 func TestSendChunked(t *testing.T) {
+	t.Parallel()
+
 	t.Run("small payload sends without batch info", func(t *testing.T) {
+		t.Parallel()
 		items := []string{"a", "b", "c"}
 		var calls []struct {
 			chunk []string
@@ -89,6 +102,7 @@ func TestSendChunked(t *testing.T) {
 	})
 
 	t.Run("empty items sends without batch info", func(t *testing.T) {
+		t.Parallel()
 		var calls int
 		err := sendChunked([]string{}, 0, 10, func(chunk []string, batch *BatchInfo) error {
 			calls++
@@ -102,6 +116,7 @@ func TestSendChunked(t *testing.T) {
 	})
 
 	t.Run("large payload is chunked with batch info", func(t *testing.T) {
+		t.Parallel()
 		// Create items that will exceed DefaultMaxPayloadBytes.
 		// Each item is ~1000 bytes when serialized.
 		largeString := make([]byte, 900)
@@ -149,6 +164,7 @@ func TestSendChunked(t *testing.T) {
 	})
 
 	t.Run("chunk failure stops and returns error", func(t *testing.T) {
+		t.Parallel()
 		largeString := make([]byte, 900)
 		for i := range largeString {
 			largeString[i] = 'x'

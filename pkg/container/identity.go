@@ -74,6 +74,17 @@ func DiscoveryFilter(stack, componentType, component string) map[string]string {
 	}
 }
 
+// ComponentTypeFilter returns the runtime List() filter that matches every
+// Atmos-managed instance of a component type. It is useful for callers that
+// need to inspect multiple configured instances in one runtime query.
+func ComponentTypeFilter(componentType string) map[string]string {
+	defer perf.Track(nil, "container.ComponentTypeFilter")()
+
+	return map[string]string{
+		"label": fmt.Sprintf("%s=%s", LabelComponentType, componentType),
+	}
+}
+
 // IsContainerRunning reports whether a runtime status string indicates a
 // running container. It accepts both Docker's "running"/"Up ..." forms.
 func IsContainerRunning(status string) bool {

@@ -1,8 +1,7 @@
 
 👽 test linux/amd64
 
-Atmos is a framework for orchestrating and operating infrastructure workflows
-across multiple cloud and DevOps toolchains.
+Atmos is a framework for orchestrating and operating infrastructure workflows across multiple cloud and DevOps toolchains.
 
 USAGE
 
@@ -29,6 +28,7 @@ BUILT-IN COMMANDS
       atlantis [command]                     Generate and manage Atlantis configurations
       auth [command] [EXPERIMENTAL]          Authenticate with cloud providers and identity services.
       aws [command]                          Run AWS-specific commands for interacting with cloud resources
+      azure [command]                        Run Azure-specific commands for interacting with cloud resources
       cast [command]                         Play and render Atmos asciicast recordings
       ci [command] [EXPERIMENTAL]            CI/CD integration commands
       completion [command]                   Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
@@ -41,10 +41,12 @@ BUILT-IN COMMANDS
       emulator [command] [EXPERIMENTAL]      Manage local emulators for AWS, GCP, Azure, Kubernetes, Vault, and OCI
                                              registries
       env                                    Output environment variables configured in atmos.yaml
+      gcp [command]                          Run GCP-specific commands for interacting with cloud resources
       git [command] [EXPERIMENTAL]           GitOps enablement: automate Git commits locally and in CI
       helm [command] [EXPERIMENTAL]          Manage native Helm components
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments
       help                                   Help about any command
+      init [EXPERIMENTAL]                    Initialize a new Atmos project from a template
       kubernetes [command] [EXPERIMENTAL]    Manage Kubernetes-native components
       list [command]                         List available stacks and components
       lsp [command] [EXPERIMENTAL]           Language Server Protocol commands
@@ -52,8 +54,11 @@ BUILT-IN COMMANDS
       packer [command]                       Manage packer-based machine images for multiple platforms
       pro [command]                          Access premium features integrated with atmos-pro.com
       profile [command]                      Manage configuration profiles
+      sbom [command] [EXPERIMENTAL]          Generate software bills of materials from Atmos locks
+      scaffold [command] [EXPERIMENTAL]      Generate code from scaffold templates
       secret [command] [EXPERIMENTAL]        Manage declarative secrets across stacks and components.
       stack [command]                        Read and edit stack manifests for a component
+      store [command] [EXPERIMENTAL]         Manage raw values in configured store backends.
       support                                Show Atmos support options
       terraform [command]                    Execute Terraform commands using Atmos stack configurations
       theme [command]                        Manage terminal themes for Atmos CLI

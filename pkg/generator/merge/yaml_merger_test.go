@@ -1,0 +1,1343 @@
+package merge
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+)
+
+func TestYAMLMerger_CleanMerges(t *testing.T) {
+	tests := []struct {
+		name    string
+		base    string
+		ours    string
+		theirs  string
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "user changes value, template adds key",
+			base: `components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+`,
+			ours: `components:
+  terraform:
+    base_path: "infrastructure/terraform"
+    apply_auto_approve: false
+`,
+			theirs: `components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+`,
+			want: `components:
+  terraform:
+    base_path: "infrastructure/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+`,
+			wantErr: false,
+		},
+		{
+			name: "template adds multiple keys",
+			base: `settings:
+  enabled: true
+`,
+			ours: `settings:
+  enabled: true
+  timeout: 30
+`,
+			theirs: `settings:
+  enabled: true
+  retries: 3
+  log_level: info
+`,
+			// Note: Key order follows "ours" first, then template additions
+			want: `settings:
+  enabled: true
+  timeout: 30
+  retries: 3
+  log_level: info
+`,
+			wantErr: false,
+		},
+		{
+			name: "user and template modify different nested keys",
+			base: `database:
+  host: localhost
+  port: 5432
+  credentials:
+    user: admin
+    password: secret
+`,
+			ours: `database:
+  host: prod-db.example.com
+  port: 5432
+  credentials:
+    user: admin
+    password: secret
+`,
+			theirs: `database:
+  host: localhost
+  port: 5432
+  credentials:
+    user: admin
+    password: secret
+    ssl: true
+`,
+			// Note: YAML preserves "ours" key ordering at all levels
+			want: `database:
+  host: prod-db.example.com
+  port: 5432
+  credentials:
+    user: admin
+    password: secret
+    ssl: true
+`,
+			wantErr: false,
+		},
+		{
+			name: "identical changes",
+			base: `version: 1
+name: myapp
+`,
+			ours: `version: 2
+name: myapp
+`,
+			theirs: `version: 2
+name: myapp
+`,
+			want: `version: 2
+name: myapp
+`,
+			wantErr: false,
+		},
+		{
+			name:    "no changes",
+			base:    "key: value\n",
+			ours:    "key: value\n",
+			theirs:  "key: value\n",
+			want:    "key: value\n",
+			wantErr: false,
+		},
+		{
+			name: "user adds key, template adds different key",
+			base: `config:
+  feature_a: true
+`,
+			ours: `config:
+  feature_a: true
+  feature_b: true
+`,
+			theirs: `config:
+  feature_a: true
+  feature_c: true
+`,
+			want: `config:
+  feature_a: true
+  feature_b: true
+  feature_c: true
+`,
+			wantErr: false,
+		},
+		{
+			name: "deep nesting with changes at different levels",
+			base: `root:
+  level1:
+    level2:
+      value: original
+`,
+			ours: `root:
+  level1:
+    level2:
+      value: original
+      user_added: true
+`,
+			theirs: `root:
+  level1:
+    level2:
+      value: original
+    template_added: true
+`,
+			want: `root:
+  level1:
+    level2:
+      value: original
+      user_added: true
+    template_added: true
+`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewYAMLMerger(50)
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+
+			if tt.wantErr && err == nil {
+				t.Errorf("Expected error, got nil")
+				return
+			}
+
+			if !tt.wantErr && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if err == nil {
+				// Normalize whitespace for comparison
+				got := strings.TrimSpace(result.Content)
+				want := strings.TrimSpace(tt.want)
+
+				if got != want {
+					t.Errorf("Merge result mismatch\nGot:\n%s\n\nWant:\n%s", got, want)
+				}
+
+				if result.HasConflicts {
+					t.Errorf("Unexpected conflicts in clean merge: %d conflicts", result.ConflictCount)
+				}
+			}
+		})
+	}
+}
+
+func TestYAMLMerger_Conflicts(t *testing.T) {
+	tests := []struct {
+		name              string
+		base              string
+		ours              string
+		theirs            string
+		threshold         int
+		wantConflicts     bool
+		wantConflictCount int
+		wantErr           bool
+	}{
+		{
+			name: "both modify same scalar value",
+			base: `config:
+  version: 1
+`,
+			ours: `config:
+  version: 2
+`,
+			theirs: `config:
+  version: 3
+`,
+			threshold:         50,
+			wantConflicts:     true,
+			wantConflictCount: 1,
+			wantErr:           false,
+		},
+		{
+			name: "multiple conflicting scalar values",
+			base: `settings:
+  timeout: 30
+  retries: 3
+  enabled: true
+`,
+			ours: `settings:
+  timeout: 60
+  retries: 5
+  enabled: true
+`,
+			theirs: `settings:
+  timeout: 45
+  retries: 10
+  enabled: true
+`,
+			threshold:         50,
+			wantConflicts:     true,
+			wantConflictCount: 2,
+			wantErr:           false,
+		},
+		{
+			name: "conflicting list modifications",
+			base: `allowed_ips:
+  - 192.168.1.1
+  - 192.168.1.2
+`,
+			ours: `allowed_ips:
+  - 192.168.1.1
+  - 10.0.0.1
+`,
+			theirs: `allowed_ips:
+  - 192.168.1.1
+  - 172.16.0.1
+`,
+			threshold:         100, // Increase threshold - one conflict in single-key doc is 100%
+			wantConflicts:     true,
+			wantConflictCount: 1,
+			wantErr:           false,
+		},
+		{
+			name: "conflicts exceeding threshold",
+			base: `a: 1
+b: 2
+c: 3
+`,
+			ours: `a: 10
+b: 20
+c: 30
+`,
+			theirs: `a: 100
+b: 200
+c: 300
+`,
+			threshold:         10, // Low threshold
+			wantConflicts:     true,
+			wantConflictCount: 3,
+			wantErr:           true, // Should exceed threshold
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewYAMLMerger(tt.threshold)
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error due to threshold, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if result.HasConflicts != tt.wantConflicts {
+				t.Errorf("HasConflicts = %v, want %v", result.HasConflicts, tt.wantConflicts)
+			}
+
+			if result.ConflictCount != tt.wantConflictCount {
+				t.Errorf("ConflictCount = %d, want %d", result.ConflictCount, tt.wantConflictCount)
+			}
+		})
+	}
+}
+
+func TestYAMLMerger_ConflictStrategies(t *testing.T) {
+	base := "config:\n  version: 1\n"
+	ours := "config:\n  version: 2\n"
+	theirs := "config:\n  version: 3\n"
+
+	tests := []struct {
+		name          string
+		strategy      ConflictStrategy
+		wantValue     string
+		wantConflicts bool
+	}{
+		{
+			name:          "manual (default) records a conflict and keeps ours",
+			strategy:      ConflictStrategyManual,
+			wantValue:     "version: 2",
+			wantConflicts: true,
+		},
+		{
+			name:          "ours auto-resolves to the user's value, no conflict",
+			strategy:      ConflictStrategyOurs,
+			wantValue:     "version: 2",
+			wantConflicts: false,
+		},
+		{
+			name:          "theirs auto-resolves to the template's value, no conflict",
+			strategy:      ConflictStrategyTheirs,
+			wantValue:     "version: 3",
+			wantConflicts: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewYAMLMerger(100)
+			merger.SetConflictStrategy(tt.strategy)
+
+			result, err := merger.Merge(base, ours, theirs)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantConflicts, result.HasConflicts)
+			assert.Contains(t, result.Content, tt.wantValue)
+		})
+	}
+}
+
+func TestYAMLMerger_CommentPreservation(t *testing.T) {
+	tests := []struct {
+		name           string
+		base           string
+		ours           string
+		theirs         string
+		wantHasKey     string   // Key that should be in result
+		wantComments   []string // Comments that should be preserved
+		wantNoComments []string // Comments that should not be in result
+	}{
+		{
+			name: "preserves head comments",
+			base: `# Base comment
+key: value
+`,
+			ours: `# User comment
+key: value
+`,
+			theirs: `# Template comment
+key: value
+`,
+			wantHasKey:   "key",
+			wantComments: []string{"# User comment"},
+			// Template comment should not appear since we prefer user's version
+			wantNoComments: []string{"# Template comment"},
+		},
+		{
+			name: "preserves comments when adding keys",
+			base: `config:
+  # Important setting
+  enabled: true
+`,
+			ours: `config:
+  # Important setting
+  enabled: true
+  # User's setting
+  timeout: 30
+`,
+			theirs: `config:
+  # Important setting
+  enabled: true
+  # Template's setting
+  retries: 3
+`,
+			wantHasKey: "timeout",
+			wantComments: []string{
+				"# User's setting",
+				"# Template's setting",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewYAMLMerger(50)
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			// Check that result is valid YAML
+			if !strings.Contains(result.Content, tt.wantHasKey) {
+				t.Errorf("Expected result to contain key %q, but it doesn't.\nGot:\n%s", tt.wantHasKey, result.Content)
+			}
+
+			// Check expected comments are present
+			for _, comment := range tt.wantComments {
+				if !strings.Contains(result.Content, comment) {
+					t.Errorf("Expected result to contain comment %q\nGot:\n%s", comment, result.Content)
+				}
+			}
+
+			// Check unwanted comments are not present
+			for _, comment := range tt.wantNoComments {
+				if strings.Contains(result.Content, comment) {
+					t.Errorf("Expected result NOT to contain comment %q\nGot:\n%s", comment, result.Content)
+				}
+			}
+		})
+	}
+}
+
+func TestYAMLMerger_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		base    string
+		ours    string
+		theirs  string
+		wantErr bool
+	}{
+		{
+			name:    "empty base",
+			base:    "",
+			ours:    "key: value\n",
+			theirs:  "key: value\n",
+			wantErr: false, // Empty YAML parses to empty document
+		},
+		{
+			name:    "empty ours",
+			base:    "key: value\n",
+			ours:    "",
+			theirs:  "key: value\n",
+			wantErr: false, // Empty YAML parses to empty document
+		},
+		{
+			name:    "null values",
+			base:    "key: null\n",
+			ours:    "key: null\n",
+			theirs:  "key: value\n",
+			wantErr: false,
+		},
+		{
+			name: "boolean values",
+			base: `enabled: false
+debug: true
+`,
+			ours: `enabled: true
+debug: true
+`,
+			theirs: `enabled: false
+debug: false
+`,
+			wantErr: false,
+		},
+		{
+			name: "numeric values",
+			base: `count: 1
+timeout: 30.5
+`,
+			ours: `count: 2
+timeout: 30.5
+`,
+			theirs: `count: 1
+timeout: 60.0
+`,
+			wantErr: false,
+		},
+		{
+			name: "multiline strings",
+			base: `description: |
+  This is a
+  multiline string
+`,
+			ours: `description: |
+  This is a
+  modified string
+`,
+			theirs: `description: |
+  This is a
+  multiline string
+`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewYAMLMerger(100) // High threshold for edge cases
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+
+			if tt.wantErr && err == nil {
+				t.Errorf("Expected error, got nil")
+				return
+			}
+
+			if !tt.wantErr && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if err == nil && result == nil {
+				t.Errorf("Expected non-nil result when no error occurred")
+			}
+		})
+	}
+}
+
+func TestYAMLMerger_RealWorldScenarios(t *testing.T) {
+	tests := []struct {
+		name           string
+		base           string
+		ours           string
+		theirs         string
+		wantContains   []string
+		wantNotContain []string
+	}{
+		{
+			name: "atmos.yaml: user changes path, template adds features",
+			base: `components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+`,
+			ours: `components:
+  terraform:
+    base_path: "infrastructure/terraform"
+    apply_auto_approve: false
+`,
+			theirs: `components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    auto_generate_backend_file: true
+`,
+			wantContains: []string{
+				"infrastructure/terraform", // User's change
+				"deploy_run_init: true",    // Template's addition
+				"auto_generate_backend_file: true",
+			},
+			wantNotContain: []string{
+				"components/terraform", // Should be replaced by user's version
+			},
+		},
+		{
+			name: "stack config: user adds vars, template adds settings",
+			base: `components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+`,
+			ours: `components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.1.0.0/16"
+        enable_dns: true
+`,
+			theirs: `components:
+  terraform:
+    vpc:
+      settings:
+        depends_on:
+          - networking/config
+      vars:
+        cidr_block: "10.0.0.0/16"
+`,
+			wantContains: []string{
+				"10.1.0.0/16",      // User's CIDR
+				"enable_dns: true", // User's var
+				"depends_on",       // Template's setting
+			},
+			wantNotContain: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewYAMLMerger(50)
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			for _, want := range tt.wantContains {
+				if !strings.Contains(result.Content, want) {
+					t.Errorf("Expected result to contain %q\nGot:\n%s", want, result.Content)
+				}
+			}
+
+			for _, dontWant := range tt.wantNotContain {
+				if strings.Contains(result.Content, dontWant) {
+					t.Errorf("Expected result NOT to contain %q\nGot:\n%s", dontWant, result.Content)
+				}
+			}
+
+			t.Logf("Merge result:\n%s", result.Content)
+		})
+	}
+}
+
+func TestYAMLMerger_KeyDeletion(t *testing.T) {
+	tests := []struct {
+		name          string
+		base          string
+		ours          string
+		theirs        string
+		wantHasKey    string
+		wantNotHasKey string
+	}{
+		{
+			name: "user deletes key, template keeps it - preserve deletion",
+			base: `settings:
+  feature_a: true
+  feature_b: true
+  feature_c: true
+`,
+			ours: `settings:
+  feature_a: true
+  feature_c: true
+`,
+			theirs: `settings:
+  feature_a: true
+  feature_b: true
+  feature_c: true
+`,
+			wantHasKey:    "feature_a", // Should have feature_a and feature_c, not feature_b
+			wantNotHasKey: "feature_b",
+		},
+		{
+			name: "template deletes key, user keeps it - preserve user's version",
+			base: `settings:
+  old_feature: true
+  new_feature: false
+`,
+			ours: `settings:
+  old_feature: true
+  new_feature: false
+  user_feature: true
+`,
+			theirs: `settings:
+  new_feature: false
+`,
+			wantHasKey:    "old_feature", // User kept it, so preserve it
+			wantNotHasKey: "",            // Nothing should be deleted in this case
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewYAMLMerger(50)
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if !strings.Contains(result.Content, tt.wantHasKey) {
+				t.Errorf("Expected result to contain key %q\nGot:\n%s", tt.wantHasKey, result.Content)
+			}
+
+			if tt.wantNotHasKey != "" && strings.Contains(result.Content, tt.wantNotHasKey) {
+				t.Errorf("Expected result NOT to contain key %q\nGot:\n%s", tt.wantNotHasKey, result.Content)
+			}
+		})
+	}
+}
+
+func TestYAMLMerger_ParseErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		base   string
+		ours   string
+		theirs string
+	}{
+		{name: "bad base", base: "bad: [", ours: "a: 1\n", theirs: "a: 1\n"},
+		{name: "bad ours", base: "a: 1\n", ours: "bad: [", theirs: "a: 1\n"},
+		{name: "bad theirs", base: "a: 1\n", ours: "a: 1\n", theirs: "bad: ["},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewYAMLMerger(50).Merge(tt.base, tt.ours, tt.theirs)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestYAMLMerger_MultiDocumentStream(t *testing.T) {
+	base := "doc: one\n---\ndoc: two\n"
+	ours := "doc: one\nuser: true\n---\ndoc: two\n"
+	theirs := "doc: one\n---\ndoc: two\ntemplate: true\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	docs := strings.Split(result.Content, "---")
+	require.Len(t, docs, 2, "both documents in the stream must survive the merge")
+	assert.Contains(t, docs[0], "doc: one")
+	assert.Contains(t, docs[0], "user: true")
+	assert.Contains(t, docs[1], "doc: two")
+	assert.Contains(t, docs[1], "template: true")
+}
+
+func TestYAMLMerger_EmptyDocumentConcurrentAdditions(t *testing.T) {
+	result, err := NewYAMLMerger(100).Merge("", "user: true\n", "template: true\n")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	// Both independent additions must survive: the user's key and the
+	// template's key are different, so this is not a real conflict.
+	assert.Contains(t, result.Content, "user: true")
+	assert.Contains(t, result.Content, "template: true")
+}
+
+func TestYAMLMerger_KindDivergencePreservesOursAndRecordsConflict(t *testing.T) {
+	result, err := NewYAMLMerger(100).Merge("key: value\n", "key:\n  nested: true\n", "key:\n  - item\n")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.HasConflicts)
+	assert.True(t, result.HasMarkers, "a real ours/theirs divergence always has a node pair to splice markers from")
+	assert.Equal(t, 1, result.ConflictCount)
+	assert.Contains(t, result.Content, "nested: true")
+}
+
+// TestYAMLMerger_DroppedDocumentConflictHasNoMarkers covers
+// mergeDocumentStreams' ours==nil branch: the user's stream dropped a
+// document the template went on to change. That's recorded as a conflict
+// (via addConflict) with no ours/theirs node pair to splice inline markers
+// from, so HasConflicts is true but HasMarkers must be false -- unlike every
+// other conflict this merger records, which always comes from addNodeConflict
+// and therefore always has a marker.
+func TestYAMLMerger_DroppedDocumentConflictHasNoMarkers(t *testing.T) {
+	base := "doc: one\n---\ndoc: two\n"
+	ours := "doc: one\n"
+	theirs := "doc: one\n---\ndoc: two\ntemplate: true\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.HasConflicts)
+	assert.False(t, result.HasMarkers, "a dropped document has no node pair to splice markers from")
+	assert.Equal(t, []string{"documents[1]"}, result.ConflictPaths)
+	assert.NotContains(t, result.Content, "<<<<<<<")
+	assert.Contains(t, result.Content, "template: true")
+}
+
+func TestYAMLMerger_ComplexMappingKeyError(t *testing.T) {
+	base := "? [a, b]\n: value\n"
+	ours := "? [a, b]\n: user\n"
+	theirs := "? [a, b]\n: template\n"
+
+	_, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.Error(t, err)
+}
+
+func TestYAMLMerger_HelperFunctions(t *testing.T) {
+	assert.Equal(t, "(document root)", displayPath(""))
+	assert.Equal(t, "spec.fields", displayPath("spec.fields"))
+
+	mapping := createEmptyNodeOfKind(&yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"})
+	assert.Equal(t, yaml.MappingNode, mapping.Kind)
+	assert.Empty(t, mapping.Content)
+
+	sequence := createEmptyNodeOfKind(&yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"})
+	assert.Equal(t, yaml.SequenceNode, sequence.Kind)
+	assert.Empty(t, sequence.Content)
+
+	document := createEmptyNodeOfKind(&yaml.Node{Kind: yaml.DocumentNode})
+	assert.Equal(t, yaml.DocumentNode, document.Kind)
+	assert.Empty(t, document.Content)
+
+	scalar := createEmptyNodeOfKind(&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Style: yaml.DoubleQuotedStyle})
+	assert.Equal(t, yaml.ScalarNode, scalar.Kind)
+	assert.Empty(t, scalar.Value)
+	assert.Equal(t, yaml.DoubleQuotedStyle, scalar.Style)
+}
+
+func TestYAMLMerger_NodesEqualAdditionalKinds(t *testing.T) {
+	assert.True(t, nodesEqual(nil, nil))
+	assert.False(t, nodesEqual(nil, &yaml.Node{}))
+	assert.False(t, nodesEqual(&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "true"}, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"}))
+	assert.True(t, nodesEqual(&yaml.Node{Kind: yaml.AliasNode, Value: "a"}, &yaml.Node{Kind: yaml.AliasNode, Value: "a"}))
+}
+
+func TestYAMLMerger_CalculatePercentageParseFallback(t *testing.T) {
+	assert.Equal(t, maxChangePercentage, NewYAMLMerger(50).calculateYAMLChangePercentage("bad: [", "", "", 1))
+}
+
+func TestYAMLMerger_PreservesTagsAndStyle(t *testing.T) {
+	tests := []struct {
+		name    string
+		base    string
+		ours    string
+		theirs  string
+		wantTag string
+		wantStr string
+	}{
+		{
+			name: "preserves explicit !!str tag when user changes value",
+			base: `value: "123"
+`,
+			ours: `value: !!str 456
+`,
+			theirs: `value: "123"
+`,
+			wantTag: "!!str",
+			wantStr: "456",
+		},
+		{
+			name: "preserves folded scalar style",
+			base: `description: short
+`,
+			ours: `description: >
+  This is a folded
+  scalar that spans
+  multiple lines
+`,
+			theirs: `description: short
+`,
+			wantStr: "This is a folded scalar that spans multiple lines",
+		},
+		{
+			name: "preserves literal scalar style",
+			base: `script: echo hello
+`,
+			ours: `script: |
+  line one
+  line two
+  line three
+`,
+			theirs: `script: echo hello
+`,
+			wantStr: "line one\nline two\nline three",
+		},
+		{
+			name: "preserves tag when user changes value with explicit tag",
+			base: `port: 8080
+`,
+			ours: `port: !!str 9000
+`,
+			theirs: `port: 8080
+`,
+			wantTag: "!!str",
+			wantStr: "9000", // User's version wins
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewYAMLMerger(50)
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			// Parse result to check node properties
+			var resultNode yaml.Node
+			if err := yaml.Unmarshal([]byte(result.Content), &resultNode); err != nil {
+				t.Fatalf("Failed to parse merge result: %v", err)
+			}
+
+			// Navigate to the value node
+			if len(resultNode.Content) == 0 || resultNode.Content[0].Kind != yaml.MappingNode {
+				t.Fatal("Result is not a mapping")
+			}
+
+			mapping := resultNode.Content[0]
+			if len(mapping.Content) < 2 {
+				t.Fatal("Result mapping is empty")
+			}
+
+			valueNode := mapping.Content[1]
+
+			// Check tag if specified
+			if tt.wantTag != "" && valueNode.Tag != tt.wantTag {
+				t.Errorf("Expected tag %q, got %q", tt.wantTag, valueNode.Tag)
+			}
+
+			// Check value content
+			if tt.wantStr != "" {
+				// Normalize whitespace for comparison
+				gotValue := strings.TrimSpace(valueNode.Value)
+				wantValue := strings.TrimSpace(tt.wantStr)
+				if gotValue != wantValue {
+					t.Errorf("Expected value %q, got %q", wantValue, gotValue)
+				}
+			}
+
+			t.Logf("Result:\n%s", result.Content)
+		})
+	}
+}
+
+// TestYAMLMerger_ConflictMarkers_Scalar covers the inline-marker path: both
+// sides of the conflict are scalars, so the reconstructed markers fit on the
+// same line as the key. This is the exact shape from the original bug report
+// (github.com/cloudposse/atmos/issues/2912): a scalar value diverges on both
+// sides while an unrelated key is added by each side too.
+func TestYAMLMerger_ConflictMarkers_Scalar(t *testing.T) {
+	base := "setting: original\nkey1: v1\n"
+	ours := "setting: user-change\nkey1: v1\ncustom: mine\n"
+	theirs := "setting: template-change\nkey1: v1\nfeature: enabled\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+	require.Equal(t, []string{"documents[0].setting"}, result.ConflictPaths)
+
+	assert.Equal(t, `<<<<<<< Ours
+setting: user-change
+=======
+setting: template-change
+>>>>>>> Theirs
+key1: v1
+custom: mine
+feature: enabled
+`, result.Content)
+}
+
+// TestYAMLMerger_ConflictMarkers_KindDivergence covers the block-marker path:
+// one side is a scalar and the other a mapping (a real structural
+// divergence), so the reconstructed markers wrap an indented block beneath
+// the key rather than fitting inline.
+func TestYAMLMerger_ConflictMarkers_KindDivergence(t *testing.T) {
+	base := "key: value\n"
+	ours := "key:\n  nested: true\n"
+	theirs := "key:\n  - item\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	assert.Equal(t, `key:
+  <<<<<<< Ours
+  nested: true
+  =======
+  - item
+  >>>>>>> Theirs
+`, result.Content)
+}
+
+// TestYAMLMerger_ConflictMarkers_MultipleConflictsDoNotCollide guards the
+// fixed-width sentinel format: with more than 10 conflicts in one document, a
+// naive substring search (e.g. sentinel "...0" matching inside "...01") would
+// misattribute markers to the wrong conflict. Every conflict here must
+// resolve to its own value on both sides.
+func TestYAMLMerger_ConflictMarkers_MultipleConflictsDoNotCollide(t *testing.T) {
+	var base, ours, theirs strings.Builder
+	const count = 12
+	for i := 0; i < count; i++ {
+		fmt.Fprintf(&base, "k%d: base%d\n", i, i)
+		fmt.Fprintf(&ours, "k%d: ours%d\n", i, i)
+		fmt.Fprintf(&theirs, "k%d: theirs%d\n", i, i)
+	}
+
+	result, err := NewYAMLMerger(100).Merge(base.String(), ours.String(), theirs.String())
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, count, result.ConflictCount)
+
+	for i := 0; i < count; i++ {
+		assert.Contains(t, result.Content, fmt.Sprintf("k%d: ours%d", i, i))
+		assert.Contains(t, result.Content, fmt.Sprintf("k%d: theirs%d", i, i))
+	}
+	assert.Equal(t, count, strings.Count(result.Content, "<<<<<<< Ours"))
+	assert.Equal(t, count, strings.Count(result.Content, ">>>>>>> Theirs"))
+}
+
+// TestYAMLMerger_ConflictMarkers_PreexistingSentinelLookalike guards against
+// sentinel collisions: a scalar value already equal to the old, purely
+// sequential sentinel format (ATMOSMERGECONFLICT000000) must not be mistaken
+// for a real conflict placeholder by findSentinel/spliceConflictMarkers, and
+// must survive an unrelated conflict elsewhere in the document untouched.
+// The random suffix and forbidden-corpus check in conflictTracker.nextSentinel
+// guarantee this; without them, this literal value colliding with the first
+// sentinel issued would corrupt it in unpredictable ways.
+func TestYAMLMerger_ConflictMarkers_PreexistingSentinelLookalike(t *testing.T) {
+	base := "setting: original\nlookalike: ATMOSMERGECONFLICT000000\n"
+	ours := "setting: user-change\nlookalike: ATMOSMERGECONFLICT000000\n"
+	theirs := "setting: template-change\nlookalike: ATMOSMERGECONFLICT000000\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	// The lookalike value is identical on all three sides, so it must pass
+	// through untouched -- appearing exactly once, and not wrapped in (or
+	// replaced by) conflict markers meant for the unrelated "setting" key.
+	assert.Equal(t, 1, strings.Count(result.Content, "ATMOSMERGECONFLICT000000"))
+	assert.Equal(t, `<<<<<<< Ours
+setting: user-change
+=======
+setting: template-change
+>>>>>>> Theirs
+lookalike: ATMOSMERGECONFLICT000000
+`, result.Content)
+}
+
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates forces
+// cryptoRandRead (the crypto/rand.Read indirection used by
+// randomSentinelSuffix) to fail, and asserts a real ours/theirs divergence
+// surfaces that failure as ErrThreeWayMerge instead of silently succeeding.
+// Note: crypto/rand.Reader itself never errors on any platform Atmos
+// supports, so this branch (and everything upstream that propagates its
+// error -- nextSentinel, addNodeConflict, pickConflictValue, and every
+// mergeNodes/mergeMappings/mergeSequences/mergeScalars call site above
+// them) is otherwise unreachable from a test.
+func TestYAMLMerger_RandomSentinelSuffixFailurePropagates(t *testing.T) {
+	original := cryptoRandRead
+	injectedErr := errors.New("injected rand failure")
+	cryptoRandRead = func([]byte) (int, error) { return 0, injectedErr }
+	t.Cleanup(func() { cryptoRandRead = original })
+
+	_, err := NewYAMLMerger(100).Merge("setting: original\n", "setting: user-change\n", "setting: template-change\n")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates_SequenceConflict is
+// the mergeSequences counterpart of
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates: a real ours/theirs
+// sequence divergence routes through mergeSequences' own pickConflictValue
+// call instead of mergeMappings'.
+func TestYAMLMerger_RandomSentinelSuffixFailurePropagates_SequenceConflict(t *testing.T) {
+	original := cryptoRandRead
+	injectedErr := errors.New("injected rand failure")
+	cryptoRandRead = func([]byte) (int, error) { return 0, injectedErr }
+	t.Cleanup(func() { cryptoRandRead = original })
+
+	_, err := NewYAMLMerger(100).Merge("items:\n  - a\n", "items:\n  - b\n", "items:\n  - c\n")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates_AddedKeyKindMismatch
+// covers mergeMappings' "!inBase && inTheirs" branch, where both sides add
+// the same key but with different node kinds -- a distinct pickConflictValue
+// call site from the "all three have the key" case the base
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates test exercises.
+func TestYAMLMerger_RandomSentinelSuffixFailurePropagates_AddedKeyKindMismatch(t *testing.T) {
+	original := cryptoRandRead
+	injectedErr := errors.New("injected rand failure")
+	cryptoRandRead = func([]byte) (int, error) { return 0, injectedErr }
+	t.Cleanup(func() { cryptoRandRead = original })
+
+	_, err := NewYAMLMerger(100).Merge("base: unrelated\n", "base: unrelated\nnewkey: scalar\n", "base: unrelated\nnewkey:\n  nested: true\n")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestYAMLMerger_ConflictMarkers_MultilineScalar covers inlineConflictBlock's
+// loop over additional lines of a multi-line scalar (e.g. a block literal `|`
+// value): both ours and theirs are still ScalarNode, so the conflict renders
+// inline, but each side spans more than one line once re-encoded.
+func TestYAMLMerger_ConflictMarkers_MultilineScalar(t *testing.T) {
+	base := "setting: |\n  line1\n"
+	ours := "setting: |\n  ours-line1\n  ours-line2\n"
+	theirs := "setting: |\n  theirs-line1\n  theirs-line2\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	assert.Equal(t, `<<<<<<< Ours
+setting: |
+  ours-line1
+  ours-line2
+=======
+setting: |
+  theirs-line1
+  theirs-line2
+>>>>>>> Theirs
+`, result.Content)
+}
+
+// TestYAMLMerger_ConflictMarkers_SuffixPreservedForBothAlternatives covers a
+// real ours/theirs divergence where the sentinel's line has trailing content
+// after it -- here, an inline comment addNodeConflict carries over from
+// ours' own LineComment (see addNodeConflict). That trailing text must
+// survive on *both* reconstructed alternatives, not just be tacked onto the
+// closing >>>>>>> Theirs marker line: only one alternative survives manual
+// resolution, and a resolution that deletes the theirs block (or just the
+// marker lines) must not silently drop it.
+func TestYAMLMerger_ConflictMarkers_SuffixPreservedForBothAlternatives(t *testing.T) {
+	base := "key: original\n"
+	ours := "key: user-change # user note\n"
+	theirs := "key: template-change\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	assert.Equal(t, `<<<<<<< Ours
+key: user-change # user note
+=======
+key: template-change # user note
+>>>>>>> Theirs
+`, result.Content)
+}
+
+// TestYAMLMerger_ConflictMarkers_FlowStyleSuffixPreserved covers a
+// divergence inside a flow-style mapping: the sentinel replaces only key
+// "a"'s value, so the rest of the flow mapping (", b: 2}") trails the
+// sentinel on the same encoded line. That trailing text must close out
+// *both* reconstructed alternatives so each remains a syntactically valid,
+// self-contained flow mapping on its own -- not just close out whichever one
+// happens to sit next to the >>>>>>> Theirs marker.
+func TestYAMLMerger_ConflictMarkers_FlowStyleSuffixPreserved(t *testing.T) {
+	base := "obj: {a: 1, b: 2}\n"
+	ours := "obj: {a: user, b: 2}\n"
+	theirs := "obj: {a: template, b: 2}\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	assert.Equal(t, `<<<<<<< Ours
+obj: {a: user, b: 2}
+=======
+obj: {a: template, b: 2}
+>>>>>>> Theirs
+`, result.Content)
+}
+
+// TestFindSentinel_DeterministicEarliestByteIndex guards against
+// findSentinel silently depending on Go's randomized map iteration order:
+// when a line holds more than one sentinel (the documented flow-style case
+// in spliceConflictMarkers' doc comment), it must always pick the one with
+// the smallest byte index, not whichever the map happens to yield first.
+// Ranging over the same two-entry map many times exercises different
+// iteration orders, so the old implementation (return on first map hit)
+// would have failed this near-certainly before it ever reached run 50.
+func TestFindSentinel_DeterministicEarliestByteIndex(t *testing.T) {
+	first := nodeConflict{sentinel: "ATMOSMERGECONFLICT000000-aaaaaaaa"}
+	second := nodeConflict{sentinel: "ATMOSMERGECONFLICT000001-bbbbbbbb"}
+	line := "obj: {a: " + first.sentinel + ", b: " + second.sentinel + "}"
+	bySentinel := map[string]nodeConflict{
+		first.sentinel:  first,
+		second.sentinel: second,
+	}
+
+	for i := 0; i < 50; i++ {
+		conflict, sentinel, idx := findSentinel(line, bySentinel)
+		assert.Equal(t, first.sentinel, sentinel, "must always pick the earliest sentinel by byte index")
+		assert.Equal(t, first, conflict)
+		assert.Equal(t, strings.Index(line, first.sentinel), idx)
+	}
+}
+
+// TestYAMLMerger_ConflictMarkers_DrainsMultipleSentinelsOnOneLine covers two
+// independent conflicts (keys "a" and "b") landing on the same flow-style
+// line. Both must be drained into real, nested diff3 markers.
+//
+// The second sentinel must never reach the output as literal placeholder
+// text (see appendTailToLastLine). "b"'s conflict is nested once under each
+// of "a"'s two alternatives (three <<<<<<< Ours/>>>>>>> Theirs pairs total,
+// not two): resolving "a" one way or the other still leaves "b" to resolve
+// independently, so each of "a"'s alternatives needs its own copy of "b"'s
+// markers rather than sharing one.
+func TestYAMLMerger_ConflictMarkers_DrainsMultipleSentinelsOnOneLine(t *testing.T) {
+	base := "obj: {a: 1, b: 2}\n"
+	ours := "obj: {a: user-a, b: user-b}\n"
+	theirs := "obj: {a: template-a, b: template-b}\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 2, result.ConflictCount)
+
+	assert.NotContains(t, result.Content, "ATMOSMERGECONFLICT",
+		"every sentinel must be drained into real markers, none left as literal placeholder text")
+	// Built line-by-line (rather than a raw string literal) since "obj: {a:
+	// user-a, b: " genuinely ends in a trailing space -- the original ": "
+	// key-value separator, immediately followed by the nested block on its
+	// own line -- and a literal trailing space in a backtick string is easy
+	// to lose to editor/linter whitespace trimming.
+	wantLines := []string{
+		"<<<<<<< Ours",
+		"obj: {a: user-a, b: ",
+		"<<<<<<< Ours",
+		"user-b}",
+		"=======",
+		"template-b}",
+		">>>>>>> Theirs",
+		"=======",
+		"obj: {a: template-a, b: ",
+		"<<<<<<< Ours",
+		"user-b}",
+		"=======",
+		"template-b}",
+		">>>>>>> Theirs",
+		">>>>>>> Theirs",
+		"",
+	}
+	assert.Equal(t, strings.Join(wantLines, "\n"), result.Content)
+}
+
+func TestYAMLMerger_PreservesLineComments(t *testing.T) {
+	tests := []struct {
+		name           string
+		base           string
+		ours           string
+		theirs         string
+		wantContain    []string
+		wantNotContain []string
+	}{
+		{
+			name: "preserves line comment when user changes value",
+			base: `foo: original
+`,
+			ours: `foo: bar # this comment too?
+`,
+			theirs: `foo: original
+`,
+			wantContain: []string{
+				"foo: bar",
+				"# this comment too?",
+			},
+		},
+		{
+			name: "template's new value wins (may not have user's comment)",
+			base: `port: 8080
+`,
+			ours: `port: 8080  # user's port comment
+`,
+			theirs: `port: 9090
+`,
+			wantContain: []string{
+				"port: 9090",
+			},
+			wantNotContain: []string{
+				"# user's port comment", // Lost because template changed value
+			},
+		},
+		{
+			name: "preserves multiple line comments on user changes",
+			base: `config:
+  enabled: true
+  timeout: 30
+`,
+			ours: `config:
+  enabled: false  # user disabled
+  timeout: 60  # user increased
+`,
+			theirs: `config:
+  enabled: true
+  timeout: 30
+`,
+			wantContain: []string{
+				"enabled: false",
+				"# user disabled",
+				"timeout: 60",
+				"# user increased",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewYAMLMerger(50)
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			for _, want := range tt.wantContain {
+				if !strings.Contains(result.Content, want) {
+					t.Errorf("Expected result to contain %q\nGot:\n%s", want, result.Content)
+				}
+			}
+
+			for _, dontWant := range tt.wantNotContain {
+				if strings.Contains(result.Content, dontWant) {
+					t.Errorf("Expected result NOT to contain %q\nGot:\n%s", dontWant, result.Content)
+				}
+			}
+
+			t.Logf("Result:\n%s", result.Content)
+		})
+	}
+}

@@ -61,9 +61,16 @@ func (d *DockerRuntime) command(ctx context.Context, args ...string) *exec.Cmd {
 func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	defer perf.Track(nil, "container.DockerRuntime.Build")()
 
+	if config.Driver != nil {
+		if err := ensureBuilder(ctx, d, config.Driver); err != nil {
+			return err
+		}
+	}
+
 	args := buildBuildArgs(config)
 
 	cmd := d.command(ctx, args...)
+	applyCommandEnv(cmd, bakeCommandEnv(d.env, config))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker build failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
@@ -71,6 +78,39 @@ func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 
 	log.Debug("Built docker image", "tags", config.Tags)
 	return nil
+}
+
+// ensureBuilder creates the named Buildx builder instance if it doesn't already exist,
+// applying the configured driver and driver-opts. It is idempotent: `docker buildx create`
+// against an existing name fails with an "existing instance" error, which is treated as
+// success rather than round-tripping through a separate `buildx inspect` check first (which
+// would only trade one race for another under concurrent Atmos runs).
+func ensureBuilder(ctx context.Context, d *DockerRuntime, cfg *DriverConfig) error {
+	defer perf.Track(nil, "container.ensureBuilder")()
+
+	cmd := d.command(ctx, buildBuilderCreateArgs(cfg)...)
+	output, err := cmd.CombinedOutput()
+	if err != nil && !strings.Contains(string(output), "existing instance") {
+		return fmt.Errorf("%w: docker buildx create failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+	}
+	return nil
+}
+
+func buildBuilderCreateArgs(cfg *DriverConfig) []string {
+	args := []string{"buildx", "create", "--name", effectiveDriverName(cfg)}
+	if cfg.Provider != "" {
+		args = append(args, "--driver", cfg.Provider)
+	}
+	keys := make([]string, 0, len(cfg.Opts))
+	for key := range cfg.Opts {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		value := cfg.Opts[key]
+		args = append(args, "--driver-opt", fmt.Sprintf(keyValueFormat, key, value))
+	}
+	return args
 }
 
 // Create creates a new container.
@@ -110,6 +150,18 @@ func (d *DockerRuntime) EnsureNetwork(ctx context.Context, name string) error {
 	cmd := d.command(ctx, "network", "create", name)
 	output, err := cmd.CombinedOutput()
 	return networkCreateResult(err, string(output))
+}
+
+// ConnectNetwork attaches an already running container to a user-defined docker
+// network, registering aliases as its DNS names on that network. It implements
+// NetworkConnector so Atmos's own container can join a dedicated stack network
+// it didn't start on.
+func (d *DockerRuntime) ConnectNetwork(ctx context.Context, network, containerID string, aliases []string) error {
+	defer perf.Track(nil, "container.DockerRuntime.ConnectNetwork")()
+
+	cmd := d.command(ctx, buildNetworkConnectArgs(network, containerID, aliases)...)
+	output, err := cmd.CombinedOutput()
+	return networkConnectResult(err, string(output))
 }
 
 // Start starts a container.

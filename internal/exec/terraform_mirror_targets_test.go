@@ -11,6 +11,8 @@ import (
 )
 
 func TestMirrorTargetIncluded(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	tests := []struct {
@@ -68,6 +70,7 @@ func TestMirrorTargetIncluded(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := mirrorTargetIncluded(atmosConfig, "vpc", tt.section, tt.query)
 			if tt.expectErr {
 				require.Error(t, err)

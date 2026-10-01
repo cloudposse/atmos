@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    example:
+      vars:
+        environment: test
+      # NOTE: dependencies.tools.tflint is intentionally omitted so the
+      # example runs against whatever `tflint` is on PATH (e.g.
+      # `brew install tflint`). To pin/auto-install via the toolchain,
+      # add `dependencies: { tools: { tflint: "0.59.1" } }` — tflint's
+      # Aqua registry entry is a plain github_release (no cosign gate).
+      hooks:
+        lint:
+          # Lint on before-init so problems fail fast — before any init/plan
+          # work. tflint enforces team conventions and catches hygiene issues
+          # (unused declarations, deprecated syntax, invalid types) that
+          # `terraform validate` never sees.
+          events:
+            - before.terraform.init
+          kind: tflint

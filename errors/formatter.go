@@ -42,8 +42,22 @@ var newMarkdownRendererWithWidth = func(config schema.AtmosConfiguration, width 
 const (
 	explanationGradientStart = "#33204f"
 	explanationGradientEnd   = "#123c5c"
-	hexColorLength           = 6
-	hexColorBase             = 16
+	// ExplanationForeground remains readable across the entire explanation gradient.
+	explanationForeground = "#F7FAFC"
+	hexColorLength        = 6
+	hexColorBase          = 16
+
+	// ExplanationGradientMinSteps is a floor on the number of gradient steps used
+	// by gradientRatio. Without it, a short callout (2-3 wrapped lines, the most
+	// common case for real error explanations/hints) samples the gradient at
+	// i/(total-1), which for total<=3 always includes both pure endpoint colors
+	// with zero blending in between -- visually a jarring two-tone seam rather
+	// than a gradient. Flooring the step count treats short callouts as a narrow
+	// slice near the start of a longer virtual gradient, so adjacent lines get
+	// close, blended shades instead of the extremes. Callouts with more lines
+	// than this floor already sample the full gradient smoothly and are
+	// unaffected (their total-1 exceeds the floor, so the formula is unchanged).
+	explanationGradientMinSteps = 3
 )
 
 type markdownSections struct {
@@ -390,9 +404,17 @@ func renderMarkdownSections(sections markdownSections, config FormatterConfig, u
 		}
 	}
 
-	return strings.TrimRight(out.String(), " \t\n") + newline, true
+	// Leading blank line separates the error block from whatever was printed
+	// before it (e.g. output from the command that failed).
+	return newline + strings.TrimRight(out.String(), " \t\n") + newline, true
 }
 
+// resolveFormatterWidth picks the width used to wrap and pad the rendered
+// error, honoring an explicit per-call MaxLineLength override first.
+// Otherwise, the configured width (settings.terminal.max_width) is a
+// maximum, not a fixed width -- it must never force content wider than the
+// actual terminal, or padded rows (like the title pill) wrap onto extra
+// visual lines in terminals narrower than the configured max.
 func resolveFormatterWidth(config FormatterConfig) int {
 	if config.MaxLineLength > 0 {
 		return config.MaxLineLength
@@ -401,11 +423,16 @@ func resolveFormatterWidth(config FormatterConfig) int {
 	configuredWidth := configuredFormatterWidth()
 	detectedWidth := detectFormatterTerminalWidth()
 
-	if configuredWidth > 0 && configuredWidth != detectedWidth {
+	switch {
+	case configuredWidth > 0 && detectedWidth > 0:
+		return min(configuredWidth, detectedWidth)
+	case configuredWidth > 0:
 		return configuredWidth
+	case detectedWidth > 0:
+		return detectedWidth
+	default:
+		return DefaultMarkdownWidth
 	}
-
-	return DefaultMarkdownWidth
 }
 
 func configuredFormatterWidth() int {
@@ -485,13 +512,49 @@ func renderExplanationCallout(rendered string, maxLineLength int, useColor bool)
 		}
 		color := interpolateHexColor(explanationGradientStart, explanationGradientEnd, gradientRatio(i, len(lines)))
 		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(explanationForeground)).
 			Background(lipgloss.Color(color)).
 			PaddingLeft(1).
 			PaddingRight(1).
 			Width(width)
+
+		// Glamour emits a full ANSI reset (CSI 0 m) after styled spans. A full
+		// reset clears this outer background too, leaving only the padding tinted
+		// and exposing the terminal background behind the explanation text.
+		// Reapply the callout colors after each reset before the outer style adds
+		// its padding and width.
+		line = restoreCalloutColorsAfterReset(line, calloutColorPrefix(color))
 		out.WriteString(style.Render(line))
 	}
 	return out.String()
+}
+
+// restoreCalloutColorsAfterReset preserves a callout's colors when nested ANSI
+// markup performs a full terminal reset. Glamour uses both CSI 0 m and CSI m.
+func restoreCalloutColorsAfterReset(rendered, colorPrefix string) string {
+	if colorPrefix == "" {
+		return rendered
+	}
+
+	return strings.NewReplacer(
+		"\x1b[0m", "\x1b[0m"+colorPrefix,
+		"\x1b[m", "\x1b[m"+colorPrefix,
+	).Replace(rendered)
+}
+
+// calloutColorPrefix returns the ANSI sequence that establishes the callout's
+// foreground and background without adding padding or a trailing reset.
+func calloutColorPrefix(background string) string {
+	const marker = "x"
+	rendered := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(explanationForeground)).
+		Background(lipgloss.Color(background)).
+		Render(marker)
+	markerIndex := strings.Index(rendered, marker)
+	if markerIndex < 0 {
+		return ""
+	}
+	return rendered[:markerIndex]
 }
 
 func maxRenderedLineWidth(lines []string) int {
@@ -508,7 +571,14 @@ func gradientRatio(index int, total int) float64 {
 	if total <= 1 {
 		return 0
 	}
-	return float64(index) / float64(total-1)
+	// Floor the step count so short callouts sample a narrow, blended slice of
+	// the gradient near its start instead of jumping straight to the pure
+	// start/end colors. See explanationGradientMinSteps for the full rationale.
+	steps := total - 1
+	if steps < explanationGradientMinSteps {
+		steps = explanationGradientMinSteps
+	}
+	return float64(index) / float64(steps)
 }
 
 func interpolateHexColor(start string, end string, ratio float64) string {
@@ -678,6 +748,8 @@ func shouldUseColor() bool {
 		EnvNoColor:       os.Getenv("NO_COLOR") != "",
 		EnvCLIColor:      os.Getenv("CLICOLOR"),
 		EnvCLIColorForce: os.Getenv("CLICOLOR_FORCE") != "" || os.Getenv("FORCE_COLOR") != "",
+		//nolint:forbidigo // CI is the standard environment signal used by terminal color detection.
+		EnvCI: os.Getenv("CI") != "",
 	}
 
 	// Add atmos.yaml settings if available.

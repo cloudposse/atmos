@@ -58,7 +58,7 @@ atmos terraform workdir clean vpc --stack dev
 Output:
 
 ```
-Cleaned workdir: .workdir/terraform/dev-vpc
+✓ Workdir cleaned for vpc in dev
 ```
 
 ### Clean All Workdirs
@@ -71,12 +71,9 @@ atmos terraform workdir clean --all
 Output:
 
 ```
-Cleaned 5 workdirs:
-  - dev-vpc
-  - staging-vpc
-  - prod-vpc
-  - dev-s3-bucket
-  - staging-s3-bucket
+▶ Cleaning all workdirs
+✓ Cleaned all workdirs: .workdir
+✓ All workdirs cleaned
 ```
 
 ### Clean Expired Workdirs
@@ -101,12 +98,10 @@ atmos terraform workdir clean --all --dry-run
 Output:
 
 ```
-Would clean 5 workdirs:
-  - .workdir/terraform/dev-vpc
-  - .workdir/terraform/staging-vpc
-  - .workdir/terraform/prod-vpc
-  - .workdir/terraform/dev-s3-bucket
-  - .workdir/terraform/staging-s3-bucket
+▶ Dry run: would clean 3 workdir(s):
+▶ terraform/dev-vpc-bb03116d
+▶ terraform/prod-vpc-0e327247
+▶ terraform/staging-vpc-8ce5e903
 ```
 
 ## When to Clean Workdirs

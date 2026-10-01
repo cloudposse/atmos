@@ -11,8 +11,10 @@ website/** linguist-documentation
 # and mark them generated so GitHub collapses their diffs in PR review.
 *.cast text eol=lf diff whitespace linguist-generated=true
 
-# Golden snapshots should be treated a raw output to prevent line-ending conversions
-tests/snapshots/**/*.golden linguist-generated=true -text
+# Golden snapshots should be treated as raw output to prevent line-ending conversions.
+# Some intentionally preserve a final blank line to keep tree output separated from
+# the next shell prompt, so Git should not flag that terminal boundary as whitespace.
+tests/snapshots/**/*.golden linguist-generated=true -text whitespace=-blank-at-eof
 
 # Mark binary files to prevent normalization
 *.png binary

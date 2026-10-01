@@ -2,9 +2,12 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	stdio "io"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/elewis787/boa"
@@ -12,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	castcmd "github.com/cloudposse/atmos/cmd/cast"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -355,4 +359,53 @@ func TestRootHelpFunc(t *testing.T) {
 		})
 		assert.Equal(t, "example usage of test", cmd.Example)
 	})
+}
+
+func TestRootHelpFuncRecordsHelpOnce(t *testing.T) {
+	_ = NewTestKit(t)
+	castcmd.FinalizeRecording()
+	t.Cleanup(castcmd.FinalizeRecording)
+
+	castPath := filepath.Join(t.TempDir(), "help.cast")
+	os.Args = []string{"atmos", "test", "--help", "--cast=" + castPath}
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	command := &cobra.Command{Use: "test", Short: "test command description"}
+	command.Flags().String(castcmd.FlagName, "", "record command output")
+	require.NoError(t, command.Flags().Set(castcmd.FlagName, castPath))
+	command.SetOut(ioCtx.Streams().Output())
+
+	rootHelpFunc(command, []string{"--help"})
+
+	castText := ansi.Strip(readCastOutput(t, castPath))
+	for _, marker := range []string{"test command description", "\nUSAGE\n"} {
+		assert.Equalf(t, 1, strings.Count(castText, marker), "cast marker %q must occur exactly once", marker)
+	}
+}
+
+func readCastOutput(t *testing.T, path string) string {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var output strings.Builder
+	for lineNumber, line := range strings.Split(strings.TrimSpace(string(content)), "\n") {
+		if lineNumber == 0 {
+			continue
+		}
+		var event []json.RawMessage
+		require.NoError(t, json.Unmarshal([]byte(line), &event))
+		if len(event) != 3 {
+			continue
+		}
+		var stream, text string
+		require.NoError(t, json.Unmarshal(event[1], &stream))
+		if stream != "o" {
+			continue
+		}
+		require.NoError(t, json.Unmarshal(event[2], &text))
+		output.WriteString(text)
+	}
+	return output.String()
 }

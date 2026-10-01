@@ -95,6 +95,63 @@ func TestIsTemplatedVersion(t *testing.T) {
 	assert.False(t, IsTemplatedVersion("1.2.3"))
 }
 
+func TestIsSemverConstraint(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{"empty", "", false},
+		{"exact bare version", "1.2.3", false},
+		{"exact v-prefixed version", "v1.2.3", false},
+		{"commit sha", "abc1234", false},
+		{"branch name", "main", false},
+		{"caret range", "^1.0.0", true},
+		{"tilde range", "~1.2.3", true},
+		{"comparator range", ">=1.0.0 <2.0.0", true},
+		{"wildcard", "*", true},
+		{"minor wildcard shorthand", "1.x", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsSemverConstraint(tt.value))
+		})
+	}
+}
+
+// TestValidateVersionRangeConstraints proves version: and constraints.version are mutually
+// exclusive: a range-shaped version: combined with a non-empty constraints.version is a hard
+// error naming both fields, while constraints.excluded_versions/no_prereleases remain accepted
+// alongside a range, and an exact-pinned version: is never rejected regardless of constraints.
+func TestValidateVersionRangeConstraints(t *testing.T) {
+	tests := []struct {
+		name        string
+		rawVersion  string
+		constraints *schema.VendorConstraints
+		wantErr     bool
+	}{
+		{"exact pin, no constraints", "v1.2.3", nil, false},
+		{"exact pin, constraints.version set", "v1.2.3", &schema.VendorConstraints{Version: "<2.0.0"}, false},
+		{"range, no constraints", "^1.0.0", nil, false},
+		{"range, constraints.version empty", "^1.0.0", &schema.VendorConstraints{ExcludedVersions: []string{"1.5.0"}}, false},
+		{"range, constraints.excluded_versions and no_prereleases only", "^1.0.0", &schema.VendorConstraints{ExcludedVersions: []string{"1.5.0"}, NoPrereleases: true}, false},
+		{"range, constraints.version conflicts", "^1.0.0", &schema.VendorConstraints{Version: "<2.0.0"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateVersionRangeConstraints(tt.rawVersion, tt.constraints)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrVersionRangeConflictsWithConstraints)
+			assert.Contains(t, err.Error(), tt.rawVersion)
+			assert.Contains(t, err.Error(), tt.constraints.Version)
+		})
+	}
+}
+
 func TestFindLatestSemVerTag(t *testing.T) {
 	tags := []string{"v1.0.0", "v1.2.0", "not-a-version", "v1.1.5", "0.9.0"}
 	ver, tag := FindLatestSemVerTag(tags)

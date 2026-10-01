@@ -8,6 +8,8 @@ import (
 )
 
 func TestHasLocalPathPrefix(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		uri      string
@@ -76,6 +78,7 @@ func TestHasLocalPathPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := hasLocalPathPrefix(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -83,6 +86,8 @@ func TestHasLocalPathPrefix(t *testing.T) {
 }
 
 func TestHasSchemeSeparator(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		uri      string
@@ -166,6 +171,7 @@ func TestHasSchemeSeparator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := hasSchemeSeparator(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -174,6 +180,8 @@ func TestHasSchemeSeparator(t *testing.T) {
 
 //nolint:dupl // Test cases are similar to TestContainsTripleSlash but test different function behavior.
 func TestHasSubdirectoryDelimiter(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		uri      string
@@ -246,6 +254,7 @@ func TestHasSubdirectoryDelimiter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := hasSubdirectoryDelimiter(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -253,6 +262,8 @@ func TestHasSubdirectoryDelimiter(t *testing.T) {
 }
 
 func TestIsGitURI(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		uri      string
@@ -429,6 +440,7 @@ func TestIsGitURI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := isGitURI(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -436,6 +448,8 @@ func TestIsGitURI(t *testing.T) {
 }
 
 func TestIsDomainLikeURI(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		uri      string
@@ -512,6 +526,7 @@ func TestIsDomainLikeURI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := isDomainLikeURI(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -519,6 +534,8 @@ func TestIsDomainLikeURI(t *testing.T) {
 }
 
 func TestIsLocalPath(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		uri      string
@@ -639,6 +656,7 @@ func TestIsLocalPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := isLocalPath(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -647,6 +665,8 @@ func TestIsLocalPath(t *testing.T) {
 
 //nolint:dupl // Test cases are similar to TestHasSubdirectoryDelimiter but test different function behavior.
 func TestContainsTripleSlash(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		uri      string
@@ -718,6 +738,7 @@ func TestContainsTripleSlash(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := containsTripleSlash(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -725,6 +746,8 @@ func TestContainsTripleSlash(t *testing.T) {
 }
 
 func TestParseSubdirFromTripleSlash(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		uri            string
@@ -799,6 +822,7 @@ func TestParseSubdirFromTripleSlash(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			source, subdir := parseSubdirFromTripleSlash(tt.uri)
 			assert.Equal(t, tt.expectedSource, source)
 			assert.Equal(t, tt.expectedSubdir, subdir)
@@ -807,6 +831,8 @@ func TestParseSubdirFromTripleSlash(t *testing.T) {
 }
 
 func TestNeedsDoubleSlashDot(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		uri      string
@@ -926,6 +952,7 @@ func TestNeedsDoubleSlashDot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := needsDoubleSlashDot(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -933,6 +960,8 @@ func TestNeedsDoubleSlashDot(t *testing.T) {
 }
 
 func TestAppendDoubleSlashDot(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		uri      string
@@ -1005,6 +1034,7 @@ func TestAppendDoubleSlashDot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := appendDoubleSlashDot(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})

@@ -353,6 +353,72 @@ func TestExecuteShellCommandAppliesAtmosMaskSettingsToSubprocessOutput(t *testin
 	assert.NotContains(t, terminalOut.String(), "super-secret-demo-value")
 }
 
+// TestResolveMaskingDisabled covers resolveMaskingDisabled's precedence: an
+// explicit --mask/ATMOS_MASK override wins when set, otherwise
+// settings.terminal.mask.enabled (from atmos.yaml) applies.
+func TestResolveMaskingDisabled(t *testing.T) {
+	tests := []struct {
+		name          string
+		maskFlagSet   bool
+		maskFlagValue bool
+		settingsMask  bool
+		want          bool
+	}{
+		{
+			name:          "explicit --mask=true enables masking",
+			maskFlagSet:   true,
+			maskFlagValue: true,
+			want:          false,
+		},
+		{
+			name:          "explicit --mask=false disables masking",
+			maskFlagSet:   true,
+			maskFlagValue: false,
+			want:          true,
+		},
+		{
+			name:         "no flag, settings.terminal.mask.enabled=true enables masking",
+			settingsMask: true,
+			want:         false,
+		},
+		{
+			name:         "no flag, settings.terminal.mask.enabled=false disables masking",
+			settingsMask: false,
+			want:         true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Reset()
+			t.Cleanup(viper.Reset)
+
+			if tt.maskFlagSet {
+				viper.Set("mask", tt.maskFlagValue)
+			} else {
+				viper.Set("settings.terminal.mask.enabled", true) // presence, not value, gates this branch
+			}
+
+			atmosConfig := schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						Mask: schema.MaskSettings{Enabled: tt.settingsMask},
+					},
+				},
+			}
+
+			assert.Equal(t, tt.want, resolveMaskingDisabled(&atmosConfig))
+		})
+	}
+}
+
+// Atomicity of the (IsSet, GetBool) pair resolveMaskingDisabled reads is
+// proven once, deterministically, at the mechanism it relies on --
+// TestSafeViperView_IsAtomic and TestSafeViperView_ConsistentSnapshotUnderConcurrentWriters
+// in pkg/config/global_viper_test.go -- rather than re-proven here with a
+// weaker, non-deterministic stress test: resolveMaskingDisabled is a thin,
+// single call to SafeViper.View, so that guarantee transfers directly.
+
 type shellHelperInvocation struct {
 	command string
 	args    []string

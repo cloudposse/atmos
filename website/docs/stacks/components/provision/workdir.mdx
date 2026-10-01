@@ -13,7 +13,7 @@ import Experimental from '@site/src/components/Experimental'
 import Note from '@site/src/components/Note'
 
 <Intro>
-`provision.workdir` creates an isolated working directory for each component instance under `.workdir/<componentType>/<stack>-<componentName>/`. The component source is staged into this directory and all toolchain commands execute there, enabling concurrent execution and just-in-time source provisioning without `.terraform/`, lockfile, or generated-varfile collisions.
+`provision.workdir` creates an isolated working directory for each component instance under `.workdir/<componentType>/<stack>-<componentName>-<hash>/`. The component source is staged into this directory and all toolchain commands execute there, enabling concurrent execution and just-in-time source provisioning without `.terraform/`, lockfile, or generated-varfile collisions.
 </Intro>
 
 <Experimental />
@@ -58,17 +58,17 @@ components:
 
 ## Directory Layout
 
-When workdir provisioning is enabled, Atmos creates a per-component-instance directory under `.workdir/` and runs all toolchain commands there. Each instance gets its own `.terraform/`, varfiles, and state cache.
+When workdir provisioning is enabled, Atmos creates a per-component-instance directory under `.workdir/` and runs all toolchain commands there. Each instance gets its own `.terraform/`, varfiles, and state cache. The directory name ends with a short hash suffix (derived from the stack and component name) that keeps two component instances from colliding even when their `<stack>-<componentName>` prefixes happen to look the same.
 
 ```
 .workdir/
 ├── terraform/
-│   └── prod-ue1-vpc/        # <stack>-<componentName>
+│   └── prod-ue1-vpc-b52c4d0a/        # <stack>-<componentName>-<hash>
 │       ├── .terraform/
 │       ├── .atmos/metadata.json
 │       └── ... (component source)
 └── helmfile/
-    └── prod-ue1-nginx/
+    └── prod-ue1-nginx-27ff63ad/
         └── ...
 ```
 
@@ -113,27 +113,38 @@ components:
 
 ## Global Defaults
 
-Set workdir defaults globally for every stack and component via the `settings.provision` block in `atmos.yaml`:
+To apply a workdir default across every stack, declare `terraform.provision` (and
+`helmfile.provision`, etc.) in a base stack manifest that all your stacks import - for example a
+`_defaults.yaml` or a catalog mixin. This is the same place you set global `vars`, `metadata`, and
+`secrets`, and it cascades to every component through normal stack inheritance. Component-level
+`provision.workdir` still overrides it.
 
-<File title="atmos.yaml">
+<File title="stacks/mixins/provision-workdir.yaml">
 ```yaml
-settings:
+terraform:
   provision:
     workdir:
-      enabled: true       # Default for every component, every stack
-      ttl: "7d"           # Auto-clean workdirs not accessed for 7 days
+      enabled: true       # Default for every Terraform component that imports this mixin
+      ttl: "7d"           # Documents the intended cleanup window for unused workdirs
+
+helmfile:
+  provision:
+    workdir:
+      enabled: true
 ```
 </File>
 
 <dl>
-  <dt>`settings.provision.workdir.enabled`</dt>
-  <dd>Global default for `provision.workdir.enabled`. Toolchain-level and component-level settings still override this.</dd>
+  <dt>`provision.workdir.enabled`</dt>
+  <dd>Whether components run inside an isolated workdir. Set it at the toolchain section of a shared stack manifest for a global default; component-level `provision.workdir.enabled` still overrides it.</dd>
 
-  <dt>`settings.provision.workdir.ttl`</dt>
+  <dt>`provision.workdir.ttl`</dt>
   <dd>Time-to-live for workdirs (e.g., `"7d"`, `"24h"`, `"weekly"`). Workdirs not accessed within this duration become candidates for cleanup by [`atmos terraform workdir clean --expired`](/cli/commands/terraform/workdir).</dd>
 </dl>
 
-For the full reference of the global settings page, see [Settings: Provision Defaults](/cli/configuration/settings/provision).
+Workdir provisioning is component configuration, so its global default belongs in the stack
+configuration alongside `vars`, `metadata`, and `secrets` - there is no `settings.provision.workdir`
+block in `atmos.yaml`.
 
 ## Managing Workdirs
 
@@ -149,6 +160,5 @@ Use the [`atmos terraform workdir`](/cli/commands/terraform/workdir) commands to
 ## Related
 
 - [Backend Provisioning](/stacks/components/provision/backend) — The other half of the `provision:` block
-- [Settings: Provision Defaults](/cli/configuration/settings/provision) — Global workdir defaults in `atmos.yaml`
 - [`atmos terraform workdir`](/cli/commands/terraform/workdir) — CLI commands for managing workdirs
 - [Terraform CLI Configuration](/cli/configuration/components/terraform) — `auto_provision_workdir_for_outputs` and other global Terraform settings

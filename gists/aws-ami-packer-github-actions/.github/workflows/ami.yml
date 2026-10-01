@@ -51,7 +51,7 @@ jobs:
     outputs:
       ami_id: ${{ steps.get_ami.outputs.ami_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - uses: ./.github/actions/setup-tools
 
@@ -83,7 +83,7 @@ jobs:
     outputs:
       instance_id: ${{ steps.launch.outputs.instance_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-tools
       - uses: ./.github/actions/setup-aws-credentials
         with:
@@ -137,7 +137,7 @@ jobs:
     env:
       ATMOS_AMI_ID: ${{ needs.build.outputs.ami_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-tools
       - uses: ./.github/actions/setup-aws-credentials
         with:
@@ -166,7 +166,7 @@ jobs:
     needs: [build, health-check, promote]
     if: ${{ always() && needs.health-check.outputs.instance_id != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-tools
       - uses: ./.github/actions/setup-aws-credentials
         with:

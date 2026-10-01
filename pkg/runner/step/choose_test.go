@@ -16,11 +16,14 @@ import (
 
 //nolint:dupl // Similar test patterns for different handler methods.
 func TestChooseHandler_ResolveOptions(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("choose")
 	require.True(t, ok)
 	chooseHandler := handler.(*ChooseHandler)
 
 	t.Run("static options", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Options: []string{"option1", "option2", "option3"},
@@ -33,6 +36,7 @@ func TestChooseHandler_ResolveOptions(t *testing.T) {
 	})
 
 	t.Run("template options", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Options: []string{"{{ .steps.env.value }}", "staging", "development"},
@@ -46,6 +50,7 @@ func TestChooseHandler_ResolveOptions(t *testing.T) {
 	})
 
 	t.Run("empty options", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Options: []string{},
@@ -58,6 +63,7 @@ func TestChooseHandler_ResolveOptions(t *testing.T) {
 	})
 
 	t.Run("invalid template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Options: []string{"valid", "{{ .steps.invalid.value"},
@@ -71,11 +77,14 @@ func TestChooseHandler_ResolveOptions(t *testing.T) {
 }
 
 func TestChooseHandler_ResolveDefault(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("choose")
 	require.True(t, ok)
 	chooseHandler := handler.(*ChooseHandler)
 
 	t.Run("no default", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Default: "",
@@ -88,6 +97,7 @@ func TestChooseHandler_ResolveDefault(t *testing.T) {
 	})
 
 	t.Run("static default", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Default: "production",
@@ -100,6 +110,7 @@ func TestChooseHandler_ResolveDefault(t *testing.T) {
 	})
 
 	t.Run("template default", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Default: "{{ .steps.env.value }}",
@@ -113,6 +124,7 @@ func TestChooseHandler_ResolveDefault(t *testing.T) {
 	})
 
 	t.Run("invalid template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Default: "{{ .steps.invalid.value",
@@ -126,11 +138,14 @@ func TestChooseHandler_ResolveDefault(t *testing.T) {
 }
 
 func TestChooseHandler_CreateChooseKeyMap(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("choose")
 	require.True(t, ok)
 	chooseHandler := handler.(*ChooseHandler)
 
 	t.Run("creates keymap", func(t *testing.T) {
+		t.Parallel()
 		keyMap := chooseHandler.createChooseKeyMap()
 		assert.NotNil(t, keyMap)
 		assert.NotNil(t, keyMap.Quit)

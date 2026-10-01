@@ -3,6 +3,8 @@ package hooks
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	// Use yaml.v3 (not v2) so that WorkflowStep.UnmarshalYAML fires when decoding the
 	// hook `with:` block — that custom unmarshaler owns the polymorphic `output`
@@ -72,16 +74,23 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 			Err()
 	}
 
-	ws, err := stepFromHook(ctx.Hook)
+	vars := stepVariables(ctx)
+	ws, err := stepFromHookWithVariables(ctx, vars)
 	if err != nil {
 		return nil, err
 	}
+	setDefaultStepWorkingDirectory(ctx, ws)
 
-	executor := runnerstep.NewStepExecutorWithVars(stepVariables(ctx))
+	executor := runnerstep.NewStepExecutorWithVars(vars)
+	runCtx := context.Background()
+	if ctx.Stdout != nil || ctx.Stderr != nil {
+		runCtx = runnerstep.WithOutputSuppressed(runCtx)
+		executor.SetOutputWriters(runnerstep.OutputWriters{Stdout: ctx.Stdout, Stderr: ctx.Stderr})
+	}
 
 	var result *runnerstep.StepResult
 	run := func() error {
-		r, runErr := executor.Execute(context.Background(), ws)
+		r, runErr := executor.Execute(runCtx, ws)
 		result = r
 		return runErr
 	}
@@ -122,11 +131,11 @@ func verifyStepHookType(name, stepType string) error {
 	return nil
 }
 
-// stepFromHook builds a WorkflowStep from a step-kind hook. The `with:` block
+// StepFromHook builds a WorkflowStep from a step-kind hook. The `with:` block
 // (already rendered by resolveHookForExecution) is round-tripped through YAML
 // into the WorkflowStep — WorkflowStep is designed to unmarshal from YAML, so
 // this reuses its tags and nested-struct decoding without a separate mapping.
-func stepFromHook(hook *Hook) (*schema.WorkflowStep, error) {
+func StepFromHook(hook *Hook) (*schema.WorkflowStep, error) {
 	ws := &schema.WorkflowStep{}
 	if hook.With != nil {
 		data, err := yaml.Marshal(hook.With)
@@ -144,6 +153,7 @@ func stepFromHook(hook *Hook) (*schema.WorkflowStep, error) {
 				Err()
 		}
 	}
+	preserveGenericWith(ws, hook.With)
 	// The envelope owns type and retry; they always win over anything in `with:`.
 	ws.Type = hook.Type
 	ws.Retry = hook.Retry
@@ -151,6 +161,25 @@ func stepFromHook(hook *Hook) (*schema.WorkflowStep, error) {
 		ws.Name = "hook:" + hook.Type
 	}
 	return ws, nil
+}
+
+// preserveGenericWith backfills ws.With from the hook's `with:` payload when
+// the step's own YAML decode left it nil. StepFromHook and
+// workflowStepFromHookPayload treat the hook's `with:` block as the step's
+// own top-level YAML document rather than a nested `with:` key, so step
+// types with flat WorkflowStep fields (archive, container, emulator, and
+// others) decode correctly, but step types whose config lives entirely in
+// the generic With map (store, tflint) have no flat fields to receive it and
+// silently lose their whole configuration. Only backfills when the normal
+// decode left With empty, so a step type that does define a real nested
+// `with:` key of its own is left untouched.
+func preserveGenericWith(ws *schema.WorkflowStep, payload any) {
+	if ws.With != nil {
+		return
+	}
+	if m, ok := payload.(map[string]any); ok {
+		ws.With = m
+	}
 }
 
 // stepsEngine runs an ordered list of registered step types as a single hook.
@@ -162,7 +191,7 @@ type stepsEngine struct{}
 func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 	defer perf.Track(nil, "hooks.stepsEngine.Run")()
 
-	steps, err := stepsFromHook(ctx.Hook)
+	rawSteps, err := rawStepsFromHook(ctx.Hook)
 	if err != nil {
 		return nil, err
 	}
@@ -170,12 +199,25 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 	var lastResult *runnerstep.StepResult
 	run := func() error {
 		lastResult = nil
-		executor := runnerstep.NewStepExecutorWithVars(stepVariables(ctx))
-		for i := range steps {
-			if steps[i].Name == "" {
-				steps[i].Name = fmt.Sprintf("hook:steps:%d", i+1)
+		// A retry is a fresh invocation of the step list. Neither template nor
+		// process environment values from a failed attempt may leak into it.
+		vars := stepVariables(ctx)
+		executor := runnerstep.NewStepExecutorWithVars(vars)
+		runCtx := context.Background()
+		if ctx.Stdout != nil || ctx.Stderr != nil {
+			runCtx = runnerstep.WithOutputSuppressed(runCtx)
+			executor.SetOutputWriters(runnerstep.OutputWriters{Stdout: ctx.Stdout, Stderr: ctx.Stderr})
+		}
+		for i, rawStep := range rawSteps {
+			step, resolveErr := workflowStepFromHookPayload(ctx, vars, rawStep)
+			if resolveErr != nil {
+				return resolveErr
 			}
-			result, runErr := executor.Execute(context.Background(), &steps[i])
+			setDefaultStepWorkingDirectory(ctx, step)
+			if step.Name == "" {
+				step.Name = fmt.Sprintf("hook:steps:%d", i+1)
+			}
+			result, runErr := executor.Execute(runCtx, step)
 			lastResult = result
 			if runErr != nil {
 				return runErr
@@ -198,7 +240,116 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 	return out, nil
 }
 
-func stepsFromHook(hook *Hook) ([]schema.WorkflowStep, error) {
+// stepFromHookWithVariables resolves a single hook step just before it runs.
+// This is distinct from StepFromHook, which remains the static decoder used by
+// preflight and callers that do not have a running step environment.
+func stepFromHookWithVariables(ctx *ExecContext, vars *runnerstep.Variables) (*schema.WorkflowStep, error) {
+	ws, err := workflowStepFromHookPayload(ctx, vars, ctx.Hook.With)
+	if err != nil {
+		return nil, err
+	}
+	ws.Type = ctx.Hook.Type
+	ws.Retry = ctx.Hook.Retry
+	if ws.Name == "" {
+		ws.Name = "hook:" + ctx.Hook.Type
+	}
+	return ws, nil
+}
+
+// workflowStepFromHookPayload processes a raw step payload against the static
+// hook template context plus the current step template environment, then
+// decodes it through WorkflowStep's normal YAML unmarshaler.
+func workflowStepFromHookPayload(ctx *ExecContext, vars *runnerstep.Variables, payload any) (*schema.WorkflowStep, error) {
+	// Test children are rendered after matrix expansion and prior steps have results.
+	// Rendering the entire tree here would evaluate .matrix/.steps before they exist.
+	nested, deferred := deferredTestPayload(ctx, payload)
+	if deferred != nil {
+		payload = deferred
+		vars.ResolveTestStep = func(s *schema.WorkflowStep, local *runnerstep.Variables) (*schema.WorkflowStep, error) {
+			return resolveTestHookStep(ctx, s, local)
+		}
+	}
+	processed, err := processHookExecutionValue(ctx.AtmosConfig, payload, hookStepTemplateInfo(ctx, vars))
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
+			WithCause(err).
+			WithExplanation("Failed to render a step hook payload").
+			Err()
+	}
+	if deferred != nil {
+		if m, ok := processed.(map[string]any); ok {
+			m["steps"] = nested
+		}
+	}
+	data, err := yaml.Marshal(processed)
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
+			WithCause(err).
+			WithExplanation("Failed to encode a rendered step hook payload").
+			Err()
+	}
+	ws := &schema.WorkflowStep{}
+	if err := yaml.Unmarshal(data, ws); err != nil {
+		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
+			WithCause(err).
+			WithExplanation("Failed to decode a rendered step hook payload into a step").
+			Err()
+	}
+	preserveGenericWith(ws, processed)
+	return ws, nil
+}
+
+func rawStepsFromHook(hook *Hook) ([]any, error) {
+	if hook.With == nil {
+		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
+			WithExplanation("A hook with kind: steps must set `with:` to an ordered list of steps").
+			WithHint("Add `with:` as a YAML list, e.g. `- type: emulator` followed by `- type: atmos`").
+			Err()
+	}
+	data, err := yaml.Marshal(hook.With)
+	if err != nil {
+		return nil, err
+	}
+	var steps []any
+	if err := yaml.Unmarshal(data, &steps); err != nil {
+		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
+			WithCause(err).
+			WithExplanation("Failed to decode the steps hook `with:` block into an ordered step list").
+			Err()
+	}
+	if len(steps) == 0 {
+		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
+			WithExplanation("A hook with kind: steps must include at least one step in `with:`").
+			Err()
+	}
+	return steps, nil
+}
+
+func hookStepTemplateInfo(ctx *ExecContext, vars *runnerstep.Variables) *schema.ConfigAndStacksInfo {
+	info := ctx.Info
+	if ctx.Hook != nil && ctx.Hook.stepTemplateInfo != nil {
+		info = ctx.Hook.stepTemplateInfo
+	}
+	if info == nil {
+		info = &schema.ConfigAndStacksInfo{}
+	}
+	clone := *info
+	section := make(map[string]any)
+	for key, value := range info.ComponentSection {
+		section[key] = value
+	}
+	templateData := vars.TemplateData()
+	for key, value := range templateData {
+		section[key] = value
+	}
+	clone.ComponentSection = section
+	return &clone
+}
+
+// StepsFromHook builds an ordered list of WorkflowSteps from a steps-kind
+// hook's `with:` block, round-tripped through YAML the same way
+// StepFromHook does for a single step.
+func StepsFromHook(hook *Hook) ([]schema.WorkflowStep, error) {
 	if hook.With == nil {
 		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
 			WithExplanation("A hook with kind: steps must set `with:` to an ordered list of steps").
@@ -230,7 +381,7 @@ func stepsFromHook(hook *Hook) ([]schema.WorkflowStep, error) {
 }
 
 func verifyStepsHookTypes(name string, hook *Hook) error {
-	steps, err := stepsFromHook(hook)
+	steps, err := StepsFromHook(hook)
 	if err != nil {
 		return err
 	}
@@ -250,8 +401,13 @@ func verifyStepsHookTypes(name string, hook *Hook) error {
 	return nil
 }
 
+// stepVariables builds the step Variables for a kind: step/kind: steps lifecycle hook run: OS
+// environment (via NewVariables' default), the standard ATMOS_* variables, the hook's own env:
+// overrides, and the component working-directory anchor used by setDefaultStepWorkingDirectory
+// and by any other relative step field.
 func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	vars := runnerstep.NewVariables()
+	vars.SetAtmosConfig(ctx.AtmosConfig)
 	for k, v := range BuildAtmosEnv(ctx, "", "") {
 		vars.SetEnv(k, v)
 	}
@@ -260,7 +416,67 @@ func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	for k, v := range ctx.Hook.Env {
 		vars.SetEnv(k, v)
 	}
+	// Anchor for a bare-relative explicit working_directory (see
+	// isDotPrefixedWorkingDirectory in pkg/runner/step/handler_base.go). Uses
+	// the same ComponentPath resolution setDefaultStepWorkingDirectory already
+	// applies to an unset working_directory, so it stays compatible with
+	// provisioned workdirs and metadata.component aliasing for free.
+	vars.SetComponentWorkingDirectory(ComponentPath(ctx))
 	return vars
+}
+
+// AtmosStepType is the step type that re-invokes the atmos binary itself
+// (pkg/runner/step.AtmosHandler). It must keep inheriting the ambient process
+// working directory rather than defaulting to the component directory: the
+// nested atmos process resolves its own atmos.yaml/stacks relative to that
+// directory, and a component subdirectory won't necessarily contain (or sit
+// under) the project's config root.
+const AtmosStepType = "atmos"
+
+// setDefaultStepWorkingDirectory gives lifecycle steps the same component directory as command
+// hooks, anchoring at ComponentPath(ctx). See ApplyDefaultWorkingDirectory for the anchor-agnostic
+// empty/bare/dot/absolute defaulting convention this delegates to.
+func setDefaultStepWorkingDirectory(ctx *ExecContext, step *schema.WorkflowStep) {
+	if step == nil {
+		return
+	}
+	ApplyDefaultWorkingDirectory(step, ComponentPath(ctx))
+}
+
+// ApplyDefaultWorkingDirectory applies the shared empty/bare/dot/absolute working-directory
+// defaulting convention (docs/prd/base-path-resolution-semantics.md) to step, anchoring an empty
+// or bare-relative step.WorkingDirectory at anchorDir. An empty working_directory defaults to
+// anchorDir outright. A non-empty, BARE value (no "./"/"../" prefix, not absolute -- e.g. "foo",
+// "foo/bar") has no anchor of its own, so it's resolved relative to anchorDir too, rather than
+// falling through to exec.Cmd.Dir's default of the ambient process CWD. A dot-prefixed value
+// ("./foo", ".", "..", "../foo") is left as-is: exec.Cmd.Dir already resolves it against CWD,
+// matching the "here means CWD" convention runtime sources use elsewhere. An absolute value is
+// always left as-is. Steps of type: atmos are exempt: a nested atmos invocation must keep
+// resolving its own atmos.yaml/stacks against the ambient process cwd.
+func ApplyDefaultWorkingDirectory(step *schema.WorkflowStep, anchorDir string) {
+	if step == nil || step.Type == AtmosStepType {
+		return
+	}
+	if step.WorkingDirectory == "" {
+		step.WorkingDirectory = anchorDir
+		return
+	}
+	if IsBareRelativePath(step.WorkingDirectory) {
+		step.WorkingDirectory = filepath.Join(anchorDir, step.WorkingDirectory)
+	}
+}
+
+// IsBareRelativePath reports whether path is a BARE relative value -- not absolute, and not
+// dot-prefixed ("./foo", "../foo", ".", "..") -- per the value classification in
+// docs/prd/base-path-resolution-semantics.md.
+func IsBareRelativePath(path string) bool {
+	if filepath.IsAbs(path) {
+		return false
+	}
+	sep := string(filepath.Separator)
+	return path != "." && path != ".." &&
+		!strings.HasPrefix(path, "./") && !strings.HasPrefix(path, "."+sep) &&
+		!strings.HasPrefix(path, "../") && !strings.HasPrefix(path, ".."+sep)
 }
 
 // stepSummary builds a best-effort Output envelope for the step run. The step
@@ -299,4 +515,60 @@ func stepsSummary(result *runnerstep.StepResult, runErr error) *Output {
 	}
 	log.Debug("Steps hook finished", logKeyKind, stepsKindName, "status", summary.Status)
 	return &Output{Summary: summary}
+}
+
+// deferredTestPayload extracts test children without mutating the hook payload.
+func deferredTestPayload(ctx *ExecContext, payload any) (any, map[string]any) {
+	data, err := yaml.Marshal(payload)
+	if err != nil {
+		return nil, nil
+	}
+	var m map[string]any
+	if yaml.Unmarshal(data, &m) != nil {
+		return nil, nil
+	}
+	kind, _ := m["type"].(string)
+	if kind != "test" && ctx.Hook.Type != "test" {
+		return nil, nil
+	}
+	nested, ok := m["steps"]
+	if !ok {
+		return nil, nil
+	}
+	delete(m, "steps")
+	return nested, m
+}
+
+// resolveTestHookStep applies hook YAML functions and templates to one expanded leaf.
+func resolveTestHookStep(ctx *ExecContext, s *schema.WorkflowStep, vars *runnerstep.Variables) (*schema.WorkflowStep, error) {
+	copy := *s
+	copy.Steps = nil
+	data, err := yaml.Marshal(&copy)
+	if err != nil {
+		return nil, err
+	}
+	var payload map[string]any
+	if err = yaml.Unmarshal(data, &payload); err != nil {
+		return nil, err
+	}
+	// Generic handler parameters are excluded from WorkflowStep's YAML fields.
+	// Restore them before rendering so expanded matrix and hook variables apply.
+	if copy.With != nil {
+		payload["with"] = copy.With
+	}
+	rendered, err := processHookExecutionValue(ctx.AtmosConfig, payload, hookStepTemplateInfo(ctx, vars))
+	if err != nil {
+		return nil, err
+	}
+	data, err = yaml.Marshal(rendered)
+	if err != nil {
+		return nil, err
+	}
+	var result schema.WorkflowStep
+	if err = yaml.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	result.Steps = s.Steps
+	result.DryRun = s.DryRun
+	return &result, nil
 }

@@ -45,6 +45,36 @@ func TestLoadConfig_ProfilesDefault_LoadsWhenNoFlagOrEnv(t *testing.T) {
 		"profiles.default should populate ProfilesFromArg with 'developer'")
 }
 
+// TestLoadConfig_ProfileStackOverrideReportsWorkdirConfig verifies that profile
+// discovery reports invalid YAML under nested directories instead of ignoring it.
+func TestLoadConfig_ProfileStackOverrideReportsWorkdirConfig(t *testing.T) {
+	fixturePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "config-profiles-stack-override")
+	absFixture, err := filepath.Abs(fixturePath)
+	require.NoError(t, err)
+	require.DirExists(t, absFixture, "required scenario fixture is missing")
+
+	t.Chdir(absFixture)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TEST_GIT_ROOT", absFixture)
+	t.Setenv("ATMOS_PROFILE", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_CONFIG", "")
+	t.Setenv("ATMOS_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
+	cleanupXDG := withTestXDGConfigHome(t, t.TempDir())
+	t.Cleanup(cleanupXDG)
+
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ProfilesFromArg: []string{"developer"},
+	}
+	_, err = LoadConfig(&configAndStacksInfo)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "'version' expected a map or struct")
+}
+
 func TestLoadConfig_ProfileDefaultCanImportAuthConfig(t *testing.T) {
 	setupTestAdapters()
 

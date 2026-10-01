@@ -4,6 +4,7 @@ description: "Devcontainer orchestration: start/stop/attach/shell/exec/rebuild, 
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: dev-tooling
 references:
   - references/commands-reference.md
 ---

@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
+	"helm.sh/helm/v4/pkg/cli/values"
+	"helm.sh/helm/v4/pkg/getter"
 	sigsyaml "sigs.k8s.io/yaml"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -15,6 +18,15 @@ import (
 )
 
 const defaultNamespace = "default"
+
+const (
+	flagValues     = "values"
+	flagSet        = "set"
+	flagSetString  = "set-string"
+	flagSetFile    = "set-file"
+	flagSetJSON    = "set-json"
+	flagSetLiteral = "set-literal"
+)
 
 // buildChartSpec assembles the resolved chart specification from the merged
 // component section. Local chart references are resolved relative to the
@@ -28,6 +40,11 @@ func buildChartSpec(
 
 	section := info.ComponentSection
 
+	releasePolicy, err := decodeReleasePolicy(section)
+	if err != nil {
+		return nil, err
+	}
+
 	chart, _ := section[cfg.ChartSectionName].(string)
 	chart = resolveLocalChart(chart, componentPath)
 
@@ -37,14 +54,16 @@ func buildChartSpec(
 	}
 
 	return &chartSpec{
-		Chart:        chart,
-		RepoURL:      stringField(section, "repository"),
-		Version:      stringField(section, "version"),
-		ReleaseName:  resolveReleaseName(section, info),
-		Namespace:    resolveNamespace(section),
-		Values:       values,
-		IncludeCRDs:  true,
-		Repositories: mergeRepositories(atmosConfig, section),
+		Chart:           chart,
+		RepoURL:         stringField(section, "repository"),
+		Version:         stringField(section, "version"),
+		ReleaseName:     resolveReleaseName(section, info),
+		Namespace:       resolveNamespace(section),
+		CreateNamespace: resolveCreateNamespace(section),
+		Values:          values,
+		IncludeCRDs:     true,
+		Repositories:    mergeRepositories(atmosConfig, section),
+		Release:         releasePolicy,
 	}, nil
 }
 
@@ -74,6 +93,40 @@ func buildValues(atmosConfig *schema.AtmosConfiguration, section map[string]any,
 		return nil, fmt.Errorf("failed to merge Helm values: %w", err)
 	}
 	return merged, nil
+}
+
+// applyValueOverrides layers Helm CLI value overrides over the already resolved
+// Atmos values. Helm's own values.Options preserves the CLI's parsing and
+// precedence rules for -f/--values and every --set variant.
+func applyValueOverrides(base map[string]any, flags map[string]any) (map[string]any, error) {
+	overrides := &values.Options{
+		ValueFiles:    stringArrayFlag(flags, flagValues),
+		Values:        stringArrayFlag(flags, flagSet),
+		StringValues:  stringArrayFlag(flags, flagSetString),
+		FileValues:    stringArrayFlag(flags, flagSetFile),
+		JSONValues:    stringArrayFlag(flags, flagSetJSON),
+		LiteralValues: stringArrayFlag(flags, flagSetLiteral),
+	}
+	if len(overrides.ValueFiles) == 0 &&
+		len(overrides.Values) == 0 &&
+		len(overrides.StringValues) == 0 &&
+		len(overrides.FileValues) == 0 &&
+		len(overrides.JSONValues) == 0 &&
+		len(overrides.LiteralValues) == 0 {
+		return base, nil
+	}
+
+	settings := newSettings()
+	parsed, err := overrides.MergeValues(getter.All(settings))
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve Helm CLI value overrides: %w", err)
+	}
+	return loader.MergeMaps(base, parsed), nil
+}
+
+func stringArrayFlag(flags map[string]any, name string) []string {
+	values, _ := flags[name].([]string)
+	return values
 }
 
 func loadValuesFile(path string) (map[string]any, error) {
@@ -123,6 +176,16 @@ func resolveNamespace(section map[string]any) string {
 		return ns
 	}
 	return defaultNamespace
+}
+
+// resolveCreateNamespace reports whether Helm should create the target namespace
+// during install when it does not exist. It defaults to true, preserving the
+// existing native-helm behavior of creating the configured namespace
+// automatically. Set `create_namespace: false` on the component to install into a
+// pre-existing namespace instead, so an identity that lacks cluster-level
+// namespace-create permission can run the install.
+func resolveCreateNamespace(section map[string]any) bool {
+	return boolFieldDefault(section, "create_namespace", true)
 }
 
 // repositoriesMap converts a `repositories:` list of {name,url} into a name->url
@@ -235,6 +298,15 @@ func stringField(section map[string]any, key string) string {
 func boolField(section map[string]any, key string) bool {
 	value, _ := section[key].(bool)
 	return value
+}
+
+// boolFieldDefault reads a bool config key, returning fallback when the key is
+// absent or not a bool. This distinguishes an unset key from an explicit false.
+func boolFieldDefault(section map[string]any, key string, fallback bool) bool {
+	if value, ok := section[key].(bool); ok {
+		return value
+	}
+	return fallback
 }
 
 func asStringSlice(value any) []string {

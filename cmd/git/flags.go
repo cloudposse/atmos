@@ -59,6 +59,8 @@ const (
 	flagFrom       = "from"
 	flagKeepHist   = "keep-history"
 	flagForce      = "force"
+	// CI explicitly selects or opts out of the no-argument CI checkout path.
+	flagCI = "ci"
 	// Opt-out flag for the fork-checkout safety gate.
 	flagAllowUnsafeFork = "allow-unsafe-fork"
 	// Shared "all" flag name used across clone, pull, and status subcommands.
@@ -105,6 +107,7 @@ func newCloneParser() *flags.StandardParser {
 		flags.WithBoolFlag(flagSingleBr, "", false, "Limit clone to the specified branch"),
 		flags.WithBoolFlag(flagSubmodules, "", false, "Initialize submodules after clone"),
 		flags.WithBoolFlag(flagAll, "", false, "Clone/reconcile all configured repositories"),
+		flags.WithBoolFlag(flagCI, "", false, "Enable CI current-repository checkout for a no-argument clone"),
 		flags.WithBoolFlag(flagAllowUnsafeFork, "", false, "Allow cloning untrusted fork content in pull_request_target/workflow_run events (unsafe)"),
 		flags.WithEnvVars(flagRepoURI, "ATMOS_GIT_REPO_URI"),
 		flags.WithEnvVars(flagBranch, envGitBranch),
@@ -115,6 +118,7 @@ func newCloneParser() *flags.StandardParser {
 		flags.WithEnvVars(flagSingleBr, "ATMOS_GIT_SINGLE_BRANCH"),
 		flags.WithEnvVars(flagSubmodules, "ATMOS_GIT_SUBMODULES"),
 		flags.WithEnvVars(flagAll, "ATMOS_GIT_CLONE_ALL"),
+		flags.WithEnvVars(flagCI, "ATMOS_CI"),
 		flags.WithEnvVars(flagAllowUnsafeFork, "ATMOS_ALLOW_UNSAFE_FORK_EXECUTION"),
 	)
 }

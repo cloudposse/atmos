@@ -1,0 +1,150 @@
+// Package github implements GitHub's pull-request API as a git publishing provider.
+package github
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"strings"
+
+	gh "github.com/google/go-github/v59/github" //nolint:depguard // This package is the GitHub-specific pull-request provider.
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	githubci "github.com/cloudposse/atmos/pkg/ci/providers/github"
+	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// ProviderName identifies the GitHub pull request publisher.
+const ProviderName = "github"
+
+// prBodyBadge is the responsive light/dark "Atmos CI" badge used in native CI plan/apply summary
+// comments (pkg/ci/plugins/terraform), reused here (via PullRequestBodyBadge) so an automated
+// component-update pull request is recognizable as Atmos-generated at a glance, not just a bare,
+// unexplained diff. GitHub renders raw HTML (<picture>/<source>/srcset) inline, letting it switch
+// images based on the viewer's OS/browser color scheme -- a capability with no plain-markdown
+// equivalent, and not guaranteed to render on every forge's own pull request markdown (see
+// atmosgit.PullRequestBodyBadger).
+const prBodyBadge = `<a href="https://atmos.tools/ci"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" height="32" align="right">
+</picture></a>
+`
+
+type client interface {
+	GitHub() *gh.Client
+}
+
+// Provider reconciles pull requests through GitHub's REST API.
+type Provider struct {
+	newClient func() (client, error)
+}
+
+func init() {
+	atmosgit.RegisterPullRequestPublisher(ProviderName, func() (atmosgit.PullRequestPublisher, error) {
+		return New(), nil
+	})
+}
+
+// New creates a GitHub pull request provider using the configured CI token.
+func New() *Provider {
+	return &Provider{newClient: func() (client, error) { return githubci.NewClient() }}
+}
+
+// NewWithClientFactory exists for fake HTTP client tests without exposing the
+// go-github dependency to caller packages.
+func NewWithClientFactory(factory func() (client, error)) *Provider {
+	return &Provider{newClient: factory}
+}
+
+// Reconcile creates or updates a pull request and applies configured metadata.
+//
+//nolint:cyclop,revive // Reconciliation keeps its forge API calls together at the provider boundary.
+func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestOptions) (*atmosgit.PullRequestResult, error) {
+	defer perf.Track(nil, "github.Provider.Reconcile")()
+
+	if options == nil {
+		return nil, fmt.Errorf("%w: pull request options are required", errUtils.ErrComponentUpdaterConfig)
+	}
+	if options.Owner == "" || options.Repository == "" || options.Base == "" || options.Head == "" {
+		return nil, fmt.Errorf("%w: owner, repository, base, and head are required", errUtils.ErrComponentUpdaterConfig)
+	}
+	if len(options.Namespace) > 0 {
+		// GitHub addresses repositories with exactly two segments (owner/repository); a non-empty
+		// Namespace means the caller built options for a forge that needs a third segment (e.g.
+		// Azure DevOps' project) and pointed it at the wrong provider. Reject outright rather than
+		// silently ignoring Namespace and resolving to the wrong repository.
+		return nil, fmt.Errorf("%w: github does not support a pull request namespace (got %v); GitHub repositories are addressed as owner/repository", errUtils.ErrComponentUpdaterConfig, options.Namespace)
+	}
+	c, err := p.newClient()
+	if err != nil {
+		return nil, fmt.Errorf("%w: configure ATMOS_CI_GITHUB_TOKEN, ATMOS_PRO_GITHUB_TOKEN (via github/sts), GITHUB_TOKEN, or GH_TOKEN: %w", errUtils.ErrGitHubAuthorization, err)
+	}
+	api := c.GitHub()
+	head := options.Owner + ":" + options.Head
+	prs, response, err := api.PullRequests.List(ctx, options.Owner, options.Repository, &gh.PullRequestListOptions{
+		State: "open", Head: head, Base: options.Base, ListOptions: gh.ListOptions{PerPage: 100},
+	})
+	if err != nil {
+		return nil, githubError(err, response)
+	}
+
+	var pr *gh.PullRequest
+	created := false
+	if len(prs) > 0 {
+		pr = prs[0]
+		pr, response, err = api.PullRequests.Edit(ctx, options.Owner, options.Repository, pr.GetNumber(), &gh.PullRequest{
+			Title: gh.String(options.Title), Body: gh.String(options.Body),
+		})
+		if err != nil {
+			return nil, githubError(err, response)
+		}
+	} else {
+		pr, response, err = api.PullRequests.Create(ctx, options.Owner, options.Repository, &gh.NewPullRequest{
+			Title: gh.String(options.Title), Body: gh.String(options.Body), Head: gh.String(options.Head), Base: gh.String(options.Base), Draft: gh.Bool(options.Draft),
+		})
+		if err != nil {
+			return nil, githubError(err, response)
+		}
+		created = true
+	}
+
+	result := &atmosgit.PullRequestResult{Number: pr.GetNumber(), URL: pr.GetHTMLURL(), Created: created}
+
+	if len(options.Labels) > 0 {
+		if _, response, err = api.Issues.AddLabelsToIssue(ctx, options.Owner, options.Repository, pr.GetNumber(), options.Labels); err != nil {
+			// The PR itself already exists at this point; surface it alongside the error so the
+			// caller (and the user) aren't left with no way to find a pull request that was, in
+			// fact, created -- only its labels/assignees/reviewers didn't fully apply.
+			return result, githubError(err, response)
+		}
+	}
+	if len(options.Assignees) > 0 {
+		if _, response, err = api.Issues.AddAssignees(ctx, options.Owner, options.Repository, pr.GetNumber(), options.Assignees); err != nil {
+			return result, githubError(err, response)
+		}
+	}
+	if len(options.Reviewers) > 0 {
+		if _, response, err = api.PullRequests.RequestReviewers(ctx, options.Owner, options.Repository, pr.GetNumber(), gh.ReviewersRequest{Reviewers: options.Reviewers}); err != nil {
+			return result, githubError(err, response)
+		}
+	}
+
+	return result, nil
+}
+
+// PullRequestBodyBadge implements atmosgit.PullRequestBodyBadger.
+func (p *Provider) PullRequestBodyBadge() string {
+	return prBodyBadge
+}
+
+func githubError(err error, response *gh.Response) error {
+	if response != nil && (response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) {
+		return fmt.Errorf("%w: GitHub returned HTTP %d; grant contents: write, pull-requests: write, and issues: write as needed: %w", errUtils.ErrGitHubAuthorization, response.StatusCode, err)
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "bad credentials") {
+		return fmt.Errorf("%w: %w", errUtils.ErrGitHubAuthorization, err)
+	}
+	return fmt.Errorf("%w: %w", errUtils.ErrPullRequestReconciliation, err)
+}

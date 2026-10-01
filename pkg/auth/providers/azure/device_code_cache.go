@@ -1,8 +1,10 @@
 package azure
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/cachepaths"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
+	"github.com/cloudposse/atmos/pkg/cache"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -24,6 +27,8 @@ const (
 	deviceCodeTokenCacheFilename  = "token.json"
 	deviceCodeTokenCacheDirPerms  = 0o700
 	deviceCodeTokenCacheFilePerms = 0o600
+	// Maximum time to wait to acquire the device-code cache file lock.
+	fileLockTimeout = 10 * time.Second
 )
 
 // deviceCodeTokenCache represents a cached Azure device code access token.
@@ -210,6 +215,7 @@ type tokenCacheUpdate struct {
 	GraphExpiresAt    time.Time // Expiration time for graph token, zero value if not available
 	KeyVaultToken     string    // KeyVault API access token (for azurerm provider KeyVault operations), empty string if not available
 	KeyVaultExpiresAt time.Time // Expiration time for KeyVault token, zero value if not available
+	HomeAccountID     string    // MSAL "{home-oid}.{home-tenant-id}"; differs from "{oid}.{tenant}" for guest (B2B) users
 }
 
 // updateAzureCLICache updates the Azure CLI MSAL token cache so Terraform can use it.
@@ -236,6 +242,10 @@ func (p *deviceCodeProvider) updateAzureCLICache(update *tokenCacheUpdate) error
 	// Load and populate cache.
 	cache, accessTokenSection, accountSection := p.loadAndInitializeCLICache(msalCachePath)
 	cacheKey := p.populateCLICacheWithTokens(accessTokenSection, accountSection, userOID, username, update)
+
+	// Copy refresh tokens from the Atmos realm cache so az can self-mint any
+	// audience and survive access-token expiry.
+	azureCloud.CopyAtmosRefreshTokensInto(cache, home, p.realm, update.HomeAccountID)
 
 	// Write updated cache.
 	updatedData, err := json.MarshalIndent(cache, "", "  ")
@@ -289,9 +299,18 @@ func (p *deviceCodeProvider) populateCLICacheWithTokens(
 	userOID, username string,
 	update *tokenCacheUpdate,
 ) string {
+	// Prefer MSAL's own home account ID: for guest (B2B) users the home tenant
+	// differs from p.tenantID, and deriving "{oid}.{target-tenant}" creates a
+	// duplicate Account entry with the same username, which breaks az
+	// (https://github.com/Azure/azure-cli/issues/20168).
+	homeAccountID := update.HomeAccountID
+	if homeAccountID == "" {
+		homeAccountID = fmt.Sprintf("%s.%s", userOID, p.tenantID)
+	}
+
 	// Create common MSAL identifiers.
 	ids := msalIdentifiers{
-		homeAccountID: fmt.Sprintf("%s.%s", userOID, p.tenantID),
+		homeAccountID: homeAccountID,
 		environment:   p.cloudEnv.LoginEndpoint,
 		clientID:      "04b07795-8ddb-461a-bbee-02f9e1bf7b46", // Azure CLI public client.
 		realm:         p.tenantID,
@@ -306,7 +325,7 @@ func (p *deviceCodeProvider) populateCLICacheWithTokens(
 		"local_account_id":            userOID,
 		"username":                    username,
 		"authority_type":              "MSSTS",
-		"account_source":              "device_code",
+		"account_source":              p.accountSource(),
 	}
 	accountSection[accountKey] = accountEntry
 	log.Debug("Added Account entry to MSAL cache", azureCloud.LogFieldKey, accountKey, "username", username)
@@ -315,7 +334,8 @@ func (p *deviceCodeProvider) populateCLICacheWithTokens(
 	// IMPORTANT: Use only ".default" scope to match Azure CLI's token lookup.
 	// Azure CLI looks up tokens using the management scope as the cache key.
 	// Using a different scope format (like adding user_impersonation) causes lookup failures.
-	cacheKey := addTokenToCLICache(accessTokenSection, update.AccessToken, update.ExpiresAt, p.cloudEnv.ManagementScope, ids)
+	cacheKey := addTokenToCLICache(accessTokenSection, update.AccessToken, update.ExpiresAt,
+		strings.Join(append([]string{p.cloudEnv.ManagementScope}, p.cloudEnv.LegacyManagementScopes...), " "), ids)
 
 	// Add Graph API and KeyVault tokens if available.
 	addOptionalCLITokens(accessTokenSection, update, ids, p.cloudEnv)
@@ -491,57 +511,46 @@ func extractJWTClaims(token string) (map[string]interface{}, error) {
 func (p *deviceCodeProvider) updateAzureProfile(home, username string) error {
 	profilePath := filepath.Join(home, ".azure", "azureProfile.json")
 
-	// Load existing profile or create new one.
-	var profile map[string]interface{}
-	data, err := os.ReadFile(profilePath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read Azure profile: %w", err)
+	if err := withAzureFileLock(profilePath, func() error {
+		// Load existing profile or create a new one.
+		var profile map[string]interface{}
+		data, err := os.ReadFile(profilePath)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("failed to read Azure profile: %w", err)
+			}
+			profile = map[string]interface{}{
+				"installationId": "",
+				"subscriptions":  []interface{}{},
+			}
+		} else {
+			// Strip UTF-8 BOM if present (Azure CLI sometimes writes files with BOM).
+			data = stripBOM(data)
+
+			if err := json.Unmarshal(data, &profile); err != nil {
+				return fmt.Errorf("failed to parse Azure profile: %w", err)
+			}
 		}
-		// Create new profile structure.
-		profile = map[string]interface{}{
-			"installationId": "",
-			"subscriptions":  []interface{}{},
+
+		// Device code flow is user authentication (not service principal).
+		profile["subscriptions"] = azureCloud.UpdateSubscriptionsInProfile(profile, azureCloud.ProfileUpdateParams{
+			Username:            username,
+			TenantID:            p.tenantID,
+			SubscriptionID:      p.subscriptionID,
+			IsServicePrincipal:  false,
+			AzureProfileEnvName: p.cloudEnv.AzureProfileEnvName,
+		})
+		updatedData, err := json.MarshalIndent(profile, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal Azure profile: %w", err)
 		}
-	} else {
-		// Strip UTF-8 BOM if present (Azure CLI sometimes writes files with BOM).
-		data = stripBOM(data)
 
-		if err := json.Unmarshal(data, &profile); err != nil {
-			return fmt.Errorf("failed to parse Azure profile: %w", err)
+		if err := os.WriteFile(profilePath, updatedData, azureCloud.FilePermissions); err != nil {
+			return fmt.Errorf("failed to write Azure profile: %w", err)
 		}
-	}
-
-	// Update subscriptions in profile.
-	// Device code flow is user authentication (not service principal).
-	profile["subscriptions"] = azureCloud.UpdateSubscriptionsInProfile(profile, azureCloud.ProfileUpdateParams{
-		Username:            username,
-		TenantID:            p.tenantID,
-		SubscriptionID:      p.subscriptionID,
-		IsServicePrincipal:  false,
-		AzureProfileEnvName: p.cloudEnv.AzureProfileEnvName,
-	})
-
-	// Write updated profile.
-	updatedData, err := json.MarshalIndent(profile, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal Azure profile: %w", err)
-	}
-
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := profilePath + ".lock"
-	lock, err := azureCloud.AcquireFileLock(lockPath)
-	if err != nil {
+		return nil
+	}); err != nil {
 		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock Azure profile file", "lock_file", lockPath, "error", unlockErr)
-		}
-	}()
-
-	if err := os.WriteFile(profilePath, updatedData, azureCloud.FilePermissions); err != nil {
-		return fmt.Errorf("failed to write Azure profile: %w", err)
 	}
 
 	log.Debug("Updated Azure profile", "path", profilePath, "subscription", p.subscriptionID)
@@ -558,25 +567,27 @@ func writeCacheFileWithLocking(cachePath string, data []byte, cacheType string) 
 		return false
 	}
 
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := cachePath + ".lock"
-	lock, err := azureCloud.AcquireFileLock(lockPath)
-	if err != nil {
-		log.Debug(fmt.Sprintf("Failed to acquire file lock for %s", cacheType), "error", err)
-		return false
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug(fmt.Sprintf("Failed to unlock %s file", cacheType), "lock_file", lockPath, "error", unlockErr)
-		}
-	}()
-
-	if err := os.WriteFile(cachePath, data, azureCloud.FilePermissions); err != nil {
+	if err := withAzureFileLock(cachePath, func() error {
+		return os.WriteFile(cachePath, data, azureCloud.FilePermissions)
+	}); err != nil {
 		log.Debug(fmt.Sprintf("Failed to write %s", cacheType), "error", err)
 		return false
 	}
 
 	return true
+}
+
+func withAzureFileLock(path string, fn func() error) error {
+	ctx, cancel := context.WithTimeout(context.Background(), fileLockTimeout)
+	defer cancel()
+
+	if err := cache.NewFileLock(path).WithLockContext(ctx, fn); err != nil {
+		if errors.Is(err, errUtils.ErrCacheLocked) {
+			return fmt.Errorf("%w: %w", azureCloud.ErrFileLockTimeout, err)
+		}
+		return err
+	}
+	return nil
 }
 
 // stripBOM removes UTF-8 BOM (Byte Order Mark) from the beginning of data.

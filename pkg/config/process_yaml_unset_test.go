@@ -18,6 +18,8 @@ func loadYAMLIntoViper(t *testing.T, v *viper.Viper, yamlContent string) {
 }
 
 func TestPreprocessUnsetYAML(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		yaml        string
@@ -74,6 +76,7 @@ key3: value3`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			v := viper.New()
 			// First load the YAML normally (this is what Viper does with ReadConfig).
 			loadYAMLIntoViper(t, v, tt.yaml)
@@ -93,6 +96,8 @@ key3: value3`,
 }
 
 func TestPreprocessUnsetWithOtherFunctions(t *testing.T) {
+	t.Parallel()
+
 	// Test that !unset works alongside other YAML functions.
 	yamlContent := `env_var: !env HOME
 exec_result: !exec echo "test"
@@ -120,6 +125,8 @@ normal_key: normal_value`
 }
 
 func TestPreprocessUnsetDeepNesting(t *testing.T) {
+	t.Parallel()
+
 	yamlContent := `level1:
   level2:
     level3:
@@ -143,6 +150,8 @@ func TestPreprocessUnsetDeepNesting(t *testing.T) {
 }
 
 func TestPreprocessUnsetEntireSection(t *testing.T) {
+	t.Parallel()
+
 	yamlContent := `section1:
   key1: value1
   key2: value2
@@ -169,6 +178,8 @@ section3:
 }
 
 func TestPreprocessInvalidYAML(t *testing.T) {
+	t.Parallel()
+
 	// Test that invalid YAML returns an error.
 	invalidYaml := `key1: "unclosed string
 key2: !unset`
@@ -179,6 +190,8 @@ key2: !unset`
 }
 
 func TestPreprocessEmptyUnset(t *testing.T) {
+	t.Parallel()
+
 	// Test !unset with no value after it.
 	yamlContent := `key1: value1
 key2: !unset
@@ -198,6 +211,8 @@ key3: value3`
 }
 
 func TestDeleteNestedKey(t *testing.T) {
+	t.Parallel()
+
 	// This test validates the deleteNestedKey helper function directly.
 	tests := []struct {
 		name       string
@@ -269,6 +284,7 @@ func TestDeleteNestedKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Test the deleteNestedKey helper directly.
 			m := make(map[string]any)
 			for k, v := range tt.initial {
@@ -295,11 +311,15 @@ func TestDeleteNestedKey(t *testing.T) {
 // the happy-path table above does not reach: empty segments, descending through a
 // non-map value, and a missing intermediate segment.
 func TestDeleteNestedKeyEdgeCases(t *testing.T) {
+	t.Parallel()
+
 	t.Run("empty segments returns false", func(t *testing.T) {
+		t.Parallel()
 		assert.False(t, deleteNestedKey(map[string]any{"a": 1}, nil))
 	})
 
 	t.Run("descend through a non-map value returns false", func(t *testing.T) {
+		t.Parallel()
 		m := map[string]any{"scalar": "value"}
 		// "scalar.child" tries to traverse into a string, which is not a map.
 		assert.False(t, deleteNestedKey(m, []string{"scalar", "child"}))
@@ -308,6 +328,7 @@ func TestDeleteNestedKeyEdgeCases(t *testing.T) {
 	})
 
 	t.Run("missing intermediate segment returns false", func(t *testing.T) {
+		t.Parallel()
 		m := map[string]any{"a": map[string]any{"b": 1}}
 		assert.False(t, deleteNestedKey(m, []string{"x", "y", "z"}))
 	})
@@ -317,7 +338,10 @@ func TestDeleteNestedKeyEdgeCases(t *testing.T) {
 // empty Viper store, and deleting a key that does not exist (which must short-circuit
 // before re-reading the config and must leave existing keys intact).
 func TestDeleteViperKeyEdgeCases(t *testing.T) {
+	t.Parallel()
+
 	t.Run("empty path is a no-op", func(t *testing.T) {
+		t.Parallel()
 		v := viper.New()
 		loadYAMLIntoViper(t, v, "key: value")
 		deleteViperKey(v, "")
@@ -326,6 +350,7 @@ func TestDeleteViperKeyEdgeCases(t *testing.T) {
 	})
 
 	t.Run("empty Viper store is a no-op", func(t *testing.T) {
+		t.Parallel()
 		v := viper.New()
 		// No config loaded -> AllSettings() is empty.
 		deleteViperKey(v, "anything")
@@ -333,6 +358,7 @@ func TestDeleteViperKeyEdgeCases(t *testing.T) {
 	})
 
 	t.Run("deleting a non-existent key leaves config untouched", func(t *testing.T) {
+		t.Parallel()
 		v := viper.New()
 		loadYAMLIntoViper(t, v, "parent:\n  child: value")
 		deleteViperKey(v, "parent.does_not_exist")
@@ -367,6 +393,8 @@ func nestedKeyExists(m map[string]any, segments []string) bool {
 }
 
 func TestUnsetKeyNotInAllSettings(t *testing.T) {
+	t.Parallel()
+
 	// This test verifies that !unset truly removes a key from Viper
 	// during preprocessing. The key should not appear in AllSettings().
 	yamlContent := `keep: value
@@ -395,6 +423,8 @@ also_keep: another_value`
 }
 
 func TestDeleteViperKeyRemovesExistingKey(t *testing.T) {
+	t.Parallel()
+
 	// This test verifies that deleteViperKey truly removes a key from Viper
 	// that was previously loaded via ReadConfig (which is how Atmos loads config).
 	yamlContent := `parent:

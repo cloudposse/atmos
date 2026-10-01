@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"runtime"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/safenum"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
@@ -65,9 +67,23 @@ func (h *SpinHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 	}
 
 	var stdout, stderr bytes.Buffer
-	err = spinner.ExecWithSpinner(title, title, func() error {
-		return h.runCommand(execCtx, opts, &stdout, &stderr)
-	})
+	writers := vars.OutputWriters
+	stdoutWriter := io.Writer(&stdout)
+	stderrWriter := io.Writer(&stderr)
+	if writers.Stdout != nil {
+		stdoutWriter = io.MultiWriter(&stdout, writers.Stdout)
+	}
+	if writers.Stderr != nil {
+		stderrWriter = io.MultiWriter(&stderr, writers.Stderr)
+	}
+	operation := func() error {
+		return h.runCommand(execCtx, opts, stdoutWriter, stderrWriter)
+	}
+	if OutputSuppressed(ctx) {
+		err = operation()
+	} else {
+		err = spinner.ExecWithSpinner(title, title, operation)
+	}
 
 	return h.buildResult(stdout.String(), stderr.String(), err), err
 }
@@ -141,7 +157,7 @@ func (h *SpinHandler) createExecContext(ctx context.Context, step *schema.Workfl
 }
 
 // runCommand executes the command with configured options.
-func (h *SpinHandler) runCommand(ctx context.Context, opts *spinExecOptions, stdout, stderr *bytes.Buffer) error {
+func (h *SpinHandler) runCommand(ctx context.Context, opts *spinExecOptions, stdout, stderr io.Writer) error {
 	if opts.command == "" {
 		return errUtils.ErrStepEmptyCommand
 	}
@@ -173,10 +189,7 @@ func getShellCommand() (shell string, arg string) {
 // safeEnvCapacity computes a safe capacity for environment variable slices.
 // It clamps both lengths to maxEnvVars before adding to prevent overflow.
 func safeEnvCapacity(len1, len2, maxEnvVars int) int {
-	// Clamp inputs using min() so the addition can't overflow.
-	len1 = min(len1, maxEnvVars)
-	len2 = min(len2, maxEnvVars)
-	return min(len1+len2, maxEnvVars)
+	return safenum.Cap(len1, len2, maxEnvVars)
 }
 
 // buildResult creates a step result from command output.

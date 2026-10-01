@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuild(t *testing.T) {
@@ -157,6 +158,64 @@ func TestErrorBuilder_Err_WithHints(t *testing.T) {
 	assert.Len(t, hints, 2)
 	assert.Equal(t, "hint 1", hints[0])
 	assert.Equal(t, "hint 2", hints[1])
+}
+
+// TestErrorBuilder_Err_EscapesAngleBracketsInHints is a regression test: a
+// raw placeholder like "<file>" in a hint used to render as an inline HTML
+// tag by the terminal markdown renderer and get silently stripped (e.g.
+// "pass --config <file>." rendered as "pass --config ."). Err() now
+// HTML-entity-encodes bare "<"/">" so the placeholder survives, while leaving
+// backtick-wrapped placeholders untouched since code spans already render
+// literally.
+func TestErrorBuilder_Err_EscapesAngleBracketsInHints(t *testing.T) {
+	baseErr := errors.New("test error")
+	err := Build(baseErr).
+		WithHint("pass --config <file>.").
+		WithHint("Re-run with `--profile <name>` using one of the profiles above").
+		WithTitle("Custom Title").
+		WithExampleFile("some <raw> content").
+		Err()
+
+	// Err() always attaches the title first (regardless of call order in the
+	// chain), then hints/examples in the order they were added.
+	hints := errors.GetAllHints(err)
+	require.Len(t, hints, 4)
+	assert.Equal(t, "TITLE:Custom Title", hints[0])
+	assert.Equal(t, "pass --config &lt;file&gt;.", hints[1])
+	assert.Equal(t, "Re-run with `--profile <name>` using one of the profiles above", hints[2])
+	assert.Equal(t, "EXAMPLE:some <raw> content", hints[3])
+}
+
+func TestEscapeHintAngleBrackets(t *testing.T) {
+	tests := []struct {
+		name string
+		hint string
+		want string
+	}{
+		{"plain placeholder", "pass --config <file>.", "pass --config &lt;file&gt;."},
+		{"backtick-protected placeholder untouched", "`--file <manifest>`", "`--file <manifest>`"},
+		{"double-backtick code span untouched", "``--file <manifest>``", "``--file <manifest>``"},
+		{"double-backtick span with embedded single backtick", "``code with a ` backtick <x>``", "``code with a ` backtick <x>``"},
+		{"unmatched double backtick has no closing run, treated literally", "``<a>", "``&lt;a&gt;"},
+		{"mixed bare and backtick-protected", "<a> and `<b>` and <c>", "&lt;a&gt; and `<b>` and &lt;c&gt;"},
+		{"no angle brackets", "nothing to escape here", "nothing to escape here"},
+		{"EXAMPLE prefix left untouched", "EXAMPLE:<raw>", "EXAMPLE:<raw>"},
+		{"TITLE prefix left untouched", "TITLE:<raw>", "TITLE:<raw>"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, escapeHintAngleBrackets(tt.hint))
+		})
+	}
+}
+
+func TestErrorBuilder_WithCausePreservesExplanation(t *testing.T) {
+	cause := Build(errors.New("cause error")).
+		WithExplanation("A detailed cause explanation.").
+		Err()
+
+	err := Build(errors.New("outer error")).WithCause(cause).Err()
+	assert.Contains(t, errors.GetAllDetails(err), "A detailed cause explanation.")
 }
 
 func TestErrorBuilder_Err_WithExitCode(t *testing.T) {

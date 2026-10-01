@@ -30,6 +30,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/secrets/providers"
 	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/sopsauth"
+	"github.com/cloudposse/atmos/pkg/templatefuncs"
 )
 
 // init self-registers the SOPS track (track 2) so backend selection is a registry
@@ -220,7 +221,7 @@ func (p *sopsProvider) resolveFile(coord providers.Coordinate) (string, error) {
 		return p.derivePath(coord), nil
 	}
 
-	tmpl, err := template.New("sops-file").Funcs(sprig.FuncMap()).Option("missingkey=error").Parse(p.file)
+	tmpl, err := template.New("sops-file").Funcs(sprig.FuncMap()).Funcs(templatefuncs.FuncMap()).Option("missingkey=error").Parse(p.file)
 	if err != nil {
 		return "", fmt.Errorf("%w: invalid `spec.file` template %q: %w", ErrSopsFilePathTemplate, p.file, err)
 	}

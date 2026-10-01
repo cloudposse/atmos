@@ -342,35 +342,75 @@ func TestPostAuthenticate(t *testing.T) {
 	assert.Equal(t, "test-token", authContext.GCP.AccessToken)
 }
 
+// TestCredentialsExist verifies standalone and chained cache behavior.
 func TestCredentialsExist(t *testing.T) {
-	id := &Identity{principal: &types.GCPProjectIdentityPrincipal{ProjectID: "p"}}
-
-	exists, err := id.CredentialsExist()
-	require.NoError(t, err)
-	assert.True(t, exists)
-}
-
-func TestLoadCredentials(t *testing.T) {
-	id := &Identity{
-		principal: &types.GCPProjectIdentityPrincipal{
-			ProjectID: "load-project",
-		},
+	tests := []struct {
+		name   string
+		via    *schema.IdentityVia
+		exists bool
+	}{
+		{name: "standalone identity", exists: true},
+		{name: "provider-backed identity", via: &schema.IdentityVia{Provider: "gcp-adc"}},
+		{name: "identity-backed identity", via: &schema.IdentityVia{Identity: "gcp-source"}},
 	}
 
-	creds, err := id.LoadCredentials(context.Background())
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id := &Identity{principal: &types.GCPProjectIdentityPrincipal{ProjectID: "p"}}
+			id.SetConfig(&schema.Identity{Via: tt.via})
 
-	gcpCreds, ok := creds.(*types.GCPCredentials)
-	require.True(t, ok)
-	assert.Equal(t, "load-project", gcpCreds.ProjectID)
+			exists, err := id.CredentialsExist()
+			require.NoError(t, err)
+			assert.Equal(t, tt.exists, exists)
+		})
+	}
 }
 
-func TestLoadCredentials_NilPrincipal(t *testing.T) {
-	id := &Identity{principal: nil}
+// TestLoadCredentials verifies only standalone identities synthesize project credentials.
+func TestLoadCredentials(t *testing.T) {
+	tests := []struct {
+		name             string
+		principal        *types.GCPProjectIdentityPrincipal
+		via              *schema.IdentityVia
+		expectCredential bool
+	}{
+		{
+			name:             "standalone identity",
+			principal:        &types.GCPProjectIdentityPrincipal{ProjectID: "load-project"},
+			expectCredential: true,
+		},
+		{
+			name:      "provider-backed identity",
+			principal: &types.GCPProjectIdentityPrincipal{ProjectID: "load-project"},
+			via:       &schema.IdentityVia{Provider: "gcp-adc"},
+		},
+		{
+			name:      "identity-backed identity",
+			principal: &types.GCPProjectIdentityPrincipal{ProjectID: "load-project"},
+			via:       &schema.IdentityVia{Identity: "gcp-source"},
+		},
+		{name: "nil principal"},
+	}
 
-	creds, err := id.LoadCredentials(context.Background())
-	require.NoError(t, err)
-	assert.Nil(t, creds)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id := &Identity{
+				principal: tt.principal,
+				config:    &schema.Identity{Via: tt.via},
+			}
+
+			creds, err := id.LoadCredentials(context.Background())
+			require.NoError(t, err)
+			if !tt.expectCredential {
+				assert.Nil(t, creds)
+				return
+			}
+
+			gcpCreds, ok := creds.(*types.GCPCredentials)
+			require.True(t, ok)
+			assert.Equal(t, "load-project", gcpCreds.ProjectID)
+		})
+	}
 }
 
 func TestLogout(t *testing.T) {

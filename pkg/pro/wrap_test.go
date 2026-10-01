@@ -14,6 +14,8 @@ import (
 // TestWrapErr_NilCauseReturnsSentinel verifies that a nil cause short-circuits
 // to the sentinel itself, avoiding an unnecessary builder allocation.
 func TestWrapErr_NilCauseReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
 	got := wrapErr(errUtils.ErrFailedToMakeRequest, nil)
 	require.Error(t, got)
 	assert.Same(t, errUtils.ErrFailedToMakeRequest, got)
@@ -23,6 +25,8 @@ func TestWrapErr_NilCauseReturnsSentinel(t *testing.T) {
 // supplied the cause is returned untouched, so callers can pass through
 // errors without losing the chain.
 func TestWrapErr_NilSentinelReturnsCause(t *testing.T) {
+	t.Parallel()
+
 	cause := errors.New("boom")
 	got := wrapErr(nil, cause)
 	require.Error(t, got)
@@ -33,6 +37,8 @@ func TestWrapErr_NilSentinelReturnsCause(t *testing.T) {
 // cause, and that any cockroach hints attached to the cause are surfaced on
 // the outer wrapper so the CLI renderer can show them.
 func TestWrapErr_BothNonNil(t *testing.T) {
+	t.Parallel()
+
 	cause := cockroachErrors.WithHint(errors.New("inner"), "try again later")
 	got := wrapErr(errUtils.ErrFailedToMakeRequest, cause)
 

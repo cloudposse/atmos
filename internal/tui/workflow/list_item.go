@@ -13,10 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
-var (
-	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
-	selectedItemStyle = theme.Styles.SelectedItem
-)
+var itemStyle = lipgloss.NewStyle().PaddingLeft(4)
 
 type listItem struct {
 	name string
@@ -33,6 +30,7 @@ func (d listItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil 
 
 func (i listItem) FilterValue() string { return string(i.item) }
 
+// Render writes a workflow item and its optional display name, highlighting the selected entry.
 func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	i, ok := item.(listItem)
 	if !ok {
@@ -42,7 +40,7 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 	fn := itemStyle.Render
 	if index == m.Index() {
 		fn = func(s ...string) string {
-			return selectedItemStyle.Render("> " + strings.Join(s, " "))
+			return theme.GetCurrentStyles().Selected.PaddingLeft(2).Render("> " + strings.Join(s, " "))
 		}
 	}
 

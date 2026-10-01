@@ -10,7 +10,7 @@ import (
 
 // newSkipHooksCmd builds a cobra.Command carrying a `skip-hooks` flag that
 // mirrors the real global flag (NoOptDefVal="*"), so ParseFlags sets `Changed`
-// exactly the way Cobra does at runtime. This exercises resolveSkipHooks
+// exactly the way Cobra does at runtime. This exercises ResolveSkipHooks
 // against a genuine parsed flag — not a viper.Set shortcut, which is what let
 // the before-event skip bug slip through.
 func newSkipHooksCmd(t *testing.T) *cobra.Command {
@@ -33,7 +33,7 @@ func TestResolveSkipHooks(t *testing.T) {
 		viper.Set("skip-hooks", "cost")
 		t.Cleanup(func() { viper.Set("skip-hooks", prev) })
 
-		assert.Equal(t, "cost", resolveSkipHooks(nil))
+		assert.Equal(t, "cost", ResolveSkipHooks(nil))
 	})
 
 	t.Run("bare --skip-hooks resolves to star via NoOptDefVal", func(t *testing.T) {
@@ -41,14 +41,14 @@ func TestResolveSkipHooks(t *testing.T) {
 		require := assert.New(t)
 		require.NoError(cmd.ParseFlags([]string{"--skip-hooks"}))
 
-		assert.Equal(t, "*", resolveSkipHooks(cmd))
+		assert.Equal(t, "*", ResolveSkipHooks(cmd))
 	})
 
 	t.Run("--skip-hooks=list resolves to the list", func(t *testing.T) {
 		cmd := newSkipHooksCmd(t)
 		assert.NoError(t, cmd.ParseFlags([]string{"--skip-hooks=cost,security"}))
 
-		assert.Equal(t, "cost,security", resolveSkipHooks(cmd))
+		assert.Equal(t, "cost,security", ResolveSkipHooks(cmd))
 	})
 
 	t.Run("flag not changed falls back to viper env value", func(t *testing.T) {
@@ -58,7 +58,7 @@ func TestResolveSkipHooks(t *testing.T) {
 
 		cmd := newSkipHooksCmd(t)
 		// No ParseFlags / flag not present on the command line → Changed=false.
-		assert.Equal(t, "audit", resolveSkipHooks(cmd))
+		assert.Equal(t, "audit", ResolveSkipHooks(cmd))
 	})
 
 	t.Run("explicit CLI flag wins over viper", func(t *testing.T) {
@@ -69,7 +69,7 @@ func TestResolveSkipHooks(t *testing.T) {
 		cmd := newSkipHooksCmd(t)
 		assert.NoError(t, cmd.ParseFlags([]string{"--skip-hooks=cost"}))
 
-		assert.Equal(t, "cost", resolveSkipHooks(cmd))
+		assert.Equal(t, "cost", ResolveSkipHooks(cmd))
 	})
 }
 
@@ -106,7 +106,7 @@ func TestNewSkipPredicate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pred := newSkipPredicate(tt.raw)
+			pred := NewSkipPredicate(tt.raw)
 			assert.Equal(t, tt.wantSkip, pred(tt.hookName))
 		})
 	}

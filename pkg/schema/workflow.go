@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,6 +13,9 @@ import (
 // ErrInvalidWorkflowContainer is returned when a workflow `container` value cannot be decoded.
 var ErrInvalidWorkflowContainer = errors.New("invalid workflow container configuration")
 
+// ErrInvalidContainerDriver is returned when a container build step's `driver` value cannot be decoded.
+var ErrInvalidContainerDriver = errors.New("invalid container build driver configuration")
+
 // DescribeWorkflowsItem represents a workflow item in the describe workflows output.
 type DescribeWorkflowsItem struct {
 	File     string `yaml:"file" json:"file" mapstructure:"file"`
@@ -19,8 +24,9 @@ type DescribeWorkflowsItem struct {
 
 // ViewportConfig configures viewport display settings.
 type ViewportConfig struct {
-	Height int `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"` // Lines.
-	Width  int `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`    // Columns.
+	Padding int `yaml:"padding,omitempty" json:"padding,omitempty" mapstructure:"padding" jsonschema:"minimum=0"` // Horizontal padding on each side, in columns.
+	Height  int `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`                           // Lines.
+	Width   int `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`                              // Columns.
 }
 
 // ShowConfig configures automatic display features for workflows.
@@ -71,7 +77,7 @@ type CastSimulateDefaults struct {
 	Interval string          `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`
 }
 
-// ParallelFailConfig configures failure behavior for parallel and matrix steps.
+// ParallelFailConfig configures failure behavior for parallel, matrix, and test steps.
 type ParallelFailConfig struct {
 	Mode        string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
 	MaxFailures int    `yaml:"max_failures,omitempty" json:"max_failures,omitempty" mapstructure:"max_failures"`
@@ -125,7 +131,48 @@ type ContainerBuildStep struct {
 	Target           string                  `yaml:"target,omitempty" json:"target,omitempty" mapstructure:"target"`
 	NoCache          bool                    `yaml:"no_cache,omitempty" json:"no_cache,omitempty" mapstructure:"no_cache"`
 	Pull             bool                    `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`
+	Load             bool                    `yaml:"load,omitempty" json:"load,omitempty" mapstructure:"load"`
 	Bake             *ContainerBuildBakeStep `yaml:"bake,omitempty" json:"bake,omitempty" mapstructure:"bake"`
+	Driver           *ContainerDriverConfig  `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
+	Cache            *ContainerCacheConfig   `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+}
+
+// ContainerDriverConfig configures the Buildx builder instance used for build/bake.
+// A bare string value sets Provider with no Opts (see UnmarshalYAML), e.g. `driver: docker-container`.
+type ContainerDriverConfig struct {
+	Name     string            `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	Provider string            `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
+	Opts     map[string]string `yaml:"opts,omitempty" json:"opts,omitempty" mapstructure:"opts"`
+}
+
+// UnmarshalYAML supports both object syntax and a bare provider string, e.g. `driver: docker-container`.
+func (d *ContainerDriverConfig) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		var provider string
+		if err := value.Decode(&provider); err != nil {
+			return fmt.Errorf("%w: driver must be a mapping or string: %w", ErrInvalidContainerDriver, err)
+		}
+		d.Provider = provider
+		return nil
+	case yaml.MappingNode:
+		type containerDriverConfig ContainerDriverConfig
+		var decoded containerDriverConfig
+		if err := decodeYAMLKnownFields(value, &decoded); err != nil {
+			return fmt.Errorf("%w: driver must be a mapping or string: %w", ErrInvalidContainerDriver, err)
+		}
+		*d = ContainerDriverConfig(decoded)
+		return nil
+	default:
+		return fmt.Errorf("%w: driver must be a mapping or string, got YAML node kind %d", ErrInvalidContainerDriver, value.Kind)
+	}
+}
+
+// ContainerCacheConfig configures Buildx cache import/export sources for a build.
+// Each entry is a raw Buildx cache attribute set (e.g. type, ref, mode, image-manifest, oci-mediatypes).
+type ContainerCacheConfig struct {
+	From []map[string]string `yaml:"from,omitempty" json:"from,omitempty" mapstructure:"from"`
+	To   []map[string]string `yaml:"to,omitempty" json:"to,omitempty" mapstructure:"to"`
 }
 
 // ContainerPushStep configures a container image push action.
@@ -185,6 +232,7 @@ type ContainerRunStep struct {
 	RunArgs           []string                `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`
 	Mounts            []ContainerMount        `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`
 	Ports             []ContainerPort         `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`
+	Env               map[string]string       `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 	Restart           *ContainerRestart       `yaml:"restart,omitempty" json:"restart,omitempty" mapstructure:"restart"`
 	HealthCheck       *ContainerHealthCheck   `yaml:"healthcheck,omitempty" json:"healthcheck,omitempty" mapstructure:"healthcheck"`
 }
@@ -221,7 +269,7 @@ func (c *WorkflowContainer) UnmarshalYAML(value *yaml.Node) error {
 	case yaml.MappingNode:
 		type workflowContainer WorkflowContainer
 		var decoded workflowContainer
-		if err := value.Decode(&decoded); err != nil {
+		if err := decodeYAMLKnownFields(value, &decoded); err != nil {
 			return fmt.Errorf("%w: container must be a mapping or boolean: %w", ErrInvalidWorkflowContainer, err)
 		}
 		*c = WorkflowContainer(decoded)
@@ -229,6 +277,53 @@ func (c *WorkflowContainer) UnmarshalYAML(value *yaml.Node) error {
 	default:
 		return fmt.Errorf("%w: container must be a mapping or boolean, got YAML node kind %d", ErrInvalidWorkflowContainer, value.Kind)
 	}
+}
+
+// workflowContainerJSON mirrors WorkflowContainer's fields for JSON
+// marshaling, adding an explicit "enabled" key. WorkflowContainer's own
+// struct tag hides Enabled from JSON (`json:"-"`) because it's normally
+// populated only by UnmarshalYAML's polymorphic bool-or-mapping decode, not
+// by generic reflection-based decoding. That's fine for the YAML config-load
+// path, but it means a generic JSON-based deep copy -- e.g.
+// cmd/cmd_utils.go's cloneCommand, which round-trips a schema.Command
+// (including any step's Container) through json.Marshal/json.Unmarshal to
+// give each custom command's Cobra closure an independent copy -- silently
+// dropped a step's `container: false` opt-out: Enabled came back nil, which
+// IsEnabled() treats as enabled, inverting the opt-out. MarshalJSON/
+// UnmarshalJSON below make WorkflowContainer round-trip through JSON
+// losslessly, the same way UnmarshalYAML already does for YAML.
+type workflowContainerJSON struct {
+	Enabled           *bool             `json:"enabled,omitempty"`
+	Image             string            `json:"image,omitempty"`
+	Shell             string            `json:"shell,omitempty"`
+	Provider          string            `json:"provider,omitempty"`
+	RuntimeAutoStart  bool              `json:"runtime_auto_start,omitempty"`
+	Pull              string            `json:"pull,omitempty"`
+	Workspace         string            `json:"workspace,omitempty"`
+	WorkspaceReadOnly bool              `json:"workspace_read_only,omitempty"`
+	Cleanup           string            `json:"cleanup,omitempty"`
+	User              string            `json:"user,omitempty"`
+	RunArgs           []string          `json:"run_args,omitempty"`
+	Mounts            []ContainerMount  `json:"mounts,omitempty"`
+	Ports             []ContainerPort   `json:"ports,omitempty"`
+	Env               map[string]string `json:"env,omitempty"`
+}
+
+// MarshalJSON serializes Enabled alongside the rest of the fields; see
+// workflowContainerJSON for why this is needed.
+func (c *WorkflowContainer) MarshalJSON() ([]byte, error) {
+	return json.Marshal(workflowContainerJSON(*c))
+}
+
+// UnmarshalJSON is the counterpart to MarshalJSON; see workflowContainerJSON
+// for why this is needed.
+func (c *WorkflowContainer) UnmarshalJSON(data []byte) error {
+	var decoded workflowContainerJSON
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidWorkflowContainer, err)
+	}
+	*c = WorkflowContainer(decoded)
+	return nil
 }
 
 // IsEnabled reports whether the container config should be applied.
@@ -250,6 +345,12 @@ type WorkflowStep struct {
 	Identity         string       `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 	Needs            []string     `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	When             Condition    `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
+	// Continue controls whether a failure of this step is forgiven: subsequent steps still run
+	// and the overall workflow exit status is unaffected (like GitHub Actions'
+	// continue-on-error). Evaluated against this step's own outcome after it runs, unlike When
+	// (evaluated before, against the running status). Unset means no forgiveness (today's
+	// fail-stop behavior, unchanged).
+	Continue Condition `yaml:"continue,omitempty" json:"continue,omitempty" mapstructure:"continue"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -279,7 +380,7 @@ type WorkflowStep struct {
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
 	// Display configuration.
-	Output         string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
+	Output         string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none; test groups use failures (default) or all.
 	CastOutput     *CastOutput           `yaml:"-" json:"cast_output,omitempty" mapstructure:"cast_output"`            // Structured output for cast artifacts.
 	ParallelOutput *ParallelOutputConfig `yaml:"-" json:"parallel_output,omitempty" mapstructure:"parallel_output"`    // Structured output for parallel/matrix.
 	Height         int                   `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
@@ -318,8 +419,15 @@ type WorkflowStep struct {
 	// Environment variables (supports templates).
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 
+	// Command/scanner step arguments (supports templates).
+	Args []string `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
+
+	// With holds type-specific step parameters for non-container step types.
+	With map[string]any `yaml:"-" json:"with,omitempty" mapstructure:"with"`
+
 	// Env step type fields.
-	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"` // Variables to set for env step type.
+	Vars   map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"`       // Variables to set for env step type.
+	Export *bool             `yaml:"export,omitempty" json:"export,omitempty" mapstructure:"export"` // Whether env-step values reach later child processes (default true).
 
 	// Exit step type fields.
 	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
@@ -365,7 +473,7 @@ type WorkflowStep struct {
 	Inspect          *ContainerInspectStep   `yaml:"-" json:"inspect,omitempty" mapstructure:"inspect"`
 	RuntimeAutoStart bool                    `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
 	Runtime          *ContainerRuntimeConfig `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`       // Inline per-step runtime block (e.g. runtime.host for Docker-out-of-Docker).
-	Provider         string                  `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // docker, podman, or empty for auto-detect.
+	Provider         string                  `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // auto, docker, podman, or empty for auto-detect.
 	Container        *WorkflowContainer      `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
 
 	// Emulator step fields.
@@ -396,13 +504,25 @@ type WorkflowStep struct {
 	Dirs  []string `yaml:"dirs,omitempty" json:"dirs,omitempty" mapstructure:"dirs"`    // Directories that must exist (supports templates).
 	Hint  string   `yaml:"hint,omitempty" json:"hint,omitempty" mapstructure:"hint"`    // Extra remediation note appended to the failure error (supports templates).
 
+	// Inputs declares this step's freshness sources. See pkg/schema/task.go's Inputs type and
+	// pkg/runner/freshness.
+	Inputs *Inputs `yaml:"inputs,omitempty" json:"inputs,omitempty" mapstructure:"inputs"`
+
+	// Artifacts declares this step's expected output files -- a sibling of Inputs, not nested
+	// inside it. See pkg/schema/task.go's Artifacts type.
+	Artifacts *Artifacts `yaml:"artifacts,omitempty" json:"artifacts,omitempty" mapstructure:"artifacts"`
+
+	// Preconditions declares tools that must already be on PATH for this step to be considered
+	// already satisfied. See pkg/schema/task.go's Preconditions type.
+	Preconditions *Preconditions `yaml:"preconditions,omitempty" json:"preconditions,omitempty" mapstructure:"preconditions"`
+
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
 
 	// Show configuration for this step (overrides workflow-level show settings).
 	Show *ShowConfig `yaml:"show,omitempty" json:"show,omitempty" mapstructure:"show"`
 
-	// Control step fields.
+	// Control step fields for parallel, matrix, and test groups.
 	Steps          []WorkflowStep      `yaml:"steps,omitempty" json:"steps,omitempty" mapstructure:"steps"`
 	MaxConcurrency int                 `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty" mapstructure:"max_concurrency"`
 	Matrix         map[string][]string `yaml:"matrix,omitempty" json:"matrix,omitempty" mapstructure:"matrix"`
@@ -428,6 +548,8 @@ type WorkflowStep struct {
 //   - `with`       : the container action's parameters, decoded into Build/Run/Push/Inspect by `action`.
 //   - `background` : boolean async marker, or a string style color.
 //   - `for`        : scalar or sequence of target step names (wait/cancel).
+//
+//nolint:dupl // Task and WorkflowStep need distinct receivers while decoding the same YAML shape.
 func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 	type plain WorkflowStep
 	// Decode into a zero-value temp first so a reused receiver does not retain
@@ -449,6 +571,7 @@ func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 		color:     &step.Background,
 		forList:   &step.For,
 		steps:     &step.Steps,
+		generic:   &step.With,
 		container: containerActionTargets{Build: &step.Build, Run: &step.Run, Push: &step.Push, Inspect: &step.Inspect},
 	})
 }
@@ -475,6 +598,7 @@ type stepPolyTargets struct {
 	color     *string
 	forList   *[]string
 	steps     *[]WorkflowStep
+	generic   *map[string]any
 	container containerActionTargets
 }
 
@@ -508,7 +632,25 @@ func applyStepPolymorphicNodes(nodes stepPolyNodes, stepType, action string, t *
 	if err := decodeWorkflowStepList(nodes.steps, t.steps); err != nil {
 		return err
 	}
-	return decodeContainerWith(nodes.with, action, t.container)
+	return decodeStepWith(nodes.with, stepType, action, t)
+}
+
+func decodeStepWith(node *yaml.Node, stepType, action string, t *stepPolyTargets) error {
+	if node == nil {
+		return nil
+	}
+	if strings.TrimSpace(stepType) == containerStepType {
+		return decodeContainerWith(node, action, t.container)
+	}
+	if t.generic == nil {
+		return nil
+	}
+	out := make(map[string]any)
+	if err := node.Decode(&out); err != nil {
+		return err
+	}
+	*t.generic = out
+	return nil
 }
 
 func decodeWorkflowStepList(node *yaml.Node, out *[]WorkflowStep) error {
@@ -621,14 +763,33 @@ func decodeContainerWith(node *yaml.Node, action string, t containerActionTarget
 	}
 }
 
-// decodeYAMLInto decodes a YAML node into a freshly allocated T and stores it in dst.
+// decodeYAMLInto decodes a YAML node into a freshly allocated T and stores it
+// in dst, rejecting any field not defined on T (e.g. a typo'd `platforms:` on
+// a `with:` block that only supports `context`/`tags`/etc.) rather than
+// silently dropping it. See decodeYAMLKnownFields for why plain node.Decode
+// can't do this.
 func decodeYAMLInto[T any](node *yaml.Node, dst **T) error {
 	var cfg T
-	if err := node.Decode(&cfg); err != nil {
-		return err
+	if err := decodeYAMLKnownFields(node, &cfg); err != nil {
+		return fmt.Errorf("%w: %w", ErrWorkflowControlStepInvalid, err)
 	}
 	*dst = &cfg
 	return nil
+}
+
+// decodeYAMLKnownFields decodes node into dst, rejecting fields not defined on
+// dst's type (including nested structs). Only the stream-level yaml.Decoder
+// supports a strict/KnownFields mode -- plain node.Decode has no such option
+// -- so this re-marshals node and decodes it through a yaml.Decoder with
+// KnownFields(true) instead.
+func decodeYAMLKnownFields(node *yaml.Node, dst any) error {
+	nodeBytes, err := yaml.Marshal(node)
+	if err != nil {
+		return err
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(nodeBytes))
+	dec.KnownFields(true)
+	return dec.Decode(dst)
 }
 
 // normalizeContainerAction returns the canonical container verb, defaulting an

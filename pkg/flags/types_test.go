@@ -67,8 +67,10 @@ func TestIntFlag(t *testing.T) {
 	assert.False(t, flag.GetNoOptDefValConsumesNextArg())
 }
 
-// TestStringSliceFlag verifies StringSliceFlag getters, including the
-// NoOptDefVal-related methods which always return false/empty for slice flags.
+// TestStringSliceFlag verifies StringSliceFlag getters. NoOptDefVal-related methods
+// mirror StringFlag's behavior (empty by default, consumes-next-arg true by default,
+// e.g. to support --profile's bare-flag sentinel pattern) rather than being
+// permanently hardcoded to empty/false.
 func TestStringSliceFlag(t *testing.T) {
 	flag := &StringSliceFlag{
 		Name:        "config",
@@ -85,9 +87,25 @@ func TestStringSliceFlag(t *testing.T) {
 	assert.Equal(t, "Config files", flag.GetDescription())
 	assert.True(t, flag.IsRequired())
 	assert.Equal(t, "", flag.GetNoOptDefVal())
-	assert.False(t, flag.GetNoOptDefValConsumesNextArg())
+	assert.True(t, flag.GetNoOptDefValConsumesNextArg(), "zero-value NoOptDefValNoSpaceValue means consumes-next-arg defaults true, matching StringFlag")
 	assert.Equal(t, []string{"ATMOS_CONFIG"}, flag.GetEnvVars())
 	assert.Nil(t, flag.GetCompletionFunc())
+}
+
+// TestStringSliceFlag_NoOptDefVal_Profile verifies the --profile bare-flag pattern
+// (NoOptDefVal set, no NoOptDefValNoSpaceValue) mirrors --identity's StringFlag
+// behavior: consumes the next arg unless explicitly marked otherwise.
+func TestStringSliceFlag_NoOptDefVal_Profile(t *testing.T) {
+	flag := &StringSliceFlag{
+		Name:        "profile",
+		Default:     []string{},
+		Description: "Activate configuration profiles",
+		EnvVars:     []string{"ATMOS_PROFILE"},
+		NoOptDefVal: "__SELECT__",
+	}
+
+	assert.Equal(t, "__SELECT__", flag.GetNoOptDefVal())
+	assert.True(t, flag.GetNoOptDefValConsumesNextArg(), "profile must consume a following non-flag arg so space-separated syntax still works")
 }
 
 func TestIdentityFlag(t *testing.T) {

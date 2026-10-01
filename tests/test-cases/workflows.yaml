@@ -333,6 +333,66 @@ tests:
         - "Testing full retry config"
       exit_code: 0
 
+  - name: atmos workflow env step propagates to shell
+    enabled: true
+    snapshot: false
+    description: "Ensure an env step propagates variables to a following shell step"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "env-step-propagates-to-shell"
+      - "--file"
+      - "test"
+    skip:
+      # Uses POSIX shell syntax.
+      os: !not windows
+    expect:
+      diff: []
+      stdout:
+        - "FOO=<bar>"
+      exit_code: 0
+
+  - name: atmos workflow env step propagates to atmos
+    enabled: true
+    snapshot: false
+    description: "Ensure an env step propagates variables to a following atmos step"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "env-step-propagates-to-atmos"
+      - "--file"
+      - "test"
+    skip:
+      # The child workflow uses POSIX shell syntax.
+      os: !not windows
+    expect:
+      diff: []
+      stdout:
+        - "FOO=<bar>"
+      exit_code: 0
+
+  - name: atmos workflow env step template only
+    enabled: true
+    snapshot: false
+    description: "Ensure an env step remains available to templates when process export is disabled"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "env-step-template-only"
+      - "--file"
+      - "test"
+    skip:
+      # Uses POSIX shell syntax.
+      os: !not windows
+    expect:
+      diff: []
+      stdout:
+        - "TEMPLATE=<bar>"
+      exit_code: 0
+
   - name: workflow retries example
     enabled: true
     snapshot: true

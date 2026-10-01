@@ -36,15 +36,12 @@ func NewResultHandler(opts HandlerOptions) hooks.ResultHandler {
 		}
 
 		data, err := os.ReadFile(path)
-		if os.IsNotExist(err) {
-			// Tool didn't produce a SARIF file (clean run, no findings).
-			label := labelOrDefault(opts.Kind, "")
-			return &hooks.Summary{
-				Kind:   label,
-				Status: hooks.StatusSuccess,
-				Title:  "no findings",
-				Body:   fmt.Sprintf("## %s\n\n✅ no findings\n", label),
-			}, nil
+		// runSubprocess always pre-creates the capture file when CaptureStdout is set, so
+		// "file exists but is empty" and "file doesn't exist" are the same signal: the
+		// scanner produced nothing. missingReportSummary already knows how to turn that
+		// into success vs. failure based on ctx.ExitCode.
+		if os.IsNotExist(err) || (err == nil && len(data) == 0) {
+			return missingReportSummary(ctx, opts)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("%s: read SARIF: %w: %w", labelOrDefault(opts.Kind, ""), errUtils.ErrReadFile, err)
@@ -63,6 +60,7 @@ func NewResultHandler(opts HandlerOptions) hooks.ResultHandler {
 		body := RenderMarkdown(findings, RenderMarkdownOptions{
 			Tool:        label,
 			MaxFindings: opts.MaxFindings,
+			RepoBaseURL: githubBlobBaseURL(),
 		})
 
 		return &hooks.Summary{
@@ -77,6 +75,28 @@ func NewResultHandler(opts HandlerOptions) hooks.ResultHandler {
 			SARIF: data,
 		}, nil
 	}
+}
+
+// missingReportSummary reports a scanner failure when it exited unsuccessfully
+// without writing SARIF; otherwise, a missing report represents a clean run
+// with no findings.
+func missingReportSummary(ctx *hooks.ExecContext, opts HandlerOptions) (*hooks.Summary, error) {
+	label := labelOrDefault(opts.Kind, "")
+	if ctx.ExitCode != 0 {
+		return &hooks.Summary{
+			Kind:   label,
+			Status: hooks.StatusFailure,
+			Title:  "scan failed",
+			Body:   fmt.Sprintf("## %s\n\n⚠ scanner failed before producing a SARIF report (exit code %d)\n", label, ctx.ExitCode),
+		}, nil
+	}
+
+	return &hooks.Summary{
+		Kind:   label,
+		Status: hooks.StatusSuccess,
+		Title:  "no findings",
+		Body:   fmt.Sprintf("## %s\n\n✅ no findings\n", label),
+	}, nil
 }
 
 // labelOrDefault resolves the report label: the configured kind, else the

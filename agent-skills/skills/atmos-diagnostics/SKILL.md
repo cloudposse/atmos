@@ -4,6 +4,7 @@ description: "Atmos diagnostics: machine-readable JSONL event streams, diagnosti
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: dev-tooling
 ---
 
 # Atmos Diagnostics

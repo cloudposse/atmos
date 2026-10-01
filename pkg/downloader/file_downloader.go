@@ -3,6 +3,7 @@ package downloader
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,19 +26,32 @@ const (
 )
 
 // isGitHubHTTPURL checks if the given URL is a GitHub HTTP URL that uses rate-limited APIs.
-// This includes raw.githubusercontent.com for file downloads and github.com archive/release URLs.
+// This includes raw.githubusercontent.com for file downloads, github.com archive/release URLs,
+// and the equivalent hosts for a configured GitHub Enterprise Server (GITHUB_SERVER_URL).
+//
+// Src is parsed and compared by hostname/path rather than by substring, so an unrelated URL
+// that merely contains "github.com" (or the configured GHES host) somewhere in its path or
+// query string is never misclassified as a GitHub URL.
 func isGitHubHTTPURL(src string) bool {
-	src = strings.ToLower(src)
+	parsed, err := url.Parse(src)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	hostname := strings.ToLower(parsed.Hostname())
+
 	// Raw GitHub content (used for mixins, imports, templates).
-	if strings.Contains(src, "raw.githubusercontent.com") {
+	if hostname == "raw.githubusercontent.com" {
 		return true
 	}
-	// GitHub archive downloads (tarballs, zipballs).
-	if strings.Contains(src, "github.com") &&
-		(strings.Contains(src, "/archive/") || strings.Contains(src, "/releases/")) {
-		return true
+
+	// GitHub (or GHES) archive/release downloads (tarballs, zipballs, release assets), and GHES
+	// raw content served under /raw/ on the server host instead of a raw.githubusercontent.com subdomain.
+	if hostname != "github.com" && !github.RepoEndpoints().IsHost(parsed.Host) {
+		return false
 	}
-	return false
+
+	path := strings.ToLower(parsed.EscapedPath())
+	return strings.Contains(path, "/archive/") || strings.Contains(path, "/releases/") || strings.Contains(path, "/raw/")
 }
 
 // fileDownloader handles downloading files and directories from various sources
@@ -85,6 +99,54 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 		return fmt.Errorf(errWrapFormat, errUtils.ErrDownloadFile, err)
 	}
 	return nil
+}
+
+// FetchWithMetadata fetches like Fetch, additionally returning best-effort HTTP cache metadata
+// (ETag/Last-Modified) captured from the response when the underlying client exposes any -- empty
+// for non-HTTP sources (git, OCI, local) or when the fetch itself fails.
+func (fd *fileDownloader) FetchWithMetadata(src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error) {
+	return fd.FetchWithMetadataContext(context.Background(), src, dest, mode, timeout)
+}
+
+// FetchWithMetadataContext propagates cancellation to the download and rate-limit waits.
+func (fd *fileDownloader) FetchWithMetadataContext(parent context.Context, src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return FetchMetadata{}, err
+	}
+
+	// Pre-check GitHub rate limits for GitHub HTTP URLs.
+	if isGitHubHTTPURL(src) {
+		if err := fd.waitForMetadataRateLimit(ctx, github.CheckRateLimit); err != nil {
+			if ctx.Err() != nil {
+				return FetchMetadata{}, ctx.Err()
+			}
+			log.Debug("Rate limit wait interrupted", "error", err)
+			// Continue anyway - don't block on rate limit check failures.
+		}
+	}
+
+	client, err := fd.clientFactory.NewClient(ctx, src, dest, mode)
+	if err != nil {
+		return FetchMetadata{}, errUtils.Build(errUtils.ErrCreateDownloadClient).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Check that the URL format is valid").
+			Err()
+	}
+
+	if err := client.Get(); err != nil {
+		return FetchMetadata{}, fmt.Errorf("%w: %w", errUtils.ErrDownloadFile, err)
+	}
+
+	// DownloadClient implementations that don't do HTTP (git, OCI, local copy, test mocks/fakes)
+	// simply don't implement Metadata() and get a zero-value result here -- deliberately not part
+	// of the DownloadClient interface itself, see FetchWithMetadata's doc comment.
+	if provider, ok := client.(interface{ Metadata() FetchMetadata }); ok {
+		return provider.Metadata(), nil
+	}
+	return FetchMetadata{}, nil
 }
 
 // FetchAutoParse downloads a remote file, detects its format, and parses it.

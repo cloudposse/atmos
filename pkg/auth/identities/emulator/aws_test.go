@@ -46,13 +46,12 @@ func TestPostAuthenticate_AWSPopulatesAuthContext(t *testing.T) {
 	assert.Contains(t, string(body), "test", "static dummy credentials written to the shared credentials file")
 }
 
-// TestPostAuthenticate_FallsBackToInjectedStack verifies the per-operation stack
-// from StackInfo is preferred, falling back to the stack injected at construction.
-func TestPostAuthenticate_FallsBackToInjectedStack(t *testing.T) {
+// TestPostAuthenticate_ResolvesWithoutStack verifies that project-scoped emulator
+// identities resolve their configured emulator even when no stack context exists.
+func TestPostAuthenticate_ResolvesWithoutStack(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	id := newAWSIdentity(t)
-	id.SetStack("dev")
 	resolver := &fakeResolver{env: map[string]string{"AWS_ENDPOINT_URL": "http://localhost:1", "AWS_REGION": "us-east-1"}}
 	id.SetEmulatorResolver(resolver)
 
@@ -61,12 +60,10 @@ func TestPostAuthenticate_FallsBackToInjectedStack(t *testing.T) {
 		AuthContext: ac, ProviderName: "local-aws", IdentityName: "local-aws",
 	}))
 	require.NotNil(t, ac.AWS)
-	assert.Equal(t, "dev", resolver.gotStack, "falls back to the injected stack when StackInfo has none")
+	assert.Equal(t, "local/aws", resolver.gotName)
 }
 
-// TestPostAuthenticate_SkipsWhenNoStack verifies that with no resolvable stack the
-// auth context is left unpopulated (best-effort) rather than failing the auth flow.
-func TestPostAuthenticate_SkipsWhenNoStack(t *testing.T) {
+func TestPostAuthenticate_UsesProjectScopedIdentityWithoutStack(t *testing.T) {
 	id := newAWSIdentity(t)
 	id.SetEmulatorResolver(&fakeResolver{env: map[string]string{"AWS_ENDPOINT_URL": "x"}})
 
@@ -74,7 +71,7 @@ func TestPostAuthenticate_SkipsWhenNoStack(t *testing.T) {
 	require.NoError(t, id.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
 		AuthContext: ac, ProviderName: "local-aws", IdentityName: "local-aws",
 	}))
-	assert.Nil(t, ac.AWS, "no stack -> auth context left unpopulated")
+	assert.NotNil(t, ac.AWS)
 }
 
 // TestPostAuthenticate_SkipsForKubernetesAndNilResolver verifies non-AWS targets and
@@ -82,7 +79,6 @@ func TestPostAuthenticate_SkipsWhenNoStack(t *testing.T) {
 func TestPostAuthenticate_SkipsForKubernetesAndNilResolver(t *testing.T) {
 	k8s, err := New("local-k8s", &schema.Identity{Kind: types.IdentityKindKubernetesEmulator, Emulator: "k3s"})
 	require.NoError(t, err)
-	k8s.SetStack("dev")
 	k8s.SetEmulatorResolver(&fakeResolver{})
 
 	ac := &schema.AuthContext{}

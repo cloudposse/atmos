@@ -2,18 +2,17 @@ package templates
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"strings"
+	"sync/atomic"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -33,28 +32,16 @@ type Templater struct {
 	UsageTemplate string
 }
 
-// commandStyle defines the styles for command formatting
-var (
-	commandNameStyle = theme.Styles.CommandName
-	commandDescStyle = theme.Styles.Description
-
-	commandUnsupportedNameStyle = theme.Styles.CommandName.
-					Foreground(lipgloss.Color(theme.ColorGray)).
-					Bold(true)
-	commandUnsupportedDescStyle = theme.Styles.Description.
-					Foreground(lipgloss.Color(theme.ColorGray))
-)
-
 // formatCommand returns a styled string for a command and its description
 func formatCommand(name string, desc string, padding int, IsNotSupported bool) string {
 	paddedName := fmt.Sprintf("%-*s", padding, name)
 	if IsNotSupported {
-		styledName := commandUnsupportedNameStyle.Render(paddedName)
-		styledDesc := commandUnsupportedDescStyle.Render(desc + " [unsupported]")
+		styledName := theme.GetCurrentStyles().Muted.Bold(true).Render(paddedName)
+		styledDesc := theme.GetCurrentStyles().Muted.Render(desc + " [unsupported]")
 		return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
 	}
-	styledName := commandNameStyle.Render(paddedName)
-	styledDesc := commandDescStyle.Render(desc)
+	styledName := theme.GetCurrentStyles().Command.Render(paddedName)
+	styledDesc := theme.GetCurrentStyles().Description.Render(desc)
 	return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
 }
 
@@ -140,12 +127,9 @@ func isAliasesPresent(cmds []*cobra.Command) bool {
 	return len(filterCommands(cmds, true)) > 0
 }
 
+// headingStyle renders a command help heading with the current theme.
 func headingStyle(s string) string {
-	if theme.Styles.Help.Headings != nil {
-		ch := theme.Styles.Help.Headings
-		return ch.Sprint(s)
-	}
-	return s
+	return theme.GetCurrentStyles().Help.Heading.Render(s)
 }
 
 func renderMarkdown(example string) string {
@@ -317,17 +301,31 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	return nil
 }
 
-// GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined
+// terminalWidthLimit holds the user-configured settings.terminal.max_width
+// (0 = unset, unlimited). It is registered once at startup via
+// SetTerminalWidthLimit so every width consumer respects the setting uniformly.
+var terminalWidthLimit atomic.Int64
+
+// SetTerminalWidthLimit registers settings.terminal.max_width as a ceiling for
+// GetTerminalWidth. Zero or negative clears the limit (the default).
+func SetTerminalWidthLimit(limit int) {
+	terminalWidthLimit.Store(int64(limit))
+}
+
+// GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined.
+// It honors an explicit COLUMNS value through the shared terminal resolver when
+// no physical terminal size is available.
 func GetTerminalWidth() int {
 	defaultWidth := 80
 	screenWidth := defaultWidth
+	if width := terminal.New().Width(terminal.Stdout); width > 0 {
+		screenWidth = width - 2
+	}
 
-	// Detect terminal width and use it by default if available
-	if termUtils.IsTTYSupportForStdout() {
-		termWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
-		if err == nil && termWidth > 0 {
-			screenWidth = termWidth - 2
-		}
+	// An explicitly-set settings.terminal.max_width is a user preference and
+	// acts as a ceiling only; by default the detected width is used as-is.
+	if limit := int(terminalWidthLimit.Load()); limit > 0 && screenWidth > limit {
+		screenWidth = limit
 	}
 
 	return screenWidth

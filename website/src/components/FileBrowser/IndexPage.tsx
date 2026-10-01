@@ -7,10 +7,21 @@ import Link from '@docusaurus/Link';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faFolder } from '@fortawesome/free-solid-svg-icons';
+import { faFolder, faGraduationCap } from '@fortawesome/free-solid-svg-icons';
 import CastPlayer from '@site/src/components/CastPlayer';
+import CopyMarkdownButton from './CopyMarkdownButton';
 import type { ExamplesTree, FileBrowserOptions } from './types';
 import styles from './styles.module.css';
+
+/**
+ * Card icons selectable via the `cardIcon` plugin option (see FileBrowserOptions).
+ * 'folder' (examples/gists) is the default; add new entries here as new
+ * file-browser instances need a different visual identity.
+ */
+const ICON_MAP = {
+  folder: faFolder,
+  'graduation-cap': faGraduationCap,
+};
 
 /**
  * Markdown components for card descriptions.
@@ -30,21 +41,34 @@ interface IndexPageProps {
 
 export default function IndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
   const { examples, featured = [], tags } = treeData;
-  const { routeBasePath, title, description } = optionsData;
+  const { routeBasePath, title, description, searchable, cardIcon, cardCtaLabel, titleAsCode, enableCopyMarkdown } = optionsData;
+  const cardIconDefinition = ICON_MAP[cardIcon] || faFolder;
+  const cardCta = cardCtaLabel || 'Open';
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredExamples = activeTag
+  const tagFilteredExamples = activeTag
     ? examples.filter((ex) => ex.tags.includes(activeTag))
     : examples;
 
+  const query = searchQuery.trim().toLowerCase();
+  const filteredExamples = query
+    ? tagFilteredExamples.filter((ex) => {
+      const haystack = [ex.name, ex.title, ex.description, ...ex.tags].join(' ').toLowerCase();
+      return haystack.includes(query);
+    })
+    : tagFilteredExamples;
+
   // Group the "All" view into visible sections by each example's primary
   // (first) tag, in the site's tag order; anything untagged lands in "More".
+  // When searching, sections are built from the search results so empty
+  // sections drop out instead of showing a heading with nothing under it.
   const sections = [
     ...tags.map((tag) => ({
       tag,
-      examples: examples.filter((ex) => (ex.tags[0] ?? 'More') === tag),
+      examples: filteredExamples.filter((ex) => (ex.tags[0] ?? 'More') === tag),
     })),
-    { tag: 'More', examples: examples.filter((ex) => ex.tags.length === 0) },
+    { tag: 'More', examples: filteredExamples.filter((ex) => ex.tags.length === 0) },
   ].filter((section) => section.examples.length > 0);
 
   // Render a single example card. All cards use the friendly English title
@@ -54,12 +78,23 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
       key={example.name}
       className={styles.exampleCard}
     >
+      {enableCopyMarkdown && (
+        <CopyMarkdownButton
+          directory={example.root}
+          title={example.title || example.name}
+          description={example.description}
+          iconOnly
+          className={styles.exampleCardCopyButton}
+        />
+      )}
       <Link to={`${routeBasePath}/${example.name}`} className={styles.exampleCardLink}>
         <div className={styles.exampleCardHeader}>
           <div className={styles.exampleCardIcon}>
-            <FontAwesomeIcon icon={faFolder} />
+            <FontAwesomeIcon icon={cardIconDefinition} />
           </div>
-          <h2 className={styles.exampleCardTitle}>{displayName}</h2>
+          <h2 className={styles.exampleCardTitle}>
+            {titleAsCode ? <code>/{example.name}</code> : displayName}
+          </h2>
         </div>
       </Link>
       {example.cast?.file && (
@@ -93,7 +128,7 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
           ))}
         </div>
         <Link to={`${routeBasePath}/${example.name}`} className={styles.exampleCardCta}>
-          Open
+          {cardCta}
         </Link>
       </div>
     </article>
@@ -107,7 +142,22 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
           <p className={styles.indexDescription}>{description}</p>
         </header>
 
-        {activeTag === null && featured.length > 0 && (
+        {searchable && (
+          <div className={styles.searchContainer}>
+            <input
+              type="text"
+              className={styles.searchInput}
+              placeholder={`Search ${title.toLowerCase()} by name, description, or category...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <div className={styles.searchResults}>
+              Showing {filteredExamples.length} of {examples.length}
+            </div>
+          </div>
+        )}
+
+        {activeTag === null && !query && featured.length > 0 && (
           <section className={styles.featuredSection}>
             <h2 className={styles.featuredHeading}>Featured</h2>
             <div className={styles.examplesGrid}>

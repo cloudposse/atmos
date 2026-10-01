@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,11 +10,15 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 type graphTestProvider struct {
-	calls []ExecutionContext
+	calls         []ExecutionContext
+	cancelOnFirst context.CancelFunc
+	errorOnFirst  error
+	nilOnCancel   bool
 }
 
 func (p *graphTestProvider) GetType() string { return cfg.KubernetesComponentType }
@@ -30,6 +35,16 @@ func (p *graphTestProvider) ValidateComponent(map[string]any) error { return nil
 
 func (p *graphTestProvider) Execute(ctx *ExecutionContext) error {
 	p.calls = append(p.calls, *ctx)
+	if p.cancelOnFirst != nil && len(p.calls) == 1 {
+		p.cancelOnFirst()
+		if p.errorOnFirst != nil {
+			return p.errorOnFirst
+		}
+		if p.nilOnCancel {
+			return nil
+		}
+		return ctx.GoContext().Err()
+	}
 	return nil
 }
 
@@ -58,6 +73,34 @@ func TestBuildGraphIncludesDependenciesAndSkipsDisabledComponents(t *testing.T) 
 	assert.Contains(t, graph.Nodes[GraphNodeID("base", "prod")].Dependents, GraphNodeID("worker", "dev"))
 }
 
+func TestBuildGraphOptionalDependencies(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"app": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "present", "required": false},
+								map[string]any{"name": "missing", "required": false},
+								map[string]any{"name": "disabled", "required": false},
+							},
+						},
+					},
+					"present": map[string]any{},
+					"disabled": map[string]any{
+						cfg.MetadataSectionName: map[string]any{"enabled": false},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := BuildGraph(stacks, cfg.KubernetesComponentType)
+	require.NoError(t, err)
+	assert.Equal(t, []string{GraphNodeID("present", "dev")}, graph.Nodes[GraphNodeID("app", "dev")].Dependencies)
+}
+
 func TestBuildGraphSupportsLegacyDependsOn(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
@@ -79,6 +122,157 @@ func TestBuildGraphSupportsLegacyDependsOn(t *testing.T) {
 
 	api := graph.Nodes[GraphNodeID("api", "dev")]
 	assert.Equal(t, []string{GraphNodeID("base", "dev")}, api.Dependencies)
+}
+
+func TestBuildGraphEmptyModernDependenciesPreventsSettingsFallback(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{}},
+						cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"base"}},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := BuildGraph(stacks, cfg.KubernetesComponentType)
+	require.NoError(t, err)
+	assert.Empty(t, graph.Nodes[GraphNodeID("api", "dev")].Dependencies)
+}
+
+func TestBuildGraphMalformedDependenciesSectionFails(t *testing.T) {
+	_, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: "not-a-map",
+						cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"base"}},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType)
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+}
+
+func TestBuildGraphRequiredUnavailableDependenciesFail(t *testing.T) {
+	tests := []struct {
+		name       string
+		target     string
+		targetBody map[string]any
+		wantErr    error
+	}{
+		{name: "missing", target: "missing", wantErr: errUtils.ErrDependencyTargetNotFound},
+		{name: "disabled", target: "disabled", targetBody: map[string]any{cfg.MetadataSectionName: map[string]any{"enabled": false}}, wantErr: errUtils.ErrDependencyTargetUnavailable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			components := map[string]any{
+				"app": map[string]any{cfg.DependenciesSectionName: map[string]any{"components": []any{map[string]any{"name": test.target}}}},
+			}
+			if test.targetBody != nil {
+				components[test.target] = test.targetBody
+			}
+			_, err := BuildGraph(map[string]any{"dev": map[string]any{cfg.ComponentsSectionName: map[string]any{cfg.KubernetesComponentType: components}}}, cfg.KubernetesComponentType)
+			require.ErrorIs(t, err, test.wantErr)
+		})
+	}
+}
+
+func TestBuildGraphInvalidRequiredValueFails(t *testing.T) {
+	_, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{
+							map[string]any{"component": "base", "required": "sometimes"},
+						}},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType)
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+	require.ErrorIs(t, err, schema.ErrComponentDependencyInvalidRequired)
+}
+
+func TestBuildGraphDefersCustomDelimitedRequiredValue(t *testing.T) {
+	graph, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{
+							map[string]any{"component": "base", "required": "[[ .vars.base_required ]]"},
+						}},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType, "[[")
+
+	require.NoError(t, err)
+	api, ok := graph.GetNode(GraphNodeID("api", "dev"))
+	require.True(t, ok)
+	require.Equal(t, []string{GraphNodeID("base", "dev")}, api.Dependencies)
+}
+
+func TestBuildGraphOptionalUnresolvedTargetFails(t *testing.T) {
+	_, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "{{ .missing }}", "required": false},
+							},
+						},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType)
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+}
+
+func TestExecuteGraphOptionalUnresolvedTargetWithCustomDelimiterFails(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "[[ .missing ]]", "required": false},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{
+		Provider:      &graphTestProvider{},
+		AtmosConfig:   &schema.AtmosConfiguration{Templates: schema.Templates{Settings: schema.TemplatesSettings{Delimiters: []string{"[[", "]]"}}}},
+		Info:          &schema.ConfigAndStacksInfo{},
+		Stacks:        stacks,
+		ComponentType: cfg.KubernetesComponentType,
+	})
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
 }
 
 func TestBuildGraphIgnoresMalformedStackSections(t *testing.T) {
@@ -124,8 +318,9 @@ func TestFilterGraph(t *testing.T) {
 
 func TestExecuteGraphRunsComponentsInDependencyOrder(t *testing.T) {
 	provider := &graphTestProvider{}
+	ctx := context.WithValue(context.Background(), graphContextKey{}, "graph")
 
-	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{
+	err := ExecuteGraph(ctx, &GraphExecutionOptions{
 		Provider:      provider,
 		Info:          &schema.ConfigAndStacksInfo{},
 		Stacks:        graphTestStacks(),
@@ -139,6 +334,7 @@ func TestExecuteGraphRunsComponentsInDependencyOrder(t *testing.T) {
 	assertLessCallIndex(t, provider.calls, "base", "dev", "api", "dev")
 	assertLessCallIndex(t, provider.calls, "base", "prod", "worker", "dev")
 	for _, call := range provider.calls {
+		assert.Equal(t, "graph", call.GoContext().Value(graphContextKey{}))
 		assert.Equal(t, cfg.KubernetesComponentType, call.ComponentType)
 		assert.Equal(t, "apply", call.SubCommand)
 		assert.False(t, call.ConfigAndStacksInfo.All)
@@ -146,6 +342,79 @@ func TestExecuteGraphRunsComponentsInDependencyOrder(t *testing.T) {
 		assert.Equal(t, true, call.Flags["dry-run"])
 	}
 }
+
+func TestExecuteGraphRunsDeleteInReverseDependencyOrder(t *testing.T) {
+	provider := &graphTestProvider{}
+	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{},
+		Stacks:        graphTestStacks(),
+		ComponentType: cfg.KubernetesComponentType,
+		SubCommand:    "delete",
+		ReverseOrder:  true,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, provider.calls, 4)
+	assertLessCallIndex(t, provider.calls, "api", "dev", "base", "dev")
+	assertLessCallIndex(t, provider.calls, "worker", "dev", "base", "prod")
+}
+
+func TestExecuteGraphNodeDoesNotRedispatchBulkSelection(t *testing.T) {
+	provider := &graphTestProvider{}
+	info := &schema.ConfigAndStacksInfo{
+		All:        true,
+		Affected:   true,
+		Query:      ".components",
+		Components: []string{"base"},
+		Tags:       []string{"lifecycle-dag"},
+		Labels:     map[string]string{"tier": "platform"},
+	}
+	flags := map[string]any{
+		"all":                true,
+		"affected":           true,
+		"query":              ".components",
+		"components":         []string{"base"},
+		"tags":               []string{"lifecycle-dag"},
+		"labels":             "tier=platform",
+		"include-dependents": true,
+		"dry-run":            true,
+	}
+
+	err := executeGraphNode(context.Background(), &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          info,
+		ComponentType: cfg.KubernetesComponentType,
+		SubCommand:    "apply",
+		Flags:         flags,
+	}, &dependency.Node{Component: "base", Stack: "dev"})
+
+	require.NoError(t, err)
+	require.Len(t, provider.calls, 1)
+	call := provider.calls[0]
+	assert.False(t, call.ConfigAndStacksInfo.All)
+	assert.False(t, call.ConfigAndStacksInfo.Affected)
+	assert.Empty(t, call.ConfigAndStacksInfo.Query)
+	assert.Empty(t, call.ConfigAndStacksInfo.Components)
+	assert.Empty(t, call.ConfigAndStacksInfo.Tags)
+	assert.Empty(t, call.ConfigAndStacksInfo.Labels)
+	for _, key := range []string{"all", "affected", "query", "components", "tags", "labels", "include-dependents"} {
+		assert.NotContains(t, call.Flags, key)
+	}
+	assert.Equal(t, true, call.Flags["dry-run"])
+	assert.Equal(t, flags, map[string]any{
+		"all":                true,
+		"affected":           true,
+		"query":              ".components",
+		"components":         []string{"base"},
+		"tags":               []string{"lifecycle-dag"},
+		"labels":             "tier=platform",
+		"include-dependents": true,
+		"dry-run":            true,
+	}, "outer graph flags must remain unchanged")
+}
+
+type graphContextKey struct{}
 
 func TestExecuteGraphValidatesRequiredOptions(t *testing.T) {
 	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{Info: &schema.ConfigAndStacksInfo{}})
@@ -204,6 +473,40 @@ func TestExecuteGraphHonorsCanceledContext(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.ErrorIs(t, err, errUtils.ErrGraphExecutionCanceled)
 	assert.Empty(t, provider.calls)
+}
+
+func TestExecuteGraphCancelsActiveNodeAndStopsDependents(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	providerErr := errors.New("provider canceled operation")
+	provider := &graphTestProvider{cancelOnFirst: cancel, errorOnFirst: providerErr}
+	err := ExecuteGraph(ctx, &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{Stack: "dev"},
+		Stacks:        graphTestStacks(),
+		ComponentType: cfg.KubernetesComponentType,
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, providerErr)
+	require.ErrorIs(t, err, errUtils.ErrComponentExecutionFailed)
+	require.ErrorIs(t, err, errUtils.ErrGraphExecutionCanceled)
+	require.Len(t, provider.calls, 1)
+	assert.Equal(t, "base", provider.calls[0].Component)
+}
+
+func TestExecuteGraphReportsCancellationAfterSuccessfulDispatch(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	provider := &graphTestProvider{cancelOnFirst: cancel, nilOnCancel: true}
+	err := ExecuteGraph(ctx, &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{Stack: "dev"},
+		Stacks:        graphTestStacks(),
+		ComponentType: cfg.KubernetesComponentType,
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, errUtils.ErrGraphExecutionCanceled)
+	require.Len(t, provider.calls, 1)
 }
 
 func TestLegacyDependsOnParsing(t *testing.T) {

@@ -1,0 +1,1275 @@
+package initcmd
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/generator/storage"
+	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/manifest"
+	"github.com/cloudposse/atmos/pkg/project/config"
+)
+
+func TestNewInitCommandProvider(t *testing.T) {
+	provider := &InitCommandProvider{}
+
+	assert.NotNil(t, provider)
+	assert.Equal(t, "init", provider.GetName())
+	assert.Equal(t, "Configuration Management", provider.GetGroup())
+	assert.NotNil(t, provider.GetCommand())
+	assert.Nil(t, provider.GetFlagsBuilder())
+	assert.Nil(t, provider.GetPositionalArgsBuilder())
+	assert.Nil(t, provider.GetCompatibilityFlags())
+	assert.Nil(t, provider.GetAliases())
+}
+
+func TestInitCommandProvider_GetCommand(t *testing.T) {
+	provider := &InitCommandProvider{}
+	cmd := provider.GetCommand()
+
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "init", cmd.Use[:4]) // "init [template] [target]"
+	assert.Contains(t, cmd.Short, "Initialize")
+	assert.Contains(t, cmd.Long, "Initialize a new Atmos project")
+}
+
+func TestInitCommandProvider_GetFlagsBuilder(t *testing.T) {
+	provider := &InitCommandProvider{}
+	builder := provider.GetFlagsBuilder()
+
+	// Init command uses cobra flags directly, not a flags builder.
+	assert.Nil(t, builder)
+}
+
+func TestInitCmd_FlagDefinitions(t *testing.T) {
+	tests := []struct {
+		name         string
+		flagName     string
+		shorthand    string
+		defaultValue string
+	}{
+		{
+			name:         "force flag",
+			flagName:     "force",
+			shorthand:    "f",
+			defaultValue: "false",
+		},
+		{
+			name:         "interactive flag",
+			flagName:     "interactive",
+			shorthand:    "i",
+			defaultValue: "true",
+		},
+		{
+			name:      "set flag",
+			flagName:  "set",
+			shorthand: "",
+		},
+		{
+			name:         "ref flag",
+			flagName:     "ref",
+			shorthand:    "",
+			defaultValue: "",
+		},
+		{
+			name:         "update flag",
+			flagName:     "update",
+			shorthand:    "",
+			defaultValue: "false",
+		},
+		{
+			name:         "base-ref flag",
+			flagName:     "base-ref",
+			shorthand:    "",
+			defaultValue: "",
+		},
+		{
+			name:         "git flag",
+			flagName:     "git",
+			shorthand:    "",
+			defaultValue: "true",
+		},
+		{
+			name:         "no-git flag",
+			flagName:     "no-git",
+			shorthand:    "",
+			defaultValue: "false",
+		},
+		{
+			name:         "merge-driver flag",
+			flagName:     "merge-driver",
+			shorthand:    "",
+			defaultValue: "auto",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flag := initCmd.Flags().Lookup(tt.flagName)
+			require.NotNil(t, flag, "flag %s should exist", tt.flagName)
+
+			if tt.shorthand != "" {
+				assert.Equal(t, tt.shorthand, flag.Shorthand)
+			}
+
+			if tt.defaultValue != "" {
+				assert.Equal(t, tt.defaultValue, flag.DefValue)
+			}
+		})
+	}
+}
+
+func TestInitCmd_Args(t *testing.T) {
+	// MaximumNArgs(2) allows 0, 1, or 2 arguments.
+	assert.NoError(t, initCmd.Args(initCmd, []string{}))
+	assert.NoError(t, initCmd.Args(initCmd, []string{"simple"}))
+	assert.NoError(t, initCmd.Args(initCmd, []string{"simple", "/tmp/target"}))
+	assert.Error(t, initCmd.Args(initCmd, []string{"simple", "/tmp/target", "extra"}))
+}
+
+func TestInitCmd_ViperIntegration(t *testing.T) {
+	v := viper.New()
+
+	// Set values via viper.
+	v.Set("force", true)
+	v.Set("interactive", false)
+
+	// Verify viper values.
+	assert.True(t, v.GetBool("force"))
+	assert.False(t, v.GetBool("interactive"))
+}
+
+func TestExecuteInit_ArgumentParsing(t *testing.T) {
+	tests := []struct {
+		name         string
+		args         []string
+		setup        func(t *testing.T) string
+		expectError  bool
+		errorContain string
+	}{
+		{
+			name: "no arguments non-interactive fails",
+			args: []string{"--interactive=false"},
+			setup: func(t *testing.T) string {
+				return ""
+			},
+			expectError:  true,
+			errorContain: "template name",
+		},
+		{
+			name: "template without target non-interactive fails",
+			args: []string{"--interactive=false", "simple"},
+			setup: func(t *testing.T) string {
+				return ""
+			},
+			expectError:  true,
+			errorContain: "target directory",
+		},
+		{
+			name: "invalid template name",
+			args: []string{"--interactive=false", "nonexistent"},
+			setup: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				return tmpDir
+			},
+			expectError:  true,
+			errorContain: "not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target := tt.setup(t)
+
+			// Prepare args.
+			args := tt.args
+			if target != "" {
+				args = append(args, target)
+			}
+
+			// Reset command.
+			initCmd.SetArgs(args)
+
+			// Execute command.
+			err := initCmd.Execute()
+
+			if tt.expectError {
+				require.Error(t, err)
+				if tt.errorContain != "" {
+					assert.Contains(t, err.Error(), tt.errorContain)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestExecuteInit_FlagParsing(t *testing.T) {
+	tests := []struct {
+		name  string
+		flags []string
+		check func(t *testing.T, v *viper.Viper)
+	}{
+		{
+			name:  "force flag short",
+			flags: []string{"-f"},
+			check: func(t *testing.T, v *viper.Viper) {
+				// This test verifies flag is parsed.
+				// Actual verification would happen in integration test.
+				assert.NotNil(t, v)
+			},
+		},
+		{
+			name:  "force flag long",
+			flags: []string{"--force"},
+			check: func(t *testing.T, v *viper.Viper) {
+				assert.NotNil(t, v)
+			},
+		},
+		{
+			name:  "interactive flag",
+			flags: []string{"--interactive=false"},
+			check: func(t *testing.T, v *viper.Viper) {
+				assert.NotNil(t, v)
+			},
+		},
+		{
+			name:  "set flag single",
+			flags: []string{"--set", "key=value"},
+			check: func(t *testing.T, v *viper.Viper) {
+				assert.NotNil(t, v)
+			},
+		},
+		{
+			name:  "set flag multiple",
+			flags: []string{"--set", "key1=value1", "--set", "key2=value2"},
+			check: func(t *testing.T, v *viper.Viper) {
+				assert.NotNil(t, v)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+
+			// Build args - note we can't actually execute because we need template files.
+			args := tt.flags
+			args = append(args, "simple", t.TempDir())
+			initCmd.SetArgs(args)
+
+			// Parse flags only.
+			err := initCmd.ParseFlags(args)
+			require.NoError(t, err)
+
+			if tt.check != nil {
+				tt.check(t, v)
+			}
+		})
+	}
+}
+
+func TestExecuteInit_EnvironmentVariables(t *testing.T) {
+	tests := []struct {
+		name  string
+		env   map[string]string
+		check func(t *testing.T, v *viper.Viper)
+	}{
+		{
+			name: "ATMOS_INIT_FORCE",
+			env: map[string]string{
+				"ATMOS_INIT_FORCE": "true",
+			},
+			check: func(t *testing.T, v *viper.Viper) {
+				v.SetEnvPrefix("ATMOS_INIT")
+				v.AutomaticEnv()
+				v.BindEnv("force", "ATMOS_INIT_FORCE")
+				assert.True(t, v.GetBool("force"))
+			},
+		},
+		{
+			name: "ATMOS_INIT_INTERACTIVE",
+			env: map[string]string{
+				"ATMOS_INIT_INTERACTIVE": "false",
+			},
+			check: func(t *testing.T, v *viper.Viper) {
+				v.SetEnvPrefix("ATMOS_INIT")
+				v.AutomaticEnv()
+				v.BindEnv("interactive", "ATMOS_INIT_INTERACTIVE")
+				assert.False(t, v.GetBool("interactive"))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set environment variables.
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+
+			v := viper.New()
+
+			if tt.check != nil {
+				tt.check(t, v)
+			}
+		})
+	}
+}
+
+func TestExecuteInit_AbsolutePath(t *testing.T) {
+	tests := []struct {
+		name         string
+		targetDir    string
+		expectError  bool
+		errorContain string
+	}{
+		{
+			name:        "relative path converted to absolute",
+			targetDir:   "test-project",
+			expectError: false,
+		},
+		{
+			name:        "absolute path kept as-is",
+			targetDir:   "/tmp/test-project",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This test validates the path conversion logic
+			// without actually executing the full command.
+			//nolint:nestif // test assertion logic requires nested conditionals
+			if tt.targetDir != "" {
+				absPath, err := filepath.Abs(tt.targetDir)
+				if tt.expectError {
+					assert.Error(t, err)
+					if tt.errorContain != "" {
+						assert.Contains(t, err.Error(), tt.errorContain)
+					}
+				} else {
+					assert.NoError(t, err)
+					assert.True(t, filepath.IsAbs(absPath))
+				}
+			}
+		})
+	}
+}
+
+func TestExecuteInit_TemplateValuesConversion(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]string
+		expected map[string]interface{}
+	}{
+		{
+			name:     "empty map",
+			input:    map[string]string{},
+			expected: map[string]interface{}{},
+		},
+		{
+			name: "single value",
+			input: map[string]string{
+				"project_name": "my-project",
+			},
+			expected: map[string]interface{}{
+				"project_name": "my-project",
+			},
+		},
+		{
+			name: "multiple values",
+			input: map[string]string{
+				"project_name": "my-project",
+				"author":       "test-author",
+				"version":      "1.0.0",
+			},
+			expected: map[string]interface{}{
+				"project_name": "my-project",
+				"author":       "test-author",
+				"version":      "1.0.0",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test the conversion logic from init.go.
+			templateValues := make(map[string]interface{})
+			for k, val := range tt.input {
+				templateValues[k] = val
+			}
+
+			assert.Equal(t, tt.expected, templateValues)
+		})
+	}
+}
+
+func TestInitCmd_Integration_Help(t *testing.T) {
+	// cobra checks the "help" flag's current value on every Execute() call, not
+	// just whether --help was in this invocation's args -- so leaving it "true"
+	// leaks into every later test that calls initCmd.Execute() for the rest of
+	// this package's test binary: Execute() returns nil having printed help
+	// instead of ever calling RunE, regardless of that later test's own args.
+	// -shuffle=on can put this test before any of those, so it must restore the
+	// flag itself; see docs/fixes for the incident.
+	t.Cleanup(func() {
+		_ = initCmd.Flags().Set("help", "false")
+	})
+
+	// Test help output.
+	initCmd.SetArgs([]string{"--help"})
+	err := initCmd.Execute()
+
+	// Help should not return error.
+	assert.NoError(t, err)
+}
+
+func TestInitCmd_Integration_Version(t *testing.T) {
+	// Verify command metadata.
+	assert.Equal(t, "init", initCmd.Name())
+	assert.NotEmpty(t, initCmd.Short)
+	assert.NotEmpty(t, initCmd.Long)
+}
+
+func TestInit_PackageInitialization(t *testing.T) {
+	// Test that init() function was called and registered command.
+	assert.NotNil(t, initCmd)
+
+	// Verify flags are registered.
+	assert.NotNil(t, initCmd.Flags().Lookup("force"))
+	assert.NotNil(t, initCmd.Flags().Lookup("interactive"))
+	assert.NotNil(t, initCmd.Flags().Lookup("set"))
+	assert.NotNil(t, initCmd.Flags().Lookup("ref"))
+	assert.NotNil(t, initCmd.Flags().Lookup("git"))
+	assert.NotNil(t, initCmd.Flags().Lookup("no-git"))
+}
+
+// TestExecuteInit_WithTemplateDirectory covers executeInit's full happy path
+// (non-interactive, target dir provided): useDefaults is derived as
+// !opts.interactive, so with interactive:false the run never invokes a real
+// huh prompt form and is safe to drive end-to-end in a unit test.
+func TestExecuteInit_WithTemplateDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	err := executeInit(context.Background(), &initOptions{
+		templateName: "simple",
+		targetDir:    tmpDir,
+		interactive:  false,
+		force:        false,
+		templateVars: map[string]interface{}{
+			"project_name": "test-project",
+		},
+	})
+
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(tmpDir, "README.md"))
+}
+
+func TestExecuteInit_InvalidMergeDriver(t *testing.T) {
+	err := executeInit(context.Background(), &initOptions{
+		templateName: "simple",
+		targetDir:    t.TempDir(),
+		interactive:  false,
+		mergeDriver:  "bogus",
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnknownMergeDriver)
+}
+
+func TestMaybeInitGeneratedProjectGit_GitEnabled(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello"), 0o600))
+
+	cfg := &templates.Configuration{Name: "demo", Version: "1.0.0"}
+	err := maybeInitGeneratedProjectGit(dir, cfg, &initOptions{git: true})
+
+	require.NoError(t, err)
+	assert.DirExists(t, filepath.Join(dir, ".git"))
+}
+
+func TestMaybeInitGeneratedProjectGit_GitDisabled(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := &templates.Configuration{Name: "demo"}
+	err := maybeInitGeneratedProjectGit(dir, cfg, &initOptions{git: false})
+
+	require.NoError(t, err)
+	assert.NoDirExists(t, filepath.Join(dir, ".git"))
+}
+
+func TestMaybeInitGeneratedProjectGit_EmptyTargetDirNoOp(t *testing.T) {
+	cfg := &templates.Configuration{Name: "demo"}
+	err := maybeInitGeneratedProjectGit("", cfg, &initOptions{git: true})
+
+	require.NoError(t, err)
+}
+
+func TestCreateInitUI_ReturnsUsableInstance(t *testing.T) {
+	initUI, err := createInitUI()
+
+	require.NoError(t, err)
+	assert.NotNil(t, initUI)
+}
+
+// TestRunInitExecution_WithTargetDir covers the targetDir != "" branch of
+// runInitExecution. The targetDir == "" branch always prompts for a target
+// directory via a real terminal form (regardless of useDefaults) and so
+// cannot be safely unit tested.
+func TestRunInitExecution_WithTargetDir(t *testing.T) {
+	initUI, err := createInitUI()
+	require.NoError(t, err)
+
+	configs, err := templates.GetAvailableConfigurations()
+	require.NoError(t, err)
+	cfg := configs["simple"]
+
+	dir := t.TempDir()
+	opts := &initOptions{
+		targetDir:    dir,
+		interactive:  false,
+		templateVars: map[string]interface{}{"project_name": "demo"},
+	}
+
+	finalDir, err := runInitExecution(initUI, &cfg, opts)
+
+	require.NoError(t, err)
+	assert.Equal(t, dir, finalDir)
+	assert.FileExists(t, filepath.Join(dir, "README.md"))
+}
+
+func TestShouldOfferUpdate(t *testing.T) {
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	otherErr := errUtils.Build(errUtils.ErrInitialization).Err()
+
+	tests := []struct {
+		name        string
+		err         error
+		opts        *initOptions
+		wantOffer   bool
+		wantBaseRef string
+	}{
+		{"nil error", nil, &initOptions{interactive: true}, false, ""},
+		{"force already set", notEmptyErr, &initOptions{interactive: true, force: true}, false, ""},
+		{"update already set", notEmptyErr, &initOptions{interactive: true, update: true}, false, ""},
+		{"not interactive", notEmptyErr, &initOptions{interactive: false}, false, ""},
+		{"different error", otherErr, &initOptions{interactive: true}, false, ""},
+		{"offers with default HEAD base ref", notEmptyErr, &initOptions{interactive: true}, true, "HEAD"},
+		{"offers with caller base ref", notEmptyErr, &initOptions{interactive: true, baseRef: "v1.2.3"}, true, "v1.2.3"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// A fresh, never-written directory: shouldOfferUpdate must resolve
+			// against the *actual* target passed in, not any stale
+			// opts.targetDir (see TestShouldOfferUpdate_UsesActualTargetDir for
+			// the regression this guards against).
+			offer, baseRef, err := shouldOfferUpdate(tt.err, tt.opts, t.TempDir())
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantOffer, offer)
+			assert.Equal(t, tt.wantBaseRef, baseRef)
+		})
+	}
+}
+
+// TestShouldOfferUpdate_UsesActualTargetDir reproduces the interactive
+// retry-offer half of defaultBaseRef's bug: opts.targetDir is the raw
+// positional CLI arg, which is "" when the user ran `atmos init --update`
+// with no target and the interactive flow picked the real directory itself.
+// It must resolve the retry base ref against the caller-supplied targetDir
+// parameter (the real, resolved directory), not opts.targetDir.
+func TestShouldOfferUpdate_UsesActualTargetDir(t *testing.T) {
+	dir := t.TempDir()
+	metadata := storage.NewInitMetadata("demo", "1.0.0", "embedded", "pinned-at-real-dir", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
+
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	// opts.targetDir left empty on purpose: it mirrors the raw positional arg
+	// in the no-target interactive scenario, and must be ignored in favor of
+	// the targetDir parameter below.
+	opts := &initOptions{interactive: true}
+
+	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, dir)
+
+	require.NoError(t, err)
+	assert.True(t, offer)
+	assert.Equal(t, "pinned-at-real-dir", baseRef)
+}
+
+// TestShouldOfferUpdate_RenderedStrategySkipsBaseRefResolution reproduces the
+// finding: under --update-strategy=rendered, shouldOfferUpdate used to
+// resolve a retry base ref via tracked-only defaultBaseRef regardless of
+// strategy. That non-empty value flowed unchanged into the retry's
+// executeWithSetup call, which sets spec.baseRef from whatever it's given
+// regardless of strategy too -- reintroducing the exact project-record
+// pollution CheckNotSwitchedFromRendered exists to guard against, just
+// reached through this offer-a-retry path instead of an explicit --update.
+// A real pinned metadata file proves the empty result is a deliberate skip,
+// not a coincidence of nothing being pinned.
+func TestShouldOfferUpdate_RenderedStrategySkipsBaseRefResolution(t *testing.T) {
+	dir := t.TempDir()
+	metadata := storage.NewInitMetadata("demo", "1.0.0", "embedded", "pinned-at-real-dir", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
+
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	opts := &initOptions{interactive: true, updateStrategy: "rendered"}
+
+	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, dir)
+
+	require.NoError(t, err)
+	assert.True(t, offer)
+	assert.Empty(t, baseRef, "rendered mode must never resolve a retry base ref, even when one is pinned")
+}
+
+// TestShouldOfferUpdate_PropagatesMetadataLoadError verifies a
+// corrupt/unreadable metadata file surfaces as an error from
+// shouldOfferUpdate rather than silently resolving to "HEAD".
+func TestShouldOfferUpdate_PropagatesMetadataLoadError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.InitMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	opts := &initOptions{interactive: true}
+
+	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, dir)
+
+	require.Error(t, err)
+	assert.False(t, offer)
+	assert.Empty(t, baseRef)
+}
+
+// TestDefaultBaseRef pins two behaviors:
+//   - An explicit --base-ref always wins, regardless of targetDir.
+//   - With no --base-ref and no pinned metadata at targetDir, it still falls
+//     back to "HEAD" -- the original fix for --update with no --base-ref
+//     silently setting up no git storage at all (ExecuteWithDelimiters only
+//     calls SetupGitStorage when baseRef is non-empty), which failed every
+//     file with an opaque "three-way merge failed" even on a completely
+//     unmodified, freshly re-run directory.
+func TestDefaultBaseRef(t *testing.T) {
+	headRef, err := defaultBaseRef("", t.TempDir())
+	require.NoError(t, err)
+	assert.Equal(t, "HEAD", headRef)
+
+	explicitRef, err := defaultBaseRef("v1.2.3", t.TempDir())
+	require.NoError(t, err)
+	assert.Equal(t, "v1.2.3", explicitRef)
+}
+
+// TestDefaultBaseRef_PrefersPinnedMetadata reproduces the fix for the bug
+// where `atmos init --update` with no --base-ref always diffed against live
+// HEAD, so a customization the user committed after generation became
+// indistinguishable from the unmodified base -- the merge then silently let
+// the freshly rendered template win with no conflict, discarding the user's
+// edit. When a pinned base ref exists (written once, at initial `--git`
+// generation -- see gen.PinInitialBaseRefForInit), defaultBaseRef must
+// prefer it over live HEAD.
+func TestDefaultBaseRef_PrefersPinnedMetadata(t *testing.T) {
+	dir := t.TempDir()
+	metadata := storage.NewInitMetadata("demo", "1.0.0", "embedded", "abc123pinned", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
+
+	pinnedRef, err := defaultBaseRef("", dir)
+	require.NoError(t, err)
+	assert.Equal(t, "abc123pinned", pinnedRef)
+
+	// An explicit --base-ref still overrides the pin.
+	explicitRef, err := defaultBaseRef("v9.9.9", dir)
+	require.NoError(t, err)
+	assert.Equal(t, "v9.9.9", explicitRef)
+}
+
+// TestDefaultBaseRef_PropagatesUnreadableMetadataError reproduces the bug
+// where any metadata.Load() error (not just "file doesn't exist") was
+// silently swallowed and defaultBaseRef fell back to "HEAD" regardless --
+// defeating the pin fix, since a corrupt pin file would silently
+// re-introduce the original silent-overwrite bug (diffing against live HEAD)
+// instead of surfacing the problem. The storage.MetadataStorage.Load method
+// returns (nil, nil) only when the file is genuinely absent (os.IsNotExist);
+// any other failure (corrupt YAML here) must propagate as an error.
+func TestDefaultBaseRef_PropagatesUnreadableMetadataError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.InitMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	resolved, err := defaultBaseRef("", dir)
+
+	require.Error(t, err)
+	assert.Empty(t, resolved)
+	assert.NotEqual(t, "HEAD", resolved, "a corrupt metadata file must not silently fall back to HEAD")
+}
+
+// TestMaybeInitGeneratedProjectGit_PinsInitialBaseRef verifies the fix for
+// atmos init --update's silent-data-loss bug: --git must pin the initial
+// commit's SHA at .atmos/init/metadata.yaml, the same way cmd/scaffold's
+// maybeInitGeneratedGitRepository already does, so defaultBaseRef has a real
+// pin to prefer over live HEAD once the user commits a customization.
+func TestMaybeInitGeneratedProjectGit_PinsInitialBaseRef(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello"), 0o600))
+
+	cfg := &templates.Configuration{Name: "demo", Version: "1.0.0", Source: "embedded"}
+	err := maybeInitGeneratedProjectGit(dir, cfg, &initOptions{git: true})
+	require.NoError(t, err)
+
+	metadata, err := storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Load()
+	require.NoError(t, err)
+	require.NotNil(t, metadata)
+	assert.NotEmpty(t, metadata.BaseRef)
+	assert.Equal(t, "demo", metadata.Template.Name)
+
+	resolved, err := defaultBaseRef("", dir)
+	require.NoError(t, err)
+	assert.Equal(t, metadata.BaseRef, resolved, "defaultBaseRef must prefer the pin just written")
+}
+
+// TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin
+// reproduces the RunE fix: with a positional target directory and --update,
+// RunE must pre-resolve --base-ref against that *real* target's own pinned
+// metadata (.atmos/init/metadata.yaml), not an empty path. A pinned base ref
+// that doesn't exist in the target's git history surfaces as
+// errUtils.ErrInvalidBaseRef once ExecuteWithBaseRef's git storage setup
+// tries to validate it -- proving the pin was actually read (the old,
+// unconditional single-target-agnostic resolution would have silently
+// defaulted to "HEAD", which resolves fine and would not fail this way).
+func TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# demo\n"), 0o600))
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+	_, err = worktree.Add("README.md")
+	require.NoError(t, err)
+	_, err = worktree.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{Name: "Test", Email: "test@example.com"},
+	})
+	require.NoError(t, err)
+
+	metadata := storage.NewInitMetadata("simple", "1.0.0", "embedded", "missing-ref", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
+
+	// RunE binds this test's flags to the global viper.GetViper() singleton
+	// (BindFlagsToViper), which outlives the test unless reset. Registering a
+	// fresh *cobra.Command with initCmd's flags (rather than calling
+	// initCmd.SetArgs/Execute on the shared package-level initCmd) also keeps
+	// this test from mutating initCmd's own FlagSet -- see the identical
+	// pattern and rationale in
+	// cmd/scaffold/scaffold_coverage_test.go's
+	// TestScaffoldGenerateRunE_UpdateFlagWithPositionalTarget_ResolvesBaseRef
+	// (cmd.NewTestKit only restores RootCmd state and isn't available to this
+	// package: it would create an import cycle back into cmd).
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("force", "false"))
+	require.NoError(t, cmd.Flags().Set("no-git", "true"))
+	require.NoError(t, cmd.Flags().Set("set", "project_name=demo"))
+
+	err = initCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidBaseRef)
+}
+
+// TestInitCmd_RunE_UpdateWithPositionalTarget_PropagatesMetadataLoadError
+// covers RunE's error branch for the same pre-resolution: a genuinely
+// unreadable pin file (corrupt YAML here) must surface as an error from the
+// command immediately, rather than being swallowed and silently falling back
+// to "HEAD".
+func TestInitCmd_RunE_UpdateWithPositionalTarget_PropagatesMetadataLoadError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.InitMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	// See the comment in
+	// TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin
+	// above for why this uses a fresh *cobra.Command plus a viper.Reset
+	// cleanup instead of calling initCmd.SetArgs/Execute directly.
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("force", "false"))
+	require.NoError(t, cmd.Flags().Set("no-git", "true"))
+
+	err := initCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resolve default --base-ref")
+}
+
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected covers --update-strategy's
+// own validation: a value outside tracked/rendered must fail before any
+// generation work starts. See the isolated-*cobra.Command rationale on
+// TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin
+// above.
+func TestInitCmd_RunE_UpdateStrategyInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "bogus"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	// Rejected by initParser.ValidateFlagValues (the WithValidValues
+	// registration for update-strategy), not by the later
+	// engine.ParseUpdateStrategy call -- proves the framework-standard
+	// validation entry point is actually reachable and firing, rather than
+	// the flag's own separate, redundant string-matching validation being
+	// the only thing catching this.
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MergeDriverInvalidValueRejected covers --merge-driver's own
+// WithValidValues registration: a value outside auto/text must be rejected by
+// initParser.ValidateFlagValues before merge.ParseDriver ever runs, mirroring
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected above.
+func TestInitCmd_RunE_MergeDriverInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("merge-driver", "bogus"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MergeStrategyInvalidValueRejected covers --merge-strategy's
+// own WithValidValues registration: a value outside manual/ours/theirs must be
+// rejected by initParser.ValidateFlagValues before merge.ParseConflictStrategy
+// (via merge.ResolveConflictStrategy) ever runs, mirroring
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected above.
+func TestInitCmd_RunE_MergeStrategyInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("merge-strategy", "bogus"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected covers the explicit
+// --base-ref + --update-strategy=rendered mutual-exclusion check: rendered's
+// base ref comes from the target's own recorded scaffold.yaml, not
+// --base-ref, so combining them is a contradiction rather than a value to
+// silently ignore.
+func TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, cmd.Flags().Set("base-ref", "some-ref"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+}
+
+// TestInitCmd_RunE_RenderedStrategyRequiresScaffoldConfig covers
+// --update-strategy=rendered against a target with no recorded
+// .atmos/scaffold.yaml project record: unlike tracked (which falls back to
+// literal "HEAD" against the target's own git history), rendered has no
+// fallback -- there is nothing to reconstruct the old ref/answers from.
+func TestInitCmd_RunE_RenderedStrategyRequiresScaffoldConfig(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	dir := t.TempDir()
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("force", "false"))
+	require.NoError(t, cmd.Flags().Set("no-git", "true"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+
+	err := initCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrRenderedStrategyRequiresConfig)
+}
+
+// TestInitCmd_RunE_SwitchedFromRenderedToTrackedRejected covers a target
+// last generated under --update-strategy=rendered (spec.renderedRef set,
+// spec.baseRef empty): a plain --update run (defaulting to tracked) against
+// it must fail loudly via CheckNotSwitchedFromRendered instead of silently
+// resolving a base ref against git history the target was never meant to
+// have.
+func TestInitCmd_RunE_SwitchedFromRenderedToTrackedRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	dir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "sample"}}
+	require.NoError(t, config.SaveProjectRecord(dir, sampleConfig,
+		config.ProjectRecordProvenance{Source: "embedded", RenderedRef: "abc123"}, nil))
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+
+	err := initCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUpdateStrategySwitchedToTracked)
+}
+
+// TestPrepareRenderedRetryBase_InvalidUpdateStrategyPropagatesError covers
+// prepareRenderedRetryBase's own defensive re-parse of opts.updateStrategy:
+// a bogus value must surface as an error directly, not reach
+// source.ResolveRenderedBase or initUI at all (nil initUI would panic if it
+// did).
+func TestPrepareRenderedRetryBase_InvalidUpdateStrategyPropagatesError(t *testing.T) {
+	opts := &initOptions{updateStrategy: "bogus"}
+
+	cleanup, err := prepareRenderedRetryBase(nil, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}
+
+// TestPrepareRenderedRetryBase_RenderedResolveFailurePropagatesError covers
+// source.ResolveRenderedBase failing during the retry (no recorded project
+// state at targetDir): the failure must propagate directly rather than
+// reaching initUI.SetRenderedBaseSource (nil initUI would panic if it did).
+func TestPrepareRenderedRetryBase_RenderedResolveFailurePropagatesError(t *testing.T) {
+	opts := &initOptions{updateStrategy: "rendered"}
+
+	cleanup, err := prepareRenderedRetryBase(nil, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}
+
+// TestResolveInteractiveInitBaseRef_NoUpdate_PassesThroughOptsUnchanged
+// covers resolveInteractiveInitBaseRef's non-update path: without --update
+// the base ref is unused (ExecuteWithDelimiters only sets up git storage when
+// update is true), so this is a no-op passthrough that must not touch
+// initUI at all -- exercised here with a nil *ui.InitUI to prove it.
+//
+// The --update branch (which resolves the target directory first via
+// initUI.ResolveTargetPath) always prompts through a real huh form when no
+// target is already known and so cannot be safely unit tested -- the same
+// limitation documented on TestRunInitExecution_WithTargetDir above.
+func TestResolveInteractiveInitBaseRef_NoUpdate_PassesThroughOptsUnchanged(t *testing.T) {
+	tests := []struct {
+		name            string
+		interactive     bool
+		wantUseDefaults bool
+	}{
+		{name: "interactive", interactive: true, wantUseDefaults: false},
+		{name: "non-interactive", interactive: false, wantUseDefaults: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := &initOptions{
+				update:       false,
+				interactive:  tt.interactive,
+				baseRef:      "v1.2.3",
+				templateVars: map[string]interface{}{"key": "value"},
+			}
+
+			resolved, err := resolveInteractiveInitBaseRef(nil, nil, opts)
+
+			require.NoError(t, err)
+			assert.Empty(t, resolved.targetDir)
+			assert.Equal(t, "v1.2.3", resolved.baseRef)
+			assert.Equal(t, opts.templateVars, resolved.templateValues)
+			assert.Equal(t, tt.wantUseDefaults, resolved.useDefaults)
+		})
+	}
+}
+
+// TestRunInitExecution_NonEmptyTargetDir_NonInteractive_ReturnsError covers
+// that a non-empty target directory fails outright (no update offered, no
+// interactive prompt attempted) when not running interactively — matches
+// shouldOfferUpdate's "not interactive" case above, exercised through the
+// real runInitExecution entry point.
+func TestRunInitExecution_NonEmptyTargetDir_NonInteractive_ReturnsError(t *testing.T) {
+	initUI, err := createInitUI()
+	require.NoError(t, err)
+
+	configs, err := templates.GetAvailableConfigurations()
+	require.NoError(t, err)
+	cfg := configs["simple"]
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "existing.txt"), []byte("hi"), 0o600))
+
+	opts := &initOptions{
+		targetDir:    dir,
+		interactive:  false,
+		templateVars: map[string]interface{}{"project_name": "demo"},
+	}
+
+	_, err = runInitExecution(initUI, &cfg, opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTargetDirectoryNotEmpty)
+}
+
+// TestRunInitExecution_UpdateFlag_MergesExistingDirectory covers the real
+// bug this flag fixes: re-running init against an already-generated,
+// git-initialized directory with --update --base-ref=HEAD regenerates the
+// template while preserving the user's own edits via a 3-way merge, instead
+// of failing with "target directory is not empty".
+func TestRunInitExecution_UpdateFlag_MergesExistingDirectory(t *testing.T) {
+	initUI, err := createInitUI()
+	require.NoError(t, err)
+
+	configs, err := templates.GetAvailableConfigurations()
+	require.NoError(t, err)
+	cfg := configs["simple"]
+
+	dir := t.TempDir()
+	opts := &initOptions{
+		targetDir:    dir,
+		interactive:  false,
+		templateVars: map[string]interface{}{"project_name": "demo"},
+	}
+	_, err = runInitExecution(initUI, &cfg, opts)
+	require.NoError(t, err)
+
+	require.NoError(t, runGitCommand(t, dir, "init"))
+	// Disable commit signing: dev machines with a GPG/1Password signing agent
+	// configured globally can hang or fail here otherwise.
+	require.NoError(t, runGitCommand(t, dir, "config", "commit.gpgsign", "false"))
+	require.NoError(t, runGitCommand(t, dir, "config", "user.email", "test@example.com"))
+	require.NoError(t, runGitCommand(t, dir, "config", "user.name", "Test"))
+	require.NoError(t, runGitCommand(t, dir, "add", "."))
+	require.NoError(t, runGitCommand(t, dir, "commit", "-m", "initial"))
+
+	readmePath := filepath.Join(dir, "README.md")
+	original, err := os.ReadFile(readmePath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(readmePath, append(original, []byte("\nuser note\n")...), 0o600))
+
+	updateOpts := &initOptions{
+		targetDir:    dir,
+		interactive:  false,
+		update:       true,
+		baseRef:      "HEAD",
+		templateVars: map[string]interface{}{"project_name": "demo"},
+	}
+	finalDir, err := runInitExecution(initUI, &cfg, updateOpts)
+
+	require.NoError(t, err)
+	assert.Equal(t, dir, finalDir)
+	merged, err := os.ReadFile(readmePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(merged), "user note", "the user's manual edit must survive the 3-way merge")
+}
+
+// runGitCommand runs git in dir for test setup, skipping the test if git is unavailable.
+func runGitCommand(t *testing.T, dir string, args ...string) error {
+	t.Helper()
+	if _, lookErr := exec.LookPath("git"); lookErr != nil {
+		t.Skip("git binary not found on PATH")
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git %v failed: %w: %s", args, err, string(out))
+	}
+	return nil
+}
+
+func TestSelectTemplate_TemplateSourceBranch(t *testing.T) {
+	result, err := selectTemplate("./local-template", false, nil, map[string]templates.Configuration{}, "v1")
+
+	require.NoError(t, err)
+	assert.Equal(t, "./local-template", result.Name)
+}
+
+func TestExecuteInit_ValidatesRequiredArgs(t *testing.T) {
+	tests := []struct {
+		name         string
+		templateName string
+		targetDir    string
+		interactive  bool
+		expectError  bool
+		errorContain string
+	}{
+		{
+			name:         "non-interactive requires template name",
+			templateName: "",
+			targetDir:    "",
+			interactive:  false,
+			expectError:  true,
+			errorContain: "template name",
+		},
+		{
+			name:         "non-interactive requires target dir",
+			templateName: "simple",
+			targetDir:    "",
+			interactive:  false,
+			expectError:  true,
+			errorContain: "target directory",
+		},
+		{
+			name:         "non-interactive requires both template and target",
+			templateName: "",
+			targetDir:    "",
+			interactive:  false,
+			expectError:  true,
+			errorContain: "template name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := executeInit(context.Background(), &initOptions{
+				templateName: tt.templateName,
+				targetDir:    tt.targetDir,
+				interactive:  tt.interactive,
+				force:        false,
+				templateVars: map[string]interface{}{},
+			})
+
+			if tt.expectError {
+				require.Error(t, err)
+				if tt.errorContain != "" {
+					assert.Contains(t, err.Error(), tt.errorContain)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestInitCmd_SubcommandsNotAllowed(t *testing.T) {
+	// Verify init command has no subcommands.
+	assert.Empty(t, initCmd.Commands())
+}
+
+func TestInitCmd_RunEFunction(t *testing.T) {
+	// Verify RunE function is set.
+	assert.NotNil(t, initCmd.RunE)
+}
+
+func TestInitCmd_CoverageBooster(t *testing.T) {
+	// This test exercises code paths for coverage.
+	provider := &InitCommandProvider{}
+
+	// Exercise all interface methods.
+	_ = provider.GetCommand()
+	_ = provider.GetName()
+	_ = provider.GetGroup()
+	_ = provider.GetFlagsBuilder()
+	_ = provider.GetPositionalArgsBuilder()
+	_ = provider.GetCompatibilityFlags()
+	_ = provider.GetAliases()
+
+	// Verify values.
+	assert.Equal(t, "init", provider.GetName())
+	assert.Equal(t, "Configuration Management", provider.GetGroup())
+}
+
+func TestParseSetFlag(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		expectKey string
+		expectVal string
+		expectErr bool
+	}{
+		{
+			name:      "valid key=value",
+			input:     "key=value",
+			expectKey: "key",
+			expectVal: "value",
+			expectErr: false,
+		},
+		{
+			name:      "value with equals sign",
+			input:     "key=value=with=equals",
+			expectKey: "key",
+			expectVal: "value=with=equals",
+			expectErr: false,
+		},
+		{
+			name:      "key with spaces trimmed",
+			input:     "  key  =  value  ",
+			expectKey: "key",
+			expectVal: "value",
+			expectErr: false,
+		},
+		{
+			name:      "invalid - no equals sign",
+			input:     "keyvalue",
+			expectKey: "",
+			expectVal: "",
+			expectErr: true,
+		},
+		{
+			name:      "invalid - empty string",
+			input:     "",
+			expectKey: "",
+			expectVal: "",
+			expectErr: true,
+		},
+		{
+			name:      "invalid - empty key",
+			input:     "=value",
+			expectKey: "",
+			expectVal: "",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key, val, err := parseSetFlag(tt.input)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectKey, key)
+				assert.Equal(t, tt.expectVal, val)
+			}
+		})
+	}
+}

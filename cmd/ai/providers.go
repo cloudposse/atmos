@@ -7,9 +7,12 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/anthropic"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/azureopenai"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/bedrock"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/deepseek"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/gemini"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/github"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/grok"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/ollama"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/openai"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/openrouter"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/zai"
 )

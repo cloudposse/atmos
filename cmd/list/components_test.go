@@ -364,6 +364,31 @@ func TestBuildComponentFilters_TagsAndLabels(t *testing.T) {
 		_, err := buildComponentFilters(&ComponentsOptions{LabelsRaw: "not-valid"})
 		require.Error(t, err)
 	})
+
+	t.Run("tags/labels row filters are skipped with the closure preview", func(t *testing.T) {
+		// With IncludeDependencies set, extractComponentsViaScopedClosure has
+		// already used opts.Tags/LabelsRaw to seed the closure roots; re-applying
+		// them here as row filters would incorrectly prune closure members
+		// (dependencies/dependents) that don't themselves carry the seed tag.
+		result, err := buildComponentFilters(&ComponentsOptions{
+			Tags:                []string{"production"},
+			LabelsRaw:           "cost-center=platform",
+			IncludeDependencies: -1,
+		})
+		require.NoError(t, err)
+		require.Len(t, result, 1, "only the abstract filter should be present, not tags/labels")
+		_, isAbstractFilter := result[0].(*filter.ColumnValueFilter)
+		assert.True(t, isAbstractFilter)
+	})
+
+	t.Run("tags/labels row filters are also skipped for IncludeDependents", func(t *testing.T) {
+		result, err := buildComponentFilters(&ComponentsOptions{
+			Tags:              []string{"production"},
+			IncludeDependents: 2,
+		})
+		require.NoError(t, err)
+		require.Len(t, result, 1, "only the abstract filter should be present, not the tags filter")
+	})
 }
 
 // TestGetComponentColumns tests column configuration logic.
@@ -425,6 +450,56 @@ func TestGetComponentColumns(t *testing.T) {
 			if tc.expectName != "" && len(result) > 0 {
 				assert.Equal(t, tc.expectName, result[0].Name)
 			}
+		})
+	}
+}
+
+// TestResolveComponentsEvalSections verifies the evaluation-scope filter derived from the
+// resolved column set. `metadata` is always folded in (extract.UniqueComponents and the
+// enabled/locked/tags/labels filters always read it, regardless of which columns are shown).
+func TestResolveComponentsEvalSections(t *testing.T) {
+	testCases := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		opts        *ComponentsOptions
+		expectNil   bool
+		expectExact []string
+	}{
+		{
+			name: "default columns require only metadata",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{List: schema.ListConfig{}},
+			},
+			opts:        &ComponentsOptions{},
+			expectExact: []string{"metadata"},
+		},
+		{
+			name: "--columns referencing vars requires vars and metadata",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{List: schema.ListConfig{}},
+			},
+			opts:        &ComponentsOptions{Columns: []string{"Component={{ .component }}", "Region={{ .vars.region }}"}},
+			expectExact: []string{"metadata", "vars"},
+		},
+		{
+			name: "--columns referencing raw falls back to nil",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{List: schema.ListConfig{}},
+			},
+			opts:      &ComponentsOptions{Columns: []string{"Raw={{ .raw }}"}},
+			expectNil: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := resolveComponentsEvalSections(tc.atmosConfig, tc.opts)
+			if tc.expectNil {
+				assert.Nil(t, result)
+				return
+			}
+			require.NotNil(t, result)
+			assert.ElementsMatch(t, tc.expectExact, result)
 		})
 	}
 }

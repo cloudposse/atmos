@@ -11,7 +11,7 @@ stacks:
   base_path: "stacks"
   included_paths:
     - "**/*.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 # A SOPS aws-kms secrets provider. The data key is wrapped with an AWS KMS key, so
 # encrypt/decrypt require AWS credentials. The `identity` here is what issue #2637 is about:

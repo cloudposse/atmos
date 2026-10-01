@@ -713,6 +713,84 @@ func TestEnrichUniqueComponentMetadata_InvalidData(t *testing.T) {
 	assert.Equal(t, "real", comp["component_type"])
 }
 
+// TestGetTagsFromMetadata covers the exported metadata.tags accessor used by
+// callers outside package extract (cmd/list sources, pkg/list/dependencies).
+func TestGetTagsFromMetadata(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata map[string]any
+		want     []string
+	}{
+		{
+			name:     "extracts_tags",
+			metadata: map[string]any{"tags": []any{"network", "database"}},
+			want:     []string{"network", "database"},
+		},
+		{
+			name:     "absent_returns_empty_non_nil_slice",
+			metadata: map[string]any{},
+			want:     []string{},
+		},
+		{
+			name:     "wrong_type_returns_empty_non_nil_slice",
+			metadata: map[string]any{"tags": "not-a-list"},
+			want:     []string{},
+		},
+		{
+			name:     "non_string_entries_are_dropped",
+			metadata: map[string]any{"tags": []any{"network", 42, true, "database"}},
+			want:     []string{"network", "database"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tags := GetTagsFromMetadata(tc.metadata)
+			assert.NotNil(t, tags)
+			assert.Equal(t, tc.want, tags)
+		})
+	}
+}
+
+// TestGetLabelsFromMetadata covers the exported metadata.labels accessor used
+// by callers outside package extract.
+func TestGetLabelsFromMetadata(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata map[string]any
+		want     map[string]string
+	}{
+		{
+			name:     "extracts_labels",
+			metadata: map[string]any{"labels": map[string]any{"team": "platform", "tier": "gold"}},
+			want:     map[string]string{"team": "platform", "tier": "gold"},
+		},
+		{
+			name:     "absent_returns_empty_non_nil_map",
+			metadata: map[string]any{},
+			want:     map[string]string{},
+		},
+		{
+			name:     "wrong_type_returns_empty_non_nil_map",
+			metadata: map[string]any{"labels": "not-a-map"},
+			want:     map[string]string{},
+		},
+		{
+			name:     "non_string_values_are_dropped",
+			metadata: map[string]any{"labels": map[string]any{"team": "platform", "count": 3, "flag": true}},
+			want:     map[string]string{"team": "platform"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			labels := GetLabelsFromMetadata(tc.metadata)
+			assert.NotNil(t, labels)
+			assert.Equal(t, tc.want, labels)
+		})
+	}
+}
+
 // Tests for buildBaseComponent function.
 func TestBuildBaseComponent(t *testing.T) {
 	comp := buildBaseComponent("vpc", "test-stack", "terraform")

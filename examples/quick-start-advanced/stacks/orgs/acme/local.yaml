@@ -1,0 +1,8 @@
+import:
+  - catalog/emulator/aws
+
+# `local` is a normal stack dedicated to the shared Floci sandbox. Platform
+# stacks resolve it through the project-scoped `local-aws` identity.
+vars:
+  stage: local
+  region: us-east-1

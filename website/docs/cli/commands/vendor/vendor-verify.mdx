@@ -1,0 +1,85 @@
+---
+title: atmos vendor verify
+sidebar_label: verify
+sidebar_class_name: command
+id: vendor-verify
+description: Verify vendored files match vendor.lock.yaml, reporting drift for CI.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Compare every lock-owned file on disk against its recorded `vendor.lock.yaml` receipt. Report
+drift — missing files, or files whose contents no longer match what was last vendored. Exits
+non-zero when any drift is found, for use in CI.
+</Intro>
+
+## Usage
+
+```shell
+atmos vendor verify [--component <name>] [--type <type>] [--file <path>] [--tags <a,b>] [--format table|json]
+atmos vendor verify [--stack <stack>] [--labels <k>=<v>] [--tags <a,b>] [--format table|json]
+```
+
+This never checks for a newer version upstream — see
+<a href="/cli/commands/vendor/update">`atmos vendor update --check`</a> for that. The `vendor
+verify` command is purely a read-only, on-disk integrity check against what's already recorded in
+the lock file: it never fetches, writes, or modifies anything.
+
+At most one base selector may be given: `--component` or `--stack`/`--labels` (a stack-resolved
+component set, composable with each other, like
+<a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>'s own `--stack`/`--labels`). `--tags`
+(vendor.yaml's own declared source tags) is a separate, independent filter that composes with
+either base selector, or stands on its own — narrowing the verified set to only components whose
+declared tags also match; a component with no `vendor.yaml` entry has no tags to match and is
+excluded by a non-empty `--tags` filter. Omit every selector to verify everything. A selector that
+matches nothing is an error, not a silent "verify everything" fallback.
+
+## Examples
+
+```shell
+# Verify every vendored artifact.
+atmos vendor verify
+
+# Verify only one component.
+atmos vendor verify --component vpc
+
+# Verify every component whose vendor.yaml source declares a given tag.
+atmos vendor verify --tags networking
+
+# Verify every component in a stack, or matching stack metadata.labels.
+atmos vendor verify --stack dev-us-west-2
+atmos vendor verify --labels tier=1
+
+# Verify a stack's components, narrowed further by declared vendor.yaml tags.
+atmos vendor verify --stack dev-us-west-2 --tags networking
+
+# Machine-readable output for CI.
+atmos vendor verify --format json
+```
+
+## Flags
+
+<dl>
+  <dt>`--component` / `-c` (string)</dt>
+  <dd>Verify only this component. Mutually exclusive with `--stack`/`--labels`. Composes with `--tags` (narrows to this component only if its declared `vendor.yaml` tags also match). Omit every selector to verify every artifact recorded in the lock file.</dd>
+  <dt>`--tags` (string)</dt>
+  <dd>Verify only components whose `vendor.yaml` source declares any of these comma-separated tags (matches any). An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.</dd>
+  <dt>`--stack` / `-s` (string)</dt>
+  <dd>Verify only components belonging to the specified stack. Composes with `--labels` to narrow further, and with `--tags` to filter by declared source tags. Mutually exclusive with `--component`.</dd>
+  <dt>`--labels` (string)</dt>
+  <dd>Verify only components whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs. Composes with `--stack` and `--tags`. Mutually exclusive with `--component`.</dd>
+  <dt>`--type` / `-t` (string, default `terraform`)</dt>
+  <dd>Component type (`terraform`, `helmfile`, or `packer`). Pass this flag explicitly to scope a `--stack`/`--labels` selection to one component type. When you omit it, every component type is considered.</dd>
+  <dt>`--file` (string, default `./vendor.yaml`)</dt>
+  <dd>The vendor manifest to read declared source tags from when resolving `--tags`.</dd>
+  <dt>`--format` (string, default `table`)</dt>
+  <dd>Output format: `table` or `json`.</dd>
+</dl>
+
+:::note
+The `atmos vendor verify` command reports drift; it never fixes it. Re-run
+`atmos vendor pull --refresh-lock` (or `atmos vendor pull --component <name> --refresh-lock` for a
+single component) to re-fetch and reconcile drifted sources. Or run
+<a href="/cli/commands/vendor/vendor-clean">`atmos vendor clean`</a> to remove lock-owned files
+outright.
+:::

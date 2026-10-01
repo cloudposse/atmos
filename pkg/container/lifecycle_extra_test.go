@@ -1,8 +1,10 @@
 package container
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // errMissingImage is recognized by IsImageMissingError (substring "no such image").
@@ -243,4 +246,46 @@ func TestContainerRef(t *testing.T) {
 	assert.Empty(t, containerRef(nil))
 	assert.Equal(t, "cid", containerRef(&Info{ID: "cid", Name: "name"})) // ID precedence
 	assert.Equal(t, "name", containerRef(&Info{Name: "name"}))           // Name fallback
+}
+
+// TestLogReusedNetworkMismatch covers the Debug hint upWithRuntime emits when it
+// reuses an existing container (rather than recreating it) while the desired
+// config still asks for network attachments -- since reuse never reconciles
+// config.Networks against the container's actual networks, this log line is the
+// only signal an operator gets.
+func TestLogReusedNetworkMismatch(t *testing.T) {
+	origLevel := log.GetLevel()
+	t.Cleanup(func() {
+		log.SetOutput(os.Stderr)
+		log.SetLevel(origLevel)
+	})
+
+	t.Run("no networks requested logs nothing", func(t *testing.T) {
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		log.SetLevel(log.DebugLevel)
+
+		logReusedNetworkMismatch("cid", "name", &NamedConfig{
+			Stack: "dev", Component: "api",
+		})
+
+		assert.Empty(t, buf.String())
+	})
+
+	t.Run("networks requested logs a reconciliation hint", func(t *testing.T) {
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		log.SetLevel(log.DebugLevel)
+
+		logReusedNetworkMismatch("cid123", "atmos-dev-container-api", &NamedConfig{
+			Stack: "dev", Component: "api",
+			Networks: []NetworkAttachment{{Name: "atmos-dev", Aliases: []string{"dev-api"}}},
+		})
+
+		out := buf.String()
+		assert.Contains(t, out, "reusing existing container")
+		assert.Contains(t, out, "atmos container down api -s dev")
+		assert.Contains(t, out, "cid123")
+		assert.Contains(t, out, "atmos-dev-container-api")
+	})
 }

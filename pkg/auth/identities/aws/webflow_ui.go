@@ -18,13 +18,16 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // webflowSpinnerPollInterval is the polling interval used by the spinner
 // model to check for token-exchange results between bubbletea ticks.
 const webflowSpinnerPollInterval = 100 * time.Millisecond
+
+// maxWebflowDialogURLWidth keeps browser-auth dialogs compact while allowing
+// short device-code URLs to remain with their verification instructions.
+const maxWebflowDialogURLWidth = 80
 
 // webflowIsTTY checks if stderr is a terminal.
 func webflowIsTTY() bool {
@@ -40,24 +43,37 @@ func webflowIsInteractive() bool {
 	return webflowIsTTYFunc()
 }
 
-// displayWebflowDialog shows a styled dialog with the authentication URL (TTY mode).
+// displayWebflowDialog shows the browser-authentication status and manual fallback URL in TTY mode.
 func displayWebflowDialog(authURL string) {
+	dialog, containsURL := renderWebflowDialog(authURL)
+	ui.Writef("%s\n", dialog)
+	if containsURL {
+		return
+	}
+
+	instructionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
+	urlStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
+		Italic(true)
+
+	ui.Writef("%s\n%s\n", instructionStyle.Render("If the browser doesn't open, visit:"), urlStyle.Render(authURL))
+}
+
+// renderWebflowDialog builds the browser sign-in prompt and reports whether the URL fits inside it.
+func renderWebflowDialog(authURL string) (string, bool) {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 		PaddingLeft(1).
 		PaddingRight(1)
 
-	urlStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorBorder)).
-		Italic(true)
-
 	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorDarkGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorBorder)).
+		BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
 		Padding(1, 2).
 		MarginTop(1).
 		MarginBottom(1)
@@ -66,12 +82,19 @@ func displayWebflowDialog(authURL string) {
 	content.WriteString(titleStyle.Render("🔐 AWS Browser Authentication"))
 	content.WriteString("\n\n")
 	content.WriteString(instructionStyle.Render("Opening browser for authentication..."))
-	content.WriteString("\n")
-	content.WriteString(instructionStyle.Render("If the browser doesn't open, visit:"))
-	content.WriteString("\n\n")
-	content.WriteString(urlStyle.Render(authURL))
 
-	ui.Writef("%s\n", boxStyle.Render(content.String()))
+	containsURL := authURL != "" && lipgloss.Width(authURL) <= maxWebflowDialogURLWidth
+	if containsURL {
+		urlStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
+			Italic(true)
+		content.WriteString("\n\n")
+		content.WriteString(urlStyle.Render(authURL))
+		content.WriteString("\n\n")
+		content.WriteString(instructionStyle.Render("Opening browser... If it doesn't open, visit the URL above."))
+	}
+
+	return boxStyle.Render(content.String()), containsURL
 }
 
 // displayWebflowDialogPlainText shows the authentication URL in plain text (non-TTY).
@@ -106,10 +129,8 @@ func defaultRunSpinnerProgram(model webflowSpinnerModel) (tea.Model, error) {
 
 // newWebflowSpinnerModel constructs the bubbletea model for the auth spinner.
 func newWebflowSpinnerModel(tokenCh <-chan webflowSpinnerTokenResult, cancel context.CancelFunc) webflowSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
-	fps.Apply(&s)
+	s := ui.NewSpinner()
+
 	return webflowSpinnerModel{
 		spinner: s,
 		message: "Waiting for browser authentication",
@@ -164,7 +185,7 @@ func (m webflowSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m webflowSpinnerModel) View() string {
 	if m.done {
 		if m.result != nil && m.result.err != nil {
-			return fmt.Sprintf("%s Authentication failed\n", theme.Styles.XMark)
+			return fmt.Sprintf("%s Authentication failed\n", theme.GetCurrentStyles().XMark)
 		}
 		return ""
 	}

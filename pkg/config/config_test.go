@@ -13,6 +13,26 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestDefaultConfig_TerraformInit verifies that the default config resolves
+// init.mode/init.reconfigure/init.upgrade to "auto" when unset in atmos.yaml. Note that
+// init.mode/init.upgrade's "auto" only took effect 2026-09-12 (journaled in pkg/edition); a
+// project pinned to an earlier edition gets "always"/"never" restored instead -- see
+// TestLoadConfigEditionInitModeAndUpgrade for that end-to-end behavior and
+// schema.Terraform.EffectiveInitMode/EffectiveInitUpgrade's doc comments for why.
+//
+// Init.Reconfigure itself is asserted empty, not "auto": EffectiveInitReconfigure's legacy
+// fallback (deprecated init_run_reconfigure, which defaultCliConfig sets to true) needs
+// Init.Reconfigure to stay genuinely unset to resolve to auto -- see
+// EffectiveInitReconfigure's doc comment and defaultCliConfig's matching comment in default.go.
+func TestDefaultConfig_TerraformInit(t *testing.T) {
+	assert.Equal(t, schema.TerraformInitModeAuto, defaultCliConfig.Components.Terraform.Init.Mode)
+	assert.Empty(t, defaultCliConfig.Components.Terraform.Init.Reconfigure)
+	assert.True(t, defaultCliConfig.Components.Terraform.InitRunReconfigure)
+	assert.Equal(t, schema.TerraformInitReconfigureAuto, defaultCliConfig.Components.Terraform.EffectiveInitReconfigure())
+	assert.Equal(t, schema.TerraformInitUpgradeAuto, defaultCliConfig.Components.Terraform.Init.Upgrade)
+	assert.False(t, defaultCliConfig.Components.Terraform.Init.PassVars)
+}
+
 // TestInitCliConfig should initialize atmos configuration with the correct base path and atmos Config File Path.
 // It should also check that the base path and atmos Config File Path are correctly set and directory.
 func TestInitCliConfig(t *testing.T) {
@@ -537,6 +557,65 @@ func TestAtmosConfigAbsolutePaths(t *testing.T) {
 		assert.Equal(t, absPath, config.Components.Terraform.BasePath)
 		assert.Equal(t, absPath, config.Components.Helmfile.BasePath)
 		assert.Equal(t, absPath, config.Stacks.BasePath)
+	})
+
+	// TestAtmosConfigAbsolutePaths_VendorAndWorkflows guards against the same bug shape
+	// cloudposse/atmos#2864 fixed for the top-level base_path: Vendor.BasePath and
+	// Workflows.BasePath were never centralized into an absolute field, so consumers
+	// re-joined the raw (possibly still-relative) atmosConfig.BasePath at call time instead.
+	t.Run("computes vendor and workflows absolute paths", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-vendor-workflows-test")
+		config := &schema.AtmosConfiguration{
+			BasePath: baseDir,
+			Vendor:   schema.Vendor{BasePath: "vendor.yaml"},
+			Workflows: schema.Workflows{
+				BasePath: "stacks/workflows",
+			},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, filepath.Join(baseDir, "vendor.yaml"), config.VendorDirAbsolutePath)
+		assert.Equal(t, filepath.Join(baseDir, "stacks", "workflows"), config.WorkflowsDirAbsolutePath)
+	})
+
+	// An already-absolute Vendor.BasePath/Workflows.BasePath must pass through unchanged --
+	// u.JoinPath returns providedPath as-is when it's absolute, regardless of basePath.
+	t.Run("computes absolute nested vendor and workflows paths unchanged", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-vendor-workflows-test")
+		vendorAbsPath := filepath.Join(os.TempDir(), "atmos-vendor-elsewhere")
+		workflowsAbsPath := filepath.Join(os.TempDir(), "atmos-workflows-elsewhere")
+		config := &schema.AtmosConfiguration{
+			BasePath:  baseDir,
+			Vendor:    schema.Vendor{BasePath: vendorAbsPath},
+			Workflows: schema.Workflows{BasePath: workflowsAbsPath},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.True(t, filepath.IsAbs(config.VendorDirAbsolutePath))
+		assert.True(t, filepath.IsAbs(config.WorkflowsDirAbsolutePath))
+		assert.Equal(t, vendorAbsPath, config.VendorDirAbsolutePath)
+		assert.Equal(t, workflowsAbsPath, config.WorkflowsDirAbsolutePath)
+	})
+
+	// An empty Vendor.BasePath/Workflows.BasePath (the default -- no vendor/workflows section
+	// configured) must resolve to the base path itself, not an error or empty string.
+	t.Run("computes vendor and workflows absolute paths from empty nested base_path", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-vendor-workflows-test")
+		config := &schema.AtmosConfiguration{
+			BasePath:  baseDir,
+			Vendor:    schema.Vendor{BasePath: ""},
+			Workflows: schema.Workflows{BasePath: ""},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, baseDir, config.VendorDirAbsolutePath)
+		assert.Equal(t, baseDir, config.WorkflowsDirAbsolutePath)
 	})
 }
 
@@ -1290,6 +1369,12 @@ func TestParentTraversalResolvesRelativeToConfigDir(t *testing.T) {
 		expectedComponentsPath := filepath.Join(cwd, "components", "terraform")
 		assert.Equal(t, expectedComponentsPath, cfg.TerraformDirAbsolutePath,
 			"Terraform components path should be at repo root (CWD), not inside config/")
+
+		// ContainerDirAbsolutePath should be computed the same way, from the
+		// default components/container base_path.
+		expectedContainerPath := filepath.Join(cwd, "components", "container")
+		assert.Equal(t, expectedContainerPath, cfg.ContainerDirAbsolutePath,
+			"Container components path should be at repo root (CWD), not inside config/")
 	})
 
 	t.Run("base_path with .. should resolve relative to atmos.yaml location", func(t *testing.T) {

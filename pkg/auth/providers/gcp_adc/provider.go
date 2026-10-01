@@ -85,6 +85,15 @@ func (p *Provider) PreAuthenticate(_ types.AuthManager) error {
 	return nil
 }
 
+// IsAmbient satisfies types.AmbientProvider. ADC resolves the active principal live on
+// every call (GOOGLE_APPLICATION_CREDENTIALS, the gcloud config, or the metadata
+// server) and mints a short-lived access token from it. Persisting that token would let
+// the auth manager replay a stale principal after the ambient credentials change, so
+// the manager must never cache credentials for chains rooted at this provider.
+func (p *Provider) IsAmbient() bool {
+	return true
+}
+
 // Authenticate obtains credentials from ADC.
 func (p *Provider) Authenticate(ctx context.Context) (types.ICredentials, error) {
 	defer perf.Track(nil, "gcp_adc.Authenticate")()

@@ -31,11 +31,11 @@ func (h *TitleHandler) Validate(step *schema.WorkflowStep) error {
 func (h *TitleHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.TitleHandler.Execute")()
 
-	term := terminal.New()
-
 	if step.Content == "" {
 		// Restore original title.
-		term.RestoreTitle()
+		if !OutputSuppressed(ctx) {
+			terminal.New().RestoreTitle()
+		}
 		return NewStepResult(""), nil
 	}
 
@@ -45,6 +45,8 @@ func (h *TitleHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		return nil, err
 	}
 
-	term.SetTitle(title)
+	if !OutputSuppressed(ctx) {
+		terminal.New().SetTitle(title)
+	}
 	return NewStepResult(title), nil
 }

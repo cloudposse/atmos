@@ -1,0 +1,5 @@
+import:
+  - catalog/emulator/aws
+
+vars:
+  stage: local

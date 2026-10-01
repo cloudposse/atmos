@@ -146,6 +146,8 @@ atmos container down api -s dev       # stop + rm
 
 Each instance is named and labeled from its canonical address `<stack>/container/<component>` (e.g., `atmos-dev-container-api`), so lifecycle commands discover it by label — there are no local state files.
 
+Containers in the same stack automatically join a shared network and can resolve each other by a `<stack>-<component>` DNS alias, with no configuration required — see [Networking](/components/container#networking).
+
 ## Related
 
 - [Using Containers](/components/container) — Conceptual overview and command walkthrough

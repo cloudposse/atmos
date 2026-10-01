@@ -1,17 +1,18 @@
 package lockfile
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/version"
 )
 
 const (
@@ -19,6 +20,10 @@ const (
 	dirPermissions = 0o755
 	// FilePermissions is the default permission for files.
 	filePermissions = 0o644
+	// YamlIndent matches pkg/utils.DefaultYAMLIndent. It's duplicated here (rather than
+	// importing pkg/utils) to avoid an import cycle: pkg/utils imports pkg/version, which
+	// imports pkg/toolchain.
+	yamlIndent = 2
 )
 
 // Error definitions for the lockfile package.
@@ -29,10 +34,10 @@ var (
 	// ErrLockFileNil indicates the lock file is nil.
 	ErrLockFileNil = errors.New("lock file is nil")
 
-	// ErrToolMissingVersion indicates a tool entry is missing the version field.
+	// ErrToolMissingVersion indicates a tool entry has no version entries.
 	ErrToolMissingVersion = errors.New("tool missing version")
 
-	// ErrToolNoPlatforms indicates a tool entry has no platform entries.
+	// ErrToolNoPlatforms indicates a version entry has no platform entries.
 	ErrToolNoPlatforms = errors.New("tool has no platform entries")
 
 	// ErrPlatformNoURL indicates a platform entry is missing the URL field.
@@ -44,8 +49,15 @@ var (
 	// ErrToolEntryNil indicates a tool entry in the lock file is nil.
 	ErrToolEntryNil = errors.New("tool entry is nil")
 
+	// ErrVersionEntryNil indicates a version entry in the lock file is nil.
+	ErrVersionEntryNil = errors.New("version entry is nil")
+
 	// ErrPlatformEntryNil indicates a platform entry in the lock file is nil.
 	ErrPlatformEntryNil = errors.New("platform entry is nil")
+
+	// ErrLegacyLockFileMigrationFailed indicates a pre-v2 lock file's raw bytes could not be
+	// re-parsed during the v1-to-v2 migration Load performs (see migrateLegacyTools).
+	ErrLegacyLockFileMigrationFailed = errors.New("failed to migrate legacy lock file")
 )
 
 // LockFile represents the toolchain.lock.yaml structure.
@@ -55,9 +67,16 @@ type LockFile struct {
 	Metadata LockFileMetadata `yaml:"metadata"`
 }
 
-// Tool represents a locked tool entry.
+// Tool represents a locked tool, keyed by owner/repo. Versions holds one entry per pinned
+// version of this tool (keyed by version string) -- a .tool-versions line can legitimately pin
+// more than one version of the same tool (e.g. "yq 4.45.1 4.50.1"), so each version's checksum
+// data must be tracked independently rather than overwriting a single flat entry.
 type Tool struct {
-	Version     string                    `yaml:"version"`
+	Versions map[string]*VersionEntry `yaml:"versions"`
+}
+
+// VersionEntry represents a single locked version of a tool.
+type VersionEntry struct {
 	Source      string                    `yaml:"source,omitempty"`
 	Platforms   map[string]*PlatformEntry `yaml:"platforms"`
 	BinaryName  string                    `yaml:"binary_name,omitempty"`
@@ -90,12 +109,18 @@ func New() *LockFile {
 		Tools:   make(map[string]*Tool),
 		Metadata: LockFileMetadata{
 			GeneratedAt:     time.Now().UTC().Format(time.RFC3339),
-			AtmosVersion:    version.Version,
+			AtmosVersion:    atmosVersion(),
 			Platform:        runtime.GOOS + "_" + runtime.GOARCH,
-			LockFileVersion: 1,
+			LockFileVersion: currentLockFileVersion,
 		},
 	}
 }
+
+// currentLockFileVersion bumped from 1 to 2 with the move from a single flat Version/Platforms
+// pair per tool to a nested per-version Versions map, so a tool pinned to multiple versions
+// (e.g. "yq 4.45.1 4.50.1") can have each version's checksum data recorded independently instead
+// of the second locked version silently overwriting the first's.
+const currentLockFileVersion = 2
 
 // Load loads a lock file from disk.
 func Load(filePath string) (*LockFile, error) {
@@ -116,7 +141,75 @@ func Load(filePath string) (*LockFile, error) {
 		return nil, fmt.Errorf("%w: missing version", ErrInvalidLockFile)
 	}
 
+	// A pre-v2 lock file (every release through v1.226.0-rc.4) stores "version"/"platforms"
+	// directly on the tool, not nested under a "versions" map -- unmarshaling that shape into
+	// the current Tool struct silently leaves Versions nil for every tool, dropping every
+	// recorded checksum. Recover it from the raw bytes rather than losing it; see Tool's doc
+	// comment for why the shape changed.
+	//
+	// Keyed off exactly 1 (the only real prior schema version), not "< currentLockFileVersion":
+	// a file with metadata version 0 is missing/invalid, not legacy-shaped, and must still fail
+	// Verify's own explicit check for that below rather than being silently "fixed" here.
+	if lockFile.Metadata.LockFileVersion == 1 {
+		if err := migrateLegacyTools(data, &lockFile); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrLegacyLockFileMigrationFailed, err)
+		}
+	}
+
 	return &lockFile, nil
+}
+
+// legacyTool is the pre-v2, flat (single-version) on-disk shape of a locked tool -- see Tool's
+// doc comment for why this changed to a nested Versions map. Used only to recover a v1
+// toolchain.lock.yaml's data during the migration Load performs.
+type legacyTool struct {
+	Version     string                    `yaml:"version"`
+	Source      string                    `yaml:"source,omitempty"`
+	Platforms   map[string]*PlatformEntry `yaml:"platforms"`
+	BinaryName  string                    `yaml:"binary_name,omitempty"`
+	InstalledAt string                    `yaml:"installed_at"`
+}
+
+// migrateLegacyTools re-parses the raw lock file bytes in the pre-v2 flat shape and folds any
+// tool that came back with no Versions data (from the initial, v2-shaped unmarshal in Load)
+// into a single-entry Versions map, preserving its recorded checksum data. Tools that already
+// have Versions data (e.g. a file re-saved after a partial upgrade) are left untouched.
+func migrateLegacyTools(raw []byte, lockFile *LockFile) error {
+	var legacy struct {
+		Tools map[string]*legacyTool `yaml:"tools"`
+	}
+	if err := yaml.Unmarshal(raw, &legacy); err != nil {
+		return err
+	}
+
+	if lockFile.Tools == nil {
+		lockFile.Tools = make(map[string]*Tool)
+	}
+
+	for name, old := range legacy.Tools {
+		if old == nil || old.Version == "" {
+			continue
+		}
+		tool := lockFile.Tools[name]
+		if tool == nil {
+			tool = &Tool{}
+			lockFile.Tools[name] = tool
+		}
+		if len(tool.Versions) > 0 {
+			continue
+		}
+		tool.Versions = map[string]*VersionEntry{
+			old.Version: {
+				Source:      old.Source,
+				Platforms:   old.Platforms,
+				BinaryName:  old.BinaryName,
+				InstalledAt: old.InstalledAt,
+			},
+		}
+	}
+
+	lockFile.Metadata.LockFileVersion = currentLockFileVersion
+	return nil
 }
 
 // Save writes the lock file to disk, updating metadata fields and creating parent directories if needed.
@@ -133,10 +226,10 @@ func Save(filePath string, lockFile *LockFile) error {
 
 	// Update metadata
 	lockFile.Metadata.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
-	lockFile.Metadata.AtmosVersion = version.Version
+	lockFile.Metadata.AtmosVersion = atmosVersion()
 	lockFile.Metadata.Platform = runtime.GOOS + "_" + runtime.GOARCH
 
-	data, err := yaml.Marshal(lockFile)
+	data, err := marshalYAMLIndented(lockFile)
 	if err != nil {
 		return fmt.Errorf("failed to marshal lock file: %w", err)
 	}
@@ -162,6 +255,32 @@ func Save(filePath string, lockFile *LockFile) error {
 	return nil
 }
 
+// marshalYAMLIndented marshals v with the repo's 2-space YAML indent standard. A bare
+// yaml.Marshal defaults to yaml.v3's 4-space indent, which drifted toolchain.lock.yaml away
+// from every other Atmos-generated YAML file.
+func marshalYAMLIndented(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(yamlIndent)
+	if err := encoder.Encode(v); err != nil {
+		return nil, err
+	}
+	if err := encoder.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// atmosVersion reads build metadata without importing pkg/version. Keeping the
+// lock-format package below the toolchain installer avoids an import cycle and
+// lets every writer use this canonical model.
+func atmosVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "unknown"
+}
+
 // GetOrCreateTool gets or creates a tool entry in the lock file.
 func (lf *LockFile) GetOrCreateTool(tool string) *Tool {
 	defer perf.Track(nil, "lockfile.LockFile.GetOrCreateTool")()
@@ -171,22 +290,54 @@ func (lf *LockFile) GetOrCreateTool(tool string) *Tool {
 	}
 
 	if entry, exists := lf.Tools[tool]; exists {
+		if entry.Versions == nil {
+			entry.Versions = make(map[string]*VersionEntry)
+		}
 		return entry
 	}
 
-	entry := &Tool{
-		Platforms:   make(map[string]*PlatformEntry),
-		InstalledAt: time.Now().UTC().Format(time.RFC3339),
-	}
+	entry := &Tool{Versions: make(map[string]*VersionEntry)}
 	lf.Tools[tool] = entry
 	return entry
 }
 
-// RemoveTool removes a tool from the lock file.
+// GetOrCreateVersion gets or creates the entry for a specific version of this tool. Locking or
+// installing a second version of an already-locked tool must not disturb any other version's
+// recorded data -- each version's checksum/platform data lives in its own entry.
+func (t *Tool) GetOrCreateVersion(version string) *VersionEntry {
+	defer perf.Track(nil, "lockfile.Tool.GetOrCreateVersion")()
+
+	if t.Versions == nil {
+		t.Versions = make(map[string]*VersionEntry)
+	}
+
+	if entry, exists := t.Versions[version]; exists {
+		if entry.Platforms == nil {
+			entry.Platforms = make(map[string]*PlatformEntry)
+		}
+		return entry
+	}
+
+	entry := &VersionEntry{
+		Platforms:   make(map[string]*PlatformEntry),
+		InstalledAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	t.Versions[version] = entry
+	return entry
+}
+
+// RemoveTool removes a tool (all of its locked versions) from the lock file.
 func (lf *LockFile) RemoveTool(tool string) {
 	defer perf.Track(nil, "lockfile.LockFile.RemoveTool")()
 
 	delete(lf.Tools, tool)
+}
+
+// RemoveVersion removes a single locked version of this tool.
+func (t *Tool) RemoveVersion(version string) {
+	defer perf.Track(nil, "lockfile.Tool.RemoveVersion")()
+
+	delete(t.Versions, version)
 }
 
 // Verify verifies the integrity and validity of the lock file at the specified path.
@@ -229,16 +380,31 @@ func validateToolEntry(toolName string, tool *Tool) error {
 		return fmt.Errorf("%w: %s", ErrToolEntryNil, toolName)
 	}
 
-	if tool.Version == "" {
+	if len(tool.Versions) == 0 {
 		return fmt.Errorf("%w: %s", ErrToolMissingVersion, toolName)
 	}
 
-	if len(tool.Platforms) == 0 {
-		return fmt.Errorf("%w: %s", ErrToolNoPlatforms, toolName)
+	for version, entry := range tool.Versions {
+		if err := validateVersionEntry(toolName, version, entry); err != nil {
+			return err
+		}
 	}
 
-	for platform, entry := range tool.Platforms {
-		if err := validatePlatformEntry(toolName, platform, entry); err != nil {
+	return nil
+}
+
+// validateVersionEntry validates a single locked version of a tool.
+func validateVersionEntry(toolName, version string, entry *VersionEntry) error {
+	if entry == nil {
+		return fmt.Errorf("%w: %s@%s", ErrVersionEntryNil, toolName, version)
+	}
+
+	if len(entry.Platforms) == 0 {
+		return fmt.Errorf("%w: %s@%s", ErrToolNoPlatforms, toolName, version)
+	}
+
+	for platform, platformEntry := range entry.Platforms {
+		if err := validatePlatformEntry(toolName, platform, platformEntry); err != nil {
 			return err
 		}
 	}

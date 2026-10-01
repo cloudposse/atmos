@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 )
 
 func TestMapCheckRunStateToStatusState(t *testing.T) {
@@ -181,6 +182,49 @@ func TestProvider_CreateCheckRun(t *testing.T) {
 		// Verify target_url was included.
 		assert.Equal(t, "https://github.com/owner/repo/actions/runs/123", capturedRequest["target_url"])
 	})
+}
+
+func TestProvider_CreateCheckRun_MasksRegisteredSecrets(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+
+	const secret = "status-secret-ABCD1234"
+	atmosio.RegisterSecret(secret)
+
+	var capturedRequest map[string]any
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/owner/repo/statuses/abc123", func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedRequest))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":          12345,
+			"context":     capturedRequest["context"],
+			"state":       capturedRequest["state"],
+			"description": capturedRequest["description"],
+		})
+	})
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	serverURL, err := url.Parse(server.URL + "/")
+	require.NoError(t, err)
+	ghClient := github.NewClient(nil)
+	ghClient.BaseURL = serverURL
+	p := NewProviderWithClient(&Client{client: ghClient})
+
+	_, err = p.CreateCheckRun(context.Background(), &provider.CreateCheckRunOptions{
+		Owner:  "owner",
+		Repo:   "repo",
+		SHA:    "abc123",
+		Name:   "atmos/plan/test/service",
+		Status: provider.CheckRunStatePending,
+		Title:  "credential: " + secret,
+	})
+	require.NoError(t, err)
+	description, ok := capturedRequest["description"].(string)
+	require.True(t, ok)
+	assert.NotContains(t, description, secret)
+	assert.Contains(t, description, atmosio.MaskReplacement)
 }
 
 func TestProvider_UpdateCheckRun(t *testing.T) {

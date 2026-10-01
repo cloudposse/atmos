@@ -49,9 +49,9 @@ commands:
             interval: 750ms
             command: *list_vars_cmd
           - type: simulate
-            text: "# plan the dev station instance"
+            text: "# plan every component in the dev stack"
           - type: simulate
-            text: &terraform_plan_cmd atmos terraform plan station -s dev
+            text: &terraform_plan_cmd atmos terraform plan --all -s dev
           - type: shell
             name: terraform-plan
             duration: 550ms
@@ -82,8 +82,8 @@ commands:
               "atmos list components",
               "station",
               "atmos list vars station",
-              "# plan the dev station instance",
-              "atmos terraform plan station -s dev",
+              "# plan every component in the dev stack",
+              "atmos terraform plan --all -s dev",
               "Terraform will perform the following actions",
               "local_file.cache",
               "https://wttr.in/Stockholm?0m",

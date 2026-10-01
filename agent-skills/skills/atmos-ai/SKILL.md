@@ -4,6 +4,7 @@ description: "Atmos AI and MCP integrations: connect external AI assistants to A
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ai
 ---
 
 # Atmos AI and MCP
@@ -100,7 +101,37 @@ through MCP **and** applies Atmos-native patterns (`!terraform.state`, abstract 
 inheritance, [remote-state-bridge](../atmos-migration/references/remote-state-bridge.md))
 from the relevant skill.
 
-Install the Atmos skills plugin into Claude Code:
+### Installing Skills: `atmos ai skill` (canonical, cross-client)
+
+`atmos ai skill install`/`list`/`update`/`uninstall` is the canonical, cross-client way to manage
+skills -- it works for every supported client (Claude Code, VS Code/Copilot, Gemini), not just
+Claude Code.
+
+```bash
+atmos ai skill list                          # Browse the bundled catalog + what's installed
+atmos ai skill install atmos-terraform       # Bundled skill, offline, no network/Git needed
+atmos ai skill install github.com/user/repo  # Community skill from GitHub
+atmos ai skill install                       # Install every bundled skill at once
+atmos ai skill update                        # Refresh installed bundled skills to the latest catalog version
+atmos ai skill uninstall atmos-terraform
+```
+
+Installing a bundled skill copies its content at that point in time -- upgrading the `atmos`
+binary alone doesn't refresh a skill you already installed. Run `atmos ai skill update` after
+upgrading Atmos to pick up any bundled skill content that shipped since you installed it. Skills
+installed from GitHub aren't covered by `update` yet; re-run `install <source> --force` for those.
+
+By default the skill is copied into every detected client's project-local skill directory
+(`.claude/skills/`, `.github/skills/` for VS Code/Copilot, `.gemini/skills/`) with zero extra
+flags. Use `--client`/`--all-clients` to target specific clients, `--scope user`/`--global` to
+install into each client's user-level directory instead of the project one, or `--path` to take
+full manual control of the install location (this skips auto-distribution to clients). See
+[`atmos ai skill`](https://atmos.tools/cli/commands/ai/skill) for the full flag reference.
+
+### Installing Skills: Claude Code Plugin (Claude Code only)
+
+For Claude Code specifically, the skills plugin is a lighter-weight alternative that also
+wires up marketplace updates:
 
 ```bash
 /plugin marketplace add cloudposse/atmos
@@ -109,7 +140,7 @@ Install the Atmos skills plugin into Claude Code:
 
 For Codex, Gemini, Cursor, Windsurf, GitHub Copilot, JetBrains Junie, and Amazon Q, see the
 [AI Agent Skills announcement](https://atmos.tools/changelog/ai-agent-skills) for tool-specific
-install paths.
+install paths, or use `atmos ai skill install` above, which works for all of them.
 
 ## The Three Layers
 
@@ -129,6 +160,10 @@ questions need Atmos Pro.
 ## External MCP Server Configuration
 
 Configure servers once in `atmos.yaml`. `atmos mcp export` writes them to per-CLI config files.
+
+`@latest` below is for brevity -- pin every `uvx` package to a reviewed version before treating
+this as a production setup (unpinned `@latest` on an MCP server is a supply-chain risk; see
+Guardrails below).
 
 ```yaml
 toolchain:
@@ -177,8 +212,6 @@ need AWS credentials; `aws-docs` is commonly no-auth):
 | aws-cloudtrail | Event history and API call auditing    |
 | aws-security   | Well-Architected security assessment   |
 | aws-api        | Direct AWS CLI (read-only by default)  |
-
-See `examples/mcp-for-ai-coding-assistants/atmos.yaml` for a working full configuration.
 
 ## Atmos Pro MCP Server (HTTP transport)
 
@@ -287,24 +320,29 @@ atmos mcp export
 `atmos mcp restart <name>` validates that the server can stop and start during the command; do
 not describe it as creating a long-running background service for stdio servers.
 
-## Gemini Trusted Folders Gotcha
+## Gemini CLI Gotchas
 
-Gemini's Trusted Folders feature blocks MCP servers in untrusted directories. After
-`atmos mcp export --output .gemini/settings.json`, the user must trust the folder once via
-the Gemini UI/settings before the MCP servers will start. Symptom: servers configured
-correctly but no tools available in Gemini.
+- **Personal Google accounts lost access on 2026-06-18.** Gemini CLI stopped serving requests
+  authenticated via "Login with Google" for free-tier and Google One individual accounts, which
+  were redirected to Antigravity CLI instead. Before recommending a Gemini CLI export, confirm
+  the user authenticates with an API key (billing enabled) or an enterprise Code Assist license --
+  personal-account users need a different client (Claude Code, Codex, Cursor) or Antigravity CLI,
+  which `atmos mcp export` does not target.
+- **Trusted Folders blocks MCP servers in untrusted directories.** After
+  `atmos mcp export --output .gemini/settings.json`, the user must trust the folder once via
+  the Gemini UI/settings before the MCP servers will start. Symptom: servers configured
+  correctly but no tools available in Gemini.
 
-## Related Examples
+## Related Patterns
 
-- `examples/mcp-for-ai-coding-assistants/` -- canonical full setup: Atmos MCP server + AWS
-  server suite + Atmos Pro, exported to Claude Code / Codex / Gemini, AWS credentials via
-  Atmos Auth.
-- `examples/mcp/` -- external MCP server config when Atmos itself drives the AI loop
+- **Full external-CLI setup**: Atmos MCP server + AWS server suite + Atmos Pro, exported to
+  Claude Code / Codex / Gemini, with AWS credentials injected via Atmos Auth.
+- **Atmos-driven AI loop**: external MCP server config when Atmos itself drives the AI loop
   (`atmos ai ask`) instead of an external CLI.
-- `examples/ai-claude-code/` -- use a Claude Pro/Max subscription as Atmos's AI provider (no
-  Anthropic API key). Atmos hosts the conversation; Claude Code provides the model.
-- `examples/ai/` -- multi-provider Atmos AI setup (Anthropic API, OpenAI API, Ollama). No
-  external CLI; chat with infrastructure from `atmos ai ask`.
+- **Claude Pro/Max as the AI provider**: use an existing Claude Pro/Max subscription instead of
+  an Anthropic API key. Atmos hosts the conversation; Claude Code provides the model.
+- **Multi-provider setup**: Anthropic API, OpenAI API, and Ollama configured side by side, no
+  external CLI -- chat with infrastructure directly from `atmos ai ask`.
 
 ## Guardrails
 

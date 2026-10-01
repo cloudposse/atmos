@@ -14,6 +14,8 @@ import (
 )
 
 func TestWebSearchTool_Name(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -27,6 +29,8 @@ func TestWebSearchTool_Name(t *testing.T) {
 }
 
 func TestWebSearchTool_Description(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -42,6 +46,8 @@ func TestWebSearchTool_Description(t *testing.T) {
 }
 
 func TestWebSearchTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -68,6 +74,8 @@ func TestWebSearchTool_Parameters(t *testing.T) {
 }
 
 func TestWebSearchTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -82,6 +90,8 @@ func TestWebSearchTool_RequiresPermission(t *testing.T) {
 }
 
 func TestWebSearchTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -95,6 +105,8 @@ func TestWebSearchTool_IsRestricted(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_NotEnabled(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -116,6 +128,8 @@ func TestWebSearchTool_Execute_NotEnabled(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_MissingQuery(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -135,6 +149,8 @@ func TestWebSearchTool_Execute_MissingQuery(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_Success(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("Skipping integration test that requires internet connection")
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -169,6 +185,8 @@ func TestWebSearchTool_Execute_Success(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_MaxResultsCapped(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("Skipping integration test that requires internet connection")
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -197,6 +215,8 @@ func TestWebSearchTool_Execute_MaxResultsCapped(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_InvalidQueryType(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -220,6 +240,8 @@ func TestWebSearchTool_Execute_InvalidQueryType(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_EmptyQuery(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -242,6 +264,8 @@ func TestWebSearchTool_Execute_EmptyQuery(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_MaxResultsEdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		maxResults      interface{}
@@ -282,6 +306,7 @@ func TestWebSearchTool_Execute_MaxResultsEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				AI: schema.AISettings{
 					WebSearch: schema.AIWebSearchSettings{
@@ -305,6 +330,8 @@ func TestWebSearchTool_Execute_MaxResultsEdgeCases(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_DifferentEngines(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		googleAPIKey  string
@@ -333,6 +360,7 @@ func TestWebSearchTool_Execute_DifferentEngines(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				AI: schema.AISettings{
 					WebSearch: schema.AIWebSearchSettings{
@@ -369,6 +397,8 @@ func (m *mockSearchEngine) Search(ctx context.Context, query string, maxResults 
 }
 
 func TestWebSearchTool_Execute_WithMockEngine_Success(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -426,6 +456,8 @@ func TestWebSearchTool_Execute_WithMockEngine_Success(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_WithMockEngine_NoResults(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -461,6 +493,8 @@ func TestWebSearchTool_Execute_WithMockEngine_NoResults(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_WithMockEngine_SearchError(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -494,6 +528,8 @@ func TestWebSearchTool_Execute_WithMockEngine_SearchError(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_MaxResultsValidation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		inputMaxResults  interface{}
@@ -554,6 +590,7 @@ func TestWebSearchTool_Execute_MaxResultsValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				AI: schema.AISettings{
 					WebSearch: schema.AIWebSearchSettings{
@@ -594,6 +631,8 @@ func TestWebSearchTool_Execute_MaxResultsValidation(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_MaxResultsTypes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		maxResults     interface{}
@@ -622,6 +661,7 @@ func TestWebSearchTool_Execute_MaxResultsTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				AI: schema.AISettings{
 					WebSearch: schema.AIWebSearchSettings{
@@ -662,6 +702,8 @@ func TestWebSearchTool_Execute_MaxResultsTypes(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_OutputFormatting(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -719,6 +761,8 @@ func TestWebSearchTool_Execute_OutputFormatting(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_NilConfig(t *testing.T) {
+	t.Parallel()
+
 	// Create tool with nil config.
 	tool := NewWebSearchTool(nil)
 	assert.NotNil(t, tool)
@@ -748,6 +792,8 @@ func TestWebSearchTool_Execute_NilConfig(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_ErrorChecking(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			WebSearch: schema.AIWebSearchSettings{
@@ -771,6 +817,8 @@ func TestWebSearchTool_Execute_ErrorChecking(t *testing.T) {
 }
 
 func TestWebSearchTool_Execute_QueryValidation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		params      map[string]interface{}
@@ -819,6 +867,7 @@ func TestWebSearchTool_Execute_QueryValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				AI: schema.AISettings{
 					WebSearch: schema.AIWebSearchSettings{

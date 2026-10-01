@@ -10,9 +10,11 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/dependencies"
 	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -40,8 +42,15 @@ type ComponentsOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	Skip             []string
+	ErrorMode        string
 	Tags             []string
 	LabelsRaw        string
+	// IncludeDependencies/IncludeDependents preview the dependency closure
+	// (0 = off, -1 = unlimited, N>0 = N levels): the listed components are
+	// exactly the ones a terraform bulk run with the same selection flags
+	// would execute.
+	IncludeDependencies int
+	IncludeDependents   int
 }
 
 // componentsCmd lists atmos components.
@@ -65,6 +74,9 @@ var componentsCmd = &cobra.Command{
 		}
 
 		opts := parseComponentsOptions(cmd, v)
+		if err := parseListClosureOptions(v, &opts.IncludeDependencies, &opts.IncludeDependents); err != nil {
+			return err
+		}
 
 		return listComponentsWithOptions(cmd, args, opts)
 	},
@@ -104,6 +116,7 @@ func parseComponentsOptions(cmd *cobra.Command, v *viper.Viper) *ComponentsOptio
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
+		ErrorMode:        v.GetString("error-mode"),
 		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
 		LabelsRaw:        v.GetString("labels"),
 	}
@@ -152,8 +165,10 @@ func init() {
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
 		WithSkipFlag,
+		WithErrorModeFlag,
 		WithTagsFlag,
 		WithLabelsFlag,
+		WithClosureFlags,
 	)
 
 	// Register flags.
@@ -174,33 +189,44 @@ func listComponentsWithOptions(cmd *cobra.Command, args []string, opts *Componen
 	defer perf.Track(nil, "list.components.listComponentsWithOptions")()
 
 	// Initialize configuration and extract components.
-	atmosConfig, components, err := initAndExtractComponents(cmd, args, opts)
+	result, err := initAndExtractComponents(cmd, args, opts)
 	if err != nil {
 		return err
 	}
+	defer printErrorModeSummary(opts.ErrorMode, result.collector)
 
-	if len(components) == 0 {
+	if len(result.components) == 0 {
 		ui.Info("No components found")
 		return nil
 	}
 
 	// Build and execute render pipeline.
-	return renderComponents(atmosConfig, opts, components)
+	return renderComponents(result.atmosConfig, opts, result.components)
 }
 
-// initAndExtractComponents initializes config and extracts components from stacks.
-func initAndExtractComponents(cmd *cobra.Command, args []string, opts *ComponentsOptions) (*schema.AtmosConfiguration, []map[string]any, error) {
+// componentsExtractResult bundles initAndExtractComponents' outputs so the function stays
+// within revive's function-result-limit.
+type componentsExtractResult struct {
+	atmosConfig *schema.AtmosConfiguration
+	components  []map[string]any
+	collector   *degradation.Collector
+}
+
+// initAndExtractComponents initializes config and extracts components from stacks. The
+// returned Collector (nil unless opts.ErrorMode is "warn"/"silent") should be summarized
+// via printErrorModeSummary only after the caller has finished writing output.
+func initAndExtractComponents(cmd *cobra.Command, args []string, opts *ComponentsOptions) (componentsExtractResult, error) {
 	defer perf.Track(nil, "list.components.initAndExtractComponents")()
 
 	// Process command line args to get ConfigAndStacksInfo with CLI flags.
 	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
 	if err != nil {
-		return nil, nil, err
+		return componentsExtractResult{}, err
 	}
 
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
+		return componentsExtractResult{}, fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
 	}
 
 	// If format is empty, check command-specific config.
@@ -208,14 +234,51 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		opts.Format = atmosConfig.Components.List.Format
 	}
 
-	// Create AuthManager for authentication support.
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
+	// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+	// list.error_mode, else "warn".
+	opts.ErrorMode = e.ResolveErrorMode(opts.ErrorMode, atmosConfig.List.ErrorMode)
 
-	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
+	// Create AuthManager for authentication support.
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
+	if err != nil {
+		return componentsExtractResult{}, err
+	}
+	skip := opts.Skip
+
+	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+	if err != nil {
+		return componentsExtractResult{}, err
+	}
+	errOpts, collector := describeStacksErrorOptions(opts.ErrorMode)
+
+	// With closure flags, the whole describe/extract flow goes through the
+	// shared scoped closure engine: only the stacks (and components) the
+	// closure touches are ever evaluated, matching the terraform bulk paths.
+	if opts.IncludeDependencies != 0 || opts.IncludeDependents != 0 {
+		atmosConfig.ListEvaluationPaths = column.RequiredPaths(getComponentColumns(&atmosConfig, opts.Columns))
+		if atmosConfig.ListEvaluationPaths != nil {
+			atmosConfig.ListEvaluationPaths = append(atmosConfig.ListEvaluationPaths, []string{"metadata"}, []string{"dependencies"}, []string{"settings", "depends_on"})
+		}
+		components, closureErr := extractComponentsViaScopedClosure(&atmosConfig, opts, labels, &scopedDescribeDeps{authManager: authManager, skip: skip, errOpts: errOpts})
+		if closureErr != nil {
+			return componentsExtractResult{}, closureErr
+		}
+		return componentsExtractResult{atmosConfig: &atmosConfig, components: components, collector: collector}, nil
+	}
+
+	// Without closure flags, --tags/--labels also scope the describe pass
+	// (early-skip): components excluded by the selectors never evaluate
+	// templates/YAML functions/auth.
+	//
+	// evalSections narrows evaluation to the sections the final column set (plus `metadata`,
+	// which extract.UniqueComponents and buildComponentFilters always need for
+	// enabled/locked/tags/labels/type/status) actually reads — see resolveComponentsEvalSections.
+	evalSections := resolveComponentsEvalSections(&atmosConfig, opts)
+	errOpts.EvaluationPaths = column.RequiredPaths(getComponentColumns(&atmosConfig, opts.Columns))
+	if errOpts.EvaluationPaths != nil {
+		errOpts.EvaluationPaths = append(errOpts.EvaluationPaths, []string{"metadata"})
+	}
+	stacksMap, err := e.ExecuteDescribeStacksWithEvalSections(
 		&atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -223,10 +286,13 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		false, // includeEmptyStacks
 		skip,
 		authManager,
-		authManager == nil,
+		opts.Tags,
+		labels,
+		errOpts,
+		evalSections,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
+		return componentsExtractResult{}, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
 
 	// Extract unique components (deduplicated across all stacks).
@@ -234,10 +300,69 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	// Pass the stack pattern to filter which stacks to consider when deduplicating.
 	components, err := extract.UniqueComponents(stacksMap, opts.Stack)
 	if err != nil {
-		return nil, nil, err
+		return componentsExtractResult{}, err
 	}
 
-	return &atmosConfig, components, nil
+	return componentsExtractResult{atmosConfig: &atmosConfig, components: components, collector: collector}, nil
+}
+
+// extractComponentsViaScopedClosure lists the unique components inside the
+// dependency closure using the shared three-phase scoped evaluation: the seed
+// (stack glob + tags/labels selectors) picks the roots on a lightweight
+// structural pass, and only the closure's own components are then fully
+// evaluated. Closure members are kept even when they do not match the
+// selectors that seeded them.
+func extractComponentsViaScopedClosure(
+	atmosConfig *schema.AtmosConfiguration,
+	opts *ComponentsOptions,
+	labels map[string]string,
+	describeDeps *scopedDescribeDeps,
+) ([]map[string]any, error) {
+	defer perf.Track(nil, "list.components.extractComponentsViaScopedClosure")()
+
+	describe := newScopedDescribeFunc(atmosConfig, describeDeps)
+
+	direction, depths := dependencies.ClosureScope(opts.IncludeDependencies, opts.IncludeDependents)
+	leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	result, err := dependencies.ResolveScopedClosure(describe, &dependencies.ScopeRequest{
+		Stack:            opts.Stack,
+		Tags:             opts.Tags,
+		Labels:           labels,
+		Direction:        direction,
+		Depths:           depths,
+		ProcessTemplates: opts.ProcessTemplates,
+		ProcessFunctions: opts.ProcessFunctions,
+		LeftDelim:        leftDelim,
+		RightDelim:       rightDelim,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
+	}
+
+	// The resolved stacks map holds only closure components, but keep the
+	// membership filter as the authoritative row gate (derived components can
+	// ride along with a components-narrowed describe).
+	components, err := extract.UniqueComponents(result.Stacks, "")
+	if err != nil {
+		return nil, err
+	}
+	return filterRowsByComponentNames(components, dependencies.ComponentNames(result.Closure)), nil
+}
+
+// filterRowsByComponentNames keeps rows whose "component" field is in names.
+func filterRowsByComponentNames(rows []map[string]any, names []string) []map[string]any {
+	allowed := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		allowed[name] = struct{}{}
+	}
+	filtered := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		name, _ := row["component"].(string)
+		if _, ok := allowed[name]; ok {
+			filtered = append(filtered, row)
+		}
+	}
+	return filtered
 }
 
 // renderComponents builds the render pipeline and renders components.
@@ -301,21 +426,43 @@ func buildComponentFilters(opts *ComponentsOptions) ([]filter.Filter, error) {
 		filters = append(filters, filter.NewBoolFilter("locked", opts.Locked))
 	}
 
-	// Tags filter (any-match).
-	if len(opts.Tags) > 0 {
-		filters = append(filters, filter.NewTagFilter("tags", opts.Tags))
-	}
-
-	// Labels filter (all-match).
-	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
-	if err != nil {
-		return nil, err
-	}
-	if len(labels) > 0 {
-		filters = append(filters, filter.NewLabelFilter("labels", labels))
+	// Tags/labels row filters (any-match / all-match). Skipped with the
+	// closure preview: the closure membership already selected the rows, and
+	// closure members must not be re-pruned by the selectors that seeded them.
+	if opts.IncludeDependencies == 0 && opts.IncludeDependents == 0 {
+		if len(opts.Tags) > 0 {
+			filters = append(filters, filter.NewTagFilter("tags", opts.Tags))
+		}
+		labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+		if err != nil {
+			return nil, err
+		}
+		if len(labels) > 0 {
+			filters = append(filters, filter.NewLabelFilter("labels", labels))
+		}
 	}
 
 	return filters, nil
+}
+
+// resolveComponentsEvalSections computes the evaluation-scope filter (see
+// column.RequiredSections/e.ExecuteDescribeStacksWithEvalSections) for the column set this
+// invocation will actually render, resolved from the same flag + atmos.yaml merge
+// getComponentColumns uses. `metadata` is unconditionally folded in: extract.UniqueComponents
+// always reads it (enabled/locked/type/tags/labels/status derive from it, and abstract-component
+// filtering depends on metadata.type), independent of which columns are displayed — see
+// enrichUniqueComponentMetadata in pkg/list/extract/components.go. Returns nil (full eager
+// evaluation, the historical behavior) whenever RequiredSections can't statically prove which
+// sections are safe to skip.
+func resolveComponentsEvalSections(atmosConfig *schema.AtmosConfiguration, opts *ComponentsOptions) []string {
+	defer perf.Track(nil, "list.components.resolveComponentsEvalSections")()
+
+	columns := getComponentColumns(atmosConfig, opts.Columns)
+	sections, ok := column.RequiredSections(columns)
+	if !ok {
+		return nil
+	}
+	return column.EnsureSection(sections, "metadata")
 }
 
 // getComponentColumns returns column configuration for unique components listing.

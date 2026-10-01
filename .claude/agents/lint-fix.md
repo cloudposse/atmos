@@ -37,12 +37,12 @@ fix — skip it with that reason, same as any other out-of-scope finding.
 2. **Read the surrounding code** — understand why the linter flagged it before changing anything.
 3. **Fix what's genuinely fixable within scope** — edit the flagged code to satisfy the rule.
 4. **Skip what isn't** — see "When to skip" below. Skipping with a clear reason is correct
-   behavior, not a failure.
+    behavior, not a failure.
 5. **Re-run the same lint command** you were given output from, to confirm the fixed findings are
-   gone and no new ones were introduced.
+    gone and no new ones were introduced.
 6. **Build and test the affected packages** — `go build ./<pkg>/...` and `go test ./<pkg>/...` for
-   each package containing a fixed finding, not the whole repo — to confirm the fix doesn't break
-   anything.
+    each package containing a fixed finding, not the whole repo — to confirm the fix doesn't break
+    anything.
 7. **Report a clear summary**: what was fixed, what was skipped and why.
 
 ## When to skip (don't force a fix)
@@ -59,7 +59,7 @@ State the reason plainly in your summary. Don't silently drop a finding.
 
 ## Guardrails (CLAUDE.md, mandatory)
 
-- Use `gofumpt`/`goimports` formatting conventions — this repo enforces `gofumpt`, not plain
+- Use `gofumpt`/`gci` formatting conventions — this repo enforces `gofumpt`, not plain
   `gofmt`.
 - Preserve existing comments; never delete one without a strong reason.
 - Follow the repo's error-handling conventions (static sentinel errors in `errors/errors.go`,

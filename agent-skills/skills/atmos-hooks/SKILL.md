@@ -4,11 +4,13 @@ description: "Atmos hooks: lifecycle events, hook kinds, command/store/git/secur
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ci-automation
 ---
 
 # Atmos Hooks
 
-Use this skill for lifecycle hooks that run before or after component operations.
+Use this skill for lifecycle hooks that run before or after component operations,
+or for generation hooks declared in a scaffold template.
 
 Hooks can run scanners, policy checks, store writes, Git actions, custom commands, or other
 toolchain-aware automation around Terraform, Helm, Kubernetes, and other component commands.
@@ -19,6 +21,7 @@ toolchain-aware automation around Terraform, Helm, Kubernetes, and other compone
 |---|---|
 | Store output hooks | [atmos-stores](../atmos-stores/SKILL.md) |
 | Shared step fields and `kind: step` payloads | [atmos-steps](../atmos-steps/SKILL.md) |
+| Post-deployment smoke tests and integration checks | [atmos-tests](../atmos-tests/SKILL.md) |
 | Git hooks and GitOps repositories | [atmos-git](../atmos-git/SKILL.md) |
 | Tool installation for hook commands | [atmos-toolchain](../atmos-toolchain/SKILL.md) |
 | CI summaries and Atmos Pro upload | [atmos-ci](../atmos-ci/SKILL.md) and [atmos-pro](../atmos-pro/SKILL.md) |
@@ -50,7 +53,7 @@ components:
 Modern dotted event names such as `after.terraform.plan` are preferred. Legacy hyphenated event
 names may appear in older stacks; modernize them when editing nearby config.
 
-## Common Events
+## Lifecycle Events
 
 Use before/after events for component operations, for example:
 
@@ -59,9 +62,19 @@ Use before/after events for component operations, for example:
 - `before.terraform.apply`, `after.terraform.apply`
 - `before.terraform.deploy`, `after.terraform.deploy`
 - `before.terraform.test`, `after.terraform.test`
+- `before.terraform.output`, `after.terraform.output` — fires for `atmos terraform output`,
+  useful for backfilling a store from already-deployed infrastructure without an `apply`
+- `before.terraform.refresh`, `after.terraform.refresh`
 
-Check local docs when using Helm, Kubernetes, or newly added component families because event names
-follow the component command surface.
+Kubernetes provides `before`/`after` events for `render`, `diff`/`plan`, `apply`/`deploy`,
+`delete`, and `validate`. Native Helm provides `template`, `diff`, `apply`/`deploy`, and
+`delete`; Helmfile provides `template`, `diff`, `apply`/`sync`/`deploy`, and `destroy`.
+Use the canonical dotted events and remember that command aliases normalize to their execution
+event (`deploy` to `apply`, Kubernetes `plan` to `diff`, and Helmfile `sync` to `apply`).
+
+Scaffold templates use the separate `before.scaffold.generate` and
+`after.scaffold.generate` events. They reuse the condition vocabulary but can run only
+`kind: step` and `kind: steps`; do not configure stack-only kinds in `spec.hooks`.
 
 Multi-component DAG runs (e.g. `--affected`, `--query`, or workflows that fan out across several
 components) also fire aggregate events once for the whole run, in addition to the per-component
@@ -90,8 +103,11 @@ See [atmos-workflows](../atmos-workflows/SKILL.md#conditional-execution-with-whe
 
 ## Hook Kinds
 
-Common hook kinds include `command`, `store`, `git`, `infracost`, `trivy`, `checkov`, and `kics`.
-Use the specific kind when Atmos has one; use `command` for project-specific scripts.
+Stack lifecycle hooks support `command`, `store`, `git`, `infracost`, `trivy`, `checkov`,
+`kics`, and the step bridge. The legacy `ci.*` hook kinds still parse but are deprecated no-ops;
+use the current CI provider bindings instead. Use a named kind when Atmos has one; use `command`
+for a project-specific binary. The legacy `command:` discriminator and hyphenated events remain
+compatibility input only; author new configuration with `kind:` and dotted events.
 
 Hooks can use `dependencies.tools` so required scanners or CLIs are installed and placed on `PATH`
 for the hook execution context.
@@ -108,7 +124,13 @@ recordings use, instead of one of the named kinds above:
   configure it with `with:`, exactly like a workflow step.
 - `kind: steps` runs an ordered list of registered step types, provided as a YAML list under `with:`.
 
-Both run strictly in order -- there is no concurrent execution within a step-backed hook.
+Hook step lists run in order. A `type: test` group can contain `parallel` or
+`matrix` checks; see [atmos-tests](../atmos-tests/SKILL.md).
+
+The hook envelope owns `events`, `when`, `env`, `retry`, and `on_failure`; `with:` is
+decoded and validated as the step's own configuration. `kind: step` supplies the one
+step type through the hook's `type:`; `kind: steps` supplies type-bearing objects in its
+ordered `with:` list.
 
 ```yaml
 hooks:
@@ -137,6 +159,36 @@ Use `kind: step`/`kind: steps` when you need a registered step type (`container`
 `require`, `atmos`, `shell`, and other types workflows support) inside a hook; use the older named
 kinds (`trivy`, `checkov`, `kics`, `infracost`) when Atmos already ships a purpose-built scanner
 integration for the job.
+
+### Working directory in `kind: step`/`kind: steps`
+
+A step's relative paths (`source`, `destination`, `path`, `files`, `context`, and other
+step-specific fields) resolve against `with: { working_directory: ... }` when set, or the
+component's own working directory when unset. This is the only surface where `working_directory`
+is ever component-relative -- workflows and custom commands always resolve relative values against
+the current working directory, since neither is scoped to a single component.
+
+An explicit `working_directory:` value resolves differently depending on its shape:
+
+| Value | Resolves against |
+|---|---|
+| Not set | The component's working directory (a provisioned/vendored working copy when one exists, otherwise the in-repo source directory) |
+| `.`, `..`, `./foo`, `../foo` | The directory Atmos was run from |
+| `foo`, `foo/bar` | The component's working directory + `foo` (or `foo/bar`) |
+| `/absolute/path` | Used as-is |
+
+A plain relative value (`foo`) behaves like the unset default -- component-relative. A `./`- or
+`../`-prefixed value is an explicit signal to anchor to the directory Atmos was run from instead.
+
+Scaffold hooks (`before.scaffold.generate`/`after.scaffold.generate`) follow the same shape, but
+anchor to the scaffold's target/output directory (`atmos scaffold generate <template> <target>`'s
+`target`) instead of a component's working directory -- there is no component in a scaffold run.
+An unset or bare-relative `working_directory:` defaults to/anchors under `target`; the target
+directory is also exposed to hook templates as `{{ .TargetPath }}`. Use `working_directory: "."`
+to opt back into running the hook in the directory Atmos was launched from. This default excludes
+`type: atmos` steps: a nested `atmos` invocation must keep resolving its own atmos.yaml/stacks
+against the directory Atmos was launched from, so it keeps the ambient cwd unless
+`working_directory:` is set explicitly.
 
 ## Operational Guidance
 

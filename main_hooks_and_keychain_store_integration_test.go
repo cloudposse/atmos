@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/otiai10/copy"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/store/providers"
 )
 
 // TestMainHooksAndKeychainStoreIntegration proves end-to-end, with no cloud credentials and no
@@ -44,9 +45,22 @@ func TestMainHooksAndKeychainStoreIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get current working directory: %v", err)
 	}
-	defer os.RemoveAll(filepath.Join(origDir, "tests", "fixtures", "scenarios", "hooks-keychain-test", ".terraform"))
 
-	t.Chdir("tests/fixtures/scenarios/hooks-keychain-test")
+	// Deploy into an isolated copy of the fixture, never the checked-out
+	// source tree directly: `atmos terraform deploy` below writes real
+	// .terraform/ and .tfstate.d/ state to disk, and other tests (e.g.
+	// internal/exec's setupDescribeAffectedTest) copy the entire repository
+	// -- including this fixture -- into their own temp dir concurrently, since
+	// `go test ./...` runs separate packages as separate processes. Writing
+	// state in place raced that concurrent read on Windows, whose mandatory
+	// file locking turns the race into "the process cannot access the file
+	// because another process has locked a portion of the file" instead of a
+	// silently-stale read.
+	fixtureSrc := filepath.Join(origDir, "tests", "fixtures", "scenarios", "hooks-keychain-test")
+	fixtureDir := t.TempDir()
+	require.NoError(t, copy.Copy(fixtureSrc, fixtureDir))
+
+	t.Chdir(fixtureDir)
 
 	// This integration test calls run() (not main()) to avoid os.Exit() which panics in Go 1.25+.
 	// run() returns an exit code instead of calling os.Exit().
@@ -63,7 +77,7 @@ func TestMainHooksAndKeychainStoreIntegration(t *testing.T) {
 
 	// Round-trip: read the value back through a keychain store constructed with the same options.
 	// This asserts the hook persisted the exact content, not merely that a deploy succeeded.
-	s, err := store.NewKeychainStore(&store.KeychainStoreOptions{Backend: "file"})
+	s, err := providers.NewKeychainStore(&providers.KeychainStoreOptions{Backend: "file"})
 	require.NoError(t, err)
 	got, err := s.Get("test", "component1", "random_id")
 	require.NoError(t, err)

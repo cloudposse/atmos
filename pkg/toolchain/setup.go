@@ -44,10 +44,7 @@ func GetAtmosConfig() *schema.AtmosConfiguration {
 func GetToolVersionsFilePath() string {
 	defer perf.Track(nil, "toolchain.GetToolVersionsFilePath")()
 
-	if atmosConfig == nil || atmosConfig.Toolchain.VersionsFile == "" {
-		return DefaultToolVersionsFilePath
-	}
-	return atmosConfig.Toolchain.VersionsFile
+	return resolveVersionsFilePath(atmosConfig)
 }
 
 // GetInstallPath returns the path where tools are installed.
@@ -65,7 +62,7 @@ func GetInstallPath() string {
 
 	// If explicitly configured, use that path
 	if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
-		return atmosConfig.Toolchain.InstallPath
+		return projectPath(atmosConfig.Toolchain.InstallPath)
 	}
 
 	// Try to use XDG-compliant cache directory (well-known cache root sub-path).
@@ -85,4 +82,16 @@ func GetInstallPath() string {
 
 	// Last resort: just return the constant
 	return DefaultInstallPath
+}
+
+// projectPath anchors configured paths before any child process changes CWD.
+func projectPath(path string) string {
+	return configuredProjectPath(atmosConfig, path)
+}
+
+func configuredProjectPath(config *schema.AtmosConfiguration, path string) string {
+	if config != nil && config.BasePathAbsolute != "" && !filepath.IsAbs(path) {
+		return filepath.Join(config.BasePathAbsolute, path)
+	}
+	return path
 }

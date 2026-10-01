@@ -1,7 +1,12 @@
 package exec
 
 import (
+	"fmt"
+	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
@@ -18,8 +23,32 @@ func componentMetadata(stackInfo *schema.ConfigAndStacksInfo) map[string]any {
 	return metadata
 }
 
+// anySlice converts a []string to []any. The deferred-merge machinery's isSlice/mergeSlices
+// (pkg/merge/merge_yaml_functions.go) only recognize []any — the same generic representation every
+// other post-merge YAML function's JSON-decoded result naturally has — so a resolved !tags/
+// !labels.keys/!labels.values value must be in that shape for deep-merging against a concrete
+// override at the same path to work (see #2888: a []string value fell into the "simple type,
+// highest precedence wins" branch instead, discarding the function's own contribution).
+func anySlice(s []string) []any {
+	result := make([]any, len(s))
+	for i, v := range s {
+		result[i] = v
+	}
+	return result
+}
+
+// anyMap converts a map[string]string to map[string]any. See anySlice's doc comment: the
+// deferred-merge machinery's isMap/mergeDeferredMaps only recognize map[string]any.
+func anyMap(m map[string]string) map[string]any {
+	result := make(map[string]any, len(m))
+	for k, v := range m {
+		result[k] = v
+	}
+	return result
+}
+
 // processTagTags processes the !tags YAML function.
-// It returns the current component's own metadata.tags as a []string.
+// It returns the current component's own metadata.tags as a []any of strings.
 // The function takes no parameters and returns an empty list if metadata.tags is unset.
 //
 // Usage in YAML:
@@ -29,25 +58,45 @@ func processTagTags(atmosConfig *schema.AtmosConfiguration, _ string, stackInfo 
 	defer perf.Track(atmosConfig, "exec.processTagTags")()
 
 	metadata := componentMetadata(stackInfo)
-	return tags.ToStringSlice(metadata["tags"])
+	return anySlice(tags.ToStringSlice(metadata["tags"]))
 }
 
 // processTagLabels processes the !labels YAML function.
-// It returns the current component's own metadata.labels as a map[string]string.
-// The function takes no parameters and returns an empty map if metadata.labels is unset.
+// Without arguments it returns the current component's metadata.labels as a map.
+// With a key it returns that label's string value, an explicit fallback, or an error.
 //
 // Usage in YAML:
 //
 //	labels: !labels
-func processTagLabels(atmosConfig *schema.AtmosConfiguration, _ string, stackInfo *schema.ConfigAndStacksInfo) any {
+func processTagLabels(atmosConfig *schema.AtmosConfiguration, input string, stackInfo *schema.ConfigAndStacksInfo) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagLabels")()
 
+	args, err := fnparser.ParseLabels(strings.TrimSpace(strings.TrimPrefix(input, "!labels")))
+	if err != nil {
+		return nil, fmt.Errorf("%w: !labels: %w", errUtils.ErrInvalidArguments, err)
+	}
 	metadata := componentMetadata(stackInfo)
-	return tags.ToStringMap(metadata["labels"])
+	labels := tags.ToStringMap(metadata["labels"])
+	if args.Key == nil {
+		return anyMap(labels), nil
+	}
+	if value, ok := labels[*args.Key]; ok {
+		return value, nil
+	}
+	if args.Default != nil {
+		return *args.Default, nil
+	}
+	missing := errUtils.Build(errUtils.ErrLabelNotFound).
+		WithExplanationf("The !labels function could not find metadata.labels[%q].", *args.Key).
+		WithHint("Define the label or supply a fallback: !labels key default")
+	if stackInfo != nil {
+		missing = missing.WithContext("component", stackInfo.ComponentFromArg).WithContext("stack", stackInfo.Stack)
+	}
+	return nil, missing.Err()
 }
 
 // processTagLabelsKeys processes the !labels.keys YAML function.
-// It returns the current component's own metadata.labels keys as a sorted []string.
+// It returns the current component's own metadata.labels keys as a sorted []any of strings.
 // The function takes no parameters and returns an empty list if metadata.labels is unset.
 //
 // Usage in YAML:
@@ -57,12 +106,12 @@ func processTagLabelsKeys(atmosConfig *schema.AtmosConfiguration, _ string, stac
 	defer perf.Track(atmosConfig, "exec.processTagLabelsKeys")()
 
 	metadata := componentMetadata(stackInfo)
-	return tags.SortedKeys(tags.ToStringMap(metadata["labels"]))
+	return anySlice(tags.SortedKeys(tags.ToStringMap(metadata["labels"])))
 }
 
 // processTagLabelsValues processes the !labels.values YAML function.
 // It returns the current component's own metadata.labels values as a
-// []string, ordered by key for deterministic output.
+// []any of strings, ordered by key for deterministic output.
 // The function takes no parameters and returns an empty list if metadata.labels is unset.
 //
 // Usage in YAML:
@@ -72,5 +121,5 @@ func processTagLabelsValues(atmosConfig *schema.AtmosConfiguration, _ string, st
 	defer perf.Track(atmosConfig, "exec.processTagLabelsValues")()
 
 	metadata := componentMetadata(stackInfo)
-	return tags.SortedValues(tags.ToStringMap(metadata["labels"]))
+	return anySlice(tags.SortedValues(tags.ToStringMap(metadata["labels"])))
 }

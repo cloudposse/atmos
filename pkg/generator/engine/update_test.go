@@ -1,0 +1,650 @@
+package engine
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	cockroachErrors "github.com/cockroachdb/errors"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
+	"github.com/cloudposse/atmos/pkg/generator/merge"
+	"github.com/cloudposse/atmos/pkg/generator/storage"
+)
+
+// gitTestRepo holds common test repository setup.
+type gitTestRepo struct {
+	tmpDir     string
+	configPath string
+	processor  *Processor
+}
+
+// setupGitTestRepo creates a git repository with an initial commit and user modifications.
+func setupGitTestRepo(t *testing.T, initialContent, userContent string) *gitTestRepo {
+	t.Helper()
+
+	const fileName = "config.yaml"
+	tmpDir := t.TempDir()
+
+	// Initialize git repository.
+	repo, err := git.PlainInit(tmpDir, false)
+	require.NoError(t, err)
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	// Create initial file and commit (this is the "base").
+	configPath := filepath.Join(tmpDir, fileName)
+	err = os.WriteFile(configPath, []byte(initialContent), 0o644)
+	require.NoError(t, err)
+
+	_, err = worktree.Add(fileName)
+	require.NoError(t, err)
+
+	_, err = worktree.Commit("Initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test",
+			Email: "test@example.com",
+		},
+	})
+	require.NoError(t, err)
+
+	// User modifies the file.
+	err = os.WriteFile(configPath, []byte(userContent), 0o644)
+	require.NoError(t, err)
+
+	// Create processor and setup git storage.
+	processor := NewProcessor()
+	err = processor.SetupGitStorage(tmpDir, "HEAD")
+	require.NoError(t, err)
+
+	return &gitTestRepo{
+		tmpDir:     tmpDir,
+		configPath: configPath,
+		processor:  processor,
+	}
+}
+
+// TestProcessorWithGitStorage tests the full update workflow with git storage.
+func TestProcessorWithGitStorage(t *testing.T) {
+	initialContent := "# Config\nversion: 1.0\nname: test\n"
+	userContent := "# Config\nversion: 1.0\nname: test\n\n# User's custom section\ncustom: value\n"
+
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+
+	// Simulate template update (new version adds a new section).
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "# Config\nversion: 2.0\nname: test\n\n# New feature from template\nfeature: enabled\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	// Process file in update mode.
+	err := testRepo.processor.ProcessFile(templateFile, testRepo.tmpDir, false, true, nil, nil)
+	require.NoError(t, err)
+
+	// Read result.
+	mergedContent, err := os.ReadFile(testRepo.configPath)
+	require.NoError(t, err)
+
+	merged := string(mergedContent)
+
+	// Verify merge results.
+	// Should have: new version (from template), user's custom section, and new feature.
+	assert.Contains(t, merged, "version: 2.0", "Should have new version from template")
+	assert.Contains(t, merged, "custom: value", "Should preserve user's custom section")
+	assert.Contains(t, merged, "feature: enabled", "Should have new feature from template")
+}
+
+// TestProcessorWithGitStorage_UserAddedFile tests that user-added files are not touched.
+func TestProcessorWithGitStorage_UserAddedFile(t *testing.T) {
+	// Create a temporary directory for our git repo
+	tmpDir := t.TempDir()
+
+	// Initialize git repository
+	repo, err := git.PlainInit(tmpDir, false)
+	require.NoError(t, err)
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	// Create and commit a README file (this exists in base)
+	readmePath := filepath.Join(tmpDir, "README.md")
+	err = os.WriteFile(readmePath, []byte("# Project\n"), 0o644)
+	require.NoError(t, err)
+
+	_, err = worktree.Add("README.md")
+	require.NoError(t, err)
+
+	_, err = worktree.Commit("Initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test",
+			Email: "test@example.com",
+		},
+	})
+	require.NoError(t, err)
+
+	// User adds a custom file (NOT in git base)
+	customPath := filepath.Join(tmpDir, "custom.yaml")
+	customContent := "# User's custom file\ncustom: true\n"
+	err = os.WriteFile(customPath, []byte(customContent), 0o644)
+	require.NoError(t, err)
+
+	// Create processor and setup git storage
+	processor := NewProcessor()
+	err = processor.SetupGitStorage(tmpDir, "HEAD")
+	require.NoError(t, err)
+
+	// Template tries to create a file with same name
+	templateFile := File{
+		Path:        "custom.yaml",
+		Content:     "# Template file\ntemplate: value\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	// Process file in update mode
+	err = processor.ProcessFile(templateFile, tmpDir, false, true, nil, nil)
+	// Should succeed (file is skipped, not an error)
+	require.NoError(t, err)
+
+	// Read result - should still be user's content
+	resultContent, err := os.ReadFile(customPath)
+	require.NoError(t, err)
+
+	// Verify user's file was NOT modified
+	assert.Equal(t, customContent, string(resultContent), "User's custom file should not be modified")
+	assert.NotContains(t, string(resultContent), "template: value", "Should not contain template content")
+}
+
+// TestProcessorWithoutGitStorage tests that update mode requires git storage.
+func TestProcessorWithoutGitStorage(t *testing.T) {
+	// Create a temporary directory (NOT a git repo)
+	tmpDir := t.TempDir()
+
+	// Create existing file
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	err := os.WriteFile(configPath, []byte("version: 1.0\n"), 0o644)
+	require.NoError(t, err)
+
+	// Create processor (git storage setup will silently fail, that's OK)
+	processor := NewProcessor()
+	err = processor.SetupGitStorage(tmpDir, "main")
+	// Should NOT error - just won't have git storage
+	require.NoError(t, err)
+
+	// Template file
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "version: 2.0\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	// Process file in update mode should fail without git storage.
+	// This is a security/correctness measure: without git, we can't compute a meaningful
+	// 3-way merge base, so the merge would be a no-op.
+	err = processor.ProcessFile(templateFile, tmpDir, false, true, nil, nil)
+	require.Error(t, err, "Update mode should require git storage")
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge, "Should return ErrThreeWayMerge")
+}
+
+// TestProcessorWithGitStorage_TemplateFile tests merging with template processing (IsTemplate=true).
+func TestProcessorWithGitStorage_TemplateFile(t *testing.T) {
+	initialContent := "# Config\nversion: 1.0\n"
+	userContent := "# Config\nversion: 1.0\ncustom: user-value\n"
+
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+
+	// Template file with IsTemplate=true.
+	// Using simple Go template syntax that doesn't require variables.
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "# Config\nversion: 2.0\nfeature: enabled\n",
+		IsTemplate:  true, // This will trigger template processing code path.
+		Permissions: 0o644,
+	}
+
+	// Process file in update mode.
+	err := testRepo.processor.ProcessFile(templateFile, testRepo.tmpDir, false, true, nil, nil)
+	require.NoError(t, err)
+
+	// Read result.
+	mergedContent, err := os.ReadFile(testRepo.configPath)
+	require.NoError(t, err)
+
+	merged := string(mergedContent)
+
+	// Verify merge results.
+	assert.Contains(t, merged, "version: 2.0", "Should have new version from template")
+	assert.Contains(t, merged, "custom: user-value", "Should preserve user's custom value")
+	assert.Contains(t, merged, "feature: enabled", "Should have new feature from template")
+}
+
+// TestProcessorWithGitStorage_MergeConflict tests conflict detection.
+func TestProcessorWithGitStorage_MergeConflict(t *testing.T) {
+	initialContent := "setting: original\n"
+	userContent := "setting: user-change\n"
+
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+
+	// Template also modifies the same setting (conflict!).
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	// Process file in update mode - should detect conflict.
+	err := testRepo.processor.ProcessFile(templateFile, testRepo.tmpDir, false, true, nil, nil)
+
+	// Should error due to conflict or merge failure.
+	assert.Error(t, err)
+	// The error could be either "merge conflict" (if conflicts detected after merge)
+	// or "three-way merge failed" (if merge fails during execution).
+	errorMsg := err.Error()
+	assert.True(t,
+		strings.Contains(errorMsg, "merge conflict") || strings.Contains(errorMsg, "three-way merge failed"),
+		"Error should mention merge conflict or three-way merge failure, got: %s", errorMsg)
+}
+
+func TestProcessorSetMaxChangesAndDirectMerge(t *testing.T) {
+	processor := NewProcessor()
+	processor.SetMaxChanges(100)
+
+	result, err := processor.Merge("name: old\n", "name: user\n", "name: template\n", "config.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.HasConflicts)
+	assert.Contains(t, result.Content, "name: user")
+}
+
+func TestProcessorSetMergeDriverForcesTextMerge(t *testing.T) {
+	processor := NewProcessor()
+	processor.SetMaxChanges(100)
+	processor.SetMergeDriver(merge.DriverText)
+
+	t.Run("identical inputs are returned unchanged", func(t *testing.T) {
+		base := "key: value\n\nother: 1\n"
+		result, err := processor.Merge(base, base, base, "config.yaml")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.False(t, result.HasConflicts)
+		assert.Equal(t, base, result.Content)
+	})
+
+	t.Run("diverging theirs merges cleanly and preserves blank lines", func(t *testing.T) {
+		base := "servers:\n- name: web\n\nsettings:\n  timeout: 30\n"
+		ours := base
+		theirs := "servers:\n- name: web\n\nsettings:\n  timeout: 30\n\ntasks:\n- name: setup\n"
+
+		result, err := processor.Merge(base, ours, theirs, "config.yaml")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.False(t, result.HasConflicts)
+		assert.Equal(t, theirs, result.Content, "text driver should merge cleanly and preserve blank lines")
+	})
+}
+
+func TestProcessorSetupGitStorageInvalidBaseRef(t *testing.T) {
+	repoDir := t.TempDir()
+	repo, err := git.PlainInit(repoDir, false)
+	require.NoError(t, err)
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+	configPath := filepath.Join(repoDir, "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("name: demo\n"), 0o644))
+	_, err = worktree.Add("config.yaml")
+	require.NoError(t, err)
+	_, err = worktree.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{Name: "Test", Email: "test@example.com"},
+	})
+	require.NoError(t, err)
+
+	processor := NewProcessor()
+	err = processor.SetupGitStorage(repoDir, "missing-ref")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidBaseRef)
+	// A failed SetupGitStorage call must not leave the Processor's state
+	// half-mutated: targetPath/baseStorage should remain at their zero values.
+	assert.Empty(t, processor.targetPath)
+	assert.Nil(t, processor.baseStorage)
+}
+
+func TestProcessorMergeFileReadError(t *testing.T) {
+	processor := NewProcessor()
+
+	err := processor.mergeFile(filepath.Join(t.TempDir(), "missing.yaml"), File{Path: "missing.yaml", Permissions: 0o644}, t.TempDir())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrReadFile)
+}
+
+func TestProcessorMergeFileTemplateProcessingError(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "{{",
+		IsTemplate:  true,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTemplateExecution)
+}
+
+func TestProcessorDetermineBaseContentWithoutGitStorage(t *testing.T) {
+	processor := NewProcessor()
+
+	_, shouldSkip, err := processor.determineBaseContent(File{Path: "config.yaml"}, filepath.Join(t.TempDir(), "config.yaml"))
+
+	require.Error(t, err)
+	assert.False(t, shouldSkip)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+func TestProcessorDetermineBaseContentRelFallback(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+	testRepo.processor.targetPath = "relative"
+
+	base, shouldSkip, err := testRepo.processor.determineBaseContent(File{Path: "config.yaml"}, testRepo.configPath)
+
+	require.NoError(t, err)
+	assert.False(t, shouldSkip)
+	assert.Equal(t, initialContent, base)
+}
+
+// TestProcessorSetupGitStorage_CorruptedRepoError covers the branch where
+// git.PlainOpenWithOptions fails with an error other than git.ErrRepositoryNotExists.
+func TestProcessorSetupGitStorage_CorruptedRepoError(t *testing.T) {
+	repoDir := t.TempDir()
+	// A .git that exists but is not a valid object database triggers an open
+	// error distinct from "repository does not exist".
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, ".git"), []byte("not a real git dir"), 0o644))
+
+	processor := NewProcessor()
+	err := processor.SetupGitStorage(repoDir, "HEAD")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+	assert.NotErrorIs(t, err, git.ErrRepositoryNotExists)
+}
+
+// TestProcessorMergeFile_DetermineBaseContentErrorPropagates covers mergeFile's
+// propagation of a determineBaseContent error (as opposed to testing
+// determineBaseContent in isolation). The base storage is pointed at a
+// nonexistent ref by bypassing SetupGitStorage's own ref validation, so
+// LoadBase fails when mergeFile calls into it.
+func TestProcessorMergeFile_DetermineBaseContentErrorPropagates(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	repo, err := git.PlainOpen(testRepo.tmpDir)
+	require.NoError(t, err)
+	testRepo.processor.baseStorage = storage.NewGitBaseStorage(repo, "nonexistent-ref")
+
+	templateFile := File{Path: "config.yaml", Content: "name: template\n", Permissions: 0o644}
+	err = testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestProcessorMergeFile_TemplateProcessingSuccess covers the success path of
+// template processing inside mergeFile (IsTemplate: true with content that
+// renders cleanly), as opposed to the existing failure-path-only coverage.
+func TestProcessorMergeFile_TemplateProcessingSuccess(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "name: demo # rendered via a valid, variable-free template\n",
+		IsTemplate:  true,
+		Permissions: 0o644,
+	}
+
+	mergeErr := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.NoError(t, mergeErr)
+
+	mergedContent, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(mergedContent), "name: demo")
+}
+
+// TestProcessorMergeFile_ConflictBranchReturnsError raises the merge threshold
+// so that a genuine conflict is not rejected earlier by TextMerger's own
+// threshold check (ErrMergeThresholdExceeded); this isolates mergeFile's own
+// result.HasConflicts branch (ErrMergeConflict).
+func TestProcessorMergeFile_ConflictBranchReturnsError(t *testing.T) {
+	initialContent := "setting: original\n"
+	userContent := "setting: user-change\n"
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+	testRepo.processor.SetMaxChanges(100)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	// The conflict branch must still write the merged content — with real
+	// conflict markers and any non-conflicting changes — instead of leaving
+	// the file completely untouched (the original bug: a non-zero exit with
+	// an explicit error, but nothing on disk to actually resolve).
+	written, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	writtenContent := string(written)
+	assert.Contains(t, writtenContent, "<<<<<<< Ours")
+	assert.Contains(t, writtenContent, "user-change")
+	assert.Contains(t, writtenContent, "=======")
+	assert.Contains(t, writtenContent, "template-change")
+	assert.Contains(t, writtenContent, ">>>>>>> Theirs")
+}
+
+// TestProcessorMergeFile_ConflictBranchDryRunDoesNotWrite verifies dry-run
+// still reports the conflict (mergeFile returns the same error) but never
+// touches the file on disk, matching the clean-merge path's dry-run behavior.
+func TestProcessorMergeFile_ConflictBranchDryRunDoesNotWrite(t *testing.T) {
+	initialContent := "setting: original\n"
+	userContent := "setting: user-change\n"
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+	testRepo.processor.SetMaxChanges(100)
+	testRepo.processor.SetDryRun(true)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	written, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, userContent, string(written), "dry-run must not modify the file even on conflict")
+}
+
+// TestProcessorMergeFile_RejectsUnresolvedMarkers verifies mergeFile fails
+// fast with a specific error when the existing file already contains
+// unresolved conflict markers from a previous --update, instead of
+// re-attempting a merge against corrupted "ours" content and surfacing
+// whatever opaque failure that produces (a YAML parse error, in this case,
+// but TextMerger has no syntax requirement on its inputs and would silently
+// garble the result rather than error at all).
+func TestProcessorMergeFile_RejectsUnresolvedMarkers(t *testing.T) {
+	initialContent := "setting: original\n"
+	unresolvedContent := "<<<<<<< Ours\nsetting: user-change\n=======\nsetting: template-change\n>>>>>>> Theirs\n"
+	testRepo := setupGitTestRepo(t, initialContent, unresolvedContent)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	// This is a fail-fast check, not another merge attempt -- the file must
+	// be left completely untouched.
+	written, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, unresolvedContent, string(written))
+}
+
+// TestProcessorMergeFile_DocumentStreamConflictHasNoMarkers covers a
+// YAMLMerger conflict that has no ours/theirs node pair to splice inline
+// markers from: a multi-document stream where the user's stream dropped a
+// document the template went on to change.
+//
+// That case is recorded as a conflict (HasConflicts) but keeps the
+// template's version verbatim instead of inserting <<<<<<< Ours markers
+// (HasMarkers is false), so mergeFile must reflect that in its hint instead
+// of claiming markers were written when none exist in the file.
+func TestProcessorMergeFile_DocumentStreamConflictHasNoMarkers(t *testing.T) {
+	initialContent := "doc: one\n---\ndoc: two\n"
+	userContent := "doc: one\n"
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+	testRepo.processor.SetMaxChanges(100)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "doc: one\n---\ndoc: two\ntemplate: true\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	hints := cockroachErrors.GetAllHints(err)
+	for _, h := range hints {
+		assert.NotContains(t, h, "have been written to the file",
+			"no inline markers exist for this conflict, so the hint must not claim they were written")
+	}
+	assert.Contains(t, hints, "The template's version was kept for the conflicting item(s); review the file to confirm it's what you want")
+
+	// The template's version of the dropped document is kept verbatim -- no
+	// conflict markers appear anywhere in the written file.
+	written, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	writtenContent := string(written)
+	assert.NotContains(t, writtenContent, "<<<<<<<")
+	assert.Contains(t, writtenContent, "template: true")
+}
+
+// TestProcessorMergeFile_ConflictWriteFailurePropagates forces
+// newAtomicWriteFS's underlying WriteFileAtomic to fail via a mock
+// filesystem.FileSystem, and asserts the conflict-markers write failure
+// (mergeFile's first writeFileSecure call) surfaces as ErrFileWrite instead
+// of the conflict succeeding silently. Reaching a real disk write failure at
+// this exact step is impractical to trigger portably (existingPath must
+// remain a valid, readable regular file through the earlier os.ReadFile, then
+// fail specifically at the write) -- see newAtomicWriteFS's doc comment.
+func TestProcessorMergeFile_ConflictWriteFailurePropagates(t *testing.T) {
+	initialContent := "setting: original\n"
+	userContent := "setting: user-change\n"
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+	testRepo.processor.SetMaxChanges(100)
+
+	original := newAtomicWriteFS
+	injectedErr := errors.New("injected write failure")
+	ctrl := gomock.NewController(t)
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().WriteFileAtomic(gomock.Any(), gomock.Any(), gomock.Any()).Return(injectedErr)
+	newAtomicWriteFS = func() filesystem.FileSystem { return mockFS }
+	t.Cleanup(func() { newAtomicWriteFS = original })
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFileWrite)
+}
+
+// TestProcessorMergeFile_CleanWriteFailurePropagates is the clean-merge
+// counterpart of TestProcessorMergeFile_ConflictWriteFailurePropagates: no
+// conflicts, so mergeFile takes its second writeFileSecure call instead.
+func TestProcessorMergeFile_CleanWriteFailurePropagates(t *testing.T) {
+	initialContent := "setting: original\nkey1: v1\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	original := newAtomicWriteFS
+	injectedErr := errors.New("injected write failure")
+	ctrl := gomock.NewController(t)
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().WriteFileAtomic(gomock.Any(), gomock.Any(), gomock.Any()).Return(injectedErr)
+	newAtomicWriteFS = func() filesystem.FileSystem { return mockFS }
+	t.Cleanup(func() { newAtomicWriteFS = original })
+
+	// Template changes a different key: no conflict, so the merge takes the
+	// clean-write path (mergeFile's second writeFileSecure call).
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: original\nkey1: v2\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFileWrite)
+}
+
+// TestProcessorDetermineBaseContent_LoadBaseError covers LoadBase returning a
+// non-nil error (as opposed to the found=true and gitStorage==nil cases
+// already covered), by pointing base storage at an unresolvable ref.
+func TestProcessorDetermineBaseContent_LoadBaseError(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	repo, err := git.PlainOpen(testRepo.tmpDir)
+	require.NoError(t, err)
+	testRepo.processor.baseStorage = storage.NewGitBaseStorage(repo, "nonexistent-ref")
+
+	_, shouldSkip, err := testRepo.processor.determineBaseContent(File{Path: "config.yaml"}, testRepo.configPath)
+
+	require.Error(t, err)
+	assert.False(t, shouldSkip)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}

@@ -10,6 +10,8 @@ import (
 )
 
 func TestMatchesPlatform(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		overrideGOOS string
@@ -86,6 +88,7 @@ func TestMatchesPlatform(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := matchesPlatform(tt.overrideGOOS, tt.overrideArch, tt.goos, tt.goarch)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -93,6 +96,8 @@ func TestMatchesPlatform(t *testing.T) {
 }
 
 func TestApplyOverride(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		tool          *registry.Tool
@@ -209,6 +214,7 @@ func TestApplyOverride(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			applyOverride(tt.tool, &tt.override)
 
 			assert.Equal(t, tt.expectedAsset, tt.tool.Asset)
@@ -226,6 +232,8 @@ func TestApplyOverride(t *testing.T) {
 }
 
 func TestApplyPlatformOverrides_NoOverrides(t *testing.T) {
+	t.Parallel()
+
 	tool := &registry.Tool{
 		Asset:  "original-asset",
 		Format: "tar.gz",
@@ -238,6 +246,8 @@ func TestApplyPlatformOverrides_NoOverrides(t *testing.T) {
 }
 
 func TestApplyPlatformOverrides_FirstMatchWins(t *testing.T) {
+	t.Parallel()
+
 	// Create overrides where both could potentially match, but first should win.
 	tool := &registry.Tool{
 		Asset:  "original-asset",
@@ -265,6 +275,8 @@ func TestApplyPlatformOverrides_FirstMatchWins(t *testing.T) {
 }
 
 func TestApplyPlatformOverrides_NoMatchingOverride(t *testing.T) {
+	t.Parallel()
+
 	tool := &registry.Tool{
 		Asset:  "original-asset",
 		Format: "tar.gz",
@@ -285,6 +297,8 @@ func TestApplyPlatformOverrides_NoMatchingOverride(t *testing.T) {
 }
 
 func TestApplyPlatformOverrides_WildcardGOOSMatch(t *testing.T) {
+	t.Parallel()
+
 	tool := &registry.Tool{
 		Asset:  "original-asset",
 		Format: "tar.gz",
@@ -303,6 +317,8 @@ func TestApplyPlatformOverrides_WildcardGOOSMatch(t *testing.T) {
 }
 
 func TestApplyPlatformOverrides_WildcardGOARCHMatch(t *testing.T) {
+	t.Parallel()
+
 	tool := &registry.Tool{
 		Asset:  "original-asset",
 		Format: "tar.gz",
@@ -321,6 +337,8 @@ func TestApplyPlatformOverrides_WildcardGOARCHMatch(t *testing.T) {
 }
 
 func TestMatchesOverride_WithEnvs(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		override registry.Override
@@ -398,6 +416,7 @@ func TestMatchesOverride_WithEnvs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := matchesOverride(&tt.override, tt.goos, tt.goarch)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -405,6 +424,8 @@ func TestMatchesOverride_WithEnvs(t *testing.T) {
 }
 
 func TestApplyPlatformOverrides_WithEnvs(t *testing.T) {
+	t.Parallel()
+
 	// Test that overrides with Envs field work with ApplyPlatformOverrides.
 	currentOS := runtime.GOOS
 	currentArch := runtime.GOARCH

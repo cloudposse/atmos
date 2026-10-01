@@ -72,6 +72,11 @@ func TestDetectRuntime_EnvVariable_Comprehensive(t *testing.T) {
 			expectError: false, // Falls back to auto-detection.
 		},
 		{
+			name:        "auto selects by availability",
+			envValue:    "auto",
+			expectError: false, // Falls back to auto-detection.
+		},
+		{
 			name:        "case sensitive - Docker (uppercase)",
 			envValue:    "Docker",
 			expectError: true,
@@ -195,7 +200,8 @@ func TestDetectRuntime_AutoDetection(t *testing.T) {
 		// At least one runtime available.
 		require.NotNil(t, runtime)
 		runtimeType := GetRuntimeType(runtime)
-		assert.True(t,
+		assert.True(
+			t,
 			runtimeType == TypeDocker || runtimeType == TypePodman,
 			"runtime should be Docker or Podman",
 		)

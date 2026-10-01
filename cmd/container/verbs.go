@@ -7,12 +7,36 @@ import (
 	"github.com/cloudposse/atmos/pkg/tags"
 )
 
+// componentPromptParsers owns the positional parser for required, single-target
+// verbs. Bulk and optional-component verbs keep their dedicated target picker.
+var componentPromptParsers = map[*cobra.Command]*flags.StandardParser{}
+
 // newVerbCmd builds a container subcommand that takes a required `component`
 // positional argument and dispatches to the container component provider. The
 // positional-args validator is separator-aware: pass-through args after "--"
 // (used by `exec`) are not counted as positional args.
 func newVerbCmd(name, short, long string) *cobra.Command {
-	return buildVerbCmd(name, short, long, false, false)
+	cmd := buildVerbCmd(name, short, long, false, false)
+
+	argsBuilder := flags.NewPositionalArgsBuilder()
+	argsBuilder.AddArg(&flags.PositionalArgSpec{
+		Name:           "component",
+		Description:    "Container component",
+		Required:       true,
+		TargetField:    "Component",
+		CompletionFunc: componentArgCompletion,
+		PromptTitle:    "Choose a container component",
+	})
+	specs, validator, usage := argsBuilder.Build()
+
+	parser := flags.NewStandardParser(
+		flags.WithPositionalArgPrompt("component", "Choose a container component", componentArgCompletion),
+	)
+	parser.SetPositionalArgs(specs, validator, usage)
+	parser.RegisterFlags(cmd)
+	componentPromptParsers[cmd] = parser
+
+	return cmd
 }
 
 // newBulkVerbCmd builds a lifecycle subcommand that can operate on a single
@@ -56,7 +80,7 @@ func buildVerbCmd(name, short, long string, optionalArg, withAllFlag bool) *cobr
 		parser := flags.NewStandardParser(
 			flags.WithBoolFlag("all", "", false, "Operate on all container components in all stacks (scope to one stack with --stack)"),
 			flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
-			flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+			flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
 		)
 		parser.RegisterFlags(cmd)
 

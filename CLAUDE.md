@@ -25,6 +25,7 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 
 - **NEVER delete, reset, or discard files you didn't create** - Other sessions may have created them
 - **NEVER run `git reset`, `git checkout --`, or `git clean`** without explicit user approval
+- **NEVER run `go clean`**. In particular, `go clean -cache` deletes the shared Go build cache and breaks concurrent builds; it is not an approved troubleshooting step.
 - **ALWAYS ask the user before removing untracked files** - They may be work-in-progress from another session
 - **When you see unfamiliar files**, assume another session created them - ask the user what to do
 - **If pre-commit hooks fail due to files you didn't touch**, ask the user how to proceed rather than trying to fix or remove them
@@ -33,7 +34,7 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 
 ## Hourly PR Maintenance Loop (RECOMMENDED)
 
-On a branch with an open PR, use the **`pr-maintenance-loop`** skill (`.claude/skills/pr-maintenance-loop/SKILL.md`) to start an hourly `/loop` that works the PR toward merge-ready: rebases against `main` when behind, checks CI, addresses and resolves unresolved CodeRabbit threads, and runs the patch-scoped `lint` and `test-coverage` skills. This loop is session-only — it dies with the process and expires after 7 days — so re-invoke the skill each new session; it is not a one-time setup. For a single on-demand pass without starting a recurring loop, invoke the **`fix-all`** skill directly (also mirrored at the CLI as `atmos fix --all`).
+On a branch with an open PR, use the **`pr-maintenance-loop`** skill (`.claude/skills/pr-maintenance-loop/SKILL.md`) to start an hourly `/loop` that works the PR toward merge-ready: rebases against `main` when behind, checks CI, addresses and resolves unresolved CodeRabbit threads, and runs the patch-scoped `lint`, `test-coverage`, and `code-hygiene` skills. This loop is session-only — it dies with the process and expires after 7 days — so re-invoke the skill each new session; it is not a one-time setup. For a single on-demand pass without starting a recurring loop, invoke the **`fix-all`** skill directly (also mirrored at the CLI as `atmos fix --all`).
 
 ## Essential Commands
 
@@ -164,7 +165,7 @@ Three groups separated by blank lines, sorted alphabetically:
 Maintain aliases: `cfg`, `log`, `u`, `errUtils`
 
 ### Go Formatting (MANDATORY)
-Use `gofumpt`, not `gofmt`, when formatting Go files. The repository enables `gofumpt` and `goimports` in `.golangci.yml`; using plain `gofmt` can leave files inconsistent with CI.
+Use `gofumpt`, not `gofmt`, when formatting Go files. The repository enables `gofumpt` and `gci` in `.golangci.yml`; using plain `gofmt` can leave files inconsistent with CI.
 
 ### Performance Tracking (MANDATORY)
 Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public functions. Use `nil` if no atmosConfig param.
@@ -239,7 +240,7 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 ## Testing
 
-**Preconditions**: Tests skip gracefully with helpers from `tests/test_preconditions.go`. See `docs/prd/testing-strategy.md`.
+**Preconditions**: Tests skip gracefully with helpers from `tests/preconditions.go`. See `docs/prd/testing-strategy.md`.
 
 **Commands**: `atmos test` (quick), `atmos test --full` (all), `atmos test --coverage` (coverage)
 
@@ -447,5 +448,5 @@ NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Hooks run
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at `specs/001-pact-consumer-contracts/plan.md`
+at `specs/003-fix-upload-component-name/plan.md`
 <!-- SPECKIT END -->

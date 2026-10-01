@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
@@ -121,4 +122,76 @@ func TestSetComponentManifestVersion_PreservesFormatting(t *testing.T) {
 	v, err := atmosyaml.GetFile(file, "spec.source.version")
 	require.NoError(t, err)
 	assert.Equal(t, "v2.0.0", v)
+}
+
+// TestResolveComponentPath covers the resolution contract: an absolute path for an existing
+// component directory, ErrComponentDirNotFound for a missing or non-directory path (the
+// missing-path case flows through u.IsDirectory's os.Stat error, not the !dirExists branch),
+// and ErrUnsupportedComponentType for unknown component types.
+func TestResolveComponentPath(t *testing.T) {
+	base := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(base, "components", "terraform", "vpc"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(base, "components", "terraform", "file.txt"), []byte("x"), 0o644))
+	config := &schema.AtmosConfiguration{BasePath: base}
+	config.Components.Terraform.BasePath = filepath.Join("components", "terraform")
+
+	t.Run("existing directory resolves to an absolute path", func(t *testing.T) {
+		resolved, err := ResolveComponentPath(config, "vpc", "terraform")
+		require.NoError(t, err)
+		assert.True(t, filepath.IsAbs(resolved))
+		assert.Equal(t, filepath.Join(base, "components", "terraform", "vpc"), resolved)
+	})
+
+	t.Run("missing directory returns ErrComponentDirNotFound", func(t *testing.T) {
+		_, err := ResolveComponentPath(config, "missing", "terraform")
+		require.ErrorIs(t, err, errUtils.ErrComponentDirNotFound)
+	})
+
+	t.Run("regular file returns ErrComponentDirNotFound", func(t *testing.T) {
+		_, err := ResolveComponentPath(config, "file.txt", "terraform")
+		require.ErrorIs(t, err, errUtils.ErrComponentDirNotFound)
+	})
+
+	t.Run("unsupported component type is rejected", func(t *testing.T) {
+		_, err := ResolveComponentPath(config, "vpc", "ansible2")
+		require.ErrorIs(t, err, errUtils.ErrUnsupportedComponentType)
+	})
+
+	t.Run("absolute component path is rejected", func(t *testing.T) {
+		_, err := ResolveComponentPath(config, filepath.Join(base, "components", "terraform", "vpc"), "terraform")
+		require.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	})
+
+	t.Run("parent-directory traversal is rejected", func(t *testing.T) {
+		_, err := ResolveComponentPath(config, filepath.Join("..", "..", "..", "outside"), "terraform")
+		require.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	})
+
+	t.Run("in-base symlink to an outside directory is rejected", func(t *testing.T) {
+		outside := t.TempDir()
+		require.NoError(t, os.MkdirAll(outside, 0o755))
+
+		linkPath := filepath.Join(base, "components", "terraform", "linked")
+		if err := os.Symlink(outside, linkPath); err != nil {
+			t.Skipf("Skipping: os.Symlink not available on this platform (%v)", err)
+		}
+		t.Cleanup(func() { _ = os.Remove(linkPath) })
+
+		_, err := ResolveComponentPath(config, "linked", "terraform")
+		require.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	})
+
+	t.Run("a path-stat failure other than not-exist wraps ErrResolveComponentPath", func(t *testing.T) {
+		// A self-referential symlink makes os.Stat (via u.IsDirectory) fail with "too many
+		// links" (not os.IsNotExist), exercising the resolve-failure branch distinct from
+		// ErrComponentDirNotFound -- proves callers can identify it with errors.Is.
+		loopPath := filepath.Join(base, "components", "terraform", "loop")
+		if err := os.Symlink(loopPath, loopPath); err != nil {
+			t.Skipf("Skipping: os.Symlink not available on this platform (%v)", err)
+		}
+		t.Cleanup(func() { _ = os.Remove(loopPath) })
+
+		_, err := ResolveComponentPath(config, "loop", "terraform")
+		require.ErrorIs(t, err, errUtils.ErrResolveComponentPath)
+	})
 }

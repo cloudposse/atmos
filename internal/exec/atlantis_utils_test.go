@@ -7,6 +7,8 @@ import (
 )
 
 func TestBuildAtlantisProjectNameFromComponentConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		atmosConfig     schema.AtmosConfiguration
@@ -74,6 +76,7 @@ func TestBuildAtlantisProjectNameFromComponentConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := BuildAtlantisProjectNameFromComponentConfig(&tt.atmosConfig, tt.configAndStacks)
 
 			if (err != nil) != tt.expectedErr {

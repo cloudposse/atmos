@@ -4,6 +4,7 @@ description: "Atmos root configuration: atmos.yaml discovery, precedence, deep m
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: core-config
 references:
   - references/sections-reference.md
 ---

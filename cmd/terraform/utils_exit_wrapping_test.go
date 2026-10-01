@@ -44,6 +44,8 @@ import (
 // errUtils.GetExitCode extracts the wrapped code, which is exactly what
 // runHooksOnErrorWithOutput does in production.
 func TestExecuteShellCommand_ErrorWrapsExitCodeError_AtCmdTerraformBoundary(t *testing.T) {
+	t.Parallel()
+
 	exePath, err := os.Executable()
 	require.NoError(t, err, "os.Executable() must succeed")
 
@@ -63,7 +65,8 @@ func TestExecuteShellCommand_ErrorWrapsExitCodeError_AtCmdTerraformBoundary(t *t
 	// The error reaching runHooksOnErrorWithOutput must remain wrapped as
 	// ExitCodeError — this is the contract the CI hook plumbing depends on.
 	var exitCodeErr errUtils.ExitCodeError
-	require.True(t,
+	require.True(
+		t,
 		errors.As(cmdErr, &exitCodeErr),
 		"cmdErr passed into runHooksOnErrorWithOutput must satisfy errors.As(err, &errUtils.ExitCodeError{}); got %T: %v", cmdErr, cmdErr,
 	)
@@ -95,7 +98,8 @@ func TestExecuteShellCommand_ErrorWrapsExitCodeError_AtCmdTerraformBoundary(t *t
 	// The wrapper contract must hold AT the boundary plugins see, not just at
 	// the cmd/terraform layer. A future refactor that copies/wraps cmdErr
 	// before placing it in the options would lose this property.
-	require.True(t,
+	require.True(
+		t,
 		errors.As(opts.CommandError, &exitCodeErr),
 		"options.CommandError must still satisfy errors.As(err, &errUtils.ExitCodeError{}); got %T", opts.CommandError,
 	)

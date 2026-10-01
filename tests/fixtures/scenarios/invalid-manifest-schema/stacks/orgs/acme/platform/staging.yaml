@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Deliberately violates the atmos-manifest JSON Schema a different way than
+# dev.yaml: `settings.templates` must be an object, but is a string here.
+# Exercises a second file with a distinct violation type/location, to see
+# whether `validate stacks` reports both files or stops at the first.
+
+vars:
+  stage: staging
+
+settings:
+  templates: "this must be an object per the schema"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.1.0.0/16"

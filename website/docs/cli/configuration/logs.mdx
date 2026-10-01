@@ -26,19 +26,19 @@ logs:
   file: "/dev/stderr"
   # Supported log levels: Trace, Debug, Info, Warning, Off
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
-  level: Info
+  level: Warning
 ```
 </File>
 
 <dl>
   <dt>`logs.file`</dt>
   <dd>
-    The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`. If omitted, `/dev/stdout` will be used. Can also be set using `ATMOS_LOGS_FILE` environment variable.
+    The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`. If omitted, `/dev/stderr` will be used so logs never contaminate pipeable command output on stdout. Can also be set using `ATMOS_LOGS_FILE` environment variable.
   </dd>
 
   <dt>`logs.level`</dt>
   <dd>
-    Log level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log any messages (note that this does not prevent other tools like Terraform from logging). Can also be set using `ATMOS_LOGS_LEVEL` environment variable.
+    Log level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If omitted, `Warning` will be used, so informational messages are hidden unless requested. The default changed from `Info` to `Warning` in the 2025-09 [edition](/cli/configuration/edition); to keep the old verbosity, set `logs.level: Info` explicitly or pin `edition: "2025-08"`. If the log level is set to `Off`, Atmos will not log any messages (note that this does not prevent other tools like Terraform from logging). Can also be set using `ATMOS_LOGS_LEVEL` environment variable.
   </dd>
 </dl>
 

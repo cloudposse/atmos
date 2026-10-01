@@ -6,6 +6,7 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/safenum"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -42,6 +43,14 @@ func (h *LogHandler) Execute(ctx context.Context, step *schema.WorkflowStep, var
 	// Build structured fields from step.Fields map.
 	keyvals := h.buildKeyvals(step, vars)
 
+	if vars.OutputWriters.Stderr != nil {
+		if len(keyvals) == 0 {
+			vars.UI().Writef("%s %s\n", log.LevelToString(level), content)
+		} else {
+			vars.UI().Writef("%s %s %v\n", log.LevelToString(level), content, keyvals)
+		}
+		return NewStepResult(content), nil
+	}
 	// Log at the appropriate level with structured fields.
 	switch level {
 	case log.TraceLevel:
@@ -85,12 +94,7 @@ func (h *LogHandler) buildKeyvals(step *schema.WorkflowStep, vars *Variables) []
 // Each field becomes 2 entries (key + value), so we need fieldsLen*2 capacity.
 // Returns min(fieldsLen*2, maxCapacity) without risk of overflow.
 func safeKeyvalsCapacity(fieldsLen, maxCapacity int) int {
-	// If fieldsLen would cause overflow when doubled, use maxCapacity.
-	// maxCapacity/2 is the largest safe input for doubling.
-	if fieldsLen > maxCapacity/2 {
-		return maxCapacity
-	}
-	return fieldsLen * 2
+	return safenum.Cap(fieldsLen, fieldsLen, maxCapacity)
 }
 
 // getLogLevel parses a log level string.

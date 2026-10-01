@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Shared configuration imported by every stack.
+#
+# Put settings that all stacks should inherit here: global variables,
+# terraform settings, backend configuration, and component defaults.
+# Stacks import this file and can override anything it defines.
+
+# Variables shared by all stacks. For example:
+#
+# vars:
+#   namespace: acme
+vars: {}

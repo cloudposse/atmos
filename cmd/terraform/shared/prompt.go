@@ -401,7 +401,14 @@ func listStacksForComponent(cmd *cobra.Command, component string) ([]string, err
 	return stacks, nil
 }
 
-// stackContainsComponent checks if a stack contains the specified terraform component.
+// stackContainsComponent checks if a stack contains the specified component, under
+// any component type section (terraform, aws/cloudformation, helmfile, packer,
+// container, kubernetes, helm, etc). This function is reused by StackFlagCompletion
+// for commands whose components aren't terraform (e.g. `atmos aws cloudformation`),
+// so it must not assume a single component type -- checking only "terraform" would
+// silently find zero matches for every other component type, which empties out
+// StackFlagCompletion's filtered branch instead of returning the stacks that
+// actually contain the component.
 func stackContainsComponent(stackData any, component string) bool {
 	stackMap, ok := stackData.(map[string]any)
 	if !ok {
@@ -411,12 +418,16 @@ func stackContainsComponent(stackData any, component string) bool {
 	if !ok {
 		return false
 	}
-	terraform, ok := components["terraform"].(map[string]any)
-	if !ok {
-		return false
+	for _, typeSection := range components {
+		typeMap, ok := typeSection.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, hasComponent := typeMap[component]; hasComponent {
+			return true
+		}
 	}
-	_, hasComponent := terraform[component]
-	return hasComponent
+	return false
 }
 
 // listAllStacks returns all stacks.

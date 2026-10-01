@@ -1,6 +1,16 @@
 # Demonstrates using Atmos auth identities with stores.
 # Each store references an identity for credential resolution.
 
+base_path: "./"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
 auth:
   providers:
     acme-sso:
@@ -42,6 +52,14 @@ auth:
       principal:
         project_id: acme-prod-123456
 
+    # A local AWS emulator identity -- unlike prod-admin/azure-prod/gcp-prod above, this one is
+    # real and running. It lets the store CRUD commands in the recorded demo actually execute,
+    # with no real AWS account needed.
+    local-aws:
+      kind: aws/emulator
+      emulator: local/aws
+      default: true
+
 # Stores with identity-based authentication.
 # Each store uses a named identity instead of the default credential chain.
 stores:
@@ -63,3 +81,11 @@ stores:
     identity: gcp-prod
     options:
       project_id: acme-prod-123456
+
+  # Backed by the local-aws emulator identity above -- real CRUD works against this one.
+  local/ssm:
+    kind: aws/ssm
+    identity: local-aws
+    options:
+      region: us-east-1
+      prefix: /atmos/demo

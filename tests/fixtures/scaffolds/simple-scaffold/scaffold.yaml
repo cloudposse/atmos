@@ -1,0 +1,32 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: simple-scaffold
+  description: Simple configuration for scaffold template
+  version: 1.0.0
+spec:
+  fields:
+    - name: name
+      type: input
+      label: Name
+      description: The name of your scaffold template
+      default: my-simple-project
+      required: true
+      placeholder: Enter name
+    - name: author
+      type: input
+      label: Author
+      description: Your name or organization
+      default: ""
+      required: true
+      placeholder: Your name
+    - name: environment
+      type: select
+      label: Environment
+      description: The environment this project will run in
+      default: dev
+      required: true
+      options:
+        - dev
+        - staging
+        - prod

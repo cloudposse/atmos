@@ -16,7 +16,7 @@ func (h *ContainerHandler) validatePushAction(step *schema.WorkflowStep) error {
 		return err
 	}
 	if !isValidContainerRuntime(push.Provider) {
-		return invalidContainerField(step, "push.provider", push.Provider, "Provider must be `docker`, `podman`, or empty for auto-detect")
+		return invalidContainerField(step, "push.provider", push.Provider, "Provider must be `auto`, `docker`, `podman`, or empty for auto-detect")
 	}
 	return nil
 }

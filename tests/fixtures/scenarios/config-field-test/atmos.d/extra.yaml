@@ -1,0 +1,26 @@
+# Fragment merged automatically from atmos.d/. Only exists in the merged
+# (`atmos describe config`) view -- `atmos config get/set` targets the root
+# atmos.yaml file only, so a value defined ONLY here should not be visible
+# to those edit commands. Used to field-test that gap.
+#
+# logs.level here is a decoy, not the actual test: root atmos.yaml also sets
+# logs.level (to Info) and root's explicit value always wins over this
+# fragment, so this key does NOT demonstrate root-vs-merged visibility on its
+# own. settings.list_merge_strategy below is the real test, since it has no
+# counterpart in root atmos.yaml at all.
+#
+# settings.list_merge_strategy specifically (not an arbitrary custom key) --
+# atmos.yaml's root `settings:` decodes into the strongly-typed AtmosSettings
+# struct, which has no catch-all field, so an arbitrary key like the
+# fragment_only_setting this fixture previously used here is silently
+# dropped during merge/decode and never appears anywhere, not even in
+# `describe config`. list_merge_strategy is a real AtmosSettings field, so it
+# actually survives the merge and is visible via `describe config` while
+# staying invisible to `config get/set` -- confirmed live: `atmos describe
+# config -q .settings.list_merge_strategy` returns "append" from here, while
+# `atmos config get settings.list_merge_strategy` reports not found.
+logs:
+  level: Debug
+
+settings:
+  list_merge_strategy: "append"

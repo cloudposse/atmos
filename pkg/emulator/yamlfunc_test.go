@@ -37,7 +37,7 @@ func testEndpoint() *Endpoint {
 		Host:   "localhost",
 		Ports:  map[int]int{4566: 34566},
 		NetworkIPs: map[string]string{
-			"atmos-emulator-dev": "172.20.0.2",
+			"atmos-dev": "172.20.0.2",
 		},
 		Region:  "us-east-1",
 		Project: "demo-project",

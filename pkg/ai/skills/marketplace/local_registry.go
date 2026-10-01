@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -23,15 +24,16 @@ type LocalRegistry struct {
 
 // InstalledSkill represents an installed community skill.
 type InstalledSkill struct {
-	Name        string    `json:"name"`
-	DisplayName string    `json:"display_name"`
-	Source      string    `json:"source"`  // e.g., "github.com/user/repo".
-	Version     string    `json:"version"` // e.g., "1.2.3".
-	InstalledAt time.Time `json:"installed_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	Path        string    `json:"path"`       // Absolute path to skill directory.
-	IsBuiltIn   bool      `json:"is_builtin"` // Always false for community skills.
-	Enabled     bool      `json:"enabled"`    // Can disable without uninstalling.
+	Name            string    `json:"name"`
+	DisplayName     string    `json:"display_name"`
+	Source          string    `json:"source"`  // e.g., "github.com/user/repo".
+	Version         string    `json:"version"` // e.g., "1.2.3".
+	InstalledAt     time.Time `json:"installed_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	Path            string    `json:"path"`                        // Absolute path to skill directory.
+	IsBuiltIn       bool      `json:"is_builtin"`                  // Always false for community skills.
+	Enabled         bool      `json:"enabled"`                     // Can disable without uninstalling.
+	MinAtmosVersion string    `json:"min_atmos_version,omitempty"` // Parsed from SKILL.md's compatibility.atmos, e.g. "1.0.0"; empty if the skill declared none.
 }
 
 // NewLocalRegistry creates or loads the local skill registry.
@@ -52,7 +54,12 @@ func NewLocalRegistry() (*LocalRegistry, error) {
 	// Load existing registry if it exists.
 	if _, err := os.Stat(registryPath); err == nil {
 		if err := registry.load(); err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrRegistryCorrupted, err)
+			return nil, errUtils.Build(ErrRegistryCorrupted).
+				WithCause(err).
+				WithExplanationf("Failed to parse the skill registry at %s", registryPath).
+				WithHintf("Delete or repair the corrupted file: `rm %s`", registryPath).
+				WithHint("Atmos will recreate an empty registry on next run; you'll need to reinstall any previously-installed skills.").
+				Err()
 		}
 	} else {
 		// Create new registry file.
@@ -203,4 +210,19 @@ func GetSkillsDir() (string, error) {
 	}
 
 	return filepath.Join(homeDir, ".atmos", "skills"), nil
+}
+
+// ResolveSkillsDir returns the directory where skill files should be installed,
+// honoring an explicit override (e.g. from --path / ATMOS_AI_SKILL_PATH). A relative
+// override is resolved against the current working directory. When override is
+// empty, delegates to GetSkillsDir().
+func ResolveSkillsDir(override string) (string, error) {
+	if override == "" {
+		return GetSkillsDir()
+	}
+	abs, err := filepath.Abs(override)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve skills directory override %q: %w", override, err)
+	}
+	return abs, nil
 }

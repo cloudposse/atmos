@@ -5,10 +5,12 @@ package workdir
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -118,6 +120,7 @@ func TestLoadMetadataWithReadLockUnix_InvalidJSON(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, metadata)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
+	assert.Equal(t, 1, strings.Count(err.Error(), errUtils.ErrWorkdirMetadata.Error()))
 }
 
 func TestLoadMetadataWithReadLockUnix_ReadError(t *testing.T) {
@@ -131,6 +134,7 @@ func TestLoadMetadataWithReadLockUnix_ReadError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, metadata)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
+	assert.Equal(t, 1, strings.Count(err.Error(), errUtils.ErrWorkdirMetadata.Error()))
 }
 
 func TestLoadMetadataWithReadLockUnix_ConcurrentReads(t *testing.T) {
@@ -168,4 +172,74 @@ func TestLoadMetadataWithReadLockUnix_ConcurrentReads(t *testing.T) {
 
 	wg.Wait()
 	assert.GreaterOrEqual(t, successCount, 1, "at least one read should succeed")
+}
+
+// TestWithMetadataFileLockUnix_LockUnavailable exercises the lock-failure branch of withMetadataFileLockUnix.
+// The gofrs/flock library opens lock files with O_CREATE|O_RDONLY rather than O_RDWR, so occupying the lock path with a directory does not fail: open(2) on a directory with O_RDONLY succeeds, and flock(2) on a directory fd succeeds too, so that variant does not force a failure here.
+// Instead, like pkg/cache/filelock_unix_test.go's TestWithLock_InvalidLockPath, this test points the metadata file at a path whose parent directory does not exist: O_CREATE then fails immediately with ENOENT, so the lock is never acquired and the 500ms context timeout never needs to elapse.
+func TestWithMetadataFileLockUnix_LockUnavailable(t *testing.T) {
+	tmpDir := t.TempDir()
+	metadataFile := filepath.Join(tmpDir, "missing-dir", "metadata.json")
+
+	called := false
+	start := time.Now()
+	err := withMetadataFileLockUnix(metadataFile, func() error {
+		called = true
+		return nil
+	})
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
+	assert.False(t, called, "fn must not run when the lock cannot be acquired")
+	assert.Less(t, elapsed, 400*time.Millisecond, "should fail fast without waiting on the 500ms timeout")
+}
+
+// TestLoadMetadataWithReadLockUnix_LockUnavailable exercises the
+// "!acquired && err != nil" branch of loadMetadataWithReadLockUnix. That
+// branch is distinct from the "!acquired && err == nil" contended-without-
+// error path already exercised by TestLoadMetadataWithReadLockUnix_ConcurrentReads.
+// As in TestWithMetadataFileLockUnix_LockUnavailable above, a directory at
+// the lock path does not force an error here (gofrs/flock opens read-only,
+// which succeeds against a directory). Instead, point the metadata file at a
+// path whose parent directory does not exist, so the open() call inside
+// TryWithRLock fails immediately with ENOENT (a hard error) rather than the
+// internal try-lock timeout merely expiring without an error - deterministically
+// forcing the hard-error variant.
+func TestLoadMetadataWithReadLockUnix_LockUnavailable(t *testing.T) {
+	tmpDir := t.TempDir()
+	metadataFile := filepath.Join(tmpDir, "missing-dir", "metadata.json")
+
+	metadata, err := loadMetadataWithReadLockUnix(metadataFile)
+
+	require.Error(t, err)
+	assert.Nil(t, metadata)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
+}
+
+// TestLoadMetadataWithReadLockUnix_ContendedNoError exercises the
+// "!acquired && err == nil" branch (the "return nil, nil" contended-read
+// path). This is genuinely distinct from both LockUnavailable tests above:
+// here the lock file opens fine but is already held exclusively by another
+// holder, so TryWithRLock's internal try-lock timeout expires without an
+// OS-level error. The existing goroutine-based TestLoadMetadataWithReadLockUnix_ConcurrentReads
+// doesn't reliably hit this branch because shared (read) locks don't
+// contend with each other, so this test forces it deterministically by
+// holding a separate exclusive lock, matching the style of
+// pkg/cache/filelock_unix_test.go's TestTryWithRLock_SkipsContendedRead.
+func TestLoadMetadataWithReadLockUnix_ContendedNoError(t *testing.T) {
+	tmpDir := t.TempDir()
+	metadataFile := filepath.Join(tmpDir, "metadata.json")
+	require.NoError(t, os.WriteFile(metadataFile, []byte(`{}`), 0o644))
+
+	blocker := flock.New(metadataFile + ".lock")
+	locked, err := blocker.TryLock()
+	require.NoError(t, err)
+	require.True(t, locked, "blocker should acquire the exclusive lock")
+	defer func() { _ = blocker.Unlock() }()
+
+	metadata, err := loadMetadataWithReadLockUnix(metadataFile)
+
+	require.NoError(t, err)
+	assert.Nil(t, metadata)
 }

@@ -18,6 +18,12 @@ const (
 	DefaultMaxSessions = 40
 	// DefaultRetentionDays is the default number of days to retain sessions.
 	DefaultRetentionDays = 30
+	// RetentionUnset signals that the caller did not explicitly request a
+	// retention period, so CleanOldSessions falls back to DefaultRetentionDays.
+	// This is distinct from an explicit retentionDays of 0, which now means
+	// "delete all sessions immediately" (no positive retention window) —
+	// a plain int can't otherwise tell "unset" and "explicitly zero" apart.
+	RetentionUnset = -1
 )
 
 // Manager handles session lifecycle and operations.
@@ -372,8 +378,11 @@ func (m *Manager) DeleteSession(ctx context.Context, id string) error {
 }
 
 // CleanOldSessions removes sessions older than the specified duration.
+// A negative retentionDays (see RetentionUnset) means "not specified" and
+// falls back to DefaultRetentionDays. A retentionDays value of 0 is honored
+// literally: the cutoff is "now", so every existing session is deleted.
 func (m *Manager) CleanOldSessions(ctx context.Context, retentionDays int) (int, error) {
-	if retentionDays <= 0 {
+	if retentionDays < 0 {
 		retentionDays = DefaultRetentionDays
 	}
 

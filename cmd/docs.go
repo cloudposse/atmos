@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
@@ -16,6 +17,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -96,9 +98,17 @@ var docsCmd = &cobra.Command{
 				return err
 			}
 
+			styleOption := glamour.WithAutoStyle()
+			if lipgloss.ColorProfile() == termenv.Ascii {
+				style, err := markdown.GetPlainTextStyle()
+				if err != nil {
+					return err
+				}
+				styleOption = glamour.WithStylesFromJSONBytes(style)
+			}
 			r, err := glamour.NewTermRenderer(
 				glamour.WithColorProfile(lipgloss.ColorProfile()),
-				glamour.WithAutoStyle(),
+				styleOption,
 				glamour.WithPreservedNewLines(),
 				glamour.WithWordWrap(screenWidth),
 			)

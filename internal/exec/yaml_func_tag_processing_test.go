@@ -461,3 +461,51 @@ func TestProcessTagTemplate_JSONHandling(t *testing.T) {
 		})
 	}
 }
+
+// TestMatchesTag_NonWhitespaceSeparators covers cloudposse/atmos#2778: a tag
+// value with no whitespace between the tag name and its content (e.g. produced
+// when a Go template `{{-` trim marker eats the separating newline) must still
+// be recognized, as long as the following character isn't a valid tag-name
+// continuation character.
+func TestMatchesTag_NonWhitespaceSeparators(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		prefix   string
+		expected bool
+	}{
+		{"space separator", "!template {}", "!template", true},
+		{"tab separator", "!template\t{}", "!template", true},
+		{"newline separator", "!template\n{}", "!template", true},
+		{"no separator before bracket", `!template["one","two"]`, "!template", true},
+		{"no separator before brace", `!template{"a":1}`, "!template", true},
+		{"no separator before quote", `!template"hello"`, "!template", true},
+		{"exact match, no content", "!template", "!template", true},
+		{"unrelated longer tag name not matched", "!templated", "!template", false},
+		{"no match at all", "!env FOO", "!template", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, matchesTag(tt.input, tt.prefix))
+		})
+	}
+}
+
+// TestProcessNodes_TemplateTagNoSeparator covers cloudposse/atmos#2778: when Go
+// template rendering trims the whitespace between the !template tag and its
+// content (e.g. via a `{{-` trim marker), processNodes must still decode the
+// resulting value instead of leaving it as a literal string.
+func TestProcessNodes_TemplateTagNoSeparator(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	data := map[string]any{
+		"generated":     `!template["one","two"]`,
+		"generated_map": `!template{"key":"value"}`,
+	}
+
+	result, err := processNodes(atmosConfig, data, "test-stack", nil, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, []interface{}{"one", "two"}, result["generated"])
+	assert.Equal(t, map[string]interface{}{"key": "value"}, result["generated_map"])
+}

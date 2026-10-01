@@ -92,8 +92,7 @@ stacks:
   included_paths:
     - "deploy/**/*"
   excluded_paths: []
-  name_pattern: "{stage}"
-
+  name_template: "{{.vars.stage}}"
 # Workflows configuration
 workflows:
   base_path: "workflows"

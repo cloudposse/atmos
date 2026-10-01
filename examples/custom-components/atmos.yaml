@@ -4,8 +4,7 @@ stacks:
   base_path: "stacks"
   included_paths:
     - "deploy/**/*"
-  name_pattern: "{stage}"
-
+  name_template: "{{.vars.stage}}"
 components:
   script:
     base_path: "components/script"
@@ -16,13 +15,13 @@ commands:
     arguments:
       - name: component
         description: "Component name"
-        type: component
+        provides: component
         required: true
     flags:
       - name: stack
         shorthand: s
         description: "Stack name"
-        semantic_type: stack
+        provides: stack
         required: true
     component:
       type: script

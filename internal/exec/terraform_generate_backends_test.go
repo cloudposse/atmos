@@ -1143,3 +1143,151 @@ components:
 		assert.True(t, os.IsNotExist(errJSON), "backend.tf.json should not be created when backend_type is missing")
 	})
 }
+
+// TestExecuteTerraformGenerateBackends_ResolvesDeferredMergeContexts is a regression test for
+// #2888: ExecuteTerraformGenerateBackends must recover and resolve this component's deferred-merge
+// contexts (FindStacksMap's third return value) the same way the main describe/plan pipeline does,
+// rather than discarding them. The `backend`/`backend_type` sections generated to disk aren't
+// themselves deferred-merge-tracked (see mergeComponentConfigurations — only vars/settings/env/
+// auth/providers/required_providers/hooks/test/generate are), so this doesn't change backend.tf
+// content; it guards that resolving a deferred !labels function elsewhere in the same component
+// (vars.tags, layered across an import) succeeds without error and doesn't regress backend
+// generation for that component.
+func TestExecuteTerraformGenerateBackends_ResolvesDeferredMergeContexts(t *testing.T) {
+	tempDir := t.TempDir()
+
+	stacksDir := filepath.Join(tempDir, "stacks")
+	catalogDir := filepath.Join(stacksDir, "catalog")
+	require.NoError(t, os.MkdirAll(catalogDir, 0o755))
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# vpc component\n"), 0o644))
+
+	// The catalog layer defines the backend and a deferred !labels function at `vars.tags`; the
+	// top-level stack imports it and layers a conflicting literal map at the same path.
+	catalogContent := `
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          org: acme
+          region: us-east-1
+      backend:
+        s3:
+          bucket: test-bucket
+          key: terraform.tfstate
+      backend_type: s3
+      vars:
+        tags: !labels
+`
+	require.NoError(t, os.WriteFile(filepath.Join(catalogDir, "vpc.yaml"), []byte(catalogContent), 0o644))
+
+	stackContent := `
+import:
+  - catalog/vpc
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      vars:
+        name: test-vpc
+        tags:
+          team: platform
+`
+	stackFile := filepath.Join(stacksDir, "dev.yaml")
+	require.NoError(t, os.WriteFile(stackFile, []byte(stackContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+		Stacks: schema.Stacks{
+			BasePath:    "stacks",
+			NamePattern: "{stage}",
+		},
+		StacksBaseAbsolutePath:        stacksDir,
+		TerraformDirAbsolutePath:      filepath.Join(tempDir, "components", "terraform"),
+		IncludeStackAbsolutePaths:     []string{stacksDir},
+		StackConfigFilesAbsolutePaths: []string{stackFile},
+	}
+
+	err := ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", []string{}, []string{"vpc"})
+	require.NoError(t, err)
+
+	backendTF := filepath.Join(componentDir, "backend.tf")
+	content, err := os.ReadFile(backendTF)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "test-bucket")
+}
+
+// TestExecuteTerraformGenerateBackends_ComponentTemplateContextIncludesAuth is a regression test
+// for a PR #2892 review finding: the ConfigAndStacksInfo.ComponentSection this generator builds
+// used to be a hand-picked subset of sections (vars, metadata, settings, env, providers, hooks,
+// overrides, backend, backend_type) that omitted `auth` entirely. A Go template anywhere in the
+// component — including inside the backend block itself — referencing `.auth...` would silently
+// render empty, unlike the main describe/plan path (processStacks in utils.go), which always
+// snapshots the complete merged component section. This test renders the S3 bucket name from
+// `.auth.role` and asserts the real value made it through.
+func TestExecuteTerraformGenerateBackends_ComponentTemplateContextIncludesAuth(t *testing.T) {
+	tempDir := t.TempDir()
+
+	stacksDir := filepath.Join(tempDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# vpc component\n"), 0o644))
+
+	stackContent := `
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      auth:
+        role: platform-admin
+      backend:
+        s3:
+          bucket: "{{ .auth.role }}-bucket"
+          key: terraform.tfstate
+      backend_type: s3
+`
+	stackFile := filepath.Join(stacksDir, "dev.yaml")
+	require.NoError(t, os.WriteFile(stackFile, []byte(stackContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+		Stacks: schema.Stacks{
+			BasePath:    "stacks",
+			NamePattern: "{stage}",
+		},
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+		StacksBaseAbsolutePath:        stacksDir,
+		TerraformDirAbsolutePath:      filepath.Join(tempDir, "components", "terraform"),
+		IncludeStackAbsolutePaths:     []string{stacksDir},
+		StackConfigFilesAbsolutePaths: []string{stackFile},
+	}
+
+	err := ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", []string{}, []string{"vpc"})
+	require.NoError(t, err)
+
+	backendTF := filepath.Join(componentDir, "backend.tf")
+	content, err := os.ReadFile(backendTF)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "platform-admin-bucket")
+}

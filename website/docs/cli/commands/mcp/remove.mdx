@@ -1,0 +1,47 @@
+---
+title: atmos mcp remove
+sidebar_label: remove
+sidebar_class_name: command
+id: remove
+description: Remove an MCP server from mcp.servers in atmos.yaml
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Use this command to remove an MCP server from `mcp.servers` in `atmos.yaml`.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos mcp remove --help" src="/casts/screengrabs/atmos-mcp-remove--help.cast" static chrome />
+
+## Description
+
+The `atmos mcp remove` command deletes an entry from `mcp.servers` in `atmos.yaml`.
+
+Only `atmos.yaml` is edited — `remove` never touches an AI client's config file. If the server was already pushed to a client via `atmos mcp install`, run [`atmos mcp uninstall`](/cli/commands/mcp/uninstall) separately to remove it there too. This mirrors [`atmos mcp add`](/cli/commands/mcp/add), which only writes `atmos.yaml` by default.
+
+## Usage
+
+```shell
+atmos mcp remove <name> [flags]
+```
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Required. The server name to remove, as it appears under `mcp.servers`.</dd>
+  <dt>`--yes`, `-y`</dt>
+  <dd>Skip the confirmation prompt.</dd>
+</dl>
+
+### Examples
+
+```shell
+# Remove a server, with a confirmation prompt.
+atmos mcp remove aws-docs
+
+# Remove without prompting.
+atmos mcp remove aws-docs --yes
+```

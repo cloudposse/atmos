@@ -13,11 +13,8 @@ components:
 # Global container runtime defaults (the top-level `container:` namespace).
 container:
   runtime:
-    # Auto-init/start the Podman machine when no running runtime is found, so the
-    # example works out of the box on macOS/Linux. Also settable via the
-    # ATMOS_CONTAINER_RUNTIME_AUTO_START env var. With Docker running this is a no-op.
-    auto_start: true
-    # provider: podman   # optional: pin docker|podman (default: auto-detect docker, then podman)
+    provider: auto # optional: auto (default), or pin docker|podman
+    # Auto-start is the default. Set auto_start: false to opt out.
 
 # A composition groups multiple services into one system. Membership is declared
 # per-component via the first-class `composition:` field. The `services:` list is

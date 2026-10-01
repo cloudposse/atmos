@@ -67,6 +67,31 @@ func IsInteractive() bool {
 	return isInteractive()
 }
 
+// runForm executes a Huh form's interactive prompt. A package-level var (rather
+// than calling form.Run() directly) so tests -- including in other packages via
+// SetFormRunnerForTest -- can substitute a fake runner (e.g. accessible mode
+// reading from a string reader, or a canned error) without needing a live TTY.
+// Mirrors the per-package runForm seam pattern used by cmd/secret/prompt_test.go
+// and cmd/store/prompt_test.go; this one is exported because PromptForValue is
+// shared by callers in other packages (e.g. cmd/describe_component.go's
+// resolveDescribeComponentStack) whose own tests need to drive this exact path.
+var runForm = func(f *huh.Form) error {
+	return f.Run()
+}
+
+// SetFormRunnerForTest overrides the Huh form runner used by PromptForValue and
+// returns a restore function. Test-only seam: production code always uses the
+// default (f.Run()); tests substitute this to either drive the real prompt body
+// via Huh's accessible mode (no live TTY required) or inject a canned error to
+// exercise a caller's error-wrapping path.
+func SetFormRunnerForTest(fn func(*huh.Form) error) (restore func()) {
+	defer perf.Track(nil, "flags.SetFormRunnerForTest")()
+
+	orig := runForm
+	runForm = fn
+	return func() { runForm = orig }
+}
+
 // PromptForValue shows an interactive Huh selector with the given options.
 // Returns the selected value or an error.
 //
@@ -107,7 +132,7 @@ func PromptForValue(name, title string, options []string) (string, error) {
 	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
 
 	// Run form.
-	if err := form.Run(); err != nil {
+	if err := runForm(form); err != nil {
 		// Check if user aborted (Ctrl+C, ESC, etc.).
 		if errors.Is(err, huh.ErrUserAborted) {
 			ui.Warning("Selection cancelled")
@@ -129,6 +154,25 @@ func PromptForValue(name, title string, options []string) (string, error) {
 func PromptForMultipleValues(name, title string, options []string) ([]string, error) {
 	defer perf.Track(nil, "flags.PromptForMultipleValues")()
 
+	return promptForMultipleValues(name, title, options, options)
+}
+
+// PromptForMultipleValuesWithPreselection shows an interactive Huh multi-select with the
+// given options, pre-selecting only the names in preselected (nil/empty means none are
+// pre-checked). Returns the selected values or an error. Used when defaulting to "select
+// everything" would be surprising -- e.g. choosing which profiles to activate, where the
+// user should opt in to each one rather than opt out.
+func PromptForMultipleValuesWithPreselection(name, title string, options, preselected []string) ([]string, error) {
+	defer perf.Track(nil, "flags.PromptForMultipleValuesWithPreselection")()
+
+	return promptForMultipleValues(name, title, options, preselected)
+}
+
+// promptForMultipleValues is the shared implementation behind PromptForMultipleValues and
+// PromptForMultipleValuesWithPreselection; only which options start pre-checked differs.
+func promptForMultipleValues(name, title string, options, preselected []string) ([]string, error) {
+	defer perf.Track(nil, "flags.promptForMultipleValues")()
+
 	if !isInteractive() {
 		return nil, errUtils.ErrInteractiveModeNotAvailable
 	}
@@ -137,12 +181,19 @@ func PromptForMultipleValues(name, title string, options []string) ([]string, er
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrNoOptionsAvailable, name)
 	}
 
-	// Pre-select every option so the default action targets all items.
-	choices := make([]string, len(options))
-	copy(choices, options)
+	preselectedSet := make(map[string]bool, len(preselected))
+	for _, p := range preselected {
+		preselectedSet[p] = true
+	}
+
+	var choices []string
 	selectOptions := make([]huh.Option[string], len(options))
 	for i, o := range options {
-		selectOptions[i] = huh.NewOption(o, o).Selected(true)
+		selected := preselectedSet[o]
+		selectOptions[i] = huh.NewOption(o, o).Selected(selected)
+		if selected {
+			choices = append(choices, o)
+		}
 	}
 
 	// Create custom keymap that adds ESC to quit keys.

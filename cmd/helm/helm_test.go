@@ -2,6 +2,7 @@ package helm
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -30,22 +32,39 @@ func TestCommandProviderMetadata(t *testing.T) {
 	for _, cmd := range provider.GetCommand().Commands() {
 		subcommands = append(subcommands, cmd.Name())
 	}
-	assert.ElementsMatch(t, []string{"template", "diff", "plan", "apply", "deploy", "delete", "plugin", "repo"}, subcommands)
+	assert.ElementsMatch(t, []string{"template", "diff", "plan", "values", "apply", "deploy", "delete", "plugin", "repo"}, subcommands)
 }
 
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	templateCmd := newOperationCommand("template", "Render")
-	for _, name := range []string{"all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels"} {
+	for _, name := range []string{"namespace", "all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels", "dependency-update", "values", "set", "set-string", "set-file", "set-json", "set-literal"} {
 		assert.NotNil(t, templateCmd.Flag(name), "expected template flag %q", name)
 	}
 
 	applyCmd := newOperationCommand("apply", "Apply")
-	assert.NotNil(t, applyCmd.Flag("target"))
+	for _, name := range []string{"namespace", "target", "on-failure", "cleanup-on-failure", "wait", "wait-for-jobs", "timeout", "history-max", "no-hooks", "skip-crds", "dependency-update", "values", "set", "set-string", "set-file", "set-json", "set-literal"} {
+		assert.NotNil(t, applyCmd.Flag(name), "expected apply flag %q", name)
+	}
+	assert.Equal(t, "watcher", applyCmd.Flag("wait").NoOptDefVal)
 	assert.Nil(t, applyCmd.Flag("output"))
 	assert.Nil(t, applyCmd.Flag("split"))
+	assert.NotNil(t, applyCmd.ValidArgsFunction)
+	require.NoError(t, applyCmd.Args(applyCmd, nil), "the missing component must reach the interactive prompt flow")
+	require.Error(t, applyCmd.Args(applyCmd, []string{"app", "extra"}))
 
 	// template does not get --target; apply/deploy do.
 	assert.Nil(t, templateCmd.Flag("target"))
+	assert.Nil(t, templateCmd.Flag("wait"))
+
+	deleteCmd := newOperationCommand("delete", "Delete")
+	for _, name := range []string{"namespace", "wait", "timeout", "no-hooks"} {
+		assert.NotNil(t, deleteCmd.Flag(name), "expected delete flag %q", name)
+	}
+	assert.Nil(t, deleteCmd.Flag("on-failure"))
+	assert.Nil(t, deleteCmd.Flag("dependency-update"))
+	for _, name := range helmValueOverrideFlags {
+		assert.Nil(t, deleteCmd.Flag(name), "delete must not accept Helm value override flag %q", name)
+	}
 
 	// diff/plan get the baseline-selection flags; other operations do not.
 	for _, opName := range []string{"diff", "plan"} {
@@ -53,9 +72,174 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 		for _, name := range []string{"against", "from-manifest", "context"} {
 			assert.NotNil(t, opCmd.Flag(name), "expected %q flag on %q", name, opName)
 		}
+		assert.NotNil(t, opCmd.Flag("dependency-update"))
+		for _, name := range helmValueOverrideFlags {
+			assert.NotNil(t, opCmd.Flag(name), "expected %q flag on %q", name, opName)
+		}
 	}
 	assert.Nil(t, applyCmd.Flag("against"))
 	assert.Nil(t, templateCmd.Flag("from-manifest"))
+
+	valuesCmd := newOperationCommand("values", "Values")
+	assert.NotNil(t, valuesCmd.Flag("stack"))
+	assert.Nil(t, valuesCmd.Flag("namespace"))
+	assert.Nil(t, valuesCmd.Flag("dependency-update"))
+	assert.Nil(t, valuesCmd.Flag("all"))
+	assert.Nil(t, valuesCmd.Flag("affected"))
+	assert.Contains(t, valuesCmd.Example, "atmos helm values monitoring -s plat-ue2-dev --set image.tag=2026.09.09")
+	for _, name := range helmValueOverrideFlags {
+		assert.NotNil(t, valuesCmd.Flag(name), "expected %q flag on values", name)
+	}
+}
+
+func TestHelmValueOverrideFlagsPreserveRepeatedRawValues(t *testing.T) {
+	cmd := newOperationCommand("apply", "Apply")
+	require.NoError(t, cmd.Flags().Set("set", `labels=one,two`))
+	require.NoError(t, cmd.Flags().Set("set", `image.tag=1.2.3`))
+	require.NoError(t, cmd.Flags().Set("values", "first.yaml"))
+	require.NoError(t, cmd.Flags().Set("values", "second.yaml"))
+
+	assert.Equal(t, "stringArray", cmd.Flag("set").Value.Type())
+	assert.Equal(t, []string{`labels=one,two`, `image.tag=1.2.3`}, getOperationFlags(cmd)["set"])
+	assert.Equal(t, []string{"first.yaml", "second.yaml"}, getOperationFlags(cmd)["values"])
+}
+
+func TestBareWaitDoesNotConsumeComponentArgument(t *testing.T) {
+	for _, operation := range []string{"apply", "deploy", "delete"} {
+		t.Run(operation, func(t *testing.T) {
+			cmd := newOperationCommand(operation, operation)
+			require.NoError(t, cmd.ParseFlags([]string{"--wait", "app"}))
+			assert.Equal(t, "watcher", cmd.Flag("wait").Value.String())
+			assert.Equal(t, []string{"app"}, cmd.Flags().Args())
+		})
+	}
+}
+
+func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
+	cmd := configuredOperationCommand(t, "apply", map[string]string{
+		"namespace":          "incident-ns",
+		"on-failure":         "rollback",
+		"cleanup-on-failure": "true",
+		"wait":               "legacy",
+		"wait-for-jobs":      "true",
+		"timeout":            "15m",
+		"history-max":        "0",
+		"no-hooks":           "true",
+		"skip-crds":          "true",
+		"dependency-update":  "true",
+	})
+
+	actual := getOperationFlags(cmd)
+	assert.Equal(t, "incident-ns", actual["namespace"])
+	assert.Equal(t, "rollback", actual[cfg.HelmOnFailureSectionName])
+	assert.Equal(t, true, actual[cfg.HelmCleanupOnFailureSectionName])
+	assert.Equal(t, "legacy", actual[cfg.HelmWaitStrategySectionName])
+	assert.Equal(t, true, actual[cfg.HelmWaitJobsSectionName])
+	assert.Equal(t, "15m", actual[cfg.HelmTimeoutSectionName])
+	assert.Equal(t, 0, actual[cfg.HelmHistoryMaxSectionName])
+	assert.Equal(t, false, actual[cfg.HelmChartHooksSectionName])
+	assert.Equal(t, "skip", actual[cfg.HelmCRDsSectionName])
+	assert.Equal(t, true, actual[cfg.HelmDependencyUpdateSectionName])
+
+	defaults := getOperationFlags(newOperationCommand("apply", "Apply"))
+	assert.NotContains(t, defaults, "namespace")
+	for _, key := range []string{
+		cfg.HelmOnFailureSectionName,
+		cfg.HelmCleanupOnFailureSectionName,
+		cfg.HelmWaitStrategySectionName,
+		cfg.HelmWaitJobsSectionName,
+		cfg.HelmTimeoutSectionName,
+		cfg.HelmHistoryMaxSectionName,
+		cfg.HelmChartHooksSectionName,
+		cfg.HelmCRDsSectionName,
+		cfg.HelmDependencyUpdateSectionName,
+	} {
+		assert.NotContains(t, defaults, key)
+	}
+}
+
+func TestOnFailureFlagUsesSingleActionAndCanClear(t *testing.T) {
+	cmd := newOperationCommand("apply", "Apply")
+	require.NoError(t, cmd.ParseFlags([]string{"--on-failure=rollback"}))
+	assert.Equal(t, "rollback", getOperationFlags(cmd)[cfg.HelmOnFailureSectionName])
+
+	cleared := newOperationCommand("apply", "Apply")
+	require.NoError(t, cleared.ParseFlags([]string{"--on-failure="}))
+	assert.Empty(t, getOperationFlags(cleared)[cfg.HelmOnFailureSectionName])
+}
+
+func TestSelectionFlagsAndComponentCompletion(t *testing.T) {
+	for _, flag := range []string{"all", "affected", "tags", "labels"} {
+		t.Run(flag, func(t *testing.T) {
+			cmd := newOperationCommand("apply", "Apply")
+			assert.False(t, hasSelectionFlags(cmd))
+			if flag == "all" || flag == "affected" {
+				require.NoError(t, cmd.Flags().Set(flag, "true"))
+			} else {
+				require.NoError(t, cmd.Flags().Set(flag, "value"))
+			}
+			assert.True(t, hasSelectionFlags(cmd))
+		})
+	}
+
+	cmd := newOperationCommand("apply", "Apply")
+	components, directive := componentArgCompletion(cmd, []string{"already-provided"}, "")
+	assert.Nil(t, components)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestComponentArgCompletionResolvesConfiguredComponents(t *testing.T) {
+	originalInit, originalDescribe, originalList := helmInitCliConfig, helmDescribeStacks, helmListAllComponents
+	t.Cleanup(func() {
+		helmInitCliConfig = originalInit
+		helmDescribeStacks = originalDescribe
+		helmListAllComponents = originalList
+	})
+
+	cmd := newOperationCommand("apply", "Apply")
+	helmInitCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+	helmDescribeStacks = func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
+		return map[string]any{"dev": map[string]any{}}, nil
+	}
+	helmListAllComponents = func(context.Context, string, map[string]any) ([]string, error) {
+		return []string{"api", "worker"}, nil
+	}
+
+	components, directive := componentArgCompletion(cmd, nil, "")
+	assert.Equal(t, []string{"api", "worker"}, components)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+
+	t.Run("configuration error", func(t *testing.T) {
+		helmInitCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, errors.New("config failed")
+		}
+		components, _ := componentArgCompletion(cmd, nil, "")
+		assert.Nil(t, components)
+	})
+
+	t.Run("describe error", func(t *testing.T) {
+		helmInitCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		}
+		helmDescribeStacks = func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
+			return nil, errors.New("describe failed")
+		}
+		components, _ := componentArgCompletion(cmd, nil, "")
+		assert.Nil(t, components)
+	})
+
+	t.Run("list error", func(t *testing.T) {
+		helmDescribeStacks = func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
+			return map[string]any{}, nil
+		}
+		helmListAllComponents = func(context.Context, string, map[string]any) ([]string, error) {
+			return nil, errors.New("list failed")
+		}
+		components, _ := componentArgCompletion(cmd, nil, "")
+		assert.Nil(t, components)
+	})
 }
 
 func TestGetOperationFlagsIncludesDiffFlags(t *testing.T) {
@@ -154,6 +338,8 @@ func TestRunOperationBuildsExecutionContext(t *testing.T) {
 		"against": "target",
 		"context": "5",
 	})
+	type contextKey struct{}
+	cmd.SetContext(context.WithValue(context.Background(), contextKey{}, "command"))
 	cmd.Flags().String("stack", "", "")
 	require.NoError(t, cmd.Flags().Set("stack", "dev"))
 
@@ -166,6 +352,32 @@ func TestRunOperationBuildsExecutionContext(t *testing.T) {
 	assert.Equal(t, []string{"app"}, provider.ctx.Args)
 	assert.Equal(t, "target", provider.ctx.Flags["against"])
 	assert.Equal(t, 5, provider.ctx.Flags["context"])
+	assert.Equal(t, "command", provider.ctx.GoContext().Value(contextKey{}))
+}
+
+func TestRunOperationBuildsApplyDryRunExecutionContext(t *testing.T) {
+	provider := &capturingHelmProvider{}
+	originalProviders := component.ListProviders()
+	require.NoError(t, component.Register(provider))
+	t.Cleanup(func() {
+		component.Reset()
+		for _, providers := range originalProviders {
+			for _, original := range providers {
+				require.NoError(t, component.Register(original))
+			}
+		}
+	})
+
+	cmd := newOperationCommand("apply", "Apply")
+	cmd.Flags().Bool("dry-run", false, "")
+	cmd.Flags().String("stack", "", "")
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+
+	require.NoError(t, runOperation(cmd, "apply", []string{"app"}))
+	require.NotNil(t, provider.ctx)
+	assert.Equal(t, "apply", provider.ctx.SubCommand)
+	assert.True(t, provider.ctx.ConfigAndStacksInfo.DryRun)
 }
 
 type capturingHelmProvider struct {

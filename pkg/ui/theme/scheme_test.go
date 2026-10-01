@@ -239,3 +239,32 @@ func TestColorSchemeSemanticMapping(t *testing.T) {
 	assert.Equal(t, theme.Yellow, scheme.LogWarning, "LogWarning should be Yellow")
 	assert.Equal(t, theme.Red, scheme.LogError, "LogError should be Red")
 }
+
+func TestProgressGradientOverrides(t *testing.T) {
+	for _, tc := range []struct {
+		name, start, end, wantStart, wantEnd string
+	}{
+		{"palette fallback", "", "", "#00FFFF", "#00FF00"},
+		{"both endpoints", "#123456", "#ABCDEF", "#123456", "#ABCDEF"},
+		{"start only", "#123456", "", "#123456", "#00FF00"},
+		{"end only", "", "#ABCDEF", "#00FFFF", "#ABCDEF"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scheme := GenerateColorScheme(&Theme{
+				Cyan: "#00FFFF", Green: "#00FF00", ProgressStart: tc.start, ProgressEnd: tc.end,
+			})
+			assert.Equal(t, tc.wantStart, scheme.ProgressStart)
+			assert.Equal(t, tc.wantEnd, scheme.ProgressEnd)
+			assert.Equal(t, "#00FFFF", scheme.Spinner)
+			assert.Equal(t, "#00FF00", scheme.Success)
+		})
+	}
+}
+
+func TestAtmosProgressGradient(t *testing.T) {
+	registry, err := NewRegistry()
+	require.NoError(t, err)
+	scheme := GenerateColorScheme(registry.GetOrDefault("atmos"))
+	assert.Equal(t, "#5A56E0", scheme.ProgressStart)
+	assert.Equal(t, "#EE6FF8", scheme.ProgressEnd)
+}

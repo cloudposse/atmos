@@ -16,6 +16,8 @@ import (
 // TestConstructTerraformComponentWorkingDir_AbsolutePathHandling tests the constructTerraformComponentWorkingDir function
 // from path_utils.go to ensure it correctly handles absolute paths without duplication.
 func TestConstructTerraformComponentWorkingDir_AbsolutePathHandling(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                      string
 		basePath                  string
@@ -66,6 +68,7 @@ func TestConstructTerraformComponentWorkingDir_AbsolutePathHandling(t *testing.T
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Skip tests with absolute paths on Windows as they're Unix-specific
 			if runtime.GOOS == "windows" && filepath.IsAbs(tt.basePath) {
 				t.Skipf("Skipping Unix absolute path test on Windows")
@@ -115,6 +118,8 @@ func TestConstructTerraformComponentWorkingDir_AbsolutePathHandling(t *testing.T
 // TestConstructTerraformComponentWorkingDir_ConsistencyWithGetComponentPath tests that
 // constructTerraformComponentWorkingDir produces consistent results with GetComponentPath.
 func TestConstructTerraformComponentWorkingDir_ConsistencyWithGetComponentPath(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                  string
 		basePath              string
@@ -163,6 +168,7 @@ func TestConstructTerraformComponentWorkingDir_ConsistencyWithGetComponentPath(t
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.skipOnWindows && runtime.GOOS == "windows" {
 				t.Skipf("Skipping Unix path test on Windows")
 			}
@@ -224,6 +230,8 @@ func TestConstructTerraformComponentWorkingDir_ConsistencyWithGetComponentPath(t
 // AtmosConfigAbsolutePaths function from the config package, not simulating it.
 // This test ensures that any changes to the actual implementation are reflected in our tests.
 func TestAtmosConfigAbsolutePathsIntegration(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		basePath          string
@@ -248,6 +256,7 @@ func TestAtmosConfigAbsolutePathsIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.skipOnWindows && runtime.GOOS == "windows" {
 				t.Skipf("Skipping Unix path test on Windows")
 			}

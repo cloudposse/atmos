@@ -14,10 +14,13 @@ import (
 // This file tests the Execute method.
 
 func TestTitleHandler_Execute(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("title")
 	require.True(t, ok)
 
 	t.Run("sets title with content", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "title",
@@ -33,6 +36,7 @@ func TestTitleHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("restores title when content is empty", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "title",
@@ -48,6 +52,7 @@ func TestTitleHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("resolves template in content", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "title",
@@ -63,6 +68,7 @@ func TestTitleHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "title",

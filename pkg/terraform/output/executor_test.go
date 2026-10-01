@@ -1,6 +1,7 @@
 package output
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -19,11 +20,14 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Helper function to create minimal valid sections.
@@ -43,10 +47,18 @@ func validSections() map[string]any {
 	}
 }
 
-// Helper function to create minimal valid atmos config.
-func validAtmosConfig() *schema.AtmosConfiguration {
+// Helper function to create minimal valid atmos config. Uses t.TempDir() (a
+// fresh directory per test) rather than a fixed shared path: ensureInitialized
+// now calls autoinit.Record after a successful init, which writes a real
+// marker file to <BasePath>/.../.terraform/atmos-init.json on disk even when
+// the terraform runner itself is mocked. A fixed shared BasePath would let one
+// test's marker satisfy another test's fingerprint check and silently skip the
+// mocked Init call it expected.
+func validAtmosConfig(t *testing.T) *schema.AtmosConfiguration {
+	t.Helper()
+
 	return &schema.AtmosConfiguration{
-		BasePath: filepath.Join(os.TempDir(), "test-project"),
+		BasePath: t.TempDir(),
 		Components: schema.Components{
 			Terraform: schema.Terraform{
 				BasePath:                "components/terraform",
@@ -103,7 +115,7 @@ func TestExecutor_ExecuteWithSections_DisabledComponent(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	// Create sections with disabled component (enabled=false in vars).
 	sections := validSections()
@@ -123,7 +135,7 @@ func TestExecutor_ExecuteWithSections_AbstractComponent(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	// Create sections with abstract component.
 	sections := validSections()
@@ -143,7 +155,7 @@ func TestExecutor_ExecuteWithSections_MissingExecutable(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	// Create sections without executable.
 	sections := map[string]any{
@@ -165,7 +177,7 @@ func TestExecutor_ExecuteWithSections_MissingWorkspace(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	// Create sections without workspace.
 	sections := map[string]any{
@@ -187,7 +199,7 @@ func TestExecutor_ExecuteWithSections_MissingComponentPath(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	// Create sections without component_info.
 	sections := map[string]any{
@@ -212,7 +224,7 @@ func TestExecutor_ExecuteWithSections_RunnerFactoryError(t *testing.T) {
 	}
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
@@ -232,7 +244,7 @@ func TestExecutor_ExecuteWithSections_InitError(t *testing.T) {
 	}
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	// Setup expectations.
@@ -256,7 +268,7 @@ func TestExecutor_ExecuteWithSections_WorkspaceSelectFails_NewFails(t *testing.T
 	}
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	// Setup expectations - select fails, then new also fails.
@@ -282,7 +294,7 @@ func TestExecutor_ExecuteWithSections_WorkspaceSelectFails_NewSucceeds(t *testin
 	}
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	// Setup expectations - select fails (workspace doesn't exist), new succeeds.
@@ -297,32 +309,52 @@ func TestExecutor_ExecuteWithSections_WorkspaceSelectFails_NewSucceeds(t *testin
 }
 
 // TestExecutor_ExecuteWithSections_PassVarsReachesRunnerEnv is an integration-level
-// regression test for issue #1412. It exercises the full ExecuteWithSections path
-// (ExtractComponentConfig → SetupEnvironment → SetEnv) and asserts the component's
-// vars reach the runner as TF_VAR_* when init.pass_vars is enabled, so the internal
-// `terraform init` can satisfy init-time variable dependencies.
+// regression test for issues #1412 and #3231. It exercises the full ExecuteWithSections path
+// (ExtractComponentConfig -> SetupEnvironment -> SetEnv/init) and asserts that, when init.pass_vars
+// is enabled, the component's vars reach the init subprocess as TF_VAR_* (so init-time variable
+// dependencies resolve) while runner.SetEnv never sees a TF_VAR_* key (terraform-exec rejects them).
 func TestExecutor_ExecuteWithSections_PassVarsReachesRunnerEnv(t *testing.T) {
-	run := func(passVars bool) map[string]string {
+	type observed struct {
+		runnerEnv   map[string]string
+		initEnv     map[string]string
+		initCalls   int
+		initReq     *InitWithVarsRequest
+		runnerInits int // Calls to runner.Init (pass_vars=false only).
+	}
+
+	run := func(passVars bool) *observed {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
 		mockDescriber := NewMockComponentDescriber(ctrl)
 		mockRunner := NewMockTerraformRunner(ctrl)
+		obs := &observed{}
 
-		var capturedEnv map[string]string
 		mockRunner.EXPECT().SetEnv(gomock.Any()).DoAndReturn(func(env map[string]string) error {
-			capturedEnv = env
-			return nil
+			obs.runnerEnv = env
+			return realRuleSetEnv(env)
 		}).AnyTimes()
-		mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+		// With pass_vars the mock has no Init expectation, so any runner.Init call fails the test.
+		if !passVars {
+			mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(context.Context, ...tfexec.InitOption) error { obs.runnerInits++; return nil },
+			).Times(1)
+		}
 		mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 		mockRunner.EXPECT().Output(gomock.Any()).Return(nil, nil)
 
-		exec := NewExecutor(mockDescriber, WithRunnerFactory(
-			func(workdir, executable string) (TerraformRunner, error) { return mockRunner, nil },
-		))
+		exec := NewExecutor(
+			mockDescriber,
+			WithRunnerFactory(func(workdir, executable string) (TerraformRunner, error) { return mockRunner, nil }),
+			WithInitWithVars(func(_ context.Context, req *InitWithVarsRequest) error {
+				obs.initCalls++
+				obs.initReq = req
+				obs.initEnv = req.Env
+				return nil
+			}),
+		)
 
-		atmosConfig := validAtmosConfig()
+		atmosConfig := validAtmosConfig(t)
 		atmosConfig.Components.Terraform.Init.PassVars = passVars
 
 		sections := validSections()
@@ -330,16 +362,60 @@ func TestExecutor_ExecuteWithSections_PassVarsReachesRunnerEnv(t *testing.T) {
 
 		_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
 		require.NoError(t, err)
-		return capturedEnv
+		return obs
 	}
 
 	withPassVars := run(true)
-	assert.Equal(t, "9.4.1", withPassVars["TF_VAR_aks_version"],
-		"pass_vars=true must forward component vars to the runner as TF_VAR_*")
+	require.Equal(t, 1, withPassVars.initCalls, "pass_vars=true must run init through the vars-aware seam")
+	assert.Equal(t, 0, withPassVars.runnerInits, "pass_vars=true must not call runner.Init")
+	assert.Equal(t, "9.4.1", withPassVars.initEnv["TF_VAR_aks_version"],
+		"pass_vars=true must forward component vars to the init subprocess as TF_VAR_*")
+	assert.NotEmpty(t, withPassVars.initReq.Dir)
+	assert.NotEmpty(t, withPassVars.initReq.Executable)
+	assert.Empty(t, tfexec.ProhibitedEnv(withPassVars.runnerEnv),
+		"runner.SetEnv must not receive keys terraform-exec prohibits (TF_VAR_*)")
+	for k := range withPassVars.runnerEnv {
+		assert.False(t, strings.HasPrefix(k, "TF_VAR_"), "runner env leaked %s", k)
+	}
 
 	withoutPassVars := run(false)
-	_, ok := withoutPassVars["TF_VAR_aks_version"]
+	assert.Equal(t, 0, withoutPassVars.initCalls, "pass_vars=false must not use the vars-aware init seam")
+	assert.Equal(t, 1, withoutPassVars.runnerInits, "pass_vars=false must init through the runner")
+	_, ok := withoutPassVars.runnerEnv["TF_VAR_aks_version"]
 	assert.False(t, ok, "pass_vars=false must not forward vars as TF_VAR_*")
+}
+
+// TestExecutor_ExecuteWithSections_AppliesAutomaticPluginCache verifies the
+// full internal-output path receives the same default cache environment as an
+// `atmos terraform` command. This is the regression for provider copies being
+// written to each !terraform.output workdir in CI.
+func TestExecutor_ExecuteWithSections_AppliesAutomaticPluginCache(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+	var capturedEnv map[string]string
+	mockRunner.EXPECT().SetEnv(gomock.Any()).DoAndReturn(func(env map[string]string) error {
+		capturedEnv = env
+		return nil
+	}).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, nil)
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(
+		func(workdir, executable string) (TerraformRunner, error) { return mockRunner, nil },
+	))
+	pluginCacheDir := filepath.Join(t.TempDir(), "plugin-cache")
+	atmosConfig := validAtmosConfig(t)
+	atmosConfig.Components.Terraform.PluginCache = true
+	atmosConfig.Components.Terraform.PluginCacheDir = pluginCacheDir
+
+	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", validSections(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, pluginCacheDir, capturedEnv["TF_PLUGIN_CACHE_DIR"])
+	assert.Equal(t, "true", capturedEnv["TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE"])
 }
 
 func TestExecutor_ExecuteWithSections_OutputError(t *testing.T) {
@@ -354,7 +430,7 @@ func TestExecutor_ExecuteWithSections_OutputError(t *testing.T) {
 	}
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	// Setup expectations.
@@ -381,7 +457,7 @@ func TestExecutor_ExecuteWithSections_Success(t *testing.T) {
 	}
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	// Setup expectations.
@@ -415,7 +491,7 @@ func TestExecutor_ExecuteWithSections_HTTPBackend_SkipsWorkspace(t *testing.T) {
 	}
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 	sections[cfg.BackendTypeSectionName] = "http"
 
@@ -446,7 +522,7 @@ func TestExecutor_GetOutput_StaticRemoteState(t *testing.T) {
 	// Clear any cached outputs for this test.
 	terraformOutputsCache.Delete(stackComponentKey("test-stack", "test-component"))
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	// Setup static remote state.
 	staticOutputs := map[string]any{
@@ -469,7 +545,7 @@ func TestExecutor_GetOutput_CacheHit(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	// Pre-populate cache.
 	stackSlug := stackComponentKey("cached-stack", "cached-component")
@@ -485,6 +561,117 @@ func TestExecutor_GetOutput_CacheHit(t *testing.T) {
 	assert.Equal(t, "from-cache", value)
 }
 
+// TestExecutor_GetOutput_CacheHitIsVisible reproduces the dogfooding report:
+// a test.vars block with multiple !terraform.output lookups against the same
+// component logged a "Fetching ..." message only for the first (a cache
+// miss); every subsequent lookup for a different output key on the same
+// now-cached component+stack was invisible, since the cache-hit branch only
+// called log.Debug (invisible outside debug/trace logging), never the
+// visible outputLookupSucceeded/outputLookupFailed path a real fetch uses.
+// Every successful lookup -- cached or not -- must produce a visible
+// notification.
+func TestExecutor_GetOutput_CacheHitIsVisible(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+
+	atmosConfig := validAtmosConfig(t)
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+
+	// Pre-populate the cache with two outputs for the same component+stack,
+	// mirroring a real fetch that caches every output at once. Neither
+	// lookup below triggers DescribeComponent -- both are cache hits.
+	stackSlug := stackComponentKey("fixtures", "vpc")
+	terraformOutputsCache.Store(stackSlug, map[string]any{
+		"vpc_id":   "vpc-abc123",
+		"vpc_cidr": "10.0.0.0/16",
+	})
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	value, exists, err := exec.GetOutput(atmosConfig, "fixtures", "vpc", "vpc_id", false, nil, nil)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "vpc-abc123", value)
+
+	value, exists, err = exec.GetOutput(atmosConfig, "fixtures", "vpc", "vpc_cidr", false, nil, nil)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "10.0.0.0/16", value)
+
+	// Strip ANSI before asserting: with color forced (e.g. CI's "CI" env var),
+	// the markdown renderer emits style resets around the literal underscore
+	// in "vpc_id"/"vpc_cidr", splitting the message across multiple escape
+	// sequences without dropping or reordering any visible characters.
+	rendered := ansi.Strip(uiOutput.String())
+	assert.Contains(t, rendered, "Fetching vpc_id output from vpc in fixtures",
+		"the first cache-hit lookup must be visible")
+	assert.Contains(t, rendered, "Fetching vpc_cidr output from vpc in fixtures",
+		"the second cache-hit lookup (a different output key on the same already-cached component) must also be visible")
+}
+
+// TestResolveOutputFromCache_MissReturnsNil verifies that resolveOutputFromCache
+// returns nil (not a zero-value *cachedOutputResult) for a stackSlug that was
+// never stored in the cache, so callers such as GetOutput correctly fall
+// through to a real fetch instead of mistaking a miss for a cache hit that
+// resolved to a nil value.
+func TestResolveOutputFromCache_MissReturnsNil(t *testing.T) {
+	atmosConfig := validAtmosConfig(t)
+
+	// A unique, never-populated stackSlug guarantees test isolation --
+	// nothing else in this package's test suite could have cached it.
+	stackSlug := stackComponentKey("never-cached-stack", "never-cached-component")
+	terraformOutputsCache.Delete(stackSlug) // defensive: ensure a clean slate.
+
+	result := resolveOutputFromCache(atmosConfig, stackSlug, "never-cached-component", "never-cached-stack", "some_output")
+	assert.Nil(t, result, "a cache miss must return nil so the caller falls through to a real fetch")
+}
+
+// TestResolveOutputFromCache_GetOutputVariableErrorIsVisible verifies that when
+// a cache hit's stored outputs cannot be evaluated for the requested output key
+// (a malformed yq expression), resolveOutputFromCache returns a
+// *cachedOutputResult carrying the error AND surfaces the same visible
+// outputLookupFailed notification a real fetch failure would -- mirroring
+// TestExecutor_GetOutput_CacheHitIsVisible's success-path assertion but for the
+// failure branch.
+func TestResolveOutputFromCache_GetOutputVariableErrorIsVisible(t *testing.T) {
+	atmosConfig := validAtmosConfig(t)
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+
+	stackSlug := stackComponentKey("malformed-yq-stack", "malformed-yq-component")
+	terraformOutputsCache.Store(stackSlug, map[string]any{
+		"vpc_id": "vpc-abc123",
+	})
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	// An unbalanced `[` is not a missing key -- it is a yq syntax error,
+	// which getOutputVariable/extractYqValue propagate as a real error
+	// rather than an "exists: false" result.
+	result := resolveOutputFromCache(atmosConfig, stackSlug, "malformed-yq-component", "malformed-yq-stack", "vpc_id[")
+	require.NotNil(t, result)
+	require.Error(t, result.err)
+	assert.Contains(t, result.err.Error(), "failed to evaluate YQ expression")
+
+	rendered := ansi.Strip(uiOutput.String())
+	assert.Contains(t, rendered, "Fetching vpc_id[ output from malformed-yq-component in malformed-yq-stack",
+		"a cache-hit lookup that fails to evaluate must still surface a visible failure notification")
+}
+
 func TestExecutor_GetOutput_NonexistentKey(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -492,7 +679,7 @@ func TestExecutor_GetOutput_NonexistentKey(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	// Pre-populate cache.
 	stackSlug := stackComponentKey("nonexistent-stack", "nonexistent-component")
@@ -599,7 +786,7 @@ func TestHandleDisabledComponent(t *testing.T) {
 }
 
 func TestExtractYqValue(t *testing.T) {
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	data := map[string]any{
 		"simple": "value",
@@ -628,7 +815,7 @@ func TestExtractYqValue(t *testing.T) {
 }
 
 func TestGetStaticRemoteStateOutput(t *testing.T) {
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	remoteState := map[string]any{
 		"vpc_id":     "vpc-123",
@@ -660,7 +847,7 @@ func TestExecutor_ExecuteWithSections_QuietMode(t *testing.T) {
 	}
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	// Quiet mode should set stdout to discard and stderr to capture.
@@ -683,7 +870,7 @@ func TestExecutor_ExecuteWithSections_QuietMode(t *testing.T) {
 }
 
 func TestGetOutputVariable(t *testing.T) {
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	outputs := map[string]any{
 		"vpc_id":  "vpc-123",
@@ -797,7 +984,7 @@ func TestExecutor_GetOutput_InvalidAuthManagerType(t *testing.T) {
 
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	// Pass an invalid authManager type (string instead of auth.AuthManager).
 	invalidAuthManager := "not an auth manager"
@@ -827,7 +1014,7 @@ func TestExecutor_GetOutput_FullExecutionPath(t *testing.T) {
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	// Setup expectations for DescribeComponent.
@@ -862,7 +1049,7 @@ func TestExecutor_GetOutput_DescribeError(t *testing.T) {
 	stackSlug := stackComponentKey("describe-err-stack", "describe-err-component")
 	terraformOutputsCache.Delete(stackSlug)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	// Setup expectations - DescribeComponent returns error.
 	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(nil, errors.New("component not found"))
@@ -891,7 +1078,7 @@ func TestExecutor_GetAllOutputs_Success(t *testing.T) {
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	// Set debug level to avoid spinner.
 	atmosConfig.Logs.Level = "debug"
 
@@ -937,7 +1124,7 @@ func TestExecutor_GetAllOutputs_PropagatesAuthContext(t *testing.T) {
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Logs.Level = "debug"
 	sections := validSections()
 	authContext := &schema.AuthContext{
@@ -998,7 +1185,7 @@ func TestExecutor_GetAllOutputs_CacheHit(t *testing.T) {
 	terraformOutputsCache.Store(stackSlug, cachedOutputs)
 	defer terraformOutputsCache.Delete(stackSlug)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	// No DescribeComponent call expected.
 	outputs, err := exec.GetAllOutputs(atmosConfig, "cache-hit-component", "cache-hit-stack", false, nil, nil)
@@ -1018,7 +1205,7 @@ func TestExecutor_GetAllOutputs_Error(t *testing.T) {
 	stackSlug := stackComponentKey("error-stack", "error-component")
 	terraformOutputsCache.Delete(stackSlug)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	// Set debug level to avoid spinner.
 	atmosConfig.Logs.Level = "debug"
 
@@ -1032,7 +1219,7 @@ func TestExecutor_GetAllOutputs_Error(t *testing.T) {
 
 // TestStartSpinnerOrLog_DebugMode tests that startSpinnerOrLog logs in debug mode.
 func TestStartSpinnerOrLog_DebugMode(t *testing.T) {
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Logs.Level = "debug"
 
 	stopFunc := startSpinnerOrLog(atmosConfig, "test message", "component", "stack")
@@ -1044,7 +1231,7 @@ func TestStartSpinnerOrLog_DebugMode(t *testing.T) {
 
 // TestStartSpinnerOrLog_TraceMode tests that startSpinnerOrLog logs in trace mode.
 func TestStartSpinnerOrLog_TraceMode(t *testing.T) {
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Logs.Level = "trace"
 
 	stopFunc := startSpinnerOrLog(atmosConfig, "test message", "component", "stack")
@@ -1052,6 +1239,13 @@ func TestStartSpinnerOrLog_TraceMode(t *testing.T) {
 
 	// Should be a no-op function.
 	stopFunc()
+}
+
+func TestOutputLookupHiddenWhenSpinnersSuppressed(t *testing.T) {
+	restore := SuppressSpinners()
+	t.Cleanup(restore)
+
+	require.False(t, outputLookupVisible())
 }
 
 // TestExecutor_GetAllOutputs_StaticRemoteState tests GetAllOutputs with static remote state.
@@ -1069,7 +1263,7 @@ func TestExecutor_GetAllOutputs_StaticRemoteState(t *testing.T) {
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Logs.Level = "debug"
 
 	sections := validSections()
@@ -1086,7 +1280,7 @@ func TestExecutor_GetAllOutputs_StaticRemoteState(t *testing.T) {
 
 // TestProcessOutputs_WithInvalidJSON tests processOutputs handling of invalid JSON.
 func TestProcessOutputs_WithInvalidJSON(t *testing.T) {
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	// Create output meta with invalid JSON value.
 	outputMeta := map[string]tfexec.OutputMeta{
@@ -1110,15 +1304,23 @@ func TestProcessOutputs_WithInvalidJSON(t *testing.T) {
 // the I/O masker (so it is redacted everywhere) while a non-sensitive output is NOT registered
 // (to avoid over-masking common values like VPC IDs).
 func TestProcessOutputs_RegistersSensitive(t *testing.T) {
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
+	iolib.Reset()
+	t.Cleanup(iolib.Reset)
 	require.NoError(t, iolib.Initialize())
-	iolib.GetContext().Masker().Clear()
+	masker := iolib.GetContext().Masker()
+	masker.Clear()
+	masker.SetEnabled(true)
 
 	outputMeta := map[string]tfexec.OutputMeta{
 		"password": {
 			Sensitive: true,
 			Value:     []byte(`"hunter2-super-secret"`),
+		},
+		"thing": {
+			Sensitive: true,
+			Value:     []byte(`{"id":"fluffy-dog","name":"small-dog"}`),
 		},
 		"vpc_id": {
 			Sensitive: false,
@@ -1126,13 +1328,48 @@ func TestProcessOutputs_RegistersSensitive(t *testing.T) {
 		},
 	}
 
-	_ = processOutputs(outputMeta, atmosConfig)
+	outputs := processOutputs(outputMeta, atmosConfig)
 
-	masker := iolib.GetContext().Masker()
 	assert.Contains(t, masker.Mask("value is hunter2-super-secret"), iolib.MaskReplacement,
 		"sensitive output value should be masked")
 	assert.Equal(t, "the vpc is vpc-abc123", masker.Mask("the vpc is vpc-abc123"),
 		"non-sensitive output value must not be masked")
+
+	thing, ok := outputs["thing"].(map[string]any)
+	require.True(t, ok, "sensitive output must remain an object before environment rendering")
+	_, secret := tfvars.Partition(map[string]any{"thing": thing}, iolib.ContainsSecret)
+	assert.Equal(t, map[string]any{"thing": thing}, secret,
+		"masked sensitive output must use secret-safe TF_VAR_ transport")
+}
+
+// TestProcessOutputs_MaskingDisabledKeepsSensitiveObjectInVarfile reproduces #2768. A sensitive
+// object resolved through !terraform.output must retain its structure for an untyped consumer
+// when the user has explicitly disabled masking. Registering its leaves would classify the
+// variable as secret-bearing and route it through TF_VAR_, which Terraform treats as a string.
+func TestProcessOutputs_MaskingDisabledKeepsSensitiveObjectInVarfile(t *testing.T) {
+	iolib.Reset()
+	t.Cleanup(iolib.Reset)
+	require.NoError(t, iolib.Initialize())
+
+	masker := iolib.GetContext().Masker()
+	masker.Clear()
+	masker.SetEnabled(false)
+
+	outputs := processOutputs(map[string]tfexec.OutputMeta{
+		"thing": {
+			Sensitive: true,
+			Value:     []byte(`{"id":"fluffy-dog","name":2}`),
+		},
+	}, validAtmosConfig(t))
+
+	thing, ok := outputs["thing"].(map[string]any)
+	require.True(t, ok, "sensitive output must remain an object")
+	assert.Equal(t, "fluffy-dog", thing["id"])
+	assert.Equal(t, float64(2), thing["name"])
+
+	safe, secret := tfvars.Partition(map[string]any{"thing": thing}, iolib.ContainsSecret)
+	assert.Equal(t, map[string]any{"thing": thing}, safe)
+	assert.Empty(t, secret, "unmasked sensitive output must not be routed through TF_VAR_")
 }
 
 // TestExecutor_ExecuteWithSections_InitWithReconfigure tests init with reconfigure option.
@@ -1148,7 +1385,7 @@ func TestExecutor_ExecuteWithSections_InitWithReconfigure(t *testing.T) {
 	}
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Components.Terraform.InitRunReconfigure = true
 
 	sections := validSections()
@@ -1184,7 +1421,7 @@ func TestExecutor_GetOutput_ExecuteError(t *testing.T) {
 	stackSlug := stackComponentKey("exec-err-stack", "exec-err-component")
 	terraformOutputsCache.Delete(stackSlug)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	// Setup expectations.
@@ -1214,7 +1451,7 @@ func TestHighlightValue_NilConfig(t *testing.T) {
 		{
 			name:     "with config attempts highlighting",
 			input:    `{"key": "value"}`,
-			config:   validAtmosConfig(),
+			config:   validAtmosConfig(t),
 			expected: `{"key": "value"}`, // May be highlighted or not depending on TTY.
 		},
 	}
@@ -1380,7 +1617,7 @@ func TestExecutor_GetAllOutputs_SkipInit_SkipsInitAndWorkspace(t *testing.T) {
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Logs.Level = "debug"
 
 	sections := validSections()
@@ -1431,7 +1668,7 @@ func TestExecutor_GetAllOutputs_SkipInit_False_RunsInitAndWorkspace(t *testing.T
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Logs.Level = "debug"
 
 	sections := validSections()
@@ -1486,7 +1723,7 @@ func TestExecutor_GetAllOutputs_SkipInit_WithAuthManager_ProcessesYamlFunctions(
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Logs.Level = "debug"
 
 	sections := validSections()
@@ -1550,7 +1787,7 @@ func TestExecutor_Execute_PropagatesBackendGenError(t *testing.T) {
 		WithRunnerFactory(customFactory),
 		WithBackendGenerator(mockBackendGen),
 	)
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	// Runner setup: Output must not be reached when backend gen fails.
@@ -1598,7 +1835,7 @@ func TestExecutor_Execute_PropagatesProvidersGenError(t *testing.T) {
 		WithRunnerFactory(customFactory),
 		WithBackendGenerator(mockBackendGen),
 	)
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
@@ -1645,7 +1882,7 @@ func TestExecutor_Execute_SkipsArtifactRegen_WhenYamlFunctionsNotProcessed(t *te
 		WithRunnerFactory(customFactory),
 		WithBackendGenerator(mockBackendGen),
 	)
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	// Runner setup: output call succeeds, no init or workspace calls.
@@ -1689,7 +1926,7 @@ func TestExecutor_Execute_SkipInit_DirectCall(t *testing.T) {
 	}
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory), WithBackendGenerator(mockBackendGen))
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	// Setup expectations — no Init or Workspace calls expected.
@@ -1835,7 +2072,7 @@ func TestExecutor_GetOutputWithOptions_SkipInit(t *testing.T) {
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	sections := validSections()
 
 	// DescribeComponent should be called with ProcessYamlFunctions=false when SkipInit=true and authManager=nil.
@@ -1876,7 +2113,7 @@ func TestExecutor_GetOutputWithOptions_CacheHit(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	stackSlug := stackComponentKey("opts-cache-stack", "opts-cache-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{"cached_out": "hit-value"})
@@ -1901,7 +2138,7 @@ func TestExecutor_GetOutputWithOptions_InvalidAuthManager(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 
 	_, _, err := exec.GetOutputWithOptions(
 		atmosConfig, "stack", "component", "output",
@@ -1920,7 +2157,7 @@ func TestExecutor_GetOutputWithOptions_DescribeError(t *testing.T) {
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	exec := NewExecutor(mockDescriber)
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Logs.Level = "debug"
 
 	stackSlug := stackComponentKey("derr-stack", "derr-component")
@@ -1949,7 +2186,7 @@ func TestExecutor_GetOutputWithOptions_ExecuteError(t *testing.T) {
 		return mockRunner, nil
 	}))
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Logs.Level = "debug"
 
 	stackSlug := stackComponentKey("eerr-stack", "eerr-component")
@@ -1978,7 +2215,7 @@ func TestExecutor_GetOutputWithOptions_StaticRemoteState(t *testing.T) {
 
 	exec := NewExecutor(mockDescriber, WithStaticRemoteStateGetter(mockGetter))
 
-	atmosConfig := validAtmosConfig()
+	atmosConfig := validAtmosConfig(t)
 	atmosConfig.Logs.Level = "debug"
 
 	stackSlug := stackComponentKey("srs-stack", "srs-component")
@@ -2033,6 +2270,49 @@ func TestEnsureWorkdirProvisioned_CallsProvisionerWhenEnabled(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestEnsureWorkdirProvisioned_SuppressesProvisioningOutputWhenSpinnersSuppressed(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	t.Cleanup(ResetWorkdirProvisionCache)
+
+	tempDir := t.TempDir()
+	componentPath := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte("# test"), 0o644))
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+
+	restoreSpinners := SuppressSpinners()
+	t.Cleanup(restoreSpinners)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+	sections := jitSections()
+	sections["component"] = "vpc"
+
+	err = NewExecutor(nil).ensureWorkdirProvisioned(
+		context.Background(),
+		atmosConfig,
+		sections,
+		nil,
+		"vpc",
+		"dev",
+		&ComponentConfig{AutoProvisionWorkdirForOutputs: true},
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, sections[provWorkdir.WorkdirPathKey])
+	assert.Empty(t, uiOutput.String())
+}
+
 func TestEnsureWorkdirProvisioned_SkipsWhenWorkdirDisabled(t *testing.T) {
 	ResetWorkdirProvisionCache()
 	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
@@ -2078,7 +2358,15 @@ func TestEnsureWorkdirProvisioned_CachePreventsDoubleProvision(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestEnsureWorkdirProvisioned_LateArrivalGetsReconfigureFromCache(t *testing.T) {
+// TestEnsureWorkdirProvisioned_LaterGenerationDoesNotInheritStaleFreshness guards against a
+// regression where workdirProvisionCache stored the freshness bool permanently: a later,
+// separate call (not a concurrent singleflight waiter of the SAME provisioning generation --
+// see TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure for that case) for a
+// component whose workdir was already provisioned in a PRIOR generation must NOT inherit that
+// prior generation's freshness. Inheriting it would force a full re-init (-reconfigure) on every
+// subsequent `terraform output` call for the component's remaining process lifetime, defeating
+// smart-init entirely for workdir-based components.
+func TestEnsureWorkdirProvisioned_LaterGenerationDoesNotInheritStaleFreshness(t *testing.T) {
 	ResetWorkdirProvisionCache()
 	defer ResetWorkdirProvisionCache()
 
@@ -2101,15 +2389,16 @@ func TestEnsureWorkdirProvisioned_LateArrivalGetsReconfigureFromCache(t *testing
 	config1 := &ComponentConfig{AutoProvisionWorkdirForOutputs: true}
 	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config1)
 	require.NoError(t, err)
-	require.True(t, config1.InitRunReconfigure, "first call: fresh provision must set InitRunReconfigure")
+	require.True(t, config1.WorkdirReprovisioned, "first call: fresh provision must set InitRunReconfigure")
 
-	// Late arrival: Provision must NOT be called again (mock expects Times(1)).
-	// The cache must return freshlyProvisioned=true so this caller also sets InitRunReconfigure.
+	// A later, separate call (this first call has already fully returned -- it is not a
+	// concurrent singleflight waiter): Provision must NOT be called again (mock expects
+	// Times(1)), but this caller must NOT inherit the first generation's freshness either.
 	config2 := &ComponentConfig{AutoProvisionWorkdirForOutputs: true}
 	err = executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config2)
 	require.NoError(t, err)
-	assert.True(t, config2.InitRunReconfigure,
-		"late arrival must read freshlyProvisioned=true from cache and set InitRunReconfigure")
+	assert.False(t, config2.WorkdirReprovisioned,
+		"a later, separate call reusing an already-provisioned workdir must not inherit a prior generation's freshness")
 }
 
 func TestEnsureWorkdirProvisioned_ConcurrentCallsBlockUntilComplete(t *testing.T) {
@@ -2202,31 +2491,59 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 	}
 	errs := make([]error, 2)
 
-	for i := range 2 {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			// Each goroutine gets its own sections map to avoid a data race between
-			// IsWorkdirEnabled reads and the singleflight leader writing
-			// WorkdirReprovisionedKey into the map via Provision.
-			// InitRunReconfigure is propagated via the singleflight return value,
-			// not via the sections map, so per-goroutine maps are correct.
-			localSections := jitSections()
-			errs[idx] = executor.ensureWorkdirProvisioned(
-				context.Background(), cfg, localSections, nil, "vpc", "dev", configs[idx],
-			)
-		}(i)
+	call := func(idx int) {
+		defer wg.Done()
+		// Each goroutine gets its own sections map to avoid a data race between
+		// IsWorkdirEnabled reads and the singleflight leader writing
+		// WorkdirReprovisionedKey into the map via Provision.
+		// InitRunReconfigure is propagated via the singleflight return value,
+		// not via the sections map, so per-goroutine maps are correct.
+		localSections := jitSections()
+		errs[idx] = executor.ensureWorkdirProvisioned(
+			context.Background(), cfg, localSections, nil, "vpc", "dev", configs[idx],
+		)
 	}
 
+	// Launch the leader alone first and wait for <-entered: this guarantees
+	// singleflight has already registered the in-flight call for this cache key
+	// (LoadOrStore happens, and Provision starts running, strictly before the
+	// closure calls close(entered)) before the follower makes its own call.
+	// Racing both goroutines' starts against each other (an earlier approach)
+	// only synchronized "about to call ensureWorkdirProvisioned", not "actually
+	// registered with singleflight" -- since DoChan's closure runs on a runtime
+	// -spawned goroutine independent of the caller, a slow-to-schedule follower
+	// could still lose to that internal goroutine reaching close(entered) first,
+	// making the follower a genuinely later, separate generation and flaking
+	// this assertion. Starting the follower only after the leader is a
+	// confirmed, in-flight singleflight call removes that race entirely: any
+	// DoChan call for this key from this point until close(gate) is guaranteed
+	// to join the same in-flight call, never start a new one.
+	wg.Add(1)
+	go call(0)
 	<-entered
+
+	// followerJoined is closed by doChanEntryHook the instant the follower's own call
+	// reaches workdirProvisionGroup.DoChan -- a deterministic proof that the follower has
+	// registered with singleflight, unlike scheduler-yielding tricks (e.g. a
+	// runtime.Gosched loop), which only make losing the race less likely, never
+	// impossible: they prove nothing about which goroutine the runtime actually chose to
+	// run next.
+	followerJoined := make(chan struct{})
+	doChanEntryHook = func() { close(followerJoined) }
+	defer func() { doChanEntryHook = nil }()
+
+	wg.Add(1)
+	go call(1)
+	<-followerJoined
+
 	close(gate)
 	wg.Wait()
 
 	require.NoError(t, errs[0])
 	require.NoError(t, errs[1])
-	assert.True(t, configs[0].InitRunReconfigure,
+	assert.True(t, configs[0].WorkdirReprovisioned,
 		"goroutine 0 config must have InitRunReconfigure=true after fresh provision")
-	assert.True(t, configs[1].InitRunReconfigure,
+	assert.True(t, configs[1].WorkdirReprovisioned,
 		"goroutine 1 config must have InitRunReconfigure=true after fresh provision")
 }
 
@@ -2291,7 +2608,7 @@ func TestEnsureWorkdirProvisioned_ContextCancellationUnblocksWaiter(t *testing.T
 	require.NoError(t, err3, "post-completion call must hit cache without calling Provision again")
 	// The leader's Provision didn't set WorkdirReprovisionedKey, so freshlyProvisioned=false.
 	// The cache holds false, so the third caller must not get InitRunReconfigure=true.
-	assert.False(t, config3.InitRunReconfigure,
+	assert.False(t, config3.WorkdirReprovisioned,
 		"cache hit with freshlyProvisioned=false must not set InitRunReconfigure")
 }
 
@@ -2365,10 +2682,10 @@ func TestEnsureWorkdirProvisioned_SetsReconfigureWhenFreshlyProvisioned(t *testi
 			return nil
 		})
 
-	require.False(t, config.InitRunReconfigure, "should be false before provision")
+	require.False(t, config.WorkdirReprovisioned, "should be false before provision")
 	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
 	require.NoError(t, err)
-	assert.True(t, config.InitRunReconfigure, "should be true after fresh provision")
+	assert.True(t, config.WorkdirReprovisioned, "should be true after fresh provision")
 }
 
 func TestEnsureWorkdirProvisioned_ReconfigureNotSetWhenNotFreshlyProvisioned(t *testing.T) {
@@ -2382,10 +2699,10 @@ func TestEnsureWorkdirProvisioned_ReconfigureNotSetWhenNotFreshlyProvisioned(t *
 		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
-	require.False(t, config.InitRunReconfigure, "should be false before provision")
+	require.False(t, config.WorkdirReprovisioned, "should be false before provision")
 	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
 	require.NoError(t, err)
-	assert.False(t, config.InitRunReconfigure, "should remain false when provisioner does not set WorkdirReprovisionedKey")
+	assert.False(t, config.WorkdirReprovisioned, "should remain false when provisioner does not set WorkdirReprovisionedKey")
 }
 
 func TestEnsureWorkdirProvisioned_ExecuteWithSectionsPath(t *testing.T) {
@@ -2422,7 +2739,7 @@ func TestExecuteWithSections_ReturnsErrWhenProvisionFails(t *testing.T) {
 		AnyTimes()
 
 	executor := NewExecutor(nil, WithWorkdirProvisioner(mockProvisioner))
-	atmosCfg := validAtmosConfig()
+	atmosCfg := validAtmosConfig(t)
 	atmosCfg.Components.Terraform.AutoProvisionWorkdirForOutputs = true
 
 	// Use validSections() so ExtractComponentConfig passes Step 2,

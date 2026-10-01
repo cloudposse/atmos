@@ -75,7 +75,11 @@ func cloneSimulatePrompt(prompt *schema.SimulatePrompt) *schema.SimulatePrompt {
 	return &clone
 }
 
-func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowStep, vars *Variables) error {
+// runCastSimulateStep replays a scripted simulate action. The skipPrompt flag
+// suppresses "typed" mode's own prompt draw when a real shell prompt is
+// already visible on screen (see runCastChildStep); "prompt" mode is
+// unaffected since drawing a prompt is its entire purpose.
+func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowStep, vars *Variables, skipPrompt bool) error {
 	switch castSimulateMode(child) {
 	case "typed":
 		text, err := vars.Resolve(strings.TrimRight(child.Text, "\n"))
@@ -98,6 +102,7 @@ func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowSt
 			Jitter:     jitter,
 			EnterDelay: enterDelay,
 			Cursor:     child.Cursor,
+			SkipPrompt: skipPrompt,
 		})
 	case "prompt":
 		return recordCastPromptWithCursor(child.SimulatePrompt, child.Cursor)
@@ -107,8 +112,10 @@ func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowSt
 }
 
 func recordCastTypedLine(ctx context.Context, opts castTypedLineOptions) error {
-	if err := recordCastPromptWithCursor(opts.Prompt, opts.Cursor); err != nil {
-		return err
+	if !opts.SkipPrompt {
+		if err := recordCastPromptWithCursor(opts.Prompt, opts.Cursor); err != nil {
+			return err
+		}
 	}
 	if err := sleepCastInput(ctx, defaultCastPromptDelay); err != nil {
 		return err

@@ -15,6 +15,8 @@ import (
 
 // TestWriteMergedDataToFile tests that merged data is written to a file and returns a valid file URL.
 func TestWriteMergedDataToFile(t *testing.T) {
+	t.Parallel()
+
 	tempDir, err := createTempDirectory()
 	if err != nil {
 		t.Fatalf("createTempDirectory error: %v", err)
@@ -78,6 +80,8 @@ func TestWriteMergedDataToFile(t *testing.T) {
 
 // TestWriteOuterTopLevelFile tests that the top-level JSON file is written and its URL is valid.
 func TestWriteOuterTopLevelFile(t *testing.T) {
+	t.Parallel()
+
 	tempDir, err := createTempDirectory()
 	if err != nil {
 		t.Fatalf("createTempDirectory error: %v", err)
@@ -130,12 +134,14 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 		t.Errorf("Expected file content to contain %q, got %q", dummyFileURL, string(content))
 	}
 	if !strings.Contains(string(content), `"name":"Atmos"`) {
-		t.Errorf("Expected file content to contain root merged data, got %q", string(content))
+		t.Errorf("Expected file content to contain root data, got %q", string(content))
 	}
 }
 
 // TestProcessTmplWithDatasourcesGomplate tests that a static template is rendered correctly.
 func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
+	t.Parallel()
+
 	// Test case 1: Static content with no interpolation
 	mergedData := map[string]interface{}{
 		// No variables to interpolate.
@@ -154,7 +160,7 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 	mergedData = map[string]interface{}{
 		"name": "Atmos",
 	}
-	tmpl = " {{- $data := (ds \"config\") -}}\n\nHello {{ $data.name | default \"Project Title\" }}!"
+	tmpl = "Hello {{ .name }}!"
 
 	result, err = ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
 	if err != nil {
@@ -165,7 +171,19 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 		t.Errorf("Expected result to be %q, got %q", expected, result)
 	}
 
-	// Test case 3: Nested variable access
+	// Test case 3: Template with config datasource interpolation
+	tmpl = " {{- $data := (ds \"config\") -}}\n\nHello {{ $data.name | default \"Project Title\" }}!"
+
+	result, err = ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
+	if err != nil {
+		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
+	}
+	expected = "Hello Atmos!"
+	if result != expected {
+		t.Errorf("Expected result to be %q, got %q", expected, result)
+	}
+
+	// Test case 4: Nested variable access
 	mergedData = map[string]interface{}{
 		"config": map[string]interface{}{
 			"version": "1.0.0",

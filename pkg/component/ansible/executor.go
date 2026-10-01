@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -71,6 +72,7 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 
 // ExecutePlaybook executes an Ansible playbook command.
 func ExecutePlaybook(
+	ctx context.Context,
 	info *schema.ConfigAndStacksInfo,
 	flags *Flags,
 ) error {
@@ -229,19 +231,43 @@ func ExecutePlaybook(
 		return nil
 	}
 
-	return e.ExecuteShellCommand(
+	return executePlaybookCommandWithRetry(ctx, &atmosConfig, info, cmdArgs, componentPath, envVars)
+}
+
+// executePlaybookCommandWithRetry runs the resolved ansible-playbook command through
+// e.ExecuteShellCommandWithRetry. Extracted from ExecutePlaybook so the retry wiring can
+// be unit-tested directly with a fake invoke, without standing up ExecutePlaybook's full
+// stack-processing/auth preamble or requiring a real ansible-playbook binary.
+func executePlaybookCommandWithRetry(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	cmdArgs *CommandArgs,
+	componentPath string,
+	envVars []string,
+) error {
+	return e.ExecuteShellCommandWithRetry(
 		atmosConfig,
-		cmdArgs.Command,
-		cmdArgs.Args,
-		componentPath,
-		envVars,
-		info.DryRun,
-		info.RedirectStdErr,
+		info,
+		info.SubCommand,
+		func(o ...e.ShellCommandOption) error {
+			return e.ExecuteShellCommand(
+				*atmosConfig,
+				cmdArgs.Command,
+				cmdArgs.Args,
+				componentPath,
+				envVars,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
+		e.WithProcessContext(ctx),
 	)
 }
 
 // ExecuteVersion executes the ansible version command.
-func ExecuteVersion(info *schema.ConfigAndStacksInfo) error {
+func ExecuteVersion(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "ansible.ExecuteVersion")()
 
 	atmosConfig, err := cfg.InitCliConfig(*info, false)
@@ -264,6 +290,7 @@ func ExecuteVersion(info *schema.ConfigAndStacksInfo) error {
 		nil,   // env
 		false, // dryRun
 		"",    // redirectStdError
+		e.WithProcessContext(ctx),
 	)
 }
 
@@ -409,7 +436,7 @@ func resolveComponentPath(
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
-		ctx, atmosConfig, info, cfg.AnsibleComponentType, initialPath,
+		ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.AnsibleComponentType, initialPath,
 	)
 	if err != nil {
 		return "", err

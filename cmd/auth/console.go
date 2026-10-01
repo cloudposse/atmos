@@ -235,9 +235,9 @@ func printConsoleInfo(whoami *types.WhoamiInfo, duration time.Duration, showURL 
 	defer perf.Track(nil, "auth.printConsoleInfo")()
 
 	// Define styles.
-	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)).Bold(true)
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)).Width(ConsoleLabelWidth)
-	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorWhite))
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).Bold(true)
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).Width(ConsoleLabelWidth)
+	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextPrimary))
 
 	// Print header.
 	ui.Writef("\n%s\n\n", headerStyle.Render("Console URL Generated"))
@@ -267,8 +267,8 @@ func printConsoleInfo(whoami *types.WhoamiInfo, duration time.Duration, showURL 
 func printConsoleURL(consoleURL string) {
 	defer perf.Track(nil, "auth.printConsoleURL")()
 
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
-	urlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
+	urlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link))
 	ui.Writef("\n%s\n%s\n", labelStyle.Render("Console URL:"), urlStyle.Render(consoleURL))
 }
 
@@ -284,7 +284,7 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 
 	// Check if provider supports console access based on kind.
 	switch providerKind {
-	case types.ProviderKindAWSIAMIdentityCenter, types.ProviderKindAWSSAML:
+	case types.ProviderKindAWSIAMIdentityCenter, types.ProviderKindAWSSAML, types.ProviderKindAWSUser:
 		// Return AWS console URL generator with default HTTP client.
 		generator := awsAuth.NewConsoleURLGenerator(nil)
 		return generator, nil

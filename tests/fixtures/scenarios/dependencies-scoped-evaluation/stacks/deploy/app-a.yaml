@@ -1,0 +1,17 @@
+# app-a is the bounded root under test. It has no dependency relationship
+# (forward or reverse) with app-b.
+vars:
+  stage: app-a
+
+components:
+  terraform:
+    root:
+      metadata:
+        component: mock
+
+    child:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: root

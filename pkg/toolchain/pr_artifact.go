@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -136,11 +137,10 @@ func CheckPRCacheAndUpdate(ctx context.Context, prNumber int, showProgress bool)
 		return true, nil
 	}
 
-	// Get GitHub token if available (not required for public repos).
-	token := github.GetGitHubToken()
-
-	// Get current PR head SHA.
-	currentSHA, err := github.GetPRHeadSHA(ctx, atmosOwner, atmosRepo, prNumber, token)
+	// Atmos self-install is a toolchain concern: the atmos binary's own build artifacts live
+	// on public github.com by default even for GHES users (see ToolchainEndpoints), so this
+	// uses the toolchain-scoped fetcher rather than the RepoEndpoints-scoped free function.
+	currentSHA, err := github.NewToolchainArtifactFetcher(ctx).GetPRHeadSHA(ctx, atmosOwner, atmosRepo, prNumber)
 	if err != nil {
 		return false, handlePRArtifactError(err, prNumber)
 	}
@@ -235,8 +235,8 @@ func InstallFromPR(prNumber int, showProgress bool) (string, error) {
 		ui.Infof("Installing Atmos from PR #%d...", prNumber)
 	}
 
-	// Get artifact info.
-	artifactInfo, err := github.GetPRArtifactInfo(ctx, atmosOwner, atmosRepo, prNumber)
+	// Get artifact info. Toolchain-scoped fetcher: see the comment in CheckPRCacheAndUpdate.
+	artifactInfo, err := github.NewToolchainArtifactFetcher(ctx).GetPRArtifactInfo(ctx, atmosOwner, atmosRepo, prNumber)
 	if err != nil {
 		return "", handlePRArtifactError(err, prNumber)
 	}
@@ -278,6 +278,16 @@ func downloadAndInstallArtifact(
 	return downloadAndInstallArtifactToDir(ctx, token, versionDir, info, showProgress)
 }
 
+// allowsPRArtifactToken reports whether it is safe to attach the GitHub token to a request
+// whose destination is u: only when its scheme is https and its host is an approved GitHub
+// host (github.IsApprovedGitHubDownloadHost -- RepoEndpoints/ToolchainEndpoints server, API, or
+// upload host). Applied both to downloadPRArtifact's initial request and, via its
+// CheckRedirect, to every hop of a redirect, since GitHub's archive download URL redirects to
+// a pre-signed, unauthenticated S3-style blob URL that must never receive the token.
+func allowsPRArtifactToken(u *url.URL) bool {
+	return strings.EqualFold(u.Scheme, "https") && github.IsApprovedGitHubDownloadHost(u.Host)
+}
+
 // downloadPRArtifact downloads the artifact ZIP to a temporary file.
 func downloadPRArtifact(ctx context.Context, token string, info *github.PRArtifactInfo) (string, error) {
 	defer perf.Track(nil, "toolchain.downloadPRArtifact")()
@@ -298,18 +308,23 @@ func downloadPRArtifact(ctx context.Context, token string, info *github.PRArtifa
 		return "", fmt.Errorf("%w: failed to create request: %w", ErrPRArtifactDownloadFailed, err)
 	}
 
-	// Only set Authorization header when a token is available.
-	if token != "" {
+	// Only attach the token when the request's own URL is https and an approved GitHub host
+	// (RepoEndpoints/ToolchainEndpoints server, API, or upload host) -- validated by
+	// allowsPRArtifactToken before the initial request is sent, and again, via CheckRedirect
+	// below, for every redirect hop. GitHub's archive download URL redirects to a pre-signed,
+	// unauthenticated S3-style blob URL that must never receive it.
+	if token != "" && allowsPRArtifactToken(req.URL) {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	client := &http.Client{
 		Timeout: prArtifactDownloadTimeout,
-		// Follow redirects but preserve auth header for GitHub domain only.
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// Don't add auth header when redirected to S3 (pre-signed URL).
-			if !strings.Contains(req.URL.Host, "github") {
+		// Follow redirects, but strip Authorization on any hop whose URL is no longer https
+		// or no longer an approved GitHub host -- e.g. the pre-signed S3 redirect target, or
+		// an unrelated host a compromised/misconfigured endpoint redirected to.
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			if !allowsPRArtifactToken(req.URL) {
 				req.Header.Del("Authorization")
 			}
 			return nil
@@ -471,35 +486,62 @@ func extractZipFile(zipPath, destDir string) error {
 	cleanDestDir := filepath.Clean(destDir) + string(os.PathSeparator)
 
 	for _, f := range r.File {
+		// Reject any archive entry name containing "..", guarding the raw tainted value
+		// directly (the shape CodeQL's go/zipslip query itself documents as the fix,
+		// see the query's help text) rather than only a derived/split-component check --
+		// sanitizeZipPath's per-component comparison isn't recognized as a sanitizer by
+		// the query's dataflow model, so this guard is what actually clears the taint.
+		if strings.Contains(f.Name, "..") {
+			return fmt.Errorf(errZipSlipFormat, ErrPRArtifactExtractFailed, f.Name)
+		}
+
 		// Sanitize path to prevent Zip Slip attacks.
 		destPath, err := sanitizeZipPath(f.Name, cleanDestDir)
 		if err != nil {
 			return err
 		}
 
-		// Verify path stays within destination (redundant with sanitizeZipPath but satisfies CodeQL).
-		if rel, relErr := filepath.Rel(strings.TrimSuffix(cleanDestDir, string(os.PathSeparator)), destPath); relErr != nil || strings.HasPrefix(rel, "..") {
-			return fmt.Errorf("%w: path escapes destination: %s", ErrPRArtifactExtractFailed, f.Name)
-		}
-
 		// Create parent directories.
 		if f.FileInfo().IsDir() {
+			// Guard placed immediately adjacent to the sink (rather than relying solely on
+			// sanitizeZipPath's earlier check) so CodeQL's go/zipslip query, which only
+			// credits a containment check that directly guards the sink, recognizes it.
+			if err := verifyWithinDestDir(destPath, cleanDestDir, f.Name); err != nil {
+				return err
+			}
 			if err := os.MkdirAll(destPath, dirPermissions); err != nil {
 				return fmt.Errorf("%w: failed to create dir: %w", ErrPRArtifactExtractFailed, err)
 			}
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(destPath), dirPermissions); err != nil {
+		parentDir := filepath.Dir(destPath)
+		if err := verifyWithinDestDir(parentDir, cleanDestDir, f.Name); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(parentDir, dirPermissions); err != nil {
 			return fmt.Errorf("%w: failed to create parent dir: %w", ErrPRArtifactExtractFailed, err)
 		}
 
 		// Extract file.
-		if err := extractZipEntry(f, destPath); err != nil {
+		if err := extractZipEntry(f, destPath, cleanDestDir); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// verifyWithinDestDir re-validates that path is contained within cleanDestDir immediately
+// before a filesystem-mutating operation. This duplicates the check sanitizeZipPath already
+// performed, deliberately placed adjacent to each sink (MkdirAll/Create) rather than relying
+// on a guarantee computed earlier in the caller, since that's what the go/zipslip scanner needs
+// to recognize the path as sanitized at the point of use.
+func verifyWithinDestDir(path, cleanDestDir, entryName string) error {
+	rel, err := filepath.Rel(strings.TrimSuffix(cleanDestDir, string(os.PathSeparator)), path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("%w: path escapes destination: %s", ErrPRArtifactExtractFailed, entryName)
+	}
 	return nil
 }
 
@@ -537,7 +579,14 @@ func sanitizeZipPath(entryName, cleanDestDir string) (string, error) {
 }
 
 // extractZipEntry extracts a single ZIP entry to the destination path.
-func extractZipEntry(f *zip.File, destPath string) error {
+func extractZipEntry(f *zip.File, destPath, cleanDestDir string) error {
+	// Guard immediately before the sink: extractZipFile already validated destPath, but this
+	// function must not trust that a caller-computed guarantee still holds without checking it
+	// again itself (and it's what lets CodeQL's go/zipslip query see the sanitizer at the sink).
+	if err := verifyWithinDestDir(destPath, cleanDestDir, f.Name); err != nil {
+		return err
+	}
+
 	rc, err := f.Open()
 	if err != nil {
 		return fmt.Errorf("%w: failed to open ZIP entry: %w", ErrPRArtifactExtractFailed, err)
@@ -685,7 +734,7 @@ func isBrewAvailable() bool {
 
 // handlePRArtifactError converts GitHub errors to user-friendly errors.
 func handlePRArtifactError(err error, prNumber int) error {
-	prURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", atmosOwner, atmosRepo, prNumber)
+	prURL := fmt.Sprintf("%s/%s/%s/pull/%d", github.ToolchainEndpoints().ServerURL, atmosOwner, atmosRepo, prNumber)
 
 	// Check for specific error types.
 	if errors.Is(err, github.ErrPRNotFound) {

@@ -287,12 +287,13 @@ ATMOS_LOGS_LEVEL=Debug atmos <command>
 
 **Solutions:**
 1. Enable AI tools: `ai.tools.enabled: true`
-2. Ensure `validate_file_lsp` is not in `blocked_tools` list:
+2. If `tools.allowed` is set, make sure it includes `validate_file_lsp` — otherwise it's never registered:
 ```yaml
 ai:
   tools:
     enabled: true
-    blocked_tools: []  # Don't block validate_file_lsp
+    allowed: []   # empty = every tool registers, including validate_file_lsp
+    blocked: []   # or, if using an allow-list: allowed: [validate_file_lsp, ...]
 ```
 
 ### LSP Server Crashes

@@ -27,7 +27,9 @@ atmos describe stacks [options]
 This command shows configuration for stacks and components in the stacks.
 
 :::info YAML Functions and Authentication
-By default, `atmos describe stacks` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during stack processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
+Default identity authentication occurs only when an evaluated YAML function or Go template needs credentials. Unused sections selected out by `--sections` do not trigger authentication. With `--error-mode=warn` (the default), unavailable implicit authentication, including a stopped emulator, produces `(computed)` for affected values and one summary; `silent` omits the summary and `strict` fails. Resolvable sibling values remain available.
+
+Explicit `--identity` or `ATMOS_IDENTITY` selection authenticates before processing and remains fail-fast. `--identity=false` disables Atmos authentication. Malformed configuration, invalid expressions, and dependency cycles remain fatal. You can disable function/template processing with `--process-functions=false` or `--process-templates=false`.
 :::
 
 :::tip

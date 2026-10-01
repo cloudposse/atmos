@@ -72,4 +72,4 @@ signed (`git log --show-signature -1`), `git add` only the files actually touche
 - **[`say` skill](../say/SKILL.md)** — invoked when a finding is skipped and needs human input.
 - `atmos fix lint` (`.atmos.d/fix.yaml`) — the custom command this skill's default mode runs;
   delegates to the existing `atmos lint --changed` (`.atmos.d/lint.yaml`), also used by the
-  pre-commit hook via `scripts/run-custom-golangci-lint.sh`.
+  pre-commit hook via `go tool mage lint:precommit` (`magefiles/`).

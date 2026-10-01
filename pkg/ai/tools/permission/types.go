@@ -16,13 +16,13 @@ const (
 
 // Config holds permission configuration.
 type Config struct {
-	Mode            Mode     `yaml:"mode" json:"mode" mapstructure:"mode"`
-	AllowedTools    []string `yaml:"allowed_tools" json:"allowed_tools" mapstructure:"allowed_tools"`
-	RestrictedTools []string `yaml:"restricted_tools" json:"restricted_tools" mapstructure:"restricted_tools"`
-	BlockedTools    []string `yaml:"blocked_tools" json:"blocked_tools" mapstructure:"blocked_tools"`
-	YOLOMode        bool     `yaml:"yolo_mode" json:"yolo_mode" mapstructure:"yolo_mode"`
-	AuditEnabled    bool     `yaml:"audit_enabled" json:"audit_enabled" mapstructure:"audit_enabled"`
-	AuditPath       string   `yaml:"audit_path" json:"audit_path" mapstructure:"audit_path"`
+	Mode         Mode     `yaml:"mode" json:"mode" mapstructure:"mode"`
+	Allowed      []string `yaml:"allowed" json:"allowed" mapstructure:"allowed"`
+	Restricted   []string `yaml:"restricted" json:"restricted" mapstructure:"restricted"`
+	Blocked      []string `yaml:"blocked" json:"blocked" mapstructure:"blocked"`
+	YOLOMode     bool     `yaml:"yolo_mode" json:"yolo_mode" mapstructure:"yolo_mode"`
+	AuditEnabled bool     `yaml:"audit_enabled" json:"audit_enabled" mapstructure:"audit_enabled"`
+	AuditPath    string   `yaml:"audit_path" json:"audit_path" mapstructure:"audit_path"`
 }
 
 // Decision represents a permission decision.

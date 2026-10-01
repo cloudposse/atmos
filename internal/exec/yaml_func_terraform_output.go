@@ -2,9 +2,9 @@ package exec
 
 import (
 	"fmt"
-	"strings"
 
-	errUtils "github.com/cloudposse/atmos/errors"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -73,32 +73,20 @@ func processTagTerraformOutputWithContext(
 	var stack string
 	var output string
 
-	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
-	// while also ignoring leading and trailing whitespace.
-	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
-	parts, err := u.SplitStringByDelimiter(str, ' ')
+	parsed, err := fnparser.ParseTerraform(str)
 	if err != nil {
 		return nil, err
 	}
-
-	partsLen := len(parts)
-
-	switch partsLen {
-	case 3:
-		component = strings.TrimSpace(parts[0])
-		stack = strings.TrimSpace(parts[1])
-		output = strings.TrimSpace(parts[2])
-	case 2:
-		component = strings.TrimSpace(parts[0])
+	component = parsed.Component
+	stack = parsed.Stack
+	output = parsed.Expression
+	if stack == "" {
 		stack = currentStack
-		output = strings.TrimSpace(parts[1])
 		log.Debug(
 			"Executing Atmos YAML function with component and output parameters; using current stack",
 			log.FieldFunction, input,
 			"stack", currentStack,
 		)
-	default:
-		return nil, fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	// Track dependency and get cleanup function.
@@ -107,6 +95,10 @@ func processTagTerraformOutputWithContext(
 		return nil, err
 	}
 	defer cleanup()
+
+	if value, mocked, mockErr := resolveTerraformMockOutput(atmosConfig, stackInfo, stack, component, output); mocked {
+		return value, mockErr
+	}
 
 	// Extract authContext and authManager from stackInfo if available.
 	var authContext *schema.AuthContext
@@ -117,12 +109,12 @@ func processTagTerraformOutputWithContext(
 		// Propagate AuthDisabled downstream even when no AuthManager was created (mirrors
 		// !terraform.state): the wrapper's stack info tells the output getter to skip resolving
 		// the target component's own auth section.
-		if authManager == nil && stackInfo.AuthDisabled {
+		if authdeferred.IsDeferred(atmosConfig.AuthManager) || (authManager == nil && stackInfo.AuthDisabled) {
 			authManager = &authContextWrapper{stackInfo: stackInfo}
 		}
 	}
 
-	value, exists, err := outputGetter.GetOutput(atmosConfig, stack, component, output, false, authContext, authManager)
+	value, exists, err := outputGetter.GetOutput(atmosConfig, stack, component, output, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
 	if err != nil {
 		// Only use YQ defaults for recoverable terraform errors (state not provisioned, output not found).
 		// Non-recoverable errors (API failures, auth errors, infrastructure issues) should fail hard.

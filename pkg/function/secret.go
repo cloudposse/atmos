@@ -34,6 +34,7 @@ func NewSecretFunction() *SecretFunction {
 //
 //	!secret NAME                       - Resolve a declared secret value.
 //	!secret NAME | path ".a.b"         - Extract a nested value from a structured secret.
+//	!secret NAME | raw                 - Retrieve the original textual payload.
 //	!secret NAME | default "dev-key"   - Fall back to a default when the secret is missing.
 func (f *SecretFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
 	defer perf.Track(nil, "function.SecretFunction.Execute")()

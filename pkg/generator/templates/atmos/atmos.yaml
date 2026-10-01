@@ -1,0 +1,80 @@
+# Atmos CLI configuration
+# https://atmos.tools/cli/configuration
+
+version: 1
+
+# CLI configuration
+cli:
+  colors: true
+
+# Base path for components, stacks and workflows
+base_path: "."
+
+components:
+  terraform:
+    # Path to Terraform components (relative to `base_path`)
+    base_path: "components/terraform"
+    # Generate backend.tf.json from stack configuration before running Terraform commands
+    auto_generate_backend_file: true
+
+  helmfile:
+    # Path to Helmfile components (relative to `base_path`)
+    base_path: "components/helmfile"
+    # Kubeconfig path
+    kubeconfig_path: '{{ env "HOME" }}/.kube/config'
+
+# Stack configuration
+stacks:
+  # Path to stack files (relative to `base_path`)
+  base_path: "stacks"
+  # Default stack name template
+  name_template: '{{`{{ .vars.environment }}-{{ .vars.stage }}`}}'
+
+# JSON Schema configuration for validation
+schemas:
+  # JSON Schema to validate stack configurations
+  jsonschema:
+    # Path to directory with JSON schemas (relative to `base_path`)
+    base_path: "schemas/jsonschema"
+  # OPA configuration
+  opa:
+    # Path to directory with OPA policies (relative to `base_path`)
+    base_path: "schemas/opa"
+
+# Template configuration
+templates:
+  settings:
+    # Enable support for Go templates in stack configuration files
+    enabled: true
+    # Enable support for Sprig functions in Go templates
+    sprig:
+      enabled: true
+    # Enable support for Gomplate functions in Go templates
+    gomplate:
+      enabled: true
+
+# Workflow configuration
+workflows:
+  # Path to workflow files (relative to `base_path`)
+  base_path: "workflows"
+
+# Logging configuration
+logs:
+  # Logging level
+  level: info
+  # Log file location
+  file: "/dev/stderr"
+
+# Vendoring configuration
+vendor:
+  # Path to vendor config file (relative to `base_path`)
+  config_path: "vendor.yaml"
+  # Path to vendor directory (relative to `base_path`)
+  base_path: "vendor"
+
+# Import configuration
+import:
+  # File extensions to search for when importing files
+  file_extensions:
+    - ".yaml"
+    - ".yml"

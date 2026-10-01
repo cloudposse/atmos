@@ -4,16 +4,83 @@ import (
 	"bytes"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestReconcileMaskingForCommandHonorsShadowingFlag(t *testing.T) {
+	t.Cleanup(func() {
+		iolib.Reset()
+		viper.Reset()
+	})
+
+	boolPtr := func(value bool) *bool { return &value }
+	tests := []struct {
+		name       string
+		configured bool
+		root       *bool
+		group      *bool
+		leaf       *bool
+		want       bool
+	}{
+		{
+			name:       "changed leaf wins over changed group",
+			configured: true,
+			group:      boolPtr(false),
+			leaf:       boolPtr(true),
+			want:       true,
+		},
+		{
+			name:       "changed root wins without child override",
+			configured: false,
+			root:       boolPtr(true),
+			want:       true,
+		},
+		{
+			name:       "no local override preserves reconciled viper state",
+			configured: false,
+			want:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			iolib.Reset()
+			viper.Reset()
+			viper.Set("mask", tt.configured)
+			require.NoError(t, iolib.Initialize())
+
+			root := &cobra.Command{Use: "root"}
+			root.PersistentFlags().Bool("mask", true, "")
+			group := &cobra.Command{Use: "group"}
+			group.PersistentFlags().Bool("mask", true, "")
+			leaf := &cobra.Command{Use: "leaf"}
+			leaf.PersistentFlags().Bool("mask", true, "")
+			root.AddCommand(group)
+			group.AddCommand(leaf)
+
+			for command, value := range map[*cobra.Command]*bool{root: tt.root, group: tt.group, leaf: tt.leaf} {
+				if value != nil {
+					require.NoError(t, command.PersistentFlags().Set("mask", strconv.FormatBool(*value)))
+				}
+			}
+
+			reconcileMaskingForCommand(leaf)
+			assert.Equal(t, tt.want, iolib.MaskingEnabled())
+		})
+	}
+}
 
 func TestNoColorLog(t *testing.T) {
 	// Skip in CI environments without TTY.
@@ -74,6 +141,18 @@ func TestNoColorLog(t *testing.T) {
 			t.Logf("Command output: %s", output)
 		}
 	})
+}
+
+func TestSyncGlobalFlagsToViperIncludesEdition(t *testing.T) {
+	previous := viper.GetString(editionFlagName)
+	t.Cleanup(func() { viper.Set(editionFlagName, previous) })
+
+	command := &cobra.Command{Use: "atmos"}
+	command.Flags().String(editionFlagName, "", "Edition pin")
+	require.NoError(t, command.Flags().Set(editionFlagName, "2025-09"))
+
+	syncGlobalFlagsToViper(command)
+	assert.Equal(t, "2025-09", viper.GetString(editionFlagName))
 }
 
 func TestInitFunction(t *testing.T) {
@@ -223,57 +302,86 @@ func TestInvocationGroupLabel(t *testing.T) {
 	assert.Equal(t, "atmos orphan", invocationGroupLabel(&cobra.Command{}, []string{"orphan"}))
 }
 
-func TestArgsRequestNoArgGitClone(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want bool
-	}{
-		{
-			name: "no arg git clone",
-			args: []string{"git", "clone"},
-			want: true,
-		},
-		{
-			name: "global profile flag is ignored for bootstrap detection",
-			args: []string{"--profile", "github", "git", "clone", "--depth", "1", "--filter=blob:none"},
-			want: true,
-		},
-		{
-			name: "positional repository is not CI bootstrap",
-			args: []string{"git", "clone", "repo"},
-			want: false,
-		},
-		{
-			name: "native git args imply explicit clone",
-			args: []string{"git", "clone", "--", "--no-tags"},
-			want: false,
-		},
-		{
-			name: "all flag is not CI bootstrap",
-			args: []string{"git", "clone", "--all"},
-			want: false,
-		},
-	}
+// newBootstrapCloneCmd builds a command tree mirroring cmd/git's real
+// gitCmd -> cloneCmd parent/name relationship (root -> git -> clone), with
+// the same --ci/--all bool flags the real clone command registers. This is
+// enough for gitcmd.CICloneBootstrapRequested's name/parent check to match,
+// without importing cmd/git's unexported command singletons.
+func newBootstrapCloneCmd(t *testing.T, rawArgs []string) (*cobra.Command, []string) {
+	t.Helper()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, argsRequestNoArgGitClone(tt.args))
-		})
-	}
+	root := &cobra.Command{Use: "atmos"}
+	git := &cobra.Command{Use: "git"}
+	clone := &cobra.Command{Use: "clone"}
+	clone.Flags().Bool("ci", false, "")
+	clone.Flags().Bool("all", false, "")
+	root.AddCommand(git)
+	git.AddCommand(clone)
+
+	require.NoError(t, clone.ParseFlags(rawArgs))
+	return clone, clone.Flags().Args()
 }
 
-func TestHandleConfigInitError_AllowsCIGitCloneBootstrap(t *testing.T) {
-	origArgs := os.Args
-	t.Cleanup(func() { os.Args = origArgs })
-	os.Args = []string{"atmos", "--profile", "github", "git", "clone"}
+// saveRestoreAtmosConfig snapshots the package-level atmosConfig (which
+// applyCIGitCloneBootstrap writes to) and restores it after the test, since
+// it is shared global state across this package's tests.
+// Kept as a named alias for readability at its call sites: NewTestKit now
+// snapshots and restores the package-level atmosConfig for every test that
+// uses it, so saveRestoreAtmosConfig delegates rather than maintaining a
+// second, narrower mechanism.
+func saveRestoreAtmosConfig(t *testing.T) {
+	t.Helper()
+	_ = NewTestKit(t)
+}
+
+func TestApplyCIGitCloneBootstrap_AllowsBootstrap(t *testing.T) {
+	saveRestoreAtmosConfig(t)
+	t.Setenv("GITHUB_ACTIONS", "true")
+	// Pin ATMOS_CI: resolveCICloneMode falls back to reading this env var when
+	// --ci isn't set, so an ambient ATMOS_CI=false in the developer/CI
+	// environment would otherwise make this test flaky (mirrors the guard in
+	// cmd/git/bootstrap_test.go).
+	t.Setenv("ATMOS_CI", "true")
+
+	cmd, args := newBootstrapCloneCmd(t, nil)
+	tmpConfig := &schema.AtmosConfiguration{}
+
+	applied := applyCIGitCloneBootstrap(cmd, args, tmpConfig)
+
+	assert.True(t, applied)
+	assert.True(t, tmpConfig.CI.Enabled)
+	assert.True(t, atmosConfig.CI.Enabled,
+		"the package-level atmosConfig must be enabled too: it's what cmd/git's RunE actually reads")
+}
+
+func TestApplyCIGitCloneBootstrap_CICloneExplicitFalseOptsOut(t *testing.T) {
+	saveRestoreAtmosConfig(t)
 	t.Setenv("GITHUB_ACTIONS", "true")
 
-	cfg := &schema.AtmosConfiguration{}
-	err := handleConfigInitError(assert.AnError, cfg)
+	cmd, args := newBootstrapCloneCmd(t, []string{"--ci=false"})
+	tmpConfig := &schema.AtmosConfiguration{}
 
-	assert.NoError(t, err)
-	assert.True(t, cfg.CI.Enabled, "CI clone bootstrap must enable the no-arg CI checkout path without repo-local config")
+	applied := applyCIGitCloneBootstrap(cmd, args, tmpConfig)
+
+	assert.False(t, applied)
+	assert.False(t, tmpConfig.CI.Enabled)
+	assert.False(t, atmosConfig.CI.Enabled)
+}
+
+func TestApplyCIGitCloneBootstrap_NoCIProviderDetected(t *testing.T) {
+	saveRestoreAtmosConfig(t)
+	t.Setenv("GITHUB_ACTIONS", "false")
+	// Pin ATMOS_CI for determinism: ci.Detect() short-circuits before it's read
+	// here, but pinning avoids any ambient-value surprises if that ordering
+	// ever changes.
+	t.Setenv("ATMOS_CI", "true")
+
+	cmd, args := newBootstrapCloneCmd(t, nil)
+	tmpConfig := &schema.AtmosConfiguration{}
+
+	assert.False(t, applyCIGitCloneBootstrap(cmd, args, tmpConfig))
+	assert.False(t, tmpConfig.CI.Enabled)
+	assert.False(t, atmosConfig.CI.Enabled)
 }
 
 func TestPreprocessArgs_NoArgs(t *testing.T) {
@@ -584,11 +692,9 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		// Use NewTestKit to isolate RootCmd state.
 		_ = NewTestKit(t)
 
-		// Save original os.Args and os.Exit.
-		originalArgs := os.Args
+		// Save original os.Exit.
 		originalOsExit := errUtils.OsExit
 		defer func() {
-			os.Args = originalArgs
 			errUtils.OsExit = originalOsExit
 		}()
 
@@ -608,9 +714,8 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		// Set ATMOS_PAGER=false to explicitly disable the pager.
 		t.Setenv("ATMOS_PAGER", "false")
 
-		// Set os.Args so our custom Execute() function can parse them.
-		// This is required because Execute() needs to initialize atmosConfig from environment variables.
-		os.Args = []string{"atmos", "--help"}
+		// Use SetArgs instead of modifying os.Args.
+		RootCmd.SetArgs([]string{"--help"})
 
 		// Execute should not error even without a TTY.
 		// The pager should be disabled via ATMOS_PAGER=false, so no TTY error should occur.
@@ -628,11 +733,9 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		// Use NewTestKit to isolate RootCmd state.
 		_ = NewTestKit(t)
 
-		// Save original os.Args and os.Exit.
-		originalArgs := os.Args
+		// Save original os.Exit.
 		originalOsExit := errUtils.OsExit
 		defer func() {
-			os.Args = originalArgs
 			errUtils.OsExit = originalOsExit
 		}()
 
@@ -654,8 +757,8 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		// The pager should detect no TTY and fall back to direct output.
 		t.Setenv("ATMOS_PAGER", "true")
 
-		// Set os.Args so our custom Execute() function can parse them.
-		os.Args = []string{"atmos", "--help"}
+		// Use SetArgs instead of modifying os.Args.
+		RootCmd.SetArgs([]string{"--help"})
 
 		// Execute should not error even without a TTY.
 		// The pager should detect the lack of TTY and fall back to printing directly.
@@ -965,14 +1068,17 @@ func TestParseChdirFromArgs(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "multiple --chdir flags (first wins)",
+			// Last-flag-wins matches Cobra's own normal-path parsing of this same
+			// flag (both go through pflag) — the old hand-rolled scanner was
+			// actually the inconsistent one here, returning on first match.
+			name:     "multiple --chdir flags (last wins, matching Cobra's own flag parsing)",
 			args:     []string{"atmos", "--chdir=/first", "--chdir=/second", "terraform", "plan"},
-			expected: "/first",
+			expected: "/second",
 		},
 		{
-			name:     "mixed -C and --chdir (first wins)",
+			name:     "mixed -C and --chdir (last wins)",
 			args:     []string{"atmos", "-C/first", "--chdir=/second", "terraform", "plan"},
-			expected: "/first",
+			expected: "/second",
 		},
 		{
 			name:     "--chdir with tilde",
@@ -1085,20 +1191,32 @@ func TestSetupColorProfileFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore os.Args.
-			oldArgs := os.Args
-			defer func() { os.Args = oldArgs }()
+			// setupColorProfileFromEnvWithArgs has real, permanent side effects
+			// when force-color is detected: it calls the raw os.Setenv (not
+			// t.Setenv) to set CLICOLOR_FORCE=1 for Boa's help renderer, and
+			// lipgloss.SetColorProfile(TrueColor) globally. NewTestKit restores
+			// the color profile; CLICOLOR_FORCE needs its own explicit
+			// save/restore since the test doesn't own that Setenv call itself.
+			// Left leaking, this silently defeats NO_COLOR for every later test
+			// in the binary that renders through the logger/Boa color path
+			// (confirmed root cause of TestTerraformGenerateVarfileCmdNoColor's
+			// intermittent -shuffle=on failures).
+			_ = NewTestKit(t)
+			originalCliColorForce, hadCliColorForce := os.LookupEnv("CLICOLOR_FORCE")
+			t.Cleanup(func() {
+				if hadCliColorForce {
+					_ = os.Setenv("CLICOLOR_FORCE", originalCliColorForce)
+				} else {
+					_ = os.Unsetenv("CLICOLOR_FORCE")
+				}
+			})
 
 			if tt.envVar != "" {
 				t.Setenv(tt.envVar, tt.envValue)
 			}
 
-			if len(tt.args) > 0 {
-				os.Args = tt.args
-			}
-
 			// Should not panic.
-			setupColorProfileFromEnv()
+			setupColorProfileFromEnvWithArgs(tt.args)
 		})
 	}
 }

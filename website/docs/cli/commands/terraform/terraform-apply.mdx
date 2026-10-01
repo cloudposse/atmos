@@ -232,6 +232,33 @@ atmos terraform apply vpc -s dev
         ```
     </dd>
 
+    <dt>`--init-mode` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.mode`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default, skip init when nothing relevant changed), `always`, or `never` (disables the ordinary implicit init, but unlike `--skip-init` does not suppress the forced reconfigure init that `atmos terraform workspace select`/`new` needs).
+
+        ```shell
+        atmos terraform apply vpc -s dev --init-mode=always
+        ```
+    </dd>
+
+    <dt>`--init-reconfigure` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.reconfigure`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never`.
+
+        ```shell
+        atmos terraform apply vpc -s dev --init-reconfigure=always
+        ```
+    </dd>
+
+    <dt>`--init-upgrade` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.upgrade`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never`.
+
+        ```shell
+        atmos terraform apply vpc -s dev --init-upgrade=always
+        ```
+    </dd>
+
     <dt>`--process-templates` <em>(optional)</em></dt>
     <dd>
         Enable/disable Go template processing in Atmos stack manifests.
@@ -241,6 +268,21 @@ atmos terraform apply vpc -s dev
         ```shell
         atmos terraform apply vpc -s dev --process-templates=false
         ```
+    </dd>
+
+    <dt>`--ui` <em>(optional)</em></dt>
+    <dd>
+        Enable streaming UI mode for real-time resource status display. Shows a Docker-build-style progress view with spinners, progress bar, and resource states.
+
+        The UI automatically disables when output is piped, in CI environments, or when running unsupported commands.
+
+        `--ui` errors when combined with `--max-concurrency` greater than `1`, since concurrently-scheduled components can't share one terminal for their full-screen UI sessions. Use `--max-concurrency 1` (the default) with `--ui`, or drop `--ui` to run concurrently.
+
+        ```shell
+        atmos terraform apply vpc -s dev --ui
+        ```
+
+        Use `--ui=false` to explicitly disable when enabled by config.
     </dd>
 
     <dt>`--max-concurrency` <em>(optional)</em></dt>
@@ -370,6 +412,16 @@ Some commonly used native flags include:
     </dd>
 </dl>
 
+### Default Locking and Concurrency Flags
+
+Instead of retyping flags like `-lock-timeout` on every invocation, declare a default
+in [`components.terraform.flags`](/cli/configuration/components/terraform#flags) — globally
+in `atmos.yaml`, per stack, or per component. When applying a freshly computed plan (not a
+saved planfile), `apply` supports all five flags (`lock_timeout`, `lock`, `parallelism`,
+`refresh`, `compact_warnings`); when applying a saved planfile, Terraform rejects
+`-refresh`, so it is not injected in that case. A native flag typed directly on the
+command line (as shown above) always wins over a declared default.
+
 ## Best Practices
 
 ### Two-Stage Apply Process
@@ -487,6 +539,23 @@ atmos terraform apply --labels cost-center=platform
 atmos terraform apply --affected --tags production
 ```
 
+### Include Dependencies and Dependents
+
+Selector flags choose the seed set; `--include-dependencies` and `--include-dependents` expand it through the dependency graph. Expanded components are applied even when they do not match the selectors — they are prerequisites (or dependents) of what was selected. Prerequisites can live in other stacks, so `--include-dependencies` with `-s dev` legitimately applies prerequisite components outside the `dev` stack:
+
+```shell
+# Apply dev-labeled components plus everything they depend on
+atmos terraform apply --labels=env=dev --include-dependencies
+
+# Bound the expansion to direct dependencies only
+atmos terraform apply --labels=env=dev --include-dependencies=1
+
+# Apply a stack plus everything that depends on it, up to two levels out
+atmos terraform apply -s dev --include-dependents=2
+```
+
+Pass the depth with `=` (for example, `--include-dependencies=2`); a space-separated value is not bound to the flag. The bare flag expands without a depth limit, and `true`/`false` values are accepted for backward compatibility.
+
 ### Multi-Component Flags
 
 <dl>
@@ -506,10 +575,13 @@ atmos terraform apply --affected --tags production
     <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 
     <dt>`--labels`</dt>
-    <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
+    <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
+
+    <dt>`--include-dependencies`</dt>
+    <dd>Also apply everything the selected components depend on (their prerequisites), in dependency order — even when the prerequisites live in other stacks or do not match the selectors. Accepts an optional depth: the bare flag expands the full dependency chain, while `--include-dependencies=1` bounds it to direct dependencies. Requires a multi-component selection.<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENCIES`</dd>
 
     <dt>`--include-dependents`</dt>
-    <dd>With `--affected`, also apply components that depend on affected components, recursively.</dd>
+    <dd>Also apply everything that depends on the selected components, in dependency order. Works with any multi-component selection (`--all`, `--components`, `--query`, `--stack`, `--tags`, `--labels`, `--affected`). Accepts an optional depth: the bare flag expands the full dependent chain, while `--include-dependents=2` bounds it to two levels.<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENTS`</dd>
 
     <dt>`--ref`</dt>
     <dd>Git reference to compare against (branch or tag). Default: `refs/remotes/origin/HEAD`.</dd>

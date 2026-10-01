@@ -34,20 +34,16 @@ func TestProvider_GetBasePath(t *testing.T) {
 	}{
 		{name: "nil config", atmosConfig: nil, want: "components/container"},
 		{
-			name: "configured via plugins map",
+			name: "configured via typed base_path field",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{Plugins: map[string]any{
-					"container": map[string]any{"base_path": "custom/c"},
-				}},
+				Components: schema.Components{Container: schema.ContainerComponentsConfig{BasePath: "custom/c"}},
 			},
 			want: "custom/c",
 		},
 		{
-			name: "empty plugins falls back to default",
-			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{Plugins: map[string]any{}},
-			},
-			want: "components/container",
+			name:        "empty config falls back to default",
+			atmosConfig: &schema.AtmosConfiguration{},
+			want:        "components/container",
 		},
 	}
 	for _, tt := range tests {

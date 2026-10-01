@@ -236,6 +236,40 @@ Absolute paths are returned as-is. No search, no anchoring.
 | 3 | `base_path` in `atmos.yaml` | (default, config-file) |
 | 4 | Default (empty) | (default) |
 
+#### FR10: Multi-Source Anchoring (`--config`/`--config-path` with 2+ sources)
+
+FR3's config-file anchor rule — "paths in configuration files are relative to where the config is
+defined" — assumed exactly one `atmos.yaml`. `--config file1.yaml,file2.yaml` and
+`--config-path dir1,dir2` both let a user select **multiple** config sources, merged in order
+(`--config` files first, then `--config-path` directories, regardless of flag order on the command
+line — see `website/docs/cli/configuration/configuration.mdx`). "Where the config is defined" must
+generalize to a specific rule for that case:
+
+**The anchor is the directory of whichever source actually declared the dot-prefixed value —
+not the first source, and not a naive concatenation of every source's directory.**
+
+When more than one source is merged, `CliConfigPath` (the field `resolveAbsolutePath` used to
+anchor dot-prefixed values) stops being a single directory: it becomes a `;`-joined string of
+every contributing directory (`connectPaths`, `pkg/config/load_config_args.go`). Joining a
+relative path against that raw string produces a nonexistent path — silently breaking discovery of
+everything downstream of `base_path` (stacks, components, vendor, workflows) with no error at all
+in some call paths. This is the same anchoring problem FR3/the classification table already solve
+for the single-file case; multi-source config just adds one more question — *which* source's
+directory — on top of it.
+
+Resolution: `AtmosConfiguration.BasePathConfigDir` tracks the directory of whichever `--config`
+file or `--config-path` directory most recently declared `base_path` in the merge order (files
+before directories), falling back to the *first* source's directory if none declared it explicitly
+— mirroring FR1.9 of the [Atmos Profiles PRD](./atmos-profiles.md), which already established this
+same rule for `profiles.base_path`. `resolveAbsolutePath` anchors against `BasePathConfigDir` when
+it is set (multi-source case), falling back to `CliConfigPath` unchanged otherwise (single-source
+case, where `CliConfigPath` is already the correct single directory).
+
+This rule is source-declaration order, not source-priority: later-declaring sources win, matching
+the general "later config overrides earlier" merge semantics used everywhere else in this
+document, not FR9's CLI-flag-vs-env-var precedence (which is about *which kind* of source wins,
+not *which one of several files of the same kind* anchors a relative value).
+
 ### Non-Functional Requirements
 
 #### NFR1: Testability
@@ -344,8 +378,8 @@ function classify(value):
     if isAbsolute(value):
         return ABSOLUTE
     if value == "." or value == ".."
-       or startsWith(value, "./") or startsWith(value, "../")
-       or startsWith(value, ".\\") or startsWith(value, "..\\"):  # Windows
+        or startsWith(value, "./") or startsWith(value, "../")
+        or startsWith(value, ".\\") or startsWith(value, "..\\"):  # Windows
         return DOT
     return BARE
 ```
@@ -378,9 +412,13 @@ The `AtmosConfiguration` struct carries a `BasePathSource` field (`yaml:"-"`) th
 
 - Issue #1858: Path resolution regression report
 - Issue #2183: `failed to find import` with `ATMOS_BASE_PATH` env var
+- Issue #2867/#2868: multi-file `--config`/`--config-path` merge and internal `InitCliConfig`
+  re-invocation dropped the CLI-selected config/base_path (FR10)
 - PR #1774: Path-based component resolution (introduced config-relative behavior)
 - PR #1773: Git root discovery for default base path
 - PR #2215: Fix explicit base paths resolving relative to CWD
 - Fix doc: `docs/fixes/2026-03-17-failed-to-find-import-base-path-resolution.md`
 - Related PRD: `docs/prd/git-root-discovery-default-behavior.md`
 - Related PRD: `docs/prd/component-path-resolution.md`
+- Related PRD: `docs/prd/atmos-profiles.md` (FR1.9 establishes the same declaring-source-directory
+  rule for `profiles.base_path`)

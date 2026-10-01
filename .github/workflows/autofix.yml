@@ -6,9 +6,14 @@ name: autofix.ci
 on: pull_request
 permissions:
   contents: read
-  actions: write
 jobs:
   autofix:
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          # This job makes no network calls at all (just echo); block all egress.
+          egress-policy: block
+
       - run: echo "See Atmos Pro"

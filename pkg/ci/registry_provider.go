@@ -47,12 +47,14 @@ func Detect() provider.Provider {
 	providersMu.RLock()
 	defer providersMu.RUnlock()
 
+	// Detect() now runs on every command startup via the CI/Pro status banner, so a
+	// per-provider "not detected" line for every registered provider would be
+	// permanent log noise at every level, on every command, everywhere. Only the
+	// positive "detected" outcome is worth logging.
 	for _, p := range providers {
 		if p.Detect() {
 			log.Debug("CI provider detected", "provider", p.Name())
 			return p
-		} else {
-			log.Debug("CI provider not detected", "provider", p.Name())
 		}
 	}
 	return nil

@@ -74,6 +74,8 @@ func (r *pushRuntime) Logs(context.Context, string, bool, string, io.Writer, io.
 func (r *pushRuntime) Info(context.Context) (*container.RuntimeInfo, error) { return nil, nil }
 
 func TestRunPushImagesTagsAndPushesResolvedTags(t *testing.T) {
+	t.Parallel()
+
 	runtime := &pushRuntime{
 		pushResults: map[string]*container.PushResult{
 			"registry.example.com/app:v1": {
@@ -108,6 +110,8 @@ func TestRunPushImagesTagsAndPushesResolvedTags(t *testing.T) {
 }
 
 func TestRunPushImagesNoTagsPushesSourceImage(t *testing.T) {
+	t.Parallel()
+
 	runtime := &pushRuntime{
 		pushResults: map[string]*container.PushResult{
 			"app:local": {
@@ -130,6 +134,8 @@ func TestRunPushImagesNoTagsPushesSourceImage(t *testing.T) {
 }
 
 func TestRunPushImagesTagError(t *testing.T) {
+	t.Parallel()
+
 	tagErr := errors.New("tag failed")
 	runtime := &pushRuntime{
 		tagErr:      tagErr,
@@ -147,6 +153,8 @@ func TestRunPushImagesTagError(t *testing.T) {
 }
 
 func TestRunPushImagesPushErrorKeepsPartialResultMetadata(t *testing.T) {
+	t.Parallel()
+
 	pushErr := errors.New("push failed")
 	runtime := &pushRuntime{
 		pushResults: map[string]*container.PushResult{
@@ -175,6 +183,8 @@ func TestRunPushImagesPushErrorKeepsPartialResultMetadata(t *testing.T) {
 }
 
 func TestPreviewPush(t *testing.T) {
+	t.Parallel()
+
 	result := previewPush("", &resolvedPushConfig{Image: "app:local"}, []string{"registry.example.com/app:v1"})
 
 	assert.Equal(t, "app:local", result.Value)
@@ -187,6 +197,8 @@ func TestPreviewPush(t *testing.T) {
 }
 
 func TestContainerHandlerExecuteDryRunActions(t *testing.T) {
+	t.Parallel()
+
 	handler := &ContainerHandler{}
 	vars := NewVariables()
 

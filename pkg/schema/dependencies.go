@@ -3,6 +3,13 @@ package schema
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"reflect"
+	"strconv"
+	"strings"
+
+	"github.com/go-viper/mapstructure/v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Canonical kind values for path-based dependency entries used internally on
@@ -15,8 +22,7 @@ const (
 	dependencyKindFolder = "folder"
 )
 
-// Sentinel errors returned by Dependencies.Normalize. Defined locally to avoid
-// an import cycle with the pkg/perf-anchored errors package.
+// Sentinel errors returned by Dependencies.Normalize.
 var (
 	// ErrComponentDependencyNameConflict is returned when a single dependency
 	// entry sets both `name` (v2 alias) and `component` (canonical) to
@@ -25,6 +31,10 @@ var (
 	// ErrComponentDependencyMissingPath is returned when an inline path-based
 	// dependency entry (`kind: file` or `kind: folder`) lacks the `path` field.
 	ErrComponentDependencyMissingPath = errors.New("path-based component dependency is missing 'path'")
+	// ErrComponentDependencyMissingComponent is retained for callers that classify an omitted target.
+	ErrComponentDependencyMissingComponent = errors.New("component dependency is missing 'component' or 'name'")
+	// ErrComponentDependencyInvalidRequired is returned when a rendered required value is not boolean.
+	ErrComponentDependencyInvalidRequired = errors.New("component dependency required value is not boolean")
 )
 
 // ComponentDependency represents a single dependency entry. It supports two
@@ -57,18 +67,26 @@ type ComponentDependency struct {
 	// type, or — in the legacy inline shape — file/folder. Defaults to the
 	// declaring component's type for component dependencies.
 	Kind string `yaml:"kind,omitempty" json:"kind,omitempty" mapstructure:"kind"`
+	// Required controls whether a missing or unavailable target causes an error. Nil defaults to true.
+	Required *bool `yaml:"required,omitempty" json:"required,omitempty" mapstructure:"required"`
 	// Path for file or folder dependencies (legacy inline shape). For new
 	// configurations, prefer the sibling keys `dependencies.files` /
 	// `dependencies.folders`.
 	Path string `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`
 
 	// Legacy context fields from settings.depends_on format.
+
 	// These are only populated when reading from the deprecated settings.depends_on format.
 	// For new dependencies.components format, use the stack field with templates instead.
 	Namespace   string `yaml:"-" json:"-" mapstructure:"namespace"`
 	Tenant      string `yaml:"-" json:"-" mapstructure:"tenant"`
 	Environment string `yaml:"-" json:"-" mapstructure:"environment"`
 	Stage       string `yaml:"-" json:"-" mapstructure:"stage"`
+}
+
+// IsRequired reports whether this dependency is required. An omitted value defaults to required.
+func (d *ComponentDependency) IsRequired() bool {
+	return d.Required == nil || *d.Required
 }
 
 // IsFileDependency returns true if this is a file dependency.
@@ -112,6 +130,156 @@ type Dependencies struct {
 	// affected by `atmos describe affected`. Each entry may be a plain string
 	// (the folder path) or, in the future, an object with additional options.
 	Folders []string `yaml:"folders,omitempty" json:"folders,omitempty" mapstructure:"folders"`
+	// Commands lists named custom commands that must complete before this command/workflow
+	// runs its own steps. Resolved and executed concurrently by pkg/taskgraph, sharing the
+	// same generic DAG scheduler used by `parallel`/`matrix` `needs:` and Terraform's
+	// `dependencies.components`. Entries may be a plain name string or a structured object
+	// (for parameterized dependencies).
+	Commands UnitDependencies `yaml:"commands,omitempty" json:"commands,omitempty" mapstructure:"commands"`
+	// Workflows lists named workflows that must complete before this command/workflow runs
+	// its own steps. A plain name resolves within the current workflow file; a structured
+	// entry with `file:` resolves cross-file, exactly as the CLI's `atmos workflow <name> -f
+	// <file>` already does.
+	Workflows UnitDependencies `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
+}
+
+// UnitDependency references a single named command or workflow that must complete before the
+// declaring command/workflow runs. Supports both a plain name string
+// (`commands: [build]`) and a structured object (`commands: [{name: build, flags: {env:
+// dev}}]`) for parameterized invocation.
+type UnitDependency struct {
+	// Name is the target command or workflow name.
+	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	// File is the workflow file to resolve Name in, for cross-file workflow references. Only
+	// meaningful for Workflows entries; ignored for Commands (which resolve globally, since
+	// atmosConfig.Commands is already flat-merged before any command runs).
+	File string `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
+	// Flags carries parameterized flag overrides for this dependency invocation. Two entries
+	// referencing the same Name with the same Flags/Args collapse into a single executed
+	// DAG node (automatic dedup); different Flags/Args produce distinct nodes that both run.
+	Flags map[string]string `yaml:"flags,omitempty" json:"flags,omitempty" mapstructure:"flags"`
+	// Args carries parameterized positional-argument overrides for this dependency invocation.
+	Args []string `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
+	// Fail controls failure propagation across the WHOLE dependency run (not just this entry's
+	// own siblings, despite the field living on a single entry): wait_all (default), fail_fast,
+	// or best_effort — reusing the exact same vocabulary as pkg/workflow/control.go's
+	// ParallelFailConfig. If any direct dependency declares best_effort, the entire run's
+	// failures are forgiven, including siblings that declared no fail: at all; if any declares
+	// fail_fast (and none declare best_effort), the whole run cancels remaining work on the
+	// first failure. Mixing modes across sibling dependencies is legal but has this one
+	// run-wide outcome — it is not resolved per entry.
+	Fail string `yaml:"fail,omitempty" json:"fail,omitempty" mapstructure:"fail"`
+}
+
+// UnitDependencies is a list of UnitDependency that supports flexible YAML/mapstructure
+// unmarshaling: each element can be a plain name string (the common case) or a structured
+// object (for parameterized invocation or a cross-file workflow reference), mirroring the
+// existing polymorphic-element pattern already used by schema.Tasks.
+type UnitDependencies []UnitDependency
+
+// UnmarshalYAML implements custom YAML unmarshaling for UnitDependencies, used when a
+// workflow file is decoded directly via yaml.v3 (see pkg/utils.UnmarshalYAMLFromFile).
+func (u *UnitDependencies) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.SequenceNode {
+		return fmt.Errorf("%w: expected sequence, got %v", ErrTaskInvalidFormat, value.Kind)
+	}
+
+	deps := make(UnitDependencies, 0, len(value.Content))
+	for i, node := range value.Content {
+		var dep UnitDependency
+		switch node.Kind {
+		case yaml.ScalarNode:
+			dep.Name = node.Value
+		case yaml.MappingNode:
+			if err := node.Decode(&dep); err != nil {
+				return fmt.Errorf("failed to decode dependency at index %d: %w", i, err)
+			}
+		default:
+			return fmt.Errorf("%w at index %d: got %v (expected string or mapping)", ErrTaskUnexpectedNodeKind, i, node.Kind)
+		}
+		deps = append(deps, dep)
+	}
+	*u = deps
+	return nil
+}
+
+// UnitDependencyDecodeHook normalizes polymorphic dependency lists (dependencies.commands /
+// dependencies.workflows) before mapstructure decodes them, used when config is loaded through
+// Viper (see pkg/config.getAtmosDecodeHookFunc) — e.g. a custom command's dependencies. Mirrors
+// schema.TasksDecodeHook's approach for the same string-or-map-per-element polymorphism.
+func UnitDependencyDecodeHook() mapstructure.DecodeHookFunc {
+	unitDependenciesType := reflect.TypeOf(UnitDependencies{})
+
+	return func(f reflect.Type, t reflect.Type, data any) (any, error) {
+		if t != unitDependenciesType || f.Kind() != reflect.Slice {
+			return data, nil
+		}
+		slice, ok := sliceToAnyGeneric(data)
+		if !ok {
+			return data, nil
+		}
+		return decodeUnitDependenciesFromSlice(slice)
+	}
+}
+
+func sliceToAnyGeneric(data any) ([]any, bool) {
+	if slice, ok := data.([]any); ok {
+		return slice, true
+	}
+	rv := reflect.ValueOf(data)
+	if !rv.IsValid() || rv.Kind() != reflect.Slice {
+		return nil, false
+	}
+	slice := make([]any, rv.Len())
+	for i := range slice {
+		slice[i] = rv.Index(i).Interface()
+	}
+	return slice, true
+}
+
+func decodeUnitDependenciesFromSlice(slice []any) (UnitDependencies, error) {
+	deps := make(UnitDependencies, 0, len(slice))
+	for i, item := range slice {
+		dep, err := decodeUnitDependencyItem(item, i)
+		if err != nil {
+			return nil, err
+		}
+		deps = append(deps, dep)
+	}
+	return deps, nil
+}
+
+func decodeUnitDependencyItem(item any, index int) (UnitDependency, error) {
+	switch v := item.(type) {
+	case string:
+		return UnitDependency{Name: v}, nil
+	case map[string]any:
+		var dep UnitDependency
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &dep,
+			TagName:          "mapstructure",
+			WeaklyTypedInput: true,
+		})
+		if err != nil {
+			return UnitDependency{}, fmt.Errorf("%w at index %d: %w", ErrTaskUnexpectedNodeKind, index, err)
+		}
+		if err := decoder.Decode(v); err != nil {
+			return UnitDependency{}, fmt.Errorf("%w at index %d: %w", ErrTaskUnexpectedNodeKind, index, err)
+		}
+		return dep, nil
+	default:
+		return UnitDependency{}, fmt.Errorf("%w at index %d: got %T (expected string or map)", ErrTaskUnexpectedNodeKind, index, item)
+	}
+}
+
+// OrEmpty returns *d, or a zero-value Dependencies if d is nil. Lets callers read
+// Commands/Workflows/Tools off a *Dependencies field (e.g. WorkflowDefinition.Dependencies,
+// Command.Dependencies) without a nil-check at every call site.
+func (d *Dependencies) OrEmpty() Dependencies {
+	if d == nil {
+		return Dependencies{}
+	}
+	return *d
 }
 
 // Normalize reconciles the v2 (`name`, `dependencies.files`,
@@ -129,7 +297,8 @@ type Dependencies struct {
 //     the typed slices directly.
 //
 // Returns an error if any entry has both `component` and `name` set to
-// different non-empty values, or if a path-based entry is missing `path`.
+// different non-empty values, if a path-based entry is missing `path`, or if a
+// component dependency omits both `component` and `name`.
 func (d *Dependencies) Normalize() error {
 	if d == nil {
 		return nil
@@ -143,18 +312,127 @@ func (d *Dependencies) Normalize() error {
 }
 
 // normalizeComponentEntries resolves the name↔component alias on every entry
-// and validates that any inline path-based entry has a non-empty path.
+// and validates that each entry has the fields required by its kind.
 func (d *Dependencies) normalizeComponentEntries() error {
 	for i := range d.Components {
 		entry := &d.Components[i]
 		if err := normalizeNameAlias(entry, i); err != nil {
 			return err
 		}
-		if (entry.IsFileDependency() || entry.IsFolderDependency()) && entry.Path == "" {
-			return fmt.Errorf("%w (entry %d, kind=%q)", ErrComponentDependencyMissingPath, i, entry.Kind)
+		if entry.IsFileDependency() || entry.IsFolderDependency() {
+			if entry.Path == "" {
+				return fmt.Errorf("%w (entry %d, kind=%q)", ErrComponentDependencyMissingPath, i, entry.Kind)
+			}
+			continue
+		}
+		if entry.Component == "" {
+			return fmt.Errorf("%w (entry %d)", ErrComponentDependencyMissingComponent, i)
 		}
 	}
 	return nil
+}
+
+var dependencyBoolType = reflect.TypeOf(false)
+
+func dependencyDecodeHook(from, to reflect.Type, data any) (any, error) {
+	if to != dependencyBoolType {
+		return data, nil
+	}
+	value, ok := data.(string)
+	if !ok {
+		return data, nil
+	}
+	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrComponentDependencyInvalidRequired, err)
+	}
+	return parsed, nil
+}
+
+// ParseComponentDependencies decodes and normalizes modern component dependencies.
+// It applies last-wins semantics using effective kind and stack identity.
+func ParseComponentDependencies(section map[string]any, defaultKind, defaultStack string) ([]ComponentDependency, error) {
+	var dependencies Dependencies
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:     &dependencies,
+		TagName:    "mapstructure",
+		DecodeHook: dependencyDecodeHook,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create component dependency decoder: %w", err)
+	}
+	if err := decoder.Decode(section); err != nil {
+		return nil, fmt.Errorf("decode component dependencies: %w", err)
+	}
+	if err := dependencies.Normalize(); err != nil {
+		return dependencies.Components, fmt.Errorf("normalize component dependencies: %w", err)
+	}
+
+	normalized := make([]ComponentDependency, 0, len(dependencies.Components))
+	indices := make(map[string]int, len(dependencies.Components))
+	for i := range dependencies.Components {
+		dependency := &dependencies.Components[i]
+		if !dependency.IsComponentDependency() || dependency.Component == "" {
+			continue
+		}
+		kind := dependency.Kind
+		if kind == "" {
+			kind = defaultKind
+		}
+		stack := dependency.Stack
+		if stack == "" {
+			stack = defaultStack
+		}
+		key := dependency.Component + "\x00" + kind + "\x00" + stack
+		if index, exists := indices[key]; exists {
+			normalized[index] = *dependency
+			continue
+		}
+		indices[key] = len(normalized)
+		normalized = append(normalized, *dependency)
+	}
+	return normalized, nil
+}
+
+// DeferUnresolvedRequired removes unrendered required values so callers that
+// parse an unevaluated component retain the conservative required default.
+func DeferUnresolvedRequired(section map[string]any, leftDelim string) map[string]any {
+	entries, ok := section["components"].([]any)
+	if !ok {
+		return section
+	}
+
+	deferred := false
+	clonedEntries := make([]any, len(entries))
+	for i, entry := range entries {
+		component, ok := entry.(map[string]any)
+		if !ok || !unresolvedRequiredValue(component["required"], leftDelim) {
+			clonedEntries[i] = entry
+			continue
+		}
+		clonedComponent := maps.Clone(component)
+		delete(clonedComponent, "required")
+		clonedEntries[i] = clonedComponent
+		deferred = true
+	}
+	if !deferred {
+		return section
+	}
+
+	clonedSection := maps.Clone(section)
+	clonedSection["components"] = clonedEntries
+	return clonedSection
+}
+
+func unresolvedRequiredValue(value any, leftDelim string) bool {
+	stringValue, ok := value.(string)
+	if !ok {
+		return false
+	}
+	if leftDelim == "" {
+		leftDelim = "{{"
+	}
+	return strings.Contains(stringValue, leftDelim) || strings.HasPrefix(strings.TrimSpace(stringValue), "!")
 }
 
 // mirrorSiblingsIntoComponents appends synthetic ComponentDependency entries

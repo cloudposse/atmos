@@ -14,7 +14,7 @@ stacks:
   base_path: "stacks"
   included_paths:
     - "deploy/**/*"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 # The secret store talks to the OpenBao emulator (Vault KV v2 API). A store lives in
 # atmos.yaml (global config, no stack context), so it cannot use the stack-scoped

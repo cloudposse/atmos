@@ -1,12 +1,17 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 func setupTestFile(content, tempDir string, filename string) (string, error) {
@@ -216,7 +221,7 @@ func TestSanitizeImport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := sanitizeImport(tt.input)
+			result := SanitizeImport(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -268,4 +273,70 @@ settings:
 
 	// The import should work despite being outside base directory.
 	// The message is now logged at Trace level, not Warn level.
+}
+
+// TestMergeResolvedImports_MergeFailureLogsWarnAndContinues verifies that when one resolved
+// import file fails to merge (e.g. malformed YAML), mergeResolvedImports logs the failure at
+// Warn level with a sanitized import path and continues merging the remaining files instead
+// of aborting the whole config load.
+func TestMergeResolvedImports_MergeFailureLogsWarnAndContinues(t *testing.T) {
+	originalLogger := log.Default()
+	buffer := &bytes.Buffer{}
+	testLogger := log.New()
+	testLogger.SetOutput(buffer)
+	testLogger.SetLevel(log.WarnLevel)
+	testLogger.SetReportTimestamp(false)
+	log.SetDefault(testLogger)
+	t.Cleanup(func() { log.SetDefault(originalLogger) })
+
+	tempDir := t.TempDir()
+
+	badFile, err := setupTestFile("key: [unterminated", tempDir, "bad.yaml")
+	require.NoError(t, err)
+	goodFile, err := setupTestFile("key2: value2", tempDir, "good.yaml")
+	require.NoError(t, err)
+
+	resolvedPaths := []ResolvedPaths{
+		{FilePath: badFile, ImportPaths: "https://user:super-secret-token@example.com/bad.yaml", ImportType: REMOTE},
+		{FilePath: goodFile, ImportPaths: "./good.yaml", ImportType: LOCAL},
+	}
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	basePathSourceDir := mergeResolvedImports(resolvedPaths, v, defaultFileSystem)
+
+	assert.Empty(t, basePathSourceDir, "neither file declares base_path")
+	assert.Equal(t, "value2", v.Get("key2"), "the good file after the bad one must still merge")
+	logged := buffer.String()
+	assert.Contains(t, logged, "error loading config file", "the merge failure should be logged")
+	assert.NotContains(t, logged, "super-secret-token", "the merge-failure warning must not leak credentials")
+}
+
+// TestProcessImports_FailedImportLogSanitized verifies that the Warn log emitted when an
+// import fails to resolve never leaks credentials embedded in the import URL.
+func TestProcessImports_FailedImportLogSanitized(t *testing.T) {
+	setupTestAdapters()
+	t.Setenv("NO_COLOR", "1")
+
+	originalLogger := log.Default()
+	buffer := &bytes.Buffer{}
+	testLogger := log.New()
+	testLogger.SetOutput(buffer)
+	testLogger.SetLevel(log.WarnLevel)
+	testLogger.SetReportTimestamp(false)
+	log.SetDefault(testLogger)
+	t.Cleanup(func() { log.SetDefault(originalLogger) })
+
+	// .invalid is a reserved TLD (RFC 2606) that always fails DNS resolution immediately,
+	// so this exercises a real resolve failure without a real network dependency.
+	credentialedImport := "https://user:super-secret-token@nonexistent.invalid/config.yaml"
+	tempDir := t.TempDir()
+
+	_, err := processImports(nil, tempDir, []string{credentialedImport}, tempDir, 1, 10)
+
+	require.NoError(t, err, "a failed import must not abort the whole config load")
+	logged := buffer.String()
+	assert.NotContains(t, logged, "super-secret-token", "the failed-import warning must not leak credentials")
+	assert.NotContains(t, logged, "user:super-secret-token@", "the failed-import warning must not leak the userinfo segment")
+	assert.Contains(t, logged, "failed to resolve import", "the warning should still identify the failure")
 }

@@ -130,13 +130,16 @@ func (b *GlobalOptionsBuilder) registerAuthenticationFlags(defaults *global.Flag
 	// and is registered as a persistent flag on the toolchain command in cmd/toolchain/toolchain.go.
 
 	// Profiles - configuration profiles.
-	b.options = append(b.options, func(cfg *parserConfig) {
-		cfg.registry.Register(&StringSliceFlag{
+	// NoOptDefVal enables the pattern: --profile (interactive selection),
+	// --profile name (explicit), mirroring the --identity flag above.
+	b.options = append(b.options, func(c *parserConfig) {
+		c.registry.Register(&StringSliceFlag{
 			Name:        "profile",
 			Shorthand:   "",
 			Default:     defaults.Profile,
 			Description: "Activate configuration profiles (comma-separated or repeated flag)",
 			EnvVars:     []string{"ATMOS_PROFILE"},
+			NoOptDefVal: cfg.ProfileFlagSelectValue,
 		})
 	})
 }
@@ -201,6 +204,14 @@ func (b *GlobalOptionsBuilder) registerSettingsFlags(defaults *global.Flags) {
 		"Override settings.list_merge_strategy for this invocation. Controls how lists are merged in Atmos stack manifests (replace, append, merge)",
 	))
 	b.options = append(b.options, WithEnvVars("settings-list-merge-strategy", "ATMOS_SETTINGS_LIST_MERGE_STRATEGY"))
+
+	b.options = append(b.options, WithStringFlag(
+		"edition",
+		"",
+		defaults.Edition,
+		"Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)",
+	))
+	b.options = append(b.options, WithEnvVars("edition", "ATMOS_EDITION"))
 }
 
 // registerSystemFlags registers system configuration flags.

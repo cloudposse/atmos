@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,9 +20,412 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 )
+
+func TestExecuteTerraformSharesRegistryCacheAcrossBulkRun(t *testing.T) {
+	originalStart := startTerraformCacheForExecution
+	t.Cleanup(func() { startTerraformCacheForExecution = originalStart })
+
+	setup := &tfcache.Setup{}
+	starts := 0
+	closes := 0
+	startTerraformCacheForExecution = func(context.Context, *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
+		starts++
+		return setup, func() { closes++ }, nil
+	}
+
+	var executed int
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "plan",
+			MaxConcurrency: 2,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed++
+			require.True(t, execution.Info.TerraformCacheExternal)
+			require.Same(t, setup, execution.Info.TerraformCache)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 3, executed)
+	require.Equal(t, 1, starts)
+	require.Equal(t, 1, closes)
+}
+
+func TestExecuteTerraformSuppressesSpinnersDuringConcurrentRun(t *testing.T) {
+	originalSuppressSpinners := suppressTerraformSpinners
+	t.Cleanup(func() { suppressTerraformSpinners = originalSuppressSpinners })
+
+	var active atomic.Bool
+	var restored atomic.Bool
+	suppressTerraformSpinners = func() func() {
+		active.Store(true)
+		return func() {
+			active.Store(false)
+			restored.Store(true)
+		}
+	}
+
+	var observedActive atomic.Bool
+	var observedOutputSuppression atomic.Bool
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     terraformSubCommandPlan,
+			MaxConcurrency: 2,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			observedActive.Store(active.Load())
+			observedOutputSuppression.Store(provWorkdir.OutputSuppressed(execution.Context))
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.True(t, observedActive.Load())
+	require.True(t, observedOutputSuppression.Load())
+	require.True(t, restored.Load())
+	require.False(t, active.Load())
+}
+
+func TestExecuteTerraformKeepsProvisioningOutputForSequentialRun(t *testing.T) {
+	var observedOutputSuppression atomic.Bool
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     terraformSubCommandPlan,
+			MaxConcurrency: 1,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			observedOutputSuppression.Store(provWorkdir.OutputSuppressed(execution.Context))
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.False(t, observedOutputSuppression.Load())
+}
+
+func TestExecuteTerraformNormalizesNilContext(t *testing.T) {
+	var executorContext context.Context
+	var nilContext context.Context
+	err := ExecuteTerraform(nilContext, TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: terraformSubCommandPlan,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executorContext = execution.Context
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, executorContext)
+}
+
+func TestStartSharedTerraformCache(t *testing.T) {
+	originalStart := startTerraformCacheForExecution
+	t.Cleanup(func() { startTerraformCacheForExecution = originalStart })
+
+	t.Run("reuses an externally managed cache", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{TerraformCacheExternal: true}
+		startTerraformCacheForExecution = func(context.Context, *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
+			t.Fatal("external cache must not start again")
+			return nil, nil, nil
+		}
+
+		cleanup, err := startSharedTerraformCache(context.Background(), &schema.AtmosConfiguration{}, info)
+		require.NoError(t, err)
+		cleanup()
+	})
+
+	t.Run("records setup and returns cleanup", func(t *testing.T) {
+		setup := &tfcache.Setup{}
+		cleaned := false
+		startTerraformCacheForExecution = func(context.Context, *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
+			return setup, func() { cleaned = true }, nil
+		}
+		info := &schema.ConfigAndStacksInfo{}
+
+		cleanup, err := startSharedTerraformCache(context.Background(), &schema.AtmosConfiguration{}, info)
+		require.NoError(t, err)
+		require.Same(t, setup, info.TerraformCache)
+		require.True(t, info.TerraformCacheExternal)
+		cleanup()
+		require.True(t, cleaned)
+	})
+
+	t.Run("propagates startup errors", func(t *testing.T) {
+		startErr := errors.New("cache startup failed")
+		startTerraformCacheForExecution = func(context.Context, *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
+			return nil, func() {}, startErr
+		}
+		cleanup, err := startSharedTerraformCache(context.Background(), &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, startErr)
+		cleanup()
+	})
+}
+
+func TestSkippedResultCount(t *testing.T) {
+	require.Zero(t, skippedResultCount(nil))
+	require.Equal(t, 2, skippedResultCount(&scheduler.AggregateResult{Results: []scheduler.Result{
+		{Status: scheduler.StatusSkipped},
+		{},
+		{Status: scheduler.StatusSkipped},
+	}}))
+}
+
+func TestTerraformDependenciesModernAndLegacy(t *testing.T) {
+	t.Run("modern dependencies normalize name aliases", func(t *testing.T) {
+		dependencies, err := terraformDependencies(map[string]any{
+			cfg.DependenciesSectionName: map[string]any{
+				"components": []any{map[string]any{"name": "vpc", "stack": "core"}},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []schema.ComponentDependency{{Component: "vpc", Stack: "core"}}, dependencies)
+	})
+
+	t.Run("modern decode and normalization errors propagate", func(t *testing.T) {
+		_, err := terraformDependencies(map[string]any{
+			cfg.DependenciesSectionName: map[string]any{"components": "not-a-list"},
+		})
+		require.Error(t, err)
+
+		_, err = terraformDependencies(map[string]any{
+			cfg.DependenciesSectionName: map[string]any{
+				"components": []any{map[string]any{"component": "vpc", "name": "network"}},
+			},
+		})
+		require.ErrorIs(t, err, schema.ErrComponentDependencyNameConflict)
+	})
+
+	t.Run("legacy settings remain supported", func(t *testing.T) {
+		dependencies, err := terraformDependencies(map[string]any{
+			cfg.SettingsSectionName: map[string]any{"depends_on": []any{"vpc"}},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []schema.ComponentDependency{{Component: "vpc"}}, dependencies)
+	})
+
+	t.Run("missing dependency sections are empty", func(t *testing.T) {
+		dependencies, err := terraformDependencies(map[string]any{})
+		require.NoError(t, err)
+		require.Empty(t, dependencies)
+	})
+}
+
+func TestTerraformDependenciesRejectsMalformedDependenciesSection(t *testing.T) {
+	_, err := terraformDependencies(map[string]any{
+		cfg.DependenciesSectionName: "not-a-map",
+		cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"vpc"}},
+	})
+	require.ErrorIs(t, err, errUtils.ErrInvalidDependenciesSection)
+}
+
+func TestTerraformDependenciesEmptyModernListPreventsSettingsFallback(t *testing.T) {
+	dependencies, err := terraformDependencies(map[string]any{
+		cfg.DependenciesSectionName: map[string]any{"components": []any{}},
+		cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"vpc"}},
+	})
+	require.NoError(t, err)
+	require.Empty(t, dependencies)
+}
+
+func TestAddTerraformDependenciesOptionalUnresolvedTargetFails(t *testing.T) {
+	tests := []struct {
+		name       string
+		dependency map[string]any
+	}{
+		{
+			name:       "component",
+			dependency: map[string]any{"name": "{{ .missing }}", "required": false},
+		},
+		{
+			name:       "stack",
+			dependency: map[string]any{"name": "vpc", "stack": "{{ .missing }}", "required": false},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			builder := dependency.NewBuilder()
+			err := addTerraformDependencies(
+				builder,
+				map[string]terraformTargetState{},
+				nil,
+				nil,
+				"",
+				"dev",
+				"app",
+				map[string]any{
+					cfg.DependenciesSectionName: map[string]any{
+						"components": []any{test.dependency},
+					},
+				},
+			)
+			require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+		})
+	}
+}
+
+func TestAddTerraformDependenciesOptionalUnresolvedTargetWithCustomDelimiterFails(t *testing.T) {
+	builder := dependency.NewBuilder()
+	err := addTerraformDependencies(
+		builder,
+		map[string]terraformTargetState{},
+		nil,
+		nil,
+		"[[",
+		"dev",
+		"app",
+		map[string]any{
+			cfg.DependenciesSectionName: map[string]any{
+				"components": []any{
+					map[string]any{"name": "vpc", "stack": "[[ .missing ]]", "required": false},
+				},
+			},
+		},
+	)
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+}
+
+func TestBuildTerraformGraphDefersCustomDelimitedRequiredValue(t *testing.T) {
+	graph, err := buildTerraformGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformComponentType: map[string]any{
+					"base": map[string]any{},
+					"app": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{
+							map[string]any{"component": "base", "required": "[[ .vars.base_required ]]"},
+						}},
+					},
+				},
+			},
+		},
+	}, "[[", nil)
+
+	require.NoError(t, err)
+	app, ok := graph.GetNode(terraformNodeID("app", "dev"))
+	require.True(t, ok)
+	require.Equal(t, []string{terraformNodeID("base", "dev")}, app.Dependencies)
+}
+
+func TestDiscoverTerraformGraphRetainsValidDependenciesAfterUnresolvedDeclaration(t *testing.T) {
+	graph := discoverTerraformGraph(map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformComponentType: map[string]any{
+					"vpc": map[string]any{},
+					"app": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "{{ .missing }}", "required": false},
+								map[string]any{"name": "vpc"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}, "")
+
+	require.Contains(t, graph.Nodes[terraformNodeID("app", "dev")].Dependencies, terraformNodeID("vpc", "dev"))
+}
+
+func TestExecuteTerraformClosesSharedRegistryCacheOnFailureAndCancellation(t *testing.T) {
+	tests := []struct {
+		name     string
+		context  func() context.Context
+		executor TerraformExecutor
+	}{
+		{
+			name:    "component failure",
+			context: context.Background,
+			executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+				return TerraformExecutionResult{}, errors.New("plan failed")
+			},
+		},
+		{
+			name: "canceled scheduler context",
+			context: func() context.Context {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx
+			},
+			executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+				t.Fatal("canceled scheduler must not execute a component")
+				return TerraformExecutionResult{}, nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originalStart := startTerraformCacheForExecution
+			t.Cleanup(func() { startTerraformCacheForExecution = originalStart })
+
+			starts := 0
+			closes := 0
+			startTerraformCacheForExecution = func(context.Context, *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
+				starts++
+				return &tfcache.Setup{}, func() { closes++ }, nil
+			}
+
+			err := ExecuteTerraform(tt.context(), TerraformOptions{
+				AtmosConfig: &schema.AtmosConfiguration{},
+				Info:        &schema.ConfigAndStacksInfo{All: true, SubCommand: "plan"},
+				Stacks:      terraformAdapterTestStacks(),
+				Executor:    tt.executor,
+			})
+
+			require.Error(t, err)
+			require.Equal(t, 1, starts)
+			require.Equal(t, 1, closes)
+		})
+	}
+}
+
+func TestExecuteTerraformDoesNotStartRegistryCacheForEmptySelection(t *testing.T) {
+	originalStart := startTerraformCacheForExecution
+	t.Cleanup(func() { startTerraformCacheForExecution = originalStart })
+
+	starts := 0
+	startTerraformCacheForExecution = func(context.Context, *schema.AtmosConfiguration) (*tfcache.Setup, func(), error) {
+		starts++
+		return &tfcache.Setup{}, func() {}, nil
+	}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info:        &schema.ConfigAndStacksInfo{All: true, SubCommand: "plan"},
+		Stacks:      map[string]any{},
+		Executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+			t.Fatal("empty selection must not execute a component")
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.Zero(t, starts)
+}
 
 func TestExecuteTerraformAllUsesGraphBackedSequentialOrder(t *testing.T) {
 	stacks := terraformAdapterTestStacks()
@@ -113,6 +517,163 @@ func TestExecuteTerraformDestroyUsesReverseDependencyOrder(t *testing.T) {
 	require.Equal(t, []string{"app@dev", "database@dev", "vpc@dev"}, executed)
 }
 
+// testNodeHooks is a schema.ComponentNodeHooks test double that records every
+// Before/After call (keyed by "component@stack") and can be configured to
+// fail for specific nodes, so tests can assert the Dispatch-level wiring
+// added to fix component hooks.RunAll not firing under bulk dispatch.
+type testNodeHooks struct {
+	mu                  sync.Mutex
+	beforeCalls         []string
+	afterCalls          []string
+	beforeErr           map[string]error
+	afterErr            map[string]error
+	beforeOutput        string
+	beforeOutputReady   chan<- struct{}
+	beforeOutputRelease <-chan struct{}
+}
+
+func (n *testNodeHooks) Before(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	return n.BeforeWithWriters(ctx, info, schema.ComponentNodeHookWriters{})
+}
+
+func (n *testNodeHooks) BeforeWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, writers schema.ComponentNodeHookWriters) error {
+	n.mu.Lock()
+	key := info.Component + "@" + info.Stack
+	n.beforeCalls = append(n.beforeCalls, key)
+	err := n.beforeErr[key]
+	beforeOutput := n.beforeOutput
+	ready := n.beforeOutputReady
+	release := n.beforeOutputRelease
+	n.mu.Unlock()
+
+	if err != nil {
+		return err
+	}
+	if beforeOutput == "" {
+		return nil
+	}
+	if writers.Stdout == nil {
+		writers.Stdout = os.Stdout
+	}
+	if ready != nil && release != nil {
+		_, _ = fmt.Fprint(writers.Stdout, "hook progress\r")
+		ready <- struct{}{}
+		<-release
+		_, _ = fmt.Fprint(writers.Stdout, "hook complete\n")
+		return nil
+	}
+	_, _ = fmt.Fprint(writers.Stdout, beforeOutput)
+	return nil
+}
+
+func (n *testNodeHooks) After(ctx context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error) error {
+	return n.AfterWithWriters(ctx, info, output, execErr, schema.ComponentNodeHookWriters{})
+}
+
+func (n *testNodeHooks) AfterWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, _ string, _ error, _ schema.ComponentNodeHookWriters) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	key := info.Component + "@" + info.Stack
+	n.afterCalls = append(n.afterCalls, key)
+	if n.afterErr != nil {
+		return n.afterErr[key]
+	}
+	return nil
+}
+
+// TestExecuteTerraformFiresNodeHooksBeforeAndAfter is a regression test for
+// the bug where component hooks.RunAll never fired under --all/--affected/
+// --query bulk dispatch (only CI hooks did, via the old PerComponentHook
+// callback, and only after execution). It asserts Before fires for each node
+// prior to the executor running, and After fires afterward, both with the
+// per-node Component/Stack values set.
+func TestExecuteTerraformFiresNodeHooksBeforeAndAfter(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+	nodeHooks := &testNodeHooks{}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+			NodeHooks:  nodeHooks,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	want := []string{"vpc@dev", "database@dev", "app@dev"}
+	require.Equal(t, want, executed)
+	require.Equal(t, want, nodeHooks.beforeCalls, "Before must fire once per node with the executed order")
+	require.Equal(t, want, nodeHooks.afterCalls, "After must fire once per node with the executed order")
+}
+
+func TestExecuteTerraformConcurrentHooksUseNodeWriters(t *testing.T) {
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	require.NoError(t, err)
+	originalStdout := os.Stdout
+	os.Stdout = stdoutWriter
+	t.Cleanup(func() { os.Stdout = originalStdout })
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": terraformAdapterComponentWithPath("selected", terraformAdapterPath("app")),
+					"db":  terraformAdapterComponentWithPath("selected", terraformAdapterPath("db")),
+				},
+			},
+		},
+	}
+
+	ready := make(chan struct{}, 2)
+	release := make(chan struct{})
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- ExecuteTerraform(context.Background(), TerraformOptions{
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info: &schema.ConfigAndStacksInfo{
+				All:               true,
+				SubCommand:        "plan",
+				MaxConcurrency:    2,
+				TerraformLogOrder: terraformLogOrderStream,
+				NodeHooks: &testNodeHooks{
+					beforeOutput:        "hook progress\rhook complete\n",
+					beforeOutputReady:   ready,
+					beforeOutputRelease: release,
+				},
+			},
+			Stacks: stacks,
+			Executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+				return TerraformExecutionResult{}, nil
+			},
+		})
+	}()
+
+	for range 2 {
+		select {
+		case <-ready:
+		case <-time.After(time.Second):
+			t.Fatal("concurrent hooks did not both write their partial records")
+		}
+	}
+	close(release)
+	err = <-errCh
+	require.NoError(t, err)
+	require.NoError(t, stdoutWriter.Close())
+	stdout, err := io.ReadAll(stdoutReader)
+	require.NoError(t, err)
+	require.Contains(t, string(stdout), "[dev/app] hook progress\n[dev/app] hook complete\n")
+	require.Contains(t, string(stdout), "[dev/db] hook progress\n[dev/db] hook complete\n")
+}
+
 func TestExecuteTerraformInitUsesForwardDependencyOrder(t *testing.T) {
 	stacks := terraformAdapterTestStacks()
 	var executed []string
@@ -135,6 +696,103 @@ func TestExecuteTerraformInitUsesForwardDependencyOrder(t *testing.T) {
 	// Unlike destroy, init has no destructive-ordering requirement, so it keeps
 	// the natural forward dependency order (prerequisites before dependents).
 	require.Equal(t, []string{"vpc@dev", "database@dev", "app@dev"}, executed)
+}
+
+// TestExecuteTerraformNodeHooksBeforeFailureAbortsNodeWithoutExecutor asserts
+// that a before-hook failure (on_failure: fail, per hooks.RunAll's own
+// resolution) aborts that node's execution — the injected Executor must never
+// be called for it — mirroring how a failing before-hook prevents a
+// single-component command's RunE from ever running.
+func TestExecuteTerraformNodeHooksBeforeFailureAbortsNodeWithoutExecutor(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+	sentinelErr := errors.New("before hook failed")
+	nodeHooks := &testNodeHooks{
+		beforeErr: map[string]error{"vpc@dev": sentinelErr},
+	}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+			NodeHooks:  nodeHooks,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrPerComponentHookFailed)
+	require.ErrorIs(t, err, sentinelErr)
+	require.NotContains(t, executed, "vpc@dev", "the executor must never run for a node whose before-hook failed")
+}
+
+// TestExecuteTerraformNodeHooksAfterFailurePromotesSuccessToFailure asserts
+// that an after-hook failure (again, only possible for on_failure: fail) is
+// treated as that node's execution failing even though the real Terraform
+// executor succeeded — matching single-component behavior where an
+// after-hook failure fails the command.
+func TestExecuteTerraformNodeHooksAfterFailurePromotesSuccessToFailure(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	sentinelErr := errors.New("after hook failed")
+	nodeHooks := &testNodeHooks{
+		afterErr: map[string]error{"vpc@dev": sentinelErr},
+	}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+			NodeHooks:  nodeHooks,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err, "an after-hook failure must fail the node even though the executor succeeded")
+	require.ErrorIs(t, err, sentinelErr)
+}
+
+// TestExecuteTerraformNodeHooksAfterFailureJoinsExecutorError asserts that
+// when the node executor itself already failed AND the after-hook also
+// fails, runAfterNodeHooks joins both errors (errors.Join) rather than
+// dropping either one.
+func TestExecuteTerraformNodeHooksAfterFailureJoinsExecutorError(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	execErr := errors.New("executor failed")
+	afterErr := errors.New("after hook failed")
+	nodeHooks := &testNodeHooks{
+		afterErr: map[string]error{"vpc@dev": afterErr},
+	}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+			NodeHooks:  nodeHooks,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			if info.Component+"@"+info.Stack == "vpc@dev" {
+				return TerraformExecutionResult{}, execErr
+			}
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, execErr, "the original executor error must survive the join")
+	require.ErrorIs(t, err, afterErr, "the after-hook error must survive the join")
 }
 
 func TestExecuteTerraformAffectedSelectionUsesGraphBackedPath(t *testing.T) {
@@ -188,47 +846,228 @@ func TestExecuteTerraformAffectedSelectionIncludesDependentsWhenRequested(t *tes
 	require.Equal(t, []string{"database@dev", "app@dev"}, executed)
 }
 
-func TestFilterTerraformGraphBySelectionDoesNotTreatDuplicatesAsAllNodes(t *testing.T) {
+func TestExecuteTerraformScopedSelectionDepthOnePreservesDependencyOrder(t *testing.T) {
+	tests := []struct {
+		name      string
+		selection TerraformSelection
+		want      []string
+	}{
+		{
+			name: "dependency depth one",
+			selection: TerraformSelection{
+				NodeIDs:             []string{"app-dev"},
+				IncludeDependencies: true,
+				DependencyDepth:     1,
+			},
+			want: []string{"database@dev", "app@dev"},
+		},
+		{
+			name: "dependent depth one",
+			selection: TerraformSelection{
+				NodeIDs:           []string{"vpc-dev"},
+				IncludeDependents: true,
+				DependentDepth:    1,
+			},
+			want: []string{"vpc@dev", "database@dev"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var executed []string
+			err := ExecuteTerraform(context.Background(), TerraformOptions{
+				AtmosConfig: &schema.AtmosConfiguration{},
+				Info: &schema.ConfigAndStacksInfo{
+					Affected:   true,
+					SubCommand: terraformSubCommandPlan,
+				},
+				Stacks: terraformAdapterTestStacks(),
+				Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+					executed = append(executed, execution.Info.Component+"@"+execution.Info.Stack)
+					return TerraformExecutionResult{}, nil
+				},
+				Selection: &test.selection,
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, test.want, executed)
+		})
+	}
+}
+
+func TestExecuteTerraformScopedOptionalDependencies(t *testing.T) {
+	tests := []struct {
+		name             string
+		stacks           func() map[string]any
+		want             []string
+		wantOptionalEdge bool
+	}{
+		{
+			name: "available target in selected closure is scheduled first",
+			stacks: func() map[string]any {
+				return map[string]any{
+					"dev": terraformStackWithComponents(map[string]any{
+						"app":      terraformAdapterComponent("selected", []any{map[string]any{"name": "database", "required": false}}, nil),
+						"database": terraformAdapterComponent("selected", nil, nil),
+					}),
+				}
+			},
+			want:             []string{"database@dev", "app@dev"},
+			wantOptionalEdge: true,
+		},
+		{
+			name: "unavailable target in selected stack is skipped",
+			stacks: func() map[string]any {
+				disabled := terraformAdapterComponent("selected", nil, nil)
+				disabled[cfg.MetadataSectionName].(map[string]any)["enabled"] = false
+				return map[string]any{
+					"dev": terraformStackWithComponents(map[string]any{
+						"app":      terraformAdapterComponent("selected", []any{map[string]any{"name": "database", "required": false}}, nil),
+						"database": disabled,
+					}),
+				}
+			},
+			want: []string{"app@dev"},
+		},
+		{
+			name: "unavailable target outside selected stack is skipped",
+			stacks: func() map[string]any {
+				disabled := terraformAdapterComponent("selected", nil, nil)
+				disabled[cfg.MetadataSectionName].(map[string]any)["enabled"] = false
+				return map[string]any{
+					"dev": terraformStackWithComponents(map[string]any{
+						"app": terraformAdapterComponent("selected", []any{map[string]any{"name": "database", "stack": "qa", "required": false}}, nil),
+					}),
+					"qa": terraformStackWithComponents(map[string]any{"database": disabled}),
+				}
+			},
+			want: []string{"app@dev"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var executed []string
+			stacks := test.stacks()
+			info := &schema.ConfigAndStacksInfo{
+				Affected:   true,
+				Stack:      "dev",
+				SubCommand: terraformSubCommandPlan,
+			}
+			selection := &TerraformSelection{
+				NodeIDs:             []string{"app-dev"},
+				IncludeDependencies: true,
+			}
+			err := ExecuteTerraform(context.Background(), TerraformOptions{
+				AtmosConfig: &schema.AtmosConfiguration{},
+				Info:        info,
+				Stacks:      stacks,
+				Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+					executed = append(executed, execution.Info.Component+"@"+execution.Info.Stack)
+					return TerraformExecutionResult{}, nil
+				},
+				Selection: selection,
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, test.want, executed)
+			if test.wantOptionalEdge {
+				discovery := discoverTerraformGraph(stacks, "")
+				filtered, err := FilterTerraformGraph(nil, discovery, info, selection)
+				require.NoError(t, err)
+				graph, err := buildScopedTerraformGraph(stacks, "", terraformGraphNodeIDs(filtered))
+				require.NoError(t, err)
+				app, ok := graph.GetNode("app-dev")
+				require.True(t, ok)
+				require.Contains(t, app.Dependencies, "database-dev")
+				require.True(t, app.OptionalDependencies["database-dev"])
+			}
+		})
+	}
+}
+
+func TestFilterTerraformGraphSelectionDoesNotTreatDuplicatesAsAllNodes(t *testing.T) {
 	graph, err := BuildTerraformGraph(terraformAdapterTestStacks())
 	require.NoError(t, err)
 
-	filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+	filtered, err := FilterTerraformGraph(nil, graph, nil, &TerraformSelection{
 		NodeIDs: []string{"database-dev", "database-dev", "missing-dev"},
 	})
+	require.NoError(t, err)
 
 	require.Equal(t, 1, filtered.Size())
 	_, ok := filtered.GetNode("database-dev")
 	require.True(t, ok)
 }
 
-func TestFilterTerraformGraphBySelectionEdgeCases(t *testing.T) {
+// TestFilterTerraformGraphSelectionTagsFilterExcludesNonMatchingSeed verifies
+// terraformSelectionSeedNodeIDs (the --affected/precomputed-selection path)
+// narrows the seed by tags/labels the same way the flag-driven selection path
+// does: a selected node whose metadata does not satisfy info.Tags is dropped
+// from the seed rather than executed.
+func TestFilterTerraformGraphSelectionTagsFilterExcludesNonMatchingSeed(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": map[string]any{
+						cfg.MetadataSectionName: map[string]any{
+							"component": "mock",
+							"tags":      []any{"network"},
+						},
+						"vars": map[string]any{"group": "selected"},
+					},
+					"database": map[string]any{
+						cfg.MetadataSectionName: map[string]any{
+							"component": "mock",
+							"tags":      []any{"database"},
+						},
+						"vars": map[string]any{"group": "selected"},
+					},
+				},
+			},
+		},
+	}
+	graph, err := BuildTerraformGraph(stacks)
+	require.NoError(t, err)
+
+	filtered, err := FilterTerraformGraph(nil, graph, &schema.ConfigAndStacksInfo{Tags: []string{"network"}}, &TerraformSelection{
+		NodeIDs: []string{"app-dev", "database-dev"},
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, filtered.Size())
+	_, ok := filtered.GetNode("app-dev")
+	require.True(t, ok, "the tag-matching node must remain in the seed")
+	_, ok = filtered.GetNode("database-dev")
+	require.False(t, ok, "a selected node failing the tags filter must be excluded from the seed")
+}
+
+func TestFilterTerraformGraphSelectionEdgeCases(t *testing.T) {
 	graph, err := BuildTerraformGraph(terraformAdapterTestStacks())
 	require.NoError(t, err)
 
 	t.Run("nil graph returns empty graph", func(t *testing.T) {
-		filtered := filterTerraformGraphBySelection(nil, &TerraformSelection{NodeIDs: []string{"database-dev"}})
-		require.NotNil(t, filtered)
-		require.Equal(t, 0, filtered.Size())
-	})
-
-	t.Run("nil selection returns empty graph", func(t *testing.T) {
-		filtered := filterTerraformGraphBySelection(graph, nil)
+		filtered, err := FilterTerraformGraph(nil, nil, nil, &TerraformSelection{NodeIDs: []string{"database-dev"}})
+		require.NoError(t, err)
 		require.NotNil(t, filtered)
 		require.Equal(t, 0, filtered.Size())
 	})
 
 	t.Run("all valid nodes without closure returns original graph", func(t *testing.T) {
-		filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+		filtered, err := FilterTerraformGraph(nil, graph, nil, &TerraformSelection{
 			NodeIDs: []string{"app-dev", "database-dev", "vpc-dev"},
 		})
+		require.NoError(t, err)
 		require.Same(t, graph, filtered)
 	})
 
 	t.Run("dependencies closure includes prerequisites", func(t *testing.T) {
-		filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+		filtered, err := FilterTerraformGraph(nil, graph, nil, &TerraformSelection{
 			NodeIDs:             []string{"app-dev"},
 			IncludeDependencies: true,
 		})
+		require.NoError(t, err)
 		require.Equal(t, 3, filtered.Size())
 		for _, id := range []string{"app-dev", "database-dev", "vpc-dev"} {
 			_, ok := filtered.GetNode(id)
@@ -237,12 +1076,27 @@ func TestFilterTerraformGraphBySelectionEdgeCases(t *testing.T) {
 	})
 
 	t.Run("dependents closure includes downstream nodes", func(t *testing.T) {
-		filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+		filtered, err := FilterTerraformGraph(nil, graph, nil, &TerraformSelection{
 			NodeIDs:           []string{"database-dev"},
 			IncludeDependents: true,
 		})
+		require.NoError(t, err)
 		require.Equal(t, 2, filtered.Size())
 		for _, id := range []string{"database-dev", "app-dev"} {
+			_, ok := filtered.GetNode(id)
+			require.True(t, ok, "expected node %s", id)
+		}
+	})
+
+	t.Run("dependency depth bounds selection closure", func(t *testing.T) {
+		filtered, err := FilterTerraformGraph(nil, graph, nil, &TerraformSelection{
+			NodeIDs:             []string{"app-dev"},
+			IncludeDependencies: true,
+			DependencyDepth:     1,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 2, filtered.Size())
+		for _, id := range []string{"app-dev", "database-dev"} {
 			_, ok := filtered.GetNode(id)
 			require.True(t, ok, "expected node %s", id)
 		}
@@ -302,6 +1156,34 @@ func TestBuildTerraformGraphPrefersDependenciesComponentsOverSettingsDependsOn(t
 	require.Equal(t, []string{"vpc-dev"}, app.Dependencies)
 }
 
+func TestBuildTerraformGraphSupportsCanonicalAndLegacyComponentDependencyNames(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"canonical": terraformAdapterComponent("selected", nil, nil),
+					"legacy":    terraformAdapterComponent("selected", nil, nil),
+					"app": terraformAdapterComponent(
+						"selected",
+						[]any{
+							map[string]any{"name": "canonical"},
+							map[string]any{"component": "legacy"},
+						},
+						nil,
+					),
+				},
+			},
+		},
+	}
+
+	graph, err := BuildTerraformGraph(stacks)
+	require.NoError(t, err)
+
+	app, ok := graph.GetNode("app-dev")
+	require.True(t, ok)
+	require.ElementsMatch(t, []string{"canonical-dev", "legacy-dev"}, app.Dependencies)
+}
+
 func TestBuildTerraformGraphFallsBackToSettingsDependsOn(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
@@ -324,6 +1206,254 @@ func TestBuildTerraformGraphFallsBackToSettingsDependsOn(t *testing.T) {
 	app, ok := graph.GetNode("app-dev")
 	require.True(t, ok)
 	require.Equal(t, []string{"vpc-dev"}, app.Dependencies)
+}
+
+func TestBuildTerraformGraphLastDependencyOverrideAppliedBeforeAvailability(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": terraformAdapterComponent(
+						"selected",
+						[]any{
+							map[string]any{"name": "missing", "required": true},
+							map[string]any{"name": "missing", "required": false},
+						},
+						nil,
+					),
+				},
+			},
+		},
+	}
+
+	graph, err := BuildTerraformGraph(stacks)
+	require.NoError(t, err)
+	require.Empty(t, graph.Nodes["app-dev"].Dependencies)
+}
+
+func TestBuildTerraformGraphSkipsUnavailableOptionalDependencies(t *testing.T) {
+	disabled := terraformAdapterComponent("selected", nil, nil)
+	disabled[cfg.MetadataSectionName].(map[string]any)["enabled"] = false
+	abstract := terraformAdapterComponent("selected", nil, nil)
+	abstract[cfg.MetadataSectionName].(map[string]any)["type"] = "abstract"
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"present":  terraformAdapterComponent("selected", nil, nil),
+					"disabled": disabled,
+					"abstract": abstract,
+					"app": terraformAdapterComponent(
+						"selected",
+						[]any{
+							map[string]any{"name": "present", "required": false},
+							map[string]any{"name": "missing", "required": false},
+							map[string]any{"name": "disabled", "required": false},
+							map[string]any{"name": "abstract", "required": false},
+						},
+						nil,
+					),
+				},
+			},
+		},
+	}
+
+	graph, err := BuildTerraformGraph(stacks)
+	require.NoError(t, err)
+	app, ok := graph.GetNode("app-dev")
+	require.True(t, ok)
+	require.Equal(t, []string{"present-dev"}, app.Dependencies)
+	require.True(t, app.OptionalDependencies["present-dev"])
+}
+
+func TestBuildTerraformGraphFailsForRequiredUnavailableDependencies(t *testing.T) {
+	tests := []struct {
+		name       string
+		target     string
+		targetBody map[string]any
+		wantErr    error
+	}{
+		{name: "missing", target: "missing", wantErr: errUtils.ErrDependencyTargetNotFound},
+		{name: "disabled", target: "disabled", targetBody: terraformAdapterComponent("selected", nil, nil), wantErr: errUtils.ErrDependencyTargetUnavailable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			components := map[string]any{
+				"app": terraformAdapterComponent("selected", []any{map[string]any{"name": test.target}}, nil),
+			}
+			if test.targetBody != nil {
+				test.targetBody[cfg.MetadataSectionName].(map[string]any)["enabled"] = false
+				components[test.target] = test.targetBody
+			}
+			_, err := BuildTerraformGraph(map[string]any{"dev": map[string]any{cfg.ComponentsSectionName: map[string]any{cfg.TerraformSectionName: components}}})
+			require.ErrorIs(t, err, test.wantErr)
+		})
+	}
+}
+
+func TestBuildTerraformGraphStrictAcrossStacks(t *testing.T) {
+	tests := []struct {
+		name         string
+		qaComponents map[string]any
+		wantErr      error
+		wantBuildErr bool
+	}{
+		{name: "malformed dependency", qaComponents: malformedTerraformDependencies(), wantErr: errUtils.ErrDependencyResolution},
+		{name: "unresolved selector", qaComponents: unresolvedTerraformDependency(), wantErr: errUtils.ErrDependencyResolution},
+		{name: "cycle", qaComponents: cyclicTerraformDependencies(), wantErr: dependency.ErrCircularDependency, wantBuildErr: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := BuildTerraformGraph(map[string]any{
+				"dev": terraformStackWithComponents(terraformScopedValidationTarget()),
+				"qa":  terraformStackWithComponents(test.qaComponents),
+			})
+
+			require.ErrorIs(t, err, test.wantErr)
+			if test.wantBuildErr {
+				require.NotErrorIs(t, err, errUtils.ErrBuildDepGraph)
+			}
+		})
+	}
+}
+
+func TestExecuteTerraformDefersRequiredTargetValidationOutsideSelectedStack(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	stacks["qa"] = map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformSectionName: map[string]any{
+				"retired-cleanup": terraformAdapterComponent("selected", []any{map[string]any{"component": "deleted-network"}}, nil),
+			},
+		},
+	}
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			Stack:      "dev",
+			SubCommand: terraformSubCommandPlan,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component+"@"+execution.Info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"app@dev", "database@dev", "vpc@dev"}, executed)
+}
+
+func TestExecuteTerraformReportsSelectedRequiredDependencyContext(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": terraformAdapterComponent("selected", []any{map[string]any{"component": "missing"}}, nil),
+				},
+			},
+		},
+	}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			Stack:      "dev",
+			SubCommand: terraformSubCommandPlan,
+		},
+		Stacks:   stacks,
+		Executor: func(TerraformExecution) (TerraformExecutionResult, error) { return TerraformExecutionResult{}, nil },
+	})
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
+	require.ErrorContains(t, err, "component=app stack=dev target_component=missing target_stack=dev reason=target_missing")
+}
+
+func TestExecuteTerraformScopedValidation(t *testing.T) {
+	tests := []struct {
+		name            string
+		devComponents   map[string]any
+		qaComponents    map[string]any
+		wantErr         error
+		wantBuildGraph  bool
+		wantExecutedIDs []string
+	}{
+		{
+			name:            "outside malformed",
+			devComponents:   terraformScopedValidationTarget(),
+			qaComponents:    malformedTerraformDependencies(),
+			wantExecutedIDs: []string{"app@dev"},
+		},
+		{
+			name:          "inside malformed",
+			devComponents: malformedTerraformDependencies(),
+			qaComponents:  terraformScopedValidationTarget(),
+			wantErr:       errUtils.ErrDependencyResolution,
+		},
+		{
+			name:            "outside unresolved selector",
+			devComponents:   terraformScopedValidationTarget(),
+			qaComponents:    unresolvedTerraformDependency(),
+			wantExecutedIDs: []string{"app@dev"},
+		},
+		{
+			name:          "inside unresolved selector",
+			devComponents: unresolvedTerraformDependency(),
+			qaComponents:  terraformScopedValidationTarget(),
+			wantErr:       errUtils.ErrDependencyResolution,
+		},
+		{
+			name:            "outside cycle",
+			devComponents:   terraformScopedValidationTarget(),
+			qaComponents:    cyclicTerraformDependencies(),
+			wantExecutedIDs: []string{"app@dev"},
+		},
+		{
+			name:           "inside cycle",
+			devComponents:  cyclicTerraformDependencies(),
+			qaComponents:   terraformScopedValidationTarget(),
+			wantErr:        dependency.ErrCircularDependency,
+			wantBuildGraph: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stacks := map[string]any{
+				"dev": terraformStackWithComponents(test.devComponents),
+				"qa":  terraformStackWithComponents(test.qaComponents),
+			}
+			var executed []string
+
+			err := ExecuteTerraform(context.Background(), TerraformOptions{
+				AtmosConfig: &schema.AtmosConfiguration{},
+				Info: &schema.ConfigAndStacksInfo{
+					All:        true,
+					Stack:      "dev",
+					SubCommand: terraformSubCommandPlan,
+				},
+				Stacks: stacks,
+				Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+					executed = append(executed, execution.Info.Component+"@"+execution.Info.Stack)
+					return TerraformExecutionResult{}, nil
+				},
+			})
+
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			if test.wantBuildGraph {
+				require.ErrorIs(t, err, errUtils.ErrBuildDepGraph)
+			}
+			require.ElementsMatch(t, test.wantExecutedIDs, executed)
+		})
+	}
 }
 
 func TestExecuteTerraformKeepsIndependentComponentsSequential(t *testing.T) {
@@ -569,6 +1699,25 @@ func TestTerraformExecutionErrorIncludesCapturedOutputDetail(t *testing.T) {
 	require.Contains(t, err.Error(), "```text")
 	require.Contains(t, err.Error(), "Error acquiring the state lock")
 	require.Contains(t, err.Error(), "gs://nxtfwd-tf-state/clickhouse-keeper-vm/fuecoco-stg.tflock")
+	formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	require.Contains(t, formatted, "Terraform execution failed for component \"clickhouse-keeper-vm\" in stack \"fuecoco-stg\"")
+}
+
+func TestTerraformExecutionErrorPreservesStructuredCauseDetails(t *testing.T) {
+	cause := errUtils.Build(errUtils.ErrCacheCertUntrusted).
+		WithExplanation("The local registry cache certificate has not been trusted.").
+		WithHint("Run `atmos terraform cache trust`, then retry the command.").
+		Err()
+
+	err := terraformExecutionError(
+		&dependency.Node{Component: "dynamodb-table", Stack: "plat-ue2-dev"},
+		TerraformExecutionResult{},
+		cause,
+	)
+
+	formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	require.Contains(t, formatted, "The local registry cache certificate has not been trusted.")
+	require.Contains(t, formatted, "atmos terraform cache trust")
 }
 
 func TestTerraformOutputConfiguration(t *testing.T) {
@@ -903,7 +2052,7 @@ func TestExecuteTerraformFailsFastByDefault(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, []string{"a-fail@dev"}, executed)
 	require.Contains(t, err.Error(), "planned failure")
-	require.Contains(t, err.Error(), "fail-fast after a-fail-dev failed")
+	require.NotContains(t, err.Error(), "fail-fast after a-fail-dev failed")
 }
 
 func TestExecuteTerraformKeepGoingRunsIndependentNodes(t *testing.T) {
@@ -930,7 +2079,7 @@ func TestExecuteTerraformKeepGoingRunsIndependentNodes(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, []string{"a-fail@dev", "c-independent@dev"}, executed)
 	require.Contains(t, err.Error(), "planned failure")
-	require.Contains(t, err.Error(), "dependency a-fail-dev failed")
+	require.NotContains(t, err.Error(), "dependency a-fail-dev failed")
 }
 
 func TestExecuteTerraformRejectsConflictingFailureModes(t *testing.T) {
@@ -1143,6 +2292,24 @@ func TestHasTerraformAutoApproveEnvChecksGlobalAndSubcommandArgs(t *testing.T) {
 	})
 }
 
+// TestValidateTerraformUIConcurrency covers the --ui + --max-concurrency>1 rejection.
+// The wouldAttemptStreamingUI value is injected rather than derived from a real TTY/CI
+// check here (tfui.WouldAttemptStreamingUI always returns false under go test's
+// non-interactive stdout, per terraform_streaming_ui_test.go's documented TTY-gating
+// limitation), which is exactly why validateTerraformConcurrentExecution takes the
+// decision as a parameter.
+func TestValidateTerraformUIConcurrency(t *testing.T) {
+	t.Run("streaming UI would be attempted", func(t *testing.T) {
+		err := validateTerraformUIConcurrency(true)
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		require.ErrorContains(t, err, "streaming UI is not supported with --max-concurrency > 1")
+	})
+
+	t.Run("streaming UI would not be attempted", func(t *testing.T) {
+		require.NoError(t, validateTerraformUIConcurrency(false))
+	})
+}
+
 func TestExecuteTerraformAllowsConcurrentApplyWithConfiguredAutoApprove(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
@@ -1232,7 +2399,8 @@ func TestExecuteTerraformDestroyFailureBlocksPrerequisites(t *testing.T) {
 
 	require.Error(t, err)
 	require.Equal(t, []string{"app@dev"}, executed)
-	require.Contains(t, err.Error(), "dependency app-dev failed")
+	require.Contains(t, err.Error(), "destroy failed")
+	require.NotContains(t, err.Error(), "dependency app-dev failed")
 }
 
 func TestExecuteTerraformPassesSchedulerContextToExecutor(t *testing.T) {
@@ -1586,6 +2754,135 @@ func TestExecuteTerraformCIResultHandlerReceivesCapturedSchedulerResults(t *test
 	require.Contains(t, app.Error, "dependency vpc-dev failed")
 }
 
+type capturingTerraformPlanCIBeforeHandler struct {
+	pending schema.TerraformPlanCIPendingSet
+	calls   int
+	err     error
+}
+
+func (h *capturingTerraformPlanCIBeforeHandler) HandleTerraformPlanCIBefore(pending schema.TerraformPlanCIPendingSet) error {
+	h.calls++
+	h.pending = pending
+	return h.err
+}
+
+func TestExecuteTerraformCIBeforeHandlerReceivesResolvedGraph(t *testing.T) {
+	handler := &capturingTerraformPlanCIBeforeHandler{}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                          true,
+			SubCommand:                   "plan",
+			MaxConcurrency:               2,
+			TerraformFailureMode:         terraformFailureModeKeepGoing,
+			TerraformPlanCIBeforeHandler: handler,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{Stdout: "No changes."}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, handler.calls)
+	require.Equal(t, "plan", handler.pending.Command)
+	require.Len(t, handler.pending.Nodes, 3)
+
+	names := make(map[string]string, len(handler.pending.Nodes))
+	for _, node := range handler.pending.Nodes {
+		names[node.NodeID] = node.Component
+		require.NotEmpty(t, node.Stack)
+		require.NotEmpty(t, node.Component)
+	}
+	require.Equal(t, "vpc", names["vpc-dev"])
+	require.Equal(t, "database", names["database-dev"])
+	require.Equal(t, "app", names["app-dev"])
+}
+
+func TestStartTerraformCIBeforeGuards(t *testing.T) {
+	handler := &capturingTerraformPlanCIBeforeHandler{}
+	graph := &dependency.Graph{Nodes: map[string]*dependency.Node{
+		"vpc-dev": {ID: "vpc-dev", Stack: "dev", Component: "vpc"},
+	}}
+
+	// Nil info, unsupported subcommand, nil handler, and nil graph all no-op.
+	startTerraformCIBefore(nil, graph)
+	startTerraformCIBefore(&schema.ConfigAndStacksInfo{SubCommand: "output"}, graph)
+	startTerraformCIBefore(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, graph)
+	startTerraformCIBefore(&schema.ConfigAndStacksInfo{SubCommand: "plan", TerraformPlanCIBeforeHandler: handler}, nil)
+	require.Zero(t, handler.calls)
+
+	// A node missing Component/Stack must never be advertised as pending.
+	incompleteGraph := &dependency.Graph{Nodes: map[string]*dependency.Node{
+		"bad-node": {ID: "bad-node", Stack: "", Component: ""},
+	}}
+	startTerraformCIBefore(&schema.ConfigAndStacksInfo{SubCommand: "plan", TerraformPlanCIBeforeHandler: handler}, incompleteGraph)
+	require.Zero(t, handler.calls)
+
+	// A handler error is logged, not returned or panicked.
+	failingHandler := &capturingTerraformPlanCIBeforeHandler{err: errors.New("handler failed")}
+	startTerraformCIBefore(&schema.ConfigAndStacksInfo{SubCommand: "plan", TerraformPlanCIBeforeHandler: failingHandler}, graph)
+	require.Equal(t, 1, failingHandler.calls)
+}
+
+// TestResolvedTerraformCIPendingNodesSortOrder exercises the full three-key
+// sort comparator in resolvedTerraformCIPendingNodes directly: nodes across
+// different stacks (Stack tiebreak), nodes in the same stack with different
+// components (Component tiebreak — already covered indirectly elsewhere),
+// and nodes with the same stack AND component but different NodeIDs
+// (NodeID tiebreak, e.g. a component targeted by two different workspaces).
+func TestResolvedTerraformCIPendingNodesSortOrder(t *testing.T) {
+	graph := &dependency.Graph{Nodes: map[string]*dependency.Node{
+		"vpc-zzz":  {ID: "vpc-zzz", Stack: "zzz", Component: "vpc"},
+		"vpc-aaa":  {ID: "vpc-aaa", Stack: "aaa", Component: "vpc"},
+		"vpc-aaa2": {ID: "vpc-aaa2", Stack: "aaa", Component: "vpc"},
+	}}
+
+	nodes := resolvedTerraformCIPendingNodes(graph)
+
+	require.Len(t, nodes, 3)
+	// Stack "aaa" sorts before "zzz" (Stack tiebreak, lines 1594-1596).
+	require.Equal(t, "aaa", nodes[0].Stack)
+	require.Equal(t, "aaa", nodes[1].Stack)
+	require.Equal(t, "zzz", nodes[2].Stack)
+	// Within the same stack+component, NodeID breaks the tie
+	// (lines 1600, reached only once Stack and Component are both equal).
+	require.Equal(t, "vpc-aaa", nodes[0].NodeID)
+	require.Equal(t, "vpc-aaa2", nodes[1].NodeID)
+}
+
+// TestExecuteTerraformResolvesAggregateEvenOnLateFailure proves the invariant
+// this fix depends on: once startTerraformCIBefore creates real pending
+// statuses up front, the after-aggregate handler must be guaranteed to run
+// (via defer) even when a later step in ExecuteTerraform errors and returns
+// early — otherwise those pending statuses would be orphaned exactly like
+// issue #3007.
+func TestExecuteTerraformResolvesAggregateEvenOnLateFailure(t *testing.T) {
+	handler := &capturingTerraformPlanCIResultHandler{}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                          true,
+			SubCommand:                   "plan",
+			MaxConcurrency:               2,
+			TerraformFailureMode:         terraformFailureModeKeepGoing,
+			TerraformPlanCIResultHandler: handler,
+			// A directory instead of a file path makes writeTerraformSummary
+			// fail after the scheduler run completes.
+			TerraformPlanSummaryFile: t.TempDir(),
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{Stdout: "No changes."}, nil
+		},
+	})
+
+	require.Error(t, err, "writeTerraformSummary should fail because the summary path is a directory")
+	require.Equal(t, 1, handler.calls, "the after-aggregate CI hook must still fire despite the later failure")
+}
+
 func TestFinalizeTerraformCIResultsGuardsAndHandlerError(t *testing.T) {
 	finalizeTerraformCIResults(nil, nil, nil)
 	finalizeTerraformCIResults(&schema.ConfigAndStacksInfo{SubCommand: "output"}, nil, nil)
@@ -1710,6 +3007,37 @@ func terraformAdapterTestStacks() map[string]any {
 				},
 			},
 		},
+	}
+}
+
+func terraformStackWithComponents(components map[string]any) map[string]any {
+	return map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformSectionName: components,
+		},
+	}
+}
+
+func terraformScopedValidationTarget() map[string]any {
+	return map[string]any{"app": terraformAdapterComponent("selected", nil, nil)}
+}
+
+func malformedTerraformDependencies() map[string]any {
+	component := terraformAdapterComponent("selected", nil, nil)
+	component[cfg.DependenciesSectionName] = map[string]any{"components": "not-a-list"}
+	return map[string]any{"app": component}
+}
+
+func unresolvedTerraformDependency() map[string]any {
+	return map[string]any{
+		"app": terraformAdapterComponent("selected", []any{map[string]any{"name": "{{ .missing }}"}}, nil),
+	}
+}
+
+func cyclicTerraformDependencies() map[string]any {
+	return map[string]any{
+		"app":      terraformAdapterComponent("selected", []any{map[string]any{"name": "database"}}, nil),
+		"database": terraformAdapterComponent("selected", []any{map[string]any{"name": "app"}}, nil),
 	}
 }
 

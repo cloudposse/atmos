@@ -112,7 +112,7 @@ func TestFilterTerraformAffected(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := filterTerraformAffected(tc.in)
+			got := FilterTerraformAffected(tc.in)
 			assert.Equal(t, tc.want, got)
 		})
 	}
@@ -129,7 +129,7 @@ func TestFilterTerraformAffected_InPlaceSemantics(t *testing.T) {
 		{Component: "helm", ComponentType: cfg.HelmfileComponentType},
 		{Component: "tf", ComponentType: cfg.TerraformComponentType},
 	}
-	got := filterTerraformAffected(in)
+	got := FilterTerraformAffected(in)
 
 	// `require.Len` (vs `assert.Len`) — the next lines index `got[0]`, and a
 	// non-fatal assertion would let the test panic instead of failing cleanly.

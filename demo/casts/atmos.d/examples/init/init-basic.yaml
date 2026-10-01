@@ -1,0 +1,232 @@
+commands:
+  - name: casts generate examples init init-basic
+    description: Regenerate the Init example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-stale-state
+        working_directory: &init_fixture "../../.context/cast-fixtures/init"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: rm -rf my-project || true
+      - type: cast
+        name: init-basic
+        working_directory: *init_fixture
+        title: "atmos init: bootstrap a new project"
+        # mode omitted -> defaults to steps. Only the interactive `atmos
+        # init` prompts below need a real PTY (type: session); everything
+        # else is ordinary steps-mode simulate/shell, exactly like
+        # aws-landing-zone-lifecycle.yaml. Mixing type: simulate's injected
+        # output directly into a *live* session (the old approach) desynced
+        # the recorded terminal's cursor from the real shell's actual prompt
+        # position -- every simulate write landed "for free" without the PTY
+        # itself advancing, so the shell's next real prompt/echo appeared on
+        # the wrong line (a doubled "> > " prompt, and typed commands
+        # floating with no leading prompt at all). Keeping simulate and real
+        # PTY output in separate, non-overlapping phases avoids that class of
+        # bug entirely, and steps-mode's shell children are synchronous, so
+        # none of the old `wait:` races against streaming output are needed
+        # for them either.
+        shell: /bin/sh
+        write_rate: 25ms
+        key_interval: 250ms
+        timeout: 60s
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          # type: simulate narration lines (below) use the same styled
+          # prompt/typing defaults the nested `type: session` block's own
+          # PS1 uses (via applySessionPromptEnv in pkg/runner/step/cast.go),
+          # so narration and the real interactive prompt render identically.
+          simulate: !include cast-defaults.yaml .simulate
+        env:
+          NO_COLOR: ''
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+          ATMOS_EXPERIMENTAL: silence
+          ATMOS_LOGS_LEVEL: Warning
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/init/init-basic.cast"
+        steps:
+          - type: simulate
+            text: "# bootstrap a brand-new Atmos project from a built-in template"
+          - type: session
+            # Interactive prompting: real keystrokes drive the actual huh
+            # prompts (project name input, environments multiselect) -- this
+            # is what a nested type: session is for. Inherits shell/write_rate/
+            # key_interval/env/defaults from the enclosing cast step.
+            steps:
+              - type: pause
+                duration: 500ms
+              - type: write
+                text: "atmos init basic ./my-project"
+              - type: key
+                key: enter
+              - type: wait
+                text: "Project name"
+                timeout: 10s
+              - type: pause
+                duration: 350ms
+              - type: key
+                key: enter
+              - type: wait
+                text: "Which environments do you need?"
+                timeout: 10s
+              - type: pause
+                duration: 350ms
+              - type: key
+                key: down
+              - type: pause
+                duration: 350ms
+              - type: key
+                key: space
+              - type: pause
+                duration: 350ms
+              - type: key
+                key: enter
+              - type: wait
+                text: "Generated 12 files."
+                timeout: 15s
+              - type: pause
+                duration: 500ms
+          - type: simulate
+            text: "cd my-project"
+          - type: simulate
+            text: "# inspect the project that was just generated"
+          - type: simulate
+            text: &list_stacks_cmd "atmos list stacks"
+          - type: shell
+            name: list-stacks
+            working_directory: &project_dir "../../.context/cast-fixtures/init/my-project"
+            command: *list_stacks_cmd
+          - type: simulate
+            text: "# the greeting component was generated for each selected environment"
+          - type: simulate
+            text: &list_instances_cmd "atmos list instances"
+          - type: shell
+            name: list-instances
+            working_directory: *project_dir
+            command: *list_instances_cmd
+          - type: simulate
+            text: "# the component catalog summarizes the generated Terraform component"
+          - type: simulate
+            text: &list_components_cmd "atmos list components"
+          - type: shell
+            name: list-components
+            working_directory: *project_dir
+            command: *list_components_cmd
+          - type: simulate
+            text: "# tree mode makes the generated stack hierarchy easy to scan"
+          - type: simulate
+            text: &list_stacks_tree_cmd "atmos list stacks --format=tree"
+          - type: shell
+            name: list-stacks-tree
+            working_directory: *project_dir
+            command: *list_stacks_tree_cmd
+          - type: simulate
+            text: "# the generated project is immediately valid, no manual wiring needed"
+          - type: simulate
+            text: &validate_cmd "atmos validate stacks"
+          - type: shell
+            name: validate
+            working_directory: *project_dir
+            command: *validate_cmd
+          - type: simulate
+            text: "# prove it: deploy every selected environment for real, right here"
+          - type: simulate
+            text: &deploy_cmd "atmos terraform deploy --all --deploy-run-init"
+          - type: shell
+            name: deploy-all
+            working_directory: *project_dir
+            command: *deploy_cmd
+      - type: script
+        name: sanitize
+        interpreter: python3
+        script: |
+          import json
+          import os
+          from pathlib import Path
+
+          cast = Path("../../website/static/casts/examples/init/init-basic.cast")
+          repo_root = Path("../..").resolve()
+          roots = {str(repo_root), os.path.realpath(str(repo_root))}
+          roots.update("/private" + root for root in list(roots) if not root.startswith("/private"))
+
+          lines = cast.read_text().splitlines()
+          rewritten = [lines[0]]
+          for line in lines[1:]:
+              event = json.loads(line)
+              if event[1] in ("o", "e"):
+                  for root in sorted(roots, key=len, reverse=True):
+                      event[2] = event[2].replace(root, "/absolute/path/to/repo")
+              rewritten.append(json.dumps(event, separators=(",", ":")))
+          cast.write_text("\n".join(rewritten) + "\n")
+      - type: shell
+        name: validate
+        command: atmos casts validate examples init init-basic
+  - name: casts validate examples init init-basic
+    description: Validate the Init example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/init/init-basic.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          assert_colored(text, "# bootstrap a brand-new Atmos project")
+          assert_colored(text, "stacks/_defaults.yaml — shared configuration imported by every")
+          assert_colored(text, "All stacks validated successfully")
+          assert_colored(text, "# prove it: deploy every selected environment for real")
+          for needle in [
+              "# bootstrap a brand-new Atmos project",
+              "Project name",
+              "Which environments do you need?",
+              "Generating basic in",
+              "atmos.yaml",
+              "stacks/dev.yaml",
+              "stacks/staging.yaml",
+              # The unselected "prod" environment is expected to appear here,
+              # explicitly marked skipped -- that's the conditional-generation
+              # feature being demonstrated, not a leak. What must never
+              # appear is stacks/prod.yaml actually being created (checked
+              # below via the generated stack and instance listings).
+              "stacks/prod.yaml (skipped)",
+              "Generated 12 files.",
+              "# inspect the project that was just generated",
+              "atmos list stacks",
+              "atmos list instances",
+              "atmos list components",
+              "Component",
+              "greeting",
+              "terraform",
+              "atmos list stacks --format=tree",
+              "Stacks",
+              "# tree mode makes the generated stack hierarchy easy to scan",
+              "All stacks validated successfully",
+              "# prove it: deploy every selected environment for real, right here",
+              "Apply complete! Resources: 1 added, 0 changed, 0 destroyed.",
+              "Hello from the dev stage!",
+              "Hello from the staging stage!",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"init-basic cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
+              if bad in plain:
+                  raise SystemExit(f"init-basic cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

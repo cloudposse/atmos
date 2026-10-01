@@ -4,6 +4,7 @@ description: "Atmos global settings: settings, logs, errors, env, docs, metadata
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: core-config
 ---
 
 # Atmos Settings
@@ -49,7 +50,7 @@ metadata:
 ## Terminal Appearance and Color
 
 `settings.terminal` controls Atmos's terminal output appearance (color, theme, width, unicode,
-syntax highlighting, pager). Fields (from `pkg/schema/schema.go` `Terminal` struct):
+syntax highlighting, pager). Fields:
 
 ```yaml
 settings:

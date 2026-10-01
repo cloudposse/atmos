@@ -1,0 +1,31 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: example
+  description: Test fixture exercising a glob spec.files[].path + matrix duplicating a whole directory.
+spec:
+  fields:
+    - name: environments
+      label: Environments
+      description: >-
+        Every file under components/ is duplicated once per selected
+        environment via a single glob spec.files[].path + matrix entry.
+        Leave unselected to generate none.
+      type: multiselect
+      options:
+        - dev
+        - staging
+        - prod
+      default: []
+
+  files:
+    # "components/**" matches every file discovered under components/,
+    # recursively, as a single spec.files[] entry; matrix still expands
+    # once per entry, but since the glob matches two files, every matched
+    # file gets its own full set of combinations. .file.RelPath (the
+    # matched file's own path with "components/" stripped) keeps
+    # vpc/main.tf and eks/main.tf from colliding once duplicated.
+    - path: "components/**"
+      target: "environments/{{ .matrix.environment }}/{{ .file.RelPath }}"
+      matrix:
+        environment: answers.environments

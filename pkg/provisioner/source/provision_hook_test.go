@@ -1,8 +1,12 @@
 package source
 
 import (
+	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,8 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestExtractComponentName(t *testing.T) {
@@ -214,7 +222,7 @@ func TestDetermineSourceTargetDirectory_WorkdirUsesAtmosComponent(t *testing.T) 
 	)
 	require.NoError(t, err)
 	assert.True(t, isWorkdir)
-	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-cluster-codepipeline-iac")
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-cluster-codepipeline-iac-9d3a9da4")
 	assert.Equal(t, expected, targetDir)
 }
 
@@ -240,8 +248,37 @@ func TestDetermineSourceTargetDirectory_WorkdirFallsBackToComponent(t *testing.T
 	)
 	require.NoError(t, err)
 	assert.True(t, isWorkdir)
-	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "dev-vpc")
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "dev-vpc-bb03116d")
 	assert.Equal(t, expected, targetDir)
+}
+
+// TestDetermineSourceTargetDirectory_WorkdirPathTraversalPropagates verifies that when
+// atmos_stack contains enough "../" segments to escape BasePath, the errUtils.ErrPathTraversal
+// returned by workdir.BuildPath propagates through determineSourceTargetDirectory as
+// ("", false, err) instead of being silently swallowed or resolving outside BasePath.
+func TestDetermineSourceTargetDirectory_WorkdirPathTraversalPropagates(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	componentConfig := map[string]any{
+		// Enough "../" segments to escape any plausible t.TempDir() nesting depth.
+		"atmos_stack": "../../../../../../../../evil",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	targetDir, isWorkdir, err := determineSourceTargetDirectory(
+		atmosConfig, "terraform", "vpc", componentConfig,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	assert.False(t, isWorkdir)
+	assert.Empty(t, targetDir)
 }
 
 func TestNeedsProvisioning(t *testing.T) {
@@ -504,7 +541,7 @@ func TestDetermineSourceTargetDirectory(t *testing.T) {
 					},
 				},
 			},
-			expectedDir:     "/base/.workdir/terraform/dev-us-east-1-vpc",
+			expectedDir:     "/base/.workdir/terraform/dev-us-east-1-vpc-3c49c90a",
 			expectedWorkdir: true,
 			expectError:     false,
 		},
@@ -551,7 +588,7 @@ func TestDetermineSourceTargetDirectory(t *testing.T) {
 					},
 				},
 			},
-			expectedDir:     ".workdir/terraform/dev-vpc",
+			expectedDir:     ".workdir/terraform/dev-vpc-bb03116d",
 			expectedWorkdir: true,
 			expectError:     false,
 		},
@@ -777,6 +814,77 @@ func TestIsLocalSource(t *testing.T) {
 			assert.Equal(t, tt.expected, result, "isLocalSource(%q) should return %v", tt.uri, tt.expected)
 		})
 	}
+}
+
+// TestIsLocalSourceGHESSCPStyle verifies that an SCP-style Git URI naming the configured
+// GitHub Enterprise Server host is classified as remote, even though it has no "://"
+// separator and the GHES host isn't in the literal remoteIndicators list.
+func TestIsLocalSourceGHESSCPStyle(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+
+	tests := []struct {
+		name     string
+		uri      string
+		expected bool
+		reason   string
+	}{
+		{
+			name:     "configured GHES host",
+			uri:      "git@ghe.example.com:org/repo.git",
+			expected: false,
+			reason:   "SCP-style URI naming the configured GHES host should be classified as remote",
+		},
+		{
+			name:     "unconfigured host",
+			uri:      "git@other.example.com:org/repo.git",
+			expected: true,
+			reason:   "SCP-style URI naming an unconfigured host should not be treated as the GHES host",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isLocalSource(tt.uri), tt.reason)
+		})
+	}
+}
+
+// TestIsLocalSourceGHESSCPStyleSingleLabelHost pins CodeRabbit thread PRRT_kwDOEW4XoM6h6mmo: a
+// single-label GHES host (e.g. GITHUB_SERVER_URL=https://ghe) must still be recognized via its
+// SCP-style remote, even though scpStyleHostPattern no longer requires a dot in the host.
+func TestIsLocalSourceGHESSCPStyleSingleLabelHost(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe")
+
+	assert.False(t, isLocalSource("git@ghe:org/repo.git"),
+		"SCP-style URI naming the configured single-label GHES host should be classified as remote")
+	assert.True(t, isLocalSource("git@other:org/repo.git"),
+		"SCP-style URI naming an unrelated single-label host should remain local/unchanged")
+}
+
+// TestIsLocalSourceGHESSCPStyleUserlessDottedHost pins CodeRabbit thread PRRT_kwDOEW4XoM6h7p3R: a
+// userless SCP-style URI naming a dotted GHES host (e.g. "ghe.example.com:org/repo.git", no
+// "user@" prefix) must be recognized as remote, matching pkg/vendor's scpURLPattern and
+// rewriteSCPURL's SCP detection, both of which allow a userless dotted host.
+func TestIsLocalSourceGHESSCPStyleUserlessDottedHost(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+
+	assert.False(t, isLocalSource("ghe.example.com:org/repo.git"),
+		"userless SCP-style URI naming a dotted, configured GHES host should be classified as remote")
+	assert.True(t, isLocalSource("other.example.com:org/repo.git"),
+		"userless SCP-style URI naming an unconfigured dotted host should not be treated as the GHES host")
+}
+
+// TestIsLocalSourceGHESSCPStyleUserlessSingleLabelHostStaysLocal pins CodeRabbit thread
+// PRRT_kwDOEW4XoM6h7p3R: a userless, single-label host (e.g. "dir:file") is genuinely ambiguous
+// with a local relative path, so it must still require the "user@" prefix to be treated as
+// remote -- relaxing the dotted-host case must not also relax the single-label case.
+func TestIsLocalSourceGHESSCPStyleUserlessSingleLabelHostStaysLocal(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe")
+
+	assert.True(t, isLocalSource("ghe:org/repo.git"),
+		"userless SCP-style URI naming a single-label configured GHES host must still require user@ to be treated as remote")
+	assert.True(t, isLocalSource("dir:file"),
+		"a colon-separated relative path must remain local")
 }
 
 // Tests for checkMetadataChanges with various version scenarios.
@@ -1398,7 +1506,7 @@ func TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning(t *testi
 	}
 
 	ctx := t.Context()
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err, "second AutoProvisionSource call with invocationDoneKey set should be a no-op")
 }
 
@@ -1407,26 +1515,19 @@ func TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning(t *testi
 // (cache still valid). This ensures the before.terraform.init hook will be a no-op.
 func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) {
 	tmpDir := t.TempDir()
-
-	// Create a workdir with valid metadata so needsProvisioning returns false
-	// (TTL not expired, version unchanged).
-	workdirPath := filepath.Join(tmpDir, ".workdir", "terraform", "demo-null-label")
-	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
-	// Place a dummy file so isNonEmptyDir returns true.
-	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# test"), 0o644))
-	// Write metadata matching the source spec so TTL check is the only gate.
-	meta := &workdir.WorkdirMetadata{
-		SourceURI:     "github.com/cloudposse/terraform-null-label.git//",
-		SourceVersion: "0.25.0",
-		UpdatedAt:     time.Now(), // Fresh — 1h TTL not expired.
-	}
-	require.NoError(t, workdir.WriteMetadata(workdirPath, meta))
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	sourceURI := server.URL + "/source.tar.gz"
 
 	componentConfig := map[string]any{
 		"component":   "null-label",
 		"atmos_stack": "demo",
 		"source": map[string]any{
-			"uri":     "github.com/cloudposse/terraform-null-label.git//",
+			"uri":     sourceURI,
 			"version": "0.25.0",
 			"ttl":     "1h",
 		},
@@ -1437,6 +1538,21 @@ func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) 
 		},
 	}
 
+	// Seed the actual hash-suffixed workdir used by the provisioner. A legacy
+	// hardcoded path silently misses the cache and downloads the source instead.
+	workdirPath, err := workdir.BuildPath(tmpDir, "terraform", "null-label", "demo", componentConfig)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+	fixturePath := filepath.Join(workdirPath, "main.tf")
+	fixtureContents := []byte("# cached source must be preserved\n")
+	require.NoError(t, os.WriteFile(fixturePath, fixtureContents, 0o644))
+	meta := &workdir.WorkdirMetadata{
+		SourceURI:     sourceURI,
+		SourceVersion: "0.25.0",
+		UpdatedAt:     time.Now(), // Fresh — 1h TTL not expired.
+	}
+	require.NoError(t, workdir.WriteMetadata(workdirPath, meta))
+
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: tmpDir,
 		Components: schema.Components{
@@ -1446,11 +1562,99 @@ func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) 
 		},
 	}
 
-	ctx := t.Context()
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	err = AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
+	assert.Zero(t, requests.Load(), "a cache hit must not fetch the source")
+	contents, err := os.ReadFile(fixturePath)
+	require.NoError(t, err)
+	assert.Equal(t, fixtureContents, contents)
+	assert.Equal(t, workdirPath, componentConfig[workdir.WorkdirPathKey])
+	assert.NotContains(t, componentConfig, workdir.WorkdirReprovisionedKey)
+	assert.Contains(t, componentConfig, invocationDoneKey,
+		"invocationDoneKey should be set after a skipped provision")
+}
 
-	// The guard marker must now be present in componentConfig.
-	_, done := componentConfig[invocationDoneKey]
-	assert.True(t, done, "invocationDoneKey should be set in componentConfig after a skipped provision")
+func TestAutoProvisionSource_SuppressesUIForWorkdirOutputLookup(t *testing.T) {
+	tempDir := t.TempDir()
+	sourceDir := filepath.Join(tempDir, "source")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# test"), 0o644))
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var uiOutput bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&uiOutput)
+	t.Cleanup(restoreUI)
+	var componentOutput bytes.Buffer
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
+	componentConfig := map[string]any{
+		"component":   "vpc",
+		"atmos_stack": "dev",
+		"source": map[string]any{
+			"uri": sourceDir,
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	ctx := workdir.WithOutputSuppressed(t.Context())
+	err = AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{Stderr: &componentOutput})
+	require.NoError(t, err)
+	assert.Empty(t, uiOutput.String())
+	assert.Contains(t, atmosansi.Strip(componentOutput.String()), "Auto-provisioned source to")
+}
+
+// TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir verifies
+// that a provisioning failure removes the target directory this attempt
+// created. A leftover directory is worse than none: an empty one misleads path
+// resolution (the component "exists" but has no code), and a partially
+// populated one is treated as fully provisioned by needsProvisioning on the
+// next run, silently skipping re-provisioning.
+func TestAutoProvisionSource_FailedProvisioningCleansUpCreatedTargetDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{TerraformDirAbsolutePath: tmpDir}
+	componentConfig := map[string]any{
+		"component": "app",
+		"source": map[string]any{
+			// A local source path that doesn't exist forces the download step to fail.
+			"uri": filepath.Join(tmpDir, "does-not-exist-source"),
+		},
+	}
+
+	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
+	require.Error(t, err, "provisioning from a nonexistent source must fail")
+
+	assert.NoDirExists(t, filepath.Join(tmpDir, "app"),
+		"a failed provisioning attempt must remove the target directory it created")
+}
+
+// TestAutoProvisionSource_FailedProvisioningKeepsPreexistingTargetDir is the
+// negative path for the cleanup above: when the (empty) target directory
+// already existed before the provisioning attempt, a failure must leave it in
+// place — the cleanup only removes what this attempt created.
+func TestAutoProvisionSource_FailedProvisioningKeepsPreexistingTargetDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	targetDir := filepath.Join(tmpDir, "app")
+	// Pre-existing but empty, so needsProvisioning still attempts (and fails) a provision.
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{TerraformDirAbsolutePath: tmpDir}
+	componentConfig := map[string]any{
+		"component": "app",
+		"source": map[string]any{
+			"uri": filepath.Join(tmpDir, "does-not-exist-source"),
+		},
+	}
+
+	err := AutoProvisionSource(t.Context(), atmosConfig, "terraform", componentConfig, nil, provisioner.OutputWriters{})
+	require.Error(t, err, "provisioning from a nonexistent source must fail")
+
+	assert.DirExists(t, targetDir,
+		"a failed provisioning attempt must not remove a pre-existing target directory")
 }

@@ -186,10 +186,16 @@ This means you can write simple `select()` expressions without worrying about th
   <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests.<br/>Environment variable: `ATMOS_COMPONENT_TAGS`</dd>
 
   <dt>`--labels`</dt>
-  <dd>Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests.<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance:sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests.<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
+
+  <dt>`--include-dependencies`</dt>
+  <dd>Expand the listing to everything the selected components depend on (their prerequisites) — previewing the exact set a terraform bulk command with the same selection flags would execute. The closure covers Terraform components (the dependency graph the scheduler executes) and is evaluated with this command's own `--process-templates`/`--process-functions` settings. Accepts an optional depth (for example, `--include-dependencies=1` for direct dependencies only).<br/>`atmos list components --labels=env=dev --include-dependencies`<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENCIES`</dd>
+
+  <dt>`--include-dependents`</dt>
+  <dd>Expand the listing to everything that depends on the selected components — previewing the exact set a terraform bulk command with the same selection flags would execute. Accepts an optional depth (for example, `--include-dependents=2` for two levels).<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENTS`</dd>
 
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
-  <dd>Authenticate with a specific identity before listing components.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list components --identity my-aws-identity`<br/><br/>Environment variable: `ATMOS_IDENTITY`</dd>
+  <dd>Explicitly authenticate before listing components; failures remain fatal. Without explicit selection, default identity authentication occurs only when an evaluated value needs credentials. Unused column values do not trigger authentication. Use `--identity=false` to disable Atmos authentication.<br/>Environment variable: `ATMOS_IDENTITY`</dd>
 
   <dt>`--process-templates`</dt>
   <dd>Enable/disable Go template processing in Atmos stack manifests (default `true`). Go template functions include `atmos.Component(...)`.<br/>Environment variable: `ATMOS_PROCESS_TEMPLATES`</dd>
@@ -199,6 +205,9 @@ This means you can write simple `select()` expressions without worrying about th
 
   <dt>`--skip`</dt>
   <dd>Skip executing a specific YAML function in the Atmos stack manifests when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`). Use this to bypass a single function (such as a backend-resolving `!terraform.state` call) while leaving other YAML functions enabled.<br/>Environment variable: `ATMOS_SKIP`</dd>
+
+  <dt>`--error-mode`</dt>
+  <dd>How to handle unavailable requested values, including missing Terraform state and unavailable implicit authentication (default `warn`). `warn` substitutes `(computed)` and prints one summary; `silent` omits the summary; `strict` fails. Explicit identity failures, malformed configuration, invalid expressions, and dependency cycles remain fatal.<br/>Environment variable: `ATMOS_LIST_ERROR_MODE`</dd>
 </dl>
 
 ## Configuration

@@ -61,6 +61,9 @@ const (
 	AppendUserAgentFlag         = "--append-user-agent"
 	InitRunReconfigure          = "--init-run-reconfigure"
 	InitPassVars                = "--init-pass-vars"
+	InitModeFlag                = "--init-mode"
+	InitReconfigureFlag         = "--init-reconfigure"
+	InitUpgradeFlag             = "--init-upgrade"
 	PlanSkipPlanfile            = "--skip-planfile"
 
 	FromPlanFlag       = "--from-plan"
@@ -118,6 +121,7 @@ const (
 	EmulatorSectionName               = "emulator"
 	AnsibleInventorySectionName       = "inventory"
 	WorkspaceSectionName              = "workspace"
+	FlagsSectionName                  = "flags"
 	AuthSectionName                   = "auth"
 	RequiredVersionSectionName        = "required_version"
 	RequiredProvidersSectionName      = "required_providers"
@@ -126,11 +130,29 @@ const (
 	PathsSectionName                  = "paths"
 	ManifestsSectionName              = "manifests"
 	RenderSectionName                 = "render"
+	ValidateSectionName               = "validate"
 	ValuesSectionName                 = "values"
 	ValuesFilesSectionName            = "values_files"
 	PluginsSectionName                = "plugins"
 	ChartSectionName                  = "chart"
 	RepositoriesSectionName           = "repositories"
+	HelmReleaseSectionName            = "release"
+	HelmInstallSectionName            = "install"
+	HelmUpgradeSectionName            = "upgrade"
+	HelmDeleteSectionName             = "delete"
+	HelmOnFailureSectionName          = "on_failure"
+	HelmCleanupOnFailureSectionName   = "cleanup_on_failure"
+	HelmWaitSectionName               = "wait"
+	HelmWaitStrategySectionName       = "strategy"
+	HelmWaitJobsSectionName           = "jobs"
+	HelmTimeoutSectionName            = "timeout"
+	HelmHistorySectionName            = "history"
+	HelmHistoryMaxSectionName         = "max"
+	HelmChartHooksSectionName         = "chart_hooks"
+	HelmCRDsSectionName               = "crds"
+	HelmDependencyUpdateSectionName   = "dependency_update"
+	HelmCreateNamespaceSectionName    = "create_namespace"
+	HelmDefaultMaxHistory             = 10
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"
@@ -141,6 +163,7 @@ const (
 	TerraformCliArgsEnvSectionName    = "env_tf_cli_args"
 	TerraformCliVarsEnvSectionName    = "env_tf_cli_vars"
 	TestSectionName                   = "test"
+	MocksSectionName                  = "mocks"
 	ComponentTypeSectionName          = "component_type"
 	OutputsSectionName                = "outputs"
 	StaticSectionName                 = "static"
@@ -167,14 +190,15 @@ const (
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
 	// Atmos Pro.
-	AtmosProBaseUrlEnvVarName     = "ATMOS_PRO_BASE_URL"
-	AtmosProEndpointEnvVarName    = "ATMOS_PRO_ENDPOINT"
-	AtmosProTokenEnvVarName       = "ATMOS_PRO_TOKEN"
-	AtmosProWorkspaceIDEnvVarName = "ATMOS_PRO_WORKSPACE_ID"
-	AtmosProRunIDEnvVarName       = "ATMOS_PRO_RUN_ID"
-	AtmosProDefaultBaseUrl        = "https://atmos-pro.com"
-	AtmosProDefaultEndpoint       = "api/v1"
-	UploadStatusFlag              = "upload-status"
+	AtmosProBaseUrlEnvVarName         = "ATMOS_PRO_BASE_URL"
+	AtmosProEndpointEnvVarName        = "ATMOS_PRO_ENDPOINT"
+	AtmosProTokenEnvVarName           = "ATMOS_PRO_TOKEN"
+	AtmosProWorkspaceIDEnvVarName     = "ATMOS_PRO_WORKSPACE_ID"
+	AtmosProRunIDEnvVarName           = "ATMOS_PRO_RUN_ID"
+	AtmosProExecSyncTimeoutEnvVarName = "ATMOS_PRO_EXEC_SYNC_TIMEOUT"
+	AtmosProDefaultBaseUrl            = "https://atmos-pro.com"
+	AtmosProDefaultEndpoint           = "api/v1"
+	UploadStatusFlag                  = "upload-status"
 
 	TerraformDefaultWorkspace = "default"
 
@@ -188,6 +212,9 @@ const (
 	IdentityFlagShort         = "-i"
 	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
 	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
+
+	// Profile flags.
+	ProfileFlagSelectValue = "__SELECT__" // Special value when --profile is used without argument (interactive picker).
 
 	// Cast recording flag.
 	CastFlagName      = "cast"

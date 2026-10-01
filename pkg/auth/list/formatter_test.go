@@ -6,51 +6,21 @@ import (
 	"time"
 
 	tree "github.com/charmbracelet/lipgloss/tree"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestTruncateString(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		maxLen   int
-		expected string
-	}{
-		{
-			name:     "shorter than max",
-			input:    "short",
-			maxLen:   10,
-			expected: "short",
-		},
-		{
-			name:     "equal to max",
-			input:    "exactlyten",
-			maxLen:   10,
-			expected: "exactlyten",
-		},
-		{
-			name:     "longer than max",
-			input:    "this is a very long string",
-			maxLen:   10,
-			expected: "this is...",
-		},
-		{
-			name:     "very short max",
-			input:    "hello",
-			maxLen:   2,
-			expected: "he",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := truncateString(tt.input, tt.maxLen)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+// forceTTYForTable forces pkg/list/renderer's TTY branch (styled table with
+// headers) instead of the default non-TTY plain-list fallback that `go test`
+// would otherwise take, since its stdout is a pipe, not a real terminal.
+func forceTTYForTable(t *testing.T) {
+	t.Helper()
+	original := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", original) })
 }
 
 func TestCreateProvidersTable(t *testing.T) {
@@ -63,27 +33,26 @@ func TestCreateProvidersTable(t *testing.T) {
 		},
 	}
 
-	table, err := createProvidersTable(providers)
+	view, err := createProvidersTable(providers)
 
 	require.NoError(t, err)
-
-	// Verify table was created successfully.
-	assert.NotNil(t, table)
-
-	// Just verify the function doesn't error - the table rendering is tested integration-wise.
+	assert.NotEmpty(t, view)
+	assert.Contains(t, view, "aws-sso")
 }
 
 func TestCreateProvidersTable_Empty(t *testing.T) {
+	forceTTYForTable(t) // Headers only render on the styled-table (TTY) path; plain-list omits them.
 	providers := map[string]schema.Provider{}
 
-	table, err := createProvidersTable(providers)
+	view, err := createProvidersTable(providers)
 
 	require.NoError(t, err)
-	assert.NotNil(t, table)
+	// No rows, but the header row (and its formatting) still render.
+	assert.Contains(t, view, "NAME")
 }
 
-// TestCreateProvidersTable_MultipleRowsVisible guards against a
-// table-height off-by-one that previously hid all rows past the first.
+// TestCreateProvidersTable_MultipleRowsVisible guards against a rendering
+// regression that drops or hides rows past the first.
 func TestCreateProvidersTable_MultipleRowsVisible(t *testing.T) {
 	providers := map[string]schema.Provider{
 		"aws-sso": {
@@ -105,10 +74,8 @@ func TestCreateProvidersTable_MultipleRowsVisible(t *testing.T) {
 		},
 	}
 
-	table, err := createProvidersTable(providers)
+	view, err := createProvidersTable(providers)
 	require.NoError(t, err)
-
-	view := table.View()
 	require.NotEmpty(t, view)
 
 	// Every provider name must appear in the rendered table.
@@ -124,8 +91,8 @@ func TestCreateProvidersTable_MultipleRowsVisible(t *testing.T) {
 	assert.Contains(t, view, "us-east-2", "google row content must include its region")
 }
 
-// TestCreateIdentitiesTable_MultipleRowsVisible guards against a
-// table-height off-by-one that previously hid all rows past the first.
+// TestCreateIdentitiesTable_MultipleRowsVisible guards against a rendering
+// regression that drops or hides rows past the first.
 func TestCreateIdentitiesTable_MultipleRowsVisible(t *testing.T) {
 	identities := map[string]schema.Identity{
 		"admin": {
@@ -142,10 +109,8 @@ func TestCreateIdentitiesTable_MultipleRowsVisible(t *testing.T) {
 		},
 	}
 
-	table, err := createIdentitiesTable(nil, identities)
+	view, err := createIdentitiesTable(nil, identities)
 	require.NoError(t, err)
-
-	view := table.View()
 	require.NotEmpty(t, view)
 
 	// Every identity name must appear in the rendered table.
@@ -162,10 +127,10 @@ func TestCreateIdentitiesTable(t *testing.T) {
 			Via:     &schema.IdentityVia{Provider: "aws-sso"},
 		},
 	}
-	table, err := createIdentitiesTable(nil, identities)
+	view, err := createIdentitiesTable(nil, identities)
 
 	require.NoError(t, err)
-	assert.NotNil(t, table)
+	assert.Contains(t, view, "admin")
 }
 
 func TestCreateIdentitiesTable_AWSUser(t *testing.T) {
@@ -175,10 +140,11 @@ func TestCreateIdentitiesTable_AWSUser(t *testing.T) {
 			Via:  nil,
 		},
 	}
-	table, err := createIdentitiesTable(nil, identities)
+	view, err := createIdentitiesTable(nil, identities)
 
 	require.NoError(t, err)
-	assert.NotNil(t, table)
+	assert.Contains(t, view, "ci")
+	assert.Contains(t, view, "aws-user", "aws/user identities show aws-user as the via-provider")
 }
 
 func TestBuildProvidersTree(t *testing.T) {
@@ -481,9 +447,9 @@ func TestBuildProviderRows_WithStartURL(t *testing.T) {
 	rows := buildProviderRows(providers)
 
 	require.Len(t, rows, 1)
-	assert.Equal(t, "aws-sso", rows[0][0])
-	assert.Contains(t, rows[0][3], "d-abc123")
-	assert.Equal(t, "✓", rows[0][4])
+	assert.Equal(t, "aws-sso", rows[0]["name"])
+	assert.Contains(t, rows[0]["url"], "d-abc123")
+	assert.Equal(t, "✓", rows[0]["default"])
 }
 
 func TestBuildProviderRows_WithURL(t *testing.T) {
@@ -497,8 +463,8 @@ func TestBuildProviderRows_WithURL(t *testing.T) {
 	rows := buildProviderRows(providers)
 
 	require.Len(t, rows, 1)
-	assert.Equal(t, "okta", rows[0][0])
-	assert.Contains(t, rows[0][3], "company.okta.com")
+	assert.Equal(t, "okta", rows[0]["name"])
+	assert.Contains(t, rows[0]["url"], "company.okta.com")
 }
 
 func TestBuildProviderRows_WithRegion(t *testing.T) {
@@ -512,7 +478,7 @@ func TestBuildProviderRows_WithRegion(t *testing.T) {
 	rows := buildProviderRows(providers)
 
 	require.Len(t, rows, 1)
-	assert.Equal(t, "us-west-2", rows[0][2])
+	assert.Equal(t, "us-west-2", rows[0]["region"])
 }
 
 func TestBuildProviderRows_NoRegion(t *testing.T) {
@@ -525,7 +491,7 @@ func TestBuildProviderRows_NoRegion(t *testing.T) {
 	rows := buildProviderRows(providers)
 
 	require.Len(t, rows, 1)
-	assert.Equal(t, "-", rows[0][2])
+	assert.Equal(t, "-", rows[0]["region"])
 }
 
 func TestBuildProviderRows_NoURL(t *testing.T) {
@@ -538,78 +504,78 @@ func TestBuildProviderRows_NoURL(t *testing.T) {
 	rows := buildProviderRows(providers)
 
 	require.Len(t, rows, 1)
-	assert.Equal(t, "-", rows[0][3])
+	assert.Equal(t, "-", rows[0]["url"])
 }
 
-func TestBuildIdentityTableRow_WithViaProvider(t *testing.T) {
+func TestBuildIdentityRow_WithViaProvider(t *testing.T) {
 	identity := schema.Identity{
 		Kind:    "aws/permission-set",
 		Default: true,
 		Via:     &schema.IdentityVia{Provider: "aws-sso"},
 	}
 
-	row := buildIdentityTableRow(nil, &identity, "admin")
+	row := buildIdentityRow(nil, &identity, "admin")
 
-	assert.Equal(t, " ", row[0])                  // Status indicator (space when authManager is nil).
-	assert.Equal(t, "admin", row[1])              // Name.
-	assert.Equal(t, "aws/permission-set", row[2]) // Kind.
-	assert.Equal(t, "aws-sso", row[3])            // Via Provider.
-	assert.Equal(t, "-", row[4])                  // Via Identity.
-	assert.Equal(t, "✓", row[5])                  // Default.
+	assert.Equal(t, " ", row["status"])                // Status indicator (space when authManager is nil).
+	assert.Equal(t, "admin", row["name"])              // Name.
+	assert.Equal(t, "aws/permission-set", row["kind"]) // Kind.
+	assert.Equal(t, "aws-sso", row["via_provider"])    // Via Provider.
+	assert.Equal(t, "-", row["via_identity"])          // Via Identity.
+	assert.Equal(t, "✓", row["default"])               // Default.
 }
 
-func TestBuildIdentityTableRow_WithViaIdentity(t *testing.T) {
+func TestBuildIdentityRow_WithViaIdentity(t *testing.T) {
 	identity := schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Identity: "admin"},
 	}
 
-	row := buildIdentityTableRow(nil, &identity, "dev")
+	row := buildIdentityRow(nil, &identity, "dev")
 
-	assert.Equal(t, " ", row[0])     // Status indicator.
-	assert.Equal(t, "dev", row[1])   // Name.
-	assert.Equal(t, "-", row[3])     // Via Provider.
-	assert.Equal(t, "admin", row[4]) // Via Identity.
+	assert.Equal(t, " ", row["status"])           // Status indicator.
+	assert.Equal(t, "dev", row["name"])           // Name.
+	assert.Equal(t, "-", row["via_provider"])     // Via Provider.
+	assert.Equal(t, "admin", row["via_identity"]) // Via Identity.
 }
 
-func TestBuildIdentityTableRow_AWSUser(t *testing.T) {
+func TestBuildIdentityRow_AWSUser(t *testing.T) {
 	identity := schema.Identity{
 		Kind: "aws/user",
 	}
 
-	row := buildIdentityTableRow(nil, &identity, "ci")
+	row := buildIdentityRow(nil, &identity, "ci")
 
-	assert.Equal(t, " ", row[0])        // Status indicator.
-	assert.Equal(t, "ci", row[1])       // Name.
-	assert.Equal(t, "aws/user", row[2]) // Kind.
-	assert.Equal(t, "aws-user", row[3]) // Via Provider.
-	assert.Equal(t, "-", row[4])        // Via Identity.
+	assert.Equal(t, " ", row["status"])              // Status indicator.
+	assert.Equal(t, "ci", row["name"])               // Name.
+	assert.Equal(t, "aws/user", row["kind"])         // Kind.
+	assert.Equal(t, "aws-user", row["via_provider"]) // Via Provider.
+	assert.Equal(t, "-", row["via_identity"])        // Via Identity.
 }
 
-func TestBuildIdentityTableRow_WithAlias(t *testing.T) {
+func TestBuildIdentityRow_WithAlias(t *testing.T) {
 	identity := schema.Identity{
 		Kind:  "aws/assume-role",
 		Alias: "developer",
 		Via:   &schema.IdentityVia{Provider: "aws-sso"},
 	}
 
-	row := buildIdentityTableRow(nil, &identity, "dev")
+	row := buildIdentityRow(nil, &identity, "dev")
 
-	assert.Equal(t, " ", row[0])         // Status indicator.
-	assert.Equal(t, "dev", row[1])       // Name.
-	assert.Equal(t, "developer", row[6]) // Alias.
+	assert.Equal(t, " ", row["status"])        // Status indicator.
+	assert.Equal(t, "dev", row["name"])        // Name.
+	assert.Equal(t, "developer", row["alias"]) // Alias.
 }
 
-func TestBuildIdentityTableRow_NoAlias(t *testing.T) {
+func TestBuildIdentityRow_NoAlias(t *testing.T) {
 	identity := schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "aws-sso"},
 	}
 
-	row := buildIdentityTableRow(nil, &identity, "admin")
+	row := buildIdentityRow(nil, &identity, "admin")
 
-	assert.Equal(t, " ", row[0]) // Status indicator.
-	assert.Equal(t, "-", row[6]) // Alias.
+	assert.Equal(t, " ", row["status"]) // Status indicator.
+	assert.Equal(t, "-", row["alias"])  // Alias.
 }
 
 func TestBuildIdentitiesTree_WithCredentials(t *testing.T) {

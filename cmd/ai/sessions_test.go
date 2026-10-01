@@ -156,10 +156,14 @@ func TestParseDuration(t *testing.T) {
 			expectedError: errUtils.ErrAIUnsupportedDurationUnit,
 		},
 		{
-			name:          "negative value",
+			// Negative durations are now a hard parse error: 0d has a real,
+			// destructive meaning ("delete all sessions now") distinct from
+			// "flag unset", so silently coercing negative values to the same
+			// default behavior would be confusing. See session.RetentionUnset.
+			name:          "negative value is rejected",
 			durationStr:   "-30d",
-			expectedDays:  -30,
-			expectedError: nil, // parseDuration doesn't validate negative values
+			expectedDays:  0,
+			expectedError: errUtils.ErrAIInvalidDurationFormat,
 		},
 		{
 			name:          "zero value",
@@ -1162,53 +1166,55 @@ func TestValidateCheckpointFile(t *testing.T) {
 	})
 }
 
+// TestParseDuration_NegativeValues documents an intentional behavior change:
+// negative durations used to pass through silently (coerced downstream to the
+// default retention). Now that 0d has a real, destructive meaning ("delete
+// all sessions now") distinct from "flag unset" (session.RetentionUnset),
+// letting negative values silently alias to the default would be confusing,
+// so parseDuration now rejects them outright.
 func TestParseDuration_NegativeValues(t *testing.T) {
-	// Test that negative values are handled (they're allowed but may not make sense).
 	tests := []struct {
-		name         string
-		durationStr  string
-		expectedDays int
+		name        string
+		durationStr string
 	}{
 		{
-			name:         "negative days",
-			durationStr:  "-7d",
-			expectedDays: -7,
+			name:        "negative days",
+			durationStr: "-7d",
 		},
 		{
-			name:         "negative weeks",
-			durationStr:  "-2w",
-			expectedDays: -14,
+			name:        "negative weeks",
+			durationStr: "-2w",
 		},
 		{
-			name:         "negative months",
-			durationStr:  "-1m",
-			expectedDays: -30,
+			name:        "negative months",
+			durationStr: "-1m",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			days, err := parseDuration(tt.durationStr)
-			assert.NoError(t, err)
-			assert.Equal(t, tt.expectedDays, days)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrAIInvalidDurationFormat)
+			assert.Equal(t, 0, days)
 		})
 	}
 }
 
+// TestParseDuration_NegativeHours documents the same intentional behavior
+// change as TestParseDuration_NegativeValues, for the hours unit specifically.
 func TestParseDuration_NegativeHours(t *testing.T) {
-	// Negative hours are a bit tricky with the rounding logic.
 	t.Run("negative hours", func(t *testing.T) {
 		days, err := parseDuration("-24h")
-		assert.NoError(t, err)
-		// -24 / 24 = -1, no remainder.
-		assert.Equal(t, -1, days)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAIInvalidDurationFormat)
+		assert.Equal(t, 0, days)
 	})
 
 	t.Run("negative hours with remainder", func(t *testing.T) {
 		days, err := parseDuration("-25h")
-		assert.NoError(t, err)
-		// -25 / 24 = -1, remainder -1, so days++ makes it 0.
-		// Note: This behavior may not be ideal but reflects current implementation.
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAIInvalidDurationFormat)
 		assert.Equal(t, 0, days)
 	})
 }
@@ -3536,16 +3542,27 @@ ai:
 	err = importSessionCommand(importCmd, []string{checkpointPath})
 	require.NoError(t, err)
 
-	t.Run("clean sessions with 0 days retention deletes all sessions", func(t *testing.T) {
+	t.Run("clean sessions with explicit 0d retention deletes all sessions", func(t *testing.T) {
 		cleanCmd := &cobra.Command{
 			Use:  "clean",
 			RunE: cleanSessionsCommand,
 		}
 		cleanCmd.Flags().String("older-than", "0d", "Duration")
+		// Explicitly Set (not just registered with a default) so cmd.Flags().Changed
+		// reports true, exercising the "0d means delete everything now" path rather
+		// than falling back to the unset-sentinel default.
+		require.NoError(t, cleanCmd.Flags().Set("older-than", "0d"))
 
 		err := cleanSessionsCommand(cleanCmd, []string{})
-		// Should succeed - may or may not delete sessions depending on timestamp.
 		assert.NoError(t, err)
+
+		// The just-imported session should now be gone: 0d means "delete
+		// everything up to now", not "use the 30-day default".
+		manager, cleanup, mgrErr := initSessionManager()
+		require.NoError(t, mgrErr)
+		defer cleanup()
+		_, getErr := manager.GetSessionByName(context.Background(), "session-for-clean")
+		assert.Error(t, getErr, "session should have been deleted by explicit 0d retention")
 	})
 }
 
@@ -3775,19 +3792,104 @@ ai:
 	err = listSessionsCommand(listCmd, []string{})
 	require.NoError(t, err)
 
-	t.Run("clean sessions with short retention deletes old sessions", func(t *testing.T) {
-		// Clean with very short retention (sessions updated within 1 day are kept).
-		// But since we imported with current timestamp, the session might not be deleted.
-		// Use 0 days to ensure deletion.
+	t.Run("clean sessions with explicit 0d retention deletes old sessions", func(t *testing.T) {
+		// Use explicit 0d ("delete everything now") to ensure deletion regardless
+		// of the imported session's actual timestamp.
 		cleanCmd := &cobra.Command{
 			Use:  "clean",
 			RunE: cleanSessionsCommand,
 		}
 		cleanCmd.Flags().String("older-than", "0d", "Duration")
+		require.NoError(t, cleanCmd.Flags().Set("older-than", "0d"))
 
 		err := cleanSessionsCommand(cleanCmd, []string{})
-		// This should succeed - sessions are deleted.
 		assert.NoError(t, err)
+
+		manager, cleanup, mgrErr := initSessionManager()
+		require.NoError(t, mgrErr)
+		defer cleanup()
+		_, getErr := manager.GetSessionByName(context.Background(), "old-session-to-delete")
+		assert.Error(t, getErr, "session should have been deleted by explicit 0d retention")
+	})
+}
+
+// TestCleanSessionsCommand_UnsetVsExplicitZero verifies the intentional behavior
+// change: omitting --older-than entirely (cmd.Flags().Changed == false) falls
+// back to the 30-day default retention, while explicitly passing --older-than 0d
+// deletes every session immediately. A recently-created session (well within the
+// 30-day default) must survive the former and be deleted by the latter.
+func TestCleanSessionsCommand_UnsetVsExplicitZero(t *testing.T) {
+	tempDir := t.TempDir()
+
+	stacksDir := filepath.Join(tempDir, "stacks", "deploy")
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	sessionsDir := filepath.Join(tempDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+
+	atmosConfig := fmt.Sprintf(`base_path: "%s"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+
+components:
+  terraform:
+    base_path: "%s"
+
+ai:
+  enabled: true
+  sessions:
+    enabled: true
+    path: "%s"
+`, filepath.ToSlash(tempDir), filepath.ToSlash(filepath.Join("components", "terraform")), filepath.ToSlash(filepath.Join(".atmos", "sessions")))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte("vars:\n  environment: dev\n  stage: test\n"), 0o644))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	t.Setenv("ATMOS_BASE_PATH", tempDir)
+
+	manager, cleanup, mgrErr := initSessionManager()
+	require.NoError(t, mgrErr)
+	_, createErr := manager.CreateSession(context.Background(), session.CreateSessionParams{
+		Name:     "recent-session",
+		Model:    "gpt-4",
+		Provider: "openai",
+	})
+	require.NoError(t, createErr)
+	cleanup()
+
+	t.Run("flag not provided keeps a recent session (30-day default)", func(t *testing.T) {
+		cleanCmd := &cobra.Command{Use: "clean", RunE: cleanSessionsCommand}
+		cleanCmd.Flags().String("older-than", "30d", "Duration")
+		// Deliberately not calling .Set(): cmd.Flags().Changed("older-than") must be false.
+
+		err := cleanSessionsCommand(cleanCmd, []string{})
+		require.NoError(t, err)
+
+		mgr, cleanupFn, err := initSessionManager()
+		require.NoError(t, err)
+		defer cleanupFn()
+		_, getErr := mgr.GetSessionByName(context.Background(), "recent-session")
+		assert.NoError(t, getErr, "recent session must survive the default 30-day retention")
+	})
+
+	t.Run("explicit 0d deletes the recent session immediately", func(t *testing.T) {
+		cleanCmd := &cobra.Command{Use: "clean", RunE: cleanSessionsCommand}
+		cleanCmd.Flags().String("older-than", "30d", "Duration")
+		require.NoError(t, cleanCmd.Flags().Set("older-than", "0d"))
+
+		err := cleanSessionsCommand(cleanCmd, []string{})
+		require.NoError(t, err)
+
+		mgr, cleanupFn, err := initSessionManager()
+		require.NoError(t, err)
+		defer cleanupFn()
+		_, getErr := mgr.GetSessionByName(context.Background(), "recent-session")
+		assert.Error(t, getErr, "explicit 0d must delete even a just-created session")
 	})
 }
 

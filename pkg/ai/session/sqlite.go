@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
@@ -18,7 +19,34 @@ import (
 const (
 	// DefaultDirPerms is the default permissions for creating storage directories.
 	defaultDirPerms = 0o755
+
+	// These two constants bound how long NewSQLiteStorage retries a pragma that
+	// fails with "database is locked". PRAGMA journal_mode = WAL briefly needs
+	// exclusive access to switch modes, and this pure-Go driver (modernc.org/sqlite)
+	// doesn't consistently honor PRAGMA busy_timeout for that specific one-time
+	// switch when two processes open the same new database file at once (e.g. two
+	// `atmos ai exec --session <same-name>` invocations) -- so this loop is a
+	// driver-level-agnostic backstop on top of busy_timeout, not a replacement for it.
+	pragmaRetryAttempts = 20
+	pragmaRetryDelay    = 100 * time.Millisecond
 )
+
+// execPragmaWithRetry runs a PRAGMA statement, retrying on "database is locked"
+// for up to pragmaRetryAttempts*pragmaRetryDelay before giving up.
+func execPragmaWithRetry(db *sql.DB, pragma string) error {
+	var err error
+	for attempt := 0; attempt < pragmaRetryAttempts; attempt++ {
+		_, err = db.Exec(pragma)
+		if err == nil {
+			return nil
+		}
+		if !strings.Contains(strings.ToLower(err.Error()), "database is locked") {
+			return err
+		}
+		time.Sleep(pragmaRetryDelay)
+	}
+	return err
+}
 
 // SQLiteStorage implements Storage using SQLite.
 type SQLiteStorage struct {
@@ -43,19 +71,25 @@ func NewSQLiteStorage(storagePath string) (*SQLiteStorage, error) {
 	// Configure connection.
 	db.SetMaxOpenConns(1) // SQLite works best with single connection
 
-	// Enable performance optimizations.
+	// Enable performance optimizations. busy_timeout must be set FIRST: it's
+	// the only pragma here that governs how this connection behaves when it
+	// loses a lock race, and journal_mode = WAL itself briefly needs exclusive
+	// access to switch modes -- with busy_timeout applied after it, a second
+	// concurrent opener (e.g. two `atmos ai exec --session <same-name>`
+	// processes) could fail the WAL switch with SQLITE_BUSY instead of
+	// waiting for the winner to finish.
 	pragmas := []string{
+		"PRAGMA busy_timeout = 5000",   // Wait up to 5s if database is locked
 		"PRAGMA foreign_keys = ON",     // Required for cascade deletes
 		"PRAGMA journal_mode = WAL",    // Write-Ahead Logging: faster, non-blocking writes
 		"PRAGMA synchronous = NORMAL",  // Reduce fsyncs while maintaining crash safety
-		"PRAGMA busy_timeout = 5000",   // Wait up to 5s if database is locked
 		"PRAGMA cache_size = -64000",   // 64MB cache (negative = KB, positive = pages)
 		"PRAGMA temp_store = MEMORY",   // Store temp tables in memory
 		"PRAGMA mmap_size = 268435456", // 256MB memory-mapped I/O for faster reads
 	}
 
 	for _, pragma := range pragmas {
-		if _, err := db.Exec(pragma); err != nil {
+		if err := execPragmaWithRetry(db, pragma); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("%w %q: %w", errUtils.ErrAISQLitePragmaFailed, pragma, err)
 		}
@@ -153,7 +187,8 @@ func (s *SQLiteStorage) CreateSession(ctx context.Context, session *Session) err
 	query := `INSERT INTO sessions (id, name, project_path, model, provider, skill, created_at, updated_at, metadata)
 	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	_, err = s.db.ExecContext(ctx, query,
+	_, err = s.db.ExecContext(
+		ctx, query,
 		session.ID,
 		session.Name,
 		session.ProjectPath,
@@ -312,7 +347,8 @@ func (s *SQLiteStorage) UpdateSession(ctx context.Context, session *Session) err
 	query := `UPDATE sessions SET name = ?, model = ?, provider = ?, skill = ?, updated_at = ?, metadata = ?
 	          WHERE id = ?`
 
-	result, err := s.db.ExecContext(ctx, query,
+	result, err := s.db.ExecContext(
+		ctx, query,
 		session.Name,
 		session.Model,
 		session.Provider,
@@ -380,7 +416,8 @@ func (s *SQLiteStorage) AddMessage(ctx context.Context, message *Message) error 
 	query := `INSERT INTO messages (session_id, role, content, created_at)
 	          VALUES (?, ?, ?, ?)`
 
-	result, err := s.db.ExecContext(ctx, query,
+	result, err := s.db.ExecContext(
+		ctx, query,
 		message.SessionID,
 		message.Role,
 		message.Content,

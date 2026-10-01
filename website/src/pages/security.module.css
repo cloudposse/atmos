@@ -1,0 +1,123 @@
+.security {
+  width: 100vw;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 4rem 1rem 5rem;
+  box-sizing: border-box;
+  color: var(--ifm-font-color-base);
+  overflow-x: hidden;
+}
+
+.hero {
+  max-width: 720px;
+  margin-bottom: 2rem;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: 0 0 0.9rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 6px;
+  color: var(--ifm-color-emphasis-700);
+  background: var(--ifm-color-emphasis-100);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+  color: var(--ifm-heading-color);
+  font-size: clamp(2.1rem, 5vw, 3.4rem);
+  line-height: 1;
+}
+
+.lede {
+  margin: 1.2rem 0 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 1.15rem;
+  line-height: 1.7;
+}
+
+.aboutSection {
+  max-width: 720px;
+  margin: 0 0 2.5rem;
+}
+
+.aboutSection h2 {
+  margin-top: 0;
+  font-size: 1.15rem;
+}
+
+.aboutSection p {
+  margin: 0 0 0.75rem;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.7;
+}
+
+.aboutSection p:last-child {
+  margin-bottom: 0;
+}
+
+.reportCard {
+  margin: 0 0 2.5rem;
+  padding: 1.5rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 12px;
+  background: var(--ifm-card-background-color);
+}
+
+.reportHeading {
+  display: flex;
+  align-items: center;
+  margin: 0 0 1.25rem;
+  font-size: 1.15rem;
+}
+
+.reportIcon {
+  flex-shrink: 0;
+  margin-right: 0.4rem;
+  font-size: 1.15em;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.summaryRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  margin: 0;
+}
+
+.meta dt {
+  margin: 0;
+  color: var(--ifm-color-emphasis-500);
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.meta dd {
+  margin: 0.15rem 0 0;
+  color: var(--ifm-color-emphasis-800);
+  font-size: 0.88rem;
+  font-family: var(--ifm-font-family-monospace);
+}
+
+.fetchedAt {
+  margin: 1.5rem 0 0;
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.85rem;
+}

@@ -6,14 +6,20 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
+
+var describeComponentErrorModeParser *flags.StandardParser
 
 // describeComponentCmd describes configuration for components.
 var describeComponentCmd = &cobra.Command{
@@ -49,9 +55,12 @@ type describeComponentFlags struct {
 	file                 string
 	processTemplates     bool
 	processYamlFunctions bool
+	useMocks             bool
 	query                string
 	skip                 []string
 	provenance           bool
+	provenanceExplicit   bool
+	errorMode            string
 }
 
 // parseDescribeComponentFlags extracts all flag values from the command.
@@ -75,6 +84,9 @@ func parseDescribeComponentFlags(cmd *cobra.Command) (describeComponentFlags, er
 	if f.processYamlFunctions, err = flags.GetBool("process-functions"); err != nil {
 		return f, err
 	}
+	if f.useMocks, err = flags.GetBool("use-mocks"); err != nil {
+		return f, err
+	}
 	if f.query, err = flags.GetString("query"); err != nil {
 		return f, err
 	}
@@ -84,6 +96,8 @@ func parseDescribeComponentFlags(cmd *cobra.Command) (describeComponentFlags, er
 	if f.provenance, err = flags.GetBool("provenance"); err != nil {
 		return f, err
 	}
+	// An explicit --provenance beats the `describe.provenance` config default.
+	f.provenanceExplicit = flags.Changed("provenance")
 	return f, nil
 }
 
@@ -120,10 +134,18 @@ type resolveAuthManagerParams struct {
 	processYamlFunctions bool
 }
 
-// resolveAuthManager creates an AuthManager when YAML functions are enabled or identity
-// is explicitly requested via CLI flag.
+// resolveAuthManager creates an AuthManager when identity is explicitly requested or when
+// enabled YAML functions can read an identity-backed store. The latter manager is deliberately
+// unauthenticated: the store resolver authenticates its configured identity only if the store
+// is actually read, preserving describe component's non-eager inspection behavior.
 func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
-	if !p.processYamlFunctions && !p.identityExplicit {
+	if authdeferred.ConfigureAuth(p.atmosConfig, p.identityName) {
+		return p.atmosConfig.AuthManager.(auth.AuthManager), nil
+	}
+	needsStoreAuth := p.processYamlFunctions && hasIdentityBackedStore(p.atmosConfig)
+	// Environment selection is just as explicit as --identity.
+	explicit := p.identityExplicit || p.identityName != ""
+	if !explicit && !needsStoreAuth {
 		return nil, nil
 	}
 
@@ -151,7 +173,30 @@ func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
 		}
 	}
 
+	if !explicit {
+		return auth.CreateManagerWithAtmosConfigForStack(mergedAuthConfig, p.atmosConfig, p.stack)
+	}
+
 	return CreateAuthManagerFromIdentityWithAtmosConfig(p.identityName, mergedAuthConfig, p.atmosConfig, p.stack)
+}
+
+// hasIdentityBackedStore reports whether a configured store requires Atmos identity
+// resolution. Stores without an identity retain their ambient SDK credential behavior.
+func hasIdentityBackedStore(atmosConfig *schema.AtmosConfiguration) bool {
+	if atmosConfig == nil {
+		return false
+	}
+
+	for name, storeConfig := range atmosConfig.StoresConfig {
+		if storeConfig.Identity == "" {
+			continue
+		}
+		if _, ok := atmosConfig.Stores[name].(store.IdentityAwareStore); ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 func getRunnableDescribeComponentCmd(
@@ -166,9 +211,16 @@ func getRunnableDescribeComponentCmd(
 			return fmt.Errorf("%w: the command requires one argument `component`", errUtils.ErrInvalidArguments)
 		}
 
+		if err := resolveDescribeComponentStack(cmd, args); err != nil {
+			return err
+		}
+
 		f, err := parseDescribeComponentFlags(cmd)
 		if err != nil {
 			return err
+		}
+		if f.useMocks && !f.processYamlFunctions {
+			return fmt.Errorf("%w: --use-mocks requires --process-functions=true", errUtils.ErrInvalidFlagValue)
 		}
 
 		component := args[0]
@@ -179,6 +231,27 @@ func getRunnableDescribeComponentCmd(
 		atmosConfig, err := g.initCliConfig(info, needsPathResolution)
 		if err != nil {
 			return handleConfigError(err, needsPathResolution, component, f.stack)
+		}
+		if cmd.Flags().Lookup(describeErrorModeFlagName) != nil {
+			if err = resolveDescribeErrorModeFlag(cmd, viper.GetViper(), describeComponentErrorModeParser); err != nil {
+				return err
+			}
+			if f.errorMode, err = cmd.Flags().GetString(describeErrorModeFlagName); err != nil {
+				return err
+			}
+		}
+		f.errorMode = e.ResolveErrorMode(f.errorMode, atmosConfig.Describe.ErrorMode)
+		if f.errorMode != "strict" && f.errorMode != "warn" && f.errorMode != "silent" {
+			return fmt.Errorf("%w: %q", e.ErrInvalidErrorMode, f.errorMode)
+		}
+
+		// Validated here (after resolveDescribeComponentStack's interactive prompt has
+		// had a chance to fill it in, and after the flag-shape validations above) rather
+		// than via cmd.MarkPersistentFlagRequired("stack"): that Cobra-native mechanism
+		// runs BEFORE RunE and would bypass the prompt entirely. See
+		// resolveDescribeComponentStack's doc comment for the full rationale.
+		if f.stack == "" {
+			return errUtils.ErrMissingStack
 		}
 
 		component, err = resolveComponentFromPathIfNeeded(&g, &atmosConfig, component, f.stack, needsPathResolution)
@@ -206,14 +279,60 @@ func getRunnableDescribeComponentCmd(
 			Stack:                f.stack,
 			ProcessTemplates:     f.processTemplates,
 			ProcessYamlFunctions: f.processYamlFunctions,
+			UseMocks:             f.useMocks,
 			Skip:                 f.skip,
 			Query:                f.query,
 			Format:               f.format,
 			File:                 f.file,
 			Provenance:           f.provenance,
+			ProvenanceExplicit:   f.provenanceExplicit,
+			ErrorMode:            f.errorMode,
 			AuthManager:          authManager,
 		})
 	}
+}
+
+// describeComponentStackCompletion is the completion function used to prompt for a
+// missing --stack flag. A package-level var (rather than calling StackFlagCompletion
+// directly) so tests can substitute a fake completion function without needing a
+// real Atmos config/stacks setup -- mirroring the existing seam pattern used for
+// initCliConfig/executeDescribeStacks in cmd/terraform/shared/prompt.go.
+var describeComponentStackCompletion flags.CompletionFunc = StackFlagCompletion
+
+// resolveDescribeComponentStack fills in a missing `--stack` flag interactively when
+// possible, writing the selection back onto cmd's own "stack" flag so the caller's
+// subsequent cmd.Flags().GetString("stack") read (via parseDescribeComponentFlags)
+// observes it.
+//
+// `describe component` used to enforce --stack via
+// cmd.MarkPersistentFlagRequired("stack"), which is Cobra's own required-flag
+// validation and runs BEFORE RunE -- so it always produced Cobra's generic
+// "required flag(s) \"stack\" not set" error and never gave this interactive
+// prompt a chance to run, even in a real terminal. Registering the flag as
+// not-required and validating it here (after attempting the prompt) restores the
+// documented `$ atmos describe component vpc` -> `? Choose a stack` behavior.
+//
+// Args is the command's positional args (already validated to be exactly the
+// component name by cobra.ExactArgs(1)), passed through so StackFlagCompletion can
+// filter the stack list down to stacks that actually define that component.
+func resolveDescribeComponentStack(cmd *cobra.Command, args []string) error {
+	stackFlag := cmd.Flags().Lookup("stack")
+	if stackFlag == nil || stackFlag.Value.String() != "" || stackFlag.Changed {
+		// Either there's no stack flag, a value is already present, or the user
+		// explicitly set it (even to empty) -- nothing to prompt for.
+		return nil
+	}
+
+	selected, err := flags.PromptForMissingRequired("stack", "Choose a stack", describeComponentStackCompletion, cmd, args)
+	if err != nil {
+		return fmt.Errorf("prompt for --stack: %w", err)
+	}
+	if selected == "" {
+		// Not interactive, or no matching stacks -- let the caller's own
+		// ErrMissingStack check report the missing flag.
+		return nil
+	}
+	return stackFlag.Value.Set(selected)
 }
 
 // resolveComponentFromPathIfNeeded resolves a filesystem path to a component name when needed.
@@ -246,13 +365,20 @@ func init() {
 	describeComponentCmd.PersistentFlags().String("file", "", "Write the result to the file")
 	describeComponentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
+	describeComponentCmd.PersistentFlags().Bool("use-mocks", false, "Resolve Terraform state/output YAML functions from component mocks instead of remote state. Supported only by plan and describe commands")
 	describeComponentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
-	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Enable provenance tracking to show where configuration values originated")
-
-	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
-	if err != nil {
+	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Show where configuration values originated (enabled by default; disable with --provenance=false or describe.provenance in atmos.yaml)")
+	describeComponentErrorModeParser = newDescribeErrorModeParser()
+	describeComponentErrorModeParser.RegisterPersistentFlags(describeComponentCmd)
+	if err := describeComponentErrorModeParser.BindToViper(viper.GetViper()); err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
+	// --stack is intentionally NOT marked required here (contrast with
+	// MarkPersistentFlagRequired used elsewhere): that Cobra-native mechanism
+	// validates before RunE ever runs, which would bypass
+	// resolveDescribeComponentStack's interactive prompt entirely. Missing --stack
+	// is instead validated in getRunnableDescribeComponentCmd after the prompt has
+	// had a chance to fill it in.
 	describeCmd.AddCommand(describeComponentCmd)
 }

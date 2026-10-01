@@ -7,7 +7,6 @@ import (
 	"io"
 	"math/rand/v2"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"testing"
@@ -25,6 +24,8 @@ import (
 // TestGetTelemetryFromConfig tests the getTelemetryFromConfig function to ensure it properly
 // initializes telemetry configuration with default values and maintains consistency across calls.
 func TestGetTelemetryFromConfig(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	enabled := true
 
 	ctrl := gomock.NewController(t)
@@ -62,6 +63,7 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 
 // TestCaptureCmdString tests capturing command telemetry with string command and CI environment.
 func TestCaptureCmdString(t *testing.T) {
+	isolateTelemetryCache(t)
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -109,6 +111,7 @@ func TestCaptureCmdString(t *testing.T) {
 
 // TestCaptureCmdErrorString tests capturing command telemetry when an error occurs.
 func TestCaptureCmdErrorString(t *testing.T) {
+	isolateTelemetryCache(t)
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -194,6 +197,7 @@ func TestCaptureCmdFailureStringDisabledWithEnvvar(t *testing.T) {
 
 // TestGetTelemetryFromConfigTokenWithEnvvar tests telemetry configuration with custom token, endpoint, and enabled status via environment variables.
 func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
+	isolateTelemetryCache(t)
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -258,6 +262,8 @@ func TestGetTelemetryFromConfigIntergration(t *testing.T) {
 // TestCaptureCmd tests the captureCmd function for successful command execution
 // by setting up mock expectations and verifying telemetry data is captured correctly.
 func TestCaptureCmd(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -314,6 +320,8 @@ func TestCaptureCmd(t *testing.T) {
 // TestCaptureCmdError tests the captureCmd function for failed command execution
 // by setting up mock expectations and verifying error telemetry data is captured correctly.
 func TestCaptureCmdError(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -433,6 +441,7 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 // has not been shown before. It verifies that the first call returns the expected disclosure message
 // and subsequent calls return empty strings (indicating the disclosure has been marked as shown).
 func TestTelemetryDisclosureMessage(t *testing.T) {
+	isolateTelemetryCache(t)
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -458,6 +467,7 @@ func TestTelemetryDisclosureMessage(t *testing.T) {
 // TestTelemetryDisclosureMessageShown tests that no disclosure message is returned when
 // the telemetry disclosure has already been shown to the user.
 func TestTelemetryDisclosureMessageShown(t *testing.T) {
+	isolateTelemetryCache(t)
 	// Preserve and restore CI environment variables to avoid interference
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -478,6 +488,7 @@ func TestTelemetryDisclosureMessageShown(t *testing.T) {
 // TestTelemetryDisclosureMessageHideForCI tests that disclosure messages are suppressed
 // when running in a CI environment (when CI environment variable is set to "true").
 func TestTelemetryDisclosureMessageHideForCI(t *testing.T) {
+	isolateTelemetryCache(t)
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -500,6 +511,7 @@ func TestTelemetryDisclosureMessageHideForCI(t *testing.T) {
 // TestTelemetryDisclosureMessageHideIfTelemetryDisabled tests that disclosure messages are suppressed
 // when telemetry is disabled.
 func TestTelemetryDisclosureMessageHideIfTelemetryDisabled(t *testing.T) {
+	isolateTelemetryCache(t)
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -635,9 +647,31 @@ func TestCaptureCmdWithLoggingDisabled(t *testing.T) {
 	captureCmdString("test-cmd-no-logging", nil, mockClientProvider.NewMockClient)
 }
 
+// isolateTelemetryCache redirects the Atmos XDG cache root to a per-test temp
+// directory so PrintTelemetryDisclosure reads and writes a private cache.yaml.
+//
+// CRITICAL: never "clean up" by deleting filepath.Dir(cfg.GetCacheFilePath())
+// -- that is the REAL shared <cache>/atmos root. Since the toolchain install
+// root moved underneath it (<cache>/atmos/toolchain, #2579), an os.RemoveAll
+// there deletes every CI-provisioned tool (terraform/tofu/helm/helmfile) out
+// from under the other concurrently-running package test binaries. That is
+// exactly what the Windows acceptance job's recurring "installed tool
+// vanished from PATH mid-suite" failure turned out to be (confirmed by the
+// lookup forensics in tests/preconditions.go). Isolate; don't delete.
+func isolateTelemetryCache(t *testing.T) {
+	t.Helper()
+	tempCache := t.TempDir()
+	// ATMOS_XDG_CACHE_HOME takes precedence over XDG_CACHE_HOME; set both so
+	// the redirect holds regardless of the ambient environment.
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tempCache)
+	t.Setenv("XDG_CACHE_HOME", tempCache)
+}
+
 // TestPrintTelemetryDisclosure tests that the telemetry disclosure message
 // is properly printed to stderr with markdown formatting.
 func TestPrintTelemetryDisclosure(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Save original stderr
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
@@ -646,11 +680,6 @@ func TestPrintTelemetryDisclosure(t *testing.T) {
 	// Save original CI env vars
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
-
-	// Clean up test cache
-	cacheDir := "./.atmos"
-	os.RemoveAll(cacheDir)
-	defer os.RemoveAll(cacheDir)
 
 	// Call PrintTelemetryDisclosure
 	PrintTelemetryDisclosure()
@@ -675,15 +704,11 @@ func TestPrintTelemetryDisclosure(t *testing.T) {
 // TestPrintTelemetryDisclosureOnlyOnce tests that the telemetry disclosure
 // message is only shown once and not on subsequent calls.
 func TestPrintTelemetryDisclosureOnlyOnce(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Save original CI env vars
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
-
-	// Clean up test cache - get the actual cache file path
-	cacheFilePath, _ := cfg.GetCacheFilePath()
-	cacheDir := filepath.Dir(cacheFilePath)
-	os.RemoveAll(cacheDir)
-	defer os.RemoveAll(cacheDir)
 
 	// First call should show the message
 	oldStderr := os.Stderr
@@ -727,10 +752,7 @@ func TestPrintTelemetryDisclosureDisabledInCI(t *testing.T) {
 	// Set CI environment variable
 	t.Setenv("CI", "true")
 
-	// Clean up test cache
-	cacheDir := "./.atmos"
-	os.RemoveAll(cacheDir)
-	defer os.RemoveAll(cacheDir)
+	isolateTelemetryCache(t)
 
 	// Capture stderr
 	oldStderr := os.Stderr
@@ -760,10 +782,7 @@ func TestPrintTelemetryDisclosureDisabledByConfig(t *testing.T) {
 	// Disable telemetry
 	t.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 
-	// Clean up test cache
-	cacheDir := "./.atmos"
-	os.RemoveAll(cacheDir)
-	defer os.RemoveAll(cacheDir)
+	isolateTelemetryCache(t)
 
 	// Capture stderr
 	oldStderr := os.Stderr

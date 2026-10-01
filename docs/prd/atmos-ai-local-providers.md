@@ -1,8 +1,8 @@
 # Atmos AI Local Providers — Use Claude Code, Gemini CLI, and OpenAI Codex Instead of API Tokens
 
-**Status:** Phase 1-3 Shipped (all 3 providers), Phase 4 Planned
-**Version:** 1.6
-**Last Updated:** 2026-04-01
+**Status:** Phase 1-3 Shipped (all 4 providers), Phase 4 auto-detection Shipped
+**Version:** 1.7
+**Last Updated:** 2026-07-11
 
 ---
 
@@ -1108,10 +1108,22 @@ To expose native Atmos tools (describe_component, list_stacks, etc.) to CLI prov
 
 This is optional — many use cases only need external MCP servers (AWS billing, security).
 
-### Phase 4: Auto-Detection and Smart Defaults (Planned)
+### Phase 4: Auto-Detection and Smart Defaults
 
-- Auto-detect installed CLI tools and suggest/use the best available provider.
-- Fallback chain: `claude-code` → `codex-cli` → `gemini-cli` → prompt for API key.
+**Auto-detection (shipped):** When `default_provider` is unset, `ai.GetProvider`
+(`pkg/ai/factory.go`) probes `PATH` for CLI tools in order — `claude-code` → `codex-cli`
+→ `copilot-cli` → `gemini-cli` (`copilot-cli` was added to the chain after this section was
+originally written) — and uses the first one found, falling back to `anthropic` if none are
+installed. This makes `ai: { enabled: true }` alone enough to start using an already
+authenticated CLI tool, with no `default_provider` or `api_key` required. The resolved
+provider is written back onto `atmosConfig.AI.DefaultProvider` once, early in each command
+(`atmos ai chat`/`ask`/`exec`, and the `--ai` flag's `ValidateAIConfig`), so the MCP
+tool-registry skip, the chat TUI's provider picker, and exec-mode metadata all stay
+consistent with whichever provider was actually selected.
+
+**Still planned:**
+- Interactively prompt for an API key when no CLI tool is found and no provider is configured
+  (rather than erroring with the anthropic API-key message).
 - Display provider and cost info in `atmos ai` output.
 - Session continuity via `--resume` for Claude Code and Codex CLI.
 

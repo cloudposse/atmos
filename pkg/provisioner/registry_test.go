@@ -26,7 +26,7 @@ func TestRegisterProvisioner(t *testing.T) {
 
 	event := HookEvent("before.terraform.init")
 
-	mockFunc := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+	mockFunc := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 		return nil
 	}
 
@@ -70,7 +70,7 @@ func TestRegisterProvisioner_EmptyHookEventReturnsError(t *testing.T) {
 	provisioner := Provisioner{
 		Type:      "backend",
 		HookEvent: "",
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			return nil
 		},
 	}
@@ -90,7 +90,7 @@ func TestRegisterProvisioner_MultipleForSameEvent(t *testing.T) {
 	provisioner1 := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			return nil
 		},
 	}
@@ -98,7 +98,7 @@ func TestRegisterProvisioner_MultipleForSameEvent(t *testing.T) {
 	provisioner2 := Provisioner{
 		Type:      "validation",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			return nil
 		},
 	}
@@ -137,7 +137,7 @@ func TestGetProvisionersForEvent_ReturnsCopy(t *testing.T) {
 	provisioner := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			return nil
 		},
 	}
@@ -173,7 +173,7 @@ func TestExecuteProvisioners_NoProvisioners(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{}
 
-	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil, OutputWriters{})
 	require.NoError(t, err)
 }
 
@@ -188,7 +188,7 @@ func TestExecuteProvisioners_SingleProvisionerSuccess(t *testing.T) {
 	provisioner := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			provisionerCalled = true
 			assert.NotNil(t, atmosConfig)
 			assert.NotNil(t, componentConfig)
@@ -204,7 +204,7 @@ func TestExecuteProvisioners_SingleProvisionerSuccess(t *testing.T) {
 		"backend_type": "s3",
 	}
 
-	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil, OutputWriters{})
 	require.NoError(t, err)
 	assert.True(t, provisionerCalled, "Provisioner should have been called")
 }
@@ -220,7 +220,7 @@ func TestExecuteProvisioners_MultipleProvisionersSuccess(t *testing.T) {
 	provisioner1 := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			provisioner1Called = true
 			return nil
 		},
@@ -230,7 +230,7 @@ func TestExecuteProvisioners_MultipleProvisionersSuccess(t *testing.T) {
 	provisioner2 := Provisioner{
 		Type:      "validation",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			provisioner2Called = true
 			return nil
 		},
@@ -244,7 +244,7 @@ func TestExecuteProvisioners_MultipleProvisionersSuccess(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{}
 
-	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil, OutputWriters{})
 	require.NoError(t, err)
 	assert.True(t, provisioner1Called, "Provisioner 1 should have been called")
 	assert.True(t, provisioner2Called, "Provisioner 2 should have been called")
@@ -263,7 +263,7 @@ func TestExecuteProvisioners_FailFast(t *testing.T) {
 	provisioner1 := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			provisioner1Called = true
 			return expectedErr
 		},
@@ -272,7 +272,7 @@ func TestExecuteProvisioners_FailFast(t *testing.T) {
 	provisioner2 := Provisioner{
 		Type:      "validation",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			provisioner2Called = true
 			return nil
 		},
@@ -287,7 +287,7 @@ func TestExecuteProvisioners_FailFast(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{}
 
-	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil, OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrProvisionerFailed, "Should return ErrProvisionerFailed sentinel")
 	assert.ErrorIs(t, err, expectedErr, "Should wrap the underlying error")
@@ -306,7 +306,7 @@ func TestExecuteProvisioners_WithAuthContext(t *testing.T) {
 	provisioner := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			capturedAuthContext = authContext
 			return nil
 		},
@@ -324,7 +324,7 @@ func TestExecuteProvisioners_WithAuthContext(t *testing.T) {
 		},
 	}
 
-	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, authContext)
+	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, authContext, OutputWriters{})
 	require.NoError(t, err)
 	require.NotNil(t, capturedAuthContext)
 	require.NotNil(t, capturedAuthContext.AWS)
@@ -344,7 +344,7 @@ func TestExecuteProvisioners_DifferentEvents(t *testing.T) {
 	provisioner1 := Provisioner{
 		Type:      "backend",
 		HookEvent: event1,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			provisioner1Called = true
 			return nil
 		},
@@ -354,7 +354,7 @@ func TestExecuteProvisioners_DifferentEvents(t *testing.T) {
 	provisioner2 := Provisioner{
 		Type:      "cleanup",
 		HookEvent: event2,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			provisioner2Called = true
 			return nil
 		},
@@ -369,7 +369,7 @@ func TestExecuteProvisioners_DifferentEvents(t *testing.T) {
 	componentConfig := map[string]any{}
 
 	// Execute event1 provisioners.
-	err = ExecuteProvisioners(ctx, event1, atmosConfig, componentConfig, nil)
+	err = ExecuteProvisioners(ctx, event1, atmosConfig, componentConfig, nil, OutputWriters{})
 	require.NoError(t, err)
 	assert.True(t, provisioner1Called, "Event1 provisioner should have been called")
 	assert.False(t, provisioner2Called, "Event2 provisioner should not have been called")
@@ -377,7 +377,7 @@ func TestExecuteProvisioners_DifferentEvents(t *testing.T) {
 	// Execute event2 provisioners.
 	provisioner1Called = false
 	provisioner2Called = false
-	err = ExecuteProvisioners(ctx, event2, atmosConfig, componentConfig, nil)
+	err = ExecuteProvisioners(ctx, event2, atmosConfig, componentConfig, nil, OutputWriters{})
 	require.NoError(t, err)
 	assert.False(t, provisioner1Called, "Event1 provisioner should not have been called")
 	assert.True(t, provisioner2Called, "Event2 provisioner should have been called")
@@ -398,7 +398,7 @@ func TestConcurrentRegistration(t *testing.T) {
 			provisioner := Provisioner{
 				Type:      "backend",
 				HookEvent: event,
-				Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+				Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 					return nil
 				},
 			}
@@ -422,7 +422,7 @@ func TestExecuteProvisioners_ContextCancellation(t *testing.T) {
 	provisioner := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
-		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *TerraformExecContext) error {
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ OutputWriters, _ *TerraformExecContext) error {
 			// Check if context is cancelled.
 			select {
 			case <-ctx.Done():
@@ -443,7 +443,7 @@ func TestExecuteProvisioners_ContextCancellation(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{}
 
-	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil, OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrProvisionerFailed, "Should return ErrProvisionerFailed sentinel")
 	assert.ErrorIs(t, err, context.Canceled, "Should wrap the context.Canceled error")
@@ -489,7 +489,7 @@ func TestExecuteProvisioners_NilFuncDefensiveCheck(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{}
 
-	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil, OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrProvisionerFailed, "Should return ErrProvisionerFailed for nil Func")
 }
@@ -515,7 +515,7 @@ func TestExecuteProvisioners_NilFuncWithEmptyType(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{}
 
-	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil, OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrProvisionerFailed, "Should return ErrProvisionerFailed for nil Func with empty type")
 }

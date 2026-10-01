@@ -58,6 +58,48 @@ func TestDeepCopyBaseComponentConfigMaps_RetryNil(t *testing.T) {
 	assert.Nil(t, dst.BaseComponentRetry, "nil source must produce nil destination")
 }
 
+// TestDeepCopyBaseComponentConfigMaps_Flags verifies that BaseComponentFlags
+// (terraform CLI execution flag defaults inherited via metadata.inherits /
+// top-level `component`) is deep-copied, not aliased — nested values are
+// preserved and mutations do not leak across the copy in either direction.
+// Without this, a component that inherits a base component's `flags:` block
+// silently loses those defaults on a cache HIT.
+func TestDeepCopyBaseComponentConfigMaps_Flags(t *testing.T) {
+	src := &schema.BaseComponentConfig{
+		BaseComponentFlags: map[string]any{
+			"lock_timeout": "5m",
+			"parallelism":  20,
+			"nested":       map[string]any{"lock": false},
+		},
+	}
+	dst := &schema.BaseComponentConfig{}
+	require.NoError(t, deepCopyBaseComponentConfigMaps(dst, src))
+
+	require.NotNil(t, dst.BaseComponentFlags)
+	assert.Equal(t, "5m", dst.BaseComponentFlags["lock_timeout"])
+	assert.Equal(t, 20, dst.BaseComponentFlags["parallelism"])
+	assert.Equal(t, false, dst.BaseComponentFlags["nested"].(map[string]any)["lock"])
+
+	// Mutating dst must not leak into src (result->src isolation).
+	dst.BaseComponentFlags["lock_timeout"] = "10m"
+	dst.BaseComponentFlags["nested"].(map[string]any)["lock"] = true
+	assert.Equal(t, "5m", src.BaseComponentFlags["lock_timeout"], "mutating dst must not leak into src")
+	assert.Equal(t, false, src.BaseComponentFlags["nested"].(map[string]any)["lock"], "nested dst mutation must not leak into src")
+
+	// Mutating src must not leak into dst (src->result isolation).
+	src.BaseComponentFlags["parallelism"] = 99
+	assert.Equal(t, 20, dst.BaseComponentFlags["parallelism"], "mutating src must not leak into dst")
+}
+
+// TestDeepCopyBaseComponentConfigMaps_FlagsNil covers the nil-source path: a base
+// component with no flags block must produce a destination with a nil (not empty) map.
+func TestDeepCopyBaseComponentConfigMaps_FlagsNil(t *testing.T) {
+	src := &schema.BaseComponentConfig{}
+	dst := &schema.BaseComponentConfig{}
+	require.NoError(t, deepCopyBaseComponentConfigMaps(dst, src))
+	assert.Nil(t, dst.BaseComponentFlags, "nil source must produce nil destination")
+}
+
 // TestClearBaseComponentConfigCache tests that the cache clearing function works correctly.
 func TestClearBaseComponentConfigCache(t *testing.T) {
 	// First, populate the cache with a test entry.
@@ -606,6 +648,11 @@ func TestCacheBaseComponentConfig_NilFieldsStayNil(t *testing.T) {
 	assert.Nil(t, cached.BaseComponentSourceSection)
 	assert.Nil(t, cached.BaseComponentProvisionSection)
 	assert.Nil(t, cached.BaseComponentRequiredProviders)
+	// BaseComponentFlags (terraform CLI flag defaults inherited via
+	// metadata.inherits / top-level `component`) must round-trip too: a nil
+	// source stays nil, a populated source is preserved (asserted in
+	// TestCacheBaseComponentConfig_RoundTripsAllFields).
+	assert.Nil(t, cached.BaseComponentFlags)
 }
 
 // TestCacheBaseComponentConfig_EmptyNonNilFieldsStayNonNil locks in the
@@ -636,6 +683,7 @@ func TestCacheBaseComponentConfig_EmptyNonNilFieldsStayNonNil(t *testing.T) {
 		BaseComponentHooks:                     map[string]any{},
 		BaseComponentTest:                      map[string]any{},
 		BaseComponentGenerate:                  map[string]any{},
+		BaseComponentFlags:                     map[string]any{},
 		BaseComponentBackendSection:            map[string]any{},
 		BaseComponentRemoteStateBackendSection: map[string]any{},
 		BaseComponentSourceSection:             map[string]any{},
@@ -664,6 +712,7 @@ func TestCacheBaseComponentConfig_EmptyNonNilFieldsStayNonNil(t *testing.T) {
 		"Hooks":                     cached.BaseComponentHooks,
 		"Test":                      cached.BaseComponentTest,
 		"Generate":                  cached.BaseComponentGenerate,
+		"Flags":                     cached.BaseComponentFlags,
 		"BackendSection":            cached.BaseComponentBackendSection,
 		"RemoteStateBackendSection": cached.BaseComponentRemoteStateBackendSection,
 		"SourceSection":             cached.BaseComponentSourceSection,
@@ -709,6 +758,7 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 		BaseComponentHooks:                     map[string]any{"pre_plan": []any{"echo hello", "echo world"}},
 		BaseComponentTest:                      map[string]any{cfg.VarsSectionName: map[string]any{"fixture_vpc_id": "vpc-123"}},
 		BaseComponentGenerate:                  map[string]any{"backend.tf.json": map[string]any{"format": "json"}},
+		BaseComponentFlags:                     map[string]any{"lock_timeout": "5m", "parallelism": 20},
 		BaseComponentBackendSection:            map[string]any{"s3": map[string]any{"bucket": "tfstate"}},
 		BaseComponentRemoteStateBackendSection: map[string]any{"s3": map[string]any{"bucket": "tfstate-remote"}},
 		BaseComponentSourceSection:             map[string]any{"uri": "github.com/example/repo"},
@@ -761,6 +811,8 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 	assert.Equal(t, "echo world", prePlanHooks[len(prePlanHooks)-1])
 	assert.Equal(t, "vpc-123", cached.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"])
 	assert.Equal(t, "json", cached.BaseComponentGenerate["backend.tf.json"].(map[string]any)["format"])
+	assert.Equal(t, "5m", cached.BaseComponentFlags["lock_timeout"])
+	assert.Equal(t, 20, cached.BaseComponentFlags["parallelism"])
 	assert.Equal(t, "tfstate", cached.BaseComponentBackendSection["s3"].(map[string]any)["bucket"])
 	assert.Equal(t, "tfstate-remote", cached.BaseComponentRemoteStateBackendSection["s3"].(map[string]any)["bucket"])
 	assert.Equal(t, "github.com/example/repo", cached.BaseComponentSourceSection["uri"])

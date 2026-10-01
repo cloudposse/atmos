@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -455,6 +456,19 @@ func TestRunPropagatesSkippedStatusToDependents(t *testing.T) {
 		require.ErrorIs(t, nodeResult.Err, skipErr)
 		require.ErrorIs(t, nodeResult.Err, errUtils.ErrNodeSkipped)
 	}
+}
+
+func TestAggregateErrorOmitsSkippedNodesWhenAComponentFails(t *testing.T) {
+	rootErr := errors.New("root component failed")
+	result := aggregateError([]Result{
+		{NodeID: "root", Status: StatusFailed, Err: rootErr},
+		{NodeID: "dependent-a", Status: StatusSkipped, Err: fmt.Errorf("%w: fail-fast after root failed", errUtils.ErrNodeSkipped)},
+		{NodeID: "dependent-b", Status: StatusSkipped, Err: fmt.Errorf("%w: fail-fast after root failed", errUtils.ErrNodeSkipped)},
+	})
+
+	require.ErrorIs(t, result, rootErr)
+	assert.NotErrorIs(t, result, errUtils.ErrNodeSkipped)
+	assert.NotContains(t, result.Error(), "fail-fast")
 }
 
 func TestRunValidatesInputs(t *testing.T) {

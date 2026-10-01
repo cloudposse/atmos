@@ -116,10 +116,10 @@ Provide default values for components that haven't been provisioned yet:
 
 ```yaml
 # String default
-username: !terraform.state config ".username // ""default-user"""
+username: !terraform.state config .username // "default-user"
 
 # List default
-subnet_ids: !terraform.state vpc ".private_subnet_ids // [""mock-subnet1"", ""mock-subnet2""]"
+subnet_ids: !terraform.state vpc .private_subnet_ids // ["mock-subnet1", "mock-subnet2"]
 
 # Map default
 config: !terraform.state settings '.config // {"env": "dev"}'
@@ -131,7 +131,7 @@ Use YQ pipes to transform output values:
 
 ```yaml
 # Prepend and append strings
-postgres_url: !terraform.state aurora-postgres ".hostname | ""jdbc:postgresql://"" + . + "":5432/db"""
+postgres_url: !terraform.state 'aurora-postgres .hostname | "jdbc:postgresql://" + . + ":5432/db"'
 ```
 
 ## Why `!terraform.state` is Faster

@@ -1,0 +1,18 @@
+name: imperative-shared
+
+import:
+  - catalog/shared
+
+components:
+  terraform:
+    dns-primary:
+      metadata:
+        component: mock
+      vars:
+        name: dns-primary
+        hostname: primary.example.com
+    network:
+      metadata:
+        component: mock
+      vars:
+        name: network

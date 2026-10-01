@@ -11,6 +11,8 @@ import (
 )
 
 func TestDescribeStacks(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -33,6 +35,8 @@ func TestDescribeStacks(t *testing.T) {
 }
 
 func TestDescribeStacksWithFilter1(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -57,6 +61,8 @@ func TestDescribeStacksWithFilter1(t *testing.T) {
 }
 
 func TestDescribeStacksWithFilter2(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -82,6 +88,8 @@ func TestDescribeStacksWithFilter2(t *testing.T) {
 }
 
 func TestDescribeStacksWithFilter3(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -107,6 +115,8 @@ func TestDescribeStacksWithFilter3(t *testing.T) {
 }
 
 func TestDescribeStacksWithFilter4(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -132,6 +142,8 @@ func TestDescribeStacksWithFilter4(t *testing.T) {
 }
 
 func TestDescribeStacksWithFilter5(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -171,6 +183,8 @@ func TestDescribeStacksWithFilter5(t *testing.T) {
 }
 
 func TestDescribeStacksWithFilter6(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -206,6 +220,8 @@ func TestDescribeStacksWithFilter6(t *testing.T) {
 }
 
 func TestDescribeStacksWithFilter7(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -241,6 +257,8 @@ func TestDescribeStacksWithFilter7(t *testing.T) {
 }
 
 func TestDescribeStacksWithFilter8(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -266,6 +284,8 @@ func TestDescribeStacksWithFilter8(t *testing.T) {
 }
 
 func TestDescribeStacksWithEmptyStacks(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -286,6 +306,8 @@ func TestDescribeStacksWithEmptyStacks(t *testing.T) {
 }
 
 func TestDescribeStacksWithVariousEmptyStacks(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -389,6 +411,8 @@ func setupEmptySectionFilteringTest(includeEmpty bool) (schema.AtmosConfiguratio
 }
 
 // Test filtering empty sections at the stack level.
+//
+//nolint:paralleltest // Called directly by TestDescribeStacksWithEmptySectionFiltering with its t; t.Parallel would be called twice.
 func TestDescribeStacksWithEmptySectionFilteringAllStacks(t *testing.T) {
 	// Setup with includeEmpty = false
 	atmosConfigFiltered, err := setupEmptySectionFilteringTest(false)
@@ -411,6 +435,8 @@ func TestDescribeStacksWithEmptySectionFilteringAllStacks(t *testing.T) {
 }
 
 // Test filtering empty sections at the component level.
+//
+//nolint:paralleltest // Called directly by TestDescribeStacksWithEmptySectionFiltering with its t; t.Parallel would be called twice.
 func TestDescribeStacksWithEmptySectionFilteringComponent(t *testing.T) {
 	stack := "tenant1-ue2-dev"
 	component := "infra/vpc"
@@ -435,6 +461,8 @@ func TestDescribeStacksWithEmptySectionFilteringComponent(t *testing.T) {
 }
 
 // Test filtering empty sections at the stack and component levels.
+//
+//nolint:paralleltest // Invokes the two tests above directly with its t; they would call t.Parallel a second time and panic.
 func TestDescribeStacksWithEmptySectionFiltering(t *testing.T) {
 	TestDescribeStacksWithEmptySectionFilteringAllStacks(t)
 	TestDescribeStacksWithEmptySectionFilteringComponent(t)

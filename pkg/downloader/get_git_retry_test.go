@@ -48,6 +48,45 @@ func TestIsRetryableGitError(t *testing.T) {
 			expected: true,
 		},
 
+		// Resolver and connect failures as git reports them (should retry).
+		{
+			name:     "could not resolve host",
+			err:      errors.New("fatal: unable to access 'https://github.com/org/repo/': Could not resolve host: github.com"),
+			expected: true,
+		},
+		{
+			name:     "could not connect to server",
+			err:      errors.New("fatal: unable to access 'https://github.com/org/repo/': Failed to connect to github.com:443 after 61 ms: Could not connect to server"),
+			expected: true,
+		},
+		{
+			name:     "no such host",
+			err:      errors.New("dial tcp: lookup github.com: no such host"),
+			expected: true,
+		},
+		{
+			name:     "network is unreachable",
+			err:      errors.New("connect: network is unreachable"),
+			expected: true,
+		},
+		{
+			name:     "temporary failure in name resolution",
+			err:      errors.New("ssh: Could not resolve hostname github.com: Temporary failure in name resolution"),
+			expected: true,
+		},
+		// Standalone forms: each of the new patterns must match on its own, without another
+		// pattern (e.g. "failed to connect to" or "temporary failure") also present in the input.
+		{
+			name:     "could not connect to server alone",
+			err:      errors.New("Could not connect to server"),
+			expected: true,
+		},
+		{
+			name:     "name resolution alone",
+			err:      errors.New("getaddrinfo: name resolution error"),
+			expected: true,
+		},
+
 		// Timeout errors (should retry).
 		{
 			name:     "timeout",
@@ -154,6 +193,13 @@ func TestIsRetryableGitError(t *testing.T) {
 		{
 			name:     "not a git repository",
 			err:      errors.New("fatal: not a git repository"),
+			expected: false,
+		},
+		{
+			// The remote answered; "unable to access" alone must not be treated
+			// as a transport failure or a real 403/404 would be retried.
+			name:     "http 403 from remote",
+			err:      errors.New("fatal: unable to access 'https://github.com/org/repo/': The requested URL returned error: 403"),
 			expected: false,
 		},
 		{
@@ -265,6 +311,19 @@ func TestIsGitHubHTTPURL(t *testing.T) {
 			url:      "HTTPS://RAW.GITHUBUSERCONTENT.COM/org/repo/main/file.yaml",
 			expected: true,
 		},
+
+		// Host substring appearing only in path or query must not be misclassified
+		// (regression: the check used to be a plain strings.Contains over the whole URL).
+		{
+			name:     "github.com only in path, unrelated host",
+			url:      "https://malicious.example.com/github.com/archive/refs/tags/v1.0.0.tar.gz",
+			expected: false,
+		},
+		{
+			name:     "github.com only in query string",
+			url:      "https://malicious.example.com/download?redirect=github.com/releases/download/x",
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -273,6 +332,15 @@ func TestIsGitHubHTTPURL(t *testing.T) {
 			assert.Equal(t, tt.expected, result, "isGitHubHTTPURL(%s) = %v, want %v", tt.url, result, tt.expected)
 		})
 	}
+}
+
+// TestIsGitHubHTTPURL_GHESHostInPathOnly pins that a URL whose path (not its actual host)
+// merely contains the configured GHES host string is never misclassified as a GitHub URL.
+func TestIsGitHubHTTPURL_GHESHostInPathOnly(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	assert.False(t, isGitHubHTTPURL("https://malicious.example.com/ghes.example.com/raw/main/file.yaml"))
+	assert.True(t, isGitHubHTTPURL("https://ghes.example.com/owner/repo/raw/main/file.yaml"))
 }
 
 // writeCountingFakeGit creates a fake git that tracks invocation count via a file.

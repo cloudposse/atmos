@@ -4,7 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -202,4 +204,114 @@ func TestLegacySpaceliftStackProcessor(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestTransformStackConfigToSpaceliftStacks_DuplicateStackName(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Two different stacks, each with a component whose `settings.spacelift.stack_name`
+	// explicitly resolves to the same literal name -- this must be rejected rather than
+	// silently overwriting the first stack's config.
+	stacks := map[string]any{
+		"stackA": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"compA": map[string]any{
+						"vars": map[string]any{},
+						"settings": map[string]any{
+							"spacelift": map[string]any{
+								"workspace_enabled": true,
+								"stack_name":        "dup-stack",
+							},
+						},
+					},
+				},
+			},
+		},
+		"stackB": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"compB": map[string]any{
+						"vars": map[string]any{},
+						"settings": map[string]any{
+							"spacelift": map[string]any{
+								"workspace_enabled": true,
+								"stack_name":        "dup-stack",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := TransformStackConfigToSpaceliftStacks(atmosConfig, stacks, "stacks/%s.yaml", "", "", false, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Duplicate Spacelift stack name")
+	assert.Contains(t, err.Error(), "dup-stack")
+}
+
+func TestTransformStackConfigToSpaceliftStacks_DependsOnNameTemplateResolvesRegion(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	stacks := map[string]any{
+		"orgs/cp/tenant1/dev/us-east-2": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"comp1": map[string]any{
+						"vars": map[string]any{
+							"tenant":      "tenant1",
+							"environment": "ue2",
+							"stage":       "dev",
+							"region":      "us-east-2",
+						},
+						"settings": map[string]any{
+							"spacelift": map[string]any{"workspace_enabled": true},
+							"depends_on": map[string]any{
+								"1": map[string]any{"component": "comp2"},
+							},
+						},
+					},
+					// comp2 deliberately uses a DIFFERENT region than comp1. If the
+					// depends_on resolution path used comp2's own vars instead of
+					// defaulting from comp1's context, the computed depends-on name
+					// would use "us-west-2" and coincidentally match comp2's own
+					// resolved name -- masking the bug. Using distinct regions forces
+					// the depends-on name to only match if it's genuinely derived from
+					// comp1's context (region "us-east-2"), which comp2 doesn't share,
+					// so the lookup correctly fails and the error content proves which
+					// region was actually used.
+					"comp2": map[string]any{
+						"vars": map[string]any{
+							"tenant":      "tenant1",
+							"environment": "ue2",
+							"stage":       "dev",
+							"region":      "us-west-2",
+						},
+						"settings": map[string]any{
+							"spacelift": map[string]any{"workspace_enabled": true},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// name_template references `.vars.region`. The `settings.depends_on` resolution path
+	// defaults namespace/tenant/environment/stage/region from the *depending* component's
+	// own context (comp1) when the depends_on entry doesn't declare them explicitly, so the
+	// template renders successfully (no missing-key error) for the depends_on label too,
+	// not just the component's own stack name.
+	stackNameTemplate := "{{.vars.tenant}}-{{.vars.region}}"
+
+	_, err := TransformStackConfigToSpaceliftStacks(atmosConfig, stacks, "stacks/%s.yaml", stackNameTemplate, "", false, nil)
+
+	// comp2's own resolved name is "tenant1-us-west-2-comp2" (its own region), which does
+	// not match "tenant1-us-east-2-comp2" (comp1's region) -- so the depends_on lookup
+	// fails to find a match. That failure, naming the comp1-region-derived stack, is the
+	// proof that region was defaulted from comp1's context and not silently pulled from
+	// comp2's own vars (which would have rendered fine and hidden the distinction).
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tenant1-us-east-2")
+	assert.NotContains(t, err.Error(), "tenant1-us-west-2")
 }

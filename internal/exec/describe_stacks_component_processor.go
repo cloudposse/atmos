@@ -4,6 +4,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -11,12 +12,15 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
@@ -32,6 +36,7 @@ type componentSections struct {
 	providers   map[string]any
 	hooks       map[string]any
 	test        map[string]any
+	secrets     map[string]any
 	overrides   map[string]any
 	backend     map[string]any
 	backendType string
@@ -72,10 +77,24 @@ type describeStacksProcessor struct {
 	processTemplates     bool
 	processYamlFunctions bool
 	authDisabled         bool
-	includeEmptyStacks   bool
-	skip                 []string
-	authManager          auth.AuthManager
-	finalStacksMap       map[string]any
+	useMocks             bool
+	// tagsFilter/labelsFilter narrow the result to components matching info.Tags
+	// (any-match) / info.Labels (all-match), mirroring
+	// pkg/scheduler/adapters/terraform.go's matchesTerraformTagsAndLabels post-filter.
+	// When non-empty, components that can be cheaply proven out-of-scope from
+	// already-inherited metadata.tags/metadata.labels are skipped before auth/template/
+	// YAML-function evaluation (see scopeDecision). The post-filter remains the
+	// authoritative answer for every component this early gate cannot decide.
+	tagsFilter   []string
+	labelsFilter map[string]string
+	// resolveSecrets makes this processor retrieve !secret values while it resolves
+	// YAML functions. It is used by Terraform graph execution preflight; inspection
+	// commands retain their mask-only behavior even when output masking is enabled.
+	resolveSecrets     bool
+	includeEmptyStacks bool
+	skip               []string
+	authManager        auth.AuthManager
+	finalStacksMap     map[string]any
 	// componentAuthResolver builds a per-component AuthManager; defaults to
 	// createComponentAuthManager and is overridable in tests.
 	componentAuthResolver componentAuthManagerResolver
@@ -85,6 +104,57 @@ type describeStacksProcessor struct {
 	// single-threaded, so a plain map needs no locking.
 	// See docs/fixes/2026-06-22-describe-stacks-scope-and-cache-per-component-auth.md.
 	authManagerCache map[string]auth.AuthManager
+	// onWarning, when non-nil, switches YAML-function processing to lenient mode: a
+	// recoverable per-value error (e.g. backend not yet provisioned) is substituted with
+	// nil and reported here instead of aborting the whole describe-stacks call. See
+	// ProcessCustomYamlTagsLenient and ExecuteDescribeStacksWithOptions.
+	onWarning func(DegradationWarning)
+	// degradeAuthErrors mirrors onWarning's lenient/strict split specifically for
+	// resolveComponentAuthManager's own construction failures. withDegradation defaults this
+	// to true (matching the original, single-flag list/describe --error-mode=warn behavior);
+	// withStrictAuth flips it back to false for callers (the Terraform --all/--query preflight)
+	// that want YAML-function values to degrade but a component's own unresolvable identity to
+	// stay fatal.
+	degradeAuthErrors bool
+	// deferredContexts holds every component's deferred-merge contexts, recovered from the
+	// FindStacksMap cache in ExecuteDescribeStacks. processComponentEntry looks up each
+	// component's entry to run Stage 3 (resolveDeferredYamlFunctions) after Stage 2 — this
+	// processor does not go through processStacks (utils.go), so it must resolve deferred
+	// YAML functions itself instead of silently losing their contribution (#2888).
+	deferredContexts AllStacksDeferredContexts
+	// evalSections is the opt-in evaluation-scope filter set by
+	// ExecuteDescribeStacksWithEvalSections: when non-nil, template rendering and YAML-function
+	// resolution (Stages 2/3, plus Go-template rendering) only run for these top-level component
+	// sections -- see deferred.IsSectionRequired. This is DELIBERATELY separate from `sections` (which
+	// only trims the OUTPUT after full evaluation and is unaffected by this field): the two solve
+	// different problems and reusing `sections` for both would silently change the long-standing
+	// behavior of `atmos describe stacks --sections=X` (today a pure output filter that never
+	// skips evaluation). Only the `list` commands ever set evalSections; every other caller
+	// leaves it nil and gets exactly the eager-evaluation behavior that predates this field.
+	evalSections []string
+	evalPaths    [][]string
+}
+
+// withDegradation switches the processor to lenient YAML-function processing: recoverable
+// per-value errors are substituted with nil and reported via onWarning instead of failing
+// the whole describe-stacks call. Passing a nil onWarning restores the default strict
+// behavior (equivalent to not calling withDegradation at all). A non-nil onWarning also
+// defaults degradeAuthErrors to true (the original, single-flag behavior); chain
+// withStrictAuth to opt back out just for component-specific auth-manager failures.
+func (p *describeStacksProcessor) withDegradation(onWarning func(DegradationWarning)) *describeStacksProcessor {
+	p.onWarning = onWarning
+	p.degradeAuthErrors = onWarning != nil
+	return p
+}
+
+// withStrictAuth keeps a component-specific auth-manager construction failure fatal even
+// though withDegradation has enabled lenient YAML-function processing. Used by the
+// Terraform --all/--query preflight (DescribeStacksErrorOptions.StrictAuth): a not-yet-applied
+// dependency's `!terraform.state` value should degrade, but a component whose own identity
+// can't be resolved should still abort before real Terraform commands run with the wrong
+// (or a merely inherited) credential set.
+func (p *describeStacksProcessor) withStrictAuth() {
+	p.degradeAuthErrors = false
 }
 
 // newDescribeStacksProcessor creates a processor with an empty result map.
@@ -156,13 +226,22 @@ func shouldResolvePerComponentAuth(processTemplates, processYamlFunctions bool) 
 // It returns the parent AuthManager unchanged when per-component resolution is
 // disabled (see shouldResolvePerComponentAuth) or when the component does not
 // declare its own default identity in its auth section. When the component
-// declares a default identity, resolver errors are fatal: falling back to the
-// parent manager could read the wrong backend/account.
+// declares a default identity, resolver errors are fatal by default: falling
+// back to the parent manager could silently read the wrong backend/account
+// for a manager that *did* resolve, just not to what was declared. In warn/silent
+// mode (p.onWarning set), a construction FAILURE — no manager was built at all,
+// as opposed to one resolving to an unexpected identity — is instead reported as
+// a degradation warning and this component falls back to the parent manager,
+// matching the same "recoverable, substitute, continue" pattern YAML-function
+// processing already uses for e.g. a not-yet-provisioned backend.
 func (p *describeStacksProcessor) resolveComponentAuthManager(
 	componentSection map[string]any,
 	componentName, stackName string,
 ) (auth.AuthManager, error) {
 	componentAuthManager := p.authManager
+	if authdeferred.IsDeferred(p.atmosConfig.AuthManager) {
+		return componentAuthManager, nil
+	}
 	if p.authDisabled || !shouldResolvePerComponentAuth(p.processTemplates, p.processYamlFunctions) {
 		return componentAuthManager, nil
 	}
@@ -187,6 +266,15 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	}
 	resolved, createErr := resolver(p.atmosConfig, componentSection, componentName, stackName, p.authManager)
 	if createErr != nil {
+		if p.onWarning != nil && p.degradeAuthErrors {
+			p.onWarning(DegradationWarning{
+				Stack:     stackName,
+				Component: componentName,
+				Function:  "auth",
+				Reason:    createErr.Error(),
+			})
+			return componentAuthManager, nil
+		}
 		return componentAuthManager, fmt.Errorf("%w: failed to resolve auth for component %q in stack %q: %w", errUtils.ErrAuthManager, componentName, stackName, createErr)
 	}
 	result := componentAuthManager
@@ -224,6 +312,11 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 	stackManifestName := getStackManifestName(stackMap)
 
 	// Delete the stack-wide imports section (not needed in output).
+	// Shallow-clone first: stackMap is owned by the shared FindStacksMap cache, and
+	// deleting from it in place would strip `imports` (and thus `deps`) from every
+	// subsequent ProcessStacks call in the same process (e.g., DAG-scheduled bulk
+	// commands, which run ExecuteDescribeStacks before executing components).
+	stackMap = maps.Clone(stackMap)
 	delete(stackMap, "imports")
 
 	// When includeEmptyStacks is true, pre-create an entry in the result map so that
@@ -359,7 +452,20 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		}
 	}
 
+	// Enforce the selector purity contract on metadata.tags/metadata.labels —
+	// whether or not a filter is active. Selectors drive scoping decisions
+	// before evaluation, so by design they may not contain constructs
+	// requiring authentication or process execution; this errors early with a
+	// by-design explanation instead of deferring to a later evaluation failure.
+	// describe.settings.eager_evaluation is the escape hatch: it forces full
+	// evaluation (no pre-evaluation scoping), under which selectors are
+	// evaluated like any other value and the purity contract is moot.
+	if err := p.validateSelectorMetadata(secs.metadata); err != nil {
+		return fmt.Errorf("component %q in stack manifest %q: %w", componentName, stackFileName, err)
+	}
+
 	info := buildConfigAndStacksInfo(componentName, stackFileName, stackManifestName, secs)
+	info.EvaluationPaths = deferred.ExpandEvaluationPaths(componentSection, p.evalPaths, p.atmosConfig.Templates.Settings.Delimiters...)
 
 	// Ensure the component key is present in the info's ComponentSection.
 	if comp, ok := info.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
@@ -375,11 +481,20 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 	info.Context = resolvedContext
 	info.AuthDisabled = p.authDisabled
+	info.UseMocks = p.useMocks
 
 	// Filter: skip this component if it does not belong to the requested stack.
 	// Done before resolveComponentAuthManager (below) so out-of-scope components don't trigger a
 	// full auth cycle. See docs/fixes/2026-06-22-describe-stacks-scope-and-cache-per-component-auth.md.
 	if shouldFilterByStack(p.filterByStack, stackFileName, stackName) {
+		return nil
+	}
+
+	// Filter: skip this component if requested tags/labels don't match, using only
+	// already-inherited metadata (no auth/template/YAML-function evaluation triggered).
+	// Generalizes the -s early-skip above to --tags/--labels. See
+	// docs/fixes/2026-07-25-scope-before-evaluate-labels-tags-list-dependencies.md.
+	if inScope, decidable := p.scopeDecision(secs.metadata, componentSection); decidable && !inScope {
 		return nil
 	}
 
@@ -431,9 +546,26 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	componentSection[componentInfoKey] = componentInfo
 	info.ComponentSection[componentInfoKey] = componentInfo
 
+	// Mocks are literal fixture data. Do not render templates or resolve YAML
+	// functions within them; doing so could reach the real dependency that the
+	// mock is intended to replace.
+	literalMocks, hasLiteralMocks := componentSection[cfg.MocksSectionName]
+	if hasLiteralMocks {
+		delete(componentSection, cfg.MocksSectionName)
+	}
+
+	// `sources` is generated provenance for describe output. It can retain overridden
+	// parent values, so it must not be treated as executable component configuration.
+	sources, hasSources := componentSection[sourcesSectionName]
+	if hasSources {
+		componentSection = maps.Clone(componentSection)
+		delete(componentSection, sourcesSectionName)
+		info.ComponentSection = componentSection
+	}
+
 	// Process Go templates.
 	if p.processTemplates {
-		componentSection, err = processComponentSectionTemplates(p.atmosConfig, &info, componentSection, secs.settings)
+		componentSection, err = processComponentSectionTemplates(p.atmosConfig, &info, componentSection, secs.settings, p.evaluationSections(&info), p.onWarning)
 		if err != nil {
 			return err
 		}
@@ -452,10 +584,32 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		if !isComponentEnabled(secs.metadata, componentName) {
 			skip = disabledComponentTerraformSkip(p.skip)
 		}
-		componentSection, err = processComponentSectionYAMLFunctions(p.atmosConfig, &info, componentSection, skip)
+		componentSection, err = processComponentSectionYAMLFunctions(
+			p.atmosConfig,
+			&info,
+			componentSection,
+			skip,
+			p.onWarning,
+			!p.resolveSecrets && iolib.MaskingEnabled(),
+			p.evaluationSections(&info),
+		)
 		if err != nil {
 			return err
 		}
+		info.ComponentSection = componentSection
+
+		componentSection, err = p.resolveDeferredForComponent(&info, secs.settings, stackFileName, typeName, componentName, componentSection, skip)
+		if err != nil {
+			return err
+		}
+	}
+	if hasLiteralMocks {
+		componentSection[cfg.MocksSectionName] = literalMocks
+		info.ComponentSection[cfg.MocksSectionName] = literalMocks
+	}
+	if hasSources {
+		componentSection[sourcesSectionName] = sources
+		info.ComponentSection[sourcesSectionName] = sources
 	}
 
 	// Write the (optionally filtered) sections into the result map.
@@ -467,6 +621,42 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	addSectionsToComponentEntry(destMap, componentSection, p.sections, includeEmpty)
 
 	return nil
+}
+
+// resolveDeferredForComponent runs Stage 3 (resolveDeferredYamlFunctions) for a single component
+// when a deferred-merge context was recorded for it during FindStacksMap, deep-merging the result
+// against any concrete override at the same path. Without this, a section that only survived
+// Stage 2's structural merge as an unresolved function string (or a placeholder) would silently
+// lose that function's contribution — the same #2888 data-loss bug the main describe-component/plan
+// path (processStacks in utils.go) fixes via this same call. Returns componentSection unchanged
+// when no deferred context was recorded for this component.
+func (p *describeStacksProcessor) resolveDeferredForComponent(
+	info *schema.ConfigAndStacksInfo,
+	settings map[string]any,
+	stackFileName, typeName, componentName string,
+	componentSection map[string]any,
+	skip []string,
+) (map[string]any, error) {
+	compDctx, ok := p.deferredContexts[stackFileName][typeName][componentName]
+	if !ok {
+		return componentSection, nil
+	}
+
+	info.DeferredMergeContexts = compDctx
+	var settingsSectionStruct schema.Settings
+	if err := mapstructure.Decode(settings, &settingsSectionStruct); err != nil {
+		return nil, fmt.Errorf("component %q in stack manifest %q: decoding settings for deferred YAML function resolution: %w", componentName, stackFileName, err)
+	}
+
+	componentTemplateContext := make(map[string]any, len(info.ComponentSection))
+	for k, v := range info.ComponentSection {
+		componentTemplateContext[k] = v
+	}
+	if err := resolveDeferredYamlFunctions(p.atmosConfig, info, &settingsSectionStruct, componentTemplateContext, skip, p.evaluationSections(info), p.onWarning); err != nil {
+		return nil, err
+	}
+
+	return info.ComponentSection, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -539,6 +729,12 @@ func extractDescribeComponentSections(componentSection map[string]any) component
 		s.test = map[string]any{}
 	}
 
+	if v, ok := componentSection[cfg.SecretsSectionName].(map[string]any); ok {
+		s.secrets = v
+	} else {
+		s.secrets = map[string]any{}
+	}
+
 	if v, ok := componentSection[cfg.OverridesSectionName].(map[string]any); ok {
 		s.overrides = v
 	} else {
@@ -586,6 +782,7 @@ func buildConfigAndStacksInfo(
 			cfg.ProvidersSectionName:   secs.providers,
 			cfg.HooksSectionName:       secs.hooks,
 			cfg.TestSectionName:        secs.test,
+			cfg.SecretsSectionName:     secs.secrets,
 			cfg.OverridesSectionName:   secs.overrides,
 			cfg.BackendSectionName:     secs.backend,
 			cfg.BackendTypeSectionName: secs.backendType,
@@ -632,10 +829,150 @@ func resolveStackName(
 	}
 }
 
+// Metadata subsection keys read by the tags/labels scope gate and the
+// selector purity validation.
+const (
+	metadataTagsKey   = "tags"
+	metadataLabelsKey = "labels"
+)
+
 // shouldFilterByStack returns true when the component should be skipped because it
 // does not belong to the requested stack filter.  An empty filterByStack means no filtering.
 func shouldFilterByStack(filterByStack, stackFileName, stackName string) bool {
 	return filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName
+}
+
+// scopeDecision reports whether a component is in scope for this processor's
+// tags/labels filter, using only cheaply-available metadata (no auth/template/
+// YAML-function evaluation). Decidable is false when selector metadata cannot
+// be safely resolved, or when eager evaluation is forced via
+// describe.settings.eager_evaluation: in both cases the
+// caller must fall through to full evaluation, leaving
+// pkg/scheduler/adapters/terraform.go's post-filter as the authoritative answer.
+func (p *describeStacksProcessor) scopeDecision(metadata, componentSection map[string]any) (inScope bool, decidable bool) {
+	if len(p.tagsFilter) == 0 && len(p.labelsFilter) == 0 {
+		return true, true
+	}
+	if GetEagerEvaluationSetting(p.atmosConfig) {
+		return true, false
+	}
+	leftDelim, rightDelim := p.templateDelims()
+	selectorData := maps.Clone(componentSection)
+	selectorData[cfg.MetadataSectionName] = metadata
+	return inScopeByTagsAndLabelsWithContext(metadata, selectorData, p.tagsFilter, p.labelsFilter, leftDelim, rightDelim)
+}
+
+// templateDelims returns the effective template delimiters for this processor's
+// configuration ("{{"/"}}" unless 'templates.settings.delimiters' overrides them).
+func (p *describeStacksProcessor) templateDelims() (string, string) {
+	return tags.TemplateDelims(p.atmosConfig.Templates.Settings.Delimiters)
+}
+
+// validateSelectorMetadata enforces the selector purity contract on this
+// component's metadata.tags and metadata.labels (see tags.ValidateSelectorValue).
+// When describe.settings.eager_evaluation forces full evaluation, the contract
+// is not enforced: no scoping decision is made before evaluation, selectors are
+// evaluated like any other value, and rejecting previously-working manifests
+// would leave users without a rollback path.
+func (p *describeStacksProcessor) validateSelectorMetadata(metadata map[string]any) error {
+	if GetEagerEvaluationSetting(p.atmosConfig) {
+		return nil
+	}
+	rawTags, hasTags := metadata[metadataTagsKey]
+	rawLabels, hasLabels := metadata[metadataLabelsKey]
+	if !hasTags && !hasLabels {
+		return nil
+	}
+	leftDelim, rightDelim := p.templateDelims()
+	if err := tags.ValidateSelectorValue("metadata.tags", rawTags, leftDelim, rightDelim); err != nil {
+		return err
+	}
+	return tags.ValidateSelectorValue("metadata.labels", rawLabels, leftDelim, rightDelim)
+}
+
+// inScopeByTagsAndLabels mirrors matchesTerraformTagsAndLabels in
+// pkg/scheduler/adapters/terraform.go (tags: any-match, labels: all-match) so the
+// early-skip gate here and that later post-filter can never disagree. Returns
+// decidable=false when metadata.tags/metadata.labels contain an unresolved Go
+// template or Atmos YAML-function marker (see tags.SelectorUnresolved), since
+// their real value cannot be determined without the full template/YAML-function
+// evaluation this gate exists to avoid for out-of-scope components.
+func inScopeByTagsAndLabels(metadata map[string]any, filterTags []string, filterLabels map[string]string, leftDelim string) (inScope bool, decidable bool) {
+	if len(filterTags) == 0 && len(filterLabels) == 0 {
+		return true, true
+	}
+
+	rawTags := metadata[metadataTagsKey]
+	rawLabels := metadata[metadataLabelsKey]
+
+	if tags.SelectorUnresolved(rawTags, leftDelim) || tags.SelectorUnresolved(rawLabels, leftDelim) {
+		return true, false
+	}
+
+	if len(filterTags) > 0 && !tags.MatchesTags(tags.ToStringSlice(rawTags), filterTags, tags.TagModeAny) {
+		return false, true
+	}
+	if len(filterLabels) > 0 && !tags.MatchesLabels(tags.ToStringMap(rawLabels), filterLabels) {
+		return false, true
+	}
+	return true, true
+}
+
+// inScopeByTagsAndLabelsWithContext resolves simple selector templates against
+// the merged component configuration before applying the normal scope gate.
+// Templates that cannot be resolved stay undecidable so the caller preserves
+// the full evaluation path rather than incorrectly excluding a component.
+func inScopeByTagsAndLabelsWithContext(metadata, data map[string]any, filterTags []string, filterLabels map[string]string, leftDelim, rightDelim string) (inScope bool, decidable bool) {
+	selectors := make(map[string]any, 2)
+	if len(filterTags) > 0 {
+		rawTags := metadata[metadataTagsKey]
+		if tags.SelectorUnresolved(rawTags, leftDelim) {
+			resolvedTags, ok := tags.ResolveSelectorValue(rawTags, data, leftDelim, rightDelim)
+			if !ok {
+				return true, false
+			}
+			rawTags = resolvedTags
+		}
+		selectors[metadataTagsKey] = rawTags
+	}
+
+	if len(filterLabels) > 0 {
+		rawLabels, ok := resolveLabelSelector(metadata, data, filterLabels, leftDelim, rightDelim)
+		if !ok {
+			return true, false
+		}
+		selectors[metadataLabelsKey] = rawLabels
+	}
+
+	return inScopeByTagsAndLabels(selectors, filterTags, filterLabels, leftDelim)
+}
+
+// resolveLabelSelector narrows metadata.labels to only the requested filter
+// keys and resolves any simple selector template against data, mirroring the
+// metadata.tags resolution in inScopeByTagsAndLabelsWithContext. Returns
+// ok=false when the selector must remain undecidable (narrowing is unsafe, or
+// a resolved template value could not be determined), signaling the caller to
+// preserve the full evaluation path rather than incorrectly excluding the
+// component.
+func resolveLabelSelector(metadata, data map[string]any, filterLabels map[string]string, leftDelim, rightDelim string) (rawLabels any, ok bool) {
+	// Narrow BEFORE the unresolved check only when narrowing is safe:
+	// a non-map labels value (templated scalar) or a templated map key
+	// makes the selector undecidable — narrowing first would collapse the
+	// unresolved marker into a decidable non-match and wrongly exclude
+	// the component.
+	narrowed, safe := tags.RequestedLabels(metadata[metadataLabelsKey], filterLabels, leftDelim)
+	if !safe {
+		return nil, false
+	}
+	rawLabels = any(narrowed)
+	if tags.SelectorUnresolved(rawLabels, leftDelim) {
+		resolvedLabels, resolveOK := tags.ResolveSelectorValue(rawLabels, data, leftDelim, rightDelim)
+		if !resolveOK {
+			return nil, false
+		}
+		rawLabels = resolvedLabels
+	}
+	return rawLabels, true
 }
 
 // ensureComponentEntryInMap creates all intermediate maps in finalStacksMap so that
@@ -730,14 +1067,49 @@ func addSectionsToComponentEntry(
 
 // processComponentSectionTemplates applies Go template processing to a component section
 // and returns the rendered section as a map.
+//
+// The evalSections parameter is the opt-in evaluation-scope filter (see deferred.IsSectionRequired): when
+// non-nil, only the top-level sections it names are serialized into the template SOURCE that
+// text/template actually parses and executes -- any atmos.Component/atmos.GomplateDatasource/etc.
+// call embedded in a skipped section's raw text is never invoked, which is the actual fix for
+// https://github.com/cloudposse/atmos/issues/3068. The template CONTEXT (the "." root available
+// to {{ }} expressions) is still built from the full, unfiltered componentSection below, so a
+// required section's template can still plain-field-access into a skipped section's raw (merged
+// but unrendered) value -- see the accepted cross-section limitation documented on
+// deferred.IsSectionRequired's callers.
 func processComponentSectionTemplates(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	componentSection map[string]any,
 	settingsSection map[string]any,
+	evalSections []string,
+	warnings ...func(DegradationWarning),
 ) (map[string]any, error) {
+	evalInput, evalExcluded := deferred.SplitSectionsByRequirement(componentSection, evalSections)
+	evalInput, fieldExcluded := deferred.SplitEvaluationFields(evalInput, info.EvaluationPaths)
+
+	// Sections computed from Terraform source code (`component_info`) are not Atmos
+	// configuration and must not be rendered as `Go` templates. They stay in the template
+	// context below, only the rendered input excludes them. See #2145.
+	templateInput, nonTemplatedSections := splitNonTemplatedSections(evalInput)
+
+	if len(templateInput) == 0 {
+		// Nothing needs template rendering (e.g. no column references any section). Skip
+		// ProcessTmplWithDatasources and the YAML round-trip entirely and hand back every section
+		// untouched -- this is the fast path that avoids the atmos.Component/GomplateDatasource
+		// slow path in #3068 when it isn't needed at all.
+		//
+		// Size the map from a single len() — CodeQL's allocation-size-overflow rule flags
+		// len(nonTemplatedSections)+len(evalExcluded); the map grows as needed for the rest.
+		result := make(map[string]any, len(nonTemplatedSections))
+		restoreNonTemplatedSections(result, nonTemplatedSections)
+		restoreNonTemplatedSections(result, evalExcluded)
+		deferred.RestoreEvaluationFields(result, fieldExcluded)
+		return result, nil
+	}
+
 	componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
-		componentSection,
+		templateInput,
 		atmosConfig.Templates.Settings.Delimiters,
 	)
 	if err != nil {
@@ -778,6 +1150,19 @@ func processComponentSectionTemplates(
 		true,
 	)
 	if err != nil {
+		if authdeferred.IsDeferred(atmosConfig.AuthManager) && canDegradeValue(atmosConfig, err) && len(warnings) > 0 && warnings[0] != nil {
+			converted, renderErr := renderDeferredTemplateValues(templateInput, &deferredTemplateOptions{
+				config: atmosConfig, info: info, settings: &settingsSectionStruct,
+				templateContext: componentTemplateContext, onWarning: warnings[0],
+			})
+			if renderErr != nil {
+				return nil, renderErr
+			}
+			restoreNonTemplatedSections(converted, nonTemplatedSections)
+			restoreNonTemplatedSections(converted, evalExcluded)
+			deferred.RestoreEvaluationFields(converted, fieldExcluded)
+			return converted, nil
+		}
 		return nil, err
 	}
 
@@ -794,30 +1179,65 @@ func processComponentSectionTemplates(
 		}
 		return nil, err
 	}
+
+	restoreNonTemplatedSections(converted, nonTemplatedSections)
+	restoreNonTemplatedSections(converted, evalExcluded)
+	deferred.RestoreEvaluationFields(converted, fieldExcluded)
+
 	return converted, nil
 }
 
 // processComponentSectionYAMLFunctions applies YAML function processing to a component section.
+// When onWarning is non-nil, recoverable per-value errors are tolerated — see
+// ProcessCustomYamlTagsLenient. For example, a Terraform backend might not yet be provisioned.
+// The secretsMaskOnly parameter selects the inspection behavior that replaces !secret values without a backend lookup.
+//
+// The evalSections parameter is the opt-in evaluation-scope filter (see deferred.IsSectionRequired): when
+// non-nil, only the top-level sections it names are walked for
+// `!terraform.state`/`!terraform.output`/`!store`/etc. YAML functions. Skipped sections are
+// restored untouched afterward. Stage 2's YAML-function resolution has no cross-section
+// dependency -- each tag resolves independently of its siblings (only a shared ResolutionContext
+// exists, for cycle detection) -- so narrowing its input map is safe without needing a separate
+// "context" the way Go-template rendering does.
 func processComponentSectionYAMLFunctions(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	componentSection map[string]any,
 	skip []string,
+	onWarning func(DegradationWarning),
+	secretsMaskOnly bool,
+	evalSections []string,
 ) (map[string]any, error) {
-	// `describe stacks` and the `list` family are inspection commands: when masking is enabled
-	// (the default), resolve `!secret` to the mask replacement WITHOUT contacting the backend,
-	// so inspection needs no credentials for the secret provider.
-	info.SecretsMaskOnly = iolib.MaskingEnabled()
-	converted, err := ProcessCustomYamlTags(
-		atmosConfig,
-		componentSection,
-		info.Stack,
-		skip,
-		info,
-	)
+	info.SecretsMaskOnly = secretsMaskOnly
+
+	evalInput, evalExcluded := deferred.SplitSectionsByRequirement(componentSection, evalSections)
+	evalInput, fieldExcluded := deferred.SplitEvaluationFields(evalInput, info.EvaluationPaths)
+
+	var converted map[string]any
+	var err error
+	if onWarning != nil {
+		converted, err = ProcessCustomYamlTagsLenient(
+			atmosConfig,
+			evalInput,
+			info.Stack,
+			skip,
+			info,
+			onWarning,
+		)
+	} else {
+		converted, err = ProcessCustomYamlTags(
+			atmosConfig,
+			evalInput,
+			info.Stack,
+			skip,
+			info,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
+	deferred.RestoreEvaluationFields(converted, fieldExcluded)
+	restoreNonTemplatedSections(converted, evalExcluded)
 	return converted, nil
 }
 
@@ -889,6 +1309,11 @@ func applyTerraformMetadataInheritance(
 	// regardless of whether an inherit list is present.  This matches the original behaviour:
 	// the cleanup ran unconditionally (outside the inheritList guard) in the old monolith.
 	if _, hasExplicitWorkspace := metadataSection["terraform_workspace"].(string); hasExplicitWorkspace {
+		// Shallow-clone first: unless the inheritance merge above already produced a
+		// fresh map, metadataSection aliases the nested metadata map owned by the
+		// shared FindStacksMap cache, and deleting from it in place would corrupt the
+		// cache for every subsequent caller in the same process.
+		metadataSection = maps.Clone(metadataSection)
 		delete(metadataSection, "terraform_workspace_pattern")
 		delete(metadataSection, "terraform_workspace_template")
 	}
@@ -982,4 +1407,20 @@ func stackHasNonEmptyComponents(componentsSection map[string]any) bool {
 		}
 	}
 	return false
+}
+
+func (p *describeStacksProcessor) evaluationSections(info *schema.ConfigAndStacksInfo) []string {
+	if p.evalPaths == nil {
+		return p.evalSections
+	}
+	if info.EvaluationPaths == nil {
+		return nil
+	}
+	sections := make([]string, 0)
+	for _, path := range info.EvaluationPaths {
+		if len(path) > 0 && !slices.Contains(sections, path[0]) {
+			sections = append(sections, path[0])
+		}
+	}
+	return sections
 }

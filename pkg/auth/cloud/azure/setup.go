@@ -1,6 +1,7 @@
 package azure
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -86,7 +87,8 @@ func SetAuthContext(params *SetAuthContextParams) error {
 	// Check for component-level location override from merged auth config.
 	if locationOverride := getComponentLocationOverride(params.StackInfo, params.IdentityName); locationOverride != "" {
 		location = locationOverride
-		log.Debug("Using component-level location override",
+		log.Debug(
+			"Using component-level location override",
 			"identity", params.IdentityName,
 			"location", location,
 		)
@@ -106,7 +108,8 @@ func SetAuthContext(params *SetAuthContextParams) error {
 		TokenFilePath: azureCreds.TokenFilePath,
 	}
 
-	log.Debug("Set Azure auth context",
+	log.Debug(
+		"Set Azure auth context",
 		"profile", params.IdentityName,
 		"credentials", credentialsPath,
 		"subscription", azureCreds.SubscriptionID,
@@ -200,10 +203,20 @@ func SetEnvironmentVariables(authContext *schema.AuthContext, stackInfo *schema.
 // This should be called from PostAuthenticate to ensure CLI compatibility.
 // The cloudEnvName selects the Azure cloud environment ("public", "usgovernment", "china").
 // If empty, defaults to "public".
-func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID, cloudEnvName string) error {
+func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID, cloudEnvName, realm string) error {
 	azureCreds, ok := creds.(*types.AzureCredentials)
 	if !ok {
 		return nil // Not Azure credentials, nothing to do.
+	}
+
+	// Credentials minted BY the Azure CLI must not be written back into the CLI's
+	// own cache: az already holds the authoritative entry for this account, and a
+	// second Account entry (with a home_account_id derived from the target tenant)
+	// makes az fail with "Found multiple accounts with the same username" for
+	// guest/B2B users (https://github.com/Azure/azure-cli/issues/20168).
+	if azureCreds.AuthMethod == types.AzureAuthMethodCLI {
+		log.Debug("Skipping Azure CLI file update; credentials originated from the Azure CLI")
+		return nil
 	}
 
 	// Extract user OID and username from token.
@@ -226,7 +239,12 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID, clo
 	cloudEnv := GetCloudEnvironment(cloudEnvName)
 
 	// Update MSAL token cache with management, Graph API, and KeyVault tokens.
-	updateMSALCacheFromCreds(home, azureCreds, userOID, tenantID, cloudEnv)
+	updateMSALCacheFromCreds(&msalCredsContext{
+		Home:     home,
+		UserOID:  userOID,
+		TenantID: tenantID,
+		Realm:    realm,
+	}, azureCreds, cloudEnv)
 
 	// Update azureProfile.json.
 	if err := updateAzureProfile(home, ProfileUpdateParams{
@@ -240,34 +258,51 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID, clo
 		// Non-fatal.
 	}
 
-	// For service principal auth, also update service_principal_entries.json.
-	// This allows Azure CLI commands to work with OIDC tokens during the CI workflow.
-	if azureCreds.IsServicePrincipal && azureCreds.ClientID != "" && azureCreds.FederatedToken != "" {
-		if err := updateServicePrincipalEntries(home, azureCreds.ClientID, tenantID, azureCreds.FederatedToken); err != nil {
-			log.Debug("Failed to update service principal entries", "error", err)
-			// Non-fatal.
-		}
-	}
+	maybeUpdateServicePrincipalEntries(home, tenantID, azureCreds)
 
 	return nil
 }
 
+// maybeUpdateServicePrincipalEntries updates service_principal_entries.json for
+// service principal auth. This allows Azure CLI commands to work with OIDC
+// tokens during the CI workflow. Non-fatal on failure.
+func maybeUpdateServicePrincipalEntries(home, tenantID string, azureCreds *types.AzureCredentials) {
+	if !azureCreds.IsServicePrincipal || azureCreds.ClientID == "" || azureCreds.FederatedToken == "" {
+		return
+	}
+	if err := updateServicePrincipalEntries(home, azureCreds.ClientID, tenantID, azureCreds.FederatedToken); err != nil {
+		log.Debug("Failed to update service principal entries", "error", err)
+	}
+}
+
+// The msalCredsContext struct carries the cache-location and account context
+// for updateMSALCacheFromCreds.
+type msalCredsContext struct {
+	Home     string
+	UserOID  string
+	TenantID string
+	Realm    string
+}
+
 // updateMSALCacheFromCreds updates the MSAL token cache using Azure credentials and cloud environment.
-func updateMSALCacheFromCreds(home string, azureCreds *types.AzureCredentials, userOID, tenantID string, cloudEnv *CloudEnvironment) {
+func updateMSALCacheFromCreds(ctx *msalCredsContext, azureCreds *types.AzureCredentials, cloudEnv *CloudEnvironment) {
 	if err := updateMSALCache(&msalCacheUpdate{
-		Home:               home,
+		Home:               ctx.Home,
 		AccessToken:        azureCreds.AccessToken,
 		Expiration:         azureCreds.Expiration,
 		GraphToken:         azureCreds.GraphAPIToken,
 		GraphExpiration:    azureCreds.GraphAPIExpiration,
 		KeyVaultToken:      azureCreds.KeyVaultToken,
 		KeyVaultExpiration: azureCreds.KeyVaultExpiration,
-		UserOID:            userOID,
-		TenantID:           tenantID,
+		UserOID:            ctx.UserOID,
+		TenantID:           ctx.TenantID,
+		AuthMethod:         azureCreds.AuthMethod,
+		HomeAccountID:      azureCreds.HomeAccountID,
 		ClientID:           azureCreds.ClientID,
 		IsServicePrincipal: azureCreds.IsServicePrincipal,
 		LoginEndpoint:      cloudEnv.LoginEndpoint,
-		ManagementScope:    cloudEnv.ManagementScope,
+		ManagementScope:    strings.Join(append([]string{cloudEnv.ManagementScope}, cloudEnv.LegacyManagementScopes...), " "),
+		Realm:              ctx.Realm,
 		GraphAPIScope:      cloudEnv.GraphAPIScope,
 		KeyVaultScope:      cloudEnv.KeyVaultScope,
 	}); err != nil {
@@ -287,6 +322,16 @@ type msalCacheUpdate struct {
 	KeyVaultExpiration string
 	UserOID            string
 	TenantID           string
+	// AuthMethod is the AzureCredentials.AuthMethod that minted these tokens;
+	// selects the MSAL cache account_source label.
+	AuthMethod string
+	// Realm is the Atmos credential-isolation realm (source of refresh tokens).
+	Realm string
+	// HomeAccountID is MSAL's "{home-oid}.{home-tenant-id}" for the authenticated
+	// account, when the provider received it from MSAL. For guest (B2B) users this
+	// differs from "{UserOID}.{TenantID}" and MUST be used for the cache Account
+	// entry so az does not see two accounts with the same username.
+	HomeAccountID string
 	// ClientID is set for service principal authentication (OIDC).
 	ClientID string
 	// IsServicePrincipal indicates this is service principal auth.
@@ -322,6 +367,9 @@ func updateMSALCache(params *msalCacheUpdate) error {
 	} else {
 		// User authentication uses standard format.
 		addUserAccountAndTokens(sections, params)
+		// Copy refresh tokens from the Atmos realm cache so az can self-mint
+		// any audience and survive access-token expiry.
+		CopyAtmosRefreshTokensInto(cache, params.Home, params.Realm, params.HomeAccountID)
 	}
 
 	// Write updated cache.
@@ -379,11 +427,30 @@ type msalIdentifiers struct {
 	realm         string
 }
 
+// accountSourceForAuthMethod returns the MSAL cache account_source label for an
+// auth method, mirroring what az itself records: "authorization_code" for the
+// interactive browser flow, "device_code" otherwise.
+func accountSourceForAuthMethod(authMethod string) string {
+	if authMethod == types.AzureAuthMethodInteractive {
+		return "authorization_code"
+	}
+	return "device_code"
+}
+
 // addUserAccountAndTokens adds account entry and tokens for user authentication.
 func addUserAccountAndTokens(sections *msalCacheSections, params *msalCacheUpdate) {
+	// Prefer MSAL's own home account ID: for guest (B2B) users the home tenant
+	// differs from the target tenant, and deriving "{oid}.{target-tenant}" would
+	// create a second Account entry with the same username, breaking az
+	// (https://github.com/Azure/azure-cli/issues/20168).
+	homeAccountID := params.HomeAccountID
+	if homeAccountID == "" {
+		homeAccountID = fmt.Sprintf("%s.%s", params.UserOID, params.TenantID)
+	}
+
 	// Create common MSAL identifiers for user auth.
 	ids := msalIdentifiers{
-		homeAccountID: fmt.Sprintf("%s.%s", params.UserOID, params.TenantID),
+		homeAccountID: homeAccountID,
 		environment:   params.LoginEndpoint,
 		clientID:      "04b07795-8ddb-461a-bbee-02f9e1bf7b46", // Azure CLI public client.
 		realm:         params.TenantID,
@@ -398,7 +465,7 @@ func addUserAccountAndTokens(sections *msalCacheSections, params *msalCacheUpdat
 		"local_account_id": params.UserOID,
 		"username":         extractUsernameOrFallback(params.AccessToken),
 		"authority_type":   "MSSTS",
-		"account_source":   "device_code",
+		"account_source":   accountSourceForAuthMethod(params.AuthMethod),
 	}
 	sections.account[accountKey] = accountEntry
 
@@ -523,24 +590,13 @@ func writeMSALCacheToFile(msalCachePath string, data []byte) error {
 		return fmt.Errorf("failed to create .azure directory: %w", err)
 	}
 
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := msalCachePath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock MSAL cache file", "lock_file", lockPath, "error", unlockErr)
+	return withFileLock(context.Background(), msalCachePath, func() error {
+		if err := os.WriteFile(msalCachePath, data, FilePermissions); err != nil {
+			return fmt.Errorf("failed to write MSAL cache: %w", err)
 		}
-	}()
-
-	if err := os.WriteFile(msalCachePath, data, FilePermissions); err != nil {
-		return fmt.Errorf("failed to write MSAL cache: %w", err)
-	}
-
-	log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath)
-	return nil
+		log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath)
+		return nil
+	})
 }
 
 // tokenCacheParams holds parameters for adding a token to MSAL cache.
@@ -605,53 +661,39 @@ func updateAzureProfile(home string, params ProfileUpdateParams) error {
 		return fmt.Errorf("failed to create .azure directory: %w", err)
 	}
 
-	// Load existing profile or create new one.
-	var profile map[string]interface{}
-	data, err := os.ReadFile(profilePath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read Azure profile: %w", err)
+	return withFileLock(context.Background(), profilePath, func() error {
+		// Load existing profile or create new one.
+		var profile map[string]interface{}
+		data, err := os.ReadFile(profilePath)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("failed to read Azure profile: %w", err)
+			}
+			profile = map[string]interface{}{
+				"installationId": "",
+				"subscriptions":  []interface{}{},
+			}
+		} else {
+			// Strip UTF-8 BOM if present (Azure CLI sometimes writes files with BOM).
+			data = stripBOM(data)
+
+			if err := json.Unmarshal(data, &profile); err != nil {
+				return fmt.Errorf("failed to parse Azure profile: %w", err)
+			}
 		}
-		profile = map[string]interface{}{
-			"installationId": "",
-			"subscriptions":  []interface{}{},
+
+		profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, params)
+		updatedData, err := json.MarshalIndent(profile, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal Azure profile: %w", err)
 		}
-	} else {
-		// Strip UTF-8 BOM if present (Azure CLI sometimes writes files with BOM).
-		data = stripBOM(data)
 
-		if err := json.Unmarshal(data, &profile); err != nil {
-			return fmt.Errorf("failed to parse Azure profile: %w", err)
+		if err := os.WriteFile(profilePath, updatedData, FilePermissions); err != nil {
+			return fmt.Errorf("failed to write Azure profile: %w", err)
 		}
-	}
-
-	// Update subscriptions in profile.
-	profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, params)
-
-	// Write updated profile.
-	updatedData, err := json.MarshalIndent(profile, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal Azure profile: %w", err)
-	}
-
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := profilePath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock Azure profile file", "lock_file", lockPath, "error", unlockErr)
-		}
-	}()
-
-	if err := os.WriteFile(profilePath, updatedData, FilePermissions); err != nil {
-		return fmt.Errorf("failed to write Azure profile: %w", err)
-	}
-
-	log.Debug("Updated Azure profile", "path", profilePath, "subscription", params.SubscriptionID)
-	return nil
+		log.Debug("Updated Azure profile", "path", profilePath, "subscription", params.SubscriptionID)
+		return nil
+	})
 }
 
 // UpdateSubscriptionsInProfile updates the subscriptions array in an Azure profile.
@@ -728,66 +770,51 @@ func updateServicePrincipalEntries(home, clientID, tenantID, federatedToken stri
 		return fmt.Errorf("failed to create .azure directory: %w", err)
 	}
 
-	// Load existing entries or create new array.
-	var entries []map[string]interface{}
-	data, err := os.ReadFile(entriesPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read service principal entries: %w", err)
-		}
-		entries = []map[string]interface{}{}
-	} else {
-		// Strip UTF-8 BOM if present.
-		data = stripBOM(data)
-
-		if err := json.Unmarshal(data, &entries); err != nil {
-			// If file is corrupted, start fresh.
-			log.Debug("Failed to parse service principal entries, creating new file", "error", err)
+	return withFileLock(context.Background(), entriesPath, func() error {
+		// Load existing entries or create a new array.
+		var entries []map[string]interface{}
+		data, err := os.ReadFile(entriesPath)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("failed to read service principal entries: %w", err)
+			}
 			entries = []map[string]interface{}{}
+		} else {
+			// Strip UTF-8 BOM if present.
+			data = stripBOM(data)
+
+			if err := json.Unmarshal(data, &entries); err != nil {
+				// If file is corrupted, start fresh.
+				log.Debug("Failed to parse service principal entries, creating new file", "error", err)
+				entries = []map[string]interface{}{}
+			}
 		}
-	}
 
-	// Find or create entry for this service principal.
-	// Azure CLI looks up entries by client_id field.
-	var found bool
-	for i, entry := range entries {
-		if cid, ok := entry["client_id"].(string); ok && cid == clientID {
-			// Update existing entry.
-			entries[i] = createServicePrincipalEntry(clientID, tenantID, federatedToken)
-			found = true
-			break
+		// Azure CLI looks up entries by client_id field.
+		var found bool
+		for i, entry := range entries {
+			if cid, ok := entry["client_id"].(string); ok && cid == clientID {
+				entries[i] = createServicePrincipalEntry(clientID, tenantID, federatedToken)
+				found = true
+				break
+			}
 		}
-	}
 
-	if !found {
-		// Add new entry.
-		entries = append(entries, createServicePrincipalEntry(clientID, tenantID, federatedToken))
-	}
-
-	// Write updated entries.
-	updatedData, err := json.MarshalIndent(entries, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal service principal entries: %w", err)
-	}
-
-	// Acquire file lock to prevent concurrent writes.
-	lockPath := entriesPath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock service principal entries file", "lock_file", lockPath, "error", unlockErr)
+		if !found {
+			entries = append(entries, createServicePrincipalEntry(clientID, tenantID, federatedToken))
 		}
-	}()
 
-	if err := os.WriteFile(entriesPath, updatedData, FilePermissions); err != nil {
-		return fmt.Errorf("failed to write service principal entries: %w", err)
-	}
+		updatedData, err := json.MarshalIndent(entries, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal service principal entries: %w", err)
+		}
 
-	log.Debug("Updated Azure CLI service principal entries", "path", entriesPath, "client_id", clientID)
-	return nil
+		if err := os.WriteFile(entriesPath, updatedData, FilePermissions); err != nil {
+			return fmt.Errorf("failed to write service principal entries: %w", err)
+		}
+		log.Debug("Updated Azure CLI service principal entries", "path", entriesPath, "client_id", clientID)
+		return nil
+	})
 }
 
 // createServicePrincipalEntry creates a service principal entry for OIDC authentication.

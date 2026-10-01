@@ -49,8 +49,8 @@ func customComponentCompletion(componentType string) func(*cobra.Command, []stri
 }
 
 // registerSemanticFlagCompletions registers completion for flags with semantic types.
-// This adds tab completion for flags like --stack (semantic_type: stack) and
-// --component (semantic_type: component) in custom commands.
+// This adds tab completion for flags like --stack (provides: stack) and
+// --component (provides: component) in custom commands.
 func registerSemanticFlagCompletions(cmd *cobra.Command, commandConfig *schema.Command) {
 	defer perf.Track(nil, "cmd.registerSemanticFlagCompletions")()
 
@@ -60,7 +60,7 @@ func registerSemanticFlagCompletions(cmd *cobra.Command, commandConfig *schema.C
 
 	for _, flag := range commandConfig.Flags {
 		var err error
-		switch flag.SemanticType {
+		switch flag.EffectiveProvides() {
 		case semanticTypeStack:
 			err = cmd.RegisterFlagCompletionFunc(flag.Name, StackFlagCompletion)
 		case semanticTypeComponent:
@@ -75,7 +75,7 @@ func registerSemanticFlagCompletions(cmd *cobra.Command, commandConfig *schema.C
 }
 
 // setSemanticArgCompletion sets ValidArgsFunction for the first semantic-typed argument.
-// This enables tab completion for positional arguments with type: component or type: stack.
+// This enables tab completion for positional arguments with provides: component or provides: stack.
 func setSemanticArgCompletion(cmd *cobra.Command, commandConfig *schema.Command) {
 	defer perf.Track(nil, "cmd.setSemanticArgCompletion")()
 
@@ -85,7 +85,7 @@ func setSemanticArgCompletion(cmd *cobra.Command, commandConfig *schema.Command)
 
 	if len(commandConfig.Arguments) > 0 {
 		arg := commandConfig.Arguments[0]
-		switch arg.Type {
+		switch arg.EffectiveProvides() {
 		case semanticTypeComponent:
 			cmd.ValidArgsFunction = customComponentCompletion(commandConfig.Component.Type)
 		case semanticTypeStack:
@@ -168,7 +168,7 @@ func promptSemanticArguments(
 		var selected string
 		var err error
 
-		switch arg.Type {
+		switch arg.EffectiveProvides() {
 		case semanticTypeComponent:
 			selected, err = promptForComponentValue(cmd, arg.Name, commandConfig.Component.Type, stacksMap, promptCfg, true)
 		case semanticTypeStack:
@@ -204,7 +204,7 @@ func promptSemanticFlags(
 		var selected string
 		var err error
 
-		switch flag.SemanticType {
+		switch flag.EffectiveProvides() {
 		case semanticTypeComponent:
 			selected, err = promptForComponentValue(cmd, flag.Name, commandConfig.Component.Type, stacksMap, promptCfg, false)
 		case semanticTypeStack:

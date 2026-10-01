@@ -1,6 +1,8 @@
 ---
 name: atmos-asciicast
 description: Create and review portable Atmos CLI asciicast demos for community-facing documentation, examples, and training materials.
+metadata:
+  category: dev-tooling
 ---
 
 # Atmos Asciicast Skill

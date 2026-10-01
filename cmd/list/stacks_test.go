@@ -280,6 +280,59 @@ func TestGetStackColumns(t *testing.T) {
 	}
 }
 
+// TestResolveStacksEvalSections verifies the evaluation-scope filter derived from the resolved
+// column set: default columns (`.stack`/`.component` only) need no section, a `.vars.X` column
+// requires "vars", and an unresolvable column template (a catch-all `.raw`) falls back to nil
+// (full eager evaluation) rather than under-computing what is required.
+func TestResolveStacksEvalSections(t *testing.T) {
+	baseConfig := &schema.AtmosConfiguration{Stacks: schema.Stacks{List: schema.ListConfig{}}}
+
+	testCases := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		opts        *StacksOptions
+		expectNil   bool
+		expectExact []string
+	}{
+		{
+			name:        "default columns without component require no section",
+			atmosConfig: baseConfig,
+			opts:        &StacksOptions{},
+			expectExact: []string{},
+		},
+		{
+			name:        "default columns with component require no section",
+			atmosConfig: baseConfig,
+			opts:        &StacksOptions{Component: "vpc"},
+			expectExact: []string{},
+		},
+		{
+			name:        "--columns referencing vars requires vars",
+			atmosConfig: baseConfig,
+			opts:        &StacksOptions{Columns: []string{"Stack={{ .stack }}", "Region={{ .vars.region }}"}},
+			expectExact: []string{"vars"},
+		},
+		{
+			name:        "--columns referencing raw falls back to nil",
+			atmosConfig: baseConfig,
+			opts:        &StacksOptions{Columns: []string{"Raw={{ .raw }}"}},
+			expectNil:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := resolveStacksEvalSections(tc.atmosConfig, tc.opts)
+			if tc.expectNil {
+				assert.Nil(t, result)
+				return
+			}
+			require.NotNil(t, result)
+			assert.ElementsMatch(t, tc.expectExact, result)
+		})
+	}
+}
+
 // TestBuildStackSorters tests sorter building.
 func TestBuildStackSorters(t *testing.T) {
 	testCases := []struct {
@@ -436,5 +489,60 @@ func TestStacksProcessTemplatesAndFunctionsFlags(t *testing.T) {
 	assert.NotNil(t, processFunctionsFlag, "process-functions flag should be registered on stacks command")
 	if processFunctionsFlag != nil {
 		assert.Equal(t, "true", processFunctionsFlag.DefValue)
+	}
+}
+
+// TestApplyConfigDefaultedFormat covers stacks.list.format defaulting from atmos.yaml,
+// including the tree-vs-columns conflict resolution: a config-defaulted "tree" steps
+// aside when the caller also requested explicit --columns (tree has no rows/columns to
+// select from), but an explicit --format=tree flag or a columns-less request keeps tree.
+func TestApplyConfigDefaultedFormat(t *testing.T) {
+	tests := []struct {
+		name         string
+		optsFormat   string
+		configFormat string
+		columns      []string
+		want         string
+	}{
+		{
+			name:         "no config default, format stays empty",
+			optsFormat:   "",
+			configFormat: "",
+			want:         "",
+		},
+		{
+			name:         "config default applied when flag unset",
+			optsFormat:   "",
+			configFormat: "table",
+			want:         "table",
+		},
+		{
+			name:         "explicit flag format wins over config default",
+			optsFormat:   "json",
+			configFormat: "tree",
+			want:         "json",
+		},
+		{
+			name:         "config-defaulted tree kept when no columns requested",
+			optsFormat:   "",
+			configFormat: "tree",
+			columns:      nil,
+			want:         "tree",
+		},
+		{
+			name:         "config-defaulted tree steps aside for explicit columns",
+			optsFormat:   "",
+			configFormat: "tree",
+			columns:      []string{"name"},
+			want:         "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := &StacksOptions{Format: tt.optsFormat, Columns: tt.columns}
+			applyConfigDefaultedFormat(opts, tt.configFormat)
+			assert.Equal(t, tt.want, opts.Format)
+		})
 	}
 }

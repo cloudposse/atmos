@@ -56,6 +56,8 @@ func setupTestComponentEnv(t *testing.T) (*schema.AtmosConfiguration, string, fu
 }
 
 func TestNewReadComponentFileTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewReadComponentFileTool(atmosConfig)
 
@@ -64,16 +66,22 @@ func TestNewReadComponentFileTool(t *testing.T) {
 }
 
 func TestReadComponentFileTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewReadComponentFileTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "read_component_file", tool.Name())
 }
 
 func TestReadComponentFileTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewReadComponentFileTool(&schema.AtmosConfiguration{})
 	assert.Contains(t, tool.Description(), "Read a file from the components directory")
 }
 
 func TestReadComponentFileTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewReadComponentFileTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -85,23 +93,30 @@ func TestReadComponentFileTool_Parameters(t *testing.T) {
 }
 
 func TestReadComponentFileTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewReadComponentFileTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.RequiresPermission())
 }
 
 func TestReadComponentFileTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewReadComponentFileTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestReadComponentFileTool_Execute(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, _, cleanup := setupTestComponentEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	tool := NewReadComponentFileTool(atmosConfig)
 	ctx := context.Background()
 
 	t.Run("successfully reads terraform component file", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "terraform",
 			"file_path":      "vpc/main.tf",
@@ -117,6 +132,7 @@ func TestReadComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing component_type", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "vpc/main.tf",
 		}
@@ -129,6 +145,7 @@ func TestReadComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing file_path", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "terraform",
 		}
@@ -141,6 +158,7 @@ func TestReadComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with unsupported component type", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "ansible",
 			"file_path":      "test.yml",
@@ -154,6 +172,7 @@ func TestReadComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with non-existent file", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "terraform",
 			"file_path":      "vpc/nonexistent.tf",
@@ -167,6 +186,7 @@ func TestReadComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with path traversal attempt", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "terraform",
 			"file_path":      "../../etc/passwd",
@@ -180,6 +200,7 @@ func TestReadComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails when path is a directory", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "terraform",
 			"file_path":      "vpc",
@@ -194,7 +215,10 @@ func TestReadComponentFileTool_Execute(t *testing.T) {
 }
 
 func TestExtractComponentParams(t *testing.T) {
+	t.Parallel()
+
 	t.Run("successfully extracts valid params", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "terraform",
 			"file_path":      "vpc/main.tf",
@@ -208,6 +232,7 @@ func TestExtractComponentParams(t *testing.T) {
 	})
 
 	t.Run("fails with missing component_type", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "vpc/main.tf",
 		}
@@ -219,6 +244,7 @@ func TestExtractComponentParams(t *testing.T) {
 	})
 
 	t.Run("fails with empty component_type", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "",
 			"file_path":      "vpc/main.tf",
@@ -231,6 +257,7 @@ func TestExtractComponentParams(t *testing.T) {
 	})
 
 	t.Run("fails with missing file_path", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "terraform",
 		}
@@ -243,9 +270,12 @@ func TestExtractComponentParams(t *testing.T) {
 }
 
 func TestReadAndValidateFile(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	t.Run("successfully reads file", func(t *testing.T) {
+		t.Parallel()
 		testFile := filepath.Join(tmpDir, "test.txt")
 		require.NoError(t, os.WriteFile(testFile, []byte("test content"), 0o600))
 
@@ -256,6 +286,7 @@ func TestReadAndValidateFile(t *testing.T) {
 	})
 
 	t.Run("fails with non-existent file", func(t *testing.T) {
+		t.Parallel()
 		_, err := readAndValidateFile(filepath.Join(tmpDir, "nonexistent.txt"), "nonexistent.txt")
 
 		require.Error(t, err)
@@ -263,6 +294,7 @@ func TestReadAndValidateFile(t *testing.T) {
 	})
 
 	t.Run("fails with directory", func(t *testing.T) {
+		t.Parallel()
 		testDir := filepath.Join(tmpDir, "testdir")
 		require.NoError(t, os.MkdirAll(testDir, 0o755))
 

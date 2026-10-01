@@ -66,14 +66,15 @@ You can control this behavior with the `settings.experimental` configuration in 
 ```yaml
 settings:
   # Control experimental feature handling
-  # Values: "silence", "disable", "warn" (default), "error"
-  experimental: warn
+  # Values: "silence", "disable", "warn", "warn-daily" (default), "error"
+  experimental: warn-daily
 ```
 
 | Mode | Behavior |
 |------|----------|
 | `silence` | Run without any notification |
-| `warn` | Show notification, then continue (default) |
+| `warn` | Show notification on each top-level invocation, then continue |
+| `warn-daily` | Show notification once per feature every 24 hours, then continue (default) |
 | `error` | Show notification and exit with error |
 | `disable` | Block experimental commands entirely |
 

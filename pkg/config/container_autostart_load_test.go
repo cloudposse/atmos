@@ -50,9 +50,9 @@ func TestLoadConfig_ContainerAutoStartEnvWins(t *testing.T) {
 	assert.Equal(t, "false", os.Getenv(envContainerRuntimeAutoStart), "explicit env var must not be overwritten by config")
 }
 
-// TestLoadConfig_NoContainerAutoStartLeavesEnvUnset verifies the bridge does not
-// set the env var when the setting is absent/false.
-func TestLoadConfig_NoContainerAutoStartLeavesEnvUnset(t *testing.T) {
+// TestLoadConfig_ContainerAutoStartDefaultsToTrue verifies that Podman recovery
+// is on by default for every config, including ones that omit the namespace.
+func TestLoadConfig_ContainerAutoStartDefaultsToTrue(t *testing.T) {
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, AtmosConfigFileName),
 		[]byte("base_path: ./\n"), 0o644))
@@ -61,9 +61,28 @@ func TestLoadConfig_NoContainerAutoStartLeavesEnvUnset(t *testing.T) {
 	t.Setenv(envContainerRuntimeAutoStart, "")
 	require.NoError(t, os.Unsetenv(envContainerRuntimeAutoStart))
 
-	_, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	atmosConfig, err := LoadConfig(&schema.ConfigAndStacksInfo{})
 	require.NoError(t, err)
 
+	assert.True(t, atmosConfig.Container.Runtime.AutoStart)
+	assert.Equal(t, "true", os.Getenv(envContainerRuntimeAutoStart))
+}
+
+// TestLoadConfig_ContainerAutoStartCanBeDisabled verifies an explicit config
+// opt-out does not promote the recovery flag.
+func TestLoadConfig_ContainerAutoStartCanBeDisabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, AtmosConfigFileName),
+		[]byte("base_path: ./\ncontainer:\n  runtime:\n    auto_start: false\n"), 0o644))
+
+	t.Chdir(tmpDir)
+	t.Setenv(envContainerRuntimeAutoStart, "")
+	require.NoError(t, os.Unsetenv(envContainerRuntimeAutoStart))
+
+	atmosConfig, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+
+	assert.False(t, atmosConfig.Container.Runtime.AutoStart)
 	_, set := os.LookupEnv(envContainerRuntimeAutoStart)
-	assert.False(t, set, "env var must stay unset when container.runtime.auto_start is not enabled")
+	assert.False(t, set)
 }

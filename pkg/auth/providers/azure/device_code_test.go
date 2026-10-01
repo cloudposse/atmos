@@ -358,11 +358,15 @@ func TestDeviceCodeProvider_PrepareEnvironment(t *testing.T) {
 				"PATH":                  "/usr/bin",
 				"AZURE_SUBSCRIPTION_ID": "sub-456",
 				"ARM_SUBSCRIPTION_ID":   "sub-456",
-				"AZURE_TENANT_ID":       "tenant-123",
-				"ARM_TENANT_ID":         "tenant-123",
 				"AZURE_LOCATION":        "eastus",
 				"ARM_LOCATION":          "eastus",
 				"ARM_USE_CLI":           "true",
+			},
+			// CLI/device-code auth must NOT export the tenant (it would make the azurerm backend's
+			// Azure CLI credential pass both --subscription and --tenant, which the CLI rejects).
+			expectedMissing: []string{
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
 			},
 		},
 		{
@@ -386,8 +390,6 @@ func TestDeviceCodeProvider_PrepareEnvironment(t *testing.T) {
 				"HOME":                           "/home/user",
 				"AZURE_SUBSCRIPTION_ID":          "sub-456",
 				"ARM_SUBSCRIPTION_ID":            "sub-456",
-				"AZURE_TENANT_ID":                "tenant-123",
-				"ARM_TENANT_ID":                  "tenant-123",
 				"ARM_USE_CLI":                    "true",
 				"AWS_ACCESS_KEY_ID":              "AKIAIOSFODNN7EXAMPLE",
 				"GOOGLE_APPLICATION_CREDENTIALS": "/path/to/gcp/creds.json",
@@ -398,6 +400,8 @@ func TestDeviceCodeProvider_PrepareEnvironment(t *testing.T) {
 				"AZURE_CLIENT_CERTIFICATE_PATH",
 				"ARM_CLIENT_ID",
 				"ARM_CLIENT_SECRET",
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
 			},
 		},
 	}

@@ -5,11 +5,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestDefaultStacksProcessor_ExecuteDescribeStacks verifies that DefaultStacksProcessor correctly delegates to ExecuteDescribeStacks.
 func TestDefaultStacksProcessor_ExecuteDescribeStacks(t *testing.T) {
+	t.Parallel()
+
 	// Create a test configuration directory.
 	testDir := t.TempDir()
 
@@ -49,12 +52,74 @@ func TestDefaultStacksProcessor_ExecuteDescribeStacks(t *testing.T) {
 	assert.NotNil(t, result)
 }
 
+// TestDefaultStacksProcessor_ExecuteDescribeStacksScoped verifies the scoped
+// variant delegates to the package-level ExecuteDescribeStacksScoped (added
+// so tags/labels-excluded components can skip evaluation entirely via the
+// early-skip gate, rather than being row-filtered after a full evaluation).
+// A single call confirms every line of the delegation is reached; correctness
+// of the early-skip behavior itself is covered by the ExecuteDescribeStacksScoped
+// tests directly.
+func TestDefaultStacksProcessor_ExecuteDescribeStacksScoped(t *testing.T) {
+	t.Parallel()
+
+	testDir := t.TempDir()
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: testDir,
+		Stacks: schema.Stacks{
+			BasePath: "stacks",
+		},
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	processor := &DefaultStacksProcessor{}
+
+	tests := []struct {
+		name         string
+		authDisabled bool
+		tagsFilter   []string
+		labelsFilter map[string]string
+	}{
+		{name: "no filters", authDisabled: false, tagsFilter: nil, labelsFilter: nil},
+		{name: "with tags and labels filters", authDisabled: true, tagsFilter: []string{"team:platform"}, labelsFilter: map[string]string{"env": "prod"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := processor.ExecuteDescribeStacksScoped(
+				&atmosConfig,
+				"",         // filterByStack
+				[]string{}, // components
+				[]string{}, // componentTypes
+				[]string{}, // sections
+				true,       // ignoreMissingFiles
+				false,      // processTemplates
+				false,      // processYamlFunctions
+				false,      // includeEmptyStacks
+				[]string{}, // skip
+				authdeferred.NewManager(authdeferred.AuthOptions{Disabled: tt.authDisabled}),
+				tt.tagsFilter,
+				tt.labelsFilter,
+			)
+			assert.NoError(t, err)
+			assert.NotNil(t, result)
+		})
+	}
+}
+
 // TestDefaultStacksProcessor_ExecuteDescribeStacksWithAuthDisabled verifies the
 // auth-disabled variant delegates to ExecuteDescribeStacksWithAuthDisabled. The
 // method is pure pass-through (added so callers can route `--identity=false`
 // through the StacksProcessor seam in pkg/list), so a single call confirms
 // every line of the delegation is reached.
 func TestDefaultStacksProcessor_ExecuteDescribeStacksWithAuthDisabled(t *testing.T) {
+	t.Parallel()
+
 	testDir := t.TempDir()
 
 	atmosConfig := schema.AtmosConfiguration{
@@ -85,6 +150,7 @@ func TestDefaultStacksProcessor_ExecuteDescribeStacksWithAuthDisabled(t *testing
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := processor.ExecuteDescribeStacksWithAuthDisabled(
 				&atmosConfig,
 				"",         // filterByStack

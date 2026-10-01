@@ -64,7 +64,7 @@ func (p *PodmanRuntime) command(ctx context.Context, args ...string) *exec.Cmd {
 func (p *PodmanRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Build")()
 
-	if config.Engine == "buildx" || config.Bake != nil {
+	if config.Engine == "buildx" || config.Bake != nil || config.Driver != nil {
 		return fmt.Errorf("%w: Docker Buildx requires Docker in V1; Podman uses the native `podman build` path", errUtils.ErrContainerRuntimeOperation)
 	}
 
@@ -89,6 +89,18 @@ func (p *PodmanRuntime) EnsureNetwork(ctx context.Context, name string) error {
 	cmd := p.command(ctx, "network", "create", name)
 	output, err := cmd.CombinedOutput()
 	return networkCreateResult(err, string(output))
+}
+
+// ConnectNetwork attaches an already running container to a user-defined podman
+// network, registering aliases as its DNS names on that network. It implements
+// NetworkConnector so Atmos's own container can join a dedicated stack network
+// it didn't start on.
+func (p *PodmanRuntime) ConnectNetwork(ctx context.Context, network, containerID string, aliases []string) error {
+	defer perf.Track(nil, "container.PodmanRuntime.ConnectNetwork")()
+
+	cmd := p.command(ctx, buildNetworkConnectArgs(network, containerID, aliases)...)
+	output, err := cmd.CombinedOutput()
+	return networkConnectResult(err, cleanPodmanOutput(output))
 }
 
 // Create creates a new container.

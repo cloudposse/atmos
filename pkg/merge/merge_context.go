@@ -43,6 +43,17 @@ func NewMergeContext() *MergeContext {
 }
 
 // WithFile creates a new context for processing a specific file.
+//
+// Stack processing calls WithFile concurrently from sibling goroutines that
+// all share the same parent MergeContext (one per imported file, see
+// processYAMLConfigFileWithContextInternal in internal/exec). Appending
+// directly with append(mc.ImportChain, filePath) would reuse mc.ImportChain's
+// backing array whenever it has spare capacity, so two sibling calls could
+// write their different filePath values into the same backing slot at the
+// same time -- a genuine data race, since Go's slice growth strategy
+// commonly leaves spare capacity after the first append. Starting from a
+// zero-capacity literal forces a fresh allocation on every call, so sibling
+// contexts never share backing memory.
 func (mc *MergeContext) WithFile(filePath string) *MergeContext {
 	if mc == nil {
 		mc = NewMergeContext()
@@ -50,7 +61,7 @@ func (mc *MergeContext) WithFile(filePath string) *MergeContext {
 
 	newContext := &MergeContext{
 		CurrentFile:   filePath,
-		ImportChain:   append(mc.ImportChain, filePath),
+		ImportChain:   append(append([]string{}, mc.ImportChain...), filePath),
 		ParentContext: mc,
 		Provenance:    mc.Provenance, // Share provenance storage across contexts.
 		Positions:     nil,           // Positions are file-specific, reset for new file.

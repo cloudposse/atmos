@@ -18,6 +18,7 @@ import (
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
 )
 
 // Note on testing bubbletea's TTY/cursor/line-clearing behavior:
@@ -45,6 +46,7 @@ import (
 // terminal width (and is correctly omitted when a line exactly fills the
 // terminal width) -- both zero before this fix, in an otherwise identical
 // capture.
+
 func TestVendorFailureError(t *testing.T) {
 	// Regression test: the vendor error must contain a descriptive explanation
 	// listing the failed component names, not just a bare integer count.
@@ -79,12 +81,24 @@ func TestVendorFailureError(t *testing.T) {
 	})
 }
 
+// namedPackage builds an install.VendorPackage carrying only Name/Version for TUI-only tests that
+// never invoke the installer itself.
+func namedPackage(name, version string) install.VendorPackage {
+	return install.NewAtmosVendorPackage(&install.AtmosPackageParams{Name: name, Version: version})
+}
+
+// mixinPackage builds an install.VendorPackage whose IsMixin() reports true, matching a
+// component.yaml mixin.
+func mixinPackage(name string) install.VendorPackage {
+	return install.NewComponentVendorPackage(&install.ComponentPackageParams{Name: name, IsMixin: true})
+}
+
 func TestHandleInstalledPkgMsg_TracksFailedNames(t *testing.T) {
 	// Verify that handleInstalledPkgMsg appends failed package names.
 	m := &modelVendor{
-		packages: []pkgVendor{
-			{name: "vpc"},
-			{name: "rds"},
+		packages: []install.VendorPackage{
+			namedPackage("vpc", ""),
+			namedPackage("rds", ""),
 		},
 		index: 0,
 		isTTY: false,
@@ -117,9 +131,9 @@ func TestHandleInstalledPkgMsg_NonTTYStatusOutput(t *testing.T) {
 	t.Run("non-final success logs package status", func(t *testing.T) {
 		stderr.Reset()
 		m := &modelVendor{
-			packages: []pkgVendor{
-				{name: "vpc", version: "1.0.0"},
-				{name: "rds", version: "2.0.0"},
+			packages: []install.VendorPackage{
+				namedPackage("vpc", "1.0.0"),
+				namedPackage("rds", "2.0.0"),
 			},
 			isTTY: false,
 		}
@@ -134,8 +148,8 @@ func TestHandleInstalledPkgMsg_NonTTYStatusOutput(t *testing.T) {
 	t.Run("final failure logs failed package and summary", func(t *testing.T) {
 		stderr.Reset()
 		m := &modelVendor{
-			packages: []pkgVendor{
-				{name: "vpc", version: "1.0.0"},
+			packages: []install.VendorPackage{
+				namedPackage("vpc", "1.0.0"),
 			},
 			isTTY: false,
 		}
@@ -159,8 +173,8 @@ func TestLogNonTTYFinalStatus_DryRunSuccessSummary(t *testing.T) {
 	defer cleanup()
 
 	m := &modelVendor{
-		packages: []pkgVendor{
-			{name: "vpc", version: "1.0.0"},
+		packages: []install.VendorPackage{
+			namedPackage("vpc", "1.0.0"),
 		},
 		dryRun: true,
 		isTTY:  false,
@@ -189,7 +203,7 @@ func (ts *vendorModelTestStreams) RawError() stdio.Writer  { return ts.stderr }
 // newVendorModelForView builds a modelVendor with an initialized spinner/progress bar so View()
 // can be exercised directly in tests without going through newModelVendor (which would query the
 // real terminal for its initial width).
-func newVendorModelForView(packages []pkgVendor, width int) *modelVendor {
+func newVendorModelForView(packages []install.VendorPackage, width int) *modelVendor {
 	return &modelVendor{
 		packages: packages,
 		spinner:  spinner.New(),
@@ -200,17 +214,17 @@ func newVendorModelForView(packages []pkgVendor, width int) *modelVendor {
 
 // TestModelVendor_ComponentCount_ExcludesMixins is a regression test: mixins are appended into
 // m.packages alongside their owning component (see buildComponentVendorPackages in
-// vendor_component_utils.go), so len(m.packages) over-counts "components" whenever any component
-// declares mixins. The componentCount and mixinCount helpers must separate the two so completion
-// messages ("Vendored N components") match what `vendor update` already reported (e.g. "Updated N
-// component(s)").
+// vendor_component_packages.go), so len(m.packages) over-counts "components" whenever any
+// component declares mixins. The componentCount and mixinCount helpers must separate the two so
+// completion messages ("Vendored N components") match what `vendor update` already reported (e.g.
+// "Updated N component(s)").
 func TestModelVendor_ComponentCount_ExcludesMixins(t *testing.T) {
 	m := &modelVendor{
-		packages: []pkgVendor{
-			{name: "vpc", componentPackage: &pkgComponentVendor{name: "vpc"}},
-			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
-			{name: "mixin https://example.com/b.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/b.tf", IsMixins: true}},
-			{name: "rds", componentPackage: &pkgComponentVendor{name: "rds"}},
+		packages: []install.VendorPackage{
+			namedPackage("vpc", ""),
+			mixinPackage("mixin https://example.com/a.tf"),
+			mixinPackage("mixin https://example.com/b.tf"),
+			namedPackage("rds", ""),
 		},
 	}
 
@@ -224,9 +238,9 @@ func TestModelVendor_ComponentCount_ExcludesMixins(t *testing.T) {
 // "components" reported as vendored.
 func TestModelVendor_View_DoneState_CountsExcludeMixins(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		m := newVendorModelForView([]pkgVendor{
-			{name: "vpc", componentPackage: &pkgComponentVendor{name: "vpc"}},
-			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
+		m := newVendorModelForView([]install.VendorPackage{
+			namedPackage("vpc", ""),
+			mixinPackage("mixin https://example.com/a.tf"),
 		}, 80)
 		m.done = true
 
@@ -237,9 +251,9 @@ func TestModelVendor_View_DoneState_CountsExcludeMixins(t *testing.T) {
 	})
 
 	t.Run("mixin-only failure", func(t *testing.T) {
-		m := newVendorModelForView([]pkgVendor{
-			{name: "vpc", componentPackage: &pkgComponentVendor{name: "vpc"}},
-			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
+		m := newVendorModelForView([]install.VendorPackage{
+			namedPackage("vpc", ""),
+			mixinPackage("mixin https://example.com/a.tf"),
 		}, 80)
 		m.done = true
 		m.failedPkg = 1
@@ -256,9 +270,9 @@ func TestModelVendor_View_DoneState_CountsExcludeMixins(t *testing.T) {
 	})
 
 	t.Run("component and mixin both failed", func(t *testing.T) {
-		m := newVendorModelForView([]pkgVendor{
-			{name: "vpc", componentPackage: &pkgComponentVendor{name: "vpc"}},
-			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
+		m := newVendorModelForView([]install.VendorPackage{
+			namedPackage("vpc", ""),
+			mixinPackage("mixin https://example.com/a.tf"),
 		}, 80)
 		m.done = true
 		m.failedPkg = 2
@@ -277,9 +291,9 @@ func TestModelVendor_LogNonTTYFinalStatus_CountsExcludeMixins(t *testing.T) {
 	defer cleanup()
 
 	m := &modelVendor{
-		packages: []pkgVendor{
-			{name: "vpc", version: "1.0.0", componentPackage: &pkgComponentVendor{name: "vpc"}},
-			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
+		packages: []install.VendorPackage{
+			namedPackage("vpc", "1.0.0"),
+			mixinPackage("mixin https://example.com/a.tf"),
 		},
 		isTTY: false,
 	}
@@ -300,9 +314,9 @@ func TestModelVendor_LogNonTTYFinalStatus_MixinOnlyFailureSurfaced(t *testing.T)
 	defer cleanup()
 
 	m := &modelVendor{
-		packages: []pkgVendor{
-			{name: "vpc", version: "1.0.0", componentPackage: &pkgComponentVendor{name: "vpc"}},
-			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
+		packages: []install.VendorPackage{
+			namedPackage("vpc", "1.0.0"),
+			mixinPackage("mixin https://example.com/a.tf"),
 		},
 		isTTY:        false,
 		failedPkg:    1,
@@ -325,8 +339,8 @@ func TestModelVendor_LogNonTTYFinalStatus_MixinOnlyFailureSurfaced(t *testing.T)
 // terminal's true last column (never equal to width -- see liveLineMargin).
 func TestModelVendor_View_LiveLine_NeverWraps(t *testing.T) {
 	longURL := "https://raw.githubusercontent.com/cloudposse/terraform-components/mixins/v0.3.2/src/mixins/account-verification.mixin.tf"
-	packages := []pkgVendor{
-		{name: "mixin " + longURL, version: "v0.3.2", componentPackage: &pkgComponentVendor{name: "mixin " + longURL, IsMixins: true}},
+	packages := []install.VendorPackage{
+		install.NewComponentVendorPackage(&install.ComponentPackageParams{Name: "mixin " + longURL, Version: "v0.3.2", IsMixin: true}),
 	}
 
 	for _, width := range []int{0, 1, 10, 40, 80, 200} {
@@ -346,9 +360,9 @@ func TestModelVendor_View_LiveLine_NeverWraps(t *testing.T) {
 // the padded gap saturates the line), the rendered line must still stop at least liveLineMargin
 // columns short of the terminal's true last column, never landing exactly on it.
 func TestModelVendor_View_NeverTouchesLastColumn(t *testing.T) {
-	packages := []pkgVendor{
-		{name: "datadog-monitor", componentPackage: &pkgComponentVendor{name: "datadog-monitor"}},
-		{name: "other", componentPackage: &pkgComponentVendor{name: "other"}},
+	packages := []install.VendorPackage{
+		namedPackage("datadog-monitor", ""),
+		namedPackage("other", ""),
 	}
 
 	for _, width := range []int{60, 61, 79, 80, 81, 120, 200, 250} {
@@ -392,8 +406,8 @@ func TestProgressBarWidthFor(t *testing.T) {
 // the live line against the real reported width (up to the generous maxWidth sanity ceiling), not
 // an aggressively low fixed cap, and the bar itself must grow wider accordingly.
 func TestModelVendor_Update_WindowSizeMsg_RightAlignsAgainstRealWidth(t *testing.T) {
-	packages := []pkgVendor{
-		{name: "datadog-monitor", componentPackage: &pkgComponentVendor{name: "datadog-monitor"}},
+	packages := []install.VendorPackage{
+		namedPackage("datadog-monitor", ""),
 	}
 	m := newVendorModelForView(packages, 0)
 
@@ -418,8 +432,8 @@ func TestModelVendor_Update_WindowSizeMsg_RightAlignsAgainstRealWidth(t *testing
 // truncates down to a bare ellipsis (truncate.StringWithTail at width 0) for the run's whole
 // lifetime, since tea.WindowSizeMsg only fires once (bubbletea has no SIGWINCH-driven resends here).
 func TestModelVendor_Update_WindowSizeMsg_ZeroWidthDoesNotResetKnownWidth(t *testing.T) {
-	packages := []pkgVendor{
-		{name: "datadog-monitor", componentPackage: &pkgComponentVendor{name: "datadog-monitor"}},
+	packages := []install.VendorPackage{
+		namedPackage("datadog-monitor", ""),
 	}
 	m := newVendorModelForView(packages, fallbackModelWidth)
 
@@ -436,8 +450,8 @@ func TestModelVendor_Update_WindowSizeMsg_ZeroWidthDoesNotResetKnownWidth(t *tes
 // with an ellipsis when the package name doesn't fit.
 func TestModelVendor_View_LiveLine_TruncatesLongName(t *testing.T) {
 	longName := strings.Repeat("x", 200)
-	packages := []pkgVendor{
-		{name: longName, componentPackage: &pkgComponentVendor{name: longName}},
+	packages := []install.VendorPackage{
+		namedPackage(longName, ""),
 	}
 	m := newVendorModelForView(packages, 60)
 

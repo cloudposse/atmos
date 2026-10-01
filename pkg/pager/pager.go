@@ -7,13 +7,13 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	terminalpkg "github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -108,7 +108,7 @@ func New() PageCreator {
 		contentFitsTerminal:   ContentFitsTerminal,
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYAccessible:       isTTYAccessible,
-		terminalSpeed:         viper.GetFloat64("settings.terminal.speed"),
+		terminalSpeed:         viperguard.GetFloat64("settings.terminal.speed"),
 	}
 }
 
@@ -116,7 +116,7 @@ func resolveSpeed(speed []float64) float64 {
 	if len(speed) > 0 {
 		return speed[0]
 	}
-	return viper.GetFloat64("settings.terminal.speed")
+	return viperguard.GetFloat64("settings.terminal.speed")
 }
 
 // isTTYAccessible checks if /dev/tty can be opened.

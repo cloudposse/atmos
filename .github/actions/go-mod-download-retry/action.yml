@@ -1,0 +1,38 @@
+name: Go Mod Download With Retry
+description: >
+  Runs `go mod download`, retrying on transient proxy.golang.org failures. A
+  request that gets reset mid-stream (e.g. "stream error: stream ID <n>;
+  INTERNAL_ERROR; received from peer") is not retried by `go mod download`
+  itself, and GOPROXY's `|direct` fallback only helps when the proxy is
+  unreachable outright, not a mid-stream reset. Makes up to three attempts
+  with a cooldown between each, matching the convention already used for
+  artifact downloads (.github/actions/download-artifact-retry) and
+  magefiles/build.go's runGoModDownload. See
+  docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
+
+inputs:
+  backoff-seconds:
+    description: 'Seconds to wait before each retry'
+    required: false
+    default: '15'
+
+runs:
+  using: composite
+  steps:
+    - name: go mod download (with retry)
+      shell: bash
+      env:
+        BACKOFF_SECONDS: ${{ inputs.backoff-seconds }}
+      run: |
+        set -euo pipefail
+        attempt=1
+        max_attempts=3
+        until go mod download; do
+          if [ "$attempt" -ge "$max_attempts" ]; then
+            echo "go mod download failed after $max_attempts attempts" >&2
+            exit 1
+          fi
+          echo "go mod download failed (attempt $attempt/$max_attempts), retrying in ${BACKOFF_SECONDS}s..." >&2
+          sleep "$BACKOFF_SECONDS"
+          attempt=$((attempt + 1))
+        done

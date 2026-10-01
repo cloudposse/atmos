@@ -4,6 +4,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // rowStyler defines the interface for row data that can be styled.
@@ -44,9 +47,9 @@ func renderTableWithConditionalStyling[T rowStyler](tableView string, rows []T) 
 	lines := strings.Split(tableView, "\n")
 
 	// Define styles.
-	greenDot := lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Green for installed.
-	grayDot := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Gray for in config but not installed.
-	grayRow := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Gray for entire uninstalled row.
+	greenDot := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))  // Green for installed.
+	grayDot := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)) // Gray for in config but not installed.
+	grayRow := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)) // Gray for entire uninstalled row.
 
 	// Apply conditional styling to each row.
 	for i, line := range lines {
@@ -79,5 +82,8 @@ func renderTableWithConditionalStyling[T rowStyler](tableView string, rows []T) 
 		}
 	}
 
-	return strings.Join(lines, "\n")
+	// The bubbles/table view right-pads every column, including the last, to a fixed
+	// width; trim that trailing padding so plain-text/piped output and snapshots don't
+	// carry invisible trailing whitespace.
+	return atmosansi.TrimLinesRightSpaces(strings.Join(lines, "\n"))
 }

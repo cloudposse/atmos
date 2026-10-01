@@ -221,6 +221,27 @@ stacks:
 	assert.Empty(t, stacks)
 }
 
+// TestListStacksTool_Execute_NoStacksYetRealPath exercises the real currentStackConfig
+// refresh path (Initialized: true, via an actual InitCliConfig call) against a project
+// with zero stack manifests. Unlike TestListStacksTool_Execute_EmptyStacks, which
+// constructs an AtmosConfiguration by hand with Initialized left false, this drives
+// the exact production path a long-running chat/MCP session takes: currentStackConfig
+// must treat "no stack manifests found" as an empty project, not an error.
+func TestListStacksTool_Execute_NoStacksYetRealPath(t *testing.T) {
+	atmosConfig, _ := setupLiveStackProject(t, map[string]string{})
+	tool := NewListStacksTool(atmosConfig)
+
+	result, err := tool.Execute(context.Background(), map[string]interface{}{})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Success)
+
+	stacks, ok := result.Data["stacks"].([]string)
+	require.True(t, ok)
+	assert.Empty(t, stacks)
+}
+
 func TestListStacksTool_Execute_LoadsStacksAddedAfterToolCreation(t *testing.T) {
 	atmosConfig, stacksDir := setupLiveStackProject(t, nil)
 	tool := NewListStacksTool(atmosConfig)

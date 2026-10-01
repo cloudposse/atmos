@@ -69,7 +69,7 @@ func runPluginList(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	installed, err := newHelmPluginLister(helmBin).ListInstalled(context.Background())
+	installed, err := newHelmPluginLister(helmBin).ListInstalled(cmd.Context())
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func runPluginInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if _, err := ensureHelmPluginsForComponent(context.Background(), helmBin, specs); err != nil {
+	if _, err := ensureHelmPluginsForComponent(cmd.Context(), helmBin, specs); err != nil {
 		return err
 	}
 	ui.Success("Helm plugins are installed")

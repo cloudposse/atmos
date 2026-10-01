@@ -245,7 +245,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteAtlantisGenerateRepoConfig")()
 
-	stacksMap, _, err := FindStacksMap(atmosConfig, false)
+	stacksMap, _, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}

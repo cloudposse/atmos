@@ -1,4 +1,5 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
+
 # Error
 
 **Error:** no workflow found
@@ -17,6 +18,10 @@ No workflow exists with name no-workflow-exists
   • env-precedence
   • env-scoping
   • env-step-level
+  • env-step-propagates-to-atmos
+  • env-step-propagates-to-shell
+  • env-step-propagation-child
+  • env-step-template-only
   • env-workflow-level
   • fail
   • fail-with-stack

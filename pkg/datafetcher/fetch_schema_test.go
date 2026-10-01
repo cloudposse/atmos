@@ -18,6 +18,8 @@ func TestAtmosFetcher(t *testing.T) {
 		err                 error
 	}{
 		{"Valid key should work", "atmos://schema/atmos/manifest/1.0", true, nil},
+		{"Valid atmos config schema should work", "atmos://schema/atmos/config/1.0", true, nil},
+		{"Legacy config schema alias should work", "atmos://schema/config/global/1.0", true, nil},
 		{"Invalid key should not work", "atmos://unknown", false, ErrAtmosSchemaNotFound},
 	}
 	for _, tt := range tests {
@@ -34,6 +36,21 @@ func TestAtmosFetcher(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAtmosFetcherLegacyConfigAlias asserts the legacy config schema URI serves
+// the exact same document as the current generated atmos.yaml schema.
+func TestAtmosFetcherLegacyConfigAlias(t *testing.T) {
+	fetcher := &atmosFetcher{}
+	current, err := fetcher.FetchData("atmos://schema/atmos/config/1.0")
+	if err != nil {
+		t.Fatalf("Expected no error fetching current config schema, got %v", err)
+	}
+	legacy, err := fetcher.FetchData("atmos://schema/config/global/1.0")
+	if err != nil {
+		t.Fatalf("Expected no error fetching legacy config schema alias, got %v", err)
+	}
+	assert.Equal(t, current, legacy, "legacy alias must serve the generated atmos.yaml schema byte-for-byte")
 }
 
 func TestGetDataFetcher(t *testing.T) {

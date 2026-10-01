@@ -16,6 +16,8 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws"    // Register aws/ecr and aws/eks integrations.
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/azure"  // Register azure/acr and azure/aks integrations.
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/gcp"    // Register gcp/gke integration.
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/github" // Register github/sts integration.
 	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -62,6 +64,12 @@ const (
 // or other operations that should not re-provision integrations (e.g., rewriting kubeconfig).
 func ContextWithSkipIntegrations(ctx context.Context) context.Context {
 	return context.WithValue(ctx, skipIntegrationsKey, true)
+}
+
+// IntegrationsSkipped reports whether auto-provisioned integrations are disabled for ctx.
+// Token-producing exec plugins use this to avoid recursively provisioning their kubeconfig.
+func IntegrationsSkipped(ctx context.Context) bool {
+	return ctx.Value(skipIntegrationsKey) != nil
 }
 
 // isInteractive checks if interactive prompts should be shown.
@@ -204,14 +212,11 @@ func NewAuthManager(
 		if receiver, ok := identity.(credentialStoreReceiver); ok {
 			receiver.SetCredentialStore(m.credentialStore)
 		}
-		// Inject the emulator resolver and the current stack into identities that
-		// target an emulator (kind: <target>/emulator), so they can resolve the
-		// running emulator's connection profile at auth time.
+		// Inject the emulator resolver into identities that target an emulator
+		// (kind: <target>/emulator), so they can resolve the running emulator's
+		// project-scoped connection profile at auth time.
 		if receiver, ok := identity.(emulatorResolverReceiver); ok {
 			receiver.SetEmulatorResolver(defaultEmulatorResolver)
-			if m.stackInfo != nil {
-				receiver.SetStack(m.stackInfo.Stack)
-			}
 		}
 	}
 
@@ -264,7 +269,20 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		// surface a hint naming the profile (non-interactive). Explicit
 		// --profile / ATMOS_PROFILE selections are never overridden.
 		// See PRD: interactive-profile-suggestion.
-		if fbErr := m.maybeOfferProfileFallback(ctx, identityName); fbErr != nil {
+		//
+		// Carry forward any component/stack values already resolved via an
+		// interactive prompt on this process's stackInfo, so the re-exec'd
+		// child doesn't re-prompt for values the user just supplied.
+		reExecCtx := ReExecContext{}
+		if m.stackInfo != nil {
+			reExecCtx = ReExecContext{
+				Component:         m.stackInfo.ComponentFromArg,
+				ComponentPrompted: m.stackInfo.ComponentPrompted,
+				Stack:             m.stackInfo.Stack,
+				StackPrompted:     m.stackInfo.StackPrompted,
+			}
+		}
+		if fbErr := m.maybeOfferProfileFallback(ctx, identityName, reExecCtx); fbErr != nil {
 			return nil, fbErr
 		}
 		// Return a single rich error carrying the explanation and hint.
@@ -331,8 +349,13 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 			Manager:      m,
 			Realm:        m.realm.Value,
 		}); err != nil {
-			wrappedErr := fmt.Errorf("%w: post-authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
-			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")
+			// Keep structured details and hints from the identity error. Emulator
+			// identities use those hints to tell the user how to start the selected
+			// emulator when it is not running.
+			wrappedErr := errUtils.Build(errUtils.ErrAuthenticationFailed).
+				WithCause(err).
+				WithExplanation("Post-authentication failed.").
+				Err()
 			return nil, wrappedErr
 		}
 
