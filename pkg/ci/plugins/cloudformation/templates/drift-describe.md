@@ -14,7 +14,7 @@ Stack: **{{ .StackName }}**
 Drift status: **{{ .DriftStatus }}**
 {{- end }}
 
-{{- if gt .DriftedCount 0 }}
+{{- if or .DriftStatus (gt .DriftedCount 0) }}
 
 Drifted resources: **{{ .DriftedCount }}**
 {{- end }}
@@ -22,7 +22,7 @@ Drifted resources: **{{ .DriftedCount }}**
 To reproduce locally:
 
 ```shell
-atmos aws/cloudformation drift describe {{ .Component }} -s {{ .Stack }}
+atmos aws cloudformation drift describe {{ .Component }} -s {{ .Stack }}
 ```
 
 {{- if .Output }}

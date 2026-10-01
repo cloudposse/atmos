@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -224,14 +226,15 @@ func TestPopulateCloudFormationCIResultFromSummary_NilSummary(t *testing.T) {
 	assert.Equal(t, &schema.CloudFormationCIResult{}, result)
 }
 
-func TestPopulateCloudFormationCIResultFromSummary_DriftDescribeFallsBackToDriftsLen(t *testing.T) {
-	result := &schema.CloudFormationCIResult{}
-	populateCloudFormationCIResultFromSummary(result, map[string]any{
-		"stack_name": "dev-vpc",
-		"drifts":     []string{"a", "b", "c"},
-	})
-	assert.Equal(t, "dev-vpc", result.StackName)
-	assert.Equal(t, 3, result.DriftedCount)
+func TestPopulateCloudFormationCIResultFromSummary_DriftCounts(t *testing.T) {
+	for _, count := range []int32{0, 2} {
+		result := &schema.CloudFormationCIResult{}
+		populateCloudFormationCIResultFromSummary(result, map[string]any{
+			"stack_name": "dev-vpc", "drifted_resource_count": count,
+			"drifts": []cfntypes.StackResourceDrift{{StackResourceDriftStatus: cfntypes.StackResourceDriftStatusInSync}},
+		})
+		assert.Equal(t, int(count), result.DriftedCount)
+	}
 }
 
 func TestSummaryLen(t *testing.T) {

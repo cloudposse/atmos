@@ -84,9 +84,6 @@ func populateCloudFormationCIResultFromSummary(result *schema.CloudFormationCIRe
 	if driftedCount, ok := summary["drifted_resource_count"].(int32); ok {
 		result.DriftedCount = int(driftedCount)
 	}
-	if drifts, ok := summary["drifts"]; ok && result.DriftedCount == 0 {
-		result.DriftedCount = summaryLen(drifts)
-	}
 }
 
 // summaryLen returns the length of a summary value that is a slice (e.g.

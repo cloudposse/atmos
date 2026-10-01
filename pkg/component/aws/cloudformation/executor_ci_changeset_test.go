@@ -60,6 +60,7 @@ func expectChangesetCIFlow(t *testing.T, client *MockCloudFormationClient, opera
 		client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil)
 		return
 	}
+	expectVpcOutputTemplate(client)
 	gomock.InOrder(
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),

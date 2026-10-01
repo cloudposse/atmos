@@ -248,6 +248,7 @@ func operationFlagOptions(use, subCommand string) []flags.Option {
 		// populate it: WithConditionalCompletionPrompt only takes effect for a
 		// flag registered on this same parser (see promptForSingleMissingFlag).
 		flags.WithStackFlag(),
+		flags.WithBoolFlag("ci", "", false, "Enable native CI integration (requires ci.enabled)."),
 		flags.WithBoolFlag(flagAll, "", false, "Process all aws/cloudformation components in dependency order."),
 		flags.WithBoolFlag(flagAffected, "", false, "Process affected aws/cloudformation components in dependency order."),
 		flags.WithBoolFlag("include-dependents", "", false, "Include dependent components when processing affected aws/cloudformation components."),
@@ -456,7 +457,7 @@ func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 
 func getOperationFlags(cmd *cobra.Command) map[string]any {
 	result := make(map[string]any)
-	for _, name := range []string{flagAll, flagAffected, "include-dependents", "clone-target-ref", flagAutoApprove, "disable-termination-protection", "flatten", "uppercase", "fail-on-drift", "original", "check", "chart", "follow"} {
+	for _, name := range []string{flagAll, flagAffected, "ci", "include-dependents", "clone-target-ref", flagAutoApprove, "disable-termination-protection", "flatten", "uppercase", "fail-on-drift", "original", "check", "chart", "follow"} {
 		if flag := cmd.Flag(name); flag != nil {
 			result[name] = flag.Value.String() == valueTrue
 		}

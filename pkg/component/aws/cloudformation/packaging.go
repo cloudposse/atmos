@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -69,7 +70,7 @@ func uploadPackage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, 
 
 	sum := sha256.Sum256([]byte(templateBody))
 	digest := hex.EncodeToString(sum[:])
-	name := packageObjectName(s3Target.Prefix, info, digest)
+	name := packageObjectName("", info, digest)
 
 	metadata := &artifact.Metadata{
 		Stack:        info.Stack,
@@ -84,7 +85,8 @@ func uploadPackage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, 
 	}
 
 	return &packageUpload{
-		URL:    packageURL(s3Target, name),
+		//nolint:forbidigo // S3 object keys use forward slashes on every OS, matching the artifact backend.
+		URL:    packageURL(s3Target, path.Join(s3Target.Prefix, name)),
 		SHA256: digest,
 	}, nil
 }

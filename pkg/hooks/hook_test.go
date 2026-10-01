@@ -168,3 +168,12 @@ func TestHook_MatchesDeployApplyAliasesInBothNotations(t *testing.T) {
 		})
 	}
 }
+
+func TestHookMatchesCloudFormationDriftEvents(t *testing.T) {
+	for _, event := range []HookEvent{BeforeAwsCloudFormationDriftDetect, AfterAwsCloudFormationDriftDetect, BeforeAwsCloudFormationDriftDescribe, AfterAwsCloudFormationDriftDescribe} {
+		t.Run(string(event), func(t *testing.T) {
+			assert.True(t, Hook{Events: []string{string(event)}}.MatchesEvent(event))
+			assert.False(t, Hook{Events: []string{string(BeforeAwsCloudFormationApply)}}.MatchesEvent(event))
+		})
+	}
+}

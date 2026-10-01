@@ -17,7 +17,7 @@ Changeset: **{{ .ChangeSetName }}**
 To reproduce locally:
 
 ```shell
-atmos aws/cloudformation apply {{ .Component }} -s {{ .Stack }}
+atmos aws cloudformation apply {{ .Component }} -s {{ .Stack }}
 ```
 
 {{- if .Output }}
