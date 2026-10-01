@@ -77,8 +77,6 @@ that itself fails (`DETECTION_FAILED`) is always an error, independent of
 `--fail-on-drift`.
 
 :::note
-`drift detect` does not fire `before`/`after` hook events — only
-[`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff), and
-[`delete`](/cli/commands/aws/cloudformation/delete) do.
+`drift detect` fires `before.aws/cloudformation.drift-detect` and
+`after.aws/cloudformation.drift-detect` hooks. The command-name hyphen is part of each event.
 :::

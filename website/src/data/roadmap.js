@@ -589,9 +589,10 @@ export const roadmapConfig = {
       tagline: 'Native CI/CD support — local = CI',
       description:
         'CI pipelines shouldn\'t require complicated workflows, custom actions, and shell commands just to run what should be a one liner. They should just work. What works locally should work identically in CI with minimal configuration.',
-      progress: 100,
-      status: 'shipped',
+      progress: 96,
+      status: 'in-progress',
       milestones: [
+        { label: 'CloudFormation native CI summaries and lifecycle safety', status: 'in-progress', quarter: 'q4-2026', pr: 3100, changelog: 'cloudformation-ci-lifecycle', docs: '/cli/commands/aws/cloudformation', description: 'Native job summaries for diff, apply, delete, and drift commands, with accurate drift counts and reproduction commands. Includes dependency-aware deletion, termination protection after named changesets, deployed-output masking, static dry-run validation, and reliable source and S3 template delivery.', benefits: 'Review CloudFormation changes and results in CI, then deploy and clean up with the same commands used locally.' },
         { label: 'Native GitHub OIDC enables automatic role assumptions', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Secretless CI/CD with native OIDC—no AWS access keys stored in GitHub secrets.', category: 'featured', priority: 'high', benefits: 'No long-lived credentials to rotate. Security posture improves and audit burden decreases.' },
         { label: 'Native GitHub Actions PATH integration', status: 'shipped', quarter: 'q1-2026', pr: 1979, docs: '/cli/commands/toolchain/env', changelog: 'github-actions-toolchain-path', description: 'Native `github` format for `atmos toolchain env` that outputs paths compatible with $GITHUB_PATH, with automatic file detection and append mode.', category: 'featured', priority: 'high', benefits: 'Add toolchain paths to GitHub Actions PATH with a single command. No shell tricks or manual file handling required.' },
         { label: 'GitHub Actions format for auth credentials', status: 'shipped', quarter: 'q1-2026', pr: 1984, changelog: 'auth-env-github-format', description: 'Direct output to $GITHUB_ENV with --format=github flag, eliminating shell pipelines for credential export.', benefits: 'Export auth credentials in one command. No grep/sed pipelines or manual file redirection.' },
