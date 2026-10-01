@@ -824,16 +824,19 @@ func TestRefuseSymlinkDeletionCandidate_UnresolvableTargetPathPropagatesError(t 
 
 // TestRefuseSymlinkDeletionCandidate_LstatErrorPropagates closes a coverage
 // gap: refuseSymlinkDeletionCandidate's non-IsNotExist Lstat error branch was
-// never exercised. Stat-ing a path through a regular file (not a directory)
-// fails with ENOTDIR, portably and without any permission tricks.
+// never exercised. An embedded NUL byte makes the path syntactically invalid
+// -- rejected by the os package itself before any platform-specific
+// filesystem call -- which reliably produces a non-IsNotExist error on every
+// platform. Stat-ing a path through a regular file instead (ENOTDIR on Unix)
+// isn't portable here: on Windows that same attempt surfaces as
+// ERROR_PATH_NOT_FOUND, which os.IsNotExist treats as true.
 func TestRefuseSymlinkDeletionCandidate_LstatErrorPropagates(t *testing.T) {
 	ui := createTestUI(t)
 	parentDir := t.TempDir()
-	notADir := filepath.Join(parentDir, "notadir.txt")
-	require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o644))
-	badPath := filepath.Join(notADir, "child")
+	badRelPath := "bad\x00name.txt"
+	badPath := filepath.Join(parentDir, badRelPath)
 
-	err := ui.refuseSymlinkDeletionCandidate(parentDir, filepath.Join("notadir.txt", "child"), badPath)
+	err := ui.refuseSymlinkDeletionCandidate(parentDir, badRelPath, badPath)
 
 	require.Error(t, err)
 	assert.False(t, os.IsNotExist(err))
