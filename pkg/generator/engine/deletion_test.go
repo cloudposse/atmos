@@ -173,8 +173,8 @@ func TestProcessorWithRenderedBaseStorage_DeletedByUserNotRecreated(t *testing.T
 // deletedByUser -- where the file does NOT exist yet -- that fallback instead
 // misreported the documented "first --update after target: changed" case as
 // a user deletion, permanently blocking the renamed file from ever being
-// created and blaming the user for it. deletedByUser must look up
-// baseStorage.LoadBase directly at the current path only, ignoring
+// created and blaming the user for it. To fix this, deletedByUser now looks
+// up baseStorage.LoadBase directly at the current path only, ignoring
 // OriginalSourcePath, so this scenario falls through to writeNewFile instead.
 func TestProcessorDeletedByUser_TargetRenameStillCreatesFreshFile(t *testing.T) {
 	renderRoot := t.TempDir()

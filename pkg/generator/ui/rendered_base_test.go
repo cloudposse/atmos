@@ -463,8 +463,8 @@ func TestHandleTemplateDeletions_ConflictOnLocalEdit(t *testing.T) {
 // test for a finding from a field-test pass: --force could not resolve a
 // deletion conflict at all, unlike every other conflict in this subsystem
 // (--force already means "the template's choice wins" for a content
-// conflict -- see merge.ResolveConflictStrategy). force=true must now delete
-// the file through the local edits instead of leaving an unresolved
+// conflict -- see merge.ResolveConflictStrategy). Passing force=true must now
+// delete the file through the local edits instead of leaving an unresolved
 // conflict.
 func TestHandleTemplateDeletions_ForceResolvesLocalEditConflict(t *testing.T) {
 	ui := createTestUI(t)
