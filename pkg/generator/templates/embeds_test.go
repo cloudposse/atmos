@@ -147,6 +147,53 @@ spec:
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldLoadConfig)
 }
 
+// TestConfiguration_IncludeSourceDir proves each of IncludeSourceDir's three
+// branches returns the directory its own doc comment promises: LocalDir when
+// set (a remote source, fully hydrated), the fixed non-existent sentinel
+// directory for an embedded template (Source holding config.SourceEmbedded),
+// and Source unchanged for a local-directory template.
+func TestConfiguration_IncludeSourceDir(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Configuration
+		check  func(t *testing.T, got string)
+	}{
+		{
+			name:   "prefers LocalDir when set",
+			config: Configuration{Source: "original-remote-ref", LocalDir: "/tmp/real-fetch-dir"},
+			check: func(t *testing.T, got string) {
+				t.Helper()
+				assert.Equal(t, "/tmp/real-fetch-dir", got)
+			},
+		},
+		{
+			name:   "embedded template never resolves against CWD",
+			config: Configuration{Source: config.SourceEmbedded},
+			check: func(t *testing.T, got string) {
+				t.Helper()
+				assert.NotEqual(t, config.SourceEmbedded, got)
+				assert.True(t, filepath.IsAbs(got), "expected an absolute sentinel path, got %q", got)
+				_, err := os.Stat(got)
+				assert.True(t, os.IsNotExist(err), "the embedded-template sentinel directory must never coincidentally exist")
+			},
+		},
+		{
+			name:   "local-directory template keeps Source unchanged",
+			config: Configuration{Source: "/some/local/template/dir"},
+			check: func(t *testing.T, got string) {
+				t.Helper()
+				assert.Equal(t, "/some/local/template/dir", got)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.check(t, tt.config.IncludeSourceDir())
+		})
+	}
+}
+
 func TestHasScaffoldConfig(t *testing.T) {
 	tests := []struct {
 		name     string
