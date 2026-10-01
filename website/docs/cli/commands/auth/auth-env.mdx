@@ -32,6 +32,10 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv|github] [--output-
 
 **Important:** This command **outputs environment variables** and does **not perform authentication by default**. It generates export statements pointing to credential files that are populated during login events. Use the `--login` flag to trigger authentication if credentials are missing or expired. Since commands cannot modify their parent shell's environment, you must use `eval` to apply these variables to your current shell.
 
+:::note Justification for privileged identities
+Because `--login` performs authentication, running it against an [`azure/pim-role`](/cli/configuration/auth/identities#pim-role-activation) identity activates the role and therefore needs a justification. Supply it with the [`--justification`](/cli/global-flags#authentication-flags) global flag or the `ATMOS_AUTH_JUSTIFICATION` environment variable (resolution order: `--justification` > `ATMOS_AUTH_JUSTIFICATION` > the identity's `principal.justification` > interactive prompt). Without `--login`, `atmos auth env` does not authenticate and no justification is required.
+:::
+
 **Typical Workflow (AWS):**
 
 <Tabs>
