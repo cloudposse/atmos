@@ -584,3 +584,57 @@ func TestHandleTemplateDeletions_DryRunDoesNotDelete(t *testing.T) {
 	_, statErr := os.Stat(filepath.Join(targetPath, "old.txt"))
 	require.NoError(t, statErr, "dry-run must not delete the file")
 }
+
+// deletionGuardScaffoldYAML declares one matrix file whose axis expression
+// references a missing answer, so engine.ExpandMatrix always fails it before
+// any combination is resolved (see
+// TestProcessMatrixedFileEntry_ExpansionErrorReturnsFailedPath in
+// matrix_test.go for the same failure shape at the single-entry level).
+const deletionGuardScaffoldYAML = `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: deletion-guard-template
+spec:
+  files:
+    - path: deploy.yaml
+      target: "deploy/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: answers.missing
+`
+
+func deletionGuardEmbedsConfig() *templates.Configuration {
+	return &templates.Configuration{
+		Name: "deletion-guard-template",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: deletionGuardScaffoldYAML, Permissions: 0o644},
+			{Path: "deploy.yaml", Content: "environment: {{ .matrix.environment }}\n", IsTemplate: true, Permissions: 0o644},
+		},
+	}
+}
+
+// TestExecuteWithSetup_SkipsTemplateDeletionWhenGenerationFailed is a
+// regression test for a finding on this PR: handleTemplateDeletions used to
+// run even when the main generation loop had already failed. A matrix entry
+// whose axis expression fails to resolve never reaches writeOneOutput, so
+// none of its outputs are ever recorded in seenRenderedPaths -- making a file
+// that genuinely survives from the old render indistinguishable from one the
+// template stopped generating. Running the deletion pass against that
+// incomplete set would delete it for the wrong reason. The deletion pass must
+// now be skipped entirely whenever the main loop already produced an error.
+func TestExecuteWithSetup_SkipsTemplateDeletionWhenGenerationFailed(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetUpdateStrategy(engine.UpdateStrategyRendered)
+
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "keep-me.txt"), []byte("keep me\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "keep-me.txt"), []byte("keep me\n"), 0o644))
+
+	err := ui.executeWithSetup(deletionGuardEmbedsConfig(), targetDir, false, true, true, "", map[string]interface{}{}, []string{"{{", "}}"})
+	require.Error(t, err, "the matrix expansion failure must still fail the run")
+
+	_, statErr := os.Stat(filepath.Join(targetDir, "keep-me.txt"))
+	require.NoError(t, statErr, "a file unrelated to the failed entry must survive a failed generation run, not be deleted")
+}
