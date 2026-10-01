@@ -62,11 +62,11 @@ spec:
 // TestExecuteWithSetup_AbsoluteIncludedLocalFileExcludedFromOutput proves the
 // same exclusion holds when scaffold.yaml's !include argument is an absolute
 // path inside the template's own source directory rather than a "./"-relative
-// one. findLocalFile resolves such a path directly, but config.WithIncludedPaths
-// records the absolute argument unchanged -- includedPathSet must rebase it
-// onto the source directory before comparing against tmpl.File.Path (which is
-// always relative), or the consumed file leaks into project output. See
-// includedPathSet's own doc comment.
+// one. The findLocalFile helper resolves such a path directly, but
+// config.WithIncludedPaths records the absolute argument unchanged --
+// includedPathSet must rebase it onto the source directory before comparing
+// against tmpl.File.Path (which is always relative), or the consumed file
+// leaks into project output. See includedPathSet's own doc comment.
 func TestExecuteWithSetup_AbsoluteIncludedLocalFileExcludedFromOutput(t *testing.T) {
 	ui := createTestUI(t)
 	targetDir := t.TempDir()
