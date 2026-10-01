@@ -301,18 +301,23 @@ source is never part of the local template directory to begin with.
 
 Besides `!include`/[`!include.raw`](/functions/yaml/include.raw), `scaffold.yaml` resolves a fixed
 set of other YAML functions that need no stack, component, or backend context --
-[`!env`](/functions/yaml/env), [`!exec`](/functions/yaml/exec),
-[`!random`](/functions/yaml/random), [`!cwd`](/functions/yaml/cwd), the `!git.*`/
-[`!repo-root`](/functions/yaml/repo-root) family ([`!git.root`](/functions/yaml/git.root),
-[`!git.sha`](/functions/yaml/git.sha), [`!git.ref`](/functions/yaml/git.ref),
-[`!git.branch`](/functions/yaml/git.branch), [`!git.repository`](/functions/yaml/git.repository),
-[`!git.owner`](/functions/yaml/git.owner), [`!git.name`](/functions/yaml/git.name),
-[`!git.host`](/functions/yaml/git.host), [`!git.url`](/functions/yaml/git.url)), and
-[`!literal`](/functions/yaml/literal) (useful for a field value that looks like a Go template
-expression but should be taken as-is). Any other YAML function -- one that needs real stack,
-component, or backend context Atmos doesn't have while loading `scaffold.yaml`, such as
-`!terraform.state`, `!store`, or `!secret` -- is rejected with a clear error naming the tag, rather
-than silently left unresolved.
+[`!env`](/functions/yaml/env), [`!random`](/functions/yaml/random), [`!cwd`](/functions/yaml/cwd),
+the `!git.*`/[`!repo-root`](/functions/yaml/repo-root) family
+([`!git.root`](/functions/yaml/git.root), [`!git.sha`](/functions/yaml/git.sha),
+[`!git.ref`](/functions/yaml/git.ref), [`!git.branch`](/functions/yaml/git.branch),
+[`!git.repository`](/functions/yaml/git.repository), [`!git.owner`](/functions/yaml/git.owner),
+[`!git.name`](/functions/yaml/git.name), [`!git.host`](/functions/yaml/git.host),
+[`!git.url`](/functions/yaml/git.url)), and [`!literal`](/functions/yaml/literal) (useful for a
+field value that looks like a Go template expression but should be taken as-is). Any other YAML
+function -- one that needs real stack, component, or backend context Atmos doesn't have while
+loading `scaffold.yaml`, such as `!terraform.state`, `!store`, or `!secret` -- is rejected with a
+clear error naming the tag, rather than silently left unresolved.
+
+[`!exec`](/functions/yaml/exec) is deliberately **not** supported, even though it needs no stack
+context: a template's `scaffold.yaml` is resolved for every template configured in `atmos.yaml`
+just to populate `atmos scaffold list` and the interactive template picker, not only the one a
+user actually selects or generates. Allowing shell execution here would let any configured
+template -- including a shared or vendored one -- run arbitrary code merely by being listed.
 
 ## Dynamic File Generation
 

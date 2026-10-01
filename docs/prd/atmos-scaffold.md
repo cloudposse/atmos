@@ -119,13 +119,19 @@ and `pkg/generator/` for the source of truth on current behavior.
 
 **Implemented since the above was written**:
 - ✅ `!include`/`!include.raw` and a fixed set of other context-free YAML functions
-  (`!env`, `!exec`, `!random`, `!cwd`, the `!git.*`/`!repo-root` family, `!literal`) in
+  (`!env`, `!random`, `!cwd`, the `!git.*`/`!repo-root` family, `!literal`) in
   `scaffold.yaml`, resolved before schema validation via a shared tag walker
   (`pkg/utils.WalkYAMLTags`/`ScaffoldTagPolicy`) extracted from the stack-manifest loader's
   own tag dispatcher, rather than a bespoke `!include`-only one. Any other YAML function
   (one needing real stack/component/backend context, e.g. `!terraform.state`, `!store`,
   `!secret`) is rejected with a clear error naming the tag, never silently left unresolved.
   See `pkg/function/tag.ScaffoldYAML` for the canonical supported-tag list.
+  - `!exec` is deliberately excluded despite needing no stack context: `scaffold.yaml` is
+    resolved for *every* configured template just to populate `atmos scaffold list`/the
+    interactive picker, not only the one a user selects or generates. A field-test pass
+    confirmed this live — `atmos scaffold list` alone executed a `!exec` command from a
+    configured template's manifest. Allowing shell execution here would let any configured
+    template (including a shared/vendored one) run arbitrary code merely by being listed.
   - Deliberately **not** done as part of this work, left as a follow-up: migrating
     `pkg/config/process_yaml.go` (`atmos.yaml`'s own loader) onto the same shared walker.
     Its handlers write into a `viper.Viper` sink rather than a `yaml.Node`, and — found
