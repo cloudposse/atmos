@@ -163,3 +163,46 @@ func TestProcessorWithRenderedBaseStorage_DeletedByUserNotRecreated(t *testing.T
 	_, statErr := os.Stat(filepath.Join(targetPath, "removed.yaml"))
 	require.True(t, os.IsNotExist(statErr), "the deleted file must not be recreated")
 }
+
+// TestProcessorDeletedByUser_TargetRenameStillCreatesFreshFile is a
+// regression test for a bug found during field-testing: deletedByUser used
+// to call determineBaseContent, whose migration fallback (OriginalSourcePath)
+// exists to recover a merge base for a file a spec.files[].target: rename has
+// already moved to a new path where it ALREADY exists on disk (see
+// determineBaseContentMigrationFallback's doc comment). Reached from
+// deletedByUser -- where the file does NOT exist yet -- that fallback instead
+// misreported the documented "first --update after target: changed" case as
+// a user deletion, permanently blocking the renamed file from ever being
+// created and blaming the user for it. deletedByUser must look up
+// baseStorage.LoadBase directly at the current path only, ignoring
+// OriginalSourcePath, so this scenario falls through to writeNewFile instead.
+func TestProcessorDeletedByUser_TargetRenameStillCreatesFreshFile(t *testing.T) {
+	renderRoot := t.TempDir()
+	// Old ref's pristine render: the file lived at "a.txt" before the
+	// template's spec.files[].target: renamed it to "b.txt".
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "a.txt"), []byte("old content\n"), 0o644))
+
+	targetPath := t.TempDir()
+	// "b.txt" has never existed on disk -- this is the first generation
+	// after the rename.
+
+	processor := NewProcessor()
+	processor.SetupRenderedBaseStorage(targetPath, renderRoot)
+
+	// Mirrors ui.go's writeOneOutput: OriginalSourcePath is the file's
+	// discovered source path ("a.txt"), Path is the rendered output path
+	// after spec.Target is applied ("b.txt").
+	templateFile := File{
+		Path:               "b.txt",
+		OriginalSourcePath: "a.txt",
+		Content:            "new content\n",
+		Permissions:        0o644,
+	}
+
+	err := processor.ProcessFile(templateFile, targetPath, false, true, nil, nil)
+	require.NoError(t, err, "a target: rename's first post-rename write must succeed, not be treated as a user deletion")
+
+	content, err := os.ReadFile(filepath.Join(targetPath, "b.txt"))
+	require.NoError(t, err, "the renamed file must be created at its new path")
+	assert.Equal(t, "new content\n", string(content))
+}
