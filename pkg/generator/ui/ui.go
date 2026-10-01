@@ -1772,12 +1772,22 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// only -- see handleTemplateDeletions's own doc comment). A no-op for every
 	// other strategy/mode, folded into the same counters as any other entry
 	// above so the summary line and error branch below need no special-casing.
-	deletionResult, deleteErr := ui.handleTemplateDeletions(targetPath, seenRenderedPaths, force)
-	successCount += deletionResult.successCount
-	errorCount += deletionResult.errorCount
-	failedFiles = append(failedFiles, deletionResult.failedPaths...)
-	if deleteErr != nil {
-		failureErrs = append(failureErrs, deleteErr)
+	//
+	// Skipped entirely when the main loop already failed: a failed entry (e.g.
+	// a matrix expansion error in processMatrixedFileEntry) returns before
+	// seenRenderedPaths is ever populated for that file's outputs, making them
+	// indistinguishable from paths the template genuinely stopped generating.
+	// Running the deletion pass against that incomplete set could delete files
+	// still-valid-but-unrecorded due to the unrelated failure, not because the
+	// template actually removed them.
+	if errorCount == 0 {
+		deletionResult, deleteErr := ui.handleTemplateDeletions(targetPath, seenRenderedPaths, force)
+		successCount += deletionResult.successCount
+		errorCount += deletionResult.errorCount
+		failedFiles = append(failedFiles, deletionResult.failedPaths...)
+		if deleteErr != nil {
+			failureErrs = append(failureErrs, deleteErr)
+		}
 	}
 
 	// Print summary. In dry-run mode nothing was actually written to disk, so
