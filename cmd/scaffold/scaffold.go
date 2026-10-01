@@ -167,6 +167,7 @@ If no target directory is specified, you will be prompted for one.`,
 		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
 		mergeStrategy := v.GetString("merge-strategy")
 		mergeDriver := v.GetString("merge-driver")
+		recreateDeleted := v.GetBool("recreate-deleted")
 		skipHooks := hooks.NewSkipPredicate(hooks.ResolveSkipHooks(cmd))
 
 		// Interactive prompting requires both an interactive-capable flag
@@ -203,44 +204,46 @@ If no target directory is specified, you will be prompted for one.`,
 		}
 
 		return executeScaffoldGenerate(&scaffoldGenerateOptions{
-			templateName:   template,
-			targetDir:      target,
-			force:          force,
-			update:         update,
-			baseRef:        baseRef,
-			dryRun:         dryRun,
-			interactive:    interactive,
-			useDefaults:    useDefaults,
-			templateValues: templateValues,
-			sourceOverride: sourceOverride,
-			ref:            ref,
-			git:            gitEnabled,
-			mergeStrategy:  mergeStrategy,
-			mergeDriver:    mergeDriver,
-			updateStrategy: updateStrategy,
-			skipHooks:      skipHooks,
+			templateName:    template,
+			targetDir:       target,
+			force:           force,
+			update:          update,
+			baseRef:         baseRef,
+			dryRun:          dryRun,
+			interactive:     interactive,
+			useDefaults:     useDefaults,
+			templateValues:  templateValues,
+			sourceOverride:  sourceOverride,
+			ref:             ref,
+			git:             gitEnabled,
+			mergeStrategy:   mergeStrategy,
+			mergeDriver:     mergeDriver,
+			updateStrategy:  updateStrategy,
+			recreateDeleted: recreateDeleted,
+			skipHooks:       skipHooks,
 		})
 	},
 }
 
 // scaffoldGenerateOptions holds the resolved inputs for scaffold generation.
 type scaffoldGenerateOptions struct {
-	templateName   string
-	targetDir      string
-	force          bool
-	update         bool
-	baseRef        string
-	dryRun         bool
-	interactive    bool
-	useDefaults    bool
-	templateValues map[string]interface{}
-	sourceOverride string
-	ref            string
-	git            bool
-	mergeStrategy  string
-	mergeDriver    string
-	updateStrategy string
-	skipHooks      func(string) bool
+	templateName    string
+	targetDir       string
+	force           bool
+	update          bool
+	baseRef         string
+	dryRun          bool
+	interactive     bool
+	useDefaults     bool
+	templateValues  map[string]interface{}
+	sourceOverride  string
+	ref             string
+	git             bool
+	mergeStrategy   string
+	mergeDriver     string
+	updateStrategy  string
+	recreateDeleted bool
+	skipHooks       func(string) bool
 }
 
 // scaffoldListCmd represents the scaffold list subcommand.
@@ -296,6 +299,7 @@ func init() {
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
 		flags.WithStringFlag("update-strategy", "", "tracked", "Where --update's 3-way merge base comes from: tracked (the target's own git history at --base-ref, default), rendered (a pristine re-render of the template at the ref that produced what's currently on disk, using its recorded answers; requires a prior generation's scaffold.yaml record, no git dependency)"),
 		flags.WithValidValues("update-strategy", "tracked", "rendered"),
+		flags.WithBoolFlag("recreate-deleted", "", false, "Recreate a file during --update even if you deleted it locally (default: the deletion is left in place)"),
 		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
 		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
 		// hooks for this invocation; --skip-hooks=name1,name2 skips only the
@@ -316,6 +320,7 @@ func init() {
 		flags.WithEnvVars("merge-driver", "ATMOS_SCAFFOLD_MERGE_DRIVER"),
 		flags.WithEnvVars("merge-strategy", "ATMOS_SCAFFOLD_MERGE_STRATEGY"),
 		flags.WithEnvVars("update-strategy", "ATMOS_SCAFFOLD_UPDATE_STRATEGY"),
+		flags.WithEnvVars("recreate-deleted", "ATMOS_SCAFFOLD_RECREATE_DELETED"),
 		flags.WithEnvVars("skip-hooks", "ATMOS_SCAFFOLD_SKIP_HOOKS"),
 	)
 
@@ -416,6 +421,7 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 		return err
 	}
 	scaffoldUI.SetUpdateStrategy(updateStrategy)
+	scaffoldUI.SetRecreateDeleted(opts.recreateDeleted)
 
 	// Only resolve here when target is already the real, final target
 	// directory (positional). The no-target interactive flow resolves this

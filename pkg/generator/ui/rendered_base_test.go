@@ -395,3 +395,131 @@ func TestSetupUpdateBase_Rendered_PropagatesRenderFailure(t *testing.T) {
 
 	require.Error(t, err)
 }
+
+// TestHandleTemplateDeletions_NoRenderedBaseRoot_NoOp confirms
+// handleTemplateDeletions is a no-op outside --update-strategy=rendered
+// (ui.renderedBaseRoot is only ever set by setupUpdateBase for that
+// strategy).
+func TestHandleTemplateDeletions_NoRenderedBaseRoot_NoOp(t *testing.T) {
+	ui := createTestUI(t)
+
+	result, err := ui.handleTemplateDeletions(t.TempDir(), map[string]string{})
+
+	require.NoError(t, err)
+	assert.Zero(t, result.successCount)
+	assert.Zero(t, result.errorCount)
+	assert.Empty(t, result.failedPaths)
+}
+
+// TestHandleTemplateDeletions_DeletesCleanRemoval confirms a file the
+// template stopped generating is deleted when the on-disk copy still matches
+// the old pristine render exactly.
+func TestHandleTemplateDeletions_DeletesCleanRemoval(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "old.txt"), []byte("old content\n"), 0o644))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.successCount)
+	assert.Zero(t, result.errorCount)
+	assert.Empty(t, result.failedPaths)
+	_, statErr := os.Stat(filepath.Join(targetPath, "old.txt"))
+	assert.True(t, os.IsNotExist(statErr), "the file should be deleted")
+}
+
+// TestHandleTemplateDeletions_ConflictOnLocalEdit confirms a file removed
+// from the template, but with surviving local edits, is left untouched and
+// reported as an unresolved merge conflict rather than silently deleted or
+// silently kept.
+func TestHandleTemplateDeletions_ConflictOnLocalEdit(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "old.txt"), []byte("locally edited content\n"), 0o644))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+	assert.Zero(t, result.successCount)
+	assert.Equal(t, 1, result.errorCount)
+	assert.Equal(t, []string{"old.txt"}, result.failedPaths)
+
+	content, readErr := os.ReadFile(filepath.Join(targetPath, "old.txt"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "locally edited content\n", string(content), "local edits must survive untouched")
+}
+
+// TestHandleTemplateDeletions_AlreadyAbsent_NoOp confirms a path that's
+// already gone on disk (the user beat atmos to deleting it, or it was never
+// generated at this target) produces no output and no count change.
+func TestHandleTemplateDeletions_AlreadyAbsent_NoOp(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	// old.txt deliberately never written to targetPath.
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{})
+
+	require.NoError(t, err)
+	assert.Zero(t, result.successCount)
+	assert.Zero(t, result.errorCount)
+	assert.Empty(t, result.failedPaths)
+}
+
+// TestHandleTemplateDeletions_StillWantedPathIsUntouched confirms a path the
+// new render still wants (present in newPaths) is never treated as a
+// deletion candidate, even if it happens to also exist in the old render.
+func TestHandleTemplateDeletions_StillWantedPathIsUntouched(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "kept.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "kept.txt"), []byte("different content\n"), 0o644))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{"kept.txt": "kept.txt"})
+
+	require.NoError(t, err)
+	assert.Zero(t, result.successCount)
+	assert.Zero(t, result.errorCount)
+	assert.Empty(t, result.failedPaths)
+	content, readErr := os.ReadFile(filepath.Join(targetPath, "kept.txt"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "different content\n", string(content))
+}
+
+// TestHandleTemplateDeletions_DryRunDoesNotDelete confirms --dry-run reports
+// the same outcome but never touches disk.
+func TestHandleTemplateDeletions_DryRunDoesNotDelete(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetDryRun(true)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "old.txt"), []byte("old content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetPath, "old.txt"), []byte("old content\n"), 0o644))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.successCount)
+	assert.Zero(t, result.errorCount)
+	assert.Empty(t, result.failedPaths)
+	_, statErr := os.Stat(filepath.Join(targetPath, "old.txt"))
+	require.NoError(t, statErr, "dry-run must not delete the file")
+}

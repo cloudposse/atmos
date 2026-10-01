@@ -166,6 +166,18 @@ func (mr *MockScaffoldUIMockRecorder) SetMergeDriver(driver any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMergeDriver", reflect.TypeOf((*MockScaffoldUI)(nil).SetMergeDriver), driver)
 }
 
+// SetRecreateDeleted mocks base method.
+func (m *MockScaffoldUI) SetRecreateDeleted(recreate bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetRecreateDeleted", recreate)
+}
+
+// SetRecreateDeleted indicates an expected call of SetRecreateDeleted.
+func (mr *MockScaffoldUIMockRecorder) SetRecreateDeleted(recreate any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRecreateDeleted", reflect.TypeOf((*MockScaffoldUI)(nil).SetRecreateDeleted), recreate)
+}
+
 // SetRenderedBaseSource mocks base method.
 func (m *MockScaffoldUI) SetRenderedBaseSource(cfg *templates.Configuration, values map[string]any) {
 	m.ctrl.T.Helper()

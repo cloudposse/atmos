@@ -1,9 +1,12 @@
 package ui
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
@@ -146,4 +149,122 @@ func (ui *InitUI) renderPristineBaseFiles(oldConfig *tmpl.Configuration, oldScaf
 			Err()
 	}
 	return nil
+}
+
+// templateDeletionResult bundles handleTemplateDeletions's counts (grouped
+// into a struct, rather than three separate return values alongside err, to
+// stay under revive's function-result-limit).
+type templateDeletionResult struct {
+	successCount int
+	errorCount   int
+	failedPaths  []string
+}
+
+// handleTemplateDeletions deletes a file the template stopped generating
+// between the old and new ref. This is only possible for
+// engine.UpdateStrategyRendered -- it's the only strategy with a full old-ref
+// file tree to diff against (ui.renderedBaseRoot, set by setupUpdateBase from
+// renderPristineBase's own full when-filtered render of the old config). By
+// contrast, engine.UpdateStrategyTracked has no equivalent: there is no safe
+// way to enumerate "every file the template generated at base-ref" without
+// conflating unrelated files that merely happen to exist in that historical
+// commit, so it's a documented limitation instead (see
+// docs/prd/atmos-scaffold.md).
+//
+// The newPaths argument is executeWithSetup's own seenRenderedPaths map: its
+// keys are exactly this run's current output paths (populated only for
+// spec.When-true, actually-attempted files -- see checkDuplicateRenderedPath),
+// so no separate "new file set" needs computing here. Every file under
+// ui.renderedBaseRoot not in newPaths is a deletion candidate, handled by
+// processDeletionCandidate.
+func (ui *InitUI) handleTemplateDeletions(targetPath string, newPaths map[string]string) (templateDeletionResult, error) {
+	if ui.renderedBaseRoot == "" {
+		return templateDeletionResult{}, nil
+	}
+
+	var result templateDeletionResult
+	var failureErrs []error
+	walkErr := filepath.WalkDir(ui.renderedBaseRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		relPath, relErr := filepath.Rel(ui.renderedBaseRoot, path)
+		if relErr != nil {
+			return relErr
+		}
+		relPath = filepath.Clean(relPath)
+		if _, stillWanted := newPaths[relPath]; stillWanted {
+			return nil
+		}
+
+		deleted, candidateErr := ui.processDeletionCandidate(targetPath, relPath)
+		switch {
+		case candidateErr != nil:
+			result.errorCount++
+			result.failedPaths = append(result.failedPaths, relPath)
+			failureErrs = append(failureErrs, candidateErr)
+		case deleted:
+			result.successCount++
+		}
+		return nil
+	})
+	if walkErr != nil {
+		return result, fmt.Errorf("failed to scan the rendered base for removed files: %w", walkErr)
+	}
+	if len(failureErrs) > 0 {
+		return result, errors.Join(failureErrs...)
+	}
+	return result, nil
+}
+
+// processDeletionCandidate handles one path the template no longer generates
+// (see handleTemplateDeletions): deletes it when the on-disk copy still
+// matches the old pristine render exactly, reports an unresolved merge
+// conflict when local edits survive (reusing errUtils.ErrMergeConflict and
+// the same "✗ path (error: ...)" shape a real content conflict already
+// uses -- see merge_update.go's mergeFile -- rather than a new reporting
+// shape), and silently no-ops when the file is already gone.
+func (ui *InitUI) processDeletionCandidate(targetPath, relPath string) (deleted bool, err error) {
+	if !fileExistsAt(targetPath, relPath) {
+		return false, nil
+	}
+
+	oldContent, err := os.ReadFile(filepath.Join(ui.renderedBaseRoot, relPath))
+	if err != nil {
+		return false, fmt.Errorf("failed to read the old rendered base for `%s`: %w", relPath, err)
+	}
+	targetFullPath := filepath.Join(targetPath, relPath)
+	currentContent, err := os.ReadFile(targetFullPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to read `%s`: %w", relPath, err)
+	}
+
+	if !bytes.Equal(oldContent, currentContent) {
+		conflictErr := errUtils.Build(errUtils.ErrMergeConflict).
+			WithExplanationf("`%s` was removed from the template but has local modifications", relPath).
+			WithHint("Resolve manually: delete the file if it's no longer needed, or keep it -- future updates won't touch it again since the template no longer generates it").
+			WithContext("file_path", relPath).
+			WithExitCode(1).
+			Err()
+		ui.writeOutput(fileStatusFormat,
+			ui.errorStyle.Render(ui.xMark),
+			relPath,
+			ui.grayStyle.Render(fmt.Sprintf("(error: %v)", conflictErr)))
+		return false, conflictErr
+	}
+
+	status := deletedStatus
+	if ui.processor.DryRun {
+		status = dryRunDeleteStatus
+	} else if removeErr := os.Remove(targetFullPath); removeErr != nil {
+		return false, fmt.Errorf("failed to delete `%s`: %w", relPath, removeErr)
+	}
+	ui.writeOutput(fileStatusFormat,
+		ui.successStyle.Render(ui.checkmark),
+		relPath,
+		ui.grayStyle.Render(status))
+	return true, nil
 }
