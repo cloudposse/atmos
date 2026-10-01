@@ -123,6 +123,7 @@ const TAGS_MAP = {
   kustomize: ['Kubernetes'],
   'demo-helmfile': ['Kubernetes'],
   'emulator-aws': ['Emulators'],
+  cloudformation: ['Emulators', 'Components'],
   'emulator-k8s': ['Emulators', 'Kubernetes'],
   'local-gitops': ['Emulators', 'Automation'],
   toolchain: ['DX'],

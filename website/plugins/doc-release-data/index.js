@@ -312,6 +312,11 @@ module.exports = function docReleaseDataPlugin(context, options) {
       const files = findDocFiles(docsDir);
 
       for (const filePath of files) {
+        const frontmatter = extractFrontmatter(filePath);
+        // Draft pages have no production route and must not appear in /unreleased.
+        if (frontmatter.draft === true) {
+          continue;
+        }
         const release = determineRelease(filePath, repoState);
         const urlPath = getDocUrlPath(filePath, docsDir);
 
@@ -323,8 +328,6 @@ module.exports = function docReleaseDataPlugin(context, options) {
 
         // For unreleased docs, extract metadata for the index page.
         if (release === 'unreleased') {
-          const frontmatter = extractFrontmatter(filePath);
-
           // Determine the correct URL path.
           // Docusaurus URL routing rules:
           // 1. slug (explicit) takes highest priority
