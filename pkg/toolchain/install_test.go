@@ -3,6 +3,7 @@ package toolchain
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -347,45 +348,41 @@ func TestRunInstall_WithCanonicalFormat(t *testing.T) {
 
 // TestRunInstall_WithLatestKeyword tests RunInstall with the "latest" version keyword.
 func TestRunInstall_WithLatestKeyword(t *testing.T) {
+	setupTestIO(t)
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
+	mock := mockUpdateInstall(t)
 
-	// Create a .tool-versions file
 	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
-	toolVersions := &ToolVersions{
-		Tools: map[string][]string{},
-	}
-	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	err := SaveToolVersions(toolVersionsPath, &ToolVersions{Tools: map[string][]string{}})
 	require.NoError(t, err)
 
-	// Set Atmos config. InstallPath MUST be isolated to a per-test temp dir: RunInstall
-	// performs a real install via NewInstaller(), and without an explicit InstallPath,
-	// GetInstallPath() falls back to the real, shared, XDG toolchain cache directory --
-	// the exact directory CI's "atmos toolchain install --default" step populates and
-	// the whole acceptance suite depends on for the rest of the run. A test writing real
-	// downloaded binaries there races with every other concurrently-running package's
-	// test process reading from it.
 	prevConfig := atmosConfig
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
 	installPath := filepath.Join(tempDir, ".atmos", "tools")
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
-	defer func() {
-		SetAtmosConfig(prevConfig)
-	}()
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		VersionsFile: toolVersionsPath,
+		InstallPath:  installPath,
+	}})
 
-	// Test installing with "latest" version
-	// This should resolve to the actual latest version from the registry
+	// Resolve latest, download, and extract the known release through the real installer.
 	err = RunInstall("terraform@latest", false, false, true, false)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	// Verify a version was added (we can't predict the exact version, but it should be
-	// there). Read back from toolVersionsPath (see TestRunInstall_WithValidToolSpec for
-	// why not DefaultToolVersionsFilePath) -- this test's loose assertions (no exact
-	// version check) mean the bug that path caused elsewhere wouldn't have failed here,
-	// just silently passed against the wrong file.
 	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
-	assert.Contains(t, updatedToolVersions.Tools, "terraform")
-	assert.NotEmpty(t, updatedToolVersions.Tools["terraform"])
+	// Keep the floating declaration while installing the resolved concrete version.
+	assert.Equal(t, []string{"latest"}, updatedToolVersions.Tools["terraform"])
+	assert.Positive(t, mock.RequestCount("/api/v3/repos/hashicorp/terraform/releases"))
+	assert.Positive(t, mock.RequestCount("/hashicorp/terraform/releases/download/v1.11.4/terraform.zip"))
+
+	binaryName := "terraform"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	contents, err := os.ReadFile(filepath.Join(installPath, "bin", "hashicorp", "terraform", "1.11.4", binaryName))
+	require.NoError(t, err)
+	assert.Equal(t, "fixture terraform", string(contents))
 }
 
 // TestRunInstall_Reinstall tests RunInstall with reinstallFlag=true.

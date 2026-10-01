@@ -11,30 +11,32 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
-func mockRemoteIncludes(t *testing.T) {
+func mockRemoteIncludes(t *testing.T) *httpmock.GitHubMockServer {
 	t.Helper()
 
 	remoteFixture, err := os.ReadFile(filepath.Join("..", "stack-templates-2", "stacks", "deploy", "nonprod.yaml"))
 	require.NoError(t, err)
 
 	mock := httpmock.NewGitHubMockServer(t)
-	mock.RegisterFile("tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml", string(remoteFixture))
-
-	oldClient := utils.TestHTTPClient
-	utils.TestHTTPClient = mock.HTTPClient()
-	t.Cleanup(func() {
-		utils.TestHTTPClient = oldClient
-	})
+	mock.RegisterRawFile("cloudposse", "atmos", "main", "tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml", string(remoteFixture))
+	t.Setenv("GITHUB_SERVER_URL", mock.URL())
+	t.Setenv("GITHUB_API_URL", mock.URL()+"/api/v3")
+	t.Setenv("ATMOS_TEST_GITHUB_MOCK_URL", mock.URL())
+	// Stack parsing caches resolved includes for one command invocation. Each
+	// test gets a new server, so do not reuse a prior invocation's parsed stack.
+	e.ClearFindStacksMapCache()
+	e.ClearFileContentCache()
+	t.Cleanup(e.ClearFindStacksMapCache)
+	t.Cleanup(e.ClearFileContentCache)
+	return mock
 }
 
 // TestYAMLFunctionInclude tests the !include YAML function with various file types.
 func TestYAMLFunctionInclude(t *testing.T) {
 	t.Chdir(filepath.Join(".", "fixtures", "scenarios", "atmos-include-yaml-function"))
-	mockRemoteIncludes(t)
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
@@ -135,12 +137,12 @@ func TestYAMLFunctionInclude(t *testing.T) {
 	})
 
 	t.Run("include from remote URL with YQ expression", func(t *testing.T) {
-		// This tests the remote include with YQ expression.
-		// The stack includes settings from a remote URL.
+		mock := mockRemoteIncludes(t)
+		t.Chdir(filepath.Join("..", "atmos-include-yaml-function-mock"))
 		componentSection, err := e.ExecuteDescribeComponent(
 			&e.ExecuteDescribeComponentParams{
 				Component: "component-1",
-				Stack:     "nonprod",
+				Stack:     "nonprod-mock",
 			},
 		)
 
@@ -156,6 +158,7 @@ func TestYAMLFunctionInclude(t *testing.T) {
 			"b": "component-1-b",
 			"c": "component-1-c",
 		}, settings["config"])
+		assert.Positive(t, mock.RequestCount("/raw/cloudposse/atmos/main/tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml"), "the remote include must fetch through the loopback facade")
 	})
 }
 
@@ -163,7 +166,6 @@ func TestYAMLFunctionInclude(t *testing.T) {
 // !include.raw, .txt, .tf, extensionless files, and advanced YQ expressions.
 func TestYAMLFunctionIncludeExtended(t *testing.T) {
 	t.Chdir(filepath.Join(".", "fixtures", "scenarios", "atmos-include-yaml-function"))
-	mockRemoteIncludes(t)
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
@@ -308,7 +310,6 @@ func TestYAMLFunctionIncludeExtended(t *testing.T) {
 // TestYAMLFunctionIncludeEdgeCases tests edge cases for the !include function.
 func TestYAMLFunctionIncludeEdgeCases(t *testing.T) {
 	t.Chdir(filepath.Join(".", "fixtures", "scenarios", "atmos-include-yaml-function"))
-	mockRemoteIncludes(t)
 
 	_, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
