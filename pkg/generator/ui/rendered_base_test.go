@@ -676,3 +676,29 @@ func TestExecuteWithSetup_SkipsTemplateDeletionWhenGenerationFailed(t *testing.T
 	_, statErr := os.Stat(filepath.Join(targetDir, "keep-me.txt"))
 	require.NoError(t, statErr, "a file unrelated to the failed entry must survive a failed generation run, not be deleted")
 }
+
+// TestExecuteWithSetup_DeletionScanFailureStillFailsTheRun is a regression
+// test for a CodeRabbit finding on PR #3245: handleTemplateDeletions's own
+// filepath.WalkDir scan can fail (e.g. ui.renderedBaseRoot itself becoming
+// unreadable) before any individual deletion candidate is ever reached,
+// leaving templateDeletionResult.errorCount at 0 even though it returned a
+// real error, and executeWithSetup only ever folded deletionResult.errorCount
+// into its own errorCount, never whether deleteErr itself was non-nil. So
+// this case never tripped the failure branch below -- the run reported
+// success and would have persisted a new project record despite losing the
+// only rendered reference a later --update needs to find the remaining
+// obsolete files.
+func TestExecuteWithSetup_DeletionScanFailureStillFailsTheRun(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetUpdateStrategy(engine.UpdateStrategyRendered)
+	// A renderedBaseRoot that doesn't exist makes handleTemplateDeletions's
+	// own filepath.WalkDir fail on its very first (root) call, before any
+	// candidate is ever reached -- templateDeletionResult.errorCount stays 0.
+	ui.renderedBaseRoot = filepath.Join(t.TempDir(), "does-not-exist")
+
+	targetDir := t.TempDir()
+
+	err := ui.executeWithSetup(renderedBaseConfig(), targetDir, false, true, true, "", map[string]interface{}{"project_name": "demo"}, []string{"{{", "}}"})
+
+	require.Error(t, err, "a deletion-scan failure must still fail the whole run")
+}

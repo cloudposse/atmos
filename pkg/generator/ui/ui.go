@@ -1787,6 +1787,18 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		failedFiles = append(failedFiles, deletionResult.failedPaths...)
 		if deleteErr != nil {
 			failureErrs = append(failureErrs, deleteErr)
+			// handleTemplateDeletions can fail (e.g. the filepath.WalkDir scan
+			// itself erroring) without ever incrementing deletionResult.errorCount
+			// -- that only counts individual candidate failures, not a scan
+			// failure before any candidate was even reached. Without this,
+			// errorCount would stay 0, the failure branch below would never
+			// trigger, and the run would report success and persist a new
+			// project record despite a real deletion-scan failure -- losing the
+			// old rendered reference a later --update would need to find the
+			// remaining obsolete files.
+			if deletionResult.errorCount == 0 {
+				errorCount++
+			}
 		}
 	}
 
