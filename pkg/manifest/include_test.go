@@ -220,3 +220,56 @@ spec:
 	_, err := Load[testSpec](testKind, data, WithIncludeResolution(atmosConfig, manifestFile, nil))
 	require.Error(t, err)
 }
+
+// TestLoad_WithIncludeResolution_InvalidYAMLRejected proves resolveIncludeTags'
+// own yaml.Unmarshal of the raw document (before the tag walk ever starts)
+// surfaces a clear ErrManifestParse rather than panicking or passing a
+// zero-value node tree on to WalkYAMLTags -- this runs before Load's own
+// later yaml.Unmarshal into Manifest[S], so a syntactically broken document
+// must be caught at this earlier stage once WithIncludeResolution is used.
+func TestLoad_WithIncludeResolution_InvalidYAMLRejected(t *testing.T) {
+	registerTestKind(t)
+
+	dir := t.TempDir()
+
+	// An unterminated flow sequence is invalid YAML at the scanner level,
+	// not merely schema-invalid -- yaml.Unmarshal itself fails on it.
+	data := []byte("apiVersion: atmos/v1\nkind: AtmosTestConfig\nmetadata: [unterminated\n")
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: dir, BasePathAbsolute: dir}
+	manifestFile := filepath.Join(dir, "manifest.yaml")
+
+	_, err := Load[testSpec](testKind, data, WithIncludeResolution(atmosConfig, manifestFile, nil))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrManifestParse)
+}
+
+// TestLoad_WithIncludeResolution_MalformedIncludeArgSkipsConsumedPath proves
+// recordConsumedPath's defensive no-op (triggered when the raw tag argument
+// fails to parse, e.g. a bare !include with no path at all) never panics
+// and never corrupts consumedPaths with a bogus/empty entry -- the real
+// parse failure still surfaces as Load's own error via
+// ProcessIncludeTag/ProcessIncludeRawTag right after, it's just not
+// duplicated into the accumulator too.
+func TestLoad_WithIncludeResolution_MalformedIncludeArgSkipsConsumedPath(t *testing.T) {
+	registerTestKind(t)
+
+	dir := t.TempDir()
+
+	data := []byte(`apiVersion: atmos/v1
+kind: AtmosTestConfig
+metadata:
+  name: x
+spec:
+  source: embedded
+  values: !include
+`)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: dir, BasePathAbsolute: dir}
+	manifestFile := filepath.Join(dir, "manifest.yaml")
+
+	var consumedPaths []string
+	_, err := Load[testSpec](testKind, data, WithIncludeResolution(atmosConfig, manifestFile, &consumedPaths))
+	require.Error(t, err)
+	assert.Empty(t, consumedPaths, "a bare !include with no path argument must not be recorded as a consumed path")
+}
