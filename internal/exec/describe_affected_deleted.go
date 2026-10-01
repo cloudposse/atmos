@@ -116,7 +116,7 @@ func processAllComponentsAsDeleted(
 	var deleted []schema.Affected
 
 	// Process each component type.
-	for _, componentType := range deletableComponentTypes {
+	for _, componentType := range componentSectionSearchOrder() {
 		componentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any)
 		if !ok {
 			continue
@@ -182,7 +182,7 @@ func processDeletedComponentsInStack(
 	var deleted []schema.Affected
 
 	// Process each component type.
-	for _, componentType := range deletableComponentTypes {
+	for _, componentType := range componentSectionSearchOrder() {
 		remoteTypeSection, ok := remoteComponentsSection[componentType].(map[string]any)
 		if !ok {
 			continue
