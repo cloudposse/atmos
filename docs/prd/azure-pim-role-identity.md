@@ -132,6 +132,12 @@ the AKS exec plugin, or an MCP server.
   it from the flag or env var, and refuse clearly when elevation is required, no justification is supplied, and
   no prompt can be shown. The flag/env reach the identity through the auth chain via the `justification` viper
   key (the identity reads it; the flag is bound in `pkg/flags`).
+- **Warn when a supplied justification is unused**: because `--justification` is global, it can be supplied
+  where nothing records it. Rather than fail an otherwise valid command, emit a user-facing warning
+  (`ui.Warning`, visible regardless of log level) distinguishing: (a) no identity in the chain consumes a
+  justification (manager-level, via a `types.JustificationConsumer` marker); (b) `azure/pim-role` short-circuited
+  because the role is already active; (c) `azure/pim-role` resumed a pending request (the original request's
+  justification stands). A newly filed activation records the justification and warns nothing.
 - **Long waits**: `Authenticate` is normally fast, but waiting on a human approver is not. Bound the wait,
   show visible progress, and make it resumable - a later invocation attaches to the pending request rather
   than starting over.
@@ -211,6 +217,10 @@ Unified Authentication initiative.
   `--justification` / `ATMOS_AUTH_JUSTIFICATION` (via the viper key, so flag > env) ->
   `principal.justification` default -> interactive prompt (TTY) -> fail-fast error. The flag reaches the
   identity through the viper key (how other auth code reads global flags, e.g. `viper.GetBool("interactive")`).
+- **Unused-justification warning** via `ui.Warning` (user-facing, not `log.Warn`): manager-level
+  `warnIfJustificationUnused` + `chainConsumesJustification` using the `types.JustificationConsumer` marker
+  (implemented by `pimRoleIdentity.ConsumesJustification`), plus the identity's own warnings on the
+  already-active and resumed-pending paths. The `warn` seam defaults to `ui.Warning`.
 - **Error sentinels** in `errors/errors.go`: `ErrAzurePIMNotEligible`,
   `ErrAzurePIMJustificationRequired`, `ErrAzurePIMActivationFailed`,
   `ErrAzurePIMActivationTimeout`, `ErrAzurePIMRequestFailed`.
@@ -229,6 +239,10 @@ Unified Authentication initiative.
   `TestPIMRole_JustificationFromFlagOrEnv`, `TestPIMRole_FlagOrEnvOverridesConfigJustification`,
   `TestPIMRole_DefaultJustificationLookupReadsViperKey`; flag/env->viper-key binding in
   `pkg/flags` `TestGlobalOptionsBuilder_Justification`.
+- Supplied-but-unused justification warns (not fails) ->
+  `TestPIMRole_WarnsWhenAlreadyActiveWithSuppliedJustification`,
+  `TestPIMRole_WarnsWhenResumingWithSuppliedJustification`, `TestPIMRole_ConsumesJustification`, and
+  `TestChainConsumesJustification` (manager-level "no consumer in chain").
 - Approval-gated role: bounded wait, resumable -> `waitForActivation` + pending-request resume.
   `TestPIMRole_PendingThenProvisioned`, `TestPIMRole_ResumePendingRequest`,
   `TestPIMRole_ActivationTimeout`.
@@ -238,7 +252,7 @@ Unified Authentication initiative.
 `pkg/auth/identities/azure/pim_role_test.go`, `pim_client_test.go`,
 `pkg/auth/cloud/azure/token_oid_test.go`, a `ResourceManagerEndpoint` test, a factory case, and the
 `--justification` flag/env binding test in `pkg/flags/global_builder_test.go`.
-Package `pkg/auth/identities/azure` coverage is 88.1%. All ARM interaction is mocked; a live
+Package `pkg/auth/identities/azure` coverage is 88.3% (pkg/auth 89.1%). All ARM interaction is mocked; a live
 end-to-end activation against a real eligible role remains a manual verification step.
 
 ### Deferred (non-goals or follow-ups)
