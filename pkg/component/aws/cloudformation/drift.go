@@ -186,6 +186,9 @@ func runDriftDescribe(ctx context.Context, client CloudFormationClient, stackNam
 		return summary, err
 	}
 	summary["drifts"] = drifts
+	status, driftedCount := summarizeResourceDrifts(drifts)
+	summary["drift_status"] = string(status)
+	summary["drifted_resource_count"] = driftedCount
 
 	if len(drifts) == 0 {
 		_ = data.Writeln(fmt.Sprintf("%s: no drift results (run drift detect first)", stackName))
@@ -200,4 +203,29 @@ func runDriftDescribe(ctx context.Context, client CloudFormationClient, stackNam
 		_ = data.Writeln(line)
 	}
 	return summary, nil
+}
+
+// summarizeResourceDrifts derives the aggregate status from the returned
+// resource results. Known drift takes precedence over incomplete detection;
+// unchecked or unrecognized results must never make a stack appear clean.
+func summarizeResourceDrifts(drifts []cfntypes.StackResourceDrift) (cfntypes.StackDriftStatus, int32) {
+	if len(drifts) == 0 {
+		return "", 0
+	}
+	status := cfntypes.StackDriftStatusInSync
+	var driftedCount int32
+	for i := range drifts {
+		switch drifts[i].StackResourceDriftStatus {
+		case cfntypes.StackResourceDriftStatusModified, cfntypes.StackResourceDriftStatusDeleted:
+			driftedCount++
+		case cfntypes.StackResourceDriftStatusInSync:
+			// This resource was checked and is unchanged.
+		default:
+			status = cfntypes.StackDriftStatusNotChecked
+		}
+	}
+	if driftedCount > 0 {
+		status = cfntypes.StackDriftStatusDrifted
+	}
+	return status, driftedCount
 }

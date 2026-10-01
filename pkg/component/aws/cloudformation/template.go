@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -64,4 +65,43 @@ func loadStackPolicyBody(componentPath string, spec *stackSpec) (string, error) 
 		return "", fmt.Errorf("stack policy file %s: %w", policyFile, err)
 	}
 	return string(data), nil
+}
+
+// inferSourceTemplatePath inspects the provisioned result, never the URI's
+// extension. Only an unambiguous regular root file can become the template.
+func inferSourceTemplatePath(componentPath string) (string, error) {
+	entries, err := os.ReadDir(componentPath)
+	if err != nil {
+		return "", fmt.Errorf("%w: inspect provisioned source: %w", errUtils.ErrMissingAwsCloudFormationTemplate, err)
+	}
+	var name string
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		if name != "" || !entry.Type().IsRegular() {
+			return "", errUtils.Build(errUtils.ErrMissingAwsCloudFormationTemplate).WithHint("Set path explicitly when the provisioned source contains a directory or multiple files.").Err()
+		}
+		name = entry.Name()
+	}
+	if name == "" {
+		return "", errUtils.ErrMissingAwsCloudFormationTemplate
+	}
+	return name, nil
+}
+
+func resolveTemplateBody(componentPath string, spec *stackSpec) error {
+	if spec.TemplateBody != "" {
+		return nil
+	}
+	var err error
+	if spec.TemplatePath == "" {
+		spec.TemplatePath, err = inferSourceTemplatePath(componentPath)
+		if err != nil {
+			return err
+		}
+	}
+	spec.TemplateAbsPath = resolveTemplateFilePath(componentPath, spec)
+	spec.TemplateBody, err = loadTemplateBody(componentPath, spec)
+	return err
 }

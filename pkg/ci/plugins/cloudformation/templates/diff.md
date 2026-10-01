@@ -17,7 +17,7 @@ Resource changes: **{{ .ResourceChanges }}**
 To reproduce locally:
 
 ```shell
-atmos aws/cloudformation diff {{ .Component }} -s {{ .Stack }}
+atmos aws cloudformation diff {{ .Component }} -s {{ .Stack }}
 ```
 
 {{- if .Output }}

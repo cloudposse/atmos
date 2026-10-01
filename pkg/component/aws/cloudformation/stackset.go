@@ -3,6 +3,7 @@ package cloudformation
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"time"
 
@@ -65,7 +66,7 @@ func resolveStackSetTarget(provisionSection map[string]any, flagTarget string) (
 		if !ok {
 			return nil, fmt.Errorf("%w: %q is not a `kind: aws/stackset` provision target", errUtils.ErrInvalidAwsCloudFormationSettings, flagTarget)
 		}
-		return stackSetConfigFromTarget(flagTarget, block), nil
+		return stackSetConfigFromTarget(flagTarget, block)
 	}
 
 	switch len(stackSetTargets) {
@@ -76,7 +77,7 @@ func resolveStackSetTarget(provisionSection map[string]any, flagTarget string) (
 			Err()
 	case 1:
 		for name, block := range stackSetTargets {
-			return stackSetConfigFromTarget(name, block), nil
+			return stackSetConfigFromTarget(name, block)
 		}
 	}
 	return nil, errUtils.Build(errUtils.ErrInvalidAwsCloudFormationSettings).
@@ -86,7 +87,7 @@ func resolveStackSetTarget(provisionSection map[string]any, flagTarget string) (
 }
 
 // stackSetConfigFromTarget extracts a stackSetConfig from a resolved provision target block.
-func stackSetConfigFromTarget(name string, block map[string]any) *stackSetConfig {
+func stackSetConfigFromTarget(name string, block map[string]any) (*stackSetConfig, error) {
 	cfg := &stackSetConfig{Name: name, PermissionModel: defaultPermissionModel}
 	if v, ok := block["permission_model"].(string); ok && v != "" {
 		cfg.PermissionModel = v
@@ -97,33 +98,53 @@ func stackSetConfigFromTarget(name string, block map[string]any) *stackSetConfig
 	if v, ok := block["execution_role_name"].(string); ok {
 		cfg.ExecutionRoleName = v
 	}
-	cfg.Accounts = toStringSlice(block["accounts"])
-	cfg.Regions = toStringSlice(block["regions"])
-	return cfg
+	var err error
+	cfg.Accounts, err = stackSetTargetStrings(name, "accounts", block["accounts"], stackSetAccountPattern)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Regions, err = stackSetTargetStrings(name, "regions", block["regions"], stackSetRegionPattern)
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
-// toStringSlice normalizes a YAML-decoded `accounts:`/`regions:` value to
-// []string. Accepts a list ([]any, the documented shape) or a single scalar
-// string (a common shorthand for a one-element list) — anything else (a
-// number, a map, etc.) returns nil rather than silently guessing.
-func toStringSlice(v any) []string {
-	switch val := v.(type) {
-	case string:
-		if val == "" {
-			return nil
-		}
-		return []string{val}
-	case []any:
-		result := make([]string, 0, len(val))
-		for _, item := range val {
-			if s, ok := item.(string); ok {
-				result = append(result, s)
-			}
-		}
-		return result
-	default:
-		return nil
+var (
+	stackSetAccountPattern = regexp.MustCompile(`^[0-9]{12}$`)
+	stackSetRegionPattern  = regexp.MustCompile(`^[a-z]{2}(-[a-z0-9]+)+-[0-9]+$`)
+)
+
+// stackSetTargetStrings rejects malformed target lists instead of dropping values
+// and accidentally creating an empty StackSet. Omitted targeting is intentional.
+func stackSetTargetStrings(target, field string, raw any, pattern *regexp.Regexp) ([]string, error) {
+	invalid := func() error {
+		return fmt.Errorf("%w: provision.targets.%s.%s must contain quoted %s strings (for example accounts: [\"012345678901\"], regions: [\"us-east-2\"])", errUtils.ErrInvalidAwsCloudFormationSettings, target, field, field)
 	}
+	var items []any
+	switch value := raw.(type) {
+	case nil:
+		return nil, nil
+	case string:
+		items = []any{value}
+	case []any:
+		items = value
+	case []string:
+		for _, item := range value {
+			items = append(items, item)
+		}
+	default:
+		return nil, invalid()
+	}
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		value, ok := item.(string)
+		if !ok || !pattern.MatchString(value) {
+			return nil, invalid()
+		}
+		result = append(result, value)
+	}
+	return result, nil
 }
 
 // runStackSetCreate creates the StackSet, then creates stack instances in the

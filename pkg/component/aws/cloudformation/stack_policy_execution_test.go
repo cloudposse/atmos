@@ -85,10 +85,14 @@ func testStackPolicyExecutionOrdering(t *testing.T, named bool, run func(CloudFo
 					if create {
 						calls = append(calls, policy())
 					}
-					if !named && !failPolicy {
-						calls = append(calls, client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil), client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil))
-					}
 				}
+				if !failPolicy {
+					calls = append(calls, client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil))
+				}
+				if !failPolicy && !named {
+					calls = append(calls, client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil))
+				}
+
 				gomock.InOrder(calls...)
 				err := run(client, spec)
 				if failPolicy {

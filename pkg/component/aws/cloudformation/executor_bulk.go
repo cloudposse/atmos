@@ -39,8 +39,8 @@ func executeBulk(
 		[]string{cfg.CloudFormationComponentType},
 		nil,
 		false,
-		true,
-		true,
+		!info.DryRun,
+		false, // Resolve YAML functions per node, after dependencies have completed.
 		true,
 		info.Skip,
 		authManager,
@@ -56,6 +56,7 @@ func executeBulk(
 
 	return executeGraph(ctx.GoContext(), &component.GraphExecutionOptions{
 		Provider:      &ComponentProvider{},
+		ReverseOrder:  operation == OperationDelete,
 		AtmosConfig:   atmosConfig,
 		Info:          info,
 		Stacks:        stacks,
@@ -118,8 +119,8 @@ func affectedCloudFormationComponents(
 	args := e.DescribeAffectedCmdArgs{
 		CLIConfig:                   atmosConfig,
 		Stack:                       info.Stack,
-		ProcessTemplates:            true,
-		ProcessYamlFunctions:        true,
+		ProcessTemplates:            !info.DryRun,
+		ProcessYamlFunctions:        false,
 		Skip:                        info.Skip,
 		IncludeSettings:             false,
 		IncludeDependents:           false,
