@@ -10,6 +10,9 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/generator/storage"
 )
 
 // TestProcessorWithGitStorage_DeletedByUserNotRecreated verifies that a file
@@ -205,4 +208,82 @@ func TestProcessorDeletedByUser_TargetRenameStillCreatesFreshFile(t *testing.T) 
 	content, err := os.ReadFile(filepath.Join(targetPath, "b.txt"))
 	require.NoError(t, err, "the renamed file must be created at its new path")
 	assert.Equal(t, "new content\n", string(content))
+}
+
+// TestFileSkippedError_ErrorIncludesReasonWhenSet closes a coverage gap: the
+// Reason-suffixed branch of FileSkippedError.Error() (set by deletedByUser)
+// was never exercised by calling Error() directly.
+func TestFileSkippedError_ErrorIncludesReasonWhenSet(t *testing.T) {
+	err := &FileSkippedError{Path: "a.txt", RenderedPath: "a.txt", Reason: "it existed previously but was removed locally"}
+	assert.Contains(t, err.Error(), "it existed previously but was removed locally")
+
+	withoutReason := &FileSkippedError{Path: "a.txt", RenderedPath: "a.txt"}
+	assert.NotContains(t, withoutReason.Error(), "Reason")
+}
+
+// TestProcessorDeletedByUser_RelFallback mirrors
+// TestProcessorDetermineBaseContentRelFallback for deletedByUser's own
+// (separate) filepath.Rel call: a relative Processor.targetPath against an
+// absolute fullPath makes filepath.Rel fail, falling back to file.Path --
+// which happens to be the same value here, so the base is still found.
+func TestProcessorDeletedByUser_RelFallback(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+	testRepo.processor.targetPath = "relative"
+
+	skipErr, err := testRepo.processor.deletedByUser(File{Path: "config.yaml"}, testRepo.configPath, "config.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, skipErr, "the Rel fallback must still resolve file.Path and find the committed base")
+}
+
+// TestProcessorDeletedByUser_LoadBaseError mirrors
+// TestProcessorDetermineBaseContent_LoadBaseError for deletedByUser's own
+// direct baseStorage.LoadBase call: a git ref that can't be resolved must
+// propagate as a real error instead of being treated as genuinely new.
+func TestProcessorDeletedByUser_LoadBaseError(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	repo, err := git.PlainOpen(testRepo.tmpDir)
+	require.NoError(t, err)
+	testRepo.processor.baseStorage = storage.NewGitBaseStorage(repo, "nonexistent-ref")
+
+	skipErr, err := testRepo.processor.deletedByUser(File{Path: "config.yaml"}, testRepo.configPath, "config.yaml")
+
+	require.Error(t, err)
+	assert.Nil(t, skipErr)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestProcessorWithGitStorage_DeletedByUserErrorPropagatesFromProcessFile
+// closes a coverage gap: ProcessFile's own `if err != nil { return err }`
+// wrapping deletedByUser's call was only exercised by calling deletedByUser
+// directly (see TestProcessorDeletedByUser_LoadBaseError), never through the
+// full ProcessFile entry point.
+func TestProcessorWithGitStorage_DeletedByUserErrorPropagatesFromProcessFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	repo, err := git.PlainInit(tmpDir, false)
+	require.NoError(t, err)
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "config.yaml"), []byte("name: demo\n"), 0o644))
+	_, err = worktree.Add("config.yaml")
+	require.NoError(t, err)
+	_, err = worktree.Commit("Initial commit", &git.CommitOptions{
+		Author: &object.Signature{Name: "Test", Email: "test@example.com"},
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(filepath.Join(tmpDir, "config.yaml")))
+
+	processor := NewProcessor()
+	gitRepo, err := git.PlainOpen(tmpDir)
+	require.NoError(t, err)
+	processor.baseStorage = storage.NewGitBaseStorage(gitRepo, "nonexistent-ref")
+	processor.targetPath = tmpDir
+
+	err = processor.ProcessFile(File{Path: "config.yaml", Content: "name: new\n"}, tmpDir, false, true, nil, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
 }
