@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
@@ -241,7 +242,7 @@ func (ui *InitUI) processDeletionCandidate(targetPath, relPath string, force boo
 	}
 	targetFullPath := filepath.Join(targetPath, relPath)
 
-	if symlinkErr := ui.refuseSymlinkDeletionCandidate(relPath, targetFullPath); symlinkErr != nil {
+	if symlinkErr := ui.refuseSymlinkDeletionCandidate(targetPath, relPath, targetFullPath); symlinkErr != nil {
 		return false, symlinkErr
 	}
 
@@ -302,40 +303,70 @@ func (ui *InitUI) deleteCandidate(targetFullPath, relPath string, locallyModifie
 }
 
 // refuseSymlinkDeletionCandidate reports (and returns) an error if
-// targetFullPath is a symlink, mirroring engine.validateWriteTarget's
-// write-side protection: a symlink here could otherwise make
-// processDeletionCandidate's byte-comparison read content from outside the
-// target directory entirely. Returns nil when it's a plain file, and also
-// when the path has already vanished (a race between the caller's own
-// fileExistsAt check and here) -- processDeletionCandidate's own
+// targetFullPath is itself a symlink, OR if any ancestor directory between
+// targetPath and targetFullPath is one -- mirroring BOTH halves of
+// engine.validateWriteTarget's write-side protection, not just the leaf
+// check. The ancestor case matters because fileExistsAt (processDeletionCandidate's
+// own existence check, via os.Stat) follows symlinks: if targetPath/somedir is
+// a symlink to an external directory, a leaf-only Lstat on
+// targetPath/somedir/file.txt sees an ordinary file -- the symlink is one
+// level up -- and would otherwise let the byte-comparison below read, and a
+// clean match or --force delete, content entirely outside the target
+// directory.
+//
+// Returns nil when the path is a plain file with no symlink in its ancestry,
+// and also when the leaf has already vanished (a race between the caller's
+// own fileExistsAt check and here) -- processDeletionCandidate's own
 // os.ReadFile calls right after this surface that case properly. Any other
-// Lstat failure (e.g. permission denied) is returned as a real error instead
-// of silently treated as a plain file.
-func (ui *InitUI) refuseSymlinkDeletionCandidate(relPath, targetFullPath string) error {
+// Lstat/EvalSymlinks failure (e.g. permission denied) is returned as a real
+// error instead of silently treated as safe.
+func (ui *InitUI) refuseSymlinkDeletionCandidate(targetPath, relPath, targetFullPath string) error {
 	info, lstatErr := os.Lstat(targetFullPath)
 	switch {
 	case os.IsNotExist(lstatErr):
-		// Vanished between the caller's own fileExistsAt check and here (a
-		// race) -- processDeletionCandidate's own os.ReadFile calls right
-		// after this surface that properly, so nothing to report here.
 		return nil
 	case lstatErr != nil:
 		return fmt.Errorf("failed to check `%s`: %w", relPath, lstatErr)
-	case info.Mode()&os.ModeSymlink == 0:
-		return nil
+	case info.Mode()&os.ModeSymlink != 0:
+		return ui.reportDeletionGuardError(errUtils.ErrSymlinkWrite, relPath,
+			fmt.Sprintf("Refusing to inspect `%s` for deletion: it's a symlink", relPath),
+			"Remove the symlink manually if it's no longer needed, or replace it with a real file")
 	}
 
-	symlinkErr := errUtils.Build(errUtils.ErrSymlinkWrite).
-		WithExplanationf("Refusing to inspect `%s` for deletion: it's a symlink", relPath).
-		WithHint("Remove the symlink manually if it's no longer needed, or replace it with a real file").
+	realTargetPath, err := filepath.EvalSymlinks(targetPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve target directory `%s`: %w", targetPath, err)
+	}
+	realParentPath, err := filepath.EvalSymlinks(filepath.Dir(targetFullPath))
+	if err != nil {
+		return fmt.Errorf("failed to resolve the directory containing `%s`: %w", relPath, err)
+	}
+	if realParentPath != realTargetPath && !strings.HasPrefix(realParentPath, realTargetPath+string(filepath.Separator)) {
+		return ui.reportDeletionGuardError(errUtils.ErrPathTraversal, relPath,
+			fmt.Sprintf("Refusing to inspect `%s` for deletion: its containing directory escapes the target directory", relPath),
+			"Check for symlinks that redirect outside the target directory")
+	}
+	return nil
+}
+
+// reportDeletionGuardError builds, reports (via the same "✗ path (error:
+// ...)" shape reportDeletionConflict uses), and returns a deletion-safety
+// guard error. Shared by refuseSymlinkDeletionCandidate's two distinct
+// cases, a symlink leaf and an ancestor directory that escapes the target,
+// which intentionally use different sentinels (ErrSymlinkWrite vs.
+// ErrPathTraversal) to match engine.validateWriteTarget's own distinction.
+func (ui *InitUI) reportDeletionGuardError(sentinel error, relPath, explanation, hint string) error {
+	guardErr := errUtils.Build(sentinel).
+		WithExplanation(explanation).
+		WithHint(hint).
 		WithContext("file_path", relPath).
 		WithExitCode(2).
 		Err()
 	ui.writeOutput(fileStatusFormat,
 		ui.errorStyle.Render(ui.xMark),
 		relPath,
-		ui.grayStyle.Render(fmt.Sprintf("(error: %v)", symlinkErr)))
-	return symlinkErr
+		ui.grayStyle.Render(fmt.Sprintf("(error: %v)", guardErr)))
+	return guardErr
 }
 
 // reportDeletionConflict reports (and returns) the unresolved-merge-conflict

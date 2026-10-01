@@ -540,6 +540,44 @@ func TestHandleTemplateDeletions_RefusesSymlinkDeletionCandidate(t *testing.T) {
 	require.NoError(t, outsideStatErr, "the file the symlink points to must be left untouched")
 }
 
+// TestHandleTemplateDeletions_RefusesAncestorSymlinkEscape is a regression
+// test for a CodeRabbit finding on PR #3245: refuseSymlinkDeletionCandidate
+// only Lstat'd the leaf path, so a symlinked ANCESTOR directory (rather than
+// the leaf itself) went undetected -- fileExistsAt's os.Stat follows
+// symlinks, so it would find a real file through the symlinked directory,
+// and the leaf Lstat on that resolved path sees an ordinary file, not a
+// symlink. Passing force=true proves this is a hard block, not just the
+// usual content-conflict guard (which force is allowed to override).
+func TestHandleTemplateDeletions_RefusesAncestorSymlinkEscape(t *testing.T) {
+	ui := createTestUI(t)
+	renderRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(renderRoot, "subdir"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(renderRoot, "subdir", "leaked.txt"), []byte("leaked content\n"), 0o644))
+	ui.renderedBaseRoot = renderRoot
+
+	targetPath := t.TempDir()
+	outsideDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(outsideDir, "leaked.txt"), []byte("leaked content\n"), 0o644))
+
+	// targetPath/subdir is a symlink to outsideDir -- the leaf (leaked.txt)
+	// is an ordinary file; only its parent directory is a symlink.
+	symlinkDir := filepath.Join(targetPath, "subdir")
+	require.NoError(t, os.Symlink(outsideDir, symlinkDir))
+
+	result, err := ui.handleTemplateDeletions(targetPath, map[string]string{}, true)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	assert.Zero(t, result.successCount)
+	assert.Equal(t, 1, result.errorCount)
+
+	_, lstatErr := os.Lstat(symlinkDir)
+	require.NoError(t, lstatErr, "the symlinked directory must be left untouched")
+	content, readErr := os.ReadFile(filepath.Join(outsideDir, "leaked.txt"))
+	require.NoError(t, readErr, "the file outside the target directory must survive")
+	assert.Equal(t, "leaked content\n", string(content))
+}
+
 // TestHandleTemplateDeletions_StillWantedPathIsUntouched confirms a path the
 // new render still wants (present in newPaths) is never treated as a
 // deletion candidate, even if it happens to also exist in the old render.
