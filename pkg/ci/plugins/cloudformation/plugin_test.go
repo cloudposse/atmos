@@ -3,6 +3,7 @@ package cloudformation
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -236,7 +237,7 @@ func TestTemplateRendering_Diff(t *testing.T) {
 	rendered, err := templates.NewLoader(nil).LoadAndRender("cloudformation", "diff", defaultTemplates, ctx)
 	require.NoError(t, err)
 	assert.Contains(t, rendered, "CloudFormation Diff Summary")
-	assert.Contains(t, rendered, "atmos aws/cloudformation diff vpc -s tenant1-ue2-dev")
+	assert.Contains(t, rendered, "atmos aws cloudformation diff vpc -s tenant1-ue2-dev")
 	assert.Contains(t, rendered, "Resource changes: **3**")
 }
 
@@ -377,4 +378,24 @@ func TestPlugin_OnAfterOperation_WriteSummaryErrorWrapsSentinel(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrCISummaryWriteFailed)
 	assert.ErrorIs(t, err, sentinel)
+}
+
+func TestTemplateRendering_ReproductionCommandsAndCleanDrift(t *testing.T) {
+	for _, command := range []string{"diff", "apply", "delete", "drift-detect", "drift-describe"} {
+		t.Run(command, func(t *testing.T) {
+			writer := &fakeWriter{}
+			err := (&Plugin{}).onAfterOperation(&plugin.HookContext{
+				Provider: fakeProvider{writer: writer}, TemplateLoader: templates.NewLoader(nil), Command: command,
+				Info:      &schema.ConfigAndStacksInfo{ComponentFromArg: "app", Stack: "dev"},
+				Aggregate: &schema.CloudFormationCIResult{DriftStatus: "IN_SYNC", DriftedCount: 0},
+			})
+			require.NoError(t, err)
+			assert.Contains(t, writer.summary, "atmos aws cloudformation "+strings.ReplaceAll(command, "-", " ")+" app -s dev")
+			assert.NotContains(t, writer.summary, "atmos aws/cloudformation")
+			if strings.HasPrefix(command, "drift-") {
+				assert.Contains(t, writer.summary, "Drift status: **IN_SYNC**")
+				assert.Contains(t, writer.summary, "Drifted resources: **0**")
+			}
+		})
+	}
 }

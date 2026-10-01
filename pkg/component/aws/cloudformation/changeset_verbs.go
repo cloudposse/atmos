@@ -138,6 +138,9 @@ func runChangesetExecute(ctx context.Context, client CloudFormationClient, spec 
 			return summary, err
 		}
 	}
+	if err := applyTerminationProtection(ctx, client, spec); err != nil {
+		return summary, err
+	}
 	return summary, nil
 }
 

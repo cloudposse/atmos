@@ -12,7 +12,7 @@ Stack: **{{ .StackName }}**
 To reproduce locally:
 
 ```shell
-atmos aws/cloudformation delete {{ .Component }} -s {{ .Stack }}
+atmos aws cloudformation delete {{ .Component }} -s {{ .Stack }}
 ```
 
 {{- if .Output }}

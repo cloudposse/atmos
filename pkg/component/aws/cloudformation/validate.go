@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -28,10 +29,7 @@ import (
 func validateComponentConfig(config map[string]any) error {
 	defer perf.Track(nil, "cloudformation.validateComponentConfig")()
 
-	if config == nil {
-		return nil
-	}
-	if isAbstractComponent(config) {
+	if config == nil || isAbstractComponent(config) {
 		return nil
 	}
 
@@ -43,7 +41,7 @@ func validateComponentConfig(config map[string]any) error {
 	switch {
 	case templatePresent && path != "":
 		return fmt.Errorf("%w: stack %q", errUtils.ErrAwsCloudFormationTemplateAndPathMutuallyExclusive, stackName)
-	case !templatePresent && path == "":
+	case !templatePresent && !hasFileTemplate(config):
 		return errUtils.ErrMissingAwsCloudFormationTemplate
 	}
 
@@ -216,4 +214,9 @@ func looksLikeTemplateFileRef(value string) bool {
 	default:
 		return false
 	}
+}
+
+func hasFileTemplate(config map[string]any) bool {
+	path, _ := config[cfg.TemplatePathSectionName].(string)
+	return path != "" || source.HasSource(config)
 }

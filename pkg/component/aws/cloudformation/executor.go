@@ -68,7 +68,7 @@ func Execute(ctx *component.ExecutionContext, operation Operation) error {
 
 // executeSingle runs the operation for a single component (the non-bulk path).
 func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) error {
-	discovered, err := processStacks(atmosConfig, *info, true, true, true, nil, nil)
+	discovered, err := processStacks(atmosConfig, *info, true, !info.DryRun, !info.DryRun, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -78,14 +78,11 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 		return nil
 	}
 
-	if err := (&ComponentProvider{}).ValidateComponent(info.ComponentSection); err != nil {
-		return err
+	// Resolve static config before any authentication, provisioning or hooks.
+	if info.DryRun {
+		return validateDryRun(atmosConfig, info, ctx.Flags, operation)
 	}
-
-	// Dry-run validates the resolved component without authenticating, provisioning
-	// sources, or executing hooks. Render keeps its normal local template behavior.
-	if info.DryRun && operation != OperationRender {
-		_, err := buildStackSpec(info.ComponentSection)
+	if err := (&ComponentProvider{}).ValidateComponent(info.ComponentSection); err != nil {
 		return err
 	}
 
@@ -183,13 +180,10 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 		return nil, err
 	}
 
-	if spec.TemplateBody == "" {
-		spec.TemplateAbsPath = resolveTemplateFilePath(componentPath, spec)
-		spec.TemplateBody, err = loadTemplateBody(componentPath, spec)
-		if err != nil {
-			return nil, err
-		}
+	if err := resolveTemplateBody(componentPath, spec); err != nil {
+		return nil, err
 	}
+
 	registerNoEchoValues(spec.TemplateBody, spec)
 
 	if operationsSkippingStackPolicyLoad[operation] {
@@ -507,15 +501,7 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		return summary, err
 	}
 
-	outputs, err := describeStackOutputs(octx.Ctx, client, spec.StackName)
-	if err != nil {
-		return summary, err
-	}
-	summary["outputs"] = outputs
-	if err := renderOutputsSummary(outputs, octx.Flags); err != nil {
-		return summary, err
-	}
-	return summary, nil
+	return runOutput(octx.Ctx, client, spec.StackName, octx.Flags, summary)
 }
 
 // runDelete deletes the stack and streams events until it's gone.
@@ -554,7 +540,7 @@ func deleteOptionsFromFlags(flags map[string]any) deleteOptions {
 // runOutput renders the deployed stack's Outputs via the standalone `output`
 // verb's path (also called by runApply for the end-of-deploy summary).
 func runOutput(ctx context.Context, client CloudFormationClient, stackName string, flags map[string]any, summary map[string]any) (map[string]any, error) {
-	outputs, err := describeStackOutputs(ctx, client, stackName)
+	outputs, err := presentedStackOutputs(ctx, client, stackName)
 	if err != nil {
 		return summary, err
 	}
