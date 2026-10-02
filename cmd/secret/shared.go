@@ -52,10 +52,15 @@ func authenticatedSecretSkip() []string {
 	return skip
 }
 
-// Resolve declarations and their local template dependencies, without evaluating
-// unrelated component inputs or outputs during secret discovery.
+// secretDeclarationEvaluation resolves supported declaration fields and provider
+// configuration, including local template dependencies, without fetching ignored
+// declaration fields or unrelated component outputs during secret discovery.
 func secretDeclarationEvaluation() e.DescribeStacksErrorOptions {
-	return e.DescribeStacksErrorOptions{EvaluationPaths: [][]string{{cfg.SecretsSectionName}}}
+	paths := [][]string{{cfg.SecretsSectionName, "providers"}}
+	for _, field := range []string{"store", "sops", "description", "reference", "required", "scope"} {
+		paths = append(paths, []string{cfg.SecretsSectionName, "vars", "*", field})
+	}
+	return e.DescribeStacksErrorOptions{EvaluationPaths: paths}
 }
 
 // secretScope holds the parsed common flags for a secret subcommand.

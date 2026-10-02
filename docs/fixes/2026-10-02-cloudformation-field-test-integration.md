@@ -91,6 +91,14 @@ are included in this change at the user's request; no follow-up issue is needed.
 - Render documentation now distinguishes offline local/warm sources from cold
   remote downloads and authenticated secret/output lookups.
 
+- Restrict secret evaluation to the six supported declaration fields and provider
+  configuration. Shared evaluation paths now support a wildcard map-key segment,
+  preserving deferred ancestors and dependencies while excluding ignored fields.
+  The ignored-field regression failed before the fix. Included and generated
+  declarations, provider-specific options, local templates and enumeration pass.
+  Full deferred/secret packages and race suites passed (99.6%/93.3% statement
+  coverage); focused describe/deferred/secret execution regressions passed.
+
 ## Follow-ups
 
 None.
