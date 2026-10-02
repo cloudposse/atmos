@@ -192,22 +192,12 @@ jobs:
       # this module that pass peaks around 25GB RSS — measured locally when
       # GO-2026-6597 (containerd/v2 < 2.3.6) landed — which exceeds the public
       # runner's 16GB RAM and gets the runner OOM-killed (seen as `Killed`,
-      # exit 143 "shutdown signal", or "The operation was canceled"). Extra
-      # swap on the runner's largest disk absorbs the overflow.
+      # exit 143 "shutdown signal", or "The operation was canceled"). Swap
+      # absorbs the overflow; with 20G added the pass finishes in ~12 min.
       - name: Add swap space
-        shell: bash
-        run: |
-          set -euo pipefail
-          # /mnt is the hosted runner's large ephemeral disk; fall back to /.
-          dir=/mnt
-          mountpoint -q /mnt || dir=/
-          df -h "$dir"
-          sudo fallocate -l 20G "$dir/govulncheck.swap"
-          sudo chmod 600 "$dir/govulncheck.swap"
-          sudo mkswap "$dir/govulncheck.swap"
-          sudo swapon "$dir/govulncheck.swap"
-          swapon --show
-          free -h
+        uses: ./.github/actions/swap-space
+        with:
+          size-gb: '20'
 
       - name: Run govulncheck
         shell: bash
