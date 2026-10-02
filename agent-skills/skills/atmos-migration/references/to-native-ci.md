@@ -140,7 +140,10 @@ steps:
 ```
 
 The IAM trust policy's `sub`-claim constraint carries over unchanged, e.g.
-`repo:ORG/REPO:ref:refs/heads/main` or `repo:ORG/REPO:environment:prod`.
+`repo:ORG/REPO:ref:refs/heads/main` or `repo:ORG/REPO:environment:prod`. A workflow triggered by
+`pull_request` (like the PR-plan example below) presents a *different* subject --
+`repo:ORG/REPO:pull_request` -- so the trust policy must permit that subject too, or the plan job's
+OIDC exchange is denied even though the deploy job's subject is allowed.
 
 `azure/login` and `google-github-actions/auth` follow the identical shape -- an OIDC action becomes
 an `auth.providers`/`auth.identities` pair with the corresponding provider `kind`.
