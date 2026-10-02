@@ -2503,6 +2503,7 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 	}
 	errs := make([]error, 2)
 
+	leaderDone := make(chan struct{})
 	call := func(idx int) {
 		defer wg.Done()
 		// Each goroutine gets its own sections map to avoid a data race between
@@ -2514,6 +2515,9 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 		errs[idx] = executor.ensureWorkdirProvisioned(
 			context.Background(), cfg, localSections, nil, "vpc", "dev", configs[idx],
 		)
+		if idx == 0 {
+			close(leaderDone)
+		}
 	}
 
 	// Launch the leader alone first and wait for <-entered: this guarantees
@@ -2534,21 +2538,29 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 	go call(0)
 	<-entered
 
-	// followerJoined is closed by doChanEntryHook the instant the follower's own call
-	// reaches workdirProvisionGroup.DoChan -- a deterministic proof that the follower has
+	// followerJoined is closed by doChanRegisteredHook after the follower's own call
+	// returns from workdirProvisionGroup.DoChan -- a deterministic proof that the follower has
 	// registered with singleflight, unlike scheduler-yielding tricks (e.g. a
 	// runtime.Gosched loop), which only make losing the race less likely, never
 	// impossible: they prove nothing about which goroutine the runtime actually chose to
 	// run next.
 	followerJoined := make(chan struct{})
-	doChanEntryHook = func() { close(followerJoined) }
-	defer func() { doChanEntryHook = nil }()
+	followerRelease := make(chan struct{})
+	doChanRegisteredHook = func() {
+		close(followerJoined)
+		<-followerRelease
+	}
+	defer func() { doChanRegisteredHook = nil }()
 
 	wg.Add(1)
 	go call(1)
 	<-followerJoined
 
 	close(gate)
+	// Keep the follower at the hook until the leader finishes. A hook fired
+	// before registration now deterministically misses the shared result.
+	<-leaderDone
+	close(followerRelease)
 	wg.Wait()
 
 	require.NoError(t, errs[0])
