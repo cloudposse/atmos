@@ -76,6 +76,7 @@ func TestResolveStoreAuthRebindsSameIdentityWithDifferentConfig(t *testing.T) {
 	}
 }
 
+// TestResolveStoreAuthPreservesConfiguredIdentityWithoutContext prevents an explicit store identity from falling back to ambient credentials.
 func TestResolveStoreAuthPreservesConfiguredIdentityWithoutContext(t *testing.T) {
 	for _, withManager := range []bool{false, true} {
 		t.Run("configured identity remains required", func(t *testing.T) {
@@ -104,6 +105,7 @@ func TestResolveStoreAuthPreservesConfiguredIdentityWithoutContext(t *testing.T)
 	}
 }
 
+// TestResolveStoreAuthInheritsExplicitCallerIdentity checks caller selection without changing global identity defaults.
 func TestResolveStoreAuthInheritsExplicitCallerIdentity(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	backend := store.NewMockIdentityAwareStore(ctrl)

@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// TestInlineTemplateWithGeneratedAuxiliaryFiles verifies inline templates coexist with generated string, YAML and JSON files.
 func TestInlineTemplateWithGeneratedAuxiliaryFiles(t *testing.T) {
 	config, info := generationFixture(t, t.TempDir(), "inline")
 	delete(info.ComponentSection, "path")

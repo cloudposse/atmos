@@ -12,6 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+// TestGeneratedBytesReachCloudFormation compares the exact generated template and policy bytes with CloudFormation API inputs.
 func TestGeneratedBytesReachCloudFormation(t *testing.T) {
 	config, info := generationFixture(t, t.TempDir(), "api")
 	spec, err := resolveSpecAndTemplate(t.Context(), config, info, OperationApply)

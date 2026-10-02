@@ -17,6 +17,7 @@ import (
 
 var _ = schema.AwsCloudFormation{AutoGenerateFiles: true}
 
+// generationFixture configures a shared component with stack-specific template, policy and auxiliary file contents.
 func generationFixture(t *testing.T, root, stack string) (*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) {
 	t.Helper()
 	config := &schema.AtmosConfiguration{BasePath: root}
@@ -69,6 +70,7 @@ func TestGeneratedComponentIsolation(t *testing.T) {
 	}
 }
 
+// TestEntirelyGeneratedComponent loads generated files without creating a shared source directory.
 func TestEntirelyGeneratedComponent(t *testing.T) {
 	root := t.TempDir()
 	config, info := generationFixture(t, root, "dev")
@@ -79,6 +81,7 @@ func TestEntirelyGeneratedComponent(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "must not create shared source directories")
 }
 
+// TestGenerationConfigurationAndFailures checks actionable errors for disabled isolation, missing paths, rendering failures and unsafe destinations.
 func TestGenerationConfigurationAndFailures(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -112,6 +115,7 @@ func TestGenerationConfigurationAndFailures(t *testing.T) {
 	}
 }
 
+// TestGenerationSkipsDeployedOperationsAndDryRun asserts state-only operations and dry runs create no local files.
 func TestGenerationSkipsDeployedOperationsAndDryRun(t *testing.T) {
 	for _, op := range []Operation{OperationDelete, OperationOutput, OperationDriftDetect, OperationGetTemplate, OperationLogs, OperationWatch, OperationStackSetInstances} {
 		t.Run(string(op), func(t *testing.T) {
@@ -134,6 +138,7 @@ func TestGenerationSkipsDeployedOperationsAndDryRun(t *testing.T) {
 	assert.NotContains(t, info.ComponentSection, "provision", "dry-run must not mutate resolved config")
 }
 
+// TestGeneratedPolicyForNamedExecution prepares a configured policy without replacing a named changeset's reviewed template.
 func TestGeneratedPolicyForNamedExecution(t *testing.T) {
 	config, info := generationFixture(t, t.TempDir(), "dev")
 	info.ComponentSection["path"] = "reviewed-template-not-needed.yaml"
@@ -144,6 +149,7 @@ func TestGeneratedPolicyForNamedExecution(t *testing.T) {
 	assert.Empty(t, spec.TemplateBody, "named changesets keep their reviewed template")
 }
 
+// TestGenerationRejectsSymlinkEscape checks that generation cannot overwrite a canary outside its workdir.
 func TestGenerationRejectsSymlinkEscape(t *testing.T) {
 	root := t.TempDir()
 	config, info := generationFixture(t, root, "dev")
@@ -162,6 +168,7 @@ func TestGenerationRejectsSymlinkEscape(t *testing.T) {
 	assert.Equal(t, "unchanged", string(data))
 }
 
+// TestDeployedDryRunIgnoresGenerationConfiguration keeps deployed-stack dry runs independent of local generation settings.
 func TestDeployedDryRunIgnoresGenerationConfiguration(t *testing.T) {
 	config, info := generationFixture(t, t.TempDir(), "dev")
 	info.ComponentSection["provision"] = map[string]any{"workdir": map[string]any{"enabled": false}}

@@ -2,6 +2,7 @@ package datafetcher
 
 import "testing"
 
+// TestSchemaCloudFormationTypeDefaults checks schemas accept supported type-level defaults and reject invalid fields.
 func TestSchemaCloudFormationTypeDefaults(t *testing.T) {
 	schemas := map[string][]byte{"manifest": loadEmbeddedSchemaBytes(t), "stack-config": loadStackConfigSchemaBytes(t)}
 	defaults := map[string]any{

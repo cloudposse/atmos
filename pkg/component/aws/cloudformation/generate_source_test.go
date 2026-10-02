@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestGeneratedNestedSource verifies authenticated archive provisioning and generation share the effective component subdirectory.
 func TestGeneratedNestedSource(t *testing.T) {
 	var archive bytes.Buffer
 	compressed := gzip.NewWriter(&archive)
@@ -57,6 +58,7 @@ func TestGeneratedNestedSource(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "source and generated files belong only in the isolated workdir")
 }
 
+// TestGenerationDisabledByDefault ensures the default opt-out neither creates directories nor writes generated files.
 func TestGenerationDisabledByDefault(t *testing.T) {
 	assert.False(t, DefaultConfig().AutoGenerateFiles)
 	config, info := generationFixture(t, t.TempDir(), "disabled")
