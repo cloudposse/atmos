@@ -72,3 +72,11 @@ re-serialized as YAML); `get policy` fetches the live stack policy via `GetStack
 missing stack to a stack-not-found error with a hint. This is the inverse of `render` (local-only) — useful for drift
 investigation and for inspecting a stack before adopting it into Atmos management (stack
 import/adoption itself is not supported).
+
+## Output details
+
+- `output <component> <key>` prints only that Output value, bare and pipeable. With `--format=json` or `yaml`, the value is encoded. A missing key fails and lists the available keys. The key cannot be combined with `--all`, `--affected`, `--tags`, or `--labels`.
+- A stack that is not deployed is an error, for `output`, `!aws.cloudformation.output`, and `atmos.Component(...).outputs`. Not deployed means `REVIEW_IN_PROGRESS`, `ROLLBACK_*`, `CREATE_FAILED`, or `DELETE_*`.
+- A deployed stack with no Outputs prints `Stack <name> has no outputs` for the table format. Structured formats still print an empty document, so stdout stays parseable.
+- An unsupported `--format` error names the value and lists the valid formats. JSON is written without HTML escaping, so `<MASKED>` appears literally.
+- In bulk runs, JSON and YAML print one document keyed by stack, then component. Table output titles each component.

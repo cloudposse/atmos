@@ -86,7 +86,7 @@ chart-style plugin system, unlike native Helm).
 |---|---|
 | `template` / `path` *(exactly one required)* | `template` is an **inline** body (string or YAML map) that flows through Atmos's `{{ }}` templating before reaching CloudFormation. `path` is a **file reference**, read as raw bytes, no templating. Setting both is an error. |
 | `stack_name` | Explicit stack name. Supports Go templates; no legacy name-pattern interpolation. |
-| `parameters` | A map of name to value, or a list of AWS CLI/Rain `{ParameterKey, ParameterValue}` entries (also via `!include` of a JSON array). Normalized at the API boundary: scalars stringified, lists comma-joined for `List<Type>`. Any other shape, or a malformed list entry, is an error naming the type or the entry index; defaults are never silently deployed. The list form accepts `UsePreviousValue: true` without a `ParameterValue`. A Rain config file is not a list: use `!include rain.yaml .Parameters`. |
+| `parameters` | A map of name to value, or an AWS CLI/Rain list of `{ParameterKey, ParameterValue}` entries (`UsePreviousValue: true` allowed; also `!include` of a JSON array). Scalars stringified, lists comma-joined for `List<Type>`. Other shapes are an error. For a Rain config file use `!include rain.yaml .Parameters`. |
 | `capabilities` | Acknowledged IAM capabilities: `CAPABILITY_IAM`, `CAPABILITY_NAMED_IAM`, `CAPABILITY_AUTO_EXPAND` (macros/SAM). Validated locally; an unknown value fails with the valid set. |
 | `tags` | `map[string]string` tags on the stack — distinct from Atmos's own component `tags`/`--tags`. |
 | `stack_policy.file` | JSON policy path. Set before UPDATE execution (apply/deploy or explicit changeset execute), after successful CREATE. Policy-setting errors stop pending updates; blocked updates never trigger an automatic override. |
@@ -108,7 +108,7 @@ chart-style plugin system, unlike native Helm).
 | `atmos aws cloudformation apply <component> -s <stack>` | Executes the changeset (`ExecuteChangeSet`), creating or updating the stack — never a direct `CreateStack`/`UpdateStack` call. Streams per-resource stack events live and ends with a rendered Outputs summary. |
 | `atmos aws cloudformation deploy <component> -s <stack>` | Alias for `apply` with `--auto-approve` defaulted to `true`. |
 | `atmos aws cloudformation delete <component> -s <stack>` | `DeleteStack`, respecting termination protection — see [Delete Safety](#delete-safety--termination-protection). |
-| `atmos aws cloudformation output <component> [key] -s <stack>` | Renders the deployed stack's Outputs via `DescribeStacks` — the same view `apply`/`deploy` render at completion. With `key`, prints only that value (bare and pipeable; `--format=json`/`yaml` encode it). A missing key lists the available keys. A stack that is not deployed (`REVIEW_IN_PROGRESS`, `ROLLBACK_*`, `CREATE_FAILED`, `DELETE_*`) is an error. Alias: `outputs`. |
+| `atmos aws cloudformation output <component> [key] -s <stack>` | Renders the deployed stack's Outputs via `DescribeStacks`, as `apply` does. With `key`, prints only that value (pipeable); a missing key lists the available keys. A stack that is not deployed is an error. Alias: `outputs`. |
 | `atmos aws cloudformation fmt <component> -s <stack> [--check]` | Canonically formats the local template in place (comment-preserving YAML round-trip, no shell-out). `--check` reports without writing and, in bulk runs, checks every template before failing once. See [ci-and-listing](references/ci-and-listing.md#fmt). |
 | `atmos aws cloudformation list [-s <stack>]` | `ListStacks`, marking each stack `managed` (matches a component's `stack_name` in `-s`, or in any stack without it) or `unmanaged`. See [ci-and-listing](references/ci-and-listing.md#list). |
 
@@ -132,11 +132,9 @@ Publish-only (`aws/s3`) and external (`git`) targets change no stack and never a
 `output` supports the full standard format set shared with `atmos terraform output`: `json`, `yaml`,
 `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table` (default on a TTY), and `github` (GitHub
 Actions `$GITHUB_OUTPUT` syntax via `atmos aws cloudformation output vpc -s dev --format=github`),
-plus `--flatten` and `--uppercase` key options. An unsupported `--format` names the value and lists
-the valid ones. JSON is written without HTML escaping. A deployed stack with no Outputs prints
-`Stack <name> has no outputs` instead of an empty table (structured formats still print an empty
-document). The optional second positional argument selects one Output key; it cannot be combined
-with `--all`/`--affected`/`--tags`/`--labels`.
+plus `--flatten` and `--uppercase` key options. An unsupported `--format` lists the valid ones. A
+stack with no Outputs prints `Stack <name> has no outputs`. The `key` argument cannot be combined
+with bulk selection.
 
 With masking enabled, standalone output and apply summaries read the deployed template
 (`cloudformation:GetTemplate`) and redact outputs that reference NoEcho parameters, including
