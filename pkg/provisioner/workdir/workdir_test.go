@@ -2197,3 +2197,75 @@ func TestServiceProvision_FailsClosedWhenExistingWorkdirBelongsToDifferentIdenti
 	_, ok := componentConfig[WorkdirPathKey]
 	assert.False(t, ok, "WorkdirPathKey must not be set when the existing workdir fails identity verification")
 }
+
+// TestComponentOptionsTerraformCompatibility verifies the default service keeps
+// Terraform migration and lock restoration while CloudFormation skips both.
+func TestComponentOptionsTerraformCompatibility(t *testing.T) {
+	for _, componentType := range []string{"", "terraform", "aws/cloudformation"} {
+		t.Run("type="+componentType, func(t *testing.T) {
+			basePath := t.TempDir()
+			service := NewService()
+			if componentType != "" {
+				service = NewService(WithComponent(ComponentOptions{Type: componentType}))
+			}
+			expectedType := componentType
+			if expectedType == "" {
+				expectedType = "terraform"
+			}
+			assert.Equal(t, expectedType, service.componentType())
+			legacy := filepath.Join(basePath, WorkdirPath, "terraform", legacyWorkdirName("dev", "network"))
+			require.NoError(t, os.MkdirAll(legacy, 0o755))
+			require.NoError(t, WriteMetadata(legacy, &WorkdirMetadata{Component: "network", Stack: "dev"}))
+			state := []byte(`{"serial":42}`)
+			require.NoError(t, os.WriteFile(filepath.Join(legacy, "terraform.tfstate"), state, 0o644))
+			canonical, err := BuildPath(basePath, expectedType, "network", "dev", nil)
+			require.NoError(t, err)
+			require.NoError(t, service.migrateComponentWorkdir(basePath, "network", "dev", canonical))
+			if expectedType == "terraform" {
+				assert.NoDirExists(t, legacy)
+				actual, err := os.ReadFile(filepath.Join(canonical, "terraform.tfstate"))
+				require.NoError(t, err)
+				assert.Equal(t, state, actual)
+			} else {
+				assert.DirExists(t, legacy)
+				assert.NoDirExists(t, canonical)
+			}
+			source, destination := t.TempDir(), t.TempDir()
+			section := map[string]any{"atmos_stack": "dev", "atmos_component": "network"}
+			lock := []byte("# pinned instance providers\n")
+			require.NoError(t, os.WriteFile(filepath.Join(source, provisioner.InstanceLockFilename(section)), lock, 0o644))
+			require.NoError(t, service.restoreTerraformLock(source, destination, section))
+			canonicalLock := filepath.Join(destination, provisioner.CanonicalLockFilename)
+			if expectedType == "terraform" {
+				actual, err := os.ReadFile(canonicalLock)
+				require.NoError(t, err)
+				assert.Equal(t, lock, actual)
+			} else {
+				assert.NoFileExists(t, canonicalLock)
+			}
+		})
+	}
+}
+
+// TestComponentOptionsMissingSource verifies generated-only workdirs preserve
+// generated files when no source exists, while ordinary components surface the error.
+func TestComponentOptionsMissingSource(t *testing.T) {
+	for _, allowMissing := range []bool{false, true} {
+		t.Run(map[bool]string{false: "required source", true: "generated source"}[allowMissing], func(t *testing.T) {
+			service := NewService(WithComponent(ComponentOptions{Type: "aws/cloudformation", AllowMissingSource: allowMissing}))
+			source, destination := filepath.Join(t.TempDir(), "missing"), t.TempDir()
+			generated := filepath.Join(destination, "generated.yaml")
+			require.NoError(t, os.WriteFile(generated, []byte("Resources: {}\n"), 0o644))
+			changed, err := service.syncComponentFiles(source, destination)
+			if allowMissing {
+				require.NoError(t, err)
+				assert.False(t, changed)
+				contents, err := os.ReadFile(generated)
+				require.NoError(t, err)
+				assert.Equal(t, "Resources: {}\n", string(contents))
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
