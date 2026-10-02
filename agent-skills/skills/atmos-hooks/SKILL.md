@@ -24,6 +24,7 @@ toolchain-aware automation around Terraform, Helm, Kubernetes, and other compone
 | Post-deployment smoke tests and integration checks | [atmos-tests](../atmos-tests/SKILL.md) |
 | Git hooks and GitOps repositories | [atmos-git](../atmos-git/SKILL.md) |
 | Tool installation for hook commands | [atmos-toolchain](../atmos-toolchain/SKILL.md) |
+| TFLint hooks, standalone linting, and rule configuration | [atmos-lint](../atmos-lint/SKILL.md) |
 | CI summaries and Atmos Pro upload | [atmos-ci](../atmos-ci/SKILL.md) and [atmos-pro](../atmos-pro/SKILL.md) |
 
 ## Hook Shape
@@ -103,7 +104,7 @@ See [atmos-workflows](../atmos-workflows/SKILL.md#conditional-execution-with-whe
 
 ## Hook Kinds
 
-Stack lifecycle hooks support `command`, `store`, `git`, `infracost`, `trivy`, `checkov`,
+Stack lifecycle hooks support `command`, `store`, `git`, `tflint`, `infracost`, `trivy`, `checkov`,
 `kics`, and the step bridge. The legacy `ci.*` hook kinds still parse but are deprecated no-ops;
 use the current CI provider bindings instead. Use a named kind when Atmos has one; use `command`
 for a project-specific binary. The legacy `command:` discriminator and hyphenated events remain
