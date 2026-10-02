@@ -105,17 +105,28 @@ system, unlike native Helm.
 
   <dt>`parameters`</dt>
   <dd>
-    CloudFormation template parameters as a YAML map. Values are normalized at
-    the API boundary: scalars are stringified, and list values are
+    CloudFormation template parameters, as either a YAML map of name to value
+    or a list of `ParameterKey`/`ParameterValue` entries (the AWS CLI and Rain
+    parameter-file format, which also works through `!include`). Values are
+    normalized at the API boundary: scalars are stringified, and list values are
     comma-joined to match CloudFormation's `List<Type>`/`CommaDelimitedList`
-    wire format (the API only accepts strings). `UsePreviousValue` is not
-    expressible — Atmos config is the source of truth for every parameter on
-    every deploy, the same declarative stance the Terraform component takes
-    toward variables.
+    wire format (the API only accepts strings). Any other shape, or a malformed
+    list entry, is an error that names the problem; Atmos never falls back to
+    the template defaults. Atmos config is the source of truth for every
+    parameter on every deploy, the same declarative stance the Terraform
+    component takes toward variables, so `UsePreviousValue` is not needed in
+    the map form. The list form accepts `UsePreviousValue: true` (without a
+    `ParameterValue`) for the rare update that must keep a stack's current value.
+    To use only the `Parameters` section of a Rain config file, select it with
+    `!include rain-config.yaml .Parameters`.
   </dd>
 
   <dt>`capabilities`</dt>
-  <dd>Acknowledged IAM capabilities, e.g. `CAPABILITY_IAM`, `CAPABILITY_NAMED_IAM`, `CAPABILITY_AUTO_EXPAND`.</dd>
+  <dd>
+    Acknowledged IAM capabilities: `CAPABILITY_IAM`, `CAPABILITY_NAMED_IAM`, or
+    `CAPABILITY_AUTO_EXPAND`. Atmos checks each value locally, and an unknown
+    value fails before any AWS call, naming the value and the valid set.
+  </dd>
 
   <dt>`tags`</dt>
   <dd>A map of `key: value` tags applied to the CloudFormation stack (not to be confused with Atmos's own component `tags`/`--tags` selection, which is separate).</dd>
@@ -293,6 +304,35 @@ declare additional named targets under `provision.targets`, selected with
 `--target`:
 
 <dl>
+  <dt>`kind: aws/cloudformation`</dt>
+  <dd>
+    The direct-deploy target. It is implicit — named `default`, with no
+    configuration — whenever nothing else is selected, so most components never
+    declare it. Declare it explicitly when it needs configuration, which today
+    means the `packaging:` field described in [Choosing the Packaging
+    Bucket](#choosing-the-packaging-bucket), or when you want a name to select
+    with `--target` or `provision.default`.
+
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      provision:
+        default: direct
+        targets:
+          direct:
+            kind: aws/cloudformation
+            packaging: artifacts
+          artifacts:
+            kind: aws/s3
+            bucket: my-cfn-artifacts
+            region: us-east-1
+```
+
+    The `provision.default` field names the target used when `--target` is
+    omitted, and `--target` overrides it for one run.
+  </dd>
+
   <dt>`kind: aws/s3`</dt>
   <dd>
     Uploads the template to S3 and stops — a publish-only target, useful for a
@@ -317,6 +357,16 @@ components:
             region: us-east-1
 ```
 
+    Atmos uploads each template to a content-addressed key,
+    `<prefix>/<stack>/<component>/template-<digest>.yaml`, next to a
+    `.metadata.json` sidecar. Leading and trailing slashes on `prefix` are
+    trimmed, so `prefix: /templates/` and `prefix: templates` produce the same
+    keys. When an object with the same key and digest already exists, Atmos
+    reuses it instead of uploading again, so repeated runs on a versioned
+    bucket do not accumulate object versions. A publish-only `apply --target
+    <name>` reports the uploaded location as an `s3://` URI and an `https://`
+    URL.
+
     The bucket must exist before `apply`/`deploy` uploads to it — either
     provision it explicitly with
     [`atmos aws cloudformation backend create`](/cli/commands/aws/cloudformation/backend/create),
@@ -340,6 +390,11 @@ components:
             bucket: my-cfn-artifacts
             region: us-east-1
 ```
+
+    Only `apply` and `deploy` create the bucket. The `validate`, `diff`, and
+    `changeset create` verbs also upload an oversized template, but they never
+    create infrastructure: when the bucket is missing they fail with a hint to
+    run `backend create` or `apply`.
   </dd>
 
   <dt>`kind: git`</dt>
@@ -406,6 +461,57 @@ components:
   existing instance, without changing which accounts/regions have one.
   </dd>
 </dl>
+
+### Choosing the Packaging Bucket
+
+Packaging uploads an oversized template through a `kind: aws/s3` target. Atmos
+picks that target as follows:
+
+- When the selected target is itself `kind: aws/s3`, that target is used.
+- When the component declares exactly one `kind: aws/s3` target, it is used
+  automatically.
+- When the component declares two or more, the selected deploy target must name
+  one with `packaging: <target-name>`. Atmos never guesses.
+
+The implicit direct-deploy target has no configuration, so it cannot carry
+`packaging:`. With two or more `kind: aws/s3` targets, declare the deploy target
+explicitly and make it the default:
+
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      provision:
+        default: direct
+        targets:
+          direct:
+            kind: aws/cloudformation
+            packaging: artifacts
+          artifacts:
+            kind: aws/s3
+            bucket: my-cfn-artifacts
+            region: us-east-1
+          archive:
+            kind: aws/s3
+            bucket: my-cfn-archive
+            region: us-east-1
+```
+
+Naming the explicit target `default` works too and replaces the implicit one,
+so `provision.default` is not needed. A `kind: git` deploy target takes the same
+`packaging:` field.
+
+### Dry Run
+
+A dry run (`--dry-run`) validates the configuration statically and makes no AWS
+calls. It applies the same rules the real run enforces before it changes anything: an
+unknown `--target`, a `kind: aws/s3` target without `bucket` or `region`, a
+template over the 51,200-byte inline limit with no packaging target, and for
+StackSets an unknown `permission_model` or a `SERVICE_MANAGED` target that sets
+both `accounts` and `regions`. Values that come from templates or YAML functions
+are not evaluated, so they are not judged. The output names the verb, component,
+and stack, for example `Dry run: apply vpc in plat-ue2-dev: configuration
+validated; no AWS calls made`.
 
 ## Related
 

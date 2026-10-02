@@ -8,6 +8,8 @@ description: Render the nested-stack dependency tree.
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
   Render the deployed stack's nested-stack dependency tree: walk the stack's
@@ -42,29 +44,21 @@ atmos aws cloudformation tree --affected --base origin/main
   <dt>`--stack`, `-s` <em>(required)</em></dt>
   <dd>Atmos stack.</dd>
 
-  <dt>`--all` <em>(optional)</em></dt>
-  <dd>Render trees for all `aws/cloudformation` components in dependency order.</dd>
+<SelectionFlags />
 
-  <dt>`--affected` <em>(optional)</em></dt>
-  <dd>Render trees for affected `aws/cloudformation` components and their dependencies.</dd>
-
-  <dt>`--include-dependents` <em>(optional)</em></dt>
-  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
-
-  <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
-
-  <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+<GitFlags />
 </dl>
 
 ## Output
 
 ```
 vpc-plat-ue2-dev
-├─ vpc-plat-ue2-dev-NatGatewayStack-AB12CD34
-└─ vpc-plat-ue2-dev-SubnetsStack-EF56GH78
+├─ NatGatewayStack (vpc-plat-ue2-dev-NatGatewayStack-AB12CD34)
+└─ SubnetsStack (vpc-plat-ue2-dev-SubnetsStack-EF56GH78)
 ```
+
+The root is the stack name. Each nested stack shows its logical resource ID in the parent, followed by
+its stack name in parentheses; stack ARNs are not shown.
 
 A nested stack whose `AWS::CloudFormation::Stack` resource is still
 `CREATE_IN_PROGRESS` (and so has no physical resource ID yet) is not shown —
