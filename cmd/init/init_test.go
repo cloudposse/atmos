@@ -113,6 +113,12 @@ func TestInitCmd_FlagDefinitions(t *testing.T) {
 			shorthand:    "",
 			defaultValue: "auto",
 		},
+		{
+			name:         "recreate-deleted flag",
+			flagName:     "recreate-deleted",
+			shorthand:    "",
+			defaultValue: "false",
+		},
 	}
 
 	for _, tt := range tests {

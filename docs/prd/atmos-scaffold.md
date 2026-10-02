@@ -83,6 +83,28 @@ and `pkg/generator/` for the source of truth on current behavior.
   [PR #2989](https://github.com/cloudposse/atmos/pull/2989) for the base-ref
   pinning this builds on and [PR #3047](https://github.com/cloudposse/atmos/pull/3047)
   for the conflict-marker correctness fixes it depends on.
+- **File deletion handling during `--update`**: `--update-strategy=rendered`
+  deletes a file the template stopped generating between the old and new ref,
+  but only when the on-disk copy is still byte-identical to the old pristine
+  render — if local edits survived, the file is left untouched and the update
+  fails with an unresolved merge conflict (`ErrMergeConflict`, exit code 1)
+  instead of silently deleting or silently keeping it, so a human reviews it.
+  `--update-strategy=tracked` does **not** support this: there is no re-render
+  of "the template at whatever ref produced this base commit" available, no
+  reliable record of what that ref even was, and naively enumerating the git
+  tree at `--base-ref` would conflate files the template actually owns with
+  unrelated files that merely happen to exist in that historical commit — this
+  is a documented limitation, not an oversight. Independently of strategy,
+  `--update` also no longer recreates a file the user deliberately deleted:
+  both strategies check whether a base exists for a path that's missing on
+  disk, and skip regenerating it if so, rather than silently overwriting the
+  deletion (matching how tools like Copier treat user-deleted paths). Pass
+  `--recreate-deleted` to opt back into the old unconditional-recreate
+  behavior. It's a flag of its own rather than reusing `--force`: `--force`
+  combined with `--update` already means "on conflict, the template's version
+  wins" (`--force` with an explicit non-`theirs` `--merge-strategy` is
+  rejected as contradictory), so tying recreation to it would make "manual
+  conflict resolution" and "recreate what I deleted" mutually exclusive.
 
 **Still not implemented** (see "Future Enhancements" below):
 - ❌ Remote-template caching/version pinning beyond a single `--ref`
@@ -233,6 +255,7 @@ atmos scaffold
     --update-strategy           # Where --update's merge base comes from: tracked (default, needs a git base; see --base-ref) or rendered (no git dependency; see the "--update-strategy" note above)
     --base-ref                  # Git ref to use as the 3-way merge base with --update-strategy=tracked (defaults to HEAD)
     --merge-strategy            # Conflict resolution for --update: manual (default), ours, theirs
+    --recreate-deleted          # Recreate a file during --update even if you deleted it locally (default: false, the deletion is left in place)
     --max-changes               # Change threshold (not implemented — no CLI flag; internal default is hardcoded)
 
   list                          # List available templates

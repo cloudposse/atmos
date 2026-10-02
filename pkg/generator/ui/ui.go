@@ -97,6 +97,15 @@ const (
 	// executeWithSetup), not one of these two labels.
 	dryRunCreateStatus = "(would create)"
 	dryRunUpdateStatus = "(would update)"
+
+	// Per-file status labels for a file the template stopped generating (see
+	// handleTemplateDeletions). The "forced" variants apply when local edits
+	// survived but --force deleted it anyway instead of leaving it as an
+	// unresolved conflict (see processDeletionCandidate).
+	deletedStatus            = "(deleted)"
+	dryRunDeleteStatus       = "(would delete)"
+	forcedDeletedStatus      = "(deleted --force, had local modifications)"
+	dryRunForcedDeleteStatus = "(would delete --force, had local modifications)"
 )
 
 // fileExistsAt reports whether a file (not directory) already exists at
@@ -525,6 +534,12 @@ type InitUI struct {
 	updateStrategy     engine.UpdateStrategy
 	renderedBaseConfig *tmpl.Configuration
 	renderedBaseValues map[string]interface{}
+	// renderedBaseRoot is the root of the pristine old-ref render tempDir set
+	// up by setupUpdateBase for UpdateStrategyRendered (see renderPristineBase).
+	// It stays valid for the lifetime of one Execute* call -- the caller defers
+	// cleanup until after generation finishes -- and is read by
+	// handleTemplateDeletions to detect files the template stopped generating.
+	renderedBaseRoot string
 }
 
 // NewInitUI creates a new InitUI instance.
@@ -563,6 +578,13 @@ func (ui *InitUI) SetConflictStrategy(strategy merge.ConflictStrategy) {
 // SetMergeDriver sets which merger handles every file during a 3-way merge.
 func (ui *InitUI) SetMergeDriver(driver merge.Driver) {
 	ui.processor.SetMergeDriver(driver)
+}
+
+// SetRecreateDeleted controls whether --update recreates a file the user
+// deleted but the template still generates (default false: the deletion is
+// left in place). See engine.Processor.SetRecreateDeleted.
+func (ui *InitUI) SetRecreateDeleted(recreate bool) {
+	ui.processor.SetRecreateDeleted(recreate)
 }
 
 // SetSkipHooks configures the --skip-hooks predicate (see
@@ -656,7 +678,11 @@ func (ui *InitUI) setupUpdateBase(targetPath, baseRef string, delimiters []strin
 			return func() {}, fmt.Errorf("failed to render the update-strategy=rendered base: %w", err)
 		}
 		ui.processor.SetupRenderedBaseStorage(targetPath, renderedTempDir)
-		return cleanupRenderedBase, nil
+		ui.renderedBaseRoot = renderedTempDir
+		return func() {
+			cleanupRenderedBase()
+			ui.renderedBaseRoot = ""
+		}, nil
 	}
 
 	if baseRef != "" {
@@ -1463,11 +1489,17 @@ func (ui *InitUI) reportWriteResult(err error, renderedPath string, existedBefor
 		}
 		return true, false
 	case errors.As(err, &skipErr):
-		// File was intentionally skipped.
+		// File was intentionally skipped. A specific Reason (e.g. the user
+		// deleted this file -- see engine.Processor.deletedByUser) overrides
+		// the generic "(skipped)" label with that explanation.
+		label := skippedText
+		if skipErr.Reason != "" {
+			label = fmt.Sprintf("(skipped: %s)", skipErr.Reason)
+		}
 		ui.writeOutput(fileStatusFormat,
 			ui.grayStyle.Render(bulletSymbol),
 			skipErr.Path,
-			ui.grayStyle.Render(skippedText))
+			ui.grayStyle.Render(label))
 		return false, false
 	default:
 		ui.writeOutput(fileStatusFormat,
@@ -1732,6 +1764,40 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		failedFiles = append(failedFiles, entryFailedPaths...)
 		if entryErr != nil {
 			failureErrs = append(failureErrs, entryErr)
+		}
+	}
+
+	// Delete files the template stopped generating (--update-strategy=rendered
+	// only -- see handleTemplateDeletions's own doc comment). A no-op for every
+	// other strategy/mode, folded into the same counters as any other entry
+	// above so the summary line and error branch below need no special-casing.
+	//
+	// Skipped entirely when the main loop already failed: a failed entry (e.g.
+	// a matrix expansion error in processMatrixedFileEntry) returns before
+	// seenRenderedPaths is ever populated for that file's outputs, making them
+	// indistinguishable from paths the template genuinely stopped generating.
+	// Running the deletion pass against that incomplete set could delete files
+	// still-valid-but-unrecorded due to the unrelated failure, not because the
+	// template actually removed them.
+	if errorCount == 0 {
+		deletionResult, deleteErr := ui.handleTemplateDeletions(targetPath, seenRenderedPaths, force)
+		successCount += deletionResult.successCount
+		errorCount += deletionResult.errorCount
+		failedFiles = append(failedFiles, deletionResult.failedPaths...)
+		if deleteErr != nil {
+			failureErrs = append(failureErrs, deleteErr)
+			// handleTemplateDeletions can fail (e.g. the filepath.WalkDir scan
+			// itself erroring) without ever incrementing deletionResult.errorCount
+			// -- that only counts individual candidate failures, not a scan
+			// failure before any candidate was even reached. Without this,
+			// errorCount would stay 0, the failure branch below would never
+			// trigger, and the run would report success and persist a new
+			// project record despite a real deletion-scan failure -- losing the
+			// old rendered reference a later --update would need to find the
+			// remaining obsolete files.
+			if deletionResult.errorCount == 0 {
+				errorCount++
+			}
 		}
 	}
 

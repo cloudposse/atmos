@@ -125,6 +125,7 @@ If no target directory is specified, you will be prompted for one.`,
 		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
 		mergeStrategy := v.GetString("merge-strategy")
 		mergeDriver := v.GetString("merge-driver")
+		recreateDeleted := v.GetBool("recreate-deleted")
 		skipHooks := hooks.NewSkipPredicate(hooks.ResolveSkipHooks(cmd))
 
 		// Interactive prompting requires both an interactive-capable flag
@@ -146,20 +147,21 @@ If no target directory is specified, you will be prompted for one.`,
 		}
 
 		return executeInit(cmd.Context(), &initOptions{
-			templateName:   template,
-			targetDir:      target,
-			interactive:    interactive,
-			force:          force,
-			update:         update,
-			baseRef:        baseRef,
-			templateVars:   templateValues,
-			sourceOverride: sourceOverride,
-			ref:            ref,
-			git:            gitEnabled,
-			mergeStrategy:  mergeStrategy,
-			mergeDriver:    mergeDriver,
-			updateStrategy: updateStrategy,
-			skipHooks:      skipHooks,
+			templateName:    template,
+			targetDir:       target,
+			interactive:     interactive,
+			force:           force,
+			update:          update,
+			baseRef:         baseRef,
+			templateVars:    templateValues,
+			sourceOverride:  sourceOverride,
+			ref:             ref,
+			git:             gitEnabled,
+			mergeStrategy:   mergeStrategy,
+			mergeDriver:     mergeDriver,
+			updateStrategy:  updateStrategy,
+			recreateDeleted: recreateDeleted,
+			skipHooks:       skipHooks,
 		})
 	},
 }
@@ -184,6 +186,7 @@ func init() {
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
 		flags.WithStringFlag("update-strategy", "", "tracked", "Where --update's 3-way merge base comes from: tracked (the target's own git history at --base-ref, default), rendered (a pristine re-render of the template at the ref that produced what's currently on disk, using its recorded answers; requires a prior generation's scaffold.yaml record, no git dependency)"),
 		flags.WithValidValues("update-strategy", "tracked", "rendered"),
+		flags.WithBoolFlag("recreate-deleted", "", false, "Recreate a file during --update even if you deleted it locally (default: the deletion is left in place)"),
 		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
 		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
 		// hooks for this invocation; --skip-hooks=name1,name2 skips only the
@@ -202,6 +205,7 @@ func init() {
 		flags.WithEnvVars("merge-driver", "ATMOS_INIT_MERGE_DRIVER"),
 		flags.WithEnvVars("merge-strategy", "ATMOS_INIT_MERGE_STRATEGY"),
 		flags.WithEnvVars("update-strategy", "ATMOS_INIT_UPDATE_STRATEGY"),
+		flags.WithEnvVars("recreate-deleted", "ATMOS_INIT_RECREATE_DELETED"),
 		flags.WithEnvVars("skip-hooks", "ATMOS_INIT_SKIP_HOOKS"),
 	)
 
@@ -281,20 +285,21 @@ func parseSetFlag(flag string) (string, string, error) {
 
 // initOptions holds configuration for the init operation.
 type initOptions struct {
-	templateName   string
-	targetDir      string
-	interactive    bool
-	force          bool
-	update         bool
-	baseRef        string
-	templateVars   map[string]interface{}
-	sourceOverride string
-	ref            string
-	git            bool
-	mergeStrategy  string
-	mergeDriver    string
-	updateStrategy string
-	skipHooks      func(string) bool
+	templateName    string
+	targetDir       string
+	interactive     bool
+	force           bool
+	update          bool
+	baseRef         string
+	templateVars    map[string]interface{}
+	sourceOverride  string
+	ref             string
+	git             bool
+	mergeStrategy   string
+	mergeDriver     string
+	updateStrategy  string
+	recreateDeleted bool
+	skipHooks       func(string) bool
 }
 
 // executeInit initializes a new Atmos project from a template.
@@ -327,6 +332,7 @@ func executeInit(_ context.Context, opts *initOptions) error {
 		return err
 	}
 	initUI.SetUpdateStrategy(updateStrategy)
+	initUI.SetRecreateDeleted(opts.recreateDeleted)
 
 	// Only resolve here when target is already the real, final target
 	// directory (positional). The no-target interactive flow resolves this
