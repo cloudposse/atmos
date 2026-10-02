@@ -161,6 +161,7 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 	if err != nil {
 		return nil, err
 	}
+	spec.withAtmosIdentity(info)
 
 	if operationsSkippingTemplateLoad[operation] {
 		if operation == OperationChangesetExecute && spec.StackPolicyFile != "" {

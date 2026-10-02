@@ -43,6 +43,7 @@ func validateDryRun(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigA
 	if err != nil {
 		return err
 	}
+	spec.withAtmosIdentity(info)
 	check := &dryRunCheck{AtmosConfig: atmosConfig, Info: info, Section: section, Flags: flags, Operation: operation, Spec: spec}
 	if err := check.validateStackSet(); err != nil {
 		return err
@@ -137,7 +138,7 @@ func (c *dryRunCheck) validatePackaging() error {
 	// The real apply rejects a `kind: aws/stackset` target before packaging
 	// (see deliverApply), so the dry run must reject it too.
 	if c.Operation == OperationApply && selected.Kind == kindAwsStackSet {
-		return stackSetTargetError(selected.Name)
+		return stackSetTargetError(selected.Name, c.Spec)
 	}
 	if !oversized && selected.Kind != kindAwsS3 {
 		return nil

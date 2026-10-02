@@ -47,14 +47,14 @@ func renderApplyPreview(stackName string, result *changeSetResult) {
 
 // stackSetTargetError explains that apply/deploy cannot deliver to a
 // `kind: aws/stackset` target and points at the StackSet verbs that can.
-func stackSetTargetError(targetName string) error {
+func stackSetTargetError(targetName string, spec *stackSpec) error {
 	hintTarget := ""
 	if targetName != "" {
 		hintTarget = " --target " + targetName
 	}
 	return errUtils.Build(errUtils.ErrAwsCloudFormationStackSetTargetNotApplicable).
 		WithExplanationf("Provision target %q is a `kind: aws/stackset` target. apply and deploy deliver a single stack; StackSets are managed by their own verbs.", targetName).
-		WithHintf("Run `atmos aws cloudformation stackset create <component> -s <stack>%s` to create it, or `stackset update` to change an existing StackSet.", hintTarget).
+		WithHintf("Run `atmos aws cloudformation stackset create %s%s` to create it, or `stackset update` to change an existing StackSet.", spec.commandTarget(), hintTarget).
 		Err()
 }
 

@@ -335,11 +335,11 @@ func TestRunChangesetCreate_KeepsStubForExplicitChangeSet(t *testing.T) {
 func TestCreateChangeSet_RollbackCompleteFailsBeforeChangeSet(t *testing.T) {
 	for name, run := range map[string]func(client CloudFormationClient) error{
 		"diff": func(client CloudFormationClient) error {
-			_, err := runDiff(&opContext{Ctx: context.Background()}, client, vpcSpec(), map[string]any{})
+			_, err := runDiff(&opContext{Ctx: context.Background()}, client, identifiedVpcSpec(), map[string]any{})
 			return err
 		},
 		"apply": func(client CloudFormationClient) error {
-			_, err := deployDirect(autoApproveOctx(), client, vpcSpec())
+			_, err := deployDirect(autoApproveOctx(), client, identifiedVpcSpec())
 			return err
 		},
 	} {
@@ -351,7 +351,8 @@ func TestCreateChangeSet_RollbackCompleteFailsBeforeChangeSet(t *testing.T) {
 			err := run(client)
 			require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackRollbackComplete)
 			hints := strings.Join(cockroachErrors.GetAllHints(err), "\n")
-			assert.Contains(t, hints, "atmos aws cloudformation delete <component> -s <stack>")
+			assert.Contains(t, hints, "atmos aws cloudformation delete vpc -s dev")
+			assert.NotContains(t, hints, "<component>")
 			assert.Contains(t, strings.Join(cockroachErrors.GetAllDetails(err), "\n"), "initial create failed")
 		})
 	}
@@ -521,11 +522,11 @@ func TestDeliverApply_StackSetTargetIsRejectedWithHint(t *testing.T) {
 		"targets": map[string]any{"fanout": map[string]any{"kind": kindAwsStackSet, "accounts": []any{"123456789012"}, "regions": []any{"us-east-2"}}},
 	}}
 
-	_, result, err := deliverApply(octx, client, vpcSpec())
+	_, result, err := deliverApply(octx, client, identifiedVpcSpec())
 	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetTargetNotApplicable)
 	assert.Nil(t, result)
 	hints := strings.Join(cockroachErrors.GetAllHints(err), "\n")
-	assert.Contains(t, hints, "stackset create <component> -s <stack> --target fanout")
+	assert.Contains(t, hints, "stackset create vpc -s dev --target fanout")
 	assert.Contains(t, hints, "stackset update")
 }
 
@@ -699,4 +700,30 @@ func TestRunApply_DeclinedHasNoFinalStatus(t *testing.T) {
 	summary, err := runApply(directApplyOctx(map[string]any{}), client, vpcSpec(), map[string]any{})
 	require.ErrorIs(t, err, errUtils.ErrUserAborted)
 	assert.NotContains(t, summary, "final_status")
+}
+
+// identifiedVpcSpec is vpcSpec with the Atmos component and stack recorded, as
+// resolveSpecAndTemplate records them for every real operation.
+func identifiedVpcSpec() *stackSpec {
+	return vpcSpec().withAtmosIdentity(&schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev"})
+}
+
+// Hints name a runnable command: the recorded component and stack, with a
+// placeholder only for a part that was never recorded.
+func TestStackSpecCommandTarget(t *testing.T) {
+	tests := []struct {
+		name string
+		info *schema.ConfigAndStacksInfo
+		want string
+	}{
+		{name: "both recorded", info: &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev"}, want: "vpc -s dev"},
+		{name: "stack missing", info: &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"}, want: "vpc -s <stack>"},
+		{name: "component missing", info: &schema.ConfigAndStacksInfo{Stack: "dev"}, want: "<component> -s dev"},
+		{name: "nothing recorded", info: nil, want: "<component> -s <stack>"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, vpcSpec().withAtmosIdentity(tt.info).commandTarget())
+		})
+	}
 }
