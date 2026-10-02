@@ -10,6 +10,7 @@ id: aws-cloudformation
 import File from "@site/src/components/File";
 import Intro from "@site/src/components/Intro";
 import Experimental from "@site/src/components/Experimental";
+import EmbedFile from "@site/src/components/EmbedFile";
 
 <Intro>
   Define CloudFormation stacks in stack manifests when you want Atmos to
@@ -77,10 +78,10 @@ dependencies, and be included in affected runs.
   <dd>Cross-component ordering for `--all` and `--affected` runs.</dd>
 </dl>
 
-CloudFormation components do **not** support a `generate:` section — there is
-no codegen-artifact output the way Terraform generates backend/provider files.
-They also do not support a `plugins:` section — there is no chart-style plugin
-system, unlike native Helm.
+CloudFormation components support a [`generate:`](#generated-files) section for
+stack-specific templates, stack policies, and auxiliary files. They do not
+support a `plugins:` section — there is no chart-style plugin system, unlike
+native Helm.
 
 ## CloudFormation-Specific Sections
 
@@ -233,6 +234,43 @@ components/cloudformation/
     ├── template.yaml
     └── stack-policy.json
 ```
+
+## Generated Files
+
+Enable `components."aws/cloudformation".auto_generate_files: true` in
+[`atmos.yaml`](/cli/configuration/components/aws-cloudformation), then define a
+component `generate` map. It uses the shared [file-generation syntax](/stacks/generate):
+filenames map to Go-template strings or structured maps serialized by extension.
+For CloudFormation intrinsic functions in a structured map, use their long form,
+such as `Ref: Marker`.
+
+Point `path` at a generated template. An inline `template` can still generate
+auxiliary files, including a JSON policy referenced by `stack_policy.file`;
+`template` and `path` remain mutually exclusive.
+
+<EmbedFile filePath="examples/cloudformation/stacks/catalog/demo-generated.yaml" />
+
+Atmos provisions local or remote component sources, resolves any source subpath,
+and then generates files before reading the template and policy. With generation
+enabled and a nonempty block, it automatically creates an isolated workdir for
+each stack/component instance. Two instances sharing one local directory or
+vendored source therefore write independently. Explicit
+`provision.workdir.enabled: false` is rejected; generated files never need to be
+written into the shared component directory. Shared `metadata.working_directory`
+and `settings.working_directory` overrides are also rejected. Source `pull --force`
+and `delete` use this same isolated directory. This isolation does not serialize
+simultaneous deployments of the same AWS stack.
+
+Generation runs for `render`, `fmt`, `validate`, `plan`/`diff`, `apply`/`deploy`,
+`changeset create`, and `stackset create`/`update`. `changeset execute` also
+generates files when it needs a configured stack policy. It does not run for
+`--dry-run` or operations that only inspect or delete deployed state, such as
+`output`, `get`, `logs`, `watch`, `tree`, `drift`, and `delete`.
+
+There is no separate CloudFormation `generate` command. Run
+`atmos aws cloudformation render demo-generated -s local` from the
+[CloudFormation example](/examples/cloudformation) to inspect the generated
+template without starting the emulator.
 
 ## Source Provisioning
 

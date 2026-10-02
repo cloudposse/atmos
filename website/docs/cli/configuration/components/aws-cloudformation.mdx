@@ -30,6 +30,9 @@ components:
     # Base path to native aws/cloudformation component directories (where local
     # templates live). Defaults to components/cloudformation.
     base_path: components/cloudformation
+
+    # Generate component files before operations that read the local template.
+    auto_generate_files: false
 ```
 </File>
 
@@ -42,15 +45,24 @@ to match the convention used throughout these docs and examples.
   <dt>`base_path`</dt>
   <dd>
     Base directory for native `aws/cloudformation` components. A component's
-    `template:` (and, when set, `stack_policy.file:`) resolve relative to its
+    `path:` (and, when set, `stack_policy.file:`) resolve relative to its
     component directory under this base path. Defaults to
     <code>components/cloudformation</code>.
+  </dd>
+  <dt>`auto_generate_files`</dt>
+  <dd>
+    When `true`, writes the component's [`generate`](/stacks/generate) block
+    before operations that consume its local template or stack policy. Defaults
+    to `false`. A nonempty block automatically uses an isolated workdir for each
+    stack/component instance; explicitly setting `provision.workdir.enabled: false`
+    is an error. See [generated files](/stacks/components/aws-cloudformation#generated-files)
+    for operation coverage and examples.
   </dd>
 </dl>
 
 Component-level fields — `template`, `stack_name`, `parameters`, `capabilities`,
 `tags`, `stack_policy`, `role_arn`, `notification_arns`, `disable_rollback`,
-`termination_protection`, `timeout_in_minutes`, `source`, `provision`, `auth`,
+`termination_protection`, `timeout_in_minutes`, `source`, `provision`, `generate`, `auth`,
 and `dependencies` — are configured per stack, not in `atmos.yaml`. See
 [CloudFormation stack configuration](/stacks/components/aws-cloudformation).
 

@@ -100,6 +100,11 @@ func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *fl
 		return err
 	}
 
+	componentConfig, err = config.prepareComponentConfig(atmosConfig, componentConfig)
+	if err != nil {
+		return err
+	}
+
 	// Determine and delete the target directory.
 	return deleteSourceDirectory(atmosConfig, config.ComponentType, component, componentConfig, deleteOpts.Force)
 }

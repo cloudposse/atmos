@@ -78,9 +78,10 @@ components:
 
 CloudFormation components use the same stack sections as other component types — `vars`, `env`,
 `auth`, `metadata`, `settings`, `dependencies`, `hooks`, `source`/`provision`, inheritance, and
-overrides — plus CloudFormation-specific fields. They do **not** support `generate:` (no
-codegen-artifact output, unlike Terraform's backend/provider generation) or `plugins:` (no
-chart-style plugin system, unlike native Helm).
+overrides — plus CloudFormation-specific fields. `generate:` supports templates and auxiliary
+files in isolated workdirs when `auto_generate_files` is enabled. See
+[generated files](references/generated-files.md) for configuration and operation coverage.
+`plugins:` is not supported (no chart-style plugin system).
 
 | Field | Purpose |
 |---|---|
@@ -119,30 +120,17 @@ All operation commands accept `--all`, `--affected` (with `--base`/`--ref`/`--sh
 `--tags`/`--labels`-based selection. `atmos aws cfn` is a Cobra alias for `atmos aws cloudformation`
 that works with every verb.
 
-**Confirmation**: `delete` prompts for interactive confirmation on a TTY; pass `--auto-approve` to
-skip it. `apply` creates its changeset first, prints the predicted changes, then asks (`--auto-approve`
-skips only the question, not the preview); declining deletes the changeset and the empty
-`REVIEW_IN_PROGRESS` stack Atmos created for a never-deployed component. Without a TTY and without
-`--auto-approve`, `apply` fails before creating anything (`confirmation required`, not `user aborted`).
-Publish-only (`aws/s3`) and external (`git`) targets change no stack and never ask. `deploy` defaults
-`--auto-approve` to `true`. See [apply flow](references/operations.md#apply-diff-and-delete-behavior).
+**Confirmation**: direct `apply` previews the changeset before asking; `deploy` auto-approves.
+`delete` also asks; publish-only/external targets do not. See
+[apply flow](references/operations.md#apply-diff-and-delete-behavior) for cleanup and non-TTY behavior.
 
 ### Output formats
 
-`output` supports the full standard format set shared with `atmos terraform output`: `json`, `yaml`,
-`hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table` (default on a TTY), and `github` (GitHub
-Actions `$GITHUB_OUTPUT` syntax via `atmos aws cloudformation output vpc -s dev --format=github`),
-plus `--flatten` and `--uppercase` key options. An unsupported `--format` lists the valid ones. A
-stack with no Outputs prints `Stack <name> has no outputs`. The `key` argument cannot be combined
-with bulk selection.
-
-With masking enabled, standalone output and apply summaries read the deployed template
-(`cloudformation:GetTemplate`) and redact outputs that reference NoEcho parameters, including
-intrinsics and indirect resource/condition dependencies. Known parameter/default values are also
-registered with the masker. Missing or invalid sensitivity metadata fails before output is printed.
-This works without a local template or source download, including when configured values are stale.
-`--mask=false` explicitly disables presentation masking. Internal component output lookups retain
-real values. Arbitrary transformed secrets without a detectable dependency cannot be recognized.
+Formats: `json`, `yaml`, `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table`, `github`;
+key modifiers: `--flatten`, `--uppercase`. A positional key selects one output.
+Masking reads deployed templates and fails closed if sensitivity metadata is unavailable;
+`--mask=false` disables it. Internal lookups keep real values. See
+[output formats and masking](references/operations.md#output-formats-and-masking) for the full contract.
 
 ## Changesets
 
@@ -267,11 +255,12 @@ table.
 components:
   "aws/cloudformation":
     base_path: components/cloudformation   # default
+    auto_generate_files: false             # opt in to component generate blocks
 ```
 
-`base_path` is the only project-wide setting. Every other CloudFormation field (`template`/`path`,
+`base_path` and `auto_generate_files` are project-wide settings. Other CloudFormation fields (`template`/`path`,
 `stack_name`, `parameters`, `capabilities`, `tags`, `stack_policy`, `role_arn`, `notification_arns`,
-`disable_rollback`, `termination_protection`, `timeout_in_minutes`, `source`, `provision`, `auth`,
+`disable_rollback`, `termination_protection`, `timeout_in_minutes`, `source`, `provision`, `generate`, `auth`,
 `dependencies`) is configured per stack, not in `atmos.yaml`.
 
 ## Native CI Summaries

@@ -140,6 +140,11 @@ func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.S
 			Err()
 	}
 
+	componentConfig, err = cfg.prepareComponentConfig(atmosConfig, componentConfig)
+	if err != nil {
+		return err
+	}
+
 	// Provision the source using command context for cancellation propagation.
 	return ProvisionSource(cmd.Context(), &ProvisionSourceOptions{
 		AtmosConfig:     atmosConfig,

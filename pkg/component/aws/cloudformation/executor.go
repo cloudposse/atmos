@@ -16,7 +16,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -170,11 +169,7 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 		return spec, nil
 	}
 
-	componentPath, err := resolveComponentPath(atmosConfig, info)
-	if err != nil {
-		return nil, err
-	}
-	componentPath, _, err = provisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.CloudFormationComponentType, componentPath)
+	componentPath, err := prepareComponentFiles(ctx, atmosConfig, info)
 	if err != nil {
 		return nil, err
 	}

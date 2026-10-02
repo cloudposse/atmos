@@ -5,15 +5,17 @@ package source
 import (
 	"github.com/spf13/cobra"
 
+	cfn "github.com/cloudposse/atmos/pkg/component/aws/cloudformation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	sourcecmd "github.com/cloudposse/atmos/pkg/provisioner/source/cmd"
 )
 
 // cloudFormationConfig holds the component-type-specific configuration for aws/cloudformation.
 var cloudFormationConfig = &sourcecmd.Config{
-	ComponentType: cfg.CloudFormationComponentType,
-	TypeLabel:     "CloudFormation",
-	CLIName:       "aws cloudformation",
+	ComponentType:          cfg.CloudFormationComponentType,
+	TypeLabel:              "CloudFormation",
+	CLIName:                "aws cloudformation",
+	PrepareComponentConfig: cfn.PrepareSourceComponentConfig,
 }
 
 // sourceCmd represents the source command.

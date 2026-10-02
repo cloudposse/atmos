@@ -1556,7 +1556,9 @@ type StackPolicy struct {
 // CloudFormation components deploy a stack-scoped CloudFormation stack directly through the
 // AWS SDK for Go v2, with no external binary/toolchain dependency.
 type AwsCloudFormation struct {
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	// AutoGenerateFiles enables generate blocks in isolated component workdirs.
+	AutoGenerateFiles bool   `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	BasePath          string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	// Template is the path to the CloudFormation template, relative to the component's base path.
 	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 	// StackName is the explicit CloudFormation stack name (no legacy name-pattern interpolation).
