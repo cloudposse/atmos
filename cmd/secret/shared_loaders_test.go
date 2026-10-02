@@ -16,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/providers"
 )
@@ -359,6 +360,7 @@ components:
         vars:
           API_KEY:
             store: !aws.cloudformation.output secret-backends dev StoreName
+            value: !aws.cloudformation.output missing-producer dev Ignored
           SOPS_KEY:
             sops: !aws.cloudformation.output secret-backends dev SopsName
   aws/cloudformation:
@@ -400,4 +402,85 @@ components:
 		}
 	}
 	assert.Positive(t, requests.Load(), "authenticated loading must resolve selectors through CloudFormation")
+}
+
+// TestSecretDeclarationFieldsAndProvidersPreserved covers supported fields and
+// provider-specific nested options through includes and local template dependencies.
+func TestSecretDeclarationFieldsAndProvidersPreserved(t *testing.T) {
+	dir := writeMinimalAtmosProject(t)
+	configPath := filepath.Join(dir, "atmos.yaml")
+	configData, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(configPath, append(configData, []byte("templates:\n  settings:\n    enabled: true\n")...), 0o644))
+	declaration := `sops: '{{ .vars.vault }}'
+description: '{{ .vars.description }}'
+reference: '{{ .vars.reference }}'
+required: true
+value: !aws.cloudformation.output missing-producer dev Ignored
+ignored_template: '{{ (atmos.Component "missing-producer" "dev").outputs.Value }}'
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "declaration.yaml"), []byte(declaration), 0o644))
+	manifest := `vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      vars:
+        vault: local
+        description: token description
+        reference: token-reference
+        provider_kind: sops/age
+        provider_file: fixture.enc.yaml
+        nested_option: nested-config
+        unrelated: !aws.cloudformation.output missing-producer dev Ignored
+      secrets:
+        vars:
+          TOKEN: !include declaration.yaml
+          GLOBAL:
+            store: vault
+            scope: global
+            value: !aws.cloudformation.output missing-producer dev Ignored
+        providers:
+          local:
+            kind: '{{ .vars.provider_kind }}'
+            spec:
+              file: '{{ .vars.provider_file }}'
+              extension:
+                nested: '{{ .vars.nested_option }}'
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "dev.yaml"), []byte(manifest), 0o644))
+	t.Chdir(dir)
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	scope := secretScope{Stack: "dev", Component: "vpc"}
+	loaded, err := loadService(scope)
+	require.NoError(t, err)
+	require.Equal(t, []secrets.Declaration{
+		{Name: "GLOBAL", BackendType: secrets.BackendStore, BackendName: "vault", Scope: secrets.ScopeGlobal},
+		{Name: "TOKEN", BackendType: secrets.BackendSops, BackendName: "local", Description: "token description", Reference: "token-reference", Required: true, Scope: secrets.ScopeInstance},
+	}, loaded.Declarations())
+	assert.Equal(t, []string{"fixture.enc.yaml"}, loaded.FileDependencies(), "the resolved provider definition must reach the real SOPS provider")
+	entries, _, err := enumerateSecretScopes(scope)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	expected := map[string]any{"local": map[string]any{"kind": "sops/age", "spec": map[string]any{"file": "fixture.enc.yaml", "extension": map[string]any{"nested": "nested-config"}}}}
+	assert.Equal(t, expected, secrets.ExtractProviders(entries[0].Section))
+}
+
+// TestSecretGeneratedDeclarationIgnoresUnsupportedFields retains declaration maps
+// produced by !template while excluding unsupported output reads inside them.
+func TestSecretGeneratedDeclarationIgnoresUnsupportedFields(t *testing.T) {
+	dir := writeMinimalAtmosProject(t)
+	manifest := `vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      secrets:
+        vars: !template '{"TOKEN":{"store":"vault","description":"generated","value":"!aws.cloudformation.output missing-producer dev Ignored"}}'
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "dev.yaml"), []byte(manifest), 0o644))
+	t.Chdir(dir)
+	loaded, err := loadService(secretScope{Stack: "dev", Component: "vpc"})
+	require.NoError(t, err)
+	require.Equal(t, []secrets.Declaration{{Name: "TOKEN", BackendType: secrets.BackendStore, BackendName: "vault", Description: "generated", Scope: secrets.ScopeInstance}}, loaded.Declarations())
 }
