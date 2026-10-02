@@ -18,6 +18,7 @@ import (
 // the JIT provisioning path under test never depends on the network.
 func setupJITSourceWorkdirFixture(t *testing.T) {
 	t.Helper()
+	resetSourceCommandState(t)
 	RequireExecutable(t, "git", "JIT source provisioning clones a git repository")
 
 	fixture, err := filepath.Abs(filepath.Join("fixtures", "scenarios", "source-provisioner-workdir"))
