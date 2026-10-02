@@ -8,11 +8,17 @@ description: Alias for `atmos aws cloudformation diff` — preview the changes a
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
+import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/_skip-hooks-flag.mdx'
 
 <Intro>
   Preview changes an apply would make to a CloudFormation stack. `plan` is an
-  alias for [`diff`](/cli/commands/aws/cloudformation/diff): it creates (or
-  reuses) a changeset and renders the predicted changes without executing it.
+  alias for [`diff`](/cli/commands/aws/cloudformation/diff): it creates a
+  changeset, renders the predicted changes, and deletes the changeset without
+  executing it. Like `diff`, it removes the empty `REVIEW_IN_PROGRESS` stack it
+  created when previewing a never-deployed component, and it fails with a
+  recovery hint for a stack in `ROLLBACK_COMPLETE`.
 </Intro>
 
 <Experimental />
@@ -36,9 +42,9 @@ atmos aws cloudformation plan --affected --labels cost-center=platform
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
   <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
 
-  <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
-  <dd>Process multiple `aws/cloudformation` components in dependency order. See [`diff`](/cli/commands/aws/cloudformation/diff).</dd>
+<SelectionFlags />
 
-  <dt>`--tags` / `--labels` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` or `key:value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+<GitFlags />
+
+<SkipHooksFlag />
 </dl>

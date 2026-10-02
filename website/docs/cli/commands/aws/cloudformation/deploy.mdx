@@ -8,6 +8,9 @@ description: Apply a CloudFormation stack with --auto-approve.
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
+import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/_skip-hooks-flag.mdx'
 
 <Intro>
   Create or update the CloudFormation stack for a component. `deploy` is an
@@ -32,6 +35,15 @@ atmos aws cloudformation deploy --all --tags production,tier-1
 atmos aws cloudformation deploy --affected --labels cost-center=platform
 ```
 
+## Behavior
+
+`deploy` runs exactly like [`apply`](/cli/commands/aws/cloudformation/apply#how-apply-runs)
+with the confirmation turned off: it creates the changeset, prints the predicted
+changes on stderr, and executes the changeset without asking. A changeset that
+would change nothing is deleted, `deploy` prints `No changes`, and the follow-up
+steps still run. With `--auto-approve=false` it asks after showing the changes,
+like `apply`.
+
 ## Flags
 
 <dl>
@@ -44,9 +56,9 @@ atmos aws cloudformation deploy --affected --labels cost-center=platform
   <dt>`--auto-approve` <em>(optional, defaults to `true`)</em></dt>
   <dd>Skip the interactive confirmation prompt. Pass `--auto-approve=false` to require confirmation, just like `apply` without the flag.</dd>
 
-  <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
-  <dd>Process multiple `aws/cloudformation` components in dependency order. See [`apply`](/cli/commands/aws/cloudformation/apply).</dd>
+<SelectionFlags />
 
-  <dt>`--tags` / `--labels` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` or `key:value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+<GitFlags />
+
+<SkipHooksFlag />
 </dl>

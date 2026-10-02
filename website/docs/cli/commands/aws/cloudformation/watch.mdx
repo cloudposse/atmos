@@ -8,6 +8,8 @@ description: Attach to a stack's in-progress (or already-terminal) operation and
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
   Attach to a stack's operation and stream its events until the stack reaches
@@ -47,20 +49,9 @@ atmos aws cloudformation watch --affected --base origin/main
   <dt>`--stack`, `-s` <em>(required)</em></dt>
   <dd>Atmos stack.</dd>
 
-  <dt>`--all` <em>(optional)</em></dt>
-  <dd>Watch all `aws/cloudformation` components in dependency order.</dd>
+<SelectionFlags />
 
-  <dt>`--affected` <em>(optional)</em></dt>
-  <dd>Watch affected `aws/cloudformation` components and their dependencies.</dd>
-
-  <dt>`--include-dependents` <em>(optional)</em></dt>
-  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
-
-  <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
-
-  <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+<GitFlags />
 </dl>
 
 ## Behavior

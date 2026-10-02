@@ -73,6 +73,13 @@ components:
       # ...
 ```
 
+A component `env` entry such as `AWS_REGION` or `AWS_DEFAULT_REGION` does not
+select the region, because Atmos builds the CloudFormation client in-process
+from the list above and never reads the component `env` for it. When the
+component `env` sets one of them to a different region than the one Atmos
+resolved, Atmos prints a warning that the value is ignored. Set
+`settings.aws_cloudformation.region` to override the region.
+
 There is no per-component account override outside stack sets — the account is
 always the active identity's account.
 
