@@ -163,3 +163,32 @@ func TestDriftLines_PropertyDifferences(t *testing.T) {
 	assert.Equal(t, "    /A: expected 1, actual 2 (NOT_EQUAL)", lines[1])
 	assert.Equal(t, "    /B: expected x, actual  (REMOVE)", lines[2])
 }
+
+// A top-level alias verb reaches the CI result as the verb the user ran: `plan`
+// dispatches with SubCommand "diff", and without the recorded invoked verb the
+// summary would be titled "Diff". Without the flag, the dispatch identifier stays.
+func TestRunCIHook_RecordsInvokedAliasVerb(t *testing.T) {
+	tests := []struct {
+		name  string
+		flags map[string]any
+		want  string
+	}{
+		{name: "plan alias", flags: map[string]any{invokedVerbFlag: "plan"}, want: "plan"},
+		{name: "deploy alias", flags: map[string]any{invokedVerbFlag: "deploy"}, want: "deploy"},
+		{name: "no alias keeps dispatch identifier", flags: map[string]any{}, want: "diff"},
+		{name: "empty alias keeps dispatch identifier", flags: map[string]any{invokedVerbFlag: ""}, want: "diff"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			captured := captureCIHook(t, ciHookParams{
+				event:   hooks.AfterAwsCloudFormationDiff,
+				flags:   tt.flags,
+				info:    &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev", SubCommand: "diff"},
+				summary: map[string]any{"stack_name": "dev-vpc"},
+			})
+			result, ok := captured.Aggregate.(*schema.CloudFormationCIResult)
+			require.True(t, ok)
+			assert.Equal(t, tt.want, result.Command)
+		})
+	}
+}

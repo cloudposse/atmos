@@ -33,6 +33,10 @@ type ciHookParams struct {
 	commandErr  error
 }
 
+// invokedVerbFlag is the key under which the CLI records a top-level alias verb
+// (`plan`, `deploy`) that dispatches under a shared operation identifier.
+const invokedVerbFlag = "invoked-verb"
+
 // runCIHook builds the compact CI result for one CloudFormation operation and
 // fires the Native CI plugin dispatch (hooks.RunCIHooks). Errors here are
 // logged, not returned — a CI summary failure must never fail the underlying
@@ -48,6 +52,10 @@ func runCIHook(p ciHookParams) {
 		result.Stack = p.info.Stack
 		result.Component = p.info.ComponentFromArg
 		result.Command = p.info.SubCommand
+	}
+	// Prefer the verb the user ran, so a `plan` summary is not titled `diff`.
+	if invoked, ok := p.flags[invokedVerbFlag].(string); ok && invoked != "" {
+		result.Command = invoked
 	}
 	if p.commandErr != nil {
 		result.Error = p.commandErr.Error()

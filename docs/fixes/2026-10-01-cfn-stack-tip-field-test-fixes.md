@@ -79,6 +79,7 @@ The full report and per-lane repros live in the field-test working notes; they w
   - `--format` errors name the valid formats.
   - `list` resolves the default identity and labels managed stacks across all stacks. It rejects an unknown `-s` and an unknown `--status`, and prints a header row.
 - **CI summaries**
+  - The `plan` and `deploy` alias verbs now reach the summary as the verb the user ran. Before, `plan` dispatched as `diff` and was titled "Diff". The live re-verification caught this.
   - Summaries render outputs and resource changes, say "No changes" when there are none, and title themselves with the verb that ran.
   - The reproduce command includes `--fail-on-drift` when it was set.
   - The plugin writes `GITHUB_OUTPUT` variables.
@@ -115,7 +116,23 @@ The full report and per-lane repros live in the field-test working notes; they w
 - `pnpm run build` in `website/` passed.
 - `go test -count=1 -v ./internal/exec/` passed: 2,270 tests passed and none failed. Go appended a spurious `[no tests to run]` to the package summary line; the verbose counts are authoritative.
 - The pre-commit hooks passed on the code commit, including golangci-lint through a freshly built `custom-gcl`.
-- Not run: the live re-verification on real AWS. The SSO session expired before it could start, so the fixes are validated by unit tests and the static checks above, not against live stacks. Re-run the field-test repros once credentials are refreshed.
+- Live re-verification ran against real AWS (dev 068007702576, us-east-2) with a binary built from the fix branch. It used a dedicated fixture with the prefix `atmos-tip-1550-fx-`.
+  - List-form `parameters:` deployed the list value, not the template default, and `diff` detected a change to it.
+  - `diff` and `plan` on a never-deployed stack left no stub; the stack history shows the stubs as `DELETE_COMPLETE`.
+  - A misspelled `!aws.cloudformation.output` key failed in `describe component` and in `apply`, listing the available keys, and created no stack.
+  - `output <component> <key>` printed the bare value, and `output` on a `REVIEW_IN_PROGRESS` stack failed as not deployed.
+  - An unknown `changeset delete` name failed with a hint. A missing stack's delete printed "nothing to delete" with exit 0.
+  - `ROLLBACK_COMPLETE` failed with the delete-and-reapply hint. Deleting and re-applying recovered the stack.
+  - Three no-op applies printed "No changes" and left no changesets. A no-op `changeset create` kept nothing.
+  - Publish-only apply reported the `s3://` location and TemplateURL without asking for confirmation. The `/pub/` prefix was trimmed, and a second publish reused the object.
+  - `validate` and `diff` with a missing bucket failed with a hint and created no bucket.
+  - Bulk JSON output was one parseable document, identical across three runs.
+  - In a real PTY, the apply preview printed before the prompt. Declining left the stack unchanged with no changeset, and accepting applied with a live spinner. Without a TTY or `--auto-approve`, apply failed before creating a changeset.
+  - `list` without `-s` or `--identity` labelled the fixture stacks managed, and `-s nosuchstack` failed.
+  - `--skip-hooks` was accepted. The CI summary and `GITHUB_OUTPUT` rendered, and `plan` is titled "Plan" after the alias fix.
+  - `apply --target <aws/stackset>` failed with the StackSet hint, in both dry-run and real runs, and created nothing.
+  - Bulk delete removed the consumer before the producer. `backend delete --force` showed a single warning icon.
+  - Independent queries found no stacks, StackSets, SSM parameters, or buckets with the prefix in dev or sandbox.
 
 ## Follow-ups
 
