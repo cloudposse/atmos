@@ -218,7 +218,7 @@ atmos auth exec --identity azure-prod -- terraform apply -auto-approve
 Output credential environment variables for shell evaluation. Does not perform authentication by default.
 
 ```shell
-atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
+atmos auth env [--identity <name>] [--format bash|json|dotenv|credential-process] [--login]
 ```
 
 ### Flags
@@ -226,7 +226,7 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
 | Flag | Alias | Description |
 |------|-------|-------------|
 | `--identity` | `-i` | Identity to use |
-| `--format` | `-f` | Output format: `bash` (default), `json`, `dotenv` |
+| `--format` | `-f` | Output format: `bash` (default), `json`, `dotenv`, `credential-process` (AWS process-credential JSON; alias of `atmos aws credential-process`) |
 | `--login` | | Trigger authentication if credentials are missing or expired |
 
 ### Environment Variables
@@ -286,6 +286,59 @@ Safe to add to `~/.bashrc` or `~/.zshrc` -- does not trigger login prompts:
 ```bash
 eval $(atmos auth env)
 ```
+
+---
+
+## atmos aws credential-process
+
+Print AWS credentials for an Atmos identity in the AWS process-credential JSON format, so a
+`credential_process` profile in `~/.aws/config` can delegate to Atmos.
+
+```shell
+atmos aws credential-process --identity=<name> [--min-validity=15m]
+```
+
+Alias with the same output: `atmos auth env --format=credential-process --identity=<name>`.
+
+### Flags
+
+| Flag | Alias | Description |
+|------|-------|-------------|
+| `--identity` | `-i` | Identity to print credentials for. Resolved from the flag, then `ATMOS_IDENTITY`, then the default identity. No interactive selector. |
+| `--min-validity` | | Reuse cached credentials that expire later than this. Default `15m`. Environment variable: `ATMOS_AWS_CREDENTIAL_PROCESS_MIN_VALIDITY`. |
+
+### Output
+
+One JSON document on stdout, unmasked; logs go to stderr:
+
+```json
+{"Version":1,"AccessKeyId":"ASIA...","SecretAccessKey":"...","SessionToken":"...","Expiration":"2026-10-02T18:30:00Z"}
+```
+
+`SessionToken` and `Expiration` are omitted for long-lived keys.
+
+### Examples
+
+```ini
+# ~/.aws/config (--chdir is the most robust way to find atmos.yaml from any directory)
+[profile app-sandbox-1]
+credential_process = atmos --chdir=/path/to/infrastructure aws credential-process --identity=app-sandbox-1
+region = us-east-1
+
+# Alternatives: --config-path=/path/to/infrastructure, ATMOS_CLI_CONFIG_PATH, or a global ~/.atmos/atmos.yaml
+```
+
+```shell
+aws sts get-caller-identity --profile=app-sandbox-1
+```
+
+### Notes
+
+- Cached credentials print with no network call. Otherwise Atmos authenticates like `atmos auth login`.
+- When an interactive login is required (for example an expired SSO session), the command fails with a
+  hint. Run `atmos auth login --identity=<name>` first.
+- Works with AWS identities only.
+- Full recipes and troubleshooting: [aws-credential-process.md](aws-credential-process.md).
 
 ---
 

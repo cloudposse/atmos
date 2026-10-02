@@ -17,7 +17,7 @@ Identify each profile's shape before proposing YAML:
 | `aws_access_key_id`/`aws_secret_access_key` in `~/.aws/credentials`  | [Static Access Keys](#static-access-keys--awsuser) |
 | `source_profile` + `role_arn` (one or more hops)                     | [Role Chaining](#role-chaining-source_profile--role_arn--viaidentity) |
 | The above plus `mfa_serial`                                          | [MFA-Gated Role Assumption](#mfa-gated-role-assumption-mfa_serial) |
-| `credential_process`                                                 | [No Equivalent: credential_process](#no-equivalent-credential_process) |
+| `credential_process`                                                 | [`aws/credential-process`](#translating-credential_process) |
 
 Most real-world configs combine two or three of these (e.g., one SSO base profile, several
 `role_arn`/`source_profile` profiles chained off it). Migrate the base profile first, then layer
@@ -232,18 +232,46 @@ auth:
 The same rule applies when the upstream identity is `aws/permission-set` instead of `aws/user` --
 MFA (if the IdP requires it) happens during the SSO browser login, not as a separate config field.
 
-## No Equivalent: `credential_process`
+## Translating credential_process
 
-Atmos Auth does not execute `credential_process` commands -- it deliberately ignores that key when
-reading a legacy `~/.aws/config` for compatibility purposes. There is no drop-in mapping. Instead:
+A profile with `credential_process` runs an external command that prints AWS credentials. Atmos
+Auth runs the same command with the `aws/credential-process` identity kind, uses the credentials as
+returned (no STS call, no MFA prompt from Atmos), and caches them until they expire.
 
-- If the process wraps SSO or role assumption (a custom script, `aws-vault`, a Leapp/Granted/
-  saml2aws shim), migrate to the native kind that process was wrapping -- see the SSO and
-  role-chaining sections above, or [from-granted.md](from-granted.md) /
-  [from-aws2saml.md](from-aws2saml.md) if that's literally what it was calling.
-- If it wraps something bespoke (an internal secrets broker, a Vault dynamic AWS secrets engine),
-  there's currently no native Atmos Auth kind for that. Don't fabricate a mapping -- tell the user
-  this profile has no equivalent yet.
+```ini
+# ~/.aws/config
+[profile corp]
+credential_process = okta-aws-cli web --format=process-credentials --org-domain=example.okta.com --oidc-client-id=0oa1example --aws-iam-idp=arn:aws:iam::111111111111:saml-provider/okta --aws-iam-role=arn:aws:iam::111111111111:role/Admin
+region = us-east-1
+```
+
+```yaml
+# atmos.yaml
+auth:
+  identities:
+    corp:
+      kind: aws/credential-process
+      credentials:
+        credential_process: >-
+          okta-aws-cli web --format=process-credentials --org-domain=example.okta.com --oidc-client-id=0oa1example --aws-iam-idp=arn:aws:iam::111111111111:saml-provider/okta --aws-iam-role=arn:aws:iam::111111111111:role/Admin
+        region: us-east-1
+```
+
+Chain `aws/assume-role` from it with `via.identity: corp` when the profile was a base session for
+other roles. If the process only wraps SSO or role assumption (a Leapp, Granted, or saml2aws shim),
+prefer the native kind it was wrapping -- see the SSO and role-chaining sections above, or
+[from-granted.md](from-granted.md) / [from-aws2saml.md](from-aws2saml.md).
+
+To keep `aws --profile=<name>` working from any directory after migrating, point a profile at Atmos:
+
+```ini
+[profile app-sandbox-1]
+credential_process = atmos --chdir=/path/to/infrastructure aws credential-process --identity=app-sandbox-1
+```
+
+On an older Atmos version without `aws/credential-process`, use an `aws/ambient` identity with
+`AWS_PROFILE` set to the helper-backed profile so the AWS SDK default credential chain runs the helper.
+See [atmos-auth](../../atmos-auth/references/aws-credential-process.md) for recipes and troubleshooting.
 
 ## Beyond Plain AWS CLI Config: Native Integrations
 
@@ -314,8 +342,8 @@ since they often replace scripts the user built by hand.
 - **One provider per SSO start URL, not one per profile.** Users with a dozen SSO profiles need
   one `aws/iam-identity-center` provider and a dozen `aws/permission-set` identities, not a dozen
   providers.
-- **`credential_process` is silently ignored, not translated.** If a profile still has it after
-  migration, `atmos auth` will not pick up whatever it produced.
+- **Translate `credential_process` explicitly.** Atmos does not read it from a legacy `~/.aws/config`
+  on its own. Move the command into an `aws/credential-process` identity.
 - **Static keys in `atmos.yaml` are a downgrade from `atmos auth user configure`.** Steer users
   away from `!env`-referenced keys committed to a shared repo when the keyring-backed command
   achieves the same result more safely.

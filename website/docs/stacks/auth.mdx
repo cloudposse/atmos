@@ -138,7 +138,7 @@ auth:
 
 <dl>
   <dt>`kind`</dt>
-  <dd>Identity type (e.g., `aws/permission-set`, `aws/assume-role`, `aws/ambient`, `ambient`, `azure/subscription`, `gcp/service-account`, `gcp/project`).</dd>
+  <dd>Identity type (e.g., `aws/permission-set`, `aws/assume-role`, `aws/ambient`, `aws/credential-process`, `ambient`, `azure/subscription`, `gcp/service-account`, `gcp/project`).</dd>
 
   <dt>`via.provider`</dt>
   <dd>Provider to use for authentication.</dd>
@@ -330,6 +330,30 @@ auth:
         assume_role: "arn:aws:iam::999999999999:role/TerraformDeployRole"
 ```
 </File>
+
+### External Credential Helpers
+
+Use the `aws/credential-process` identity kind when your organization already vends AWS credentials through a helper command such as `okta-aws-cli`, `aws-sso-cli`, `aws-vault`, or a corporate SAML tool. Atmos runs the command, uses the credentials it prints, and caches them until they expire. You can chain `aws/assume-role` identities from it.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    corp-base:
+      kind: aws/credential-process
+      credentials:
+        credential_process: corp-credential-helper --account=prod
+
+    prod-admin:
+      kind: aws/assume-role
+      via:
+        identity: corp-base
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/Admin
+```
+</File>
+
+See [Credential Process](/cli/configuration/auth/identities#credential-process) for all fields and behavior. To go the other way and use an Atmos identity from the AWS CLI, see [`atmos aws credential-process`](/cli/commands/aws/credential-process).
 
 ### Component-Level Identity Selection
 

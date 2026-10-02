@@ -4,8 +4,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -257,6 +259,15 @@ func TestNewIdentity_Factory(t *testing.T) {
 			expectError:  false,
 		},
 		{
+			name:         "aws-credential-process-valid",
+			identityName: "corp-base",
+			config: &schema.Identity{
+				Kind:        "aws/credential-process",
+				Credentials: map[string]interface{}{"credential_process": "okta-aws-cli web"},
+			},
+			expectError: false,
+		},
+		{
 			name:         "aws-ambient-valid",
 			identityName: "eks-deployer",
 			config:       &schema.Identity{Kind: "aws/ambient"},
@@ -323,4 +334,18 @@ func TestNewIdentity_Factory(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewIdentity_AWSCredentialProcess(t *testing.T) {
+	id, err := NewIdentity("corp-base", &schema.Identity{
+		Kind:        types.IdentityKindAWSCredentialProcess,
+		Credentials: map[string]interface{}{"credential_process": "okta-aws-cli web"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, id)
+	assert.Equal(t, "aws/credential-process", id.Kind())
+
+	standalone, ok := id.(types.StandaloneIdentity)
+	require.True(t, ok)
+	assert.True(t, standalone.IsStandalone())
 }

@@ -13,7 +13,7 @@ USAGE
 
 FLAGS
 
-  -f, --format string       Output format: bash, dotenv, env, github, json (default bash)
+  -f, --format string       Output format: bash, dotenv, env, github, json, credential-process (default bash)
 
   -h, --help                help for env
 

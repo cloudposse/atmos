@@ -23,7 +23,7 @@ Quickly generate temporary cloud credentials as environment variables so you can
 ## Usage
 
 ```shell
-atmos auth env [--identity <name>] [--format bash|json|dotenv|github] [--output-file <file>] [--login]
+atmos auth env [--identity <name>] [--format bash|json|dotenv|github|credential-process] [--output-file <file>] [--login]
 ```
 
 ## How It Works
@@ -205,6 +205,9 @@ atmos auth env --identity prod-admin --format github
 # GitHub Actions format with explicit output file
 atmos auth env --identity prod-admin --format github --output-file /path/to/env/file
 
+# AWS process-credential JSON for a credential_process profile
+atmos auth env --identity prod-admin --format credential-process
+
 # Automatically login if credentials don't exist or are expired
 atmos auth env --login
 
@@ -332,6 +335,11 @@ Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensu
     - **`json`**: Prints a JSON object of environment variables
     - **`dotenv`**: Prints `KEY='value'` lines in dotenv format
     - **`github`**: Prints `KEY=value` lines for GitHub Actions `$GITHUB_ENV` file. Multiline values use GitHub's heredoc syntax.
+    - **`credential-process`**: Prints AWS credentials as a single JSON document in the [AWS process-credential format](https://docs.aws.amazon.com/sdkref/latest/guide/feature-process-credentials.html), for use as a `credential_process` in `~/.aws/config`. It prints credentials, not environment variables, and works only with AWS identities. See [`atmos aws credential-process`](/cli/commands/aws/credential-process), the canonical command for this output.
+
+    ```shell
+    atmos auth env --format=credential-process --identity=prod-admin
+    ```
   </dd>
 
   <dt>`--output-file` <em>(alias `-o`)</em></dt>
@@ -361,7 +369,7 @@ Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensu
   <dd>Default identity when `--identity` is not provided.</dd>
 
   <dt>`ATMOS_AUTH_ENV_FORMAT`</dt>
-  <dd>Sets the default output style for exported credentials. Supported values: `bash`, `json`, `dotenv`, `github`.</dd>
+  <dd>Sets the default output style for exported credentials. Supported values: `bash`, `json`, `dotenv`, `github`, `credential-process`.</dd>
 
   <dt>`ATMOS_AUTH_ENV_OUTPUT_FILE`</dt>
   <dd>Default output file path when `--output-file` is not provided. For `--format=github`, this defaults to the value of `$GITHUB_ENV` if set.</dd>
@@ -421,5 +429,6 @@ These environment variables configure cloud provider SDKs and tools (Terraform, 
 
 - [`atmos auth shell`](/cli/commands/auth/shell) - Launch an isolated shell session with automatic credential cleanup
 - [`atmos auth login`](/cli/commands/auth/login) - Authenticate to a cloud identity
+- [`atmos aws credential-process`](/cli/commands/aws/credential-process) - Print AWS credentials in the process-credential format for `~/.aws/config` profiles
 - [`atmos auth whoami`](/cli/commands/auth/whoami) - Display information about the current authenticated identity
 - [Warp Terminal](https://warp.dev) - Modern terminal that works well with persistent environment variables

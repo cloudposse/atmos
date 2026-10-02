@@ -2,10 +2,13 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,10 +18,54 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
+// Environment variables that turn the test binary into a fake AWS credential_process helper.
+// Tests of credential_process spawn the test binary itself (via os.Executable) so they work on
+// every platform without relying on Unix-only tools.
+const (
+	// When set, makes the test binary print its value to stdout.
+	testCredentialProcessJSONEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_JSON"
+	// When set, makes the test binary exit with that code.
+	testCredentialProcessExitEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_EXIT"
+	// When set to a duration string, makes the test binary sleep first.
+	testCredentialProcessSleepEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_SLEEP"
+)
+
 // TestMain disables homedir caching to prevent cached values from affecting test isolation.
+// It also acts as a fake credential_process helper when the _ATMOS_TEST_CREDENTIAL_PROCESS_*
+// environment variables are set (see runFakeCredentialProcess).
 func TestMain(m *testing.M) {
+	runFakeCredentialProcess()
+
 	homedir.DisableCache = true
 	os.Exit(m.Run())
+}
+
+// runFakeCredentialProcess emulates a credential helper when the test binary is executed as one.
+// It returns immediately (running the normal test suite) when no helper variable is set.
+func runFakeCredentialProcess() {
+	jsonOut, hasJSON := os.LookupEnv(testCredentialProcessJSONEnv)
+	exitCode, hasExit := os.LookupEnv(testCredentialProcessExitEnv)
+	sleep, hasSleep := os.LookupEnv(testCredentialProcessSleepEnv)
+	if !hasJSON && !hasExit && !hasSleep {
+		return
+	}
+
+	if hasSleep {
+		if d, err := time.ParseDuration(sleep); err == nil {
+			time.Sleep(d)
+		}
+	}
+	if hasJSON {
+		fmt.Fprint(os.Stdout, jsonOut)
+	}
+	if hasExit {
+		code, err := strconv.Atoi(exitCode)
+		if err != nil {
+			code = 1
+		}
+		os.Exit(code)
+	}
+	os.Exit(0)
 }
 
 // skipIfCannotDenyDirWrite skips tests that rely on removing write permission

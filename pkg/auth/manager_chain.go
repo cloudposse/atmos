@@ -302,15 +302,8 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 
 	// Step 1: Authenticate with provider if needed.
 	// Only authenticate provider if we don't have cached provider credentials.
-	if actualStartIndex == 0 { //nolint:nestif
-		// Allow provider to inspect the chain and prepare pre-auth preferences.
-		if provider, exists := m.providers[m.chain[0]]; exists {
-			if err := provider.PreAuthenticate(m); err != nil {
-				errUtils.CheckErrorAndPrint(err, "Pre Authenticate", "")
-				return nil, fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, m.chain[0], err)
-			}
-		}
-		currentCreds, err = m.authenticateWithProvider(ctx, m.chain[0])
+	if actualStartIndex == 0 {
+		currentCreds, err = m.authenticateChainRoot(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -319,6 +312,47 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 
 	// Step 2: Authenticate through identity chain.
 	return m.authenticateIdentityChain(ctx, actualStartIndex, currentCreds)
+}
+
+// authenticateChainRoot authenticates the root of the current chain (m.chain[0]).
+//
+// The root is normally a registered provider. When it is not a provider but a standalone
+// identity (aws/user with YAML keys, aws/credential-process, ...), the identity is the
+// credential source and is authenticated through the StandaloneIdentity interface instead.
+// Without this, chaining from a standalone root whose credentials were not cached failed with
+// "provider not registered".
+func (m *manager) authenticateChainRoot(ctx context.Context) (types.ICredentials, error) {
+	rootName := m.chain[0]
+
+	if provider, exists := m.providers[rootName]; exists {
+		// Allow provider to inspect the chain and prepare pre-auth preferences.
+		if err := provider.PreAuthenticate(m); err != nil {
+			errUtils.CheckErrorAndPrint(err, "Pre Authenticate", "")
+			return nil, fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, rootName, err)
+		}
+		return m.authenticateWithProvider(ctx, rootName)
+	}
+
+	if standalone, ok := m.identities[rootName].(types.StandaloneIdentity); ok && standalone.IsStandalone() {
+		return m.authenticateStandaloneRoot(ctx, rootName, standalone)
+	}
+
+	// Neither a provider nor a standalone identity: report the "provider not registered" error.
+	return m.authenticateWithProvider(ctx, rootName)
+}
+
+// authenticateStandaloneRoot authenticates a standalone identity at the root of a chain.
+// Its credentials are intentionally not written to the keyring: a standalone identity owns its
+// own credential storage (e.g. Atmos-managed AWS files) and is the source of truth, and
+// the chain loop only caches the steps that follow the root.
+func (m *manager) authenticateStandaloneRoot(ctx context.Context, rootName string, standalone types.StandaloneIdentity) (types.ICredentials, error) {
+	log.Debug("Authenticating standalone identity at chain root", logKeyIdentity, rootName, logKeyChain, m.chain)
+
+	creds, err := standalone.AuthenticateStandalone(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: identity=%s step=0: %w", errUtils.ErrAuthenticationFailed, rootName, err)
+	}
+	return creds, nil
 }
 
 func (m *manager) fetchCachedCredentials(startIndex int) (types.ICredentials, int) {

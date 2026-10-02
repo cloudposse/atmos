@@ -191,6 +191,71 @@ auth:
 
 Store credentials securely with `atmos auth user configure --identity <name>` instead of in config files.
 
+### AWS Ambient
+
+Uses credentials the environment already provides, resolved through the AWS SDK default credential
+chain: environment variables, shared config files, IRSA web identity tokens, EC2 instance metadata, and
+ECS task roles. Atmos does not clear credential environment variables or disable IMDS for this kind.
+
+```yaml
+auth:
+  identities:
+    <name>:
+      kind: aws/ambient                     # Required
+      principal:
+        region: us-east-1                   # Optional
+```
+
+Because it returns real AWS credentials, `aws/assume-role` identities can chain from it with
+`via.identity`. Use the generic `ambient` kind to leave the whole environment untouched.
+
+### AWS Credential Process
+
+Runs an external helper that follows the AWS `credential_process` protocol and uses the credentials it
+prints. Use it when an Okta CLI, aws-sso-cli, aws-vault, Granted, or corporate SAML tool already vends
+credentials.
+
+```yaml
+auth:
+  identities:
+    <name>:
+      kind: aws/credential-process          # Required
+      credentials:
+        credential_process: corp-credential-helper --account=prod   # Required: command to run
+        region: us-east-1                   # Optional: default region
+      spec:
+        endpoint_url: http://localhost:4566 # Optional: AWS-compatible endpoint for emulators
+```
+
+Behavior:
+
+- The identity is standalone. `via`, `access_key_id`, `secret_access_key`, and `mfa_arn` are rejected.
+  Use `aws/user` for IAM user keys.
+- Credentials are used as returned. Atmos makes no STS call and does not prompt for MFA.
+- The command runs through the platform shell (`sh -c` or `cmd.exe /C`) with stdin and stderr passed
+  through, so the helper can prompt for MFA.
+- Credentials are cached in Atmos-managed AWS files until `Expiration`. Credentials without an
+  `Expiration` make Atmos run the helper every time.
+- The helper must finish within 1 minute. Its output is never stored in the keyring.
+
+Chain a role from the helper's session:
+
+```yaml
+auth:
+  identities:
+    prod-admin:
+      kind: aws/assume-role
+      via:
+        identity: <helper-identity-name>
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/Admin
+```
+
+Choose `aws/user` for IAM user keys, `aws/ambient` for credentials already in the environment, and
+`aws/credential-process` for a command that prints credentials. Helper examples, error meanings, and
+the reverse direction (`atmos aws credential-process` for `~/.aws/config` profiles) are in
+[aws-credential-process.md](aws-credential-process.md).
+
 ### Azure Subscription
 
 ```yaml

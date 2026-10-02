@@ -1,0 +1,159 @@
+package auth
+
+import (
+	"context"
+	"io"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/credentialprocess"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+)
+
+// Compile-time guard so a field rename in AWSCredentials fails the build here.
+var _ = authTypes.AWSCredentials{AccessKeyID: "", SecretAccessKey: "", SessionToken: "", Expiration: ""}
+
+const (
+	cpAccessKey    = "AKIAIOSFODNN7EXAMPLE"
+	cpSecretKey    = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+	cpSessionToken = "FwoGZXIvYXdzEBYaDHexampleSessionToken"
+)
+
+func cpCaptureStdout(t *testing.T, fn func() error) (string, error) {
+	t.Helper()
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+
+	runErr := fn()
+
+	require.NoError(t, w.Close())
+	os.Stdout = oldStdout
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+	return string(out), runErr
+}
+
+// cpManager returns a mock manager whose cached credentials are valid for an hour.
+func cpManager(t *testing.T, expiration string) *authTypes.MockAuthManager {
+	t.Helper()
+	mgr := authTypes.NewMockAuthManager(gomock.NewController(t))
+	mgr.EXPECT().GetCachedCredentials(gomock.Any(), "dev").Return(&authTypes.WhoamiInfo{
+		Credentials: &authTypes.AWSCredentials{
+			AccessKeyID:     cpAccessKey,
+			SecretAccessKey: cpSecretKey,
+			SessionToken:    cpSessionToken,
+			Expiration:      expiration,
+		},
+	}, nil).AnyTimes()
+	return mgr
+}
+
+func TestWriteCredentialProcessDocument_Stdout(t *testing.T) {
+	exp := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	mgr := cpManager(t, exp)
+
+	out, err := cpCaptureStdout(t, func() error {
+		return writeCredentialProcessDocument(context.Background(), viper.New(), mgr, "dev")
+	})
+	require.NoError(t, err)
+
+	// Unmasked, and byte-identical to what `atmos aws credential-process` prints for the same credentials.
+	doc, err := credentialprocess.Produce(context.Background(), mgr, "dev")
+	require.NoError(t, err)
+	assert.Equal(t, credentialprocess.Render(doc), out)
+	assert.Equal(t,
+		`{"Version":1,"AccessKeyId":"`+cpAccessKey+`","SecretAccessKey":"`+cpSecretKey+
+			`","SessionToken":"`+cpSessionToken+`","Expiration":"`+exp+`"}`+"\n",
+		out)
+}
+
+func TestWriteCredentialProcessDocument_OutputFile(t *testing.T) {
+	exp := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	mgr := cpManager(t, exp)
+	path := filepath.Join(t.TempDir(), "creds.json")
+	// Pre-existing content and a permissive mode must be replaced and tightened.
+	require.NoError(t, os.WriteFile(path, []byte("stale content that is longer than the new document, "+cpSecretKey), 0o644))
+
+	v := viper.New()
+	v.Set(OutputFileFlagName, path)
+
+	out, err := cpCaptureStdout(t, func() error {
+		return writeCredentialProcessDocument(context.Background(), v, mgr, "dev")
+	})
+	require.NoError(t, err)
+	assert.Empty(t, out, "nothing goes to stdout when --output-file is set")
+
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t,
+		`{"Version":1,"AccessKeyId":"`+cpAccessKey+`","SecretAccessKey":"`+cpSecretKey+
+			`","SessionToken":"`+cpSessionToken+`","Expiration":"`+exp+`"}`+"\n",
+		string(got))
+
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
+}
+
+func TestWriteCredentialProcessDocument_IgnoresGitHubEnv(t *testing.T) {
+	mgr := cpManager(t, time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	githubEnv := filepath.Join(t.TempDir(), "github_env")
+	require.NoError(t, os.WriteFile(githubEnv, []byte("EXISTING=value\n"), 0o600))
+	t.Setenv("GITHUB_ENV", githubEnv)
+
+	out, err := cpCaptureStdout(t, func() error {
+		return writeCredentialProcessDocument(context.Background(), viper.New(), mgr, "dev")
+	})
+	require.NoError(t, err)
+	assert.Contains(t, out, cpAccessKey)
+
+	got, err := os.ReadFile(githubEnv)
+	require.NoError(t, err)
+	assert.Equal(t, "EXISTING=value\n", string(got), "credential-process must not write to $GITHUB_ENV")
+}
+
+func TestWriteCredentialProcessDocument_NonAWSIdentity(t *testing.T) {
+	mgr := authTypes.NewMockAuthManager(gomock.NewController(t))
+	mgr.EXPECT().GetCachedCredentials(gomock.Any(), "dev").
+		Return(&authTypes.WhoamiInfo{Credentials: &authTypes.AzureCredentials{}}, nil)
+
+	out, err := cpCaptureStdout(t, func() error {
+		return writeCredentialProcessDocument(context.Background(), viper.New(), mgr, "dev")
+	})
+	require.ErrorIs(t, err, errUtils.ErrIdentityNotAWS)
+	assert.Empty(t, out)
+}
+
+// TestExecuteAuthEnvCommand_CredentialProcessFromEnvVar verifies ATMOS_AUTH_ENV_FORMAT=credential-process
+// routes to the credential-process document instead of environment variables. The mock/aws fixture
+// produces non-AWS credentials, so reaching ErrIdentityNotAWS proves the branch was taken.
+func TestExecuteAuthEnvCommand_CredentialProcessFromEnvVar(t *testing.T) {
+	setupMockAuthFixture(t)
+	t.Setenv("ATMOS_AUTH_ENV_FORMAT", FormatCredentialProcess)
+
+	cmd := authEnvCmd
+	resetAuthCmdFlags(t, cmd)
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags(nil))
+
+	err := executeAuthEnvCommand(cmd, nil)
+	require.ErrorIs(t, err, errUtils.ErrIdentityNotAWS)
+}
+
+func TestEnvCommand_FormatCredentialProcessAccepted(t *testing.T) {
+	assert.Contains(t, SupportedFormats, FormatCredentialProcess)
+	assert.Contains(t, authEnvCmd.Flags().Lookup(FormatFlagName).Usage, FormatCredentialProcess)
+}

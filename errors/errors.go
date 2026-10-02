@@ -1048,11 +1048,17 @@ var (
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
 	ErrPlaywrightDriverSeed         = errors.New("failed to pre-seed the Playwright driver")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
+	ErrIdentityNotAWS               = errors.New("identity does not produce AWS credentials")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
 	ErrChromeNotFound               = errors.New("chrome/chromium not found for isolated browser sessions")
 	ErrSayNotFound                  = errors.New("text-to-speech command not found")
 	ErrVoiceListUnsupported         = errors.New("voice enumeration not supported for backend")
 	ErrUserAborted                  = errors.New("user aborted")
+
+	// AWS credential_process errors (consuming and producing the AWS process-credential format).
+	ErrCredentialProcessFailed        = errors.New("credential_process command failed")
+	ErrCredentialProcessInvalidOutput = errors.New("credential_process returned invalid output")
+	ErrCredentialProcessRecursion     = errors.New("credential_process recursion detected")
 
 	// AWS SSO specific errors.
 	ErrSSOSessionExpired      = errors.New("aws sso session expired")

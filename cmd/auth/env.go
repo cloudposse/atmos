@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/credentialprocess"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/env"
@@ -27,11 +28,15 @@ const (
 	FormatFlagName = "format"
 	// OutputFileFlagName is the name of the output-file flag for env command.
 	OutputFileFlagName = "output-file"
+	// FormatCredentialProcess is the format that prints AWS credential_process JSON instead of
+	// environment variables. It is an alias for `atmos aws credential-process`.
+	FormatCredentialProcess = "credential-process"
 )
 
 // SupportedFormats lists the supported output formats for env command.
-// JSON is handled separately in the command, all other formats are delegated to pkg/env.
-var SupportedFormats = []string{"json", "bash", "dotenv", "env", "github"}
+// JSON and credential-process are handled separately in the command, all other formats are
+// delegated to pkg/env.
+var SupportedFormats = []string{"json", "bash", "dotenv", "env", "github", FormatCredentialProcess}
 
 // envParser handles flags for the env command.
 var envParser *flags.StandardParser
@@ -51,7 +56,7 @@ func init() {
 
 	// Create parser with env-specific flags.
 	envParser = flags.NewStandardParser(
-		flags.WithStringFlag(FormatFlagName, "f", "bash", "Output format: bash, dotenv, env, github, json"),
+		flags.WithStringFlag(FormatFlagName, "f", "bash", "Output format: bash, dotenv, env, github, json, credential-process"),
 		flags.WithStringFlag(OutputFileFlagName, "o", "", "Output file path (default: stdout, or $GITHUB_ENV for github format)"),
 		flags.WithBoolFlag("login", "", false, "Trigger authentication if credentials are missing or expired"),
 		flags.WithEnvVars(FormatFlagName, "ATMOS_AUTH_ENV_FORMAT"),
@@ -100,6 +105,12 @@ func executeAuthEnvCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// credential-process prints a credential document, not environment variables. It always
+	// authenticates when the cached credentials are missing or about to expire, so --login is moot.
+	if v.GetString(FormatFlagName) == FormatCredentialProcess {
+		return writeCredentialProcessDocument(cmd.Context(), v, authManager, identityName)
+	}
+
 	// Optionally trigger authentication if credentials are missing or expired.
 	if v.GetBool("login") {
 		if loginErr := loginIfNeeded(cmd.Context(), authManager, identityName); loginErr != nil {
@@ -125,6 +136,27 @@ func executeAuthEnvCommand(cmd *cobra.Command, args []string) error {
 		env.WithFileMode(env.CredentialFileMode),
 		env.WithAtmosConfig(atmosConfig),
 	)
+}
+
+// writeCredentialProcessDocument produces the AWS credential_process document for the identity and
+// writes it to --output-file (owner-readable only, replacing existing content) or stdout. The output
+// is byte-identical to `atmos aws credential-process`.
+func writeCredentialProcessDocument(ctx context.Context, v *viper.Viper, authManager auth.AuthManager, identityName string) error {
+	defer perf.Track(nil, "auth.writeCredentialProcessDocument")()
+
+	doc, err := credentialprocess.Produce(ctx, authManager, identityName)
+	if err != nil {
+		return err
+	}
+
+	// Not resolveEnvOutputTarget: this format never falls back to $GITHUB_ENV.
+	if outputFile := v.GetString(OutputFileFlagName); outputFile != "" {
+		return credentialprocess.WriteFile(outputFile, doc)
+	}
+
+	// The credentials are the purpose of this command, so masking them would make the output unusable.
+	// codeql[go/clear-text-logging]: intentional credential output for the AWS credential_process protocol.
+	return data.WriteUnmasked(credentialprocess.Render(doc))
 }
 
 // loadAuthManagerForEnv loads the atmos config (honouring global flags) and

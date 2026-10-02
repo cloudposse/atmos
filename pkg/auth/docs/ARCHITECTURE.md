@@ -10,8 +10,10 @@ The Atmos Auth package provides a comprehensive authentication framework for clo
 pkg/auth/
 ├── cloud/                    # Cloud-specific helpers
 │   └── aws/                  # AWS-specific implementation
+│       ├── credential_process.go # AWS process-credential format helpers and helper-command runner
 │       ├── files.go          # Helpers for AWS credentials/config file management
 │       └── setup.go          # Setup helpers used by identities
+├── credentialprocess/       # Produces process-credential output for `atmos aws credential-process`
 ├── credentials/             # Credential storage
 │   └── store.go             # Encrypted credential store
 ├── docs/                    # Documentation
@@ -21,6 +23,7 @@ pkg/auth/
 ├── identities/              # Identity implementations
 │   └── aws/                 # AWS identity types
 │       ├── assume_role.go   # AWS assume role identity
+│       ├── credential_process.go # AWS credential-process identity (standalone)
 │       ├── permission_set.go # AWS permission set identity
 │       └── user.go          # AWS user identity
 ├── providers/               # Provider implementations
@@ -182,6 +185,29 @@ identities:
     principal:
       assume_role: arn:aws:iam::999999999999:role/FinalRole
 ```
+
+### AWS Credential Process (Both Directions)
+
+Atmos speaks the AWS `credential_process` protocol in both directions.
+
+**Consume: `aws/credential-process` identity.** A standalone identity (it implements
+`types.StandaloneIdentity` and has no `via`). `Authenticate` reuses unexpired credentials from the
+Atmos-managed AWS files; otherwise it runs the configured helper through the platform shell, validates
+the version-1 JSON output, and writes the result to those files. Helper output is used as returned (no
+STS call, no MFA) and is never stored in the keyring. Credentials without an expiration are never
+reused across invocations. The runner sets `ATMOS_AUTH_CREDENTIAL_PROCESS_CHAIN` for every helper so a
+helper that re-enters Atmos for an identity already resolving fails with a recursion error instead of
+looping. Error text never includes helper stdout, because the AWS SDK embeds raw output in parse errors.
+
+When a standalone identity is the root of a chain (`[root, child, ...]`) and has no valid cached
+credentials, the manager authenticates it through the standalone path instead of treating it as a
+provider. This applies to `aws/credential-process` and to `aws/user` roots configured with YAML keys.
+
+**Produce: `atmos aws credential-process`.** The `credentialprocess` package resolves the identity,
+returns cached credentials that remain valid for at least `--min-validity`, and otherwise authenticates
+the identity as `atmos auth login` would. `pkg/auth/cloud/aws` supplies the process-credential document
+(`Version: 1`, `SessionToken` and `Expiration` omitted when empty, RFC3339 UTC expiration). The command
+and `atmos auth env --format=credential-process` share this code path so both emit identical output.
 
 ## Error Handling
 

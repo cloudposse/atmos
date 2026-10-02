@@ -163,6 +163,8 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 		return awsIdentities.NewAWSAmbientIdentity(name, config)
 	case "aws/user":
 		return awsIdentities.NewUserIdentity(name, config)
+	case types.IdentityKindAWSCredentialProcess:
+		return awsIdentities.NewCredentialProcessIdentity(name, config)
 	case "atmos/pro":
 		return atmosproIdentities.NewIdentity(name, config)
 	case types.IdentityKindAzureSubscription:
