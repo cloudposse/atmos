@@ -3,8 +3,9 @@ package cloudformation
 import (
 	"testing"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestMissingProducerCannotBecomeAnEmptyCloudFormationParameter(t *testing.T) {
@@ -13,6 +14,7 @@ func TestMissingProducerCannotBecomeAnEmptyCloudFormationParameter(t *testing.T)
 		map[string]any{"List": []any{"valid", nil}},
 		[]any{map[string]any{"ParameterKey": "MissingOutput", "ParameterValue": nil}},
 		[]any{map[string]any{"ParameterKey": "MissingValue"}},
+		[]any{map[string]any{"ParameterKey": "MissingValue", "UsePreviousValue": false}},
 	} {
 		_, err := buildStackSpec(map[string]any{"stack_name": "consumer", "path": "template.yaml", "parameters": parameters})
 		require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationParameters)
