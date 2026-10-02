@@ -842,3 +842,90 @@ func TestSourceMisplacedUnderMetadata(t *testing.T) {
 		})
 	}
 }
+
+// TestProvisionAndResolveComponentPath_CloudFormationIsolation verifies local nested
+// sources are copied once into distinct canonical workdirs without changing source files.
+func TestProvisionAndResolveComponentPath_CloudFormationIsolation(t *testing.T) {
+	basePath := t.TempDir()
+	sourceDir := filepath.Join(basePath, "custom-cfn", "modules", "network")
+	require.NoError(t, os.MkdirAll(filepath.Join(sourceDir, "modules", "network"), 0o755))
+	contents := []byte("Resources: {}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "template.yaml"), contents, 0o644))
+	config := &schema.AtmosConfiguration{BasePath: basePath}
+	paths := make(map[string]string)
+	for _, stack := range []string{"dev", "sandbox"} {
+		info := &schema.ConfigAndStacksInfo{
+			FinalComponent: "network/shared", Stack: stack, BaseComponentPath: "modules/network",
+			ComponentSection: map[string]any{
+				"component": "modules/network", "atmos_component": "network/shared", "atmos_stack": stack,
+				"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+			},
+		}
+		got, exists, err := ProvisionAndResolveComponentPath(context.Background(), provisioner.OutputWriters{}, config, info, cfg.CloudFormationComponentType, sourceDir)
+		require.NoError(t, err)
+		require.True(t, exists)
+		expected, err := provWorkdir.BuildPath(basePath, cfg.CloudFormationComponentType, "network/shared", stack, nil)
+		require.NoError(t, err)
+		require.Equal(t, expected, got, "local metadata subpaths must not be joined a second time")
+		require.Equal(t, got, info.ComponentSection[provWorkdir.WorkdirPathKey])
+		copied, err := os.ReadFile(filepath.Join(got, "template.yaml"))
+		require.NoError(t, err)
+		assert.Equal(t, contents, copied)
+		require.NoError(t, os.WriteFile(filepath.Join(got, "generated.yaml"), []byte(stack), 0o644))
+		rerun, exists, err := ProvisionAndResolveComponentPath(context.Background(), provisioner.OutputWriters{}, config, info, cfg.CloudFormationComponentType, sourceDir)
+		require.NoError(t, err)
+		assert.True(t, exists)
+		assert.Equal(t, got, rerun)
+		paths[stack] = got
+	}
+	assert.NotEqual(t, paths["dev"], paths["sandbox"])
+	for stack, path := range paths {
+		value, err := os.ReadFile(filepath.Join(path, "generated.yaml"))
+		require.NoError(t, err)
+		assert.Equal(t, stack, string(value))
+	}
+	assert.NoFileExists(t, filepath.Join(sourceDir, "generated.yaml"))
+	unchanged, err := os.ReadFile(filepath.Join(sourceDir, "template.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, contents, unchanged)
+}
+
+// TestProvisionAndResolveComponentPath_CloudFormationMissingSource requires both
+// opt-in generation and a nonempty generate block before creating an empty workdir.
+func TestProvisionAndResolveComponentPath_CloudFormationMissingSource(t *testing.T) {
+	for _, tc := range []struct {
+		name                          string
+		enabled, generated, wantError bool
+	}{
+		{name: "entirely generated", enabled: true, generated: true},
+		{name: "generation disabled", generated: true, wantError: true},
+		{name: "empty generation", enabled: true, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			basePath := t.TempDir()
+			config := &schema.AtmosConfiguration{BasePath: basePath}
+			config.Components.CloudFormation.AutoGenerateFiles = tc.enabled
+			section := map[string]any{
+				"component": "generated", "atmos_component": "generated", "atmos_stack": "dev",
+				"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+			}
+			if tc.generated {
+				section[cfg.GenerateSectionName] = map[string]any{"template.yaml": "Resources: {}"}
+			}
+			info := &schema.ConfigAndStacksInfo{FinalComponent: "generated", Stack: "dev", ComponentSection: section}
+			sourcePath := filepath.Join(basePath, "missing")
+			got, exists, err := ProvisionAndResolveComponentPath(context.Background(), provisioner.OutputWriters{}, config, info, cfg.CloudFormationComponentType, sourcePath)
+			if tc.wantError {
+				require.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
+				assert.False(t, exists)
+				assert.Empty(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.True(t, exists)
+			assert.DirExists(t, got)
+			assert.NoDirExists(t, sourcePath)
+			assert.NoFileExists(t, filepath.Join(got, "template.yaml"), "path preparation does not generate files itself")
+		})
+	}
+}
