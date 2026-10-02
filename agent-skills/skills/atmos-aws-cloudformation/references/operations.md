@@ -89,7 +89,7 @@ skips only the question, not the preview); declining deletes the changeset and t
 `REVIEW_IN_PROGRESS` stack Atmos created for a never-deployed component. Without a TTY and without
 `--auto-approve`, `apply` fails before creating anything (`confirmation required`, not `user aborted`).
 Publish-only (`aws/s3`) and external (`git`) targets change no stack and never ask. `deploy` defaults
-`--auto-approve` to `true`. See [apply flow](references/operations.md#apply-diff-and-delete-behavior).
+`--auto-approve` to `true`. See [apply flow](#apply-diff-and-delete-behavior).
 
 
 ## Output Formats and Masking

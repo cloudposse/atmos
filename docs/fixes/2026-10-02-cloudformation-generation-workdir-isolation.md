@@ -45,6 +45,8 @@ The implementation was developed in a separate checkout to preserve existing wor
   client boundary, YAML/JSON/string serialization, inheritance/overrides, entirely
   generated and nested source components, reruns, failure paths, dry-run and
   deployed-operation isolation, and named changeset policy generation.
+- Corrected the operations skill reference self-link found by CI; offline link
+  verification passed.
 - `go build ./...` and changed-code custom lint passed. Website dependency
   installation and production build passed. The generated example rendered using
   the freshly built CLI.
