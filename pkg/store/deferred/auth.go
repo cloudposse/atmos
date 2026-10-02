@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 )
 
+// resolveStoreAuth resets shared store credentials and resolves its effective identity.
 func resolveStoreAuth(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, name string) error {
 	defer perf.Track(ac, "store.deferred.ResolveStoreAuth")()
 
@@ -27,7 +28,11 @@ func resolveStoreAuth(ac *schema.AtmosConfiguration, info *schema.ConfigAndStack
 	if identity == "" && info != nil {
 		// A store's explicit identity wins; otherwise inherit the caller's
 		// explicit CLI identity without changing component or global defaults.
-		requested := cfg.NormalizeIdentityValue(info.Identity)
+		raw := info.Identity
+		if info.RequestedIdentity != nil {
+			raw = *info.RequestedIdentity
+		}
+		requested := cfg.NormalizeIdentityValue(raw)
 		if requested != cfg.IdentityFlagSelectValue && requested != cfg.IdentityFlagDisabledValue {
 			identity = requested
 		}
@@ -41,6 +46,7 @@ func resolveStoreAuth(ac *schema.AtmosConfiguration, info *schema.ConfigAndStack
 	return nil
 }
 
+// injectDeferredStoreContext binds resolved credentials without changing caller defaults.
 func injectDeferredStoreContext(s store.IdentityAwareStore, manager auth.AuthManager, identity string) {
 	if manager == nil {
 		preserveConfiguredStoreIdentity(s, identity)
@@ -58,7 +64,7 @@ func injectDeferredStoreContext(s store.IdentityAwareStore, manager auth.AuthMan
 	s.SetAuthContext(authbridge.NewResolvedContext(info.AuthContext), identity)
 }
 
-// An explicitly configured identity must not silently become ambient credentials
+// preserveConfiguredStoreIdentity ensures an explicit identity cannot become ambient credentials
 // if a custom resolver returns no usable authentication context.
 func preserveConfiguredStoreIdentity(s store.IdentityAwareStore, identity string) {
 	if identity != "" {

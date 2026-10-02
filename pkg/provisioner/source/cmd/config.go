@@ -30,6 +30,7 @@ func (c *Config) CLI() string {
 	return c.ComponentType
 }
 
+// prepareComponentConfig applies the optional component-specific destination policy before source operations.
 func (c *Config) prepareComponentConfig(atmosConfig *schema.AtmosConfiguration, section map[string]any) (map[string]any, error) {
 	if c.PrepareComponentConfig == nil {
 		return section, nil

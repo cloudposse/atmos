@@ -20,6 +20,7 @@ import (
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 )
 
+// generationEnabled requires both the global opt-in and a nonempty component generate block.
 func generationEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
 	return atmosConfig.Components.CloudFormation.AutoGenerateFiles && len(tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection)) > 0
 }
@@ -72,6 +73,7 @@ func PrepareSourceComponentConfig(atmosConfig *schema.AtmosConfiguration, sectio
 	return section, nil
 }
 
+// cloneOrEmpty returns a writable shallow copy without mutating inherited configuration.
 func cloneOrEmpty(value map[string]any) map[string]any {
 	if value == nil {
 		return map[string]any{}
@@ -129,6 +131,7 @@ func resolveSourceAWSAuth(atmosConfig *schema.AtmosConfiguration, info *schema.C
 	return info.AuthContext.AWS, nil
 }
 
+// generateComponentFiles writes into the isolated workdir and reports both batch and per-file failures.
 func generateComponentFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, path string) error {
 	defer perf.Track(atmosConfig, "cloudformation.generateComponentFiles")()
 	if info.DryRun || !generationEnabled(atmosConfig, info) {
@@ -157,6 +160,7 @@ func generateComponentFiles(atmosConfig *schema.AtmosConfiguration, info *schema
 	return nil
 }
 
+// prepareGeneratedDirectories validates every destination before creating any parent directories.
 func prepareGeneratedDirectories(path string, section map[string]any) error {
 	for name := range section {
 		if filepath.IsAbs(name) || filepath.VolumeName(name) != "" {
@@ -174,6 +178,7 @@ func prepareGeneratedDirectories(path string, section map[string]any) error {
 	return nil
 }
 
+// requireGeneratedPath rejects lexical and symlink escapes from the workdir, including missing leaves.
 func requireGeneratedPath(root, path string) error {
 	relative, err := filepath.Rel(root, path)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
@@ -212,6 +217,7 @@ func resolveExistingAncestor(path string) (string, error) {
 	return filepath.Join(parent, filepath.Base(absolute)), nil
 }
 
+// invalidGeneratedPath explains how to keep generated files inside the component workdir.
 func invalidGeneratedPath(path string) error {
 	return errUtils.Build(errUtils.ErrInvalidAwsCloudFormationSettings).
 		WithExplanationf("Generated path %q must remain inside the component's isolated workdir.", path).
