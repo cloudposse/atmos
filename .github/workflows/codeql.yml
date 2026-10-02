@@ -187,27 +187,46 @@ jobs:
             attempt=$((attempt + 1))
           done
 
+      # govulncheck only builds its whole-program call graph when an imported
+      # package has a known vuln (otherwise it returns early in seconds). On
+      # this module that pass peaks around 25GB RSS — measured locally when
+      # GO-2026-6597 (containerd/v2 < 2.3.6) landed — which exceeds the public
+      # runner's 16GB RAM and gets the runner OOM-killed (seen as `Killed`,
+      # exit 143 "shutdown signal", or "The operation was canceled"). Extra
+      # swap on the runner's largest disk absorbs the overflow.
+      - name: Add swap space
+        shell: bash
+        run: |
+          set -euo pipefail
+          # /mnt is the hosted runner's large ephemeral disk; fall back to /.
+          dir=/mnt
+          mountpoint -q /mnt || dir=/
+          df -h "$dir"
+          sudo fallocate -l 20G "$dir/govulncheck.swap"
+          sudo chmod 600 "$dir/govulncheck.swap"
+          sudo mkswap "$dir/govulncheck.swap"
+          sudo swapon "$dir/govulncheck.swap"
+          swapon --show
+          free -h
+
       - name: Run govulncheck
         shell: bash
+        # Bounds a swap-thrashing run instead of burning the 6h job default.
+        timeout-minutes: 30
         env:
           # Atmos ships with CGO disabled (see Makefile/test.yml) — without this,
           # the runner's default CGO_ENABLED=1 makes govulncheck try to compile
           # the cgo-only half of github.com/bearsh/hid (pulled in transitively via
           # saml2aws's U2F support), which needs libudev-dev and fails to load.
           CGO_ENABLED: "0"
-          # govulncheck's whole-program (`./...`) SSA call-graph analysis over
-          # this repo's large, dependency-heavy module (cloud SDKs, client-go,
-          # Terraform/OpenTofu, ...) peaks high enough in memory to get
-          # OOM-killed by the standard 16GB runner (observed as an unexplained
-          # SIGTERM/exit 143 partway through, with no findings ever produced).
-          # A soft memory ceiling forces the Go runtime to GC earlier/more
-          # often instead of letting the heap grow unchecked, trading some run
-          # time for staying under the runner's memory limit. GOFLAGS=-p=1
-          # (serializing package builds) was tried first and rejected: it only
-          # marginally reduced peak memory (govulncheck's SSA construction
-          # parallelizes via goroutines internally, which -p doesn't govern)
-          # while nearly tripling run time.
-          GOMEMLIMIT: "12GiB"
+          # Sized to RAM + swap. A limit below the call-graph pass's real ~25GB
+          # need (the previous 12GiB) can't shrink the live heap; it only keeps
+          # the GC running near-continuously, and each cycle would page the
+          # swapped heap back in. GOFLAGS=-p=1 (serializing package builds) was
+          # tried earlier and rejected: it barely reduced peak memory
+          # (govulncheck's SSA construction parallelizes via goroutines, which
+          # -p doesn't govern) while nearly tripling run time.
+          GOMEMLIMIT: "32GiB"
         run: govulncheck -format sarif ./... > govulncheck.sarif
 
       - name: Upload SARIF file
