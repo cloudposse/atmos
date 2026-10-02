@@ -45,6 +45,11 @@ The implementation was developed in a separate checkout to preserve existing wor
   client boundary, YAML/JSON/string serialization, inheritance/overrides, entirely
   generated and nested source components, reruns, failure paths, dry-run and
   deployed-operation isolation, and named changeset policy generation.
+- Repository-wide short testing passed all packages except the CLI suite, which
+  exceeded the default five-minute limit. With a longer timeout and generated
+  website artifacts outside the checkout, that suite completed and exposed only
+  14 stale config snapshots. Each now includes `auto_generate_files: false`; all
+  14 cases passed focused replay. The other CLI cases passed the completed run.
 - Corrected the operations skill reference self-link found by CI; offline link
   verification passed.
 - `go build ./...` and changed-code custom lint passed. Website dependency

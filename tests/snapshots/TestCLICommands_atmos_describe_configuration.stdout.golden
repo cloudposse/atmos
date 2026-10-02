@@ -56,6 +56,7 @@ components:
   container:
     base_path: components/container
   aws/cloudformation:
+    auto_generate_files: false
     base_path: components/cloudformation
 stacks:
   base_path: stacks
