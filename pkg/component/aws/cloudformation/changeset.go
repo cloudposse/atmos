@@ -158,10 +158,10 @@ func stackExists(ctx context.Context, client CloudFormationClient, stackName str
 
 // rollbackCompleteError explains that a stack whose initial create failed cannot
 // be updated, and how to recover. Atmos never deletes the stack on its own.
-func rollbackCompleteError(stackName string) error {
+func rollbackCompleteError(spec *stackSpec) error {
 	return errUtils.Build(errUtils.ErrAwsCloudFormationStackRollbackComplete).
-		WithExplanationf("Stack %q is in ROLLBACK_COMPLETE: its initial create failed and CloudFormation cannot update a stack in that state.", stackName).
-		WithHint("Delete the failed stack with `atmos aws cloudformation delete <component> -s <stack>`, then run apply again.").
+		WithExplanationf("Stack %q is in ROLLBACK_COMPLETE: its initial create failed and CloudFormation cannot update a stack in that state.", spec.StackName).
+		WithHintf("Delete the failed stack with `atmos aws cloudformation delete %s`, then run apply again.", spec.commandTarget()).
 		Err()
 }
 
@@ -209,7 +209,7 @@ func createChangeSet(ctx context.Context, client CloudFormationClient, spec *sta
 		return nil, err
 	}
 	if state.Status == cfntypes.StackStatusRollbackComplete {
-		return nil, rollbackCompleteError(spec.StackName)
+		return nil, rollbackCompleteError(spec)
 	}
 
 	changeSetType := cfntypes.ChangeSetTypeCreate

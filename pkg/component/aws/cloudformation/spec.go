@@ -14,6 +14,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -48,6 +49,34 @@ type stackSpec struct {
 	DisableRollback       bool
 	TerminationProtection bool
 	TimeoutInMinutes      int32
+	// Component and AtmosStack identify the Atmos component and stack the spec
+	// was built for, so error hints can name a runnable command. Both are set by
+	// the caller; buildStackSpec only sees the component section.
+	Component  string
+	AtmosStack string
+}
+
+// commandTarget returns the `<component> -s <stack>` arguments that address this
+// spec's component on the command line, falling back to placeholders for any
+// part the caller did not record.
+func (s *stackSpec) commandTarget() string {
+	component, stack := s.Component, s.AtmosStack
+	if component == "" {
+		component = "<component>"
+	}
+	if stack == "" {
+		stack = "<stack>"
+	}
+	return component + " -s " + stack
+}
+
+// withAtmosIdentity records the Atmos component and stack the spec belongs to.
+func (s *stackSpec) withAtmosIdentity(info *schema.ConfigAndStacksInfo) *stackSpec {
+	if info != nil {
+		s.Component = info.ComponentFromArg
+		s.AtmosStack = info.Stack
+	}
+	return s
 }
 
 // buildStackSpec extracts and normalizes an aws/cloudformation component's

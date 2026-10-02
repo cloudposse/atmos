@@ -262,6 +262,7 @@ func TestDryRunApplyRejectsStackSetTarget(t *testing.T) {
 
 	err := runDryRun(t, section, map[string]any{targetKey: "fleet"}, OperationApply)
 	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetTargetNotApplicable)
+	assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), "\n"), "stackset create vpc -s dev --target fleet")
 
 	require.NoError(t, runDryRun(t, section, map[string]any{targetKey: "fleet"}, OperationStackSetCreate))
 }
