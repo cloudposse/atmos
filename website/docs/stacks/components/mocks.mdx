@@ -45,6 +45,13 @@ When `vpc` has not been provisioned, the lookups return `vpc-local` and `subnet-
 `atmos terraform apply vpc -s dev`, the same commands return the real `vpc_id` and subnet
 from state. To always use the mocks, even when state exists, pass `--use-mocks=always`.
 
+:::warning Attach the mode with an equals sign
+A bare `--use-mocks` takes no value, so `--use-mocks always` leaves `always` behind as a positional
+argument and does not select the mode. When the mode word follows the component, Atmos reports
+this with an error and a hint. Write
+`--use-mocks=always`.
+:::
+
 Running the app's plan can still require its own provider credentials and infrastructure access.
 
 ## Resolution modes
@@ -74,9 +81,16 @@ With the `vpc` example above:
 | `vpc` applied, output `vpc_id` is `vpc-0abc` | `vpc-0abc` (the mock is ignored) |
 | `vpc` never applied | `vpc-local` (from `mocks`) |
 | `vpc` applied, but it has no `vpc_id` output | `vpc-local` (from `mocks`) |
-| `vpc` never applied, `vpc` declares no `mocks` | The normal not-provisioned error |
+| `vpc` never applied, `vpc` declares no matching mock | The normal not-provisioned error for `!terraform.state`; `null` for `!terraform.output`, the same as without mocks |
 | `vpc` applied, no `vpc_id` output, and no `vpc_id` mock | `null`, the same as without mocks |
 | Backend returns an access-denied or network error | The error. Mocks never hide it |
+
+When the real lookup for a component that declares `mocks` fails with an error that is not
+recoverable (credentials, network, backend, Terraform initialization, or a missing Terraform
+binary), the error includes a hint to use
+`--use-mocks=always` or `components.terraform.mocks.mode: always` for mocks-only resolution.
+Use `always` for runs that have no credentials or no Terraform installed, such as CI jobs that only
+inspect configuration.
 
 The precedence is: real value, then mock, then a YQ `//` default, then the original error.
 A `//` default in the expression is therefore the last resort, not a replacement for the mock:
@@ -89,6 +103,33 @@ vars:
 Here the value is the real `vpc_id` when it exists, `vpc-local` when only the mock exists, and
 `vpc-default` when neither exists.
 
+#### Map outputs are merged
+
+Mocks are deep-merged under the real outputs. Every value present in real state wins, and a mock
+fills only the keys that are missing from a real map output. Suppose the real `config` output is
+`{ a = 1 }` and the mock is:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      mocks:
+        config: {a: 0, b: 2}
+```
+
+Then `.config.a` is the real `1`, `.config.b` is `2` from the mock, and `.config` resolves to
+`{a: 1, b: 2}`.
+
+Lists and scalars are never merged element by element. A real list replaces the mock list
+wholesale, and a real scalar replaces the mock scalar.
+
+:::note Outputs that are null in state
+Terraform does not record outputs whose value is `null` in state. In fallback mode an output that is
+`null` in a provisioned component is therefore indistinguishable from a missing output, and it
+resolves to the mock. Don't declare a mock for an output that can legitimately be `null`, or use
+`--use-mocks=always` when that matters.
+:::
+
 ### Always mode
 
 In `always` mode lookups resolve from `mocks` and nothing else. Atmos does not initialize
@@ -99,7 +140,8 @@ result is the same on every machine regardless of what has been deployed.
 atmos describe component app -s dev --use-mocks=always
 ```
 
-Use `always` when a run must be hermetic, for example in CI jobs with no cloud credentials.
+Use `always` when a run must be hermetic, for example in CI jobs with no cloud credentials or
+without Terraform installed.
 In this mode a missing `mocks` map or an undeclared output is an error, because there is no real
 value to fall back to. A YQ `//` default still applies:
 
@@ -126,22 +168,38 @@ mode regardless of the pin.
 
   <dt>`--use-mocks`</dt>
   <dd>
-  Turns on mock lookups for `atmos terraform plan` and `atmos describe component`. Other
-  Terraform commands (`apply`, `deploy`, `destroy`, and passthrough commands) reject the flag.
-  YAML function processing must remain enabled. Accepted values:
+  Turns on mock lookups for `atmos terraform plan` and `atmos describe component`. Every other
+  `atmos terraform` subcommand (for example `apply`, `deploy`, and `destroy`) rejects the flag.
+  `atmos terraform plan --all` and `--affected` pass it through to each component. YAML function
+  processing must remain enabled. Accepted values (matching is case-insensitive):
 
-  - Absent or `--use-mocks=false`: mocks are off and lookups use real state and outputs.
-  - `--use-mocks`, `--use-mocks=true`, or `ATMOS_USE_MOCKS=true`: mocks are on, using the
+  - Absent, empty, or a false boolean (`false`, `0`, `f`): mocks are off and lookups use real state and outputs.
+  - Bare `--use-mocks` or a true boolean (`true`, `1`, `t`): mocks are on, using the
     resolved `components.terraform.mocks.mode`.
-  - `--use-mocks=fallback` or `--use-mocks=always`: mocks are on, overriding
-    `components.terraform.mocks.mode` for this run.
+  - `fallback` or `always`: mocks are on, overriding `components.terraform.mocks.mode` for this run.
+
+  Any other value is an error. Attach the value with `=`, as in `--use-mocks=always`; a bare
+  `--use-mocks` takes no value, so `--use-mocks always` leaves `always` as a positional argument and
+  Atmos reports it as an error with a hint.
 
   **Default:** off
   </dd>
 
+  <dt>`ATMOS_USE_MOCKS`</dt>
+  <dd>
+  Environment equivalent of `--use-mocks`, with the same accepted values. Only `atmos terraform plan`
+  reads it; `atmos describe component` ignores it, so pass `--use-mocks` there. If `ATMOS_USE_MOCKS`
+  is exported in a shell or CI environment, every `atmos terraform` subcommand other than `plan`
+  (for example `apply`, `deploy`, and `destroy`) fails with an error that names the variable. Unset it
+  before running those commands.
+  </dd>
+
   <dt>`components.terraform.mocks.mode`</dt>
   <dd>
-  Either `fallback` or `always`, as described in [Resolution modes](#resolution-modes). The
+  Either `fallback` or `always`, as described in [Resolution modes](#resolution-modes). The value in
+  `atmos.yaml` is case-insensitive (`Always` works). An invalid value, whether in `atmos.yaml` or in
+  `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`, fails at configuration load for every command, not only
+  when a `--use-mocks` lookup runs. The
   default is `fallback` for unpinned projects and projects pinned to a
   [config edition](/cli/configuration/edition) on or after 2026-10-01, and `always` for
   projects pinned to an earlier edition. The effective value resolves in this order (highest

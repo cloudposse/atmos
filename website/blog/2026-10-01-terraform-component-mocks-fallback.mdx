@@ -22,9 +22,9 @@ The behavior is configurable. In the new default `fallback` mode, each lookup re
 1. The real value, when the referenced component's state exists and declares the output.
 2. The component's mock, when the state is not provisioned or the output is missing.
 3. A YQ `//` default in the expression, if one is present.
-4. The same result as without mocks: the not-provisioned error, or `null` for an output missing from applied state.
+4. The same result as without mocks: the not-provisioned error for a component that was never applied, or `null` for an output missing from applied state.
 
-Mocks never hide real problems. Credential, network, and backend failures still fail the command instead of quietly returning a mock value. As before, only `atmos terraform plan` and `atmos describe component` accept `--use-mocks`; apply, deploy, and destroy reject it.
+Mocks never hide real problems. Credential, network, and backend failures still fail the command instead of quietly returning a mock value. As before, only `atmos terraform plan` and `atmos describe component` accept `--use-mocks`; every other Terraform subcommand, such as apply, deploy, and destroy, rejects it. Map outputs are merged: a mock fills keys that are missing from a real map output, while every value present in real state wins.
 
 The other mode, `always`, keeps the previous behavior for runs that must stay hermetic, such as an offline review or a machine without cloud credentials. In `always` mode, lookups resolve from mocks only and never initialize Terraform, authenticate, or read a backend. Choose the mode per run with the flag, or set a project default with [`mocks.mode`](/cli/configuration/components/terraform), as shown below.
 
@@ -62,7 +62,7 @@ components:
       mode: always   # fallback (default) | always
 ```
 
-The `mocks.mode` setting can also be set with `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`. An explicit mode passed with the flag, such as `--use-mocks=fallback` or `--use-mocks=always`, wins over the environment variable, which wins over `atmos.yaml`. A bare `--use-mocks` turns mocks on and keeps the configured mode.
+The `mocks.mode` setting can also be set with `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`. Attach a mode to the flag with `=`, because `--use-mocks always` does not select one. An explicit mode passed with the flag, such as `--use-mocks=fallback` or `--use-mocks=always`, wins over the environment variable, which wins over `atmos.yaml`. A bare `--use-mocks` turns mocks on and keeps the configured mode.
 
 ### Upgrading
 

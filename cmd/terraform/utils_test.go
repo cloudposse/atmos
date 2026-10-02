@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -145,7 +146,7 @@ func TestValidateTerraformMockFlagsBeforeHooks(t *testing.T) {
 	cmd.Flags().String("use-mocks", "true", "")
 	cmd.Flags().Bool("process-functions", true, "")
 
-	err := validateTerraformMockFlags(cmd)
+	err := validateTerraformMockFlags(cmd, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "supported only by `atmos terraform plan`")
 }
@@ -180,7 +181,7 @@ func TestValidateTerraformMockFlags(t *testing.T) {
 				tt.command.Flags().Bool("process-functions", tt.processFunctions, "")
 			}
 
-			err := validateTerraformMockFlags(tt.command)
+			err := validateTerraformMockFlags(tt.command, nil)
 			if tt.wantErrIs != nil {
 				assert.ErrorIs(t, err, tt.wantErrIs)
 				return
@@ -199,6 +200,40 @@ func TestValidateTerraformMockOptions(t *testing.T) {
 	assert.ErrorContains(t, validateTerraformMockOptions("plan", true, false), "requires --process-functions=true")
 	assert.ErrorContains(t, validateTerraformMockOptions("apply", true, true), "supported only by `atmos terraform plan`")
 	assert.NoError(t, validateTerraformMockOptions("plan", true, true))
+
+	// The env var can turn mocks on without the user typing the flag, so the error names it and
+	// the hint says to unset it.
+	err := validateTerraformMockOptions("apply", true, true)
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.Contains(t, err.Error(), "ATMOS_USE_MOCKS")
+	assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), "\n"), "unset it for `atmos terraform apply`")
+}
+
+// TestValidateTerraformMockFlagsSeparatedMode covers `--use-mocks always` (a space instead of `=`):
+// the mode word lands among the positional arguments after the component and would otherwise be
+// passed to Terraform as a stray argument.
+func TestValidateTerraformMockFlagsSeparatedMode(t *testing.T) {
+	newPlan := func(useMocks string) *cobra.Command {
+		cmd := &cobra.Command{Use: "plan"}
+		cmd.Flags().String("use-mocks", useMocks, "")
+		cmd.Flags().Bool("process-functions", true, "")
+		return cmd
+	}
+
+	err := validateTerraformMockFlags(newPlan("true"), []string{"app", "always"})
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), "\n"), "--use-mocks=always")
+
+	// A component that happens to be named like a mode is not flagged.
+	require.NoError(t, validateTerraformMockFlags(newPlan("true"), []string{"always"}))
+	// An explicit mode means the word is not the flag's value.
+	require.NoError(t, validateTerraformMockFlags(newPlan("always"), []string{"app", "always"}))
+
+	err = terraformRunWithOptions(&cobra.Command{Use: "terraform"}, &cobra.Command{Use: "plan"}, []string{"app", "fallback"}, &TerraformRunOptions{
+		ProcessFunctions: true,
+		UseMocks:         true,
+	})
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
 }
 
 func TestIsCompoundTerraformCommandWithoutComponent(t *testing.T) {

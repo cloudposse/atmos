@@ -161,13 +161,17 @@ func declaredFallbackMocks(
 }
 
 // resolveTerraformOutputWithMocks evaluates the caller's expression against the component mocks
-// overlaid with the real outputs (real wins per top-level output) in `fallback` mode. Precedence
-// is therefore: real value, then component mock, then YQ `//` default, then the original lookup
-// error (or nil for an output missing from provisioned state).
+// deep-merged under the real outputs in `fallback` mode. Precedence is therefore: real value,
+// then component mock, then YQ `//` default, then the original lookup error (or nil for an output
+// missing from provisioned state).
+//
+// The merge is recursive for maps, so a mock fills a key missing from a real map output (real
+// `config = {a = 1}` plus mock `config: {b: 2}` resolves `.config.b` to 2). Every value present in
+// the real outputs wins, and lists and scalars are never merged element by element.
 //
 // The realOutputs argument is the whole real output map (nil when the state is not provisioned or the
 // output map is absent) and realErr is the recoverable lookup error that produced it, if any.
-// Neither the mocks nor the real map is mutated: the merge works on a shallow copy.
+// Neither the mocks nor the real map is mutated: the merge builds new maps.
 func resolveTerraformOutputWithMocks(
 	atmosConfig *schema.AtmosConfiguration,
 	lookup *terraformStateLookup,
@@ -175,13 +179,7 @@ func resolveTerraformOutputWithMocks(
 	realOutputs map[string]any,
 	realErr error,
 ) (any, error) {
-	merged := make(map[string]any)
-	for key, value := range mocks {
-		merged[key] = value
-	}
-	for key, value := range realOutputs {
-		merged[key] = value
-	}
+	merged := mergeRealOverMocks(mocks, realOutputs)
 
 	value, err := tb.GetTerraformBackendVariable(atmosConfig, merged, lookup.output)
 	if err != nil {
@@ -191,19 +189,56 @@ func resolveTerraformOutputWithMocks(
 		return nil, missingTerraformOutputWithMocks(merged, lookup.output, realErr)
 	}
 
-	if key := topLevelOutputKey(lookup.output); key != "" {
-		_, inReal := realOutputs[key]
-		_, inMocks := mocks[key]
-		if !inReal && inMocks {
-			log.Debug(
-				"Terraform YAML function resolved from component mocks (fallback)",
-				"component", lookup.component,
-				"stack", lookup.stack,
-				"output", lookup.output,
-			)
-		}
+	if resolvedFromMocks(mocks, realOutputs, lookup.output) {
+		log.Debug(
+			"Terraform YAML function resolved from component mocks (fallback)",
+			"component", lookup.component,
+			"stack", lookup.stack,
+			"output", lookup.output,
+		)
 	}
 	return value, nil
+}
+
+// mergeRealOverMocks returns a new map holding mocks deep-merged under real: maps are merged
+// recursively and any other real value (including an explicit null, a list, or a scalar) replaces
+// the mock at that key. Neither input is mutated.
+func mergeRealOverMocks(mocks, real map[string]any) map[string]any {
+	merged := make(map[string]any, len(mocks)+len(real))
+	for key, value := range mocks {
+		merged[key] = value
+	}
+	for key, realValue := range real {
+		realMap, realIsMap := realValue.(map[string]any)
+		mockMap, mockIsMap := merged[key].(map[string]any)
+		if realIsMap && mockIsMap {
+			merged[key] = mergeRealOverMocks(mockMap, realMap)
+			continue
+		}
+		merged[key] = realValue
+	}
+	return merged
+}
+
+// resolvedFromMocks reports whether a simple output path is absent from the real outputs but
+// declared in the mocks, i.e. the value came from the mocks. Complex YQ expressions report false.
+func resolvedFromMocks(mocks, realOutputs map[string]any, output string) bool {
+	inReal, decidable := mockPathExists(realOutputs, output)
+	if !decidable || inReal {
+		return false
+	}
+	inMocks, _ := mockPathExists(mocks, output)
+	return inMocks
+}
+
+// withFallbackModeHint adds a hint to a non-recoverable lookup error raised in `fallback` mode:
+// fallback reads real state first, so a machine without credentials, network access, or the
+// Terraform binary now fails where mocks-only resolution would not.
+func withFallbackModeHint(err error) error {
+	return errUtils.Build(err).
+		WithHintf("`%s` runs in `%s` mode, which reads real state first and uses mocks only when state or an output is missing. To resolve from mocks only, without Terraform, credentials, or backend access, pass `%s=%s` or set `components.terraform.mocks.mode: %s`.",
+			cfg.UseMocksFlag, schema.TerraformMocksModeFallback, cfg.UseMocksFlag, schema.TerraformMocksModeAlways, schema.TerraformMocksModeAlways).
+		Err()
 }
 
 // missingTerraformOutputWithMocks decides what a nil result means after evaluating against the
@@ -218,16 +253,6 @@ func missingTerraformOutputWithMocks(merged map[string]any, output string, realE
 		return realErr
 	}
 	return nil
-}
-
-// topLevelOutputKey returns the first path segment of a YQ output expression (for example
-// "vpc_id" for `.vpc_id // "x"` or `vpc_id`), or an empty string when none can be determined.
-func topLevelOutputKey(output string) string {
-	output = strings.TrimPrefix(strings.TrimSpace(output), yqPathSeparator)
-	if end := strings.IndexAny(output, ".[]{}|/ \t\n\r\"'()"); end >= 0 {
-		output = output[:end]
-	}
-	return output
 }
 
 // isDirectMockOutputReference reports whether an expression names one top-level

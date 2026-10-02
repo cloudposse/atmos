@@ -171,7 +171,7 @@ func lookupTerraformStateWithMocks(
 
 	whole, err := stateGetter.GetState(atmosConfig, lookup.yamlFunc, lookup.stack, lookup.component, terraformAllOutputsExpression, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
 	if err != nil && !isRecoverableTerraformError(err) {
-		return nil, err
+		return nil, withFallbackModeHint(err)
 	}
 
 	var realOutputs map[string]any

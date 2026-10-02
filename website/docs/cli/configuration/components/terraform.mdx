@@ -195,15 +195,17 @@ components:
   <dd>
     Controls how [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output) lookups use a component's [`mocks`](/stacks/components/mocks) when you pass `--use-mocks` to `atmos terraform plan` or `atmos describe component`. Without `--use-mocks`, this setting has no effect.
 
-    - **`fallback`** — Atmos reads the real state or output first and returns it when it exists. The component's `mocks` value is used only when the referenced component's state is not provisioned or the requested output is missing. Credential, network, and backend errors still fail. When neither a real value nor a mock exists, a YQ `//` default applies. Otherwise the result is the same as without mocks: the not-provisioned error for a component that was never applied, or `null` for an output that is missing from provisioned state.
+    - **`fallback`** — Atmos reads the real state or output first and returns it when it exists. The component's `mocks` value is used only when the referenced component's state is not provisioned or the requested output is missing. Credential, network, and backend errors still fail. Mocks are deep-merged under the real outputs: every value present in real state wins, and a mock fills keys missing from a real map output. Lists and scalars are never merged element by element, so a real list replaces the mock list wholesale. When neither a real value nor a mock exists, a YQ `//` default applies. Otherwise the result is the same as without mocks: for a component that was never applied and declares no matching mock, `!terraform.state` returns the not-provisioned error and `!terraform.output` returns `null`; for an output missing from provisioned state, both return `null`. Terraform does not record outputs whose value is `null` in state, so in this mode such an output resolves to the mock. If the real lookup fails with an error that is not recoverable (credentials, network, backend, initialization, or a missing Terraform binary), the error includes a hint to use `--use-mocks=always` or `mocks.mode: always`.
     - **`always`** — Lookups resolve from `mocks` only. Atmos never initializes Terraform, authenticates, or reads a backend for those lookups, and a missing mock is an error (a YQ `//` default still applies).
 
     The default is `fallback` for unpinned projects and projects pinned to a [config edition](/cli/configuration/edition) on or after October 1, 2026. Pinning an earlier edition restores `always`, the behavior bare `--use-mocks` had before this setting existed, with no config changes.
 
+    The value in `atmos.yaml` is case-insensitive (`Always` works). An invalid value, in `atmos.yaml` or in `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`, fails at configuration load for every command, not only when a `--use-mocks` lookup runs.
+
     The effective value resolves in this order (highest wins): the `--use-mocks=fallback` or `--use-mocks=always` flag value, the `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE` environment variable, the value in `atmos.yaml`, then the edition-aware default. A bare `--use-mocks`, `--use-mocks=true`, or (for `atmos terraform plan`) `ATMOS_USE_MOCKS=true` turns mocks on using the resolved `mocks.mode` and does not change it.
 
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`
-    **Command-line flag:** `--use-mocks=<mode>` (per run, on `atmos terraform plan` and `atmos describe component`)
+    **Command-line flag:** `--use-mocks=<mode>` (per run, on `atmos terraform plan` and `atmos describe component`). Attach the mode with `=`; `--use-mocks always` does not select a mode.
     **Default:** `fallback` (`always` when pinned to an edition before 2026-10-01)
   </dd>
 

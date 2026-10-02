@@ -2,8 +2,10 @@ package config
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -87,6 +89,9 @@ func TestMocksModeEnvVarAndFlagPrecedence(t *testing.T) {
 		{name: "flag beats config", start: schema.TerraformMocksModeFallback, flag: "always", want: schema.TerraformMocksModeAlways},
 		{name: "flag beats env", start: schema.TerraformMocksModeFallback, env: "always", flag: "fallback", want: schema.TerraformMocksModeFallback},
 		{name: "invalid env errors", env: "sometimes", wantErrs: errUtils.ErrInvalidMocksMode},
+		{name: "config value is lower-cased", start: "Always", want: schema.TerraformMocksModeAlways},
+		{name: "invalid config value errors at load", start: "sometimes", wantErrs: errUtils.ErrInvalidMocksMode},
+		{name: "a valid env value replaces an invalid config value", start: "sometimes", env: "always", want: schema.TerraformMocksModeAlways},
 		{name: "invalid flag errors", flag: "sometimes", wantErrs: errUtils.ErrInvalidMocksMode},
 	}
 
@@ -128,7 +133,14 @@ func TestParseUseMocksFlag(t *testing.T) {
 		{raw: "always", wantEnabled: true, wantMode: "always"},
 		{raw: "Always", wantEnabled: true, wantMode: "always"},
 		{raw: "sometimes", wantErr: true},
-		{raw: "1", wantErr: true},
+		{raw: "yes", wantErr: true},
+		// The boolean forms the flag accepted when it was a plain BoolFlag stay accepted.
+		{raw: "1", wantEnabled: true},
+		{raw: "t", wantEnabled: true},
+		{raw: "T", wantEnabled: true},
+		{raw: "0", wantEnabled: false},
+		{raw: "f", wantEnabled: false},
+		{raw: "F", wantEnabled: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.raw, func(t *testing.T) {
@@ -145,4 +157,51 @@ func TestParseUseMocksFlag(t *testing.T) {
 			assert.Equal(t, tt.wantMode, mode)
 		})
 	}
+}
+
+func TestParseUseMocksValueNamesSource(t *testing.T) {
+	_, _, err := ParseUseMocksValue("sometimes", UseMocksFlagAndEnvSource)
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.Contains(t, err.Error(), "ATMOS_USE_MOCKS")
+
+	_, _, err = ParseUseMocksFlag("sometimes")
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.NotContains(t, err.Error(), "ATMOS_USE_MOCKS")
+}
+
+func TestCheckUseMocksSeparatedMode(t *testing.T) {
+	tests := []struct {
+		name    string
+		enabled bool
+		mode    string
+		args    []string
+		wantErr bool
+	}{
+		{name: "bare flag followed by always", enabled: true, args: []string{"always"}, wantErr: true},
+		{name: "bare flag followed by Fallback", enabled: true, args: []string{"-var", "Fallback"}, wantErr: true},
+		{name: "bare flag with unrelated args", enabled: true, args: []string{"-var=x=1"}},
+		{name: "explicit mode is not rechecked", enabled: true, mode: "always", args: []string{"always"}},
+		{name: "mocks off", enabled: false, args: []string{"always"}},
+		{name: "no args", enabled: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := CheckUseMocksSeparatedMode(tt.enabled, tt.mode, tt.args)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+			assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), "\n"), "--use-mocks=")
+		})
+	}
+}
+
+func TestLoadConfigRejectsInvalidMocksMode(t *testing.T) {
+	writeEditionTestConfig(t, "base_path: ./\ncomponents:\n  terraform:\n    mocks:\n      mode: sometimes\n")
+
+	_, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+
+	require.ErrorIs(t, err, errUtils.ErrInvalidMocksMode)
+	assert.Contains(t, err.Error(), "atmos.yaml")
 }

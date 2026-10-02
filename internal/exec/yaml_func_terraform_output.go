@@ -157,7 +157,7 @@ func lookupTerraformOutputWithMocks(
 	if err != nil {
 		wrapped := wrapTerraformOutputError(lookup, err)
 		if !isRecoverableTerraformError(err) {
-			return nil, wrapped
+			return nil, withFallbackModeHint(wrapped)
 		}
 		return resolveTerraformOutputWithMocks(atmosConfig, lookup, mocks, nil, wrapped)
 	}

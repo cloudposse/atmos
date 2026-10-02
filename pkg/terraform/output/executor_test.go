@@ -2782,3 +2782,8 @@ func TestExecuteWithSections_ReturnsErrWhenProvisionFails(t *testing.T) {
 	require.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
 		"error must wrap ErrWorkdirProvision, got: %v", err)
 }
+
+func TestFetchingOutputMessage(t *testing.T) {
+	assert.Equal(t, "Fetching vpc_id output from vpc in dev", fetchingOutputMessage("vpc_id", "vpc", "dev"))
+	assert.Equal(t, "Fetching all outputs from vpc in dev", fetchingOutputMessage(".", "vpc", "dev"))
+}

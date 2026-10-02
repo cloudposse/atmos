@@ -178,13 +178,18 @@ atmos describe component . --stack dev --provenance
     Use the producer's literal [component mocks](/stacks/components/mocks) for
     `!terraform.state` and `!terraform.output` lookups. Accepts these values:
 
-    - Absent or `--use-mocks=false`: mocks are off.
-    - `--use-mocks` or `--use-mocks=true`: mocks are on, using
+    - Absent, empty, or a false boolean (`false`, `0`, `f`): mocks are off.
+    - Bare `--use-mocks` or a true boolean (`true`, `1`, `t`): mocks are on, using
       [`components.terraform.mocks.mode`](/cli/configuration/components/terraform) (`fallback` by default).
       In `fallback` mode the real state or output wins and the mock is used only when the component is
       not provisioned or the output is missing.
     - `--use-mocks=fallback` or `--use-mocks=always`: mocks are on, overriding the configured mode for this run.
       The `always` value resolves from mocks only and never initializes Terraform, authenticates, or reads a backend.
+
+    Matching is case-insensitive, and any other value is an error. Attach the mode with `=`: a bare
+    `--use-mocks` takes no value, so `--use-mocks always` leaves `always` as a positional argument and
+    Atmos reports an error with a hint. This command ignores the `ATMOS_USE_MOCKS` environment variable;
+    pass the flag instead.
 
     Default: off. Requires YAML function processing to remain enabled.
     Also accepted by `atmos terraform plan`.

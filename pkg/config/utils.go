@@ -300,6 +300,10 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE", foundEnvVarMessage,
 		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode, &atmosConfig.Components.Terraform.Mocks.Mode); err != nil {
+		return fmt.Errorf("%w (from ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE)", err)
+	}
+
+	if err := normalizeConfiguredMocksMode(atmosConfig); err != nil {
 		return err
 	}
 
@@ -534,6 +538,19 @@ func setInitEnumEnvVar[T ~string](envVar, foundEnvVarMessage string, isValid fun
 		return err
 	}
 	*dest = normalized
+	return nil
+}
+
+// normalizeConfiguredMocksMode lower-cases and validates components.terraform.mocks.mode as loaded
+// from atmos.yaml, so a typo fails at config load (as an invalid ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE
+// does) instead of being accepted silently until a --use-mocks lookup runs.
+func normalizeConfiguredMocksMode(atmosConfig *schema.AtmosConfiguration) error {
+	mode, err := normalizeInitEnumValue(string(atmosConfig.Components.Terraform.Mocks.Mode),
+		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode)
+	if err != nil {
+		return fmt.Errorf("%w (from components.terraform.mocks.mode in atmos.yaml)", err)
+	}
+	atmosConfig.Components.Terraform.Mocks.Mode = mode
 	return nil
 }
 

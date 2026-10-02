@@ -120,7 +120,7 @@ var multiComponentFlagNames = []string{"all", "affected", "components", "query",
 // before.terraform.test) operate on the chosen target instead of an empty one. With
 // explicit args or in non-interactive contexts it is a no-op beyond the normal hook run.
 func runBeforeHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
-	if err := validateTerraformMockFlags(cmd_); err != nil {
+	if err := validateTerraformMockFlags(cmd_, args); err != nil {
 		return err
 	}
 	if err := preResolveInteractiveSelection(cmd_, args); err != nil {
@@ -131,8 +131,9 @@ func runBeforeHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error
 
 // validateTerraformMockFlags rejects an invalid mock invocation before hook or
 // stack resolution. RunE repeats this validation for commands without hooks and
-// for values supplied through environment variables.
-func validateTerraformMockFlags(cmd_ *cobra.Command) error {
+// for values supplied through environment variables. The positional arguments
+// (the component first) are used to catch `--use-mocks always`.
+func validateTerraformMockFlags(cmd_ *cobra.Command, args []string) error {
 	if cmd_ == nil || cmd_.Flags().Lookup("use-mocks") == nil {
 		return nil
 	}
@@ -141,8 +142,11 @@ func validateTerraformMockFlags(cmd_ *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	useMocks, _, err := cfg.ParseUseMocksFlag(rawUseMocks)
+	useMocks, mocksMode, err := cfg.ParseUseMocksFlag(rawUseMocks)
 	if err != nil || !useMocks {
+		return err
+	}
+	if err := cfg.CheckUseMocksSeparatedMode(useMocks, mocksMode, argsAfterComponent(args)); err != nil {
 		return err
 	}
 	processFunctions, err := cmd_.Flags().GetBool("process-functions")
@@ -1566,6 +1570,9 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	if err := validateTerraformMockOptions(subCommand, opts.UseMocks, opts.ProcessFunctions); err != nil {
 		return err
 	}
+	if err := cfg.CheckUseMocksSeparatedMode(opts.UseMocks, opts.MocksMode, argsAfterComponent(args)); err != nil {
+		return err
+	}
 
 	// Validate Atmos config first to provide specific error messages.
 	if err := internal.ValidateAtmosConfig(); err != nil {
@@ -1704,9 +1711,20 @@ func validateTerraformMockOptions(subCommand string, useMocks, processFunctions 
 		return fmt.Errorf("%w: --use-mocks requires --process-functions=true", errUtils.ErrInvalidFlagValue)
 	}
 	if subCommand != "plan" {
-		return fmt.Errorf("%w: --use-mocks is supported only by `atmos terraform plan`", errUtils.ErrInvalidFlagValue)
+		return errUtils.Build(fmt.Errorf("%w: %s is supported only by `atmos terraform plan`", errUtils.ErrInvalidFlagValue, cfg.UseMocksFlagAndEnvSource)).
+			WithHintf("If `ATMOS_USE_MOCKS` is set in your shell or CI environment, unset it for `atmos terraform %s`.", subCommand).
+			Err()
 	}
 	return nil
+}
+
+// argsAfterComponent returns the positional arguments that follow the component (the first
+// positional argument), or nil when there are none.
+func argsAfterComponent(args []string) []string {
+	if len(args) < 2 {
+		return nil
+	}
+	return args[1:]
 }
 
 // verifyStoredPlanForDeploy runs planfile drift verification before a deploy

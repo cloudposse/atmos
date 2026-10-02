@@ -186,12 +186,14 @@ These environment variables configure Atmos behavior and can override settings i
   <dd>
     Controls how [component mocks](/stacks/components/mocks) are used when `--use-mocks` is passed: `fallback` (real state wins, mocks fill gaps) or `always` (mocks only). Defaults to `fallback`, or `always` for projects pinned to a [config edition](/cli/configuration/edition) before 2026-10-01.
 
+    The value is case-insensitive, and an invalid value fails at configuration load for every command.
+
     - **YAML Path:** `components.terraform.mocks.mode`
   </dd>
 
   <dt>`ATMOS_USE_MOCKS`</dt>
   <dd>
-    Turns on [component mocks](/stacks/components/mocks) for `atmos terraform plan`, the same as passing `--use-mocks`. Accepts the same values as the flag: `true` uses the mode from `components.terraform.mocks.mode`, while `fallback` or `always` override it for the run. `atmos describe component` does not read this variable; pass `--use-mocks` instead.
+    Turns on [component mocks](/stacks/components/mocks) for `atmos terraform plan`, the same as passing `--use-mocks`. Accepts the same values as the flag, case-insensitively: a false boolean (`false`, `0`, `f`) or an empty value is off, a true boolean (`true`, `1`, `t`) uses the mode from `components.terraform.mocks.mode`, and `fallback` or `always` override it for the run. Any other value is an error. `atmos describe component` does not read this variable; pass `--use-mocks` instead. If this variable is exported, every `atmos terraform` subcommand other than `plan` (for example `apply`, `deploy`, and `destroy`) fails with an error naming it, so unset it before running them.
   </dd>
 
   <dt>`ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE`</dt>

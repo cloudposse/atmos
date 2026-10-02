@@ -130,7 +130,7 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 	}
 	opts.Labels = labels
 
-	if opts.UseMocks, opts.MocksMode, err = cfg.ParseUseMocksFlag(v.GetString("use-mocks")); err != nil {
+	if opts.UseMocks, opts.MocksMode, err = cfg.ParseUseMocksValue(v.GetString("use-mocks"), cfg.UseMocksFlagAndEnvSource); err != nil {
 		return nil, err
 	}
 

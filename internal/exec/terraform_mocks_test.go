@@ -3,8 +3,10 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -72,16 +74,13 @@ func TestTerraformComponentMocksAlwaysModeFailClosed(t *testing.T) {
 	atmosConfig.Components.Terraform.Mocks.Mode = schema.TerraformMocksModeAlways
 
 	_, err = processTagTerraformState(&atmosConfig, "!terraform.state app missing", "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "does not declare `mocks`")
+	require.ErrorIs(t, err, errUtils.ErrTerraformComponentMocksNotDeclared)
 
 	_, err = processTagTerraformOutput(&atmosConfig, "!terraform.output vpc missing", "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "is not declared")
+	require.ErrorIs(t, err, errUtils.ErrTerraformMockOutputNotDeclared)
 
 	_, err = processTagTerraformOutput(&atmosConfig, "!terraform.output vpc '.network.missing'", "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "is not declared")
+	require.ErrorIs(t, err, errUtils.ErrTerraformMockOutputNotDeclared)
 }
 
 // TestTerraformComponentMocksYqDefaultDoesNotRequireMocks verifies that a YQ `//`
@@ -230,8 +229,21 @@ func mocksFallbackCases(function string) []mocksFallbackCase {
 			input: function + " vpc '.private_subnet_ids[1]'", lookupValue: map[string]any{"vpc_id": "vpc-real", "private_subnet_ids": []any{"real-a", "real-b"}}, want: "real-b",
 		},
 		{
-			name: "fallback: a real top-level output replaces the whole mocked nested map", mode: fb, useMocks: true,
-			input: function + " vpc '.network.cidr'", lookupValue: map[string]any{"network": map[string]any{"name": "real"}}, want: nil,
+			name: "fallback: a mock fills a key missing from a real map output", mode: fb, useMocks: true,
+			input: function + " vpc '.network.cidr'", lookupValue: map[string]any{"network": map[string]any{"name": "real"}}, want: "10.0.0.0/16",
+		},
+		{
+			name: "fallback: a real nested value wins over the mocked nested value", mode: fb, useMocks: true,
+			input: function + " vpc '.network.cidr'", lookupValue: map[string]any{"network": map[string]any{"cidr": "192.168.0.0/16"}}, want: "192.168.0.0/16",
+		},
+		{
+			name: "fallback: a real map output is merged over the mocked map", mode: fb, useMocks: true,
+			input: function + " vpc network", lookupValue: map[string]any{"network": map[string]any{"name": "real"}},
+			want: map[string]any{"name": "real", "cidr": "10.0.0.0/16"},
+		},
+		{
+			name: "fallback: a real list output replaces the mocked list without merging elements", mode: fb, useMocks: true,
+			input: function + " vpc '.private_subnet_ids[1]'", lookupValue: map[string]any{"private_subnet_ids": []any{"real-a"}}, want: nil,
 		},
 		{
 			name: "fallback: explicit null in the real outputs is a hit and is not replaced by the mock", mode: fb, useMocks: true,
@@ -297,7 +309,7 @@ func mocksFallbackCases(function string) []mocksFallbackCase {
 		},
 		{
 			name: "fallback: mock loading failure is returned before the real lookup", mode: fb, useMocks: true,
-			input: function + " does-not-exist vpc_id", skipLookup: true, wantErrText: "failed to load mocks",
+			input: function + " does-not-exist vpc_id", skipLookup: true, wantErrIs: errUtils.ErrInvalidComponent, wantErrText: "failed to load mocks",
 		},
 		{
 			name: "mocks off: a recoverable miss never reads mocks even in fallback mode", mode: fb, useMocks: false,
@@ -309,7 +321,7 @@ func mocksFallbackCases(function string) []mocksFallbackCase {
 		},
 		{
 			name: "always: missing mock is an error without calling the real getter", mode: schema.TerraformMocksModeAlways, useMocks: true,
-			input: function + " vpc missing", skipLookup: true, wantErrText: "is not declared",
+			input: function + " vpc missing", skipLookup: true, wantErrIs: errUtils.ErrTerraformMockOutputNotDeclared,
 		},
 		{
 			name: "always: undeclared mocks map is an error without calling the real getter", mode: schema.TerraformMocksModeAlways, useMocks: true,
@@ -376,6 +388,33 @@ func TestTerraformOutputComponentMocksModes(t *testing.T) {
 			assertMocksFallbackResult(t, &tt, got, err)
 		})
 	}
+}
+
+// TestTerraformComponentMocksFallbackHintsAtAlwaysMode verifies that a non-recoverable lookup error
+// in fallback mode keeps its sentinel and gains a hint pointing at --use-mocks=always, the
+// mocks-only mode that needs no Terraform, credentials, or backend.
+func TestTerraformComponentMocksFallbackHintsAtAlwaysMode(t *testing.T) {
+	t.Run("terraform.state", func(t *testing.T) {
+		atmosConfig := newMocksFixtureConfig(t, schema.TerraformMocksModeFallback)
+		stateMock, _ := installMockGetters(t)
+		expectStateLookup(stateMock, terraformAllOutputsExpression, nil, errMocksAccessDenied)
+
+		_, err := processTagTerraformState(atmosConfig, "!terraform.state vpc vpc_id", "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
+
+		require.ErrorIs(t, err, errMocksAccessDenied)
+		assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), "\n"), "--use-mocks=always")
+	})
+
+	t.Run("terraform.output", func(t *testing.T) {
+		atmosConfig := newMocksFixtureConfig(t, schema.TerraformMocksModeFallback)
+		_, outputMock := installMockGetters(t)
+		expectOutputLookup(outputMock, terraformAllOutputsExpression, nil, false, errMocksAccessDenied)
+
+		_, err := processTagTerraformOutput(atmosConfig, "!terraform.output vpc vpc_id", "dev", &schema.ConfigAndStacksInfo{UseMocks: true})
+
+		require.ErrorIs(t, err, errMocksAccessDenied)
+		assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), "\n"), "--use-mocks=always")
+	})
 }
 
 // TestTerraformOutputComponentMocksFallbackOnMissingOutput covers the non-error miss for
@@ -489,23 +528,53 @@ func TestTerraformAllOutputsExpression(t *testing.T) {
 	})
 }
 
-func TestTopLevelOutputKey(t *testing.T) {
+func TestMergeRealOverMocks(t *testing.T) {
+	mocks := map[string]any{
+		"vpc_id":  "vpc-mock",
+		"network": map[string]any{"cidr": "10.0.0.0/16", "tags": map[string]any{"env": "mock", "team": "mock"}},
+		"subnets": []any{"mock-a", "mock-b"},
+		"only":    "mock-only",
+	}
+	real := map[string]any{
+		"vpc_id":  "vpc-real",
+		"network": map[string]any{"name": "real", "tags": map[string]any{"env": "real"}},
+		"subnets": []any{"real-a"},
+		"nulled":  nil,
+	}
+
+	merged := mergeRealOverMocks(mocks, real)
+
+	assert.Equal(t, map[string]any{
+		"vpc_id":  "vpc-real",
+		"network": map[string]any{"name": "real", "cidr": "10.0.0.0/16", "tags": map[string]any{"env": "real", "team": "mock"}},
+		"subnets": []any{"real-a"},
+		"only":    "mock-only",
+		"nulled":  nil,
+	}, merged)
+
+	// Neither input is mutated by the merge, and the result does not alias their nested maps.
+	assert.Equal(t, map[string]any{"cidr": "10.0.0.0/16", "tags": map[string]any{"env": "mock", "team": "mock"}}, mocks["network"])
+	assert.Equal(t, map[string]any{"name": "real", "tags": map[string]any{"env": "real"}}, real["network"])
+	merged["network"].(map[string]any)["cidr"] = "changed"
+	assert.Equal(t, "10.0.0.0/16", mocks["network"].(map[string]any)["cidr"])
+}
+
+func TestResolvedFromMocks(t *testing.T) {
+	mocks := map[string]any{"vpc_id": "vpc-mock", "network": map[string]any{"cidr": "10.0.0.0/16"}}
+	real := map[string]any{"vpc_id": "vpc-real", "network": map[string]any{"name": "real"}}
 	tests := []struct {
 		output string
-		want   string
+		want   bool
 	}{
-		{output: "vpc_id", want: "vpc_id"},
-		{output: ".vpc_id", want: "vpc_id"},
-		{output: `.vpc_id // "x"`, want: "vpc_id"},
-		{output: ".network.cidr", want: "network"},
-		{output: ".private_subnet_ids[0]", want: "private_subnet_ids"},
-		{output: "  .padded  ", want: "padded"},
-		{output: ".", want: ""},
-		{output: "", want: ""},
+		{output: "vpc_id", want: false},
+		{output: ".network.cidr", want: true},
+		{output: ".network.name", want: false},
+		{output: "missing", want: false},
+		{output: `.network.cidr // "x"`, want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.output, func(t *testing.T) {
-			assert.Equal(t, tt.want, topLevelOutputKey(tt.output))
+			assert.Equal(t, tt.want, resolvedFromMocks(mocks, real, tt.output))
 		})
 	}
 }

@@ -660,3 +660,32 @@ func TestParseDescribeComponentFlags_UseMocks(t *testing.T) {
 		})
 	}
 }
+
+// TestDescribeComponentArgs covers `--use-mocks always` (a space instead of `=`): the arity check
+// lets it through so RunE reports the mode word with a hint instead of the generic
+// "accepts 1 arg(s), received 2" usage error.
+func TestDescribeComponentArgs(t *testing.T) {
+	newCmd := func(useMocks string) *cobra.Command {
+		testCmd := &cobra.Command{Use: "component"}
+		testCmd.Flags().String("use-mocks", useMocks, "")
+		return testCmd
+	}
+
+	require.NoError(t, describeComponentArgs(newCmd(""), []string{"vpc"}))
+
+	require.NoError(t, describeComponentArgs(newCmd("true"), []string{"vpc", "always"}))
+	err := checkDescribeComponentSeparatedMocksMode(newCmd("true"), []string{"vpc", "always"})
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.Contains(t, err.Error(), `"always"`)
+	require.NoError(t, checkDescribeComponentSeparatedMocksMode(newCmd("true"), []string{"vpc"}))
+
+	// Any other extra argument keeps the standard arity error.
+	err = describeComponentArgs(newCmd("true"), []string{"vpc", "extra"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "accepts 1 arg(s), received 2")
+	assert.NotErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+
+	// An explicit mode means the extra word is not the flag's value.
+	err = describeComponentArgs(newCmd("always"), []string{"vpc", "always"})
+	assert.Contains(t, err.Error(), "accepts 1 arg(s), received 2")
+}
