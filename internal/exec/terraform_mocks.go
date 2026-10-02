@@ -204,7 +204,8 @@ func resolveTerraformOutputWithMocks(
 // recursively and any other real value (including an explicit null, a list, or a scalar) replaces
 // the mock at that key. Neither input is mutated.
 func mergeRealOverMocks(mocks, real map[string]any) map[string]any {
-	merged := make(map[string]any, len(mocks)+len(real))
+	// No capacity hint: CodeQL flags len(mocks)+len(real) as an allocation size that may overflow.
+	merged := make(map[string]any)
 	for key, value := range mocks {
 		merged[key] = value
 	}
