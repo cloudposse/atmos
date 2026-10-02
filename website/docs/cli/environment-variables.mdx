@@ -460,6 +460,11 @@ These environment variables configure Atmos behavior and can override settings i
 ## Authentication and Token Injection
 
 <dl>
+  <dt>`ATMOS_AUTH_JUSTIFICATION`</dt>
+  <dd>
+    Human-readable reason recorded for privileged authentication actions, such as [Azure PIM role activation](/cli/configuration/auth/identities#pim-role-activation). Equivalent to the [`--justification`](/cli/global-flags#authentication-flags) global flag (the flag takes precedence). Auth-level and portable across implementations. Resolution order: `--justification` > `ATMOS_AUTH_JUSTIFICATION` > the identity's `principal.justification` default > interactive prompt.
+  </dd>
+
   <dt>`GITHUB_TOKEN` / `ATMOS_GITHUB_TOKEN`</dt>
   <dd>
     GitHub token for private module downloads and API access. `ATMOS_GITHUB_TOKEN` takes precedence over `GITHUB_TOKEN`.

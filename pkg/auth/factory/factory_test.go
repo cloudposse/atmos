@@ -214,6 +214,19 @@ func TestNewIdentity_Factory(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:         "azure-pim-role-valid",
+			identityName: "prod-contributor",
+			config: &schema.Identity{
+				Kind: "azure/pim-role",
+				Via:  &schema.IdentityVia{Identity: "azure-dev"},
+				Principal: map[string]interface{}{
+					"role_definition_id": "/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c",
+					"scope":              "/subscriptions/00000000-0000-0000-0000-000000000000",
+				},
+			},
+			expectError: false,
+		},
+		{
 			name:         "gcp-service-account-valid",
 			identityName: "gcp-sa",
 			config: &schema.Identity{

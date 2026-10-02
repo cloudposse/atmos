@@ -73,6 +73,9 @@ GLOBAL FLAGS
                                              flags using the sentinel pattern, and missing positional arguments
                                              (requires TTY, disabled in CI) (default true)
 
+      --justification string                 Reason recorded for privileged auth actions such as PIM role activation (--
+                                             justification=REASON)
+
       --labels string                        Filter by labels (comma-separated key=value or key:value pairs, matches
                                              all): --labels=cost-center=platform,compliance=sox
 
