@@ -3,14 +3,20 @@ package cloudformation
 import (
 	"context"
 	"fmt"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// provisionTimeout bounds one explicit `backend create`/`update` bucket reconcile.
+const provisionTimeout = 5 * time.Minute
 
 // backendTypeS3 mirrors pkg/provisioner/backend/s3.go's unexported
 // backendTypeS3 constant. `atmos aws cloudformation backend` targets the same
@@ -215,6 +221,39 @@ func autoProvisionBackendIfEnabled(ctx context.Context, args autoProvisionArgs) 
 	return nil
 }
 
+// requireBackendExistsIfEnabled is autoProvisionBackendIfEnabled's read-only
+// counterpart for operations that must never create infrastructure (validate,
+// diff, changeset create). When the component opted in to
+// `provision.backend.enabled: true` and the packaging bucket is missing, it
+// fails with ErrAwsCloudFormationBackendMissing and a hint to create the bucket
+// explicitly. An existence-check failure is logged and deferred to the upload's
+// own error, matching autoProvisionBackendIfEnabled's leniency.
+func requireBackendExistsIfEnabled(ctx context.Context, args autoProvisionArgs) error {
+	defer perf.Track(args.AtmosConfig, "cloudformation.requireBackendExistsIfEnabled")()
+
+	if !isBackendProvisionEnabled(args.ComponentConfig) {
+		return nil
+	}
+
+	synthetic := BuildSyntheticBackendConfig(args.S3Target, args.ComponentConfig, args.AuthContext)
+	backendBlock, _ := synthetic[backendMapKey].(map[string]any)
+
+	exists, err := backend.S3BackendExists(ctx, args.AtmosConfig, backendBlock, args.AuthContext)
+	if err != nil {
+		log.Debug("Backend existence check failed; deferring to template upload", "error", err, "bucket", args.S3Target.Bucket)
+		return nil
+	}
+	if exists {
+		return nil
+	}
+
+	return errUtils.Build(errUtils.ErrAwsCloudFormationBackendMissing).
+		WithExplanationf("The packaging bucket %q does not exist, and this command does not create it (only apply and deploy provision the bucket).", args.S3Target.Bucket).
+		WithHintf("Run `atmos aws cloudformation backend create %s -s %s` to create the bucket, or run `atmos aws cloudformation apply %s -s %s`, which provisions it because provision.backend.enabled is true.", args.Component, args.Stack, args.Component, args.Stack).
+		WithContext("bucket", args.S3Target.Bucket).
+		Err()
+}
+
 // resolveBackendRegion implements BuildSyntheticBackendConfig's documented
 // region fallback chain.
 func resolveBackendRegion(s3cfg *targetS3Config, componentConfig map[string]any, authContext *schema.AuthContext) string {
@@ -232,10 +271,13 @@ func resolveBackendRegion(s3cfg *targetS3Config, componentConfig map[string]any,
 
 // S3BackendStatus is the result of checking whether a `kind: aws/s3` backend
 // target's bucket exists, for `backend describe`/`backend list`.
+//
+// The yaml/json tags give the machine-readable output the snake_case keys the
+// rest of this component type's JSON/YAML output uses.
 type S3BackendStatus struct {
-	Target *targetS3Config
-	Region string
-	Exists bool
+	Target *targetS3Config `json:"target" yaml:"target"`
+	Region string          `json:"region" yaml:"region"`
+	Exists bool            `json:"exists" yaml:"exists"`
 }
 
 // DescribeS3BackendTarget reports whether an aws/s3 backend target's bucket
@@ -265,4 +307,63 @@ func DescribeS3BackendTarget(
 
 	region, _ := backendBlock["region"].(string)
 	return &S3BackendStatus{Target: s3cfg, Region: region, Exists: exists}, nil
+}
+
+// ProvisionS3BackendParams are the inputs to ProvisionS3BackendTarget. Target must come from
+// ResolveS3BackendTarget.
+type ProvisionS3BackendParams struct {
+	AtmosConfig     *schema.AtmosConfiguration
+	Target          *targetS3Config
+	ComponentConfig map[string]any
+	AuthContext     *schema.AuthContext
+	Component       string
+	Stack           string
+}
+
+// ProvisionS3BackendTarget creates the target's bucket, or reconciles an existing
+// one to the secure defaults (versioning, encryption, public-access block, tags).
+// It backs the explicit `backend create`/`backend update` verbs. Unlike
+// provisioner.ProvisionWithParams (which prints its success line before the
+// warnings it collected), it prints the "settings will be replaced" warnings
+// first, so the final line reports the completed result.
+func ProvisionS3BackendTarget(ctx context.Context, params *ProvisionS3BackendParams) error {
+	defer perf.Track(params.AtmosConfig, "cloudformation.ProvisionS3BackendTarget")()
+
+	synthetic := BuildSyntheticBackendConfig(params.Target, params.ComponentConfig, params.AuthContext)
+	label := fmt.Sprintf("S3 backend `%s` for `%s` in stack `%s`", params.Target.Bucket, params.Component, params.Stack)
+	ui.Info("Provisioning " + label)
+
+	ctx, cancel := context.WithTimeout(ctx, provisionTimeout)
+	defer cancel()
+
+	result, err := backend.ProvisionBackend(ctx, params.AtmosConfig, synthetic, params.AuthContext)
+	if err != nil {
+		return err
+	}
+	if result != nil {
+		for _, warning := range result.Warnings {
+			ui.Warning(warning)
+		}
+	}
+	ui.Success("Provisioned " + label)
+	return nil
+}
+
+// S3BackendDryRunSummary resolves the `kind: aws/s3` target a backend verb would act on, from the
+// component's static configuration alone (no AWS calls), and describes what the verb would do.
+// The action argument is the verb phrase, for example "create" or "delete". It returns a wrapped
+// ErrInvalidAwsCloudFormationSettings when no single target can be selected.
+func S3BackendDryRunSummary(componentConfig map[string]any, flagTarget, action string) (string, error) {
+	defer perf.Track(nil, "cloudformation.S3BackendDryRunSummary")()
+
+	provisionSection, _ := componentConfig[cfg.ProvisionSectionName].(map[string]any)
+	s3cfg, err := ResolveS3BackendTarget(provisionSection, flagTarget)
+	if err != nil {
+		return "", err
+	}
+	region := resolveBackendRegion(s3cfg, componentConfig, nil)
+	if region == "" {
+		region = "the region of the active identity"
+	}
+	return fmt.Sprintf("would %s bucket %s in region %s", action, s3cfg.Bucket, region), nil
 }

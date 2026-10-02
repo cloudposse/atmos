@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 )
 
@@ -104,15 +103,12 @@ type deleteRequest struct {
 }
 
 func executeDelete(ctx context.Context, req deleteRequest) error {
-	if req.Stack == "" {
-		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-			WithExplanation("--stack flag is required").
-			WithHint("Specify a stack with --stack or -s flag").
-			Err()
+	if err := requireComponentAndStack(verbDelete, req.Component, req.Stack); err != nil {
+		return err
 	}
 
 	if req.DryRun {
-		return nil
+		return executeDryRun(ctx, &dryRunRequest{Verb: verbDelete, Action: "delete", Component: req.Component, Stack: req.Stack, Target: req.Target})
 	}
 
 	atmosConfig, info, err := configInit.InitConfigAndAuth(req.Component, req.Stack, req.Identity)

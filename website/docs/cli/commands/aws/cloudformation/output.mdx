@@ -8,6 +8,8 @@ description: Show a deployed CloudFormation stack's Outputs.
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
   Show the deployed stack's `Outputs` (`DescribeStacks`), formatted for
@@ -22,11 +24,19 @@ import Experimental from '@site/src/components/Experimental'
 ## Usage
 
 ```shell
-atmos aws cloudformation output <component> --stack <stack> [options]
+atmos aws cloudformation output <component> [key] --stack <stack> [options]
 ```
 
 ```shell
 atmos aws cloudformation output vpc -s plat-ue2-dev
+```
+
+Print a single Output by its key. The value is written bare, so it is safe to use in a shell
+pipeline:
+
+```shell
+atmos aws cloudformation output vpc VpcId -s plat-ue2-dev
+VPC_ID=$(atmos aws cloudformation output vpc VpcId -s plat-ue2-dev)
 ```
 
 Choose an output format:
@@ -50,6 +60,38 @@ atmos aws cloudformation output --all -s plat-ue2-dev
 atmos aws cloudformation output --affected --base origin/main
 ```
 
+With more than one component selected, the JSON and YAML formats print a single document keyed by stack and then by component, so the result stays parseable:
+
+```shell
+atmos aws cloudformation output --all --format=json
+```
+
+```json
+{
+  "plat-ue2-dev": {
+    "vpc": { "VpcId": "vpc-0123456789abcdef0" },
+    "dns": { "ZoneId": "Z0123456789ABCDEFGHIJ" }
+  }
+}
+```
+
+The table format prints a heading naming the component and stack above each table. The other formats print each component's outputs in turn.
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required unless `--all`/`--affected`/`--tags`/`--labels` is set)</em></dt>
+  <dd>The `aws/cloudformation` component.</dd>
+
+  <dt>`key` <em>(optional)</em></dt>
+  <dd>
+    The Output key to print on its own. With the default `table` format the value is written bare, one line, on stdout.
+    With `--format=json` the value is JSON-encoded, with `--format=yaml` YAML-encoded, and the other formats
+    render a single `KEY=value`-style entry. A key the stack does not have is an error that lists the
+    keys it does have. A key cannot be combined with `--all`, `--affected`, `--tags`, or `--labels`.
+  </dd>
+</dl>
+
 ## Flags
 
 <dl>
@@ -57,7 +99,7 @@ atmos aws cloudformation output --affected --base origin/main
   <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
 
   <dt>`--format` <em>(optional, default `table`)</em></dt>
-  <dd>Output format: `json`, `yaml`, `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table`, or `github`.</dd>
+  <dd>Output format: `json`, `yaml`, `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table`, or `github`. An unsupported value is an error that names the value and lists the valid formats.</dd>
 
   <dt>`--flatten` <em>(optional)</em></dt>
   <dd>Flatten nested Outputs into compound keys.</dd>
@@ -65,28 +107,28 @@ atmos aws cloudformation output --affected --base origin/main
   <dt>`--uppercase` <em>(optional)</em></dt>
   <dd>Uppercase Output keys.</dd>
 
-  <dt>`--all` <em>(optional)</em></dt>
-  <dd>Show Outputs for all `aws/cloudformation` components in dependency order.</dd>
+<SelectionFlags />
 
-  <dt>`--affected` <em>(optional)</em></dt>
-  <dd>Show Outputs for affected `aws/cloudformation` components and their dependencies.</dd>
-
-  <dt>`--include-dependents` <em>(optional)</em></dt>
-  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
-
-  <dt>`--base` <em>(optional)</em></dt>
-  <dd>Git base ref or SHA to compare against for affected detection: `--base origin/main`. Used with `--affected`.</dd>
-
-  <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
-
-  <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+<GitFlags />
 </dl>
 
 :::note
 `outputs` is accepted as an alias for `output`.
 :::
+
+## Stack state
+
+The `output` command reads the deployed stack, so the stack has to be deployed:
+
+- A stack that is not deployed is an error: `REVIEW_IN_PROGRESS` (a preview changeset created by
+  `diff` or `plan` on a component that was never applied), `ROLLBACK_COMPLETE`, `ROLLBACK_FAILED`,
+  `CREATE_FAILED`, and the `DELETE_*` statuses. Apply the component, or delete a stack that is stuck in
+  a failed create first.
+- A deployed stack that declares no `Outputs` prints `Stack <name> has no outputs` instead of an empty
+  table. `--format=json` and the other structured formats still print an empty document, so
+  pipelines keep getting parseable output.
+
+JSON output is written without HTML escaping, so masked values read `<MASKED>`.
 
 ## Masking
 
@@ -99,5 +141,5 @@ before raw values are printed. This also protects outputs when local parameters 
 
 `--mask=false` explicitly disables presentation masking. Internal YAML output lookups retain real
 values for component dependencies. Arbitrary transformed secrets without detectable template
-references cannot be recognized; keep secrets out of CloudFormation Outputs. The command accepts
-one component argument and renders all output keys.
+references cannot be recognized; keep secrets out of CloudFormation Outputs. Masking also applies
+when you print a single key.

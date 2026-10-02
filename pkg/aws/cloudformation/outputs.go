@@ -11,10 +11,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -79,6 +81,9 @@ func GetOutputs(ctx context.Context, region, stackName string, authContext *sche
 	if len(out.Stacks) == 0 {
 		return nil, fmt.Errorf("%w: stack %q", errUtils.ErrAwsCloudFormationStackNotFound, stackName)
 	}
+	if err := CheckStackDeployed(stackName, out.Stacks[0].StackStatus); err != nil {
+		return nil, err
+	}
 
 	outputs := make(map[string]any, len(out.Stacks[0].Outputs))
 	for _, o := range out.Stacks[0].Outputs {
@@ -109,4 +114,62 @@ func isStackNotFoundError(err error) bool {
 		return false
 	}
 	return apiErr.ErrorCode() == "ValidationError" && strings.Contains(apiErr.ErrorMessage(), "does not exist")
+}
+
+// notDeployedStatuses are the stack statuses that carry no deployed resources
+// (and therefore no meaningful Outputs): a stack that only holds a preview
+// changeset (REVIEW_IN_PROGRESS, left behind by diff/plan on a never-deployed
+// component), a failed or rolled-back create, or one that is deleted or being
+// deleted.
+var notDeployedStatuses = map[cfntypes.StackStatus]bool{
+	cfntypes.StackStatusReviewInProgress:   true,
+	cfntypes.StackStatusRollbackInProgress: true,
+	cfntypes.StackStatusRollbackComplete:   true,
+	cfntypes.StackStatusRollbackFailed:     true,
+	cfntypes.StackStatusCreateFailed:       true,
+	cfntypes.StackStatusDeleteInProgress:   true,
+	cfntypes.StackStatusDeleteComplete:     true,
+	cfntypes.StackStatusDeleteFailed:       true,
+}
+
+// CheckStackDeployed returns ErrAwsCloudFormationStackNotDeployed when status
+// is one that carries no deployed resources, so callers never mistake a stub
+// stack's empty Outputs for real values.
+func CheckStackDeployed(stackName string, status cfntypes.StackStatus) error {
+	defer perf.Track(nil, "cloudformation.CheckStackDeployed")()
+
+	if !notDeployedStatuses[status] {
+		return nil
+	}
+	return errUtils.Build(fmt.Errorf("%w: %q has status %s", errUtils.ErrAwsCloudFormationStackNotDeployed, stackName, status)).
+		WithHint("Deploy the stack with `atmos aws cloudformation apply`. A stack stuck in a failed-create state (ROLLBACK_COMPLETE, CREATE_FAILED) must be deleted first with `atmos aws cloudformation delete`.").
+		Err()
+}
+
+// LookupOutput returns the value of one Output key, or
+// ErrAwsCloudFormationOutputNotFound naming the key and listing the keys the
+// stack does have, so a misspelled key fails loudly instead of resolving to
+// null.
+func LookupOutput(outputs map[string]any, stackName, key string) (any, error) {
+	defer perf.Track(nil, "cloudformation.LookupOutput")()
+
+	if value, ok := outputs[key]; ok {
+		return value, nil
+	}
+	return nil, errUtils.Build(fmt.Errorf("%w: %q in stack %q (available: %s)", errUtils.ErrAwsCloudFormationOutputNotFound, key, stackName, availableOutputKeys(outputs))).
+		WithHint("Output keys are case-sensitive. Check the `Outputs` section of the stack's template.").
+		Err()
+}
+
+// availableOutputKeys renders the sorted output keys for an error message.
+func availableOutputKeys(outputs map[string]any) string {
+	if len(outputs) == 0 {
+		return "none"
+	}
+	keys := make([]string, 0, len(outputs))
+	for k := range outputs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
 }
