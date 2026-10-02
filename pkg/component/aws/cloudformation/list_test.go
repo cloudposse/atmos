@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -95,20 +96,62 @@ func TestListDeployedStacks_APIError(t *testing.T) {
 // explicit filter is given — even if the caller explicitly asks for DELETE_COMPLETE.
 func TestToStackStatuses(t *testing.T) {
 	for _, empty := range [][]string{nil, {}} {
-		got := toStackStatuses(empty)
+		got, err := toStackStatuses(empty)
+		require.NoError(t, err)
 		assert.NotEmpty(t, got, "an empty filter must default to a non-empty status allowlist")
 		assert.NotContains(t, got, cfntypes.StackStatusDeleteComplete, "the default allowlist must exclude DELETE_COMPLETE")
 		assert.Contains(t, got, cfntypes.StackStatusCreateComplete)
 		assert.Contains(t, got, cfntypes.StackStatusUpdateComplete)
 	}
 
-	got := toStackStatuses([]string{"CREATE_COMPLETE", "UPDATE_COMPLETE"})
+	got, err := toStackStatuses([]string{"CREATE_COMPLETE", "UPDATE_COMPLETE"})
+	require.NoError(t, err)
 	assert.Equal(t, []cfntypes.StackStatus{cfntypes.StackStatusCreateComplete, cfntypes.StackStatusUpdateComplete}, got)
 
 	// An explicit request for DELETE_COMPLETE must pass through untouched — only the
 	// no-filter-given default excludes it.
-	explicit := toStackStatuses([]string{"DELETE_COMPLETE"})
+	explicit, err := toStackStatuses([]string{"DELETE_COMPLETE"})
+	require.NoError(t, err)
 	assert.Equal(t, []cfntypes.StackStatus{cfntypes.StackStatusDeleteComplete}, explicit)
+}
+
+// toStackStatuses must accept lowercase and padded values case-insensitively, normalizing them
+// to the SDK's canonical upper-case enum value, and must reject an unknown value locally with an
+// ErrInvalidFlag error that names the bad value and the valid statuses (rather than letting AWS
+// answer with a raw ValidationError).
+func TestToStackStatuses_CaseInsensitiveAndValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   []string
+		want    []cfntypes.StackStatus
+		wantErr bool
+	}{
+		{name: "lowercase", input: []string{"create_complete"}, want: []cfntypes.StackStatus{cfntypes.StackStatusCreateComplete}},
+		{name: "mixed case and padding", input: []string{" Update_Complete ", "ROLLBACK_COMPLETE"}, want: []cfntypes.StackStatus{cfntypes.StackStatusUpdateComplete, cfntypes.StackStatusRollbackComplete}},
+		{name: "bogus", input: []string{"CREATE_COMPLETE", "bogus"}, wantErr: true},
+		{name: "empty string", input: []string{""}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := toStackStatuses(tt.input)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+				formatted := errUtils.Format(err, errUtils.FormatterConfig{})
+				assert.Contains(t, formatted, "CREATE_COMPLETE", "the error must list the valid statuses")
+				assert.Contains(t, formatted, "ROLLBACK_COMPLETE")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// ValidateStackStatusFilter must agree with toStackStatuses so the CLI can fail before auth.
+func TestValidateStackStatusFilter(t *testing.T) {
+	require.NoError(t, ValidateStackStatusFilter(nil))
+	require.NoError(t, ValidateStackStatusFilter([]string{"update_complete"}))
+	require.ErrorIs(t, ValidateStackStatusFilter([]string{"nope"}), errUtils.ErrInvalidFlag)
 }
 
 // defaultDeployedStackStatuses must track the SDK's own StackStatus.Values() (minus
@@ -219,9 +262,23 @@ func TestRenderDeployedStacksList_Populated(t *testing.T) {
 	out := captureStdout(t, func() {
 		RenderDeployedStacksList(stacks)
 	})
+	assert.Contains(t, out, fmt.Sprintf("%-9s %-30s %s", "MANAGED", "STATUS", "STACK NAME"), "the table must start with a header row")
+	assert.True(t, strings.HasPrefix(out, "MANAGED"), "the header must be the first line")
 	// "managed" is a substring of "unmanaged", so assert full rendered lines
 	// (not bare substrings) to actually distinguish the two rows, rather than
 	// a check that would still pass if vpc's row were also marked unmanaged.
 	assert.Contains(t, out, fmt.Sprintf("%-9s %-30s %s", "managed", "CREATE_COMPLETE", "vpc"))
 	assert.Contains(t, out, fmt.Sprintf("%-9s %-30s %s", "unmanaged", "UPDATE_COMPLETE", "orphaned-stack"))
+}
+
+// ListDeployedStacks must reject a bogus --status before building AWS config, so the failure is
+// the local ErrInvalidFlag validation and never an auth/credential or AWS API error.
+func TestListDeployedStacks_InvalidStatusFailsBeforeAWS(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{
+			AWS: &schema.AWSAuthContext{CredentialsFile: filepath.Join(t.TempDir(), "missing", "credentials")},
+		},
+	}
+	_, err := ListDeployedStacks(context.Background(), info, "us-east-1", []string{"bogus"}, map[string]bool{})
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
 }

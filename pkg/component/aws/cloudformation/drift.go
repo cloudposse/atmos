@@ -194,15 +194,31 @@ func runDriftDescribe(ctx context.Context, client CloudFormationClient, stackNam
 		_ = data.Writeln(fmt.Sprintf("%s: no drift results (run drift detect first)", stackName))
 		return summary, nil
 	}
+	for _, line := range driftLines(drifts) {
+		_ = data.Writeln(line)
+	}
+	return summary, nil
+}
+
+// driftLines renders every drifted (not IN_SYNC) resource as one status line, followed by one
+// indented line per property difference (path, expected value, actual value, difference type) so
+// a MODIFIED resource shows what changed rather than only that it did. Shared by `drift describe`
+// and the CI summary so both show the same detail.
+func driftLines(drifts []cfntypes.StackResourceDrift) []string {
+	var lines []string
 	for i := range drifts {
 		d := &drifts[i]
 		if d.StackResourceDriftStatus == cfntypes.StackResourceDriftStatusInSync {
 			continue
 		}
-		line := fmt.Sprintf("  %-10s %-28s %s", d.StackResourceDriftStatus, stringValue(d.ResourceType), stringValue(d.LogicalResourceId))
-		_ = data.Writeln(line)
+		lines = append(lines, fmt.Sprintf("  %-10s %-28s %s", d.StackResourceDriftStatus, stringValue(d.ResourceType), stringValue(d.LogicalResourceId)))
+		for j := range d.PropertyDifferences {
+			diff := &d.PropertyDifferences[j]
+			lines = append(lines, fmt.Sprintf("    %s: expected %s, actual %s (%s)",
+				stringValue(diff.PropertyPath), stringValue(diff.ExpectedValue), stringValue(diff.ActualValue), diff.DifferenceType))
+		}
 	}
-	return summary, nil
+	return lines
 }
 
 // summarizeResourceDrifts derives the aggregate status from the returned

@@ -34,6 +34,11 @@ type ConfigInitializer interface {
 	// (including provision.targets) for component/stack, authenticated via
 	// info's AuthManager.
 	DescribeComponent(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, component, stack string) (map[string]any, error)
+	// DescribeComponentStatic returns the component section for component/stack
+	// without authenticating and without evaluating templates or YAML functions,
+	// for dry runs that must make no AWS calls. It fails for a component or stack
+	// that does not exist.
+	DescribeComponentStatic(component, stack string) (map[string]any, error)
 }
 
 type defaultConfigInitializer struct{}
@@ -73,6 +78,21 @@ func (d *defaultConfigInitializer) DescribeComponent(atmosConfig *schema.AtmosCo
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: false,
 		AuthManager:          authManager,
+	})
+}
+
+func (d *defaultConfigInitializer) DescribeComponentStatic(component, stack string) (map[string]any, error) {
+	info := schema.ConfigAndStacksInfo{ComponentFromArg: component, Stack: stack}
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrFailedToInitConfig, err)
+	}
+	return e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		AtmosConfig:          &atmosConfig,
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
 	})
 }
 
@@ -135,18 +155,13 @@ func (d *defaultProvisioner) CreateBackend(ctx context.Context, params *CreateBa
 		return err
 	}
 
-	describeFunc := func(string, string) (map[string]any, error) {
-		return pkgcfn.BuildSyntheticBackendConfig(s3cfg, params.ComponentConfig, params.AuthContext), nil
-	}
-
-	return provisioner.ProvisionWithParams(&provisioner.ProvisionParams{
-		AtmosConfig:       params.AtmosConfig,
-		ProvisionerType:   "backend",
-		Component:         params.Component,
-		Stack:             params.Stack,
-		DescribeComponent: describeFunc,
-		AuthContext:       params.AuthContext,
-		Context:           ctx,
+	return pkgcfn.ProvisionS3BackendTarget(ctx, &pkgcfn.ProvisionS3BackendParams{
+		AtmosConfig:     params.AtmosConfig,
+		Target:          s3cfg,
+		ComponentConfig: params.ComponentConfig,
+		AuthContext:     params.AuthContext,
+		Component:       params.Component,
+		Stack:           params.Stack,
 	})
 }
 
@@ -271,16 +286,22 @@ func renderBackendStatuses(format string, statuses []*pkgcfn.S3BackendStatus) er
 	}
 }
 
+// backendTableRowFormat lays out the target/bucket/region/status table.
+const backendTableRowFormat = "%-20s %-30s %-14s %s\n"
+
 func renderBackendStatusesTable(statuses []*pkgcfn.S3BackendStatus) error {
 	if len(statuses) == 0 {
 		return data.Writeln("No `kind: aws/s3` provision targets declared.")
+	}
+	if err := data.Writef(backendTableRowFormat, "TARGET", "BUCKET", "REGION", "STATUS"); err != nil {
+		return err
 	}
 	for _, s := range statuses {
 		state := "does not exist"
 		if s.Exists {
 			state = "exists"
 		}
-		if err := data.Writef("%-20s %-30s %-14s %s\n", s.Target.Name, s.Target.Bucket, s.Region, state); err != nil {
+		if err := data.Writef(backendTableRowFormat, s.Target.Name, s.Target.Bucket, s.Region, state); err != nil {
 			return err
 		}
 	}

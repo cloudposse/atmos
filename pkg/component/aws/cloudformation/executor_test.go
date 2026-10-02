@@ -194,6 +194,10 @@ func TestRunDelete_FailedStatus(t *testing.T) {
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusDeleteFailed}},
 		}, nil),
+		// Final read for the stack-level event after the terminal status.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		// Resources that blocked the delete, for the --retain-resources hint.
+		client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackResourcesOutput{}, nil),
 	)
 
 	spec := &stackSpec{StackName: "vpc"}
@@ -322,6 +326,8 @@ func expectRunApplySuccessfulDeployFlow(t *testing.T, client *MockCloudFormation
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 		}, nil),
+		// Final read for the stack-level event after the terminal status.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		// No UpdateTerminationProtection call: spec.TerminationProtection is
 		// false (not set below), and applyTerminationProtection is a no-op
 		// unless the component opts in.
@@ -348,13 +354,14 @@ func TestRunApply_Success(t *testing.T) {
 		Ctx:         context.Background(),
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info:        &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
-		Flags:       map[string]any{"format": "json"},
+		Flags:       map[string]any{"format": "json", "auto-approve": true},
 	}
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
 
 	summary, err := runApply(octx, client, spec, map[string]any{"stack_name": "vpc"})
 	require.NoError(t, err)
 	assert.False(t, summary["no_op"].(bool))
+	assert.Equal(t, string(cfntypes.StackStatusCreateComplete), summary["final_status"], "the CI summary reads the final stack status from the same key delete uses")
 	assert.Equal(t, map[string]any{"VpcId": "vpc-123"}, summary["outputs"])
 }
 
@@ -374,7 +381,7 @@ func TestRunApply_RenderOutputsError(t *testing.T) {
 		Ctx:         context.Background(),
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info:        &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
-		Flags:       map[string]any{"format": "not-a-real-format"},
+		Flags:       map[string]any{"format": "not-a-real-format", "auto-approve": true},
 	}
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
 
@@ -411,6 +418,8 @@ func TestRunApply_SetsStackPolicy(t *testing.T) {
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 		}, nil),
+		// Final read for the stack-level event after the terminal status.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().SetStackPolicy(gomock.Any(), gomock.Any()).Return(&cloudformation.SetStackPolicyOutput{}, nil),
 		// No UpdateTerminationProtection call: spec.TerminationProtection is
 		// false (not set below), and applyTerminationProtection is a no-op
@@ -422,7 +431,7 @@ func TestRunApply_SetsStackPolicy(t *testing.T) {
 		Ctx:         context.Background(),
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info:        &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
-		Flags:       map[string]any{},
+		Flags:       map[string]any{"auto-approve": true},
 	}
 	spec := &stackSpec{
 		StackName:       "vpc",
@@ -482,6 +491,8 @@ func expectDeployThenFinalCall(t *testing.T, client *MockCloudFormationClient, f
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 		}, nil),
+		// Final read for the stack-level event after the terminal status.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		final,
 	)
 }
@@ -498,7 +509,7 @@ func TestRunApply_SetStackPolicyError(t *testing.T) {
 		Ctx:         context.Background(),
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info:        &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
-		Flags:       map[string]any{},
+		Flags:       map[string]any{"auto-approve": true},
 	}
 	spec := &stackSpec{
 		StackName:       "vpc",
@@ -523,7 +534,7 @@ func TestRunApply_TerminationProtectionError(t *testing.T) {
 		Ctx:         context.Background(),
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info:        &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
-		Flags:       map[string]any{},
+		Flags:       map[string]any{"auto-approve": true},
 	}
 	// TerminationProtection must be true here: applyTerminationProtection is a
 	// no-op (never calls UpdateTerminationProtection) unless the component
@@ -563,6 +574,8 @@ func TestRunApply_DescribeOutputsError(t *testing.T) {
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 		}, nil),
+		// Final read for the stack-level event after the terminal status.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		// No UpdateTerminationProtection call: spec.TerminationProtection is
 		// false (not set below), and applyTerminationProtection is a no-op
 		// unless the component opts in.
@@ -573,7 +586,7 @@ func TestRunApply_DescribeOutputsError(t *testing.T) {
 		Ctx:         context.Background(),
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info:        &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
-		Flags:       map[string]any{},
+		Flags:       map[string]any{"auto-approve": true},
 	}
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
 
@@ -1239,14 +1252,15 @@ components:
 	assert.True(t, os.IsNotExist(successErr), "the default (success-only) hook must not run after a failed operation")
 }
 
-// runOperation must reject apply/delete when the confirmation prompt is
-// declined, never reaching buildAWSConfig/newClient.
-func TestRunOperation_Apply_ConfirmationDeclined(t *testing.T) {
+// runOperation must reject delete when the confirmation prompt is declined,
+// never reaching buildAWSConfig/newClient. (apply asks later, after its
+// changeset preview; see TestDeployDirect_DeclinedDiscardsChangeSet.)
+func TestRunOperation_Delete_ConfirmationDeclined(t *testing.T) {
 	stubConfirmOperation(t, false, nil)
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
 	octx := &opContext{Ctx: context.Background(), Info: &schema.ConfigAndStacksInfo{}, Flags: map[string]any{}}
-	_, err := runOperation(octx, OperationApply, spec)
+	_, err := runOperation(octx, OperationDelete, spec)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
 }
@@ -1335,7 +1349,7 @@ func TestOperationHandlers_Dispatch(t *testing.T) {
 			name: "diff",
 			op:   OperationDiff,
 			setup: func(m *MockCloudFormationClient) {
-				m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+				m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}}}, nil)
 				m.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil)
 				lastPoll := m.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 					Status: cfntypes.ChangeSetStatusCreateComplete,
@@ -1343,7 +1357,6 @@ func TestOperationHandlers_Dispatch(t *testing.T) {
 				gomock.InOrder(
 					lastPoll,
 					m.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil),
-					m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
 				)
 			},
 			check: func(t *testing.T, summary map[string]any) {
@@ -1459,6 +1472,7 @@ func TestOperationHandlers_ChangesetExecute_ThreadsChangesetNameFlag(t *testing.
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
 		}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 	)
 
 	spec := &stackSpec{StackName: "vpc"}
@@ -1480,6 +1494,7 @@ func TestOperationHandlers_ChangesetDelete_ThreadsChangesetNameFlag(t *testing.T
 	client := NewMockCloudFormationClient(ctrl)
 
 	var gotChangeSetName *string
+	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{Status: cfntypes.ChangeSetStatusCreateComplete}, nil)
 	client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, input *cloudformation.DeleteChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.DeleteChangeSetOutput, error) {
 			gotChangeSetName = input.ChangeSetName

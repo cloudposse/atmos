@@ -56,6 +56,21 @@ func (mr *MockConfigInitializerMockRecorder) DescribeComponent(atmosConfig, info
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeComponent", reflect.TypeOf((*MockConfigInitializer)(nil).DescribeComponent), atmosConfig, info, component, stack)
 }
 
+// DescribeComponentStatic mocks base method.
+func (m *MockConfigInitializer) DescribeComponentStatic(component, stack string) (map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeComponentStatic", component, stack)
+	ret0, _ := ret[0].(map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeComponentStatic indicates an expected call of DescribeComponentStatic.
+func (mr *MockConfigInitializerMockRecorder) DescribeComponentStatic(component, stack any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeComponentStatic", reflect.TypeOf((*MockConfigInitializer)(nil).DescribeComponentStatic), component, stack)
+}
+
 // InitConfigAndAuth mocks base method.
 func (m *MockConfigInitializer) InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, error) {
 	m.ctrl.T.Helper()

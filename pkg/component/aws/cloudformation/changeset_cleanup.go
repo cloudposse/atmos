@@ -11,6 +11,7 @@ import (
 	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // changeSetCleanupTimeout bounds cleanup even when the caller cancelled its operation.
@@ -128,6 +129,13 @@ func waitForStubDeletion(ctx context.Context, client CloudFormationClient, stack
 			return ctx.Err()
 		case <-time.After(eventPollInterval):
 		}
+	}
+}
+
+// discardChangeSetBestEffort preserves apply and explicit-create outcomes while warning about cleanup failures.
+func discardChangeSetBestEffort(ctx context.Context, client CloudFormationClient, stackName string, result *changeSetResult) {
+	if err := discardChangeSet(ctx, client, stackName, result); err != nil {
+		ui.Warning(fmt.Sprintf("failed to clean up CloudFormation changeset: %v", err))
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 )
 
@@ -78,11 +77,8 @@ func init() {
 }
 
 func executeList(ctx context.Context, component, stack, identity, format string) error {
-	if stack == "" {
-		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-			WithExplanation("--stack flag is required").
-			WithHint("Specify a stack with --stack or -s flag").
-			Err()
+	if err := requireComponentAndStack("list", component, stack); err != nil {
+		return err
 	}
 
 	atmosConfig, info, err := configInit.InitConfigAndAuth(component, stack, identity)

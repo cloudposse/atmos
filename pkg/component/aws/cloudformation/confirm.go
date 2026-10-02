@@ -41,22 +41,40 @@ var confirmedOperationVerbs = map[Operation]string{
 	OperationStackSetDelete:   "delete stackset for",
 }
 
-// requireConfirmation prompts for the given operation unless auto-approve is set.
-func requireConfirmation(operation Operation, stackName string, flags map[string]any) error {
+// confirmationRequired reports whether operation needs the user's go-ahead
+// before it runs: it is a mutating verb and --auto-approve was not passed.
+func confirmationRequired(operation Operation, flags map[string]any) (string, bool) {
 	verb, ok := confirmedOperationVerbs[operation]
 	if !ok {
-		return nil
+		return "", false
 	}
 	autoApprove, _ := flags["auto-approve"].(bool)
-	if autoApprove {
+	return verb, !autoApprove
+}
+
+// requireInteractiveOrAutoApprove is the fast, no-API-call half of the
+// confirmation: without --auto-approve and without a terminal on stdin, there is
+// no way to ask, so the operation fails before anything is created. The user did
+// not decline anything, so this is ErrAwsCloudFormationConfirmationRequired, not
+// ErrUserAborted.
+func requireInteractiveOrAutoApprove(operation Operation, flags map[string]any) error {
+	if _, needed := confirmationRequired(operation, flags); !needed || stdinIsTerminal() {
 		return nil
 	}
+	return errUtils.Build(errUtils.ErrAwsCloudFormationConfirmationRequired).
+		WithExplanation("Stack changes require confirmation, but stdin is not a terminal.").
+		WithHint("Pass --auto-approve to explicitly authorize this operation in a non-interactive session.").
+		Err()
+}
 
-	if !stdinIsTerminal() {
-		return errUtils.Build(errUtils.ErrUserAborted).
-			WithExplanation("Stack changes require confirmation, but stdin is not a terminal.").
-			WithHint("Pass --auto-approve to explicitly authorize this operation in a non-interactive session.").
-			Err()
+// requireConfirmation prompts for the given operation unless auto-approve is set.
+func requireConfirmation(operation Operation, stackName string, flags map[string]any) error {
+	verb, needed := confirmationRequired(operation, flags)
+	if !needed {
+		return nil
+	}
+	if err := requireInteractiveOrAutoApprove(operation, flags); err != nil {
+		return err
 	}
 
 	message := fmt.Sprintf("%s stack %q?", verb, stackName)

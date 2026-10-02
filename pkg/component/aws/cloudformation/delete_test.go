@@ -24,9 +24,10 @@ func TestDeleteStack_BlocksOnTerminationProtection(t *testing.T) {
 	// No API calls expected — the guard must short-circuit before calling DeleteStack.
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{})
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationTerminationProtectionEnabled)
+	assert.NotErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed, "a delete refusal is not a changeset failure")
 }
 
 func TestDeleteStack_DisableTerminationProtectionFlag(t *testing.T) {
@@ -45,7 +46,7 @@ func TestDeleteStack_DisableTerminationProtectionFlag(t *testing.T) {
 	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
 	require.NoError(t, err)
 }
 
@@ -73,7 +74,7 @@ func TestDeleteStack_RestoresTerminationProtectionOnDeleteFailure(t *testing.T) 
 	)
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 	assert.Contains(t, err.Error(), "delete rejected")
@@ -139,7 +140,7 @@ func TestDeleteStack_DoesNotRestoreWhenStackWasNeverProtected(t *testing.T) {
 	)
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: false}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 	assert.Contains(t, err.Error(), "delete rejected")
@@ -171,7 +172,7 @@ func TestDeleteStack_RestoreFailureJoinedWithDeleteError(t *testing.T) {
 	)
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
-	err := deleteStack(ctx, client, spec, deleteOptions{DisableTerminationProtection: true})
+	_, err := deleteStack(ctx, client, spec, deleteOptions{DisableTerminationProtection: true})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled, "must preserve the original delete error")
 	assert.ErrorIs(t, err, restoreErr, "must include the restoration failure")
@@ -196,7 +197,7 @@ func TestDeleteStack_RestoreSkippedWhenDeleteActuallyInProgress(t *testing.T) {
 	)
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "timeout")
 	assert.NotContains(t, err.Error(), "DELETE_IN_PROGRESS",
@@ -250,7 +251,7 @@ func TestDeleteStack_NoTerminationProtection(t *testing.T) {
 	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
 
 	spec := &stackSpec{StackName: "vpc"}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{})
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{})
 	require.NoError(t, err)
 }
 
@@ -270,9 +271,10 @@ func TestDeleteStack_BlocksOnLiveTerminationProtection(t *testing.T) {
 	// No DeleteStack expectation — the guard must short-circuit before it.
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: false}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{})
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationTerminationProtectionEnabled)
+	assert.NotErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed, "a delete refusal is not a changeset failure")
 }
 
 // TestDeleteStack_DisableTerminationProtectionFlag_SkipsUpdateWhenNotProtected
@@ -295,7 +297,7 @@ func TestDeleteStack_DisableTerminationProtectionFlag_SkipsUpdateWhenNotProtecte
 
 	// Local config says false (the drifted case), yet --disable-termination-protection still works.
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: false}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
 	require.NoError(t, err)
 }
 
@@ -308,9 +310,10 @@ func TestDeleteStack_RetainResourcesRequiresDeleteFailed(t *testing.T) {
 	}, nil)
 
 	spec := &stackSpec{StackName: "vpc"}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{RetainResources: []string{"MyBucket"}})
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{RetainResources: []string{"MyBucket"}})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationRetainResourcesNotApplicable)
+	assert.NotErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed, "a retain-resources rejection is not a changeset failure")
 }
 
 // TestDeleteStack_RetainResourcesRejectionLeavesTerminationProtectionUntouched
@@ -332,12 +335,13 @@ func TestDeleteStack_RetainResourcesRejectionLeavesTerminationProtectionUntouche
 	}, nil)
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{
 		RetainResources:              []string{"MyBucket"},
 		DisableTerminationProtection: true,
 	})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationRetainResourcesNotApplicable)
+	assert.NotErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed, "a retain-resources rejection is not a changeset failure")
 }
 
 func TestDeleteStack_RetainResourcesAllowedWhenDeleteFailed(t *testing.T) {
@@ -355,7 +359,7 @@ func TestDeleteStack_RetainResourcesAllowedWhenDeleteFailed(t *testing.T) {
 	)
 
 	spec := &stackSpec{StackName: "vpc"}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{RetainResources: []string{"MyBucket"}})
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{RetainResources: []string{"MyBucket"}})
 	require.NoError(t, err)
 }
 
@@ -380,12 +384,13 @@ func TestDeleteStack_RetainResourcesFailureNeverDisablesProtection(t *testing.T)
 	// unreachable once --retain-resources validation fails.
 
 	spec := &stackSpec{StackName: "vpc"}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{
 		DisableTerminationProtection: true,
 		RetainResources:              []string{"MyBucket"},
 	})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationRetainResourcesNotApplicable)
+	assert.NotErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed, "a retain-resources rejection is not a changeset failure")
 }
 
 // TestDeleteStack_RetainResourcesSuccessReusesDescribedStackForProtectionCheck
@@ -408,7 +413,7 @@ func TestDeleteStack_RetainResourcesSuccessReusesDescribedStackForProtectionChec
 	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
 
 	spec := &stackSpec{StackName: "vpc"}
-	err := deleteStack(context.Background(), client, spec, deleteOptions{
+	_, err := deleteStack(context.Background(), client, spec, deleteOptions{
 		DisableTerminationProtection: true,
 		RetainResources:              []string{"MyBucket"},
 	})

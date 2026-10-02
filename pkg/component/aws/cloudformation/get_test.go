@@ -3,10 +3,12 @@ package cloudformation
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -118,10 +120,98 @@ func TestRunGetTemplate_Success(t *testing.T) {
 	out := captureStdout(t, func() {
 		summary, err := runGetTemplate(context.Background(), client, "vpc", map[string]any{"original": true}, map[string]any{})
 		require.NoError(t, err)
-		assert.Equal(t, "AWSTemplateFormatVersion: \"2010-09-09\"\n", summary["template"])
+		assert.Equal(t, "AWSTemplateFormatVersion: '2010-09-09'", summary["template"])
 	})
 	assert.Equal(t, cfntypes.TemplateStageOriginal, gotStage)
-	assert.Contains(t, out, "AWSTemplateFormatVersion")
+	assert.Equal(t, "AWSTemplateFormatVersion: '2010-09-09'", out, "--original must print the body exactly as returned")
+}
+
+// --original must be byte-exact: comments, quoting, key order, indentation and
+// the absence of a trailing newline all survive. The processed (default) form
+// is still re-serialized, so this guards the difference between the two.
+func TestRunGetTemplate_OriginalIsByteExact(t *testing.T) {
+	body := "# A leading comment.\nResources:\n    Bucket:   {Type: 'AWS::S3::Bucket'}\nOutputs: {}"
+
+	tests := []struct {
+		name         string
+		flags        map[string]any
+		wantExact    bool
+		wantContains string
+	}{
+		{"original is verbatim", map[string]any{"original": true}, true, ""},
+		{"processed is re-serialized", map[string]any{}, false, "Resources:"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewMockCloudFormationClient(gomock.NewController(t))
+			client.EXPECT().GetTemplate(gomock.Any(), gomock.Any()).Return(&cloudformation.GetTemplateOutput{TemplateBody: awsString(body)}, nil)
+
+			out := captureStdout(t, func() {
+				_, err := runGetTemplate(context.Background(), client, "vpc", tt.flags, map[string]any{})
+				require.NoError(t, err)
+			})
+			if tt.wantExact {
+				assert.Equal(t, body, out)
+				return
+			}
+			assert.NotEqual(t, body, out)
+			assert.Contains(t, out, tt.wantContains)
+		})
+	}
+}
+
+// A missing stack on a get verb is the stack-not-found sentinel with a hint,
+// not AWS's raw validation message. Other failures keep the API sentinel.
+func TestGetVerbs_MissingStackMapsToStackNotFound(t *testing.T) {
+	missing := errors.New("api error ValidationError: Stack with id vpc does not exist")
+
+	tests := []struct {
+		name string
+		call func(client CloudFormationClient) error
+		mock func(client *MockCloudFormationClient, err error)
+	}{
+		{
+			name: "get policy",
+			call: func(c CloudFormationClient) error {
+				_, err := getDeployedStackPolicy(context.Background(), c, "vpc")
+				return err
+			},
+			mock: func(c *MockCloudFormationClient, err error) {
+				c.EXPECT().GetStackPolicy(gomock.Any(), gomock.Any()).Return(nil, err)
+			},
+		},
+		{
+			name: "get template",
+			call: func(c CloudFormationClient) error {
+				_, err := getDeployedTemplate(context.Background(), c, "vpc", false)
+				return err
+			},
+			mock: func(c *MockCloudFormationClient, err error) {
+				c.EXPECT().GetTemplate(gomock.Any(), gomock.Any()).Return(nil, err)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name+" missing stack", func(t *testing.T) {
+			client := NewMockCloudFormationClient(gomock.NewController(t))
+			tt.mock(client, missing)
+
+			err := tt.call(client)
+			require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackNotFound)
+			require.NotErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+			hints := strings.Join(cockroachErrors.GetAllHints(err), "\n")
+			assert.Contains(t, hints, "atmos aws cloudformation apply")
+			assert.NotContains(t, hints, "--target")
+		})
+		t.Run(tt.name+" other error", func(t *testing.T) {
+			client := NewMockCloudFormationClient(gomock.NewController(t))
+			tt.mock(client, errors.New("throttled"))
+
+			err := tt.call(client)
+			require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+			require.NotErrorIs(t, err, errUtils.ErrAwsCloudFormationStackNotFound)
+		})
+	}
 }
 
 // runGetTemplate must pretty-print the body as YAML even when CloudFormation

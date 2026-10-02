@@ -175,14 +175,15 @@ func deleteBackendContents(ctx context.Context, client S3ClientAPI, bucket strin
 		return err
 	}
 
-	ui.Success(fmt.Sprintf("Deleted %d object(s) from bucket '%s'", counts.Objects, bucket))
+	// The final "Backend deleted" success line in DeleteS3Backend reports the
+	// outcome; a second success line here would be redundant.
 	return nil
 }
 
 // showDeletionWarning displays a warning message about pending deletion.
 func showDeletionWarning(bucket string, counts deletionCounts) {
 	objectCount, stateFileCount, stateFileLabel := counts.Objects, counts.StateFiles, counts.StateFileLabel
-	msg := fmt.Sprintf("⚠ Deleting backend will permanently remove %d object(s) from bucket '%s'",
+	msg := fmt.Sprintf("Deleting backend will permanently remove %d object(s) from bucket '%s'",
 		objectCount, bucket)
 	if stateFileCount > 0 && stateFileLabel != "" {
 		msg += fmt.Sprintf(" (including %d %s)", stateFileCount, stateFileLabel)
