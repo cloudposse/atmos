@@ -1,12 +1,19 @@
 ---
 title: AWS CloudFormation
-tags: [Emulators, Components]
+tags: [Components, Emulators]
 description: >-
   Deploy a native aws/cloudformation component — no external binary, no AWS
   account or credentials required — against a local Floci AWS emulator.
+cast:
+  file: /casts/examples/cloudformation/lifecycle.cast
+  title: atmos aws cloudformation lifecycle
 ---
 
 ## Notes
+
+The catalog currently uses the file-based `template: template.yaml` configuration. Backend
+commands, automatic bucket provisioning, `path:`, and the inline-template example require the
+[phase 4 implementation](https://github.com/cloudposse/atmos/pull/3137).
 
 This example deploys a real, minimal CloudFormation stack (a single `AWS::SSM::Parameter`
 resource) through the native **`aws/cloudformation`** component type — SDK-native, no
