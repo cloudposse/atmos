@@ -20,16 +20,23 @@ func resolveComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.C
 	return u.GetComponentPath(atmosConfig, cfg.CloudFormationComponentType, info.ComponentFolderPrefix, info.FinalComponent)
 }
 
+// resolveTemplateFilePath resolves the component's template file's absolute
+// path, joined with componentPath when spec.TemplatePath is relative.
+func resolveTemplateFilePath(componentPath string, spec *stackSpec) string {
+	templateFile := spec.TemplatePath
+	if !filepath.IsAbs(templateFile) {
+		templateFile = filepath.Join(componentPath, templateFile)
+	}
+	return templateFile
+}
+
 // loadTemplateBody reads the component's template file from disk, resolved
 // relative to componentPath. Returns ErrMissingAwsCloudFormationTemplate wrapped
 // with the resolved path when the file cannot be read.
 func loadTemplateBody(componentPath string, spec *stackSpec) (string, error) {
 	defer perf.Track(nil, "cloudformation.loadTemplateBody")()
 
-	templateFile := spec.TemplatePath
-	if !filepath.IsAbs(templateFile) {
-		templateFile = filepath.Join(componentPath, templateFile)
-	}
+	templateFile := resolveTemplateFilePath(componentPath, spec)
 
 	data, err := os.ReadFile(templateFile)
 	if err != nil {

@@ -33,7 +33,7 @@ If component is not specified, prompts interactively for selection.`, cfg.TypeLa
   atmos %s source describe vpc --stack dev
 
   # Interactive: prompts for component and stack
-  atmos %s source describe`, cfg.ComponentType, cfg.ComponentType),
+  atmos %s source describe`, cfg.CLI(), cfg.CLI()),
 		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executeDescribe(cmd, args, cfg, parser)
