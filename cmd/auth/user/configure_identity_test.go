@@ -101,6 +101,33 @@ func TestResolveIdentityToConfigure(t *testing.T) {
 		assert.Contains(t, hints[len(hints)-1], "--identity=ft-user")
 	})
 
+	t.Run("--identity=false is rejected instead of reported as not found", func(t *testing.T) {
+		stubPrompts(t, true, nil)
+		_, err := resolveIdentityToConfigure(newConfigureTestCmd(t, "--identity=false"), viper.New(), selectable, identities)
+		require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+		require.NotErrorIs(t, err, errUtils.ErrIdentityNotFound)
+		hints := cockroach.GetAllHints(err)
+		require.NotEmpty(t, hints)
+		assert.Contains(t, hints[0], "--identity=ft-user")
+	})
+
+	t.Run("false-like ATMOS_IDENTITY is rejected too", func(t *testing.T) {
+		stubPrompts(t, true, nil)
+		v := viper.New()
+		v.Set(cfg.IdentityFlagName, "off")
+		_, err := resolveIdentityToConfigure(newConfigureTestCmd(t), v, selectable, identities)
+		require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	})
+
+	t.Run("hints stay safe when no aws/user identity exists", func(t *testing.T) {
+		stubPrompts(t, false, nil)
+		_, err := resolveIdentityToConfigure(newConfigureTestCmd(t, "--identity=nope"), viper.New(), nil, identities)
+		require.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
+		_, err = resolveIdentityToConfigure(newConfigureTestCmd(t), viper.New(), nil, identities)
+		require.ErrorIs(t, err, errUtils.ErrIdentitySelectionRequiresTTY)
+		assert.Contains(t, cockroach.GetAllHints(err)[0], "--identity=IDENTITY")
+	})
+
 	t.Run("no identity without a terminal fails fast with a hint", func(t *testing.T) {
 		stubPrompts(t, false, nil)
 		_, err := resolveIdentityToConfigure(newConfigureTestCmd(t), viper.New(), selectable, identities)

@@ -79,9 +79,20 @@ func runFakeCredentialProcess() {
 }
 
 // runFakeCredentialProcessWithGrandchild starts a detached grandchild that holds the inherited
-// stdout pipe open for the given duration, then blocks forever so the parent can only finish by
-// being killed. It never returns.
+// stdout pipe open for the given duration, then blocks until it is killed or the grandchild's
+// lifetime has passed. It never returns.
 func runFakeCredentialProcessWithGrandchild(grandchildSleep string) {
+	// The helper inherits the test binary's stderr. When `sh -c` forks instead of exec'ing (dash
+	// on Linux), the timeout kills only the shell and this process outlives the test; holding the
+	// test's stderr would then make `go test` wait for I/O ("Test I/O incomplete") long after the
+	// test finished. Release it, since this helper never writes to stderr.
+	_ = os.Stderr.Close()
+
+	lifetime, err := time.ParseDuration(grandchildSleep)
+	if err != nil {
+		os.Exit(2)
+	}
+
 	exe, err := os.Executable()
 	if err != nil {
 		os.Exit(2)
@@ -105,7 +116,8 @@ func runFakeCredentialProcessWithGrandchild(grandchildSleep string) {
 		os.Exit(2)
 	}
 
-	time.Sleep(time.Hour)
+	// Outlive the caller's timeout, but stay bounded so an orphaned helper exits on its own.
+	time.Sleep(lifetime)
 	os.Exit(0)
 }
 

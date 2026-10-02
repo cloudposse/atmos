@@ -603,7 +603,7 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 func promptUnavailableBuilder(sentinel error) *errUtils.ErrorBuilder {
 	return errUtils.Build(sentinel).
 		WithExplanation("An interactive identity prompt is needed, but this session cannot show one (it requires stdin and stderr to be terminals outside CI)").
-		WithHint("Select an identity explicitly with --identity=<name>, or mark one as default with `default: true` in atmos.yaml").
+		WithHint("Pass `--identity=<name>`, or mark an identity as default with `default: true` in atmos.yaml").
 		WithHint("To authenticate interactively, run `atmos auth login --identity=<name>` in a terminal")
 }
 

@@ -51,6 +51,11 @@ keychain, so `atmos auth login` could not find them, and the error hints pointed
 - **Docs.** `website/docs/cli/commands/auth/user/configure.mdx` documents `--identity` and the keyring
   behavior.
 
+- **`--identity=false`.** `resolveIdentityToConfigure` normalizes the value first, so `--identity=false` or a
+  false-like `ATMOS_IDENTITY` returns an `ErrInvalidFlagValue` error that explains `configure` needs an identity,
+  instead of looking up `__DISABLED__` and reporting "identity not found". Hints use an `IDENTITY` placeholder when
+  no `aws/user` identity exists, instead of indexing an empty list (raised in PR review).
+
 ## Validation
 
 - `go build ./...`
@@ -76,6 +81,9 @@ keychain, so `atmos auth login` could not find them, and the error hints pointed
   ./pkg/store/... ./pkg/process/... ./pkg/io/... ./pkg/data/...`; `go test -short ./cmd/... ./internal/exec/...`;
   `go test ./tests -run 'TestCLICommands/atmos_(auth|aws)'`; `GOOS=windows go vet` on the auth packages; and
   `./custom-gcl run --new-from-rev=origin/main` (0 issues). All passed.
+
+- The `--identity=false`, false-like `ATMOS_IDENTITY`, and empty-list cases of `TestResolveIdentityToConfigure`
+  failed before that change (the empty list panicked with an index out of range) and pass after it.
 
 ## Follow-ups
 

@@ -108,7 +108,16 @@ func executeAuthUserConfigureCommand(cmd *cobra.Command, args []string) error {
 func resolveIdentityToConfigure(cmd *cobra.Command, v *viper.Viper, selectable []string, identities map[string]schema.Identity) (string, error) {
 	defer perf.Track(nil, "auth.user.resolveIdentityToConfigure")()
 
-	requested := identityFromFlagOrEnv(cmd, v)
+	requested := cfg.NormalizeIdentityValue(identityFromFlagOrEnv(cmd, v))
+
+	// --identity=false (or a false-like ATMOS_IDENTITY) disables authentication elsewhere; here it
+	// would otherwise be looked up as an identity named "__DISABLED__" and reported as not found.
+	if requested == cfg.IdentityFlagDisabledValue {
+		return "", errUtils.Build(errUtils.ErrInvalidFlagValue).
+			WithExplanation("`--identity=false` cannot be used with `atmos auth user configure`, which needs an identity to store credentials for").
+			WithHintf("Pass the identity to configure: atmos auth user configure --identity=%s", exampleIdentity(selectable)).
+			Err()
+	}
 
 	// --identity without a value (the select sentinel) asks for the selector, same as no identity.
 	if requested != "" && requested != cfg.IdentityFlagSelectValue {
@@ -118,7 +127,7 @@ func resolveIdentityToConfigure(cmd *cobra.Command, v *viper.Viper, selectable [
 	if !interactiveAvailable() {
 		return "", errUtils.Build(errUtils.ErrIdentitySelectionRequiresTTY).
 			WithExplanation("No identity was specified and this session cannot show an interactive selector").
-			WithHintf("Pass the identity to configure: atmos auth user configure --identity=%s", selectable[0]).
+			WithHintf("Pass the identity to configure: atmos auth user configure --identity=%s", exampleIdentity(selectable)).
 			WithHintf("Available aws/user identities: %s", strings.Join(selectable, ", ")).
 			Err()
 	}
@@ -147,7 +156,7 @@ func validateIdentityToConfigure(requested string, selectable []string, identiti
 		return "", errUtils.Build(errUtils.ErrIdentityNotFound).
 			WithContext("identity", requested).
 			WithHintf("Available aws/user identities: %s", strings.Join(selectable, ", ")).
-			WithHintf("Run: atmos auth user configure --identity=%s", selectable[0]).
+			WithHintf("Run: atmos auth user configure --identity=%s", exampleIdentity(selectable)).
 			Err()
 	}
 	if identity.Kind != authTypes.ProviderKindAWSUser {
@@ -156,10 +165,18 @@ func validateIdentityToConfigure(requested string, selectable []string, identiti
 			WithContext("kind", identity.Kind).
 			WithExplanationf("Identity %q has kind %q; only %s identities store credentials in the keyring", requested, identity.Kind, authTypes.ProviderKindAWSUser).
 			WithHintf("Available aws/user identities: %s", strings.Join(selectable, ", ")).
-			WithHintf("Run: atmos auth user configure --identity=%s", selectable[0]).
+			WithHintf("Run: atmos auth user configure --identity=%s", exampleIdentity(selectable)).
 			Err()
 	}
 	return requested, nil
+}
+
+// exampleIdentity returns an identity name for hints: the first selectable aws/user identity, // placeholder when there is none (callers may invoke the resolver directly with an empty list).
+func exampleIdentity(selectable []string) string {
+	if len(selectable) == 0 {
+		return "IDENTITY"
+	}
+	return selectable[0]
 }
 
 // interactiveAvailable reports whether prompts can be shown. It is a variable so tests can
