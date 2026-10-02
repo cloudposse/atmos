@@ -65,7 +65,7 @@ are included in this change at the user's request; no follow-up issue is needed.
   evidence are retained under the originating workspace's
   `.context/field-test-cfn-gaps-20261001-2314/`.
 
-## Review validation
+### Review validation
 
 - Preserve the original CLI identity request when deferred stores resolve credentials
   after component authentication. Six cases cover explicit, implicit, legacy,
@@ -76,6 +76,10 @@ are included in this change at the user's request; no follow-up issue is needed.
 - Full S3 downloader and deferred-store tests, race tests and affected builds passed.
   Package statement coverage is 93.9% and 100%, respectively. The broader
   patch-scoped package test run and changed-line lint also passed.
+- Direct shared-auth tests cover all target-auth functions, including identity
+  precedence, independent contexts and error propagation (100% function statement
+  coverage). Workdir tests cover all component-option helpers and verify real
+  Terraform state migration, lock restoration and CloudFormation source isolation.
 
 ## Follow-ups
 
