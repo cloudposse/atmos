@@ -14,6 +14,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -136,9 +137,9 @@ func TestToStackStatuses_CaseInsensitiveAndValidation(t *testing.T) {
 			got, err := toStackStatuses(tt.input)
 			if tt.wantErr {
 				require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
-				formatted := errUtils.Format(err, errUtils.FormatterConfig{})
-				assert.Contains(t, formatted, "CREATE_COMPLETE", "the error must list the valid statuses")
-				assert.Contains(t, formatted, "ROLLBACK_COMPLETE")
+				hints := strings.Join(cockroachErrors.GetAllHints(err), "\n")
+				assert.Contains(t, hints, "CREATE_COMPLETE", "the error must list the valid statuses")
+				assert.Contains(t, hints, "ROLLBACK_COMPLETE")
 				return
 			}
 			require.NoError(t, err)
