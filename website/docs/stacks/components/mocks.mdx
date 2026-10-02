@@ -89,8 +89,8 @@ When the real lookup for a component that declares `mocks` fails with an error t
 recoverable (credentials, network, backend, Terraform initialization, or a missing Terraform
 binary), the error includes a hint to use
 `--use-mocks=always` or `components.terraform.mocks.mode: always` for mocks-only resolution.
-Use `always` for runs that have no credentials or no Terraform installed, such as CI jobs that only
-inspect configuration.
+Use `always` for lookups on machines that have no credentials or no Terraform installed, such as
+CI jobs that only inspect configuration with `atmos describe component`.
 
 The precedence is: real value, then mock, then a YQ `//` default, then the original error.
 A `//` default in the expression is therefore the last resort, not a replacement for the mock:
@@ -140,8 +140,10 @@ result is the same on every machine regardless of what has been deployed.
 atmos describe component app -s dev --use-mocks=always
 ```
 
-Use `always` when a run must be hermetic, for example in CI jobs with no cloud credentials or
-without Terraform installed.
+Use `always` when lookups must be hermetic, for example `atmos describe component` in CI jobs with
+no cloud credentials or without Terraform installed. A plan with `--use-mocks=always` still
+initializes and plans the component itself, so it needs Terraform and that component's own backend
+and provider access; only the lookups it makes are hermetic.
 In this mode a missing `mocks` map or an undeclared output is an error, because there is no real
 value to fall back to. A YQ `//` default still applies:
 

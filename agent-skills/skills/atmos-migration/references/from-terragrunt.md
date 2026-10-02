@@ -179,8 +179,8 @@ Without `--use-mocks`, the same expression resolves the real value as usual. Thi
 Terragrunt's `mock_outputs_allowed_terraform_commands` scoping more closely than a
 default-value expression does: only `atmos terraform plan` and `atmos describe component`
 accept `--use-mocks`, and it is rejected outright on `apply`, `deploy`, and `destroy`, so a
-mock value can never reach a mutating Terraform operation. For hermetic runs that must never
-read state or authenticate, pass `--use-mocks=always` or set
+mock value can never reach a mutating Terraform operation. For `!terraform.state` and
+`!terraform.output` lookups that must never read state or authenticate, pass `--use-mocks=always` or set
 `components.terraform.mocks.mode: always`; in that mode an undeclared `mocks` entry is a
 hard error unless the expression has a `//` default. A working, provider-free reference
 lives at `examples/terraform-component-mocks` in the Atmos repository.

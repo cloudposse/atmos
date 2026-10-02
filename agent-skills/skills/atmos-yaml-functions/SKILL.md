@@ -147,7 +147,8 @@ accept the flag; other terraform subcommands reject it. `ATMOS_USE_MOCKS` accept
 `atmos terraform plan` only; `atmos describe component` reads the flag, not the variable, and an
 exported `ATMOS_USE_MOCKS` makes `apply`, `deploy`, `destroy`, and other non-plan terraform subcommands
 fail until it is unset. Mode `always` is the hermetic behavior: lookups
-resolve from `mocks:` only and never initialize Terraform, authenticate, or read a backend, and a
+resolve from `mocks:` only and never initialize Terraform, authenticate, or read a backend for those
+lookups (a `terraform plan` still uses the planned component's own backend and credentials), and a
 missing `mocks:` map or output is an error (a `//` default still rescues it). The mode also comes from
 `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`; an invalid mode in `atmos.yaml` or that variable fails at
 config load. Unpinned projects default to `fallback`; projects whose

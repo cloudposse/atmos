@@ -208,7 +208,7 @@ components:
       In `fallback` mode the real state or output wins and the mock is used only when the component is
       not provisioned or the output is missing.
     - `--use-mocks=fallback` or `--use-mocks=always`: mocks are on, overriding the configured mode for this run.
-      The `always` value resolves from mocks only and never initializes Terraform, authenticates, or reads a backend.
+      The `always` value resolves `!terraform.state` and `!terraform.output` lookups from mocks only, without initializing the referenced components, authenticating, or reading their backends. The plan itself still initializes this component and uses its own backend and provider credentials.
 
     Matching is case-insensitive, and any other value is an error. Attach the mode with `=`: a bare
     `--use-mocks` takes no value, so `--use-mocks always` leaves `always` as a positional argument and
