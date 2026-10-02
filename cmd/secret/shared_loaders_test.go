@@ -292,3 +292,35 @@ func TestBuildAuthManager_ComponentNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load component config for auth")
 }
+
+// Both collision validation and ordinary loading must ignore unrelated live
+// outputs when discovering secret declarations, even if the producer is absent.
+func TestSecretDiscoverySkipsCloudFormationOutputs(t *testing.T) {
+	dir := writeMinimalAtmosProject(t)
+	configPath := filepath.Join(dir, "atmos.yaml")
+	configData, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(configPath, append(configData, []byte("templates:\n  settings:\n    enabled: true\n")...), 0o644))
+	manifest := `vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      vars:
+        live: !aws.cloudformation.output missing-producer dev Value
+        template_live: '{{ (atmos.Component "missing-producer" "dev").outputs.Value }}'
+        vault_name: vault
+      secrets:
+        vars:
+          TOKEN:
+            store: '{{ .vars.vault_name }}'
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "dev.yaml"), []byte(manifest), 0o644))
+	t.Chdir(dir)
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	require.NoError(t, checkStackSopsCollisions("dev"))
+	svc, err := loadService(secretScope{Stack: "dev", Component: "vpc"})
+	require.NoError(t, err)
+	require.True(t, svc.IsDeclared("TOKEN"))
+	require.Equal(t, "vault", svc.Declarations()[0].BackendName)
+}

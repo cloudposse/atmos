@@ -2180,10 +2180,13 @@ type ConfigAndStacksInfo struct {
 	TerraformPlanHideNoChanges bool
 	TerraformPlanSummaryFile   string
 	Identity                   string
-	ClusterName                string // EKS cluster name from --cluster-name flag.
-	NeedsPathResolution        bool   // True if ComponentFromArg is a path that needs resolution.
-	UIEnabled                  bool   // Enable streaming UI mode for terraform commands.
-	UIFlagExplicitlySet        bool   // Whether --ui flag was explicitly set (vs. config/default).
+	// RequestedIdentity preserves the CLI/environment choice before authentication
+	// stores an auto-selected identity. Nil means Identity has not been rewritten.
+	RequestedIdentity   *string
+	ClusterName         string // EKS cluster name from --cluster-name flag.
+	NeedsPathResolution bool   // True if ComponentFromArg is a path that needs resolution.
+	UIEnabled           bool   // Enable streaming UI mode for terraform commands.
+	UIFlagExplicitlySet bool   // Whether --ui flag was explicitly set (vs. config/default).
 
 	// NodeHooks fires per-component lifecycle hooks (user hooks + CI hooks,
 	// before and after) for each component in a multi-component/bulk
