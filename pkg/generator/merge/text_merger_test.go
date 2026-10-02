@@ -1028,3 +1028,47 @@ func TestTextMerger_PreservesOursCRLFOnCleanMerge(t *testing.T) {
 		t.Errorf("Expected both independent edits to survive the merge, got:\n%q", result.Content)
 	}
 }
+
+// TestTextMerger_PreservesOursCRLFWithUnresolvedConflict ensures that when
+// ours is CRLF and a real conflict remains (manual strategy), the
+// unconflicted lines still come back CRLF instead of silently flattening to
+// LF.
+func TestTextMerger_PreservesOursCRLFWithUnresolvedConflict(t *testing.T) {
+	toCRLF := func(s string) string { return strings.ReplaceAll(s, "\n", "\r\n") }
+
+	base := "line 1\nline 2\nline 3"
+	ours := toCRLF("line 1\nuser version\nline 3")
+	theirs := "line 1\ntemplate version\nline 3"
+
+	result, err := NewTextMerger(0).Merge(base, ours, theirs)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if !result.HasConflicts {
+		t.Fatalf("Expected an unresolved conflict on the shared line, got none")
+	}
+	if !HasConflictMarkers(result.Content) {
+		t.Fatalf("Expected conflict markers in the result, got:\n%q", result.Content)
+	}
+
+	lines := strings.Split(result.Content, "\n")
+	if lines[0] != "line 1\r" {
+		t.Errorf("Expected ours' untouched CRLF line before the conflict to survive, got:\n%q", result.Content)
+	}
+	if lines[len(lines)-1] != "line 3" {
+		t.Errorf("Expected ours' untouched trailing line (no original trailing newline) to survive unchanged, got:\n%q", result.Content)
+	}
+}
+
+// TestHasUnresolvedConflictMarkers_IgnoresRestoredCarriageReturn is a
+// regression test for the CRLF-restoration path in Merge: once ours' CRLF
+// style is restored across an unresolved-conflict result, the marker lines
+// themselves gain a trailing "\r" too (since the restore is a blanket
+// "\n" -> "\r\n" replace). HasUnresolvedConflictMarkers must still recognize
+// the triplet despite that trailing "\r".
+func TestHasUnresolvedConflictMarkers_IgnoresRestoredCarriageReturn(t *testing.T) {
+	content := "<<<<<<< Ours\r\nuser version\r\n=======\r\ntemplate version\r\n>>>>>>> Theirs\r\n"
+	if !HasUnresolvedConflictMarkers(content) {
+		t.Errorf("HasUnresolvedConflictMarkers() = false, want true for CRLF-restored markers:\n%q", content)
+	}
+}

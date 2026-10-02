@@ -79,7 +79,8 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	// style it already had. Left unnormalized, that mismatch makes every
 	// untouched line look changed, inflating calculateChangePercentage far
 	// past the real edit size -- so normalize all three to LF before diffing,
-	// then restore ours' original style on a clean (marker-free) result.
+	// then restore ours' original style on the result, conflict markers
+	// included.
 	oursHadCRLF := strings.Contains(ours, "\r\n")
 	base = normalizeLineEndings(base)
 	ours = normalizeLineEndings(ours)
@@ -143,12 +144,13 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 		}
 	}
 
-	// Only restore ours' original CRLF style on a clean result: a manual
-	// conflict still carries diff3's own bare-LF marker lines
-	// ("<<<<<<< Ours", "=======", ">>>>>>> Theirs"), and blindly expanding
-	// those to CRLF would break the exact-match marker detection in
-	// HasUnresolvedConflictMarkers.
-	if oursHadCRLF && !hasConflicts {
+	// Restore ours' original CRLF style even when a manual conflict remains:
+	// ours' own unconflicted lines would otherwise silently flatten to LF in
+	// the written-out file. This also expands diff3's own marker lines
+	// ("<<<<<<< Ours", "=======", ">>>>>>> Theirs") to CRLF, so
+	// HasUnresolvedConflictMarkers trims the restored trailing "\r" before
+	// comparing.
+	if oursHadCRLF {
 		mergedContent = strings.ReplaceAll(mergedContent, newlineSeparator, "\r\n")
 	}
 
@@ -318,7 +320,10 @@ func HasUnresolvedConflictMarkers(content string) bool {
 
 	sawOurs, sawSeparator := false, false
 	for _, line := range strings.Split(content, newlineSeparator) {
-		trimmed := strings.TrimLeft(line, " ")
+		// TrimRight the "\r" too: TextMerger's CRLF-restoration path expands
+		// every line (including the bare marker lines) to CRLF, so a line
+		// split on "\n" alone leaves a trailing "\r" here.
+		trimmed := strings.TrimRight(strings.TrimLeft(line, " "), "\r")
 		switch {
 		case !sawOurs:
 			// Exact match: both TextMerger (via diff3's "<<<<<<< %s" label
