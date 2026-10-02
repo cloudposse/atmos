@@ -61,6 +61,11 @@ const (
 	// positional argument (a single Output key) reaches the executor.
 	outputKeyFlag = "key"
 
+	// The invokedVerbFlag const is the key under which a top-level alias verb
+	// (`plan`, `deploy`) reaches the executor, so CI summaries can name the verb
+	// the user ran instead of the shared dispatch identifier (`diff`, `apply`).
+	invokedVerbFlag = "invoked-verb"
+
 	// The flagSkipHooks const is the --skip-hooks flag name and the viper key
 	// pkg/hooks reads (hooks.ResolveSkipHooks).
 	flagSkipHooks = "skip-hooks"
@@ -539,7 +544,18 @@ func operationFlags(cmd *cobra.Command, subCommand string, args []string) map[st
 	if subCommand == opOutput && len(args) > 1 {
 		result[outputKeyFlag] = args[1]
 	}
+	if isTopLevelAliasVerb(cmd, subCommand) {
+		result[invokedVerbFlag] = cmd.Name()
+	}
 	return result
+}
+
+// isTopLevelAliasVerb reports whether cmd is a top-level verb that dispatches
+// under a different operation identifier, such as `plan` (dispatched as `diff`)
+// or `deploy` (dispatched as `apply`). Grouped verbs such as `changeset create`
+// also differ from their identifier, but they are not aliases of another verb.
+func isTopLevelAliasVerb(cmd *cobra.Command, subCommand string) bool {
+	return cmd.Name() != subCommand && cmd.Parent() == CloudFormationCmd
 }
 
 // getOperationFlags preserves typed operation options when dispatching Cobra commands to the component

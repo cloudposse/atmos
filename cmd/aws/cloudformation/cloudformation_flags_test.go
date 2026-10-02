@@ -289,3 +289,27 @@ func TestSkipHooksReachesViperWhenVerbRuns(t *testing.T) {
 		assert.Empty(t, hooks.ResolveSkipHooks(nil))
 	})
 }
+
+// The real `plan` and `deploy` commands record the verb the user ran, because
+// they dispatch as `diff` and `apply`. Verbs that dispatch under their own name,
+// and grouped verbs such as `changeset create`, record nothing.
+func TestOperationFlags_RecordsTopLevelAliasVerb(t *testing.T) {
+	find := func(t *testing.T, parent *cobra.Command, name string) *cobra.Command {
+		t.Helper()
+		for _, c := range parent.Commands() {
+			if c.Name() == name {
+				return c
+			}
+		}
+		require.FailNowf(t, "command not found", "%s under %s", name, parent.Name())
+		return nil
+	}
+
+	assert.Equal(t, "plan", operationFlags(find(t, CloudFormationCmd, "plan"), opDiff, nil)[invokedVerbFlag])
+	assert.Equal(t, "deploy", operationFlags(find(t, CloudFormationCmd, "deploy"), subCommandApply, nil)[invokedVerbFlag])
+	assert.NotContains(t, operationFlags(find(t, CloudFormationCmd, "diff"), opDiff, nil), invokedVerbFlag)
+	assert.NotContains(t, operationFlags(find(t, CloudFormationCmd, "apply"), subCommandApply, nil), invokedVerbFlag)
+
+	changeset := find(t, CloudFormationCmd, "changeset")
+	assert.NotContains(t, operationFlags(find(t, changeset, "create"), "changeset-create", nil), invokedVerbFlag)
+}
