@@ -267,3 +267,89 @@ func TestDefaultNewCloudFormationClient_NoEndpointOverride(t *testing.T) {
 	opts := real.Options()
 	assert.Nil(t, opts.BaseEndpoint, "BaseEndpoint must stay nil (real AWS) when no override is configured")
 }
+
+// GetOutputs must refuse a stack that carries no deployed resources, because
+// its (empty) Outputs would otherwise flow into a consumer as null or "".
+func TestGetOutputs_NotDeployedStatuses(t *testing.T) {
+	for _, status := range []cfntypes.StackStatus{
+		cfntypes.StackStatusReviewInProgress,
+		cfntypes.StackStatusRollbackInProgress,
+		cfntypes.StackStatusRollbackComplete,
+		cfntypes.StackStatusRollbackFailed,
+		cfntypes.StackStatusCreateFailed,
+		cfntypes.StackStatusDeleteInProgress,
+		cfntypes.StackStatusDeleteComplete,
+		cfntypes.StackStatusDeleteFailed,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			mockClient := NewMockcloudFormationAPI(gomock.NewController(t))
+			mockClient.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+				Stacks: []cfntypes.Stack{{StackStatus: status}},
+			}, nil)
+			stubOutputsSeams(t, nil, mockClient)
+
+			outputs, err := GetOutputs(context.Background(), "us-east-1", "stub", nil)
+			require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackNotDeployed)
+			assert.Nil(t, outputs)
+			assert.Contains(t, err.Error(), `"stub"`)
+			assert.Contains(t, err.Error(), string(status))
+		})
+	}
+}
+
+// Negative path: a deployed (or updating) stack keeps returning its outputs.
+func TestGetOutputs_DeployedStatusesAreAllowed(t *testing.T) {
+	for _, status := range []cfntypes.StackStatus{
+		cfntypes.StackStatusCreateComplete,
+		cfntypes.StackStatusUpdateComplete,
+		cfntypes.StackStatusUpdateRollbackComplete,
+		cfntypes.StackStatusUpdateInProgress,
+		"",
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			mockClient := NewMockcloudFormationAPI(gomock.NewController(t))
+			mockClient.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+				Stacks: []cfntypes.Stack{{
+					StackStatus: status,
+					Outputs:     []cfntypes.Output{{OutputKey: aws.String("VpcId"), OutputValue: aws.String("vpc-1")}},
+				}},
+			}, nil)
+			stubOutputsSeams(t, nil, mockClient)
+
+			outputs, err := GetOutputs(context.Background(), "us-east-1", "vpc", nil)
+			require.NoError(t, err)
+			assert.Equal(t, map[string]any{"VpcId": "vpc-1"}, outputs)
+		})
+	}
+}
+
+func TestLookupOutput(t *testing.T) {
+	outputs := map[string]any{"VpcId": "vpc-1", "Empty": nil}
+
+	t.Run("present key", func(t *testing.T) {
+		value, err := LookupOutput(outputs, "vpc", "VpcId")
+		require.NoError(t, err)
+		assert.Equal(t, "vpc-1", value)
+	})
+
+	t.Run("present key with a null value is not an error", func(t *testing.T) {
+		value, err := LookupOutput(outputs, "vpc", "Empty")
+		require.NoError(t, err)
+		assert.Nil(t, value)
+	})
+
+	t.Run("misspelled key lists the available keys sorted", func(t *testing.T) {
+		value, err := LookupOutput(outputs, "vpc", "Valeu")
+		require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOutputNotFound)
+		assert.Nil(t, value)
+		assert.Contains(t, err.Error(), `"Valeu"`)
+		assert.Contains(t, err.Error(), `"vpc"`)
+		assert.Contains(t, err.Error(), "available: Empty, VpcId")
+	})
+
+	t.Run("stack with no outputs says so", func(t *testing.T) {
+		_, err := LookupOutput(map[string]any{}, "vpc", "VpcId")
+		require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOutputNotFound)
+		assert.Contains(t, err.Error(), "available: none")
+	})
+}

@@ -2,6 +2,7 @@ package cloudformation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // kindAwsStackSet is the provision-target kind for multi-account/multi-region
@@ -229,6 +231,9 @@ func runStackSetDelete(ctx context.Context, client CloudFormationClient, stackSe
 	// Deletion does not require a local target; use the existing StackSet's model.
 	out, err := client.DescribeStackSet(ctx, &cloudformation.DescribeStackSetInput{StackSetName: awsString(stackSetName)})
 	if err != nil {
+		if isStackSetNotFoundError(err) {
+			return reportStackSetAlreadyDeleted(stackSetName, summary), nil
+		}
 		return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
 	}
 	if out.StackSet == nil {
@@ -248,11 +253,29 @@ func runStackSetDelete(ctx context.Context, client CloudFormationClient, stackSe
 	}
 
 	if _, err := client.DeleteStackSet(ctx, &cloudformation.DeleteStackSetInput{StackSetName: awsString(stackSetName)}); err != nil {
+		if isStackSetNotFoundError(err) {
+			return reportStackSetAlreadyDeleted(stackSetName, summary), nil
+		}
 		return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
 	}
 	_ = data.Writeln(fmt.Sprintf("%s: stackset deleted", stackSetName))
 	summary["stackset_name"] = stackSetName
 	return summary, nil
+}
+
+// isStackSetNotFoundError reports whether err is CloudFormation's "StackSet does
+// not exist" response, which makes deleting it an idempotent no-op.
+func isStackSetNotFoundError(err error) bool {
+	var notFound *cfntypes.StackSetNotFoundException
+	return errors.As(err, &notFound)
+}
+
+// reportStackSetAlreadyDeleted is the successful outcome of deleting a StackSet
+// that does not exist, matching how stack delete treats a missing stack.
+func reportStackSetAlreadyDeleted(stackSetName string, summary map[string]any) map[string]any {
+	summary["already_deleted"] = true
+	ui.Info(fmt.Sprintf("%s does not exist; nothing to delete", stackSetName))
+	return summary
 }
 
 // validateStackSetInstancePermissionModel prevents unsupported service-managed

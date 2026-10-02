@@ -4,16 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // shrinkStackSetTiming replaces the package's StackSet operation poll
@@ -824,4 +828,108 @@ func TestResolveStackSetTargetRejectsMalformedAccounts(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
 		assert.Contains(t, err.Error(), "provision.targets.fleet.accounts")
 	}
+}
+
+// Deleting a StackSet that does not exist is an idempotent success that says so,
+// like stack delete, instead of exiting 1. Only the not-found response counts: any
+// other describe failure is still an error.
+func TestRunStackSetDelete_MissingStackSetIsIdempotent(t *testing.T) {
+	tests := []struct {
+		name        string
+		describeErr error
+		wantMissing bool
+	}{
+		{name: "not found", describeErr: &cfntypes.StackSetNotFoundException{Message: awsString("StackSet mine not found")}, wantMissing: true},
+		{name: "access denied is still an error", describeErr: errors.New("AccessDenied: not authorized")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewMockCloudFormationClient(gomock.NewController(t))
+			// Nothing after DescribeStackSet: no instance listing, no delete calls.
+			client.EXPECT().DescribeStackSet(gomock.Any(), gomock.Any()).Return(nil, tt.describeErr)
+
+			var summary map[string]any
+			var err error
+			var stdout string
+			stderr := captureStderr(t, func() {
+				stdout = captureStdout(t, func() {
+					summary, err = runStackSetDelete(context.Background(), client, "mine", map[string]any{})
+				})
+			})
+			if !tt.wantMissing {
+				require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, true, summary["already_deleted"])
+			assert.Contains(t, normalizeUIOutput(stderr), "mine does not exist; nothing to delete")
+			assert.NotContains(t, stdout, "stackset deleted")
+		})
+	}
+}
+
+// A StackSet that vanishes between the describe and the delete is the same
+// idempotent success.
+func TestRunStackSetDelete_VanishesBeforeDelete(t *testing.T) {
+	client := NewMockCloudFormationClient(gomock.NewController(t))
+	client.EXPECT().DescribeStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOutput{
+		StackSet: &cfntypes.StackSet{PermissionModel: cfntypes.PermissionModelsSelfManaged},
+	}, nil)
+	client.EXPECT().ListStackInstances(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackInstancesOutput{}, nil)
+	client.EXPECT().DeleteStackSet(gomock.Any(), gomock.Any()).Return(nil, &cfntypes.StackSetNotFoundException{Message: awsString("gone")})
+
+	summary, err := runStackSetDelete(context.Background(), client, "mine", map[string]any{})
+	require.NoError(t, err)
+	assert.Equal(t, true, summary["already_deleted"])
+}
+
+// A permission_model typo is rejected when the real run resolves the target, so it
+// fails locally with the list of valid models instead of at the AWS API after
+// partial work. Known models, and the default when unset, still resolve. (Dry-run
+// resolves targets without this check because a deferred value may still be a
+// template.)
+func TestResolveStackSetTargetFromContext_PermissionModelValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		model   any
+		want    string
+		wantErr bool
+	}{
+		{name: "unset defaults to SELF_MANAGED", model: nil, want: defaultPermissionModel},
+		{name: "SELF_MANAGED", model: "SELF_MANAGED", want: "SELF_MANAGED"},
+		{name: "SERVICE_MANAGED", model: "SERVICE_MANAGED", want: "SERVICE_MANAGED"},
+		{name: "typo", model: "SELF_MANAGD", wantErr: true},
+		{name: "lowercase", model: "self_managed", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			block := map[string]any{"kind": kindAwsStackSet}
+			if tt.model != nil {
+				block["permission_model"] = tt.model
+			}
+			octx := &opContext{
+				Info:  &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{cfg.ProvisionSectionName: map[string]any{"targets": map[string]any{"fanout": block}}}},
+				Flags: map[string]any{},
+			}
+			got, err := resolveStackSetTargetFromContext(octx)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+				assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), "\n"), "SELF_MANAGED")
+				assert.Contains(t, strings.Join(cockroachErrors.GetAllDetails(err), "\n"), "fanout")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.PermissionModel)
+		})
+	}
+}
+
+// Negative path: resolving the target itself (the dry-run entry point) does not
+// judge the model, so a deferred template value passes through to dry-run's own
+// deferral-aware check.
+func TestResolveStackSetTarget_DoesNotJudgePermissionModel(t *testing.T) {
+	provision := map[string]any{"targets": map[string]any{"fanout": map[string]any{"kind": kindAwsStackSet, "permission_model": "{{ .vars.model }}"}}}
+	got, err := resolveStackSetTarget(provision, "")
+	require.NoError(t, err)
+	assert.Equal(t, "{{ .vars.model }}", got.PermissionModel)
 }

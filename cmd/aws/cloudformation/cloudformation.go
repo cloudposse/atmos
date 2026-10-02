@@ -3,6 +3,7 @@
 package cloudformation
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -53,6 +54,16 @@ const (
 	opDelete   = "delete"
 	opValidate = "validate"
 	opOutput   = "output"
+)
+
+const (
+	// The outputKeyFlag const is the key under which `output`'s optional second
+	// positional argument (a single Output key) reaches the executor.
+	outputKeyFlag = "key"
+
+	// The flagSkipHooks const is the --skip-hooks flag name and the viper key
+	// pkg/hooks reads (hooks.ResolveSkipHooks).
+	flagSkipHooks = "skip-hooks"
 )
 
 var cloudFormationParser *flags.StandardParser
@@ -195,6 +206,12 @@ func newOperationCommand(use, subCommand, short string) *cobra.Command {
 		Long:    long,
 		Example: example,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Flag-combination errors are checked before parsing: the parser wraps
+			// every validator error as "invalid positional arguments", which is the
+			// wrong headline for a bad flag combination.
+			if err := validateFlagSelection(cmd); err != nil {
+				return err
+			}
 			parsed, err := parser.Parse(cmd.Context(), args)
 			if err != nil {
 				return err
@@ -217,6 +234,25 @@ func newOperationCommand(use, subCommand, short string) *cobra.Command {
 		func(_ *flags.ParsedConfig) bool { return !hasSelectionFlags(cmd) },
 	))
 	parser = flags.NewStandardParser(options...)
+	specs, usage := operationPositionalArgs(cmd, use, subCommand)
+	parser.SetPositionalArgs(specs, validateOperationArgs, usage)
+	parser.RegisterFlags(cmd)
+	if skipHooksVerbs[subCommand] {
+		// Bind the parsed --skip-hooks (and ATMOS_SKIP_HOOKS) into viper, where
+		// pkg/hooks resolves it for the executor's before/after hooks.
+		if err := parser.BindToViper(viper.GetViper()); err != nil {
+			panic(err)
+		}
+	}
+	cmd.ValidArgsFunction = componentArgCompletion
+
+	return cmd
+}
+
+// operationPositionalArgs builds the positional-argument specs for an operation
+// command: the component, plus `output`'s optional Output key (which also
+// widens cmd.Use so the help shows it).
+func operationPositionalArgs(cmd *cobra.Command, use, subCommand string) ([]*flags.PositionalArgSpec, string) {
 	argsBuilder := flags.NewPositionalArgsBuilder()
 	argsBuilder.AddArg(&flags.PositionalArgSpec{
 		Name:           "component",
@@ -226,12 +262,17 @@ func newOperationCommand(use, subCommand, short string) *cobra.Command {
 		CompletionFunc: componentArgCompletion,
 		PromptTitle:    "Choose an aws/cloudformation component",
 	})
+	if subCommand == opOutput {
+		cmd.Use = use + " [component] [key]"
+		argsBuilder.AddArg(&flags.PositionalArgSpec{
+			Name:        outputKeyFlag,
+			Description: "Output key to print on its own",
+			Required:    false,
+			TargetField: "Key",
+		})
+	}
 	specs, _, usage := argsBuilder.Build()
-	parser.SetPositionalArgs(specs, validateOperationArgs, usage)
-	parser.RegisterFlags(cmd)
-	cmd.ValidArgsFunction = componentArgCompletion
-
-	return cmd
+	return specs, usage
 }
 
 // operationFlagOptions returns the standard-parser options for an
@@ -265,7 +306,32 @@ func operationFlagOptions(use, subCommand string) []flags.Option {
 		flags.WithViperKey(flagLabels, "aws.cloudformation.labels"),
 	}
 	options = append(options, operationSpecificFlagOptions(use, subCommand)...)
+	if skipHooksVerbs[subCommand] {
+		options = append(options, skipHooksFlagOptions()...)
+	}
 	return options
+}
+
+// skipHooksVerbs are the verbs that fire lifecycle hooks (before/after
+// diff/apply/delete/drift events) and therefore accept --skip-hooks.
+var skipHooksVerbs = map[string]bool{
+	opDiff:           true,
+	subCommandApply:  true,
+	subCommandDelete: true,
+	"drift-detect":   true,
+	"drift-describe": true,
+}
+
+// skipHooksFlagOptions registers --skip-hooks with the same semantics as
+// `atmos terraform` (see cmd/terraform/flags.go): --skip-hooks with no value
+// skips every hook for this invocation, --skip-hooks=a,b skips only the named
+// hooks. ATMOS_SKIP_HOOKS is the equivalent environment variable.
+func skipHooksFlagOptions() []flags.Option {
+	return []flags.Option{
+		flags.WithStringFlag(flagSkipHooks, "", "", "Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --skip-hooks=name1,name2 to skip specific hooks by name."),
+		flags.WithNoOptDefVal(flagSkipHooks, "*"),
+		flags.WithEnvVars(flagSkipHooks, "ATMOS_SKIP_HOOKS"),
+	}
 }
 
 // operationSpecificFlagOptions returns the flags specific to one operation,
@@ -366,8 +432,8 @@ func validateIncludeDependents(cmd *cobra.Command) error {
 }
 
 // validateFlagCombinations rejects invalid flag combinations that aren't the
-// --all/--affected mutual-exclusion check (kept separate in validateOperationArgs
-// since it needs the already-parsed all/affected values).
+// --all/--affected mutual-exclusion check (kept in validateFlagSelection since
+// it reads the all/affected values).
 func validateFlagCombinations(cmd *cobra.Command) error {
 	if err := validateLogsFollowChart(cmd); err != nil {
 		return err
@@ -375,27 +441,39 @@ func validateFlagCombinations(cmd *cobra.Command) error {
 	return validateIncludeDependents(cmd)
 }
 
-func validateOperationArgs(cmd *cobra.Command, args []string) error {
+// validateFlagSelection rejects invalid flag combinations and malformed
+// --labels before any parsing or prompting. Combination errors carry the
+// "invalid flag combination" headline and stay on one line.
+func validateFlagSelection(cmd *cobra.Command) error {
 	all, _ := cmd.Flags().GetBool(flagAll)
 	affected, _ := cmd.Flags().GetBool(flagAffected)
 	if all && affected {
-		return errUtils.ErrAwsCloudFormationFlagsMutuallyExclusive
+		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationInvalidFlagCombination, errUtils.ErrAwsCloudFormationFlagsMutuallyExclusive)
 	}
 	if err := validateFlagCombinations(cmd); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationInvalidFlagCombination, err)
 	}
 
-	tagsFlag, _ := cmd.Flags().GetStringSlice(flagTags)
 	labelsFlag, _ := cmd.Flags().GetStringSlice(flagLabels)
 	if _, err := tags.ParseLabelsFlag(labelsFlag); err != nil {
 		return err
 	}
-	hasTagsOrLabels := len(tagsFlag) > 0 || len(labelsFlag) > 0
+	return nil
+}
 
-	if all || affected || hasTagsOrLabels {
+// validateOperationArgs validates the positional arguments against the
+// selection flags. Only output/outputs accepts an optional second positional
+// argument (the Output key to print); every other verb takes the component
+// alone.
+func validateOperationArgs(cmd *cobra.Command, args []string) error {
+	if hasSelectionFlags(cmd) {
 		return validateSelectionFlags(args)
 	}
-	if len(args) != 1 {
+	maxArgs := 1
+	if cmd.Name() == opOutput {
+		maxArgs = 2
+	}
+	if len(args) < 1 || len(args) > maxArgs {
 		return errUtils.ErrAwsCloudFormationComponentArgRequired
 	}
 	return nil
@@ -451,8 +529,19 @@ func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 		SubCommand:          subCommand,
 		ConfigAndStacksInfo: info,
 		Args:                args,
-		Flags:               getOperationFlags(cmd),
+		Flags:               operationFlags(cmd, subCommand, args),
 	})
+}
+
+// operationFlags returns the typed operation options for the provider, plus
+// `output`'s optional second positional argument (the single Output key to
+// print) under the "key" flag.
+func operationFlags(cmd *cobra.Command, subCommand string, args []string) map[string]any {
+	result := getOperationFlags(cmd)
+	if subCommand == opOutput && len(args) > 1 {
+		result[outputKeyFlag] = args[1]
+	}
+	return result
 }
 
 // getOperationFlags preserves typed operation options when dispatching Cobra commands to the component

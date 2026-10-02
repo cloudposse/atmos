@@ -27,16 +27,54 @@ const maxNestedStackDepth = 10
 // stackNode is one stack in the nested-stack tree: its own name plus every
 // child (nested) stack discovered under it.
 type stackNode struct {
+	// StackName is the identifier used for API calls: the stack name for the root, and the
+	// nested stack's ARN for a child (that is how CloudFormation reports its physical ID).
 	StackName string
+	// LogicalID is the nested stack's logical resource ID in its parent. Empty for the root.
+	LogicalID string
 	Children  []*stackNode
+}
+
+// label is the human-readable name of the node: the stack name for the root, and the logical
+// resource ID with the nested stack's name for a child. The ARN stays out of the display; it is
+// only the API identifier.
+func (n *stackNode) label() string {
+	name := stackNameFromID(n.StackName)
+	if n.LogicalID == "" || n.LogicalID == name {
+		return name
+	}
+	return fmt.Sprintf("%s (%s)", n.LogicalID, name)
+}
+
+// stackNameFromID returns the stack name from a stack ARN
+// (arn:aws:cloudformation:<region>:<account>:stack/<name>/<guid>), or id unchanged when it is
+// already a bare name.
+func stackNameFromID(id string) string {
+	if !strings.HasPrefix(id, "arn:") {
+		return id
+	}
+	_, resource, found := strings.Cut(id, ":stack/")
+	if !found {
+		return id
+	}
+	name, _, _ := strings.Cut(resource, "/")
+	if name == "" {
+		return id
+	}
+	return name
 }
 
 // buildStackTree walks a stack's resources, recursing into every nested stack
 // (AWS::CloudFormation::Stack resources) up to maxNestedStackDepth.
 func buildStackTree(ctx context.Context, client CloudFormationClient, stackName string, depth int) (*stackNode, error) {
+	return buildStackSubtree(ctx, client, stackName, "", depth)
+}
+
+// buildStackSubtree is buildStackTree for one node, recording the node's logical ID in its parent.
+func buildStackSubtree(ctx context.Context, client CloudFormationClient, stackName, logicalID string, depth int) (*stackNode, error) {
 	defer perf.Track(nil, "cloudformation.buildStackTree")()
 
-	node := &stackNode{StackName: stackName}
+	node := &stackNode{StackName: stackName, LogicalID: logicalID}
 	if depth >= maxNestedStackDepth {
 		return node, nil
 	}
@@ -56,7 +94,7 @@ func buildStackTree(ctx context.Context, client CloudFormationClient, stackName 
 			// Nested stack not yet created (still IN_PROGRESS) — nothing to recurse into yet.
 			continue
 		}
-		child, err := buildStackTree(ctx, client, childID, depth+1)
+		child, err := buildStackSubtree(ctx, client, childID, stringValue(r.LogicalResourceId), depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -136,7 +174,7 @@ func flattenStackNames(node *stackNode) []string {
 
 // renderStackTree writes an indented tree of a stack and its nested stacks.
 func renderStackTree(node *stackNode, prefix string) {
-	_ = data.Writeln(prefix + node.StackName)
+	_ = data.Writeln(prefix + node.label())
 	renderStackTreeChildren(node.Children, prefix)
 }
 
@@ -153,7 +191,7 @@ func renderStackTreeChildren(children []*stackNode, prefix string) {
 			branch = "└─ "
 			nextPrefix = prefix + "   "
 		}
-		_ = data.Writeln(prefix + branch + child.StackName)
+		_ = data.Writeln(prefix + branch + child.label())
 		renderStackTreeChildren(child.Children, nextPrefix)
 	}
 }
@@ -314,7 +352,10 @@ func refreshFollowedStacks(ctx context.Context, client CloudFormationClient, roo
 
 // renderEventChart groups events by stack and logical resource ID and prints each
 // resource's status transitions on one line — a compact per-resource timeline
-// rather than a flat chronological event stream.
+// rather than a flat chronological event stream. Rows are labeled with the stack
+// name and logical ID; a stack ARN appears only when two different stacks share a
+// name (for example a deleted and re-created stack), where the name alone would
+// merge their rows.
 func renderEventChart(events []cfntypes.StackEvent) {
 	type resourceKey struct {
 		stackID   string
@@ -322,6 +363,7 @@ func renderEventChart(events []cfntypes.StackEvent) {
 	}
 	order := []resourceKey{}
 	byResource := map[resourceKey][]string{}
+	stackIDsByName := map[string]map[string]bool{}
 	for i := range events {
 		e := &events[i]
 		key := resourceKey{stackID: stringValue(e.StackId), logicalID: stringValue(e.LogicalResourceId)}
@@ -329,14 +371,36 @@ func renderEventChart(events []cfntypes.StackEvent) {
 			order = append(order, key)
 		}
 		byResource[key] = append(byResource[key], string(e.ResourceStatus))
+		name := chartStackName(e)
+		if stackIDsByName[name] == nil {
+			stackIDsByName[name] = map[string]bool{}
+		}
+		stackIDsByName[name][key.stackID] = true
+	}
+	names := map[string]string{}
+	for i := range events {
+		names[stringValue(events[i].StackId)] = chartStackName(&events[i])
 	}
 	for _, key := range order {
 		label := key.logicalID
 		if key.stackID != "" {
-			label = key.stackID + "/" + label
+			stack := names[key.stackID]
+			if len(stackIDsByName[stack]) > 1 {
+				stack = key.stackID
+			}
+			label = stack + "/" + label
 		}
 		_ = data.Writeln(fmt.Sprintf("%-30s %s", label, strings.Join(byResource[key], " -> ")))
 	}
+}
+
+// chartStackName is the display name of an event's stack: the event's StackName, falling back to
+// the name parsed from its StackId.
+func chartStackName(event *cfntypes.StackEvent) string {
+	if name := stringValue(event.StackName); name != "" {
+		return name
+	}
+	return stackNameFromID(stringValue(event.StackId))
 }
 
 // runWatch attaches to a stack's in-progress (or already-terminal) operation

@@ -2,12 +2,14 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -62,6 +64,41 @@ func TestComponentFunc_CloudFormationBranch_OutputsError(t *testing.T) {
 	_, err := componentFunc(&atmosConfig, nil, "no-stack-name", "test")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "atmos.Component")
+}
+
+// atmos.Component(...).outputs shares the outputs getter, so a target stack
+// that is not deployed must fail there too rather than yield an empty map.
+func TestComponentFunc_CloudFormationBranch_NotDeployedStackFails(t *testing.T) {
+	clearComponentFuncSyncMap(t)
+	atmosConfig := setupAwsCloudFormationOutputFixture(t)
+
+	ctrl := gomock.NewController(t)
+	mockGetter := NewMockCloudFormationOutputsGetter(ctrl)
+	notDeployed := fmt.Errorf("%w: %q has status %s", errUtils.ErrAwsCloudFormationStackNotDeployed, "test-vpc", "REVIEW_IN_PROGRESS")
+	mockGetter.EXPECT().GetOutputs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, notDeployed)
+	stubCloudFormationOutputsGetter(t, mockGetter)
+
+	_, err := componentFunc(&atmosConfig, nil, "vpc", "test")
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackNotDeployed)
+}
+
+// A missing key is not an error for atmos.Component: the outputs map is
+// returned as-is and Go templates handle absent keys themselves.
+func TestComponentFunc_CloudFormationBranch_MissingKeyStillReturnsOutputs(t *testing.T) {
+	clearComponentFuncSyncMap(t)
+	atmosConfig := setupAwsCloudFormationOutputFixture(t)
+
+	ctrl := gomock.NewController(t)
+	mockGetter := NewMockCloudFormationOutputsGetter(ctrl)
+	mockGetter.EXPECT().GetOutputs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(map[string]any{"VpcId": "vpc-123"}, nil)
+	stubCloudFormationOutputsGetter(t, mockGetter)
+
+	result, err := componentFunc(&atmosConfig, nil, "vpc", "test")
+	require.NoError(t, err)
+	outputs, ok := result.(map[string]any)[cfg.OutputsSectionName].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, map[string]any{"VpcId": "vpc-123"}, outputs)
 }
 
 // componentFunc's aws/cloudformation branch must forward the resolved

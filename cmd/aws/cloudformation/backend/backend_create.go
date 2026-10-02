@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -44,6 +45,7 @@ var createCmd = &cobra.Command{
 			autoApprove = v.GetBool(flagAutoApprove)
 		}
 		return executeCreateOrUpdate(ctx, createOrUpdateArgs{
+			Verb:        verbCreate,
 			Component:   result.Component,
 			Stack:       stack,
 			Identity:    identity,
@@ -88,6 +90,8 @@ func init() {
 // createOrUpdateArgs bundles executeCreateOrUpdate's inputs to stay under this
 // repo's 5-argument function limit.
 type createOrUpdateArgs struct {
+	// Verb is the invoking subcommand (verbCreate or verbUpdate); it only shapes messages.
+	Verb        string
 	Component   string
 	Stack       string
 	Identity    string
@@ -105,15 +109,20 @@ type createOrUpdateArgs struct {
 // mutating verb in this feature (apply, delete, changeset execute, stackset
 // create/update/delete) already does.
 func executeCreateOrUpdate(ctx context.Context, args createOrUpdateArgs) error {
-	if args.Stack == "" {
-		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-			WithExplanation("--stack flag is required").
-			WithHint("Specify a stack with --stack or -s flag").
-			Err()
+	verb := args.Verb
+	if verb == "" {
+		verb = verbCreate
+	}
+	if err := requireComponentAndStack(verb, args.Component, args.Stack); err != nil {
+		return err
 	}
 
 	if args.DryRun {
-		return nil
+		action := "create"
+		if verb == verbUpdate {
+			action = "update (creating it if missing)"
+		}
+		return executeDryRun(ctx, &dryRunRequest{Verb: verb, Action: action, Component: args.Component, Stack: args.Stack, Target: args.Target})
 	}
 
 	atmosConfig, info, err := configInit.InitConfigAndAuth(args.Component, args.Stack, args.Identity)
@@ -161,6 +170,12 @@ func confirmExistingBackendOverwrite(ctx context.Context, params *CreateBackendP
 		fmt.Sprintf("Bucket for %q already exists — applying secure defaults will overwrite its existing encryption, versioning, public-access, and tags. Continue?", params.Component),
 		false,
 	)
+	if errors.Is(err, errUtils.ErrInteractiveNotAvailable) {
+		return errUtils.Build(errUtils.ErrInteractiveNotAvailable).
+			WithExplanationf("The bucket for %q already exists, and re-applying secure defaults overwrites its encryption, versioning, public-access settings and tags, which requires confirmation. Stdin is not a terminal.", params.Component).
+			WithHint("Pass --auto-approve to explicitly authorize this in a non-interactive session.").
+			Err()
+	}
 	if err != nil {
 		return err
 	}
