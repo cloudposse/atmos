@@ -145,8 +145,10 @@ below, triggered by `pull_request`) gets `repo:ORG/REPO:ref:refs/heads/main` or
 `repo:ORG/REPO:pull_request`; a job that *references* an Environment gets
 `repo:ORG/REPO:environment:prod` instead -- these are alternatives, not both-at-once. Repositories
 created after July 15, 2026 default to an immutable subject format that embeds owner/repo IDs
-(`repo:ORG@ORG-ID/REPO@REPO-ID:...`). Match the trust policy to the subject the job actually emits,
-or the OIDC exchange is denied.
+(`repo:ORG@ORG-ID/REPO@REPO-ID:...`). Merge-queue runs (the `merge_group` trigger, also in the
+PR-plan example) are ref-based on a temporary branch, so without an Environment they need a pattern
+like `repo:ORG/REPO:ref:refs/heads/gh-readonly-queue/main/*` (`StringLike` in AWS). Match the trust
+policy to the subject the job actually emits, or the OIDC exchange is denied.
 
 `azure/login` and `google-github-actions/auth` follow the identical shape -- an OIDC action becomes
 an `auth.providers`/`auth.identities` pair with the corresponding provider `kind`.
