@@ -263,6 +263,67 @@ option list (no constraint, any value accepted) at runtime instead of erroring; 
 looks back only one hop -- it does not chase labels through a chain of dynamic references, nor
 through the template-expression form, both of which fall back to `label == value`.
 
+## Loading External Data with `!include` and Other YAML Functions
+
+The [`!include`](/functions/yaml/include) YAML function, already available in stack manifests, also
+works in `scaffold.yaml` -- resolving before schema validation, so it can be used anywhere a literal
+YAML value is otherwise accepted: `options:`, a computed field's `value:`, and a `matrix:` axis.
+
+A YQ-filtered `!include` shapes external data into `{label, value}` options directly, so a list
+doesn't have to be duplicated across fields that need the same choices:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: license
+      type: select
+      options: !include "./lib/licenses.yaml '. | to_entries | map({\"label\": .value.full_name, \"value\": .key})'"
+```
+
+An unfiltered `!include` on a `type: computed` field's `value:` lands the raw included structure at
+`.Config.<name>` instead -- see [Computed Fields](#computed-fields) above -- useful for a small
+reference table read as data rather than a list of choices:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: license_lookup
+      type: computed
+      value: !include ./lib/licenses.yaml
+```
+
+`lib/licenses.yaml` here is a normal template file, resolved relative to `scaffold.yaml`'s own
+directory. A local file that exists solely to be included this way is automatically excluded from
+generation output -- it's never copied into the generated project, the same way `scaffold.yaml`
+itself never is. `!include` also accepts everything it does in a stack manifest: a remote `git::`,
+`oci://`, or `https://` source works the same way, with no such exclusion needed since a remote
+source is never part of the local template directory to begin with.
+
+Included content is not processed transitively: a literal `!include` tag written inside an
+included file's own content is never resolved, and stays as inert, unprocessed text. This matches
+stack manifests, which share the same underlying `!include` implementation and the same
+limitation.
+
+Besides `!include`/[`!include.raw`](/functions/yaml/include.raw), `scaffold.yaml` resolves a fixed
+set of other YAML functions that need no stack, component, or backend context --
+[`!env`](/functions/yaml/env), [`!random`](/functions/yaml/random), [`!cwd`](/functions/yaml/cwd),
+the `!git.*`/[`!repo-root`](/functions/yaml/repo-root) family
+([`!git.root`](/functions/yaml/git.root), [`!git.sha`](/functions/yaml/git.sha),
+[`!git.ref`](/functions/yaml/git.ref), [`!git.branch`](/functions/yaml/git.branch),
+[`!git.repository`](/functions/yaml/git.repository), [`!git.owner`](/functions/yaml/git.owner),
+[`!git.name`](/functions/yaml/git.name), [`!git.host`](/functions/yaml/git.host),
+[`!git.url`](/functions/yaml/git.url)), and [`!literal`](/functions/yaml/literal) (useful for a
+field value that looks like a Go template expression but should be taken as-is). Any other YAML
+function -- one that needs real stack, component, or backend context Atmos doesn't have while
+loading `scaffold.yaml`, such as `!terraform.state`, `!store`, or `!secret` -- is rejected with a
+clear error naming the tag, rather than silently left unresolved.
+
+[`!exec`](/functions/yaml/exec) is deliberately **not** supported, even though it needs no stack
+context: a template's `scaffold.yaml` is resolved for every template configured in `atmos.yaml`
+just to populate `atmos scaffold list` and the interactive template picker, not only the one a
+user actually selects or generates. Allowing shell execution here would let any configured
+template -- including a shared or vendored one -- run arbitrary code merely by being listed.
+
 ## Dynamic File Generation
 
 `matrix:` expands a single discovered file into one generated file per resolved combination — the

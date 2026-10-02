@@ -1248,7 +1248,7 @@ func validateScaffoldFile(scaffoldPath string) error {
 	// the manifest envelope: apiVersion, kind, metadata) and the Go-level
 	// backstop checks generate itself relies on (field definitions, matrix
 	// axis values).
-	if _, err := config.LoadScaffoldConfigFromContent(string(scaffoldData)); err != nil {
+	if _, err := config.LoadScaffoldConfigFromContent(string(scaffoldData), config.WithSourceDir(filepath.Dir(scaffoldPath))); err != nil {
 		return errUtils.Build(errUtils.ErrScaffoldValidation).
 			WithCause(err).
 			WithExplanationf("Invalid scaffold manifest: `%s`", scaffoldPath).
