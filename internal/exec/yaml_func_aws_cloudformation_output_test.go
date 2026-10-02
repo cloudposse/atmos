@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -90,22 +91,61 @@ func TestProcessTagAwsCloudFormationOutputWithContext_Success(t *testing.T) {
 	assert.Equal(t, "vpc-123", result)
 }
 
-// A requested output key absent from the deployed stack's Outputs must
-// return (nil, nil) — not an error — matching !terraform.output's own
-// "output not found" contract.
+// A requested output key absent from the deployed stack's Outputs must be a
+// sentinel error that names the key and lists the available ones. Resolving it
+// to null made a consumer deploy an empty value without any warning.
 func TestProcessTagAwsCloudFormationOutputWithContext_OutputKeyNotFound(t *testing.T) {
 	atmosConfig := setupAwsCloudFormationOutputFixture(t)
 
 	ctrl := gomock.NewController(t)
 	mockGetter := NewMockCloudFormationOutputsGetter(ctrl)
 	mockGetter.EXPECT().GetOutputs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(map[string]any{"OtherKey": "other-value"}, nil)
+		Return(map[string]any{"OtherKey": "other-value", "VpcId": "vpc-123"}, nil)
 	stubCloudFormationOutputsGetter(t, mockGetter)
 
 	result, err := processTagAwsCloudFormationOutputWithContext(
-		&atmosConfig, "!aws.cloudformation.output vpc test MissingKey", "test", nil, nil,
+		&atmosConfig, "!aws.cloudformation.output vpc test Valeu", "test", nil, nil,
+	)
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOutputNotFound)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "Valeu")
+	assert.Contains(t, err.Error(), "OtherKey, VpcId")
+}
+
+// A key that exists with a null value is a legitimate result, not a missing
+// key.
+func TestProcessTagAwsCloudFormationOutputWithContext_NullOutputValueIsNotAnError(t *testing.T) {
+	atmosConfig := setupAwsCloudFormationOutputFixture(t)
+
+	ctrl := gomock.NewController(t)
+	mockGetter := NewMockCloudFormationOutputsGetter(ctrl)
+	mockGetter.EXPECT().GetOutputs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(map[string]any{"Empty": nil}, nil)
+	stubCloudFormationOutputsGetter(t, mockGetter)
+
+	result, err := processTagAwsCloudFormationOutputWithContext(
+		&atmosConfig, "!aws.cloudformation.output vpc test Empty", "test", nil, nil,
 	)
 	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+// A target stack that is not deployed (for example REVIEW_IN_PROGRESS from a
+// preview changeset) must fail the function instead of resolving to an empty
+// value that apply would send to the consumer.
+func TestProcessTagAwsCloudFormationOutputWithContext_NotDeployedStackFails(t *testing.T) {
+	atmosConfig := setupAwsCloudFormationOutputFixture(t)
+
+	ctrl := gomock.NewController(t)
+	mockGetter := NewMockCloudFormationOutputsGetter(ctrl)
+	notDeployed := fmt.Errorf("%w: %q has status %s", errUtils.ErrAwsCloudFormationStackNotDeployed, "test-vpc", "REVIEW_IN_PROGRESS")
+	mockGetter.EXPECT().GetOutputs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, notDeployed)
+	stubCloudFormationOutputsGetter(t, mockGetter)
+
+	result, err := processTagAwsCloudFormationOutputWithContext(
+		&atmosConfig, "!aws.cloudformation.output vpc test VpcId", "test", nil, nil,
+	)
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackNotDeployed)
 	assert.Nil(t, result)
 }
 

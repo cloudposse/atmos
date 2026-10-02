@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // listChangeSets returns every changeset for a stack, paginating through
@@ -61,7 +62,9 @@ func describeNamedChangeSet(ctx context.Context, client CloudFormationClient, st
 	})
 	if err != nil {
 		if isStackNotFoundError(err) {
-			return nil, fmt.Errorf("%w: %q on stack %q", errUtils.ErrAwsCloudFormationChangeSetNotFound, changeSetName, stackName)
+			return nil, errUtils.Build(fmt.Errorf("%w: %q on stack %q", errUtils.ErrAwsCloudFormationChangeSetNotFound, changeSetName, stackName)).
+				WithHint("List the stack's changesets with `atmos aws cloudformation changeset list <component> -s <stack>` and pass one of those names to --changeset-name.").
+				Err()
 		}
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
 	}
@@ -79,14 +82,17 @@ func describeNamedChangeSet(ctx context.Context, client CloudFormationClient, st
 
 // runChangesetCreate creates a changeset and leaves it in place for later manual
 // review/execution — the explicit-control complement to diff/plan's implicit,
-// preview-only changeset (which is also left in place, but framed as a preview
-// rather than a named, reusable artifact).
+// preview-only changeset (which is deleted again once rendered). A changeset
+// that would change nothing is the exception: CloudFormation leaves it FAILED
+// ("didn't contain changes"), so there is nothing worth keeping and it is
+// deleted. A failed computation is cleaned up the same way.
 func runChangesetCreate(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 	if err := prepareTemplateForAPI(octx, spec, summary); err != nil {
 		return summary, err
 	}
 	result, err := createChangeSet(octx.Ctx, client, spec)
 	if err != nil {
+		discardChangeSet(octx.Ctx, client, spec.StackName, result)
 		return summary, err
 	}
 	summary["changeset_id"] = result.ChangeSetID
@@ -96,9 +102,14 @@ func runChangesetCreate(octx *opContext, client CloudFormationClient, spec *stac
 	if err := renderDiffSummary(spec.StackName, result); err != nil {
 		return summary, err
 	}
-	if !result.NoOp {
-		_ = data.Writeln(fmt.Sprintf("changeset: %s", result.ChangeSetName))
+	if result.NoOp {
+		discardChangeSet(octx.Ctx, client, spec.StackName, result)
+		summary["changeset_kept"] = false
+		ui.Info("No changes; changeset not kept")
+		return summary, nil
 	}
+	summary["changeset_kept"] = true
+	_ = data.Writeln(fmt.Sprintf("changeset: %s", result.ChangeSetName))
 	return summary, nil
 }
 
@@ -166,7 +177,13 @@ func runChangesetList(ctx context.Context, client CloudFormationClient, spec *st
 }
 
 // runChangesetDelete deletes a named changeset without touching the stack.
+// DeleteChangeSet itself succeeds for a name that does not exist, so the
+// changeset is looked up first: deleting something that is not there is
+// reported as not found instead of a false "deleted".
 func runChangesetDelete(ctx context.Context, client CloudFormationClient, spec *stackSpec, changeSetName string, summary map[string]any) (map[string]any, error) {
+	if _, err := describeNamedChangeSet(ctx, client, spec.StackName, changeSetName); err != nil {
+		return summary, err
+	}
 	if err := deleteChangeSet(ctx, client, spec.StackName, changeSetName); err != nil {
 		return summary, err
 	}

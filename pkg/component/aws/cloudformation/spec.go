@@ -3,6 +3,7 @@ package cloudformation
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 
@@ -14,6 +15,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/ui"
+)
+
+// Field names of one `parameters:` list entry (the AWS CLI / Rain form).
+const (
+	paramKeyField         = "ParameterKey"
+	paramValueField       = "ParameterValue"
+	paramUsePreviousField = "UsePreviousValue"
 )
 
 // stackSpec is the fully-resolved, SDK-ready shape of an aws/cloudformation component,
@@ -67,13 +75,9 @@ func buildStackSpec(componentSection map[string]any) (*stackSpec, error) {
 		TemplateBody: templateBody,
 	}
 
-	params, err := normalizeParameters(componentSection[cfg.ParametersSectionName])
-	if err != nil {
+	if err := normalizeParametersAndCapabilities(spec, componentSection); err != nil {
 		return nil, err
 	}
-	spec.Parameters = params
-
-	spec.Capabilities = normalizeCapabilities(componentSection[cfg.CapabilitiesSectionName])
 
 	spec.Tags = normalizeTags(componentSection[cfg.TagsSectionName])
 
@@ -93,6 +97,24 @@ func buildStackSpec(componentSection map[string]any) (*stackSpec, error) {
 	}
 
 	return spec, nil
+}
+
+// normalizeParametersAndCapabilities fills the spec's parameters and capabilities,
+// failing on a malformed `parameters:` shape or an unknown capability instead of
+// letting the deploy proceed with defaults or fail late in the AWS API.
+func normalizeParametersAndCapabilities(spec *stackSpec, componentSection map[string]any) error {
+	params, err := normalizeParameters(componentSection[cfg.ParametersSectionName])
+	if err != nil {
+		return err
+	}
+	spec.Parameters = params
+
+	capabilities, err := normalizeCapabilities(componentSection[cfg.CapabilitiesSectionName])
+	if err != nil {
+		return err
+	}
+	spec.Capabilities = capabilities
+	return nil
 }
 
 // resolveTemplateSection reads the component's `template`/`path` keys and
@@ -135,17 +157,34 @@ func isAbstractComponent(componentSection map[string]any) bool {
 	return ok && componentType == "abstract"
 }
 
-// normalizeParameters converts the `parameters:` map to CloudFormation API parameters.
-// Per the Parameter Typing contract: scalars are stringified, and list values are
-// comma-joined to match CloudFormation's List<Type>/CommaDelimitedList wire format
-// (the API accepts only strings). UsePreviousValue is not expressible in config —
-// Atmos config is always the source of truth.
+// normalizeParameters converts the `parameters:` section to CloudFormation API
+// parameters. Two shapes are accepted:
+//
+//   - a map of parameter name to value (the native Atmos form), and
+//   - a list of `{ParameterKey, ParameterValue[, UsePreviousValue]}` entries,
+//     the AWS CLI / Rain form, so existing parameter files (including a JSON
+//     array pulled in with `!include`) keep working unchanged.
+//
+// Any other non-nil value is an error rather than silently deploying the
+// template's defaults. Per the Parameter Typing contract: scalars are
+// stringified, and list values are comma-joined to match CloudFormation's
+// List<Type>/CommaDelimitedList wire format (the API accepts only strings).
 func normalizeParameters(raw any) ([]cfntypes.Parameter, error) {
-	params, ok := raw.(map[string]any)
-	if !ok {
+	switch v := raw.(type) {
+	case nil:
 		return nil, nil
+	case map[string]any:
+		return normalizeParameterMap(v)
+	case []any:
+		return normalizeParameterList(v)
+	default:
+		return nil, fmt.Errorf("%w: 'parameters' must be a map of name to value or a list of {ParameterKey, ParameterValue} entries, got %T", errUtils.ErrInvalidAwsCloudFormationParameters, raw)
 	}
+}
 
+// normalizeParameterMap converts the native `parameters:` map form, sorted by
+// name for deterministic output.
+func normalizeParameterMap(params map[string]any) ([]cfntypes.Parameter, error) {
 	keys := make([]string, 0, len(params))
 	for k := range params {
 		keys = append(keys, k)
@@ -164,6 +203,75 @@ func normalizeParameters(raw any) ([]cfntypes.Parameter, error) {
 		})
 	}
 	return result, nil
+}
+
+// normalizeParameterList converts the AWS CLI / Rain list form, preserving the
+// declared order. Malformed entries are errors that name the entry index.
+func normalizeParameterList(entries []any) ([]cfntypes.Parameter, error) {
+	result := make([]cfntypes.Parameter, 0, len(entries))
+	seen := make(map[string]int, len(entries))
+	for i, entry := range entries {
+		param, err := normalizeParameterEntry(entry)
+		if err != nil {
+			return nil, fmt.Errorf("parameters[%d]: %w", i, err)
+		}
+		key := *param.ParameterKey
+		if first, dup := seen[key]; dup {
+			return nil, fmt.Errorf("parameters[%d]: %w: duplicate ParameterKey %q (first declared at parameters[%d])", i, errUtils.ErrInvalidAwsCloudFormationParameters, key, first)
+		}
+		seen[key] = i
+		result = append(result, param)
+	}
+	return result, nil
+}
+
+// normalizeParameterEntry converts one `{ParameterKey, ParameterValue,
+// UsePreviousValue}` list entry. UsePreviousValue keeps the value the stack
+// already has, so it excludes a ParameterValue.
+func normalizeParameterEntry(entry any) (cfntypes.Parameter, error) {
+	fields, ok := entry.(map[string]any)
+	if !ok {
+		return cfntypes.Parameter{}, fmt.Errorf("%w: each entry must be a map with ParameterKey and ParameterValue, got %T", errUtils.ErrInvalidAwsCloudFormationParameters, entry)
+	}
+	name, usePrevious, err := parseParameterEntryFields(fields)
+	if err != nil {
+		return cfntypes.Parameter{}, err
+	}
+	if usePrevious {
+		return cfntypes.Parameter{ParameterKey: awsString(name), UsePreviousValue: &usePrevious}, nil
+	}
+
+	value, err := stringifyParameterValue(fields[paramValueField])
+	if err != nil {
+		return cfntypes.Parameter{}, fmt.Errorf("parameter %q: %w", name, err)
+	}
+	return cfntypes.Parameter{ParameterKey: awsString(name), ParameterValue: awsString(value)}, nil
+}
+
+// parseParameterEntryFields validates one list entry's field names and types
+// and returns its parameter name and UsePreviousValue flag.
+func parseParameterEntryFields(fields map[string]any) (name string, usePrevious bool, err error) {
+	for field := range fields {
+		if field != paramKeyField && field != paramValueField && field != paramUsePreviousField {
+			return "", false, fmt.Errorf("%w: unknown field %q (expected %s, %s, or %s)", errUtils.ErrInvalidAwsCloudFormationParameters, field, paramKeyField, paramValueField, paramUsePreviousField)
+		}
+	}
+
+	name, _ = fields[paramKeyField].(string)
+	if name == "" {
+		return "", false, fmt.Errorf("%w: %s must be a non-empty string", errUtils.ErrInvalidAwsCloudFormationParameters, paramKeyField)
+	}
+
+	if rawUse, present := fields[paramUsePreviousField]; present {
+		var ok bool
+		if usePrevious, ok = rawUse.(bool); !ok {
+			return "", false, fmt.Errorf("%w: %s for %q must be a boolean, got %T", errUtils.ErrInvalidAwsCloudFormationParameters, paramUsePreviousField, name, rawUse)
+		}
+	}
+	if _, hasValue := fields[paramValueField]; usePrevious && hasValue {
+		return "", false, fmt.Errorf("%w: %q sets both %s and %s", errUtils.ErrInvalidAwsCloudFormationParameters, name, paramUsePreviousField, paramValueField)
+	}
+	return name, usePrevious, nil
 }
 
 // stringifyParameterValue normalizes a single parameter value to CloudFormation's
@@ -193,17 +301,32 @@ func stringifyParameterValue(value any) (string, error) {
 }
 
 // normalizeCapabilities converts `capabilities:` (a list of strings) to CloudFormation
-// capability enum values.
-func normalizeCapabilities(raw any) []cfntypes.Capability {
+// capability enum values, rejecting anything the SDK does not define so a typo
+// fails locally with the valid set instead of as a late AWS API error.
+func normalizeCapabilities(raw any) ([]cfntypes.Capability, error) {
 	items := normalizeStringSlice(raw)
 	if len(items) == 0 {
-		return nil
+		return nil, nil
 	}
+	valid := cfntypes.Capability("").Values()
 	result := make([]cfntypes.Capability, 0, len(items))
 	for _, item := range items {
-		result = append(result, cfntypes.Capability(item))
+		capability := cfntypes.Capability(item)
+		if !slices.Contains(valid, capability) {
+			return nil, fmt.Errorf("%w: %q is not a valid capability (valid: %s)", errUtils.ErrInvalidAwsCloudFormationCapabilities, item, joinCapabilities(valid))
+		}
+		result = append(result, capability)
 	}
-	return result
+	return result, nil
+}
+
+// joinCapabilities renders capability enum values as a comma-separated list.
+func joinCapabilities(values []cfntypes.Capability) string {
+	names := make([]string, 0, len(values))
+	for _, v := range values {
+		names = append(names, string(v))
+	}
+	return strings.Join(names, ", ")
 }
 
 // normalizeTags converts `tags:` (a map[string]string-ish) to CloudFormation tags,

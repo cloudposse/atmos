@@ -1251,6 +1251,19 @@ type CloudFormationCIResult struct {
 	ResourceChanges int
 	DriftStatus     string
 	DriftedCount    int
+	// FailOnDrift records that `drift detect` ran with --fail-on-drift, so the
+	// summary's reproduce command can include it.
+	FailOnDrift bool
+	// NoOp is true when the changeset reported no changes (diff/apply).
+	NoOp bool
+	// HasChanges is true when a diff/apply changeset contains changes. It is
+	// false when the changeset was a no-op or the operation produced none.
+	HasChanges bool
+	// StackStatus is the final stack status the operation observed (delete), when known.
+	StackStatus string
+	// Outputs holds the deployed stack's Outputs after apply, already masked for NoEcho
+	// dependencies (the same values the `output` verb presents).
+	Outputs map[string]string
 }
 
 // CIConfig contains CI/CD integration configuration.

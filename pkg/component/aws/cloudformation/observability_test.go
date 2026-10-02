@@ -678,6 +678,8 @@ func TestRunWatch_Success(t *testing.T) {
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
 		}, nil),
+		// Final read for the stack-level event after the terminal status.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 	)
 
 	summary, err := runWatch(context.Background(), client, "root", map[string]any{})
@@ -703,6 +705,8 @@ func TestRunWatch_FailedStatus(t *testing.T) {
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateRollbackComplete}},
 		}, nil),
+		// Final read for the stack-level event after the terminal status.
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 	)
 
 	_, err := runWatch(context.Background(), client, "root", map[string]any{})

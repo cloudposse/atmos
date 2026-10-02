@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 )
 
@@ -94,11 +93,8 @@ type describeRequest struct {
 }
 
 func executeDescribe(ctx context.Context, req *describeRequest) error {
-	if req.Stack == "" {
-		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-			WithExplanation("--stack flag is required").
-			WithHint("Specify a stack with --stack or -s flag").
-			Err()
+	if err := requireComponentAndStack("describe", req.Component, req.Stack); err != nil {
+		return err
 	}
 
 	atmosConfig, info, err := configInit.InitConfigAndAuth(req.Component, req.Stack, req.Identity)

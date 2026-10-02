@@ -126,8 +126,12 @@ var operationHelpBySubCommand = map[string]operationHelpEntry{
 	"output": {
 		long: "Show the deployed stack's Outputs (DescribeStacks), formatted for\n" +
 			"consumption by shells, other tools, or other Atmos components. apply\n" +
-			"renders this same view automatically at the end of a successful deploy.",
+			"renders this same view automatically at the end of a successful deploy.\n" +
+			"Pass an Output key after the component to print only that value, bare and\n" +
+			"pipeable; --format=json or yaml encodes it instead. A stack that was never\n" +
+			"deployed (for example, one left in REVIEW_IN_PROGRESS by diff) is an error.",
 		example: "  atmos aws cloudformation output vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation output vpc VpcId --stack plat-ue2-dev\n" +
 			"  atmos aws cloudformation output vpc --stack plat-ue2-dev --format=json\n" +
 			"  atmos aws cloudformation output vpc --stack plat-ue2-dev --format=dotenv --flatten --uppercase",
 	},

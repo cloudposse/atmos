@@ -3,6 +3,8 @@ package cloudformation
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -29,13 +31,16 @@ const kindAwsS3 = "aws/s3"
 // packaging the template through a `kind: aws/s3` target first when needed, and
 // delivers to it:
 //   - the implicit/selected `kind: aws/cloudformation` target (the default when
-//     no provision: is declared) deploys directly via the changeset flow.
+//     no provision: is declared) deploys directly via the changeset flow:
+//     changeset, preview, confirmation, execute.
 //   - `kind: aws/s3` selected directly (--target <s3-target-name>) is
-//     publish-only: upload the (optionally packaged) template and stop.
+//     publish-only: upload the (optionally packaged) template, report where it
+//     went, and stop. No stack changes, so no stack-change confirmation.
+//   - `kind: aws/stackset` is rejected with a pointer to the stackset verbs.
 //   - any other kind (e.g. `kind: git`) packages through the aws/s3 target
 //     first, then delivers the packaged reference via the generic target
 //     registry (target.Deliver), the same producer-agnostic path Helm uses for
-//     its own non-cluster deliveries.
+//     its own non-cluster deliveries. It also asks no stack-change question.
 func deliverApply(octx *opContext, client CloudFormationClient, spec *stackSpec) (map[string]any, *changeSetResult, error) {
 	defer perf.Track(octx.AtmosConfig, "cloudformation.deliverApply")()
 
@@ -52,17 +57,31 @@ func deliverApply(octx *opContext, client CloudFormationClient, spec *stackSpec)
 		summary[targetKey] = selected.Kind
 	}
 
+	if selected.Kind == kindAwsStackSet {
+		return summary, nil, stackSetTargetError(selected.Name)
+	}
+
+	// Only a direct stack deploy asks the stack-change question. Fail fast, before
+	// packaging uploads anything or a changeset exists, when it cannot be asked.
+	direct := selected.Kind == cfg.CloudFormationComponentType
+	if direct {
+		if err := requireInteractiveOrAutoApprove(OperationApply, octx.Flags); err != nil {
+			return summary, nil, err
+		}
+	}
+
 	if err := packageIfNeeded(octx, provisionSection, selected, spec, summary); err != nil {
 		return summary, nil, err
 	}
 
-	if selected.Kind == cfg.CloudFormationComponentType {
-		result, err := deployDirect(octx.Ctx, client, spec)
+	if direct {
+		result, err := deployDirect(octx, client, spec)
 		return summary, result, err
 	}
 
 	if selected.Kind == kindAwsS3 {
 		// Publish-only: template uploaded above, no deploy, no further delivery.
+		reportPublished(selected, summary)
 		return summary, nil, nil
 	}
 
@@ -70,46 +89,30 @@ func deliverApply(octx *opContext, client CloudFormationClient, spec *stackSpec)
 	return summary, nil, deliverToExternalTarget(octx, selected, spec, summary)
 }
 
-// packageIfNeeded shares template uploads across apply, diff, validate, and changeset creation.
+// packageIfNeeded packages the template for an apply/deploy. It is the only
+// packaging entry point allowed to provision a missing packaging bucket
+// (provision.backend.enabled: true); preview, validation and changeset creation
+// go through prepareTemplateForAPI, which never creates infrastructure.
 // Inline templates need no upload unless an S3 publish target was selected.
 // A direct-deploy target needs TemplateURL just as much as an external delivery
 // target: CreateChangeSet rejects TemplateBody over 51,200 bytes. Packaging first
 // also prevents embedding an oversized body in a delivered artifact after that
 // same template was already uploaded.
 func packageIfNeeded(octx *opContext, provisionSection map[string]any, selected *target.SelectedTarget, spec *stackSpec, summary map[string]any) error {
-	if !needsPackaging(spec.TemplateBody) && selected.Kind != kindAwsS3 {
-		return nil
-	}
-
-	s3Target, err := resolvePackagingTarget(provisionSection, selected)
-	if err != nil {
-		return err
-	}
-
-	if err := autoProvisionBackendIfEnabled(octx.Ctx, autoProvisionArgs{
-		AtmosConfig:     octx.AtmosConfig,
-		S3Target:        s3Target,
-		ComponentConfig: octx.Info.ComponentSection,
-		AuthContext:     octx.Info.AuthContext,
-		Component:       octx.Info.ComponentFromArg,
-		Stack:           octx.Info.Stack,
-	}); err != nil {
-		return err
-	}
-
-	pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, octx.Info, s3Target, spec.TemplateBody)
-	if err != nil {
-		return err
-	}
-	summary["package_url"] = pkg.URL
-	summary["package_sha256"] = pkg.SHA256
-	spec.TemplateURL = pkg.URL
-	return nil
+	return packageTemplate(octx, &packagingRequest{
+		ProvisionSection: provisionSection,
+		Selected:         selected,
+		Spec:             spec,
+		Summary:          summary,
+		MayProvision:     true,
+	})
 }
 
 // prepareTemplateForAPI packages oversized templates before preview, validation, or changeset creation.
 // It only selects a provision target when an upload is needed; an inline template
 // can be inspected without a deployment destination or packaging configuration.
+// Unlike apply, these read-style verbs never provision the packaging bucket: a
+// missing bucket fails with a hint to run `backend create` or `apply`.
 func prepareTemplateForAPI(octx *opContext, spec *stackSpec, summary map[string]any) error {
 	if spec.TemplateURL != "" || !needsPackaging(spec.TemplateBody) {
 		return nil
@@ -120,21 +123,45 @@ func prepareTemplateForAPI(octx *opContext, spec *stackSpec, summary map[string]
 	if err != nil {
 		return err
 	}
-	return packageIfNeeded(octx, provisionSection, selected, spec, summary)
+	return packageTemplate(octx, &packagingRequest{
+		ProvisionSection: provisionSection,
+		Selected:         selected,
+		Spec:             spec,
+		Summary:          summary,
+		MayProvision:     false,
+	})
 }
 
-// deployDirect executes the direct-deploy path: create (or reuse) a changeset
-// and execute it, streaming live events while the stack converges.
-func deployDirect(ctx context.Context, client CloudFormationClient, spec *stackSpec) (*changeSetResult, error) {
+// deployDirect executes the direct-deploy path. The changeset is created first
+// so the user reviews what will change before anything is approved:
+//
+//	create changeset -> preview -> (no-op: stop) -> confirm -> execute
+//
+// A no-op deletes the FAILED "didn't contain changes" changeset and stops. A
+// declined prompt, or any failure before execution starts, deletes the
+// changeset (and the empty stub stack a first-time CREATE registered). The
+// confirmation is skipped with --auto-approve, which deploy defaults to true.
+func deployDirect(octx *opContext, client CloudFormationClient, spec *stackSpec) (*changeSetResult, error) {
+	ctx := octx.Ctx
 	result, err := createChangeSet(ctx, client, spec)
 	if err != nil {
+		discardChangeSet(ctx, client, spec.StackName, result)
 		return nil, err
 	}
 	if result.NoOp {
+		discardChangeSet(ctx, client, spec.StackName, result)
+		announceNoChanges(spec.StackName)
 		return result, nil
 	}
 
+	renderApplyPreview(spec.StackName, result)
+	if err := confirmApply(octx, spec.StackName); err != nil {
+		discardChangeSet(ctx, client, spec.StackName, result)
+		return nil, err
+	}
+
 	if _, err := prepareStackPolicy(ctx, client, spec, result); err != nil {
+		discardChangeSet(ctx, client, spec.StackName, result)
 		return result, err
 	}
 
@@ -144,6 +171,7 @@ func deployDirect(ctx context.Context, client CloudFormationClient, spec *stackS
 	baseline := preOperationEventBaseline(ctx, client, spec.StackName)
 
 	if err := executeChangeSet(ctx, client, spec, result); err != nil {
+		discardChangeSet(ctx, client, spec.StackName, result)
 		return result, err
 	}
 
@@ -151,6 +179,7 @@ func deployDirect(ctx context.Context, client CloudFormationClient, spec *stackS
 	if err != nil {
 		return result, err
 	}
+	result.StackStatus = status
 	if isFailedStackStatus(status) {
 		return result, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationOperationFailed, spec.StackName, status)
 	}
@@ -184,13 +213,26 @@ func resolvePackagingTarget(provisionSection map[string]any, selected *target.Se
 		if cfgBlock, found := s3Targets[packagingName]; found {
 			return s3ConfigFromTarget(packagingName, cfgBlock)
 		}
-		return nil, fmt.Errorf("%w: packaging target %q not found among aws/s3 targets", errUtils.ErrInvalidAwsCloudFormationSettings, packagingName)
+		return nil, errUtils.Build(fmt.Errorf("%w: packaging target %q not found among aws/s3 targets", errUtils.ErrInvalidAwsCloudFormationSettings, packagingName)).
+			WithExplanationf("The deploy target %q sets `packaging: %s`, but no `kind: aws/s3` provision target has that name.", selected.Name, packagingName).
+			WithHintf("Set `packaging:` to one of the declared `kind: aws/s3` target names: %s.", strings.Join(sortedKeys(s3Targets), ", ")).
+			Err()
 	}
 
 	return nil, errUtils.Build(errUtils.ErrInvalidAwsCloudFormationSettings).
-		WithExplanationf("Multiple `kind: aws/s3` provision targets are declared; packaging is ambiguous.").
-		WithHint("Set `packaging: <target-name>` on the deploy-style target to disambiguate.").
+		WithExplanationf("Multiple `kind: aws/s3` provision targets are declared (%s); packaging is ambiguous.", strings.Join(sortedKeys(s3Targets), ", ")).
+		WithHint("Declare the deploy target explicitly and name its packaging bucket, for example `provision: {default: deploy, targets: {deploy: {kind: aws/cloudformation, packaging: <s3-target-name>}}}`. The implicit default target cannot carry `packaging:`; a target named `default` replaces the implicit one.").
 		Err()
+}
+
+// sortedKeys returns the map's keys in sorted order, for deterministic error text.
+func sortedKeys(m map[string]map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // findS3Targets returns every `kind: aws/s3` entry in provision.targets.
@@ -248,7 +290,7 @@ func s3ConfigFromTargetAllowEmptyRegion(name string, block map[string]any) (*tar
 	}
 	region, _ := block["region"].(string)
 	prefix, _ := block["prefix"].(string)
-	return &targetS3Config{Name: name, Bucket: bucket, Prefix: prefix, Region: region}, nil
+	return &targetS3Config{Name: name, Bucket: bucket, Prefix: normalizeS3Prefix(prefix), Region: region}, nil
 }
 
 // deliverToExternalTarget publishes the packaged template to a non-direct-deploy
@@ -276,13 +318,17 @@ func deliverToExternalTarget(octx *opContext, selected *target.SelectedTarget, s
 	deliverCtx, cancel := context.WithTimeout(octx.Ctx, deliveryTimeout)
 	defer cancel()
 
-	return target.Deliver(deliverCtx, selected.Kind, &target.DeliverInput{
+	if err := target.Deliver(deliverCtx, selected.Kind, &target.DeliverInput{
 		AtmosConfig:  octx.AtmosConfig,
 		TargetName:   selected.Name,
 		TargetConfig: selected.Config,
 		Artifact:     artifact,
 		EnvProvider:  authManagerFor(octx.Info),
-	})
+	}); err != nil {
+		return err
+	}
+	reportDelivered(selected, fileName, summary)
+	return nil
 }
 
 // templateContentForDelivery returns the bytes an external (e.g. git) target

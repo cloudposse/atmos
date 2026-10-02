@@ -41,7 +41,15 @@ type stackPoll struct {
 type eventBaseline struct {
 	seen  map[string]bool
 	valid bool
+	// stackID is the stack's ID as recorded on its pre-operation events. After a
+	// delete completes the stack can no longer be looked up by name, but its
+	// events (including the final DELETE_COMPLETE) stay readable by ID.
+	stackID string
 }
+
+// stackResourceType is the resource type of a stack-level event: the event a
+// stack emits for its own status changes.
+const stackResourceType = "AWS::CloudFormation::Stack"
 
 // streamStackEvents polls DescribeStackEvents from the moment it's called and
 // prints each new event as it appears, until the stack reaches a terminal status.
@@ -79,6 +87,7 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 
 	deadline := time.Now().Add(operationTimeout)
 	signals := completionSignals{baselineValid: baseline.valid}
+	sawStackTerminal := false
 
 	for {
 		events, poll, err := pollStackEvents(ctx, client, stackName, seen, operation)
@@ -87,9 +96,13 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 		}
 		for i := range events {
 			dispatchStackEvent(sp, &events[i])
+			sawStackTerminal = sawStackTerminal || isStackTerminalEvent(&events[i], stackName)
 		}
 
 		if signals.observe(poll, len(events)) {
+			if !sawStackTerminal {
+				drainFinalStackEvents(ctx, client, finalEventsTarget(stackName, baseline, poll), seen, sp)
+			}
 			finishStreamSpinner(sp, stackName, poll.Status)
 			return poll.Status, nil
 		}
@@ -163,12 +176,70 @@ func preOperationEventBaseline(ctx context.Context, client CloudFormationClient,
 	if err != nil {
 		return eventBaseline{seen: seen, valid: isStackNotFoundError(err)}
 	}
+	stackID := ""
 	for i := range out.StackEvents {
 		if id := stringValue(out.StackEvents[i].EventId); id != "" {
 			seen[id] = true
 		}
+		if stackID == "" {
+			stackID = stringValue(out.StackEvents[i].StackId)
+		}
 	}
-	return eventBaseline{seen: seen, valid: true}
+	return eventBaseline{seen: seen, valid: true, stackID: stackID}
+}
+
+// isStackTerminalEvent reports whether event is the stack's own terminal status
+// change (CREATE_COMPLETE, UPDATE_COMPLETE, DELETE_COMPLETE, a rollback or failure
+// state), as opposed to a resource event or a nested stack's event.
+func isStackTerminalEvent(event *cfntypes.StackEvent, stackName string) bool {
+	return stringValue(event.ResourceType) == stackResourceType &&
+		stringValue(event.LogicalResourceId) == stackName &&
+		isTerminalStackStatus(cfntypes.StackStatus(event.ResourceStatus))
+}
+
+// finalEventsTarget picks what to read the last events through. A stack that is
+// gone can only be read by ID; with no ID recorded there is nothing to read.
+func finalEventsTarget(stackName string, baseline eventBaseline, poll stackPoll) string {
+	if poll.Gone {
+		return baseline.stackID
+	}
+	return stackName
+}
+
+// drainFinalStackEvents reads the stack's events once more after a terminal
+// status was accepted and prints any not shown yet. Events are polled before the
+// stack status, so a stack that finishes between the two reads would otherwise
+// lose its final stack-level event (for example CREATE_COMPLETE), and a deleted
+// stack is never readable by name again, so its DELETE_COMPLETE is read by ID.
+// Best effort: failing to read never fails the operation that already finished.
+func drainFinalStackEvents(ctx context.Context, client CloudFormationClient, target string, seen map[string]bool, sp *spinner.Spinner) {
+	if target == "" {
+		return
+	}
+	out, err := client.DescribeStackEvents(ctx, &cloudformation.DescribeStackEventsInput{StackName: awsString(target)})
+	if err != nil {
+		return
+	}
+	fresh := freshStackEvents(out.StackEvents, seen)
+	for i := range fresh {
+		dispatchStackEvent(sp, &fresh[i])
+	}
+}
+
+// freshStackEvents returns the events not yet in seen, oldest first (the API
+// returns newest first), marking each as seen.
+func freshStackEvents(events []cfntypes.StackEvent, seen map[string]bool) []cfntypes.StackEvent {
+	var fresh []cfntypes.StackEvent
+	for i := len(events) - 1; i >= 0; i-- {
+		event := events[i]
+		id := stringValue(event.EventId)
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		fresh = append(fresh, event)
+	}
+	return fresh
 }
 
 // isInProgressStatus reports whether status is a non-empty `*_IN_PROGRESS` status.
@@ -260,16 +331,7 @@ func pollStackEvents(ctx context.Context, client CloudFormationClient, stackName
 		return nil, stackPoll{}, err
 	}
 
-	var fresh []cfntypes.StackEvent
-	for i := len(eventsOut.StackEvents) - 1; i >= 0; i-- {
-		event := eventsOut.StackEvents[i]
-		id := stringValue(event.EventId)
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		fresh = append(fresh, event)
-	}
+	fresh := freshStackEvents(eventsOut.StackEvents, seen)
 
 	poll, err := pollStackStatus(ctx, client, stackName, operation)
 	return fresh, poll, err

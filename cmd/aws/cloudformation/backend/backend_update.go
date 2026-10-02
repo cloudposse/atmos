@@ -45,6 +45,7 @@ encryption, and public access blocking to match secure defaults.`,
 			autoApprove = v.GetBool(flagAutoApprove)
 		}
 		return executeCreateOrUpdate(ctx, createOrUpdateArgs{
+			Verb:        verbUpdate,
 			Component:   result.Component,
 			Stack:       stack,
 			Identity:    identity,

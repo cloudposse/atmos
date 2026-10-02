@@ -2,12 +2,15 @@ package cloudformation
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/cloudposse/atmos/pkg/aws/identity"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // buildAWSConfig resolves an aws.Config for the active identity, in-process.
@@ -22,7 +25,49 @@ import (
 func buildAWSConfig(ctx context.Context, info *schema.ConfigAndStacksInfo, region string) (aws.Config, error) {
 	defer perf.Track(nil, "cloudformation.buildAWSConfig")()
 
-	return identity.LoadConfigWithAuth(ctx, region, "", 0, awsAuthContextFrom(info))
+	awsCfg, err := identity.LoadConfigWithAuth(ctx, region, "", 0, awsAuthContextFrom(info))
+	if err != nil {
+		return awsCfg, err
+	}
+	warnIgnoredEnvRegion(info, awsCfg.Region)
+	return awsCfg, nil
+}
+
+// envRegionVars are the component `env` entries a user might expect to select
+// the CloudFormation region.
+var envRegionVars = []string{"AWS_REGION", "AWS_DEFAULT_REGION"}
+
+// warnIgnoredEnvRegion warns when the component's `env` sets AWS_REGION or
+// AWS_DEFAULT_REGION to a region other than the one the SDK client resolved.
+// The client is built in-process from the active identity, never from the
+// component `env` (see buildAWSConfig), so by the documented precedence the
+// env value is ignored. Say so instead of silently deploying to a different
+// region than the user wrote.
+func warnIgnoredEnvRegion(info *schema.ConfigAndStacksInfo, resolvedRegion string) {
+	if info == nil || resolvedRegion == "" {
+		return
+	}
+	for _, name := range envRegionVars {
+		value, ok := componentEnvValue(info, name)
+		if !ok || value == "" || value == resolvedRegion {
+			continue
+		}
+		ui.Warningf("Component env sets %s=%s, which is ignored: CloudFormation uses region %s. Set settings.aws_cloudformation.region to override the region.", name, value, resolvedRegion)
+	}
+}
+
+// componentEnvValue looks up one variable in the component's resolved `env`
+// section, falling back to the raw component section's `env` map.
+func componentEnvValue(info *schema.ConfigAndStacksInfo, name string) (string, bool) {
+	if value, ok := info.ComponentEnvSection[name]; ok {
+		return fmt.Sprint(value), true
+	}
+	if env, ok := info.ComponentSection[cfg.EnvSectionName].(map[string]any); ok {
+		if value, ok := env[name]; ok {
+			return fmt.Sprint(value), true
+		}
+	}
+	return "", false
 }
 
 // awsAuthContextFrom extracts the active identity's AWSAuthContext from info, or
