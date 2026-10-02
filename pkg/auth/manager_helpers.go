@@ -332,6 +332,10 @@ func CreateAndAuthenticateManagerWithReExecContext(
 	}
 
 	// Authenticate with the resolved identity.
+	// Keep the original request distinct from an automatically selected default.
+	// Describe/list consumers reconstruct stack info from this manager, so the
+	// provenance must travel with it to nested delivery-target output lookups.
+	authManager.GetStackInfo().RequestedIdentity = &identityName
 	if err := authenticateWithIdentity(authManager, resolvedIdentity, selectValue); err != nil {
 		return nil, NormalizeAuthenticationError(err)
 	}

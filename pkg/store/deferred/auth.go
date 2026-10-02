@@ -3,6 +3,7 @@ package deferred
 import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -23,6 +24,14 @@ func resolveStoreAuth(ac *schema.AtmosConfiguration, info *schema.ConfigAndStack
 		return nil
 	}
 	identity := ac.StoresConfig[name].Identity
+	if identity == "" && info != nil {
+		// A store's explicit identity wins; otherwise inherit the caller's
+		// explicit CLI identity without changing component or global defaults.
+		requested := cfg.NormalizeIdentityValue(info.Identity)
+		if requested != cfg.IdentityFlagSelectValue && requested != cfg.IdentityFlagDisabledValue {
+			identity = requested
+		}
+	}
 	resolved, err := authdeferred.Credentials(ac, info, identity).Resolve()
 	if err != nil {
 		return err
