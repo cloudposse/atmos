@@ -36,8 +36,9 @@ func init() {
 // Service coordinates workdir provisioning operations.
 // The workdir provisioner copies local component files to an isolated working directory.
 type Service struct {
-	fs     FileSystem
-	hasher Hasher
+	componentOptions ComponentOptions
+	fs               FileSystem
+	hasher           Hasher
 }
 
 // WithOutputSuppressed disables transient workdir provisioning output for this context.
@@ -55,13 +56,14 @@ func OutputSuppressed(ctx context.Context) bool {
 }
 
 // NewService creates a new workdir service with default implementations.
-func NewService() *Service {
+func NewService(options ...ServiceOption) *Service {
 	defer perf.Track(nil, "workdir.NewService")()
 
-	return &Service{
-		fs:     NewDefaultFileSystem(),
-		hasher: NewDefaultHasher(),
+	service := &Service{fs: NewDefaultFileSystem(), hasher: NewDefaultHasher()}
+	for _, option := range options {
+		option(service)
 	}
+	return service
 }
 
 // NewServiceWithDeps creates a new workdir service with injected dependencies.
@@ -198,7 +200,7 @@ func (s *Service) Provision(
 	// the workdir as the canonical .terraform.lock.hcl, so init honors the instance's pinned
 	// providers; the after.terraform.init hook completes and re-persists it. Best-effort: a
 	// restore failure must not block provisioning (init simply re-resolves).
-	if err := provisioner.RestorePerInstanceLock(metadata.Source, workdirPath, componentConfig); err != nil {
+	if err := s.restoreTerraformLock(metadata.Source, workdirPath, componentConfig); err != nil {
 		log.Debug("Failed to restore per-instance provider lock", "error", err)
 	}
 
@@ -245,7 +247,7 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 	// docs/fixes/2026-08-05-workdir-nested-component-path-depth.md) patched, so a nested
 	// component name (e.g. "app/local-nested") created a real nested directory instead of
 	// a sanitized sibling.
-	workdirPath, err := BuildPath(basePath, "terraform", component, stack, nil)
+	workdirPath, err := BuildPath(basePath, s.componentType(), component, stack, nil)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrWorkdirCreation).
 			WithCause(err).
@@ -255,7 +257,7 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 			Err()
 	}
 
-	if err := s.migrateLegacyWorkdir(basePath, component, stack, workdirPath); err != nil {
+	if err := s.migrateComponentWorkdir(basePath, component, stack, workdirPath); err != nil {
 		return "", errUtils.Build(errUtils.ErrWorkdirCreation).
 			WithCause(err).
 			WithExplanation("failed to migrate legacy workdir to its new encoded path").
@@ -530,7 +532,7 @@ func (s *Service) syncLocalToWorkdir(
 
 	existingMetadata, _ := ReadMetadata(workdirPath)
 
-	changed, err := s.fs.SyncDir(componentPath, workdirPath, s.hasher)
+	changed, err := s.syncComponentFiles(componentPath, workdirPath)
 	if err != nil {
 		return nil, false, errUtils.Build(errUtils.ErrWorkdirSync).
 			WithCause(err).
@@ -570,7 +572,10 @@ func (s *Service) validateComponentPath(
 	componentConfig map[string]any,
 	component string,
 ) (string, error) {
-	componentPath := extractComponentPath(atmosConfig, componentConfig, component)
+	componentPath := s.componentOptions.SourcePath
+	if componentPath == "" {
+		componentPath = extractComponentPath(atmosConfig, componentConfig, component)
+	}
 	if componentPath == "" {
 		return "", errUtils.Build(errUtils.ErrWorkdirProvision).
 			WithExplanation("cannot determine local component path").
@@ -578,7 +583,7 @@ func (s *Service) validateComponentPath(
 			Err()
 	}
 
-	if !s.fs.Exists(componentPath) {
+	if !s.fs.Exists(componentPath) && !s.componentOptions.AllowMissingSource {
 		return "", errUtils.Build(errUtils.ErrWorkdirProvision).
 			WithExplanation("local component path does not exist").
 			WithContext("path", componentPath).

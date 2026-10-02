@@ -3,6 +3,8 @@
 // enabling terraform, helmfile, and packer to share the same implementation.
 package cmd
 
+import "github.com/cloudposse/atmos/pkg/schema"
+
 // Config holds component-type-specific configuration for source commands.
 type Config struct {
 	// ComponentType identifies the component type (e.g., "terraform", "helmfile", "packer",
@@ -14,6 +16,9 @@ type Config struct {
 	// "aws cloudformation"). Falls back to ComponentType via CLI() when unset — the common
 	// case for types whose CLI command name matches their internal ComponentType exactly.
 	CLIName string
+	// PrepareComponentConfig normalizes the source destination before pull/delete.
+	// Nil preserves the manifest configuration for existing component types.
+	PrepareComponentConfig func(*schema.AtmosConfiguration, map[string]any) (map[string]any, error)
 }
 
 // CLI returns the command path to use in generated help/example text, falling
@@ -23,4 +28,11 @@ func (c *Config) CLI() string {
 		return c.CLIName
 	}
 	return c.ComponentType
+}
+
+func (c *Config) prepareComponentConfig(atmosConfig *schema.AtmosConfiguration, section map[string]any) (map[string]any, error) {
+	if c.PrepareComponentConfig == nil {
+		return section, nil
+	}
+	return c.PrepareComponentConfig(atmosConfig, section)
 }

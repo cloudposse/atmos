@@ -1477,6 +1477,9 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
             "vars": {
               "$ref": "#/definitions/vars"
             },
@@ -1540,6 +1543,9 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
             "metadata": {
               "$ref": "#/definitions/metadata"
             },

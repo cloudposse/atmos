@@ -465,7 +465,8 @@ func supportsComponentHooks(componentType string) bool {
 }
 
 func supportsGenerate(componentType string) bool {
-	return componentType == cfg.TerraformComponentType ||
+	return componentType == cfg.CloudFormationComponentType ||
+		componentType == cfg.TerraformComponentType ||
 		componentType == cfg.KubernetesComponentType ||
 		componentType == cfg.HelmComponentType
 }

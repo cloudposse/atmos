@@ -2199,6 +2199,10 @@
     },
     "AwsCloudFormation": {
       "properties": {
+        "auto_generate_files": {
+          "type": "boolean",
+          "description": "Generate component files in an isolated workdir. Defaults to false."
+        },
         "base_path": {
           "anyOf": [
             {
