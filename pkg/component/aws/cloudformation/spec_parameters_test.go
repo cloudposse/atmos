@@ -36,7 +36,7 @@ func TestNormalizeParameters_ListForm(t *testing.T) {
 		map[string]any{"ParameterKey": "Env", "ParameterValue": "dev"},
 		map[string]any{"ParameterKey": "Count", "ParameterValue": 3},
 		map[string]any{"ParameterKey": "AZs", "ParameterValue": []any{"a", "b"}},
-		map[string]any{"ParameterKey": "Empty"},
+		map[string]any{"ParameterKey": "Empty", "ParameterValue": ""},
 	})
 	require.NoError(t, err)
 	require.Len(t, params, 4)

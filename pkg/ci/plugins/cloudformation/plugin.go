@@ -59,15 +59,15 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 func (p *Plugin) onAfterOperation(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "cloudformationci.Plugin.onAfterOperation")()
 
-	if err := p.writeSummary(ctx); err != nil {
-		return err
-	}
+	// Summary rendering/writes and output variables are independent channels.
+	// Preserve the summary error for diagnostics, but always attempt outputs.
+	summaryErr := p.writeSummary(ctx)
 	if isOutputEnabled(ctx.Config) {
 		if err := p.writeOutputs(ctx); err != nil {
 			log.Warn("CloudFormation CI output failed", "error", err)
 		}
 	}
-	return nil
+	return summaryErr
 }
 
 // writeSummary renders and writes the job summary for one operation.

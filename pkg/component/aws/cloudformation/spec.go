@@ -321,7 +321,9 @@ func stringifyParameterValue(value any) (string, error) {
 		}
 		return strings.Join(parts, ","), nil
 	case nil:
-		return "", nil
+		return "", errUtils.Build(errUtils.ErrInvalidAwsCloudFormationParameters).
+			WithExplanation("Parameter values cannot be null; an output dependency may not be deployed yet.").
+			WithHint("Deploy the producer or supply an explicit fallback. Use an empty string explicitly if intended, omit the parameter for its template default, or use UsePreviousValue for an update.").Err()
 	case map[string]any:
 		return "", fmt.Errorf("%w: parameter values must be scalars or lists, got a map", errUtils.ErrInvalidAwsCloudFormationSettings)
 	default:

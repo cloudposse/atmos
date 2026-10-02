@@ -15,10 +15,12 @@ import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/
 <Intro>
   Create or update the CloudFormation stack for a component: create a changeset,
   show the predicted changes, ask for confirmation, and execute it. After a
-  successful apply, Atmos applies the component's `stack_policy` (if set) and
-  renders the stack's Outputs — the same view
+  successful apply, Atmos renders the stack's Outputs — the same view
   [`output`](/cli/commands/aws/cloudformation/output) renders on demand.
 </Intro>
+
+Atmos applies the component's `stack_policy` (if set) after CREATE and no-op
+applies. An UPDATE that changes resources retains the existing stack policy.
 
 <Experimental />
 
