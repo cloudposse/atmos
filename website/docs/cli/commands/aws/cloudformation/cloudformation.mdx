@@ -89,3 +89,28 @@ atmos aws cfn apply vpc -s plat-ue2-dev
 ## Subcommands
 
 <DocCardList/>
+
+## Execution controls
+
+<dl>
+  <dt>`--dry-run`</dt>
+  <dd>Validate static configuration without YAML functions, template evaluation, authentication,
+  source downloads, hooks, or cloud operations. This also applies to `render` and bulk/affected
+  selection. Checks requiring dynamic values are deferred.</dd>
+  <dt>`--ci`</dt>
+  <dd>Enable native CI provider selection. With `ci.enabled` and summary output enabled,
+  `diff`, `apply`, `delete`, `drift detect`, and `drift describe` write summaries. In a generic
+  CI environment, set `ATMOS_CI_SUMMARY` to the destination file; GitHub Actions uses
+  `GITHUB_STEP_SUMMARY`. Dry-run does not publish a summary. The flag is accepted by every
+  component verb (not only the ones that write a summary), as are the selection flags
+  (`--all`, `--affected`, `--tags`, `--labels`) and the Git flags that drive `--affected`
+  (`--base`, `--ref`, `--sha`, `--repo-path`, `--clone-target-ref`, `--ssh-key`,
+  `--ssh-key-password`).</dd>
+  <dt>`--skip-hooks`</dt>
+  <dd>Skip lifecycle hooks for one invocation of `diff`/`plan`, `apply`/`deploy`, `delete`,
+  `drift detect`, or `drift describe`: no value skips every hook, `--skip-hooks=a,b` skips the
+  named hooks. Same as the `ATMOS_SKIP_HOOKS` environment variable.</dd>
+</dl>
+
+Bulk deletion runs consumers before dependencies. Apply retains dependency-first execution.
+Preview changesets created by `diff`/`plan` are deleted after rendering, including when rendering fails.

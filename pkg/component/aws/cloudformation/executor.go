@@ -15,11 +15,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	sharedoutput "github.com/cloudposse/atmos/pkg/output"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Seams for testing.
@@ -68,7 +66,7 @@ func Execute(ctx *component.ExecutionContext, operation Operation) error {
 
 // executeSingle runs the operation for a single component (the non-bulk path).
 func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) error {
-	discovered, err := processStacks(atmosConfig, *info, true, true, true, nil, nil)
+	discovered, err := processStacks(atmosConfig, *info, true, !info.DryRun, !info.DryRun, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -78,14 +76,11 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 		return nil
 	}
 
-	if err := (&ComponentProvider{}).ValidateComponent(info.ComponentSection); err != nil {
-		return err
+	// Resolve static config before any authentication, provisioning or hooks.
+	if info.DryRun {
+		return validateDryRun(atmosConfig, info, ctx.Flags, operation)
 	}
-
-	// Dry-run validates the resolved component without authenticating, provisioning
-	// sources, or executing hooks. Render keeps its normal local template behavior.
-	if info.DryRun && operation != OperationRender {
-		_, err := buildStackSpec(info.ComponentSection)
+	if err := (&ComponentProvider{}).ValidateComponent(info.ComponentSection); err != nil {
 		return err
 	}
 
@@ -166,6 +161,7 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 	if err != nil {
 		return nil, err
 	}
+	spec.withAtmosIdentity(info)
 
 	if operationsSkippingTemplateLoad[operation] {
 		if operation == OperationChangesetExecute && spec.StackPolicyFile != "" {
@@ -183,13 +179,10 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 		return nil, err
 	}
 
-	if spec.TemplateBody == "" {
-		spec.TemplateAbsPath = resolveTemplateFilePath(componentPath, spec)
-		spec.TemplateBody, err = loadTemplateBody(componentPath, spec)
-		if err != nil {
-			return nil, err
-		}
+	if err := resolveTemplateBody(componentPath, spec); err != nil {
+		return nil, err
 	}
+
 	registerNoEchoValues(spec.TemplateBody, spec)
 
 	if operationsSkippingStackPolicyLoad[operation] {
@@ -203,7 +196,10 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 	return spec, nil
 }
 
-// runWithHooks runs the before/after hooks around the operation.
+// runWithHooks runs the before/after hooks around the operation. The Native CI
+// summary hook (runCIHook) fires on both success and failure — mirroring
+// Kubernetes's runWithHooks — since a job summary describing a failed
+// operation is exactly as useful as one describing a successful one.
 func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, spec *stackSpec) error {
 	hookSet, err := getHooks(atmosConfig, info)
 	if err != nil {
@@ -215,12 +211,47 @@ func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 	}
 
 	octx := &opContext{Ctx: ctx.GoContext(), AtmosConfig: atmosConfig, Info: info, Flags: ctx.Flags}
-	_, opErr := runOperation(octx, operation, spec)
+	summary, opErr := runOperation(octx, operation, spec)
+
+	// The outcome status describes the CloudFormation operation, not the
+	// after-hooks: a failed apply must let `when: failure`/`always` hooks run
+	// and see the right status, mirroring runUserHooks in cmd/terraform/utils.go.
+	outcome := hooks.Outcome{Status: hooks.RunSuccess}
+	if opErr != nil {
+		outcome = hooks.Outcome{Status: hooks.RunFailure, Err: opErr, ExitCode: errUtils.GetExitCode(opErr)}
+	}
+	hookSet.SetOutcome(outcome)
+
+	// User-defined `hooks:` blocks run first, then the CI summary dispatch —
+	// matching the ordering Kubernetes's executor uses between its own
+	// user-hook and CI-hook calls. The CI hook is fire-and-forget (errors are
+	// logged, not returned; see runCIHook), so it never masks opErr or the
+	// after-hooks error below.
+	afterErr := hookSet.RunAll(after, atmosConfig, info, nil, nil)
+	// opErr takes precedence (it's the more actionable failure, matching the
+	// return below), but when the operation succeeded and only the after-hook
+	// failed, the CI summary must still reflect that failure rather than
+	// silently reporting success.
+	ciErr := opErr
+	if ciErr == nil {
+		ciErr = afterErr
+	}
+	runCIHook(ciHookParams{
+		event:       after,
+		flags:       ctx.Flags,
+		atmosConfig: atmosConfig,
+		info:        info,
+		summary:     summary,
+		commandErr:  ciErr,
+	})
+
+	// The underlying operation's own error takes priority: a failed apply is
+	// the more actionable/severe failure than a problem in a user-defined
+	// after-hook, and callers (exit code, CI status) should see it first.
 	if opErr != nil {
 		return opErr
 	}
-
-	return hookSet.RunAll(after, atmosConfig, info, nil, nil)
+	return afterErr
 }
 
 // eventsFor maps an Operation to its before/after hook events.
@@ -232,6 +263,10 @@ func eventsFor(operation Operation) (hooks.HookEvent, hooks.HookEvent) {
 		return hooks.BeforeAwsCloudFormationApply, hooks.AfterAwsCloudFormationApply
 	case OperationDelete:
 		return hooks.BeforeAwsCloudFormationDelete, hooks.AfterAwsCloudFormationDelete
+	case OperationDriftDetect:
+		return hooks.BeforeAwsCloudFormationDriftDetect, hooks.AfterAwsCloudFormationDriftDetect
+	case OperationDriftDescribe:
+		return hooks.BeforeAwsCloudFormationDriftDescribe, hooks.AfterAwsCloudFormationDriftDescribe
 	default:
 		return hooks.HookEvent(""), hooks.HookEvent("")
 	}
@@ -250,9 +285,7 @@ var operationHandlers = map[Operation]operationHandler{
 	OperationDelete: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 		return runDelete(octx.Ctx, client, octx.Flags, spec, summary)
 	},
-	OperationOutput: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
-		return runOutput(octx.Ctx, client, spec.StackName, octx.Flags, summary)
-	},
+	OperationOutput:          runOutputOperation,
 	OperationChangesetCreate: runChangesetCreate,
 	OperationChangesetExecute: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 		return runChangesetExecute(octx.Ctx, client, spec, changesetNameFlag(octx.Flags), summary)
@@ -315,7 +348,17 @@ var operationHandlers = map[Operation]operationHandler{
 func resolveStackSetTargetFromContext(octx *opContext) (*stackSetConfig, error) {
 	provisionSection, _ := octx.Info.ComponentSection[cfg.ProvisionSectionName].(map[string]any)
 	flagTarget, _ := octx.Flags[targetKey].(string)
-	return resolveStackSetTarget(provisionSection, flagTarget)
+	ssCfg, err := resolveStackSetTarget(provisionSection, flagTarget)
+	if err != nil {
+		return nil, err
+	}
+	// A permission_model typo fails here, locally, instead of at the AWS API. This
+	// is the real-run path only: dry-run resolves the target without rendering
+	// templates, so it validates a deferred permission_model itself.
+	if err := validateStackSetPermissionModel(ssCfg.Name, ssCfg.PermissionModel); err != nil {
+		return nil, err
+	}
+	return ssCfg, nil
 }
 
 // changesetNameFlag extracts the required --changeset-name flag value.
@@ -343,8 +386,13 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 		return runFmt(spec, octx.Flags, summary)
 	}
 
-	if err := requireConfirmation(operation, spec.StackName, octx.Flags); err != nil {
-		return summary, err
+	// apply asks only after its changeset is created and previewed (see
+	// deployDirect), and only when it deploys a stack: publish-only and external
+	// deliveries change no stack and never ask.
+	if operation != OperationApply {
+		if err := requireConfirmation(operation, spec.StackName, octx.Flags); err != nil {
+			return summary, err
+		}
 	}
 
 	region := resolveRegion(octx.Info.ComponentSection)
@@ -372,18 +420,20 @@ func runDiff(octx *opContext, client CloudFormationClient, spec *stackSpec, summ
 	}
 	result, err := createChangeSet(octx.Ctx, client, spec)
 	if err != nil {
+		discardChangeSet(octx.Ctx, client, spec.StackName, result)
 		return summary, err
 	}
 	summary["changeset_id"] = result.ChangeSetID
+	summary["changeset_name"] = result.ChangeSetName
 	summary["no_op"] = result.NoOp
 	summary["changes"] = result.Changes
 	renderErr := renderDiffSummary(spec.StackName, result)
 
-	// Clean up the preview even if its output could not be written. A cleanup
-	// failure is a warning; preserve any rendering failure as the command error.
-	if err := deleteChangeSet(octx.Ctx, client, spec.StackName, result.ChangeSetName); err != nil {
-		ui.Warning(fmt.Sprintf("failed to clean up preview changeset %q: %v", result.ChangeSetName, err))
-	}
+	// Clean up the preview even if its output could not be written: the changeset
+	// and, for a stack that did not exist before this diff, the empty
+	// REVIEW_IN_PROGRESS stub the CREATE changeset registered. A cleanup failure is
+	// only a warning; any rendering failure stays the command error.
+	discardChangeSet(octx.Ctx, client, spec.StackName, result)
 	return summary, renderErr
 }
 
@@ -392,15 +442,22 @@ func runDiff(octx *opContext, client CloudFormationClient, spec *stackSpec, summ
 // to renderOutputsSummary, without which those verbs produce no visible output
 // at all despite successfully creating and describing the changeset.
 func renderDiffSummary(stackName string, result *changeSetResult) error {
+	if err := data.Writeln(diffSummaryText(stackName, result)); err != nil {
+		return fmt.Errorf("write CloudFormation diff summary: %w", err)
+	}
+	return nil
+}
+
+// diffSummaryText builds the text renderDiffSummary writes: a header line with
+// the number of resource changes, then one line per changed resource (or the
+// no-op line when the changeset would change nothing).
+func diffSummaryText(stackName string, result *changeSetResult) string {
 	lines := []string{fmt.Sprintf("%s: no changes (changeset would be a no-op)", stackName)}
 	if !result.NoOp {
 		lines = diffResourceLines(result.Changes)
 		lines = append([]string{fmt.Sprintf("%s: %d resource change(s)", stackName, len(lines))}, lines...)
 	}
-	if err := data.Writeln(strings.Join(lines, "\n")); err != nil {
-		return fmt.Errorf("write CloudFormation diff summary: %w", err)
-	}
-	return nil
+	return strings.Join(lines, "\n")
 }
 
 // diffResourceLines renders resource changes, excluding non-resource changes.
@@ -442,6 +499,11 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 	for k, v := range deploySummary {
 		summary[k] = v
 	}
+	// The stack's final status, under the same key delete uses, is recorded even
+	// when the deploy failed (for example ROLLBACK_COMPLETE) so CI can report it.
+	if result != nil && result.StackStatus != "" {
+		summary["final_status"] = string(result.StackStatus)
+	}
 	if err != nil {
 		return summary, err
 	}
@@ -451,7 +513,9 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		return summary, nil
 	}
 	summary["changeset_id"] = result.ChangeSetID
+	summary["changeset_name"] = result.ChangeSetName
 	summary["no_op"] = result.NoOp
+	summary["changes"] = result.Changes
 
 	if spec.StackPolicyBody != "" && (result.NoOp || result.ChangeSetType == cfntypes.ChangeSetTypeCreate) {
 		if err := setStackPolicy(octx.Ctx, client, spec); err != nil {
@@ -463,36 +527,7 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		return summary, err
 	}
 
-	outputs, err := describeStackOutputs(octx.Ctx, client, spec.StackName)
-	if err != nil {
-		return summary, err
-	}
-	summary["outputs"] = outputs
-	if err := renderOutputsSummary(outputs, octx.Flags); err != nil {
-		return summary, err
-	}
-	return summary, nil
-}
-
-// runDelete deletes the stack and streams events until it's gone.
-func runDelete(ctx context.Context, client CloudFormationClient, flags map[string]any, spec *stackSpec, summary map[string]any) (map[string]any, error) {
-	opts := deleteOptionsFromFlags(flags)
-	// Captured immediately before deleteStack's DeleteStack call -- see
-	// preOperationEventBaseline -- so streamStackEvents can tell a fast
-	// delete's own events apart from anything already present on the stack.
-	baseline := preOperationEventBaseline(ctx, client, spec.StackName)
-	if err := deleteStack(ctx, client, spec, opts); err != nil {
-		return summary, err
-	}
-	status, err := streamStackEvents(ctx, client, spec.StackName, baseline, OperationDelete)
-	if err != nil {
-		return summary, err
-	}
-	summary["final_status"] = string(status)
-	if isFailedStackStatus(status) {
-		return summary, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationOperationFailed, spec.StackName, status)
-	}
-	return summary, nil
+	return runOutput(octx.Ctx, client, spec.StackName, octx.Flags, summary)
 }
 
 // deleteOptionsFromFlags builds deleteOptions from the command's flags.
@@ -505,46 +540,4 @@ func deleteOptionsFromFlags(flags map[string]any) deleteOptions {
 		opts.DisableTerminationProtection = v
 	}
 	return opts
-}
-
-// runOutput renders the deployed stack's Outputs via the standalone `output`
-// verb's path (also called by runApply for the end-of-deploy summary).
-func runOutput(ctx context.Context, client CloudFormationClient, stackName string, flags map[string]any, summary map[string]any) (map[string]any, error) {
-	outputs, err := describeStackOutputs(ctx, client, stackName)
-	if err != nil {
-		return summary, err
-	}
-	summary["outputs"] = outputs
-	if err := renderOutputsSummary(outputs, flags); err != nil {
-		return summary, err
-	}
-	return summary, nil
-}
-
-// renderOutputsSummary writes the Outputs to the data channel (stdout) in the
-// requested format (default: table), reusing the shared pkg/output formatter —
-// the full standard format set (json/yaml/hcl/env/dotenv/bash/csv/tsv/github).
-// Returns an error on an invalid --format (wrapped in ErrInvalidFlag, instead of
-// swallowing it: a bad value must fail the command, not silently exit 0 with
-// empty stdout) or on a write failure, so callers report the operation as
-// unsuccessful instead of silently succeeding with no output.
-func renderOutputsSummary(outputs map[string]any, flags map[string]any) error {
-	format := sharedoutput.FormatTable
-	if f, ok := flags["format"].(string); ok && f != "" {
-		format = sharedoutput.Format(f)
-	}
-
-	opts := sharedoutput.FormatOptions{}
-	if flatten, ok := flags["flatten"].(bool); ok {
-		opts.Flatten = flatten
-	}
-	if uppercase, ok := flags["uppercase"].(bool); ok {
-		opts.Uppercase = uppercase
-	}
-
-	rendered, err := sharedoutput.FormatOutputsWithOptions(outputs, format, opts)
-	if err != nil {
-		return fmt.Errorf("%w: failed to format outputs: %w", errUtils.ErrInvalidFlag, err)
-	}
-	return data.Write(rendered)
 }

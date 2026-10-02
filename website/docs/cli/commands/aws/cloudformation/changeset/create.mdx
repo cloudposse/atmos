@@ -8,13 +8,15 @@ description: Create a changeset and leave it for later review or execution.
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
   Create a CloudFormation changeset for the component and leave it in place for
   later manual review and execution — the explicit-control complement to
   [`diff`](/cli/commands/aws/cloudformation/diff)/[`plan`](/cli/commands/aws/cloudformation/plan)'s
-  implicit, preview-only changeset (which is also left in place, but framed as
-  a one-off preview rather than a named, reusable artifact).
+  implicit, preview-only changeset (which is deleted again as soon as it has
+  been rendered).
 </Intro>
 
 <Experimental />
@@ -44,21 +46,17 @@ atmos aws cloudformation changeset create --affected --base origin/main
   <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
   <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
 
-  <dt>`--all` <em>(optional)</em></dt>
-  <dd>Create changesets for all `aws/cloudformation` components in dependency order.</dd>
+<SelectionFlags />
 
-  <dt>`--affected` <em>(optional)</em></dt>
-  <dd>Create changesets for affected `aws/cloudformation` components and their dependencies.</dd>
-
-  <dt>`--include-dependents` <em>(optional)</em></dt>
-  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
-
-  <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
-
-  <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+<GitFlags />
 </dl>
+
+## Behavior
+
+- A changeset that would change nothing is not kept. CloudFormation reports it as a `FAILED` changeset ("didn't contain changes"), so Atmos deletes it and prints `No changes; changeset not kept`.
+- A changeset that fails to compute is deleted, together with the empty `REVIEW_IN_PROGRESS` stack it registered when Atmos created that stack for a never-deployed component.
+- A successful changeset is kept, and so is the `REVIEW_IN_PROGRESS` stack of a never-deployed component: that is the reusable artifact you asked for, and [`changeset execute`](/cli/commands/aws/cloudformation/changeset/execute) needs it.
+- A stack in `ROLLBACK_COMPLETE` cannot be updated, so `changeset create` fails with a hint to [`delete`](/cli/commands/aws/cloudformation/delete) the stack first.
 
 ## Output
 
@@ -71,6 +69,8 @@ changeset later with
 :::note
 `changeset create` does not fire `before`/`after` hook events — only
 [`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff), and
-[`delete`](/cli/commands/aws/cloudformation/delete) do.
+[`diff`](/cli/commands/aws/cloudformation/diff),
+[`delete`](/cli/commands/aws/cloudformation/delete),
+[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
+[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
 :::

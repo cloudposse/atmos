@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -13,7 +15,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	artifact "github.com/cloudposse/atmos/pkg/ci/artifact"
 	_ "github.com/cloudposse/atmos/pkg/ci/artifact/s3" // Registers the "aws/s3" artifact.Backend factory used via artifact.NewBackend below.
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 )
@@ -37,8 +41,15 @@ var newS3BackendFunc = newS3Backend
 // provision target: the URL CreateChangeSet's TemplateURL can reference, and a
 // SHA-256 digest for provenance.
 type packageUpload struct {
-	URL    string
+	// URL is the https TemplateURL CreateChangeSet references.
+	URL string
+	// S3URI is the same object as an s3://bucket/key URI, for humans and tooling.
+	S3URI string
+	// SHA256 is the template's hex-encoded SHA-256 digest.
 	SHA256 string
+	// Reused reports that the content-addressed object already existed, so no
+	// upload (and no new S3 object version) was made.
+	Reused bool
 }
 
 // needsPackaging reports whether the template body exceeds CloudFormation's
@@ -51,6 +62,64 @@ type packageUpload struct {
 // phase closes this gap.
 func needsPackaging(templateBody string) bool {
 	return len(templateBody) > templateInlineSizeLimit
+}
+
+// packagingRequest bundles packageTemplate's inputs to stay under this repo's
+// 5-argument function limit.
+type packagingRequest struct {
+	ProvisionSection map[string]any
+	Selected         *target.SelectedTarget
+	Spec             *stackSpec
+	Summary          map[string]any
+	// MayProvision reports whether this operation may create the packaging
+	// bucket when provision.backend.enabled is true. Only apply/deploy provision
+	// infrastructure; validate, diff and changeset create must not.
+	MayProvision bool
+}
+
+// packageTemplate uploads the template to the packaging target when it exceeds
+// the inline size limit (or an aws/s3 target was selected directly), points
+// Spec.TemplateURL at the uploaded object, and records where it went in
+// Summary under package_url (the https TemplateURL), package_s3_uri
+// (s3://bucket/key), package_sha256, and package_reused (true when the
+// content-addressed object already existed and no upload was made).
+func packageTemplate(octx *opContext, req *packagingRequest) error {
+	if !needsPackaging(req.Spec.TemplateBody) && req.Selected.Kind != kindAwsS3 {
+		return nil
+	}
+
+	s3Target, err := resolvePackagingTarget(req.ProvisionSection, req.Selected)
+	if err != nil {
+		return err
+	}
+
+	args := autoProvisionArgs{
+		AtmosConfig:     octx.AtmosConfig,
+		S3Target:        s3Target,
+		ComponentConfig: octx.Info.ComponentSection,
+		AuthContext:     octx.Info.AuthContext,
+		Component:       octx.Info.ComponentFromArg,
+		Stack:           octx.Info.Stack,
+	}
+	if req.MayProvision {
+		err = autoProvisionBackendIfEnabled(octx.Ctx, args)
+	} else {
+		err = requireBackendExistsIfEnabled(octx.Ctx, args)
+	}
+	if err != nil {
+		return err
+	}
+
+	pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, octx.Info, s3Target, req.Spec.TemplateBody)
+	if err != nil {
+		return err
+	}
+	req.Summary["package_url"] = pkg.URL
+	req.Summary["package_s3_uri"] = pkg.S3URI
+	req.Summary["package_sha256"] = pkg.SHA256
+	req.Summary["package_reused"] = pkg.Reused
+	req.Spec.TemplateURL = pkg.URL
+	return nil
 }
 
 // uploadPackage uploads the template body to the selected `kind: aws/s3`
@@ -69,32 +138,66 @@ func uploadPackage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, 
 
 	sum := sha256.Sum256([]byte(templateBody))
 	digest := hex.EncodeToString(sum[:])
-	name := packageObjectName(s3Target.Prefix, info, digest)
+	name := packageObjectName("", info, digest)
+	//nolint:forbidigo // S3 object keys use forward slashes on every OS, matching the artifact backend.
+	key := path.Join(normalizeS3Prefix(s3Target.Prefix), name)
 
-	metadata := &artifact.Metadata{
-		Stack:        info.Stack,
-		Component:    info.ComponentFromArg,
-		SHA256:       digest,
-		CreatedAt:    time.Now(),
-		AtmosVersion: "",
-	}
-
-	if err := backend.Upload(ctx, name, strings.NewReader(templateBody), int64(len(templateBody)), metadata); err != nil {
-		return nil, fmt.Errorf("packaging template to s3://%s/%s: %w", s3Target.Bucket, name, err)
+	// The key is content-addressed, so an object whose sidecar records the same
+	// digest is byte-identical. Re-uploading it would only pile up object versions
+	// on every run of a versioned bucket.
+	reused := packageAlreadyPublished(ctx, backend, name, digest)
+	if !reused {
+		metadata := &artifact.Metadata{
+			Stack:        info.Stack,
+			Component:    info.ComponentFromArg,
+			SHA256:       digest,
+			CreatedAt:    time.Now(),
+			AtmosVersion: "",
+		}
+		if err := backend.Upload(ctx, name, strings.NewReader(templateBody), int64(len(templateBody)), metadata); err != nil {
+			return nil, fmt.Errorf("packaging template to s3://%s/%s: %w", s3Target.Bucket, key, err)
+		}
 	}
 
 	return &packageUpload{
-		URL:    packageURL(s3Target, name),
+		URL:    packageURL(s3Target, key),
+		S3URI:  fmt.Sprintf("s3://%s/%s", s3Target.Bucket, key),
 		SHA256: digest,
+		Reused: reused,
 	}, nil
 }
 
+// packageAlreadyPublished reports whether the packaged template object already
+// exists with a metadata sidecar recording the same digest. Any lookup failure
+// (including a missing object, a missing sidecar, or insufficient permission to
+// read it) reports false, so the caller uploads and surfaces the real error.
+func packageAlreadyPublished(ctx context.Context, backend artifact.Backend, name, digest string) bool {
+	metadata, err := backend.GetMetadata(ctx, name)
+	if err != nil {
+		if !errors.Is(err, errUtils.ErrArtifactNotFound) {
+			log.Debug("Could not check for an existing packaged template; uploading", "name", name, "error", err)
+		}
+		return false
+	}
+	return metadata != nil && metadata.SHA256 == digest
+}
+
+// normalizeS3Prefix trims leading and trailing slashes so a configured prefix
+// such as "/lead" or "lead/" never yields an S3 key that starts with "/" or an
+// empty path segment.
+func normalizeS3Prefix(prefix string) string {
+	return strings.Trim(prefix, "/")
+}
+
 // targetS3Config is the resolved `kind: aws/s3` provision target configuration.
+//
+// The yaml/json tags give `backend describe`/`list` machine-readable output the
+// snake_case keys the rest of this component type's output uses.
 type targetS3Config struct {
-	Name   string
-	Bucket string
-	Prefix string
-	Region string
+	Name   string `json:"name" yaml:"name"`
+	Bucket string `json:"bucket" yaml:"bucket"`
+	Prefix string `json:"prefix,omitempty" yaml:"prefix,omitempty"`
+	Region string `json:"region,omitempty" yaml:"region,omitempty"`
 }
 
 // newS3Backend constructs the aws/s3 artifact backend for the selected packaging
@@ -120,7 +223,7 @@ func newS3Backend(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAnd
 		Type: "aws/s3",
 		Options: map[string]any{
 			"bucket": s3Target.Bucket,
-			"prefix": s3Target.Prefix,
+			"prefix": normalizeS3Prefix(s3Target.Prefix),
 			"region": s3Target.Region,
 		},
 		AtmosConfig: atmosConfig,

@@ -8,6 +8,8 @@ description: Show the combined event log across a stack and its nested stacks.
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
   Show the combined CloudFormation event log across a stack and every nested
@@ -51,20 +53,12 @@ atmos aws cloudformation logs --affected --base origin/main
   <dt>`--chart` <em>(optional)</em></dt>
   <dd>Render a per-resource timeline (one line per logical resource ID, showing its status transitions in order) instead of a flat chronological event list.</dd>
 
-  <dt>`--all` <em>(optional)</em></dt>
-  <dd>Show logs for all `aws/cloudformation` components in dependency order.</dd>
+  <dt>`--follow`, `-f` <em>(optional)</em></dt>
+  <dd>Continuously stream new events until interrupted (`tail -f` style) instead of returning after one pass. Press Ctrl+C to stop; the command exits 130. Cannot be combined with `--chart`.</dd>
 
-  <dt>`--affected` <em>(optional)</em></dt>
-  <dd>Show logs for affected `aws/cloudformation` components and their dependencies.</dd>
+<SelectionFlags />
 
-  <dt>`--include-dependents` <em>(optional)</em></dt>
-  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
-
-  <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
-
-  <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+<GitFlags />
 </dl>
 
 ## Output
@@ -79,9 +73,15 @@ NatGateway                    CREATE_IN_PROGRESS -> CREATE_COMPLETE
 SubnetsStack                  CREATE_IN_PROGRESS -> CREATE_COMPLETE
 ```
 
+With nested stacks, each row is prefixed with its stack name (`<stack-name>/<LogicalId>`). A stack ARN
+appears only when two different stacks share a name, for example a stack that was deleted and re-created,
+where the name alone would merge their rows.
+
 :::note
 `logs` does not fire `before`/`after` hook events — only
 [`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff), and
-[`delete`](/cli/commands/aws/cloudformation/delete) do.
+[`diff`](/cli/commands/aws/cloudformation/diff),
+[`delete`](/cli/commands/aws/cloudformation/delete),
+[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
+[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
 :::

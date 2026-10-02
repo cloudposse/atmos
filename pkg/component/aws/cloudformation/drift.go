@@ -186,18 +186,62 @@ func runDriftDescribe(ctx context.Context, client CloudFormationClient, stackNam
 		return summary, err
 	}
 	summary["drifts"] = drifts
+	status, driftedCount := summarizeResourceDrifts(drifts)
+	summary["drift_status"] = string(status)
+	summary["drifted_resource_count"] = driftedCount
 
 	if len(drifts) == 0 {
 		_ = data.Writeln(fmt.Sprintf("%s: no drift results (run drift detect first)", stackName))
 		return summary, nil
 	}
+	for _, line := range driftLines(drifts) {
+		_ = data.Writeln(line)
+	}
+	return summary, nil
+}
+
+// driftLines renders every drifted (not IN_SYNC) resource as one status line, followed by one
+// indented line per property difference (path, expected value, actual value, difference type) so
+// a MODIFIED resource shows what changed rather than only that it did. Shared by `drift describe`
+// and the CI summary so both show the same detail.
+func driftLines(drifts []cfntypes.StackResourceDrift) []string {
+	var lines []string
 	for i := range drifts {
 		d := &drifts[i]
 		if d.StackResourceDriftStatus == cfntypes.StackResourceDriftStatusInSync {
 			continue
 		}
-		line := fmt.Sprintf("  %-10s %-28s %s", d.StackResourceDriftStatus, stringValue(d.ResourceType), stringValue(d.LogicalResourceId))
-		_ = data.Writeln(line)
+		lines = append(lines, fmt.Sprintf("  %-10s %-28s %s", d.StackResourceDriftStatus, stringValue(d.ResourceType), stringValue(d.LogicalResourceId)))
+		for j := range d.PropertyDifferences {
+			diff := &d.PropertyDifferences[j]
+			lines = append(lines, fmt.Sprintf("    %s: expected %s, actual %s (%s)",
+				stringValue(diff.PropertyPath), stringValue(diff.ExpectedValue), stringValue(diff.ActualValue), diff.DifferenceType))
+		}
 	}
-	return summary, nil
+	return lines
+}
+
+// summarizeResourceDrifts derives the aggregate status from the returned
+// resource results. Known drift takes precedence over incomplete detection;
+// unchecked or unrecognized results must never make a stack appear clean.
+func summarizeResourceDrifts(drifts []cfntypes.StackResourceDrift) (cfntypes.StackDriftStatus, int32) {
+	if len(drifts) == 0 {
+		return "", 0
+	}
+	status := cfntypes.StackDriftStatusInSync
+	var driftedCount int32
+	for i := range drifts {
+		switch drifts[i].StackResourceDriftStatus {
+		case cfntypes.StackResourceDriftStatusModified, cfntypes.StackResourceDriftStatusDeleted:
+			driftedCount++
+		case cfntypes.StackResourceDriftStatusInSync:
+			// This resource was checked and is unchanged.
+		default:
+			status = cfntypes.StackDriftStatusNotChecked
+		}
+	}
+	if driftedCount > 0 {
+		status = cfntypes.StackDriftStatusDrifted
+	}
+	return status, driftedCount
 }

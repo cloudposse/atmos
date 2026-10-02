@@ -4,7 +4,11 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -231,7 +235,20 @@ func TestNewS3Backend_MissingBucket(t *testing.T) {
 // injecting a gomock-generated artifact.Backend so uploadPackage's own logic
 // (digest computation, object naming, error wrapping) can be exercised
 // without a real S3 call. Auto-restores on cleanup.
+//
+// Unless the caller already set GetMetadata expectations, a mock backend
+// reports every object as absent, so uploadPackage always uploads.
 func stubNewS3Backend(t *testing.T, backend artifact.Backend, err error) {
+	t.Helper()
+	if mock, ok := backend.(*artifact.MockBackend); ok {
+		mock.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(nil, errUtils.ErrArtifactNotFound).AnyTimes()
+	}
+	stubNewS3BackendExact(t, backend, err)
+}
+
+// stubNewS3BackendExact overrides the newS3BackendFunc seam without adding any
+// default mock expectations.
+func stubNewS3BackendExact(t *testing.T, backend artifact.Backend, err error) {
 	t.Helper()
 	original := newS3BackendFunc
 	newS3BackendFunc = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _ *targetS3Config) (artifact.Backend, error) {
@@ -303,4 +320,42 @@ func TestUploadPackage_UploadError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "packaging template to s3://my-bucket/")
 	assert.Contains(t, err.Error(), "access denied")
+}
+
+// TestUploadPackageRealBackendPrefix compares the returned URL with actual SDK upload paths, including
+// nested and escaped prefixes and metadata sidecars.
+func TestUploadPackageRealBackendPrefix(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	for _, prefix := range []string{"", "templates", "nested/templates/", "templates with spaces/#"} {
+		t.Run(prefix, func(t *testing.T) {
+			var mu sync.Mutex
+			var paths []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				if r.Method == http.MethodHead {
+					// Report the content-addressed object as absent so the upload proceeds.
+					mu.Unlock()
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				paths = append(paths, r.URL.Path)
+				mu.Unlock()
+				_, err := io.Copy(io.Discard, r.Body)
+				assert.NoError(t, err)
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+			t.Setenv("AWS_ENDPOINT_URL_S3", server.URL)
+			target := &targetS3Config{Bucket: "field-test", Region: "us-east-2", Prefix: prefix}
+			result, err := uploadPackage(context.Background(), &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "test"}, target, "Resources: {}")
+			require.NoError(t, err)
+			parsed, err := url.Parse(result.URL)
+			assert.NoError(t, err)
+			mu.Lock()
+			defer mu.Unlock()
+			assert.Equal(t, []string{"/field-test" + parsed.Path, "/field-test" + parsed.Path + ".metadata.json"}, paths)
+		})
+	}
 }

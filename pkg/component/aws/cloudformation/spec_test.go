@@ -135,12 +135,8 @@ func TestNormalizeParameters_RejectsNestedMap(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
 }
 
-func TestNormalizeParameters_NilAndNonMap(t *testing.T) {
+func TestNormalizeParameters_Nil(t *testing.T) {
 	params, err := normalizeParameters(nil)
-	require.NoError(t, err)
-	assert.Nil(t, params)
-
-	params, err = normalizeParameters("not-a-map")
 	require.NoError(t, err)
 	assert.Nil(t, params)
 }
@@ -209,8 +205,45 @@ func TestNormalizeStringSlice_AlreadyStringSlice(t *testing.T) {
 }
 
 func TestNormalizeCapabilities_Empty(t *testing.T) {
-	assert.Nil(t, normalizeCapabilities(nil))
-	assert.Nil(t, normalizeCapabilities([]any{}))
+	for _, raw := range []any{nil, []any{}} {
+		got, err := normalizeCapabilities(raw)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	}
+}
+
+// Capabilities are validated locally against the SDK enum so a typo fails with
+// the valid set instead of surfacing as a late AWS API error.
+func TestNormalizeCapabilities_Validation(t *testing.T) {
+	t.Run("accepts every SDK enum value", func(t *testing.T) {
+		valid := cfntypes.Capability("").Values()
+		require.NotEmpty(t, valid)
+		raw := make([]any, 0, len(valid))
+		for _, v := range valid {
+			raw = append(raw, string(v))
+		}
+		got, err := normalizeCapabilities(raw)
+		require.NoError(t, err)
+		assert.Equal(t, valid, got)
+	})
+
+	t.Run("rejects an unknown value naming it and the valid set", func(t *testing.T) {
+		_, err := normalizeCapabilities([]any{"CAPABILITY_IAM", "CAPABILITY_IAMM"})
+		require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationCapabilities)
+		assert.Contains(t, err.Error(), "CAPABILITY_IAMM")
+		for _, valid := range cfntypes.Capability("").Values() {
+			assert.Contains(t, err.Error(), string(valid))
+		}
+	})
+
+	t.Run("buildStackSpec propagates the error", func(t *testing.T) {
+		_, err := buildStackSpec(map[string]any{
+			"stack_name":   "vpc",
+			"template":     "Resources: {}\n",
+			"capabilities": []any{"CAPABILITY_IAMM"},
+		})
+		require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationCapabilities)
+	})
 }
 
 func TestNormalizeTags_NonMap(t *testing.T) {

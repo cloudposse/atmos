@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
@@ -194,8 +195,9 @@ func TestDispatchAffected_DefaultRefCheckout(t *testing.T) {
 func TestExecuteBulk_All(t *testing.T) {
 	origDescribe := executeDescribeStacks
 	stacks := map[string]any{"dev": map[string]any{}}
-	executeDescribeStacks = func(_ *schema.AtmosConfiguration, filterByStack string, _, componentTypes, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+	executeDescribeStacks = func(_ *schema.AtmosConfiguration, filterByStack string, _, componentTypes, _ []string, _, _, processYAML, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
 		assert.Equal(t, []string{cfg.CloudFormationComponentType}, componentTypes)
+		assert.False(t, processYAML, "discovery must defer producer outputs until dependency-ordered execution")
 		return stacks, nil
 	}
 	t.Cleanup(func() { executeDescribeStacks = origDescribe })
@@ -229,6 +231,10 @@ func TestExecuteBulk_All(t *testing.T) {
 	assert.Equal(t, string(OperationApply), gotOpts.SubCommand)
 	assert.Nil(t, gotOpts.Selection, "--all (not --affected) must pass a nil selection")
 	assert.Equal(t, ctx.Flags, gotOpts.Flags)
+	assert.False(t, gotOpts.ReverseOrder, "apply must preserve dependency order")
+	require.NoError(t, executeBulk(ctx, atmosConfig, info, OperationDelete))
+	assert.True(t, gotOpts.ReverseOrder, "delete must remove consumers before dependencies")
+
 	require.NotNil(t, gotCtx)
 	assert.ErrorIs(t, gotCtx.Err(), context.Canceled,
 		"executeBulk must forward the caller's cancellation into ExecuteGraph instead of a disconnected context.Background()")
@@ -295,4 +301,49 @@ func TestAffectedCloudFormationComponents_WiresArgsAndDispatches(t *testing.T) {
 	assert.Equal(t, "refs/heads/main", gotArgs.Ref)
 	assert.Equal(t, "dev", gotArgs.Stack)
 	assert.True(t, gotArgs.AuthDisabled)
+}
+
+// executeBulk must hand every fmt node a bulk state (through the graph's flags) and
+// finish the run with the aggregated --check result, so one run reports every
+// unformatted template and fails once. Other operations get no fmt state.
+func TestExecuteBulk_FmtStateIsAttachedAndFinished(t *testing.T) {
+	tests := []struct {
+		name         string
+		operation    Operation
+		recordUnfmt  bool
+		wantState    bool
+		wantNotClean bool
+	}{
+		{name: "fmt with an unformatted template", operation: OperationFmt, recordUnfmt: true, wantState: true, wantNotClean: true},
+		{name: "fmt with everything formatted", operation: OperationFmt, wantState: true},
+		{name: "validate has no fmt state", operation: OperationValidate},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldDescribe, oldGraph := executeDescribeStacks, executeGraph
+			t.Cleanup(func() { executeDescribeStacks, executeGraph = oldDescribe, oldGraph })
+			executeDescribeStacks = func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+				return map[string]any{}, nil
+			}
+			var graphFlags map[string]any
+			executeGraph = func(_ context.Context, opts *component.GraphExecutionOptions) error {
+				graphFlags = opts.Flags
+				if state := fmtBulkStateFrom(opts.Flags); state != nil && tt.recordUnfmt {
+					state.recordUnformatted("templates/a.yaml")
+				}
+				return nil
+			}
+
+			ctx := &component.ExecutionContext{Context: context.Background(), Flags: map[string]any{}}
+			err := executeBulk(ctx, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{All: true}, tt.operation)
+			assert.Equal(t, tt.wantState, fmtBulkStateFrom(graphFlags) != nil)
+			assert.NotContains(t, ctx.Flags, fmtBulkStateKey, "the caller's flags must not be modified")
+			if tt.wantNotClean {
+				require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationFmtNotClean)
+				assert.Contains(t, err.Error(), "templates/a.yaml")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }

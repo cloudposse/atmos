@@ -174,7 +174,7 @@ func (h Hook) MatchesEvent(event HookEvent) bool {
 	}
 	normalizedEvent := event.Normalize()
 	for _, e := range h.Events {
-		if HookEvent(strings.ReplaceAll(e, "-", ".")).Normalize() == normalizedEvent {
+		if HookEvent(e).Normalize() == normalizedEvent || HookEvent(strings.ReplaceAll(e, "-", ".")).Normalize() == normalizedEvent {
 			return true
 		}
 	}

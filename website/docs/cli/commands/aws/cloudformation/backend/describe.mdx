@@ -58,3 +58,22 @@ atmos aws cloudformation backend describe vpc -s plat-ue2-dev --target artifacts
 `backend describe` calls the same S3 `HeadBucket` existence check the
 provisioner uses internally to decide whether to create or reuse a bucket
 during `backend create`/`backend update`.
+
+The `table` format prints a header row (`TARGET`, `BUCKET`, `REGION`,
+`STATUS`). The `json` and `yaml` formats use snake_case keys, matching the rest
+of the CloudFormation output:
+
+```json
+[
+  {
+    "target": {
+      "name": "artifacts",
+      "bucket": "my-org-cfn-templates",
+      "prefix": "vpc",
+      "region": "us-east-1"
+    },
+    "region": "us-east-1",
+    "exists": true
+  }
+]
+```

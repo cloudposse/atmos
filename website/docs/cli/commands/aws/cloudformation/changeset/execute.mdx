@@ -8,6 +8,8 @@ description: Execute a previously-created, named changeset.
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
   Execute a previously-created, named changeset (`ExecuteChangeSet`) and stream
@@ -50,20 +52,9 @@ atmos aws cloudformation changeset execute vpc -s plat-ue2-dev --changeset-name 
   <dt>`--auto-approve` <em>(optional)</em></dt>
   <dd>Skip the interactive confirmation prompt. Without it, `changeset execute` prompts for confirmation on a TTY before executing the changeset.</dd>
 
-  <dt>`--all` <em>(optional)</em></dt>
-  <dd>Execute the named changeset for all `aws/cloudformation` components in dependency order.</dd>
+<SelectionFlags />
 
-  <dt>`--affected` <em>(optional)</em></dt>
-  <dd>Execute the named changeset for affected `aws/cloudformation` components and their dependencies.</dd>
-
-  <dt>`--include-dependents` <em>(optional)</em></dt>
-  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
-
-  <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
-
-  <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+<GitFlags />
 </dl>
 
 ## Behavior
@@ -74,6 +65,13 @@ If the stack ends in a failed status after executing the changeset (e.g.
 :::note
 `changeset execute` does not fire `before`/`after` hook events — only
 [`apply`](/cli/commands/aws/cloudformation/apply),
-[`diff`](/cli/commands/aws/cloudformation/diff), and
-[`delete`](/cli/commands/aws/cloudformation/delete) do.
+[`diff`](/cli/commands/aws/cloudformation/diff),
+[`delete`](/cli/commands/aws/cloudformation/delete),
+[`drift detect`](/cli/commands/aws/cloudformation/drift/detect), and
+[`drift describe`](/cli/commands/aws/cloudformation/drift/describe) do.
 :::
+
+After a successful named CREATE or UPDATE, Atmos enables configured `termination_protection`,
+matching apply. Failure to enable it fails the command even if the deployment completed.
+Setting the field to false never disables existing protection; deletion requires the explicit
+`--disable-termination-protection` flag.

@@ -1,6 +1,7 @@
 package cloudformation
 
 import (
+	"fmt"
 	"maps"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -8,6 +9,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
+	sharedoutput "github.com/cloudposse/atmos/pkg/output"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -21,6 +24,8 @@ var (
 	affectedCloudFormationComponentsFunc = affectedCloudFormationComponents
 )
 
+// executeBulk discovers the dependency graph without resolving YAML functions, then executes producers
+// first for apply and consumers first for delete.
 func executeBulk(
 	ctx *component.ExecutionContext,
 	atmosConfig *schema.AtmosConfiguration,
@@ -39,8 +44,8 @@ func executeBulk(
 		[]string{cfg.CloudFormationComponentType},
 		nil,
 		false,
-		true,
-		true,
+		!info.DryRun,
+		false, // Resolve YAML functions per node, after dependencies have completed.
 		true,
 		info.Skip,
 		authManager,
@@ -54,16 +59,26 @@ func executeBulk(
 		return err
 	}
 
-	return executeGraph(ctx.GoContext(), &component.GraphExecutionOptions{
+	flags, collector, err := withBulkOutputCollector(operation, bulkOperationFlags(operation, ctx.Flags))
+	if err != nil {
+		return err
+	}
+
+	graphErr := executeGraph(ctx.GoContext(), &component.GraphExecutionOptions{
 		Provider:      &ComponentProvider{},
+		ReverseOrder:  operation == OperationDelete,
 		AtmosConfig:   atmosConfig,
 		Info:          info,
 		Stacks:        stacks,
 		ComponentType: cfg.CloudFormationComponentType,
 		SubCommand:    string(operation),
-		Flags:         bulkOperationFlags(operation, ctx.Flags),
+		Flags:         flags,
 		Selection:     selection,
 	})
+	if graphErr == nil {
+		graphErr = collector.flush()
+	}
+	return finishFmtBulk(flags, graphErr)
 }
 
 func authManagerForBulk(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
@@ -110,6 +125,8 @@ func graphSelectionForBulk(
 	}, nil
 }
 
+// affectedCloudFormationComponents selects changed components without resolving output dependencies
+// that may not exist until execution.
 func affectedCloudFormationComponents(
 	ctx *component.ExecutionContext,
 	atmosConfig *schema.AtmosConfiguration,
@@ -118,8 +135,8 @@ func affectedCloudFormationComponents(
 	args := e.DescribeAffectedCmdArgs{
 		CLIConfig:                   atmosConfig,
 		Stack:                       info.Stack,
-		ProcessTemplates:            true,
-		ProcessYamlFunctions:        true,
+		ProcessTemplates:            !info.DryRun,
+		ProcessYamlFunctions:        false,
 		Skip:                        info.Skip,
 		IncludeSettings:             false,
 		IncludeDependents:           false,
@@ -241,6 +258,112 @@ func bulkOperationFlags(operation Operation, flags map[string]any) map[string]an
 	if result == nil {
 		result = make(map[string]any)
 	}
+	attachFmtBulkState(result)
 	result[fmtSkipInlineKey] = true
 	return result
+}
+
+// bulkOutputCollectorKey is the private flag through which a bulk `output` run
+// hands its collector to every component node (the graph copies flags to each
+// node). It is not a CLI flag.
+const bulkOutputCollectorKey = "bulk-output-collector"
+
+// bulkOutputCollector makes `output --all` (and --tags/--labels/--affected)
+// produce one coherent result instead of unlabeled per-component output:
+//   - json and yaml collect every component's outputs and print ONE document
+//     keyed by stack, then component, once the whole run succeeds.
+//   - table prints a title above each component's table.
+//
+// Other formats (env, dotenv, bash, hcl, csv, tsv, github) stay flat,
+// per-component streams: they have no way to carry a stack/component key.
+type bulkOutputCollector struct {
+	format sharedoutput.Format
+	// docs maps stack -> component -> outputs for the structured formats.
+	docs map[string]any
+}
+
+// withBulkOutputCollector installs a collector for a bulk `output` run in a copy
+// of flags (the caller's map is never modified) and returns it. Any other
+// operation, and formats with no stack/component structure, get a nil collector.
+func withBulkOutputCollector(operation Operation, flags map[string]any) (map[string]any, *bulkOutputCollector, error) {
+	if operation != OperationOutput {
+		return flags, nil, nil
+	}
+	format, err := outputFormat(flags)
+	if err != nil {
+		return nil, nil, err
+	}
+	switch format {
+	case sharedoutput.FormatJSON, sharedoutput.FormatYAML, sharedoutput.FormatTable:
+	default:
+		return flags, nil, nil
+	}
+	collector := &bulkOutputCollector{format: format, docs: make(map[string]any)}
+	result := maps.Clone(flags)
+	if result == nil {
+		result = make(map[string]any)
+	}
+	result[bulkOutputCollectorKey] = collector
+	return result, collector, nil
+}
+
+// runOutputOperation runs the `output` verb for one component. In a bulk run the
+// bulk collector decides how it is presented; otherwise the outputs are rendered
+// directly.
+func runOutputOperation(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+	collector, _ := octx.Flags[bulkOutputCollectorKey].(*bulkOutputCollector)
+	if collector == nil {
+		return runOutput(octx.Ctx, client, spec.StackName, octx.Flags, summary)
+	}
+	return collector.run(octx, client, spec.StackName, summary)
+}
+
+// run handles one component of a bulk output run: structured formats record the
+// outputs for the final document, table prints a title and the table.
+func (c *bulkOutputCollector) run(octx *opContext, client CloudFormationClient, stackName string, summary map[string]any) (map[string]any, error) {
+	stack, component := octx.Info.Stack, octx.Info.ComponentFromArg
+	if c.format == sharedoutput.FormatTable {
+		if err := data.Writeln(fmt.Sprintf("%s in stack %s:", component, stack)); err != nil {
+			return summary, err
+		}
+		return runOutput(octx.Ctx, client, stackName, octx.Flags, summary)
+	}
+	return c.record(octx, client, stackName, summary)
+}
+
+// record fetches one component's presented (masked) outputs and files them under
+// stack and component.
+func (c *bulkOutputCollector) record(octx *opContext, client CloudFormationClient, stackName string, summary map[string]any) (map[string]any, error) {
+	stack, component := octx.Info.Stack, octx.Info.ComponentFromArg
+	outputs, err := presentedStackOutputs(octx.Ctx, client, stackName)
+	if err != nil {
+		return summary, err
+	}
+	summary["outputs"] = outputs
+	byComponent, _ := c.docs[stack].(map[string]any)
+	if byComponent == nil {
+		byComponent = make(map[string]any)
+		c.docs[stack] = byComponent
+	}
+	byComponent[component] = outputs
+	return summary, nil
+}
+
+// flush prints the single aggregated document for the structured formats. It is
+// a no-op for a nil collector and for table output, which streams per component.
+func (c *bulkOutputCollector) flush() error {
+	if c == nil || c.format == sharedoutput.FormatTable {
+		return nil
+	}
+	var rendered string
+	var err error
+	if c.format == sharedoutput.FormatJSON {
+		rendered, err = encodeJSON(c.docs)
+	} else {
+		rendered, err = sharedoutput.FormatOutputs(c.docs, c.format)
+	}
+	if err != nil {
+		return err
+	}
+	return data.Write(rendered)
 }

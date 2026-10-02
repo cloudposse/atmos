@@ -39,7 +39,7 @@ func expectPreviewRequest(t *testing.T, client *MockCloudFormationClient, operat
 		})
 		return
 	}
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}}}, nil)
 	client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input *cloudformation.CreateChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {
 		assertTemplateInput(t, spec, input.TemplateBody, input.TemplateURL)
 		return &cloudformation.CreateChangeSetOutput{}, nil

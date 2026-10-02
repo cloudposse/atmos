@@ -7,6 +7,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	awscfn "github.com/cloudposse/atmos/pkg/aws/cloudformation"
 	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	awsOrg "github.com/cloudposse/atmos/pkg/aws/organization"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -279,7 +280,19 @@ func processTagAwsCloudFormationOutputWithContext(
 		return nil, fmt.Errorf("failed to get aws/cloudformation output for component %s in stack %s, output %s: %w", component, stack, output, err)
 	}
 
-	return outputs[output], nil
+	return lookupCloudFormationOutput(sections, outputs, component, stack, output)
+}
+
+// lookupCloudFormationOutput returns one Output's value. A missing key must
+// fail loudly: resolving it to null would flow into the consuming component as
+// an empty value and deploy it silently.
+func lookupCloudFormationOutput(sections, outputs map[string]any, component, stack, output string) (any, error) {
+	cfnStackName, _ := sections[cfg.StackNameSectionName].(string)
+	value, err := awscfn.LookupOutput(outputs, cfnStackName, output)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get aws/cloudformation output for component %s in stack %s, output %s: %w", component, stack, output, err)
+	}
+	return value, nil
 }
 
 // resolveCloudFormationOutputAuth resolves the target identity before any output
