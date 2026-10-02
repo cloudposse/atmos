@@ -50,9 +50,6 @@ atmos aws cloudformation backend create vpc -s plat-ue2-dev --target artifacts
   <dt>`--auto-approve` <em>(optional)</em></dt>
   <dd>Skip the confirmation prompt shown when the bucket already exists, since re-applying the secure defaults overwrites its existing encryption, versioning, public-access settings, and tags. Required to reconcile an existing bucket in a non-interactive session. A bucket that does not exist yet never prompts.</dd>
 
-  <dt>`--auto-approve` <em>(optional)</em></dt>
-  <dd>Skip the confirmation prompt shown when the bucket already exists. Required in a non-interactive session (no terminal on stdin) when re-running against an existing bucket, because re-applying the defaults overwrites its encryption, versioning, public-access settings, and tags.</dd>
-
   <dt>`--dry-run` <em>(optional)</em></dt>
   <dd>Resolve the component and its `kind: aws/s3` target from static configuration and print what would happen, for example `would create bucket <name> in region <region>`. It makes no AWS calls and does not authenticate. A component or stack that does not exist, or a component with no resolvable target, fails the same way the real run does.</dd>
 
