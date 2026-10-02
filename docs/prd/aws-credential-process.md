@@ -10,12 +10,12 @@ document with temporary (or long-lived) credentials.
 Atmos Auth should speak this protocol in both directions:
 
 1. **Consume** — a new `aws/credential-process` identity kind runs an external helper (Okta CLI,
-   aws-sso-cli, aws-vault, Granted, a corporate SAML tool, …) and uses the credentials it returns.
-   ([#1734](https://github.com/cloudposse/atmos/issues/1734), supersedes the PRD in
-   [#1795](https://github.com/cloudposse/atmos/pull/1795))
+    aws-sso-cli, aws-vault, Granted, a corporate SAML tool, …) and uses the credentials it returns.
+    ([#1734](https://github.com/cloudposse/atmos/issues/1734), supersedes the PRD in
+    [#1795](https://github.com/cloudposse/atmos/pull/1795))
 2. **Produce** — `atmos aws credential-process --identity=<name>` prints credentials for any Atmos
-   identity in the same format, so a `~/.aws/config` profile can delegate to Atmos.
-   ([#3248](https://github.com/cloudposse/atmos/issues/3248))
+    identity in the same format, so a `~/.aws/config` profile can delegate to Atmos.
+    ([#3248](https://github.com/cloudposse/atmos/issues/3248))
 
 ## Problem
 
@@ -47,7 +47,7 @@ chaining, or the automatic authentication of `atmos terraform`.
 
 1. Follow the AWS process-credential specification exactly, in both directions.
 2. Work with every existing Atmos Auth workflow: `auth shell`, `auth exec`, `auth env`, `auth whoami`,
-   identity chaining, and commands that authenticate automatically.
+    identity chaining, and commands that authenticate automatically.
 3. Respect credential lifetimes: reuse unexpired credentials, refresh expired ones.
 4. Never leak secrets in logs or error messages.
 5. Work from any directory when producing credentials.
@@ -168,10 +168,10 @@ Atmos locates `atmos.yaml` the usual way, so any of these work from any director
 ### Behavior
 
 1. Resolve the identity from `--identity`, then `ATMOS_IDENTITY`, then the configured default
-   identity. Interactive selection is not available because stdout is not a terminal.
+    identity. Interactive selection is not available because stdout is not a terminal.
 2. If cached credentials for the identity expire more than `--min-validity` (default 15 minutes) from
-   now, print them without any network call. The AWS CLI runs `credential_process` once per CLI
-   invocation, so this keeps every `aws` command fast.
+    now, print them without any network call. The AWS CLI runs `credential_process` once per CLI
+    invocation, so this keeps every `aws` command fast.
 3. Otherwise authenticate the identity the same way `atmos auth login` would.
 4. Print exactly one JSON document to stdout. Everything else (logs, notices) goes to stderr.
 

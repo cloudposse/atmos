@@ -91,16 +91,16 @@ Component Request → Identity → Provider Chain → Root Provider
 Example: `terraform apply` with identity `sandbox-admin`:
 
 1. Resolve identity chain: `sandbox-admin` → `managers` → `cplive-sso`
-   a. `sandbox-admin` is the target identity (kind: `aws/assume-role`)
-   b. `managers` is the via identity (kind: `aws/permission-set`)
-   c. `cplive-sso` is the root provider (kind: `aws/iam-identity-center`)
+    a. `sandbox-admin` is the target identity (kind: `aws/assume-role`)
+    b. `managers` is the via identity (kind: `aws/permission-set`)
+    c. `cplive-sso` is the root provider (kind: `aws/iam-identity-center`)
 2. Build authentication chain: `[cplive-sso, managers, sandbox-admin]`
 3. Execute sequential authentication
 
 ### 2. Sequential Authentication
 
 ```go
-	finalCreds, err := m.authenticateHierarchical(ctx, identityName)
+finalCreds, err := m.authenticateHierarchical(ctx, identityName)
 ```
 
 We traverse the chain, checking for cached credentials. We start at the target identity, and if that already has cached credentials, we can use that. Otherwise, we go down until we have cached credentials, and then we refresh the credentials going back up.

@@ -348,7 +348,7 @@ Open cloud provider web console in your default browser using authenticated cred
 
 ```shell
 atmos auth console [--identity <name>] [--destination <url-or-alias>] [--duration <duration>]
-                   [--issuer <name>] [--print-only] [--no-open]
+                    [--issuer <name>] [--print-only] [--no-open]
 ```
 
 ### Flags
