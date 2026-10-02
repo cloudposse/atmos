@@ -27,9 +27,16 @@ import (
 // fall back to the default AWS credential chain and fail (e.g. the S3 backend assumes a role with
 // no base credentials and the SDK ultimately dials the EC2 IMDS endpoint, which is unreachable on
 // a workstation). Skipping them keeps listing genuinely credential-free: a skipped function leaves
-// its raw string in place, which the declaration extractor ignores. `!secret` is included because
-// retrieving secret values is a separate, explicit step.
+// its raw declaration string in place without resolving backend selectors or values. `!secret`
+// is included because retrieving secret values is a separate, explicit step.
 func credentialFreeSkip() []string {
+	return append(authenticatedSecretSkip(), strings.TrimPrefix(u.AtmosYamlFuncAwsCloudFormationOutput, "!"))
+}
+
+// authenticatedSecretSkip leaves secret values and Terraform/store reads lazy,
+// while allowing CloudFormation outputs to resolve secret backend selectors.
+// The evaluation scope includes only declarations and their local dependencies.
+func authenticatedSecretSkip() []string {
 	// skipFunc compares against the tag with the leading "!" trimmed, so the skip tokens are bare.
 	tags := []string{
 		u.AtmosYamlFuncSecret,
@@ -37,7 +44,6 @@ func credentialFreeSkip() []string {
 		u.AtmosYamlFuncStoreGet,
 		u.AtmosYamlFuncTerraformOutput,
 		u.AtmosYamlFuncTerraformState,
-		u.AtmosYamlFuncAwsCloudFormationOutput,
 	}
 	skip := make([]string, len(tags))
 	for i, tag := range tags {
@@ -158,12 +164,12 @@ func requireScopeComponent(scope secretScope, cmd *cobra.Command, args []string)
 }
 
 // loadService initializes config + auth and returns a secrets.Service scoped to (stack,
-// component). It resolves the component section with credentialFreeSkip()'s functions skipped
+// component). It resolves the component section with authenticatedSecretSkip()'s functions skipped
 // (`!secret`, `!store`, `!store.get`, `!terraform.output`, `!terraform.state`) so declarations and
 // includes resolve without retrieving secret values (a separate, explicit step) and without
-// requiring sibling components' terraform state or store contents to already exist — the service
-// only ever reads secrets.vars/secrets.providers from the resolved section, never those functions'
-// results.
+// requiring sibling components' terraform state or store contents to already exist. CloudFormation
+// output selectors in secrets.vars/secrets.providers resolve using the authenticated scope;
+// unrelated component inputs and outputs remain outside the evaluation scope.
 func loadService(scope secretScope) (*secrets.Service, error) {
 	defer perf.Track(nil, "secret.loadService")()
 
@@ -201,10 +207,9 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 		ComponentType:        scope.ComponentType,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
-		// Skip the same credential/state-fetching functions `secret list` already skips (see
-		// credentialFreeSkip): resolving where to write/read a secret only needs secrets.vars/
-		// secrets.providers, never a sibling component's terraform state or store contents.
-		Skip:         credentialFreeSkip(),
+		// Resolve CloudFormation backend selectors inside declarations while keeping
+		// secret values and unrelated state/store reads deferred.
+		Skip:         authenticatedSecretSkip(),
 		AuthManager:  authManager,
 		ErrorOptions: secretDeclarationEvaluation(),
 	})

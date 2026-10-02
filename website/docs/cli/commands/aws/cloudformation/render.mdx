@@ -3,7 +3,7 @@ title: atmos aws cloudformation render
 sidebar_label: render
 sidebar_class_name: command
 id: render
-description: Render the local CloudFormation template client-side, with no AWS API calls.
+description: Render a CloudFormation template client-side, provisioning sources and generating configured files first.
 ---
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
@@ -15,8 +15,10 @@ import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-
 
 <Intro>
   Render the component's inline `template:` or file-based `path:` template,
-  provisioning `source:` and generating configured files first when enabled. `render`
-  does not authenticate, so it works offline and without AWS credentials.
+  provisioning `source:` and generating configured files first when enabled. Local
+  or already-provisioned sources can render offline without AWS credentials when
+  their configuration does not require remote lookups. A cold remote `source:` must
+  be fetched first; private S3 sources use the component’s resolved AWS identity.
 </Intro>
 
 <Experimental />
@@ -66,8 +68,10 @@ atmos aws cloudformation render --affected --labels cost-center=platform
 </dl>
 
 :::note
-`render` skips authentication and never calls the CloudFormation API. To preview
-the changes an `apply` would actually make against the deployed stack, use
+`render` does not deploy or validate a stack through the CloudFormation API.
+Source provisioning and configured secret or output lookups can still require
+authentication and network access. To preview the changes an `apply` would
+actually make against the deployed stack, use
 [`diff`](/cli/commands/aws/cloudformation/diff) (alias [`plan`](/cli/commands/aws/cloudformation/plan)).
 :::
 

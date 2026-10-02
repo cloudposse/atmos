@@ -1,8 +1,12 @@
 package secret
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -323,4 +327,77 @@ components:
 	require.NoError(t, err)
 	require.True(t, svc.IsDeclared("TOKEN"))
 	require.Equal(t, "vault", svc.Declarations()[0].BackendName)
+}
+
+// TestSecretBackendSelectorsResolveCloudFormationOutputs verifies authenticated
+// declaration loading resolves both backend selectors, while listing remains
+// credential-free and unrelated component outputs are never fetched.
+func TestSecretBackendSelectorsResolveCloudFormationOutputs(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if !assert.NoError(t, r.ParseForm()) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		assert.Equal(t, "DescribeStacks", r.Form.Get("Action"))
+		assert.Equal(t, "dev-secret-backends", r.Form.Get("StackName"))
+		assert.Contains(t, r.Header.Get("Authorization"), "Credential=selector-test/")
+		w.Header().Set("Content-Type", "text/xml")
+		_, _ = fmt.Fprint(w, `<DescribeStacksResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/"><DescribeStacksResult><Stacks><member><StackName>dev-secret-backends</StackName><StackStatus>CREATE_COMPLETE</StackStatus><Outputs><member><OutputKey>StoreName</OutputKey><OutputValue>resolved-store</OutputValue></member><member><OutputKey>SopsName</OutputKey><OutputValue>resolved-sops</OutputValue></member></Outputs></member></Stacks></DescribeStacksResult></DescribeStacksResponse>`)
+	}))
+	defer server.Close()
+	dir := writeMinimalAtmosProject(t)
+	manifest := `vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      vars:
+        unrelated: !aws.cloudformation.output missing-producer dev Value
+      secrets:
+        vars:
+          API_KEY:
+            store: !aws.cloudformation.output secret-backends dev StoreName
+          SOPS_KEY:
+            sops: !aws.cloudformation.output secret-backends dev SopsName
+  aws/cloudformation:
+    secret-backends:
+      stack_name: dev-secret-backends
+      settings:
+        aws_cloudformation:
+          region: us-east-2
+      template:
+        Resources: {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "dev.yaml"), []byte(manifest), 0o644))
+	t.Chdir(dir)
+	t.Setenv("AWS_ENDPOINT_URL_CLOUDFORMATION", server.URL)
+	t.Setenv("AWS_ACCESS_KEY_ID", "selector-test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "synthetic-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "")
+	t.Setenv("AWS_PROFILE", "")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	scope := secretScope{Stack: "dev", Component: "vpc"}
+	listed, err := loadServiceForList(scope, false)
+	require.NoError(t, err)
+	require.Len(t, listed.Declarations(), 2)
+	for _, declaration := range listed.Declarations() {
+		assert.Contains(t, declaration.BackendName, "!aws.cloudformation.output")
+	}
+	assert.Zero(t, requests.Load(), "credential-free listing must not read output selectors")
+	loaded, err := loadService(scope)
+	require.NoError(t, err)
+	require.Len(t, loaded.Declarations(), 2)
+	for _, declaration := range loaded.Declarations() {
+		switch declaration.Name {
+		case "API_KEY":
+			assert.Equal(t, "resolved-store", declaration.BackendName)
+		case "SOPS_KEY":
+			assert.Equal(t, "resolved-sops", declaration.BackendName)
+		default:
+			t.Errorf("unexpected declaration %q", declaration.Name)
+		}
+	}
+	assert.Positive(t, requests.Load(), "authenticated loading must resolve selectors through CloudFormation")
 }

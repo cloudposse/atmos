@@ -81,6 +81,16 @@ are included in this change at the user's request; no follow-up issue is needed.
   coverage). Workdir tests cover all component-option helpers and verify real
   Terraform state migration, lock restoration and CloudFormation source isolation.
 
+- Authenticated secret loading now resolves CloudFormation output selectors used
+  by `store` and `sops` declarations. Credential-free listing retains unresolved
+  selectors, and unrelated component outputs stay outside the evaluation scope.
+  A real SDK regression failed before the fix and passed afterward against a
+  local HTTP endpoint, checking both resolved backend names, signed requests to
+  the intended producer, and zero requests during listing. The full secret
+  package passed with 93.3% statement coverage; focused race tests passed.
+- Render documentation now distinguishes offline local/warm sources from cold
+  remote downloads and authenticated secret/output lookups.
+
 ## Follow-ups
 
 None.
