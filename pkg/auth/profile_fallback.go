@@ -172,14 +172,14 @@ func buildProfileSuggestionError(identityName string, candidates []string) error
 	if len(candidates) == 1 {
 		b = b.
 			WithHintf("Identity `%s` is defined in profile `%s`", identityName, candidates[0]).
-			WithHintf("Re-run with `%s %s` to use it", profileFlagName, candidates[0])
+			WithHintf("Re-run with `%s=%s` to use it", profileFlagName, candidates[0])
 	} else {
 		sorted := make([]string, len(candidates))
 		copy(sorted, candidates)
 		sort.Strings(sorted)
 		b = b.
-			WithHintf("Identity `%s` is defined in these profiles: `%s`", identityName, joinQuoted(sorted)).
-			WithHint("Re-run with `--profile <name>` using one of the profiles above")
+			WithHintf("Identity `%s` is defined in these profiles: %s", identityName, joinQuoted(sorted)).
+			WithHint("Re-run with `--profile=<name>` using one of the profiles above")
 	}
 
 	return b.
@@ -374,11 +374,11 @@ func buildAnyProfileSuggestionError(candidates []string) error {
 	if len(sorted) == 1 {
 		b = b.
 			WithHintf("Profile `%s` defines auth configuration", sorted[0]).
-			WithHintf("Re-run with `%s %s` to use it", profileFlagName, sorted[0])
+			WithHintf("Re-run with `%s=%s` to use it", profileFlagName, sorted[0])
 	} else {
 		b = b.
 			WithHintf("These profiles define auth configuration: %s", joinQuoted(sorted)).
-			WithHint("Re-run with `--profile <name>` using one of the profiles above")
+			WithHint("Re-run with `--profile=<name>` using one of the profiles above")
 	}
 
 	return b.

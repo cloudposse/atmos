@@ -242,7 +242,7 @@ auth:
 
 Runs an existing external helper (Okta CLI, aws-sso-cli, aws-vault, Granted, a corporate SAML tool)
 that prints AWS `credential_process` JSON, and uses the credentials as returned. No STS call, no MFA
-prompt from Atmos. Cached until the credentials expire. Standalone (no `via`); chain `aws/assume-role`
+prompt from Atmos. Cached (never in the keyring) while at least 15 minutes remain. Standalone (no `via`); chain `aws/assume-role`
 from it.
 
 ```yaml
@@ -314,15 +314,17 @@ File keyring password resolution: `ATMOS_KEYRING_PASSWORD` env var, then interac
 | `atmos auth validate [--verbose]` | Validate auth configuration for syntax and logic errors |
 | `atmos auth shell [--identity <name>]` | Launch interactive shell with credentials pre-configured |
 | `atmos auth exec [--identity <name>] -- <cmd>` | Execute a single command with identity credentials |
-| `atmos auth env [--format bash\|json\|dotenv\|credential-process]` | Export credentials as environment variables, or AWS process-credential JSON |
+| `atmos auth env [--format bash\|json\|dotenv\|env\|github\|credential-process]` | Export credentials as environment variables, or AWS process-credential JSON |
 | `atmos aws credential-process --identity=<name> [--min-validity=15m]` | Print AWS credentials for an identity in `credential_process` format |
 | `atmos auth console [--destination <url>]` | Open cloud provider web console in browser |
 | `atmos auth list [--format table\|tree\|json\|yaml\|graphviz\|mermaid]` | List providers and identities |
 | `atmos auth ecr-login [integration]` | Login to AWS ECR registries |
 | `atmos auth logout [identity] [--all] [--provider]` | Clear cached credentials |
 
-All commands accepting `--identity` support three modes: with value (use that identity), without value
-(interactive selector), or omitted (use default or prompt). The `-i` alias works for all.
+Most commands accepting `--identity` support three modes: with value (use that identity), without value
+(interactive selector), or omitted (use default or prompt). The `-i` alias works for all. The exception
+is `atmos aws credential-process` (and `atmos auth env --format=credential-process`), which never
+prompts: it needs `--identity=<name>`, `ATMOS_IDENTITY`, or exactly one default identity.
 
 ## Use Atmos Identities from the AWS CLI
 
@@ -334,8 +336,9 @@ directory:
 credential_process = atmos --chdir=/path/to/infrastructure aws credential-process --identity=app-sandbox-1
 ```
 
-If an SSO session has expired, run `atmos auth login --identity=app-sandbox-1` first. Recipes and
-troubleshooting: [references/aws-credential-process.md](references/aws-credential-process.md).
+The AWS CLI captures stderr, so Atmos cannot prompt. If an SSO session has expired, the command fails
+fast: run `atmos auth login --identity=app-sandbox-1` first. For identities defined in an Atmos profile,
+add `--profile=<name>` to the `credential_process` line. Recipes and troubleshooting: [references/aws-credential-process.md](references/aws-credential-process.md).
 
 ## Disabling Authentication
 

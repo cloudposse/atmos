@@ -126,7 +126,7 @@ auth:
 ```
 
 `aws/user` is the only identity kind that needs no `via` -- credentials are inline. Prefer
-`atmos auth user configure --identity emergency-access` over hand-writing keys into `atmos.yaml`
+`atmos auth user configure --identity=emergency-access` over hand-writing keys into `atmos.yaml`
 or shell env files; it stores them in the OS keyring (or the configured keyring backend) instead
 of a config file a teammate or CI log could leak.
 
@@ -236,7 +236,10 @@ MFA (if the IdP requires it) happens during the SSO browser login, not as a sepa
 
 A profile with `credential_process` runs an external command that prints AWS credentials. Atmos
 Auth runs the same command with the `aws/credential-process` identity kind, uses the credentials as
-returned (no STS call, no MFA prompt from Atmos), and caches them until they expire.
+returned (no STS call, no MFA prompt from Atmos), and caches them while at least 15 minutes remain
+before they expire. Atmos runs the command through a shell (like the AWS SDK for Go), while the AWS CLI
+splits it into arguments, so pipes and environment variable expansion that fail in the AWS CLI work in
+Atmos. The helper must finish within 1 minute.
 
 ```ini
 # ~/.aws/config

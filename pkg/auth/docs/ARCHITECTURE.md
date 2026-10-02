@@ -11,9 +11,9 @@ pkg/auth/
 ├── cloud/                    # Cloud-specific helpers
 │   └── aws/                  # AWS-specific implementation
 │       ├── credential_process.go # AWS process-credential format helpers and helper-command runner
+│       ├── credentialprocess/ # Produces process-credential output for `atmos aws credential-process`
 │       ├── files.go          # Helpers for AWS credentials/config file management
 │       └── setup.go          # Setup helpers used by identities
-├── credentialprocess/       # Produces process-credential output for `atmos aws credential-process`
 ├── credentials/             # Credential storage
 │   └── store.go             # Encrypted credential store
 ├── docs/                    # Documentation
@@ -191,21 +191,47 @@ identities:
 Atmos speaks the AWS `credential_process` protocol in both directions.
 
 **Consume: `aws/credential-process` identity.** A standalone identity (it implements
-`types.StandaloneIdentity` and has no `via`). `Authenticate` reuses unexpired credentials from the
-Atmos-managed AWS files; otherwise it runs the configured helper through the platform shell, validates
-the version-1 JSON output, and writes the result to those files. Helper output is used as returned (no
-STS call, no MFA) and is never stored in the keyring. Credentials without an expiration are never
-reused across invocations. The runner sets `ATMOS_AUTH_CREDENTIAL_PROCESS_CHAIN` for every helper so a
+`types.StandaloneIdentity` and has no `via`). `Authenticate` reuses credentials from the
+Atmos-managed AWS files while they have at least the required validity left (15 minutes by default);
+otherwise it runs the configured helper through the platform shell (`sh -c`, or
+`%COMSPEC% /S /C "<command>"` on Windows), validates the version-1 JSON output, and writes the result to
+those files. The helper must finish within one minute (not configurable); `exec.Cmd.WaitDelay` bounds
+how long Atmos waits for grandchildren that keep the stdout pipe open after the timeout kills the shell.
+Helper output is used as returned (no STS call, no MFA) and is never stored in the keyring: the identity
+implements the optional `types.CredentialPersistence` interface (`PersistsCredentials() == false`), and
+the manager asks the identity, never the kind, before every keyring read or write. `Logout` force-deletes
+any stale keyring entry for such identities without `--keychain`, and whoami and chain authentication
+purge entries written by older versions. Credentials without an expiration are never reused across
+invocations. The manager validates every identity in a chain before authenticating any step
+(`validateChainIdentities`), so a bad later identity cannot run an upstream helper first. The runner sets `ATMOS_AUTH_CREDENTIAL_PROCESS_CHAIN` for every helper so a
 helper that re-enters Atmos for an identity already resolving fails with a recursion error instead of
 looping. Error text never includes helper stdout, because the AWS SDK embeds raw output in parse errors.
 
-When a standalone identity is the root of a chain (`[root, child, ...]`) and has no valid cached
-credentials, the manager authenticates it through the standalone path instead of treating it as a
-provider. This applies to `aws/credential-process` and to `aws/user` roots configured with YAML keys.
+Prompts (identity selection, MFA, credential forms) go through the shared `pkg/auth/interactive`
+predicate: interactive mode enabled, stdin and stderr both terminals, and not CI. A parent that captures
+stderr (the AWS CLI running a helper) makes a prompt invisible, so the production prompts fail fast with
+`ErrAuthPromptUnavailable` and a hint instead of hanging.
 
-**Produce: `atmos aws credential-process`.** The `credentialprocess` package resolves the identity,
+When a standalone identity is the root of a chain (`[root, child, ...]`), the manager always
+authenticates it through `AuthenticateStandalone` instead of treating it as a provider, and the cache
+scan in `findFirstValidCachedCredentials` never uses the root's stored credentials as a starting point.
+The root owns its own caching: `aws/user` reuses its unexpired session from the AWS files (otherwise it
+runs `GetSessionToken`, with MFA when `mfa_arn` is set), and `aws/credential-process` reuses unexpired
+file credentials (otherwise it re-runs the helper). Cached credentials of later steps (index 1 and
+beyond, such as an assume-role step) are still reused. Without this rule, long-lived IAM keys or
+expiration-less helper credentials count as "valid non-expiring" cache entries and get passed straight
+to the next step, skipping the MFA session and the helper.
+
+**Produce: `atmos aws credential-process`.** The `pkg/auth/cloud/aws/credentialprocess` package resolves the identity,
 returns cached credentials that remain valid for at least `--min-validity`, and otherwise authenticates
-the identity as `atmos auth login` would. `pkg/auth/cloud/aws` supplies the process-credential document
+the identity like `atmos auth login`, except that it skips auto-triggered integrations
+(`auth.ContextWithSkipIntegrations`), because it runs as a non-interactive helper. The requested minimum validity travels down to standalone
+identities through the context (`types.WithMinCredentialValidity`), so `aws/user` and
+`aws/credential-process` refresh a cache that does not satisfy it instead of returning it; the default
+is `types.DefaultMinCredentialValidity`, the same 15 minute buffer the manager applies to its chain.
+The producer never opens the interactive identity selector (the AWS CLI hides stderr), and it resolves
+the default identity from `GetIdentities` rather than `GetDefaultIdentity`, which prompts when stdin is
+a terminal. `pkg/auth/cloud/aws` supplies the process-credential document
 (`Version: 1`, `SessionToken` and `Expiration` omitted when empty, RFC3339 UTC expiration). The command
 and `atmos auth env --format=credential-process` share this code path so both emit identical output.
 

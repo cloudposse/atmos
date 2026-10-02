@@ -189,7 +189,7 @@ auth:
         duration: 1h                        # Optional: 15m-12h (no MFA) or 15m-36h (with MFA)
 ```
 
-Store credentials securely with `atmos auth user configure --identity <name>` instead of in config files.
+Store credentials securely with `atmos auth user configure --identity=<name>` instead of in config files.
 
 ### AWS Ambient
 
@@ -229,14 +229,18 @@ auth:
 
 Behavior:
 
-- The identity is standalone. `via`, `access_key_id`, `secret_access_key`, and `mfa_arn` are rejected.
-  Use `aws/user` for IAM user keys.
+- The identity is standalone. `via`, `session`, `principal`, `access_key_id`, `secret_access_key`, and
+  `mfa_arn` are rejected. Use `aws/user` for IAM user keys.
 - Credentials are used as returned. Atmos makes no STS call and does not prompt for MFA.
-- The command runs through the platform shell (`sh -c` or `cmd.exe /C`) with stdin and stderr passed
-  through, so the helper can prompt for MFA.
-- Credentials are cached in Atmos-managed AWS files until `Expiration`. Credentials without an
-  `Expiration` make Atmos run the helper every time.
-- The helper must finish within 1 minute. Its output is never stored in the keyring.
+- The command runs through the platform shell, like the AWS SDK for Go (`sh -c`, or
+  `%COMSPEC% /S /C "<command>"` on Windows), with stdin and stderr passed through, so the helper can
+  prompt for MFA when Atmos runs interactively. The AWS CLI does not use a shell.
+- Credentials are cached in Atmos-managed AWS files and reused while at least 15 minutes remain
+  before `Expiration`. Credentials without an `Expiration` make Atmos run the helper every time.
+- The helper must finish within 1 minute (not configurable). A helper that waits for a browser login
+  can time out.
+- Output is never stored in the keyring. `atmos auth logout` removes stale keyring entries.
+- `atmos auth console` works only when the helper returns a `SessionToken`.
 
 Chain a role from the helper's session:
 

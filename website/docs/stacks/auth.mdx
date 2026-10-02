@@ -333,7 +333,7 @@ auth:
 
 ### External Credential Helpers
 
-Use the `aws/credential-process` identity kind when your organization already vends AWS credentials through a helper command such as `okta-aws-cli`, `aws-sso-cli`, `aws-vault`, or a corporate SAML tool. Atmos runs the command, uses the credentials it prints, and caches them until they expire. You can chain `aws/assume-role` identities from it.
+Use the `aws/credential-process` identity kind when your organization already vends AWS credentials through a helper command such as `okta-aws-cli`, `aws-sso-cli`, `aws-vault`, or a corporate SAML tool. Atmos runs the command, uses the credentials it prints, and caches them in its managed AWS files (never in the keyring) while they have at least 15 minutes of lifetime left. You can chain `aws/assume-role` identities from it.
 
 <File title="atmos.yaml">
 ```yaml

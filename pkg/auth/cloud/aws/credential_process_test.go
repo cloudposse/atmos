@@ -426,11 +426,9 @@ func TestDefaultCredentialProcessCommandBuilder(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cmd)
 
-	if runtime.GOOS == "windows" {
-		assert.Equal(t, []string{"cmd.exe", "/C", "do-something --now"}, cmd.Args)
-	} else {
-		assert.Equal(t, []string{"sh", "-c", "do-something --now"}, cmd.Args)
-	}
+	// The shell invocation itself is platform-specific (`sh -c` vs a verbatim cmd.exe command
+	// line), so it is asserted in the *_unix_test.go / *_windows_test.go companions.
+	assertDefaultBuilderShellInvocation(t, cmd, "do-something --now")
 	assert.Equal(t, env, cmd.Env)
 	assert.Equal(t, os.Stdin, cmd.Stdin, "stdin must be inherited so helpers can prompt for MFA")
 	assert.Equal(t, os.Stderr, cmd.Stderr, "stderr must be inherited so helpers can print instructions")
@@ -486,23 +484,26 @@ func TestNewProcessCredentials(t *testing.T) {
 	})
 
 	t.Run("rejects missing credentials", func(t *testing.T) {
-		tests := map[string]*types.AWSCredentials{
-			"nil":               nil,
-			"empty access key":  {SecretAccessKey: testSecretValue},
-			"empty secret key":  {AccessKeyID: testAccessKeyValue},
-			"both keys missing": {SessionToken: testSessionValue},
+		tests := map[string]struct {
+			creds   *types.AWSCredentials
+			wantErr error
+		}{
+			"nil":               {creds: nil, wantErr: errUtils.ErrIdentityCredentialsNone},
+			"empty access key":  {creds: &types.AWSCredentials{SecretAccessKey: testSecretValue}, wantErr: errUtils.ErrAWSCredentialsIncomplete},
+			"empty secret key":  {creds: &types.AWSCredentials{AccessKeyID: testAccessKeyValue}, wantErr: errUtils.ErrAWSCredentialsIncomplete},
+			"both keys missing": {creds: &types.AWSCredentials{SessionToken: testSessionValue}, wantErr: errUtils.ErrAWSCredentialsIncomplete},
 		}
-		for name, creds := range tests {
+		for name, tt := range tests {
 			t.Run(name, func(t *testing.T) {
-				out, err := NewProcessCredentials(creds)
-				require.Error(t, err)
+				out, err := NewProcessCredentials(tt.creds)
+				require.ErrorIs(t, err, tt.wantErr)
+				// Incomplete AWS credentials are still AWS credentials.
+				assert.NotErrorIs(t, err, errUtils.ErrIdentityNotAWS)
 				assert.Nil(t, out)
-				assert.ErrorIs(t, err, errUtils.ErrIdentityNotAWS)
 
-				data, err := MarshalProcessCredentials(creds)
-				require.Error(t, err)
+				data, err := MarshalProcessCredentials(tt.creds)
+				require.ErrorIs(t, err, tt.wantErr)
 				assert.Nil(t, data)
-				assert.ErrorIs(t, err, errUtils.ErrIdentityNotAWS)
 			})
 		}
 	})

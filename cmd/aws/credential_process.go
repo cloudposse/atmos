@@ -11,19 +11,12 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
-	"github.com/cloudposse/atmos/pkg/auth/credentialprocess"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/aws/credentialprocess"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-)
-
-const (
-	// The name of the flag that sets the minimum remaining credential lifetime.
-	minValidityFlagName = "min-validity"
-	// The environment variable equivalent of --min-validity.
-	minValidityEnvVar = "ATMOS_AWS_CREDENTIAL_PROCESS_MIN_VALIDITY"
 )
 
 // Testing seams: package-level indirection so tests can stub config loading and auth manager construction.
@@ -44,9 +37,9 @@ var credentialProcessParser = newCredentialProcessParser()
 func newCredentialProcessParser() *flags.StandardParser {
 	return flags.NewStandardParser(
 		flags.WithIdentityFlag(),
-		flags.WithStringFlag(minValidityFlagName, "", "15m",
+		flags.WithStringFlag(credentialprocess.MinValidityFlagName, "", credentialprocess.FormatMinValidity(credentialprocess.DefaultMinValidity),
 			"Reuse cached credentials only if they remain valid for at least this long (for example, 15m)"),
-		flags.WithEnvVars(minValidityFlagName, minValidityEnvVar),
+		flags.WithEnvVars(credentialprocess.MinValidityFlagName, credentialprocess.MinValidityEnvVar),
 	)
 }
 
@@ -57,7 +50,9 @@ var credentialProcessCmd = &cobra.Command{
 	Long: "Print AWS credentials for an Atmos identity as the JSON document defined by the AWS SDKs for " +
 		"'credential_process', so the AWS CLI, SDKs, and any tool that reads ~/.aws/config can source " +
 		"credentials from Atmos Auth.\n\n" +
-		"Reuses cached credentials that stay valid for at least --min-validity.",
+		"Reuses cached credentials that stay valid for at least --min-validity.\n\n" +
+		"The identity must be named with --identity (or ATMOS_IDENTITY) or marked as the default identity. " +
+		"The interactive identity selector is never shown, because the AWS CLI captures this command's output.",
 	Example: credentialProcessUsageMarkdown,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
@@ -77,7 +72,7 @@ func executeCredentialProcess(cmd *cobra.Command, v *viper.Viper) error {
 		return err
 	}
 
-	minValidity, err := parseMinValidity(v.GetString(minValidityFlagName))
+	minValidity, err := credentialprocess.ParseMinValidity(v.GetString(credentialprocess.MinValidityFlagName))
 	if err != nil {
 		return err
 	}
@@ -117,20 +112,13 @@ func writeCredentialProcess(ctx context.Context, cmd *cobra.Command, v *viper.Vi
 	return data.WriteUnmasked(credentialprocess.Render(out))
 }
 
-// parseMinValidity parses the --min-validity value.
-func parseMinValidity(value string) (time.Duration, error) {
-	d, err := time.ParseDuration(value)
-	if err != nil {
-		return 0, fmt.Errorf("%w --%s=%q: %w", errUtils.ErrInvalidFlagValue, minValidityFlagName, value, err)
-	}
-	if d < 0 {
-		return 0, fmt.Errorf("%w --%s=%q: must not be negative", errUtils.ErrInvalidFlagValue, minValidityFlagName, value)
-	}
-	return d, nil
-}
-
 func init() {
 	credentialProcessParser.RegisterFlags(credentialProcessCmd)
+
+	// The shared --identity help text advertises interactive selection, which this command never offers.
+	if f := credentialProcessCmd.Flags().Lookup(cfg.IdentityFlagName); f != nil {
+		f.Usage = "Identity to print credentials for (default: ATMOS_IDENTITY, then the default identity); required when no default identity is configured"
+	}
 
 	if err := credentialProcessParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)

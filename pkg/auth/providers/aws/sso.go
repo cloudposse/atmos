@@ -178,7 +178,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	if !isInteractive() {
 		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
 			WithExplanation("AWS SSO device flow requires an interactive terminal (TTY) for user authorization").
-			WithHint("Use 'aws sso login' to authenticate before running Atmos in headless environments").
+			WithHintf("Run `atmos auth login --provider=%s` (or `atmos auth login --identity=<identity>`) in a terminal first; Atmos keeps its own SSO token cache, so `aws sso login` does not help", p.name).
 			WithHint("For CI/CD pipelines, use AWS environment credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)").
 			WithHint("For GitHub Actions, use OIDC authentication with aws/assume-role identity").
 			WithContext("provider", p.name).
@@ -277,7 +277,7 @@ func (p *ssoProvider) runDeviceAuthFlow(ctx context.Context, oidcClient *ssooidc
 	if err != nil {
 		return ssoTokenCache{}, errUtils.Build(errUtils.ErrSSODeviceAuthFailed).
 			WithExplanation("Failed to initiate AWS SSO device authorization flow").
-			WithHint("Verify your AWS SSO session is active with 'aws sso login'").
+			WithHintf("Re-authenticate with `atmos auth login --provider=%s`; Atmos keeps its own SSO token cache, so `aws sso login` does not help", p.name).
 			WithHintf("Check that the SSO start URL '%s' is correct in your atmos.yaml", p.startURL).
 			WithHint("Ensure your AWS account has SSO enabled and configured").
 			WithContext("provider", p.name).
@@ -739,7 +739,7 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 			WithExplanation("AWS SSO authentication timed out waiting for browser confirmation").
 			WithHint("Complete the device authorization in your browser within the time limit").
 			WithHint("Visit the verification URL and enter the code displayed earlier").
-			WithHint("Try running 'aws sso login' to verify your SSO configuration").
+			WithHintf("Try again with `atmos auth login --provider=%s`; Atmos keeps its own SSO token cache, so `aws sso login` does not help", p.name).
 			WithContext("provider", p.name).
 			WithContext("start_url", p.startURL).
 			WithContext("region", p.region).

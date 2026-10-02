@@ -130,7 +130,7 @@ func printErrorDetails(err error) {
 }
 
 func appendErrorDetails(out *strings.Builder, err error) {
-	details := errors.GetAllDetails(err)
+	details := AllDetails(err)
 	if len(details) == 0 {
 		return
 	}
@@ -150,7 +150,7 @@ func printErrorHints(err error) {
 }
 
 func appendErrorHints(out *strings.Builder, err error) {
-	allHints := errors.GetAllHints(err)
+	allHints := AllHints(err)
 	var userHints []string
 	for _, h := range allHints {
 		if !strings.HasPrefix(h, "TITLE:") && !strings.HasPrefix(h, "EXAMPLE:") {

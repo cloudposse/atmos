@@ -205,3 +205,172 @@ func TestManager_AWSCredentialProcessRoot_ChainAndProvider(t *testing.T) {
 	require.True(t, ok, "the constructed identity must be dispatched through StandaloneIdentity")
 	assert.True(t, standalone.IsStandalone())
 }
+
+// newStandaloneRootThreeStepManager builds a [root, mid, leaf] chain whose root is a standalone
+// identity (not a registered provider).
+func newStandaloneRootThreeStepManager(root *standaloneRootIdentity, mid, leaf types.Identity, store *testStore) *manager {
+	return &manager{
+		config: &schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"root": {Kind: "aws/credential-process"},
+				"mid":  {Kind: "aws/assume-role", Via: &schema.IdentityVia{Identity: "root"}},
+				"leaf": {Kind: "aws/assume-role", Via: &schema.IdentityVia{Identity: "mid"}},
+			},
+		},
+		providers:       map[string]types.Provider{},
+		identities:      map[string]types.Identity{"root": root, "mid": mid, "leaf": leaf},
+		credentialStore: store,
+		chain:           []string{"root", "mid", "leaf"},
+		realm:           realm.RealmInfo{Value: "test-realm"},
+	}
+}
+
+// TestAuthenticateChain_StandaloneRoot_IgnoresCachedLongLivedRootCredentials is the repro for the
+// aws/user MFA bypass: long-lived, non-expiring credentials for the standalone root sit in the
+// credential store, so the cache scan used to treat the root as a valid cached starting point and
+// fed the raw keys to the child, skipping the root's own session/MFA logic. The root must
+// authenticate through AuthenticateStandalone and the child must receive ITS credentials.
+func TestAuthenticateChain_StandaloneRoot_IgnoresCachedLongLivedRootCredentials(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
+	exp := time.Now().UTC().Add(time.Hour)
+	longLived := &testCreds{} // No expiration: valid forever from the cache scan's point of view.
+	sessionCreds := &testCreds{exp: &exp}
+	childCreds := &testCreds{exp: &exp}
+
+	root := &standaloneRootIdentity{creds: sessionCreds, loadErr: errors.New("no credential files")}
+	child := &recordingChildIdentity{creds: childCreds}
+	m := newStandaloneRootChainManager(root, child, map[string]types.Provider{})
+	m.credentialStore = &testStore{data: map[string]any{"root": longLived}}
+
+	assert.Equal(t, -1, m.findFirstValidCachedCredentials(),
+		"cached credentials of a standalone chain root must never be a reusable starting point")
+
+	got, err := m.authenticateChain(context.Background(), "child")
+	require.NoError(t, err)
+
+	assert.Equal(t, childCreds, got)
+	assert.Equal(t, int32(1), root.standaloneCalls.Load(), "root AuthenticateStandalone must run")
+	assert.Same(t, sessionCreds, child.received, "child must receive the credentials returned by the root, not the stored long-lived ones")
+	assert.NotSame(t, longLived, child.received)
+}
+
+// TestAuthenticateChain_ProviderRoot_ReusesCachedProviderCredentials is the negative test: a chain
+// rooted at a registered provider keeps reusing valid cached provider credentials without
+// re-authenticating the provider.
+func TestAuthenticateChain_ProviderRoot_ReusesCachedProviderCredentials(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
+	exp := time.Now().UTC().Add(time.Hour)
+	cachedProviderCreds := &testCreds{exp: &exp}
+	freshProviderCreds := &testCreds{exp: &exp}
+	provider := &testProvider{name: "root", creds: freshProviderCreds}
+
+	// The identity registered under the provider's name is standalone-capable to prove the
+	// provider check wins.
+	root := &standaloneRootIdentity{creds: &testCreds{exp: &exp}, loadErr: errors.New("no credential files")}
+	child := &recordingChildIdentity{creds: &testCreds{exp: &exp}}
+	m := newStandaloneRootChainManager(root, child, map[string]types.Provider{"root": provider})
+	m.credentialStore = &testStore{data: map[string]any{"root": cachedProviderCreds}}
+
+	assert.Equal(t, 0, m.findFirstValidCachedCredentials(), "valid cached provider credentials are a reusable starting point")
+
+	_, err := m.authenticateChain(context.Background(), "child")
+	require.NoError(t, err)
+
+	assert.Same(t, cachedProviderCreds, child.received, "child must receive the cached provider credentials")
+	assert.Equal(t, int32(0), root.standaloneCalls.Load())
+}
+
+// TestAuthenticateChain_StandaloneRoot_ReusesCachedCredentialsAtLaterStep verifies the fix is
+// scoped to the root: valid cached credentials of a later step (index >= 1) are still reused and
+// the standalone root is not re-authenticated.
+func TestAuthenticateChain_StandaloneRoot_ReusesCachedCredentialsAtLaterStep(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
+	exp := time.Now().UTC().Add(time.Hour)
+	cachedMid := &testCreds{exp: &exp}
+	leafCreds := &testCreds{exp: &exp}
+
+	root := &standaloneRootIdentity{creds: &testCreds{exp: &exp}, loadErr: errors.New("no credential files")}
+	mid := &recordingChildIdentity{creds: &testCreds{exp: &exp}}
+	leaf := &recordingChildIdentity{creds: leafCreds}
+	store := &testStore{data: map[string]any{
+		"root": &testCreds{}, // Long-lived root credentials must be ignored.
+		"mid":  cachedMid,
+	}}
+	m := newStandaloneRootThreeStepManager(root, mid, leaf, store)
+
+	assert.Equal(t, 1, m.findFirstValidCachedCredentials(), "cached credentials at index 1 are reusable")
+
+	got, err := m.authenticateChain(context.Background(), "leaf")
+	require.NoError(t, err)
+
+	assert.Equal(t, leafCreds, got)
+	assert.Equal(t, int32(0), root.standaloneCalls.Load(), "root must not be re-authenticated when a later step is cached")
+	assert.Equal(t, int32(0), mid.calls.Load(), "mid must not run when its cached credentials are reused")
+	assert.Equal(t, int32(1), leaf.calls.Load())
+	assert.Same(t, cachedMid, leaf.received, "leaf must receive the cached mid credentials")
+}
+
+// TestAuthenticateChain_StandaloneRoot_ExpiredLaterStepReauthenticatesFromRoot verifies the
+// negative path: when the later step's cache is expired, the chain re-authenticates from the
+// standalone root instead of reusing the stored root keys.
+func TestAuthenticateChain_StandaloneRoot_ExpiredLaterStepReauthenticatesFromRoot(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
+	exp := time.Now().UTC().Add(time.Hour)
+	expired := time.Now().UTC().Add(-time.Hour)
+	sessionCreds := &testCreds{exp: &exp}
+
+	root := &standaloneRootIdentity{creds: sessionCreds, loadErr: errors.New("no credential files")}
+	mid := &recordingChildIdentity{creds: &testCreds{exp: &exp}}
+	leaf := &recordingChildIdentity{creds: &testCreds{exp: &exp}}
+	store := &testStore{data: map[string]any{
+		"root": &testCreds{},
+		"mid":  &testCreds{exp: &expired},
+	}}
+	m := newStandaloneRootThreeStepManager(root, mid, leaf, store)
+
+	assert.Equal(t, -1, m.findFirstValidCachedCredentials())
+
+	_, err := m.authenticateChain(context.Background(), "leaf")
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(1), root.standaloneCalls.Load())
+	assert.Same(t, sessionCreds, mid.received, "mid must receive the credentials returned by the root")
+}
+
+// TestAuthenticateChain_StandaloneSingleElementChain_Unchanged verifies a single-element chain of a
+// standalone identity still authenticates through AuthenticateStandalone, regardless of what is
+// cached for it.
+func TestAuthenticateChain_StandaloneSingleElementChain_Unchanged(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+
+	exp := time.Now().UTC().Add(time.Hour)
+	rootCreds := &testCreds{exp: &exp}
+	root := &standaloneRootIdentity{creds: rootCreds, loadErr: errors.New("no credential files")}
+	m := &manager{
+		config: &schema.AuthConfig{
+			Identities: map[string]schema.Identity{"root": {Kind: "aws/credential-process"}},
+		},
+		providers:       map[string]types.Provider{},
+		identities:      map[string]types.Identity{"root": root},
+		credentialStore: &testStore{data: map[string]any{"root": &testCreds{}}},
+		chain:           []string{"root"},
+		realm:           realm.RealmInfo{Value: "test-realm"},
+	}
+
+	assert.Equal(t, -1, m.findFirstValidCachedCredentials())
+
+	got, err := m.authenticateChain(context.Background(), "root")
+	require.NoError(t, err)
+
+	assert.Same(t, rootCreds, got)
+	assert.Equal(t, int32(1), root.standaloneCalls.Load())
+}

@@ -114,7 +114,7 @@ func TestNewCredentialProcessIdentity(t *testing.T) {
 	t.Run("constructor tolerates invalid settings so Validate can report them", func(t *testing.T) {
 		id, err := NewCredentialProcessIdentity("x", &schema.Identity{Kind: types.IdentityKindAWSCredentialProcess})
 		require.NoError(t, err)
-		require.Error(t, id.Validate())
+		require.ErrorIs(t, id.Validate(), errUtils.ErrInvalidIdentityConfig)
 	})
 }
 
@@ -194,6 +194,26 @@ func TestCredentialProcessIdentity_Validate(t *testing.T) {
 			wantContain: "via",
 		},
 		{
+			name: "rejects session duration",
+			identity: schema.Identity{
+				Kind:        types.IdentityKindAWSCredentialProcess,
+				Session:     &schema.SessionConfig{Duration: "12h"},
+				Credentials: map[string]any{"credential_process": cpTestCommand},
+			},
+			wantErr:     true,
+			wantContain: "session",
+		},
+		{
+			name: "rejects principal",
+			identity: schema.Identity{
+				Kind:        types.IdentityKindAWSCredentialProcess,
+				Principal:   map[string]any{"name": "Admin"},
+				Credentials: map[string]any{"credential_process": cpTestCommand},
+			},
+			wantErr:     true,
+			wantContain: "principal",
+		},
+		{
 			name: "rejects access_key_id",
 			identity: schema.Identity{
 				Kind:        types.IdentityKindAWSCredentialProcess,
@@ -239,8 +259,7 @@ func TestCredentialProcessIdentity_Validate(t *testing.T) {
 				assert.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+			require.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
 			assert.Contains(t, err.Error(), tt.wantContain)
 		})
 	}
@@ -283,6 +302,65 @@ func TestCredentialProcessIdentity_Authenticate_ReusesUnexpiredFiles(t *testing.
 	assert.Equal(t, cached.Expiration, creds.Expiration)
 }
 
+func TestCredentialProcessIdentity_Authenticate_HonorsMinValidityFromContext(t *testing.T) {
+	// Cached credentials with 20 minutes left satisfy the 15 minute default but not a 30 minute request.
+	cachedExpiration := time.Now().UTC().Add(20 * time.Minute).Format(time.RFC3339)
+	fresh := &types.AWSCredentials{
+		AccessKeyID:     "AKIAFRESH",
+		SecretAccessKey: "fresh-secret",
+		SessionToken:    "fresh-token",
+		Expiration:      cachedExpiration, // The helper only mints 20 minute credentials.
+	}
+
+	tests := []struct {
+		name      string
+		ctx       func() context.Context
+		wantCalls int
+	}{
+		{name: "no requested minimum uses the 15 minute default", ctx: context.Background, wantCalls: 0},
+		{
+			name:      "smaller minimum reuses the cache",
+			ctx:       func() context.Context { return types.WithMinCredentialValidity(context.Background(), 5*time.Minute) },
+			wantCalls: 0,
+		},
+		{
+			name:      "larger minimum refreshes through the helper",
+			ctx:       func() context.Context { return types.WithMinCredentialValidity(context.Background(), 30*time.Minute) },
+			wantCalls: 1,
+		},
+		{
+			name:      "zero minimum reuses any unexpired cache",
+			ctx:       func() context.Context { return types.WithMinCredentialValidity(context.Background(), 0) },
+			wantCalls: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isolateXDG(t)
+			fake := &fakeRetriever{creds: fresh}
+			id := newCPIdentity(t, nil, fake)
+			require.NoError(t, id.writeAWSFiles(&types.AWSCredentials{
+				AccessKeyID: "AKIACACHED", SecretAccessKey: "cached-secret", SessionToken: "cached-token",
+				Expiration: cachedExpiration,
+			}))
+
+			got, err := id.Authenticate(tt.ctx(), nil)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantCalls, fake.calls)
+			creds, ok := got.(*types.AWSCredentials)
+			require.True(t, ok)
+			if tt.wantCalls == 0 {
+				assert.Equal(t, "AKIACACHED", creds.AccessKeyID)
+			} else {
+				// The helper still only issues short-lived credentials: they are returned as-is, no loop, no error.
+				assert.Equal(t, "AKIAFRESH", creds.AccessKeyID)
+			}
+		})
+	}
+}
+
 func TestCredentialProcessIdentity_Authenticate_RunsHelperWhenFilesNotReusable(t *testing.T) {
 	fresh := &types.AWSCredentials{
 		AccessKeyID:     "AKIAFRESH",
@@ -307,7 +385,7 @@ func TestCredentialProcessIdentity_Authenticate_RunsHelperWhenFilesNotReusable(t
 			name: "files expiring within the reuse buffer",
 			cached: &types.AWSCredentials{
 				AccessKeyID: "AKIAOLD", SecretAccessKey: "old-secret", SessionToken: "old-token",
-				Expiration: time.Now().UTC().Add(credentialProcessReuseBuffer / 2).Format(time.RFC3339),
+				Expiration: time.Now().UTC().Add(types.DefaultMinCredentialValidity / 2).Format(time.RFC3339),
 			},
 		},
 		{
@@ -433,9 +511,8 @@ func TestCredentialProcessIdentity_Authenticate_Errors(t *testing.T) {
 		id := newCPIdentity(t, nil, fake)
 
 		got, err := id.Authenticate(context.Background(), nil)
-		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrCredentialProcessFailed)
 		assert.Nil(t, got)
-		assert.ErrorIs(t, err, errUtils.ErrCredentialProcessFailed)
 
 		exists, existsErr := id.CredentialsExist()
 		require.NoError(t, existsErr)
@@ -462,8 +539,7 @@ func TestCredentialProcessIdentity_Authenticate_Errors(t *testing.T) {
 		id := newCPIdentity(t, map[string]any{"credential_process": ""}, fake)
 
 		_, err := id.Authenticate(context.Background(), nil)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+		require.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
 		assert.Equal(t, 0, fake.calls)
 	})
 
@@ -474,7 +550,8 @@ func TestCredentialProcessIdentity_Authenticate_Errors(t *testing.T) {
 
 		fake := &fakeRetriever{creds: &types.AWSCredentials{AccessKeyID: "A", SecretAccessKey: "S"}}
 		_, err := newCPIdentity(t, nil, fake).Authenticate(context.Background(), nil)
-		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrAwsAuth)
+		assert.Contains(t, err.Error(), "failed to write AWS files")
 	})
 }
 
@@ -498,8 +575,7 @@ func TestCredentialProcessIdentity_AuthenticateStandalone(t *testing.T) {
 		isolateXDG(t)
 		fake := &fakeRetriever{err: errUtils.ErrCredentialProcessFailed}
 		_, err := newCPIdentity(t, nil, fake).AuthenticateStandalone(context.Background())
-		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+		require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 		assert.ErrorIs(t, err, errUtils.ErrCredentialProcessFailed)
 		assert.Contains(t, err.Error(), "corp-base")
 	})

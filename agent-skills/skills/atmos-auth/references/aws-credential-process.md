@@ -36,18 +36,28 @@ The identity is standalone. It takes no `via`. Credentials come from the helper.
 ### Behavior
 
 - **Used as returned.** Atmos makes no STS call and never prompts for MFA. The helper owns MFA.
-- **Shell execution.** The command runs through the platform shell (`sh -c` on Linux and macOS,
-  `cmd.exe /C` on Windows), like the AWS CLI, so a command copied from `~/.aws/config` behaves the same.
+- **Shell execution.** The command runs through the platform shell, like the AWS SDK for Go does:
+  `sh -c` on Linux and macOS, `%COMSPEC% /S /C "<command>"` on Windows. Pipes and environment variable
+  expansion work. The AWS CLI does not use a shell (it splits the command into arguments), so keep the
+  command free of shell-only syntax if the same line must also work in an AWS CLI profile.
 - **Terminal passthrough.** The helper keeps stdin and stderr, so it can prompt for MFA or print
-  browser-login instructions.
-- **Caching.** Credentials are written to Atmos-managed AWS files with their `Expiration` and reused
-  until they expire.
+  browser-login instructions when Atmos runs interactively.
+- **Caching.** Credentials are written to Atmos-managed AWS files with their `Expiration`. Atmos reuses
+  them while at least 15 minutes of lifetime remain. A helper that returns credentials valid for 15
+  minutes or less runs on every invocation.
 - **No `Expiration`.** The helper runs on every Atmos invocation, because Atmos cannot know how long
   the credentials last.
-- **Timeout.** The helper must finish within 1 minute.
-- **No keyring storage.** Helper output is never stored in the keyring.
-- **Validation.** `credential_process` is required. Atmos rejects `via`, `access_key_id`,
-  `secret_access_key`, and `mfa_arn` on this kind. Use `aws/user` for IAM user keys.
+- **Timeout.** The helper must finish within 1 minute. The limit is not configurable. A helper that
+  waits for an MFA code or a browser login can time out: log in with `atmos auth login` first so the
+  credentials are cached.
+- **No prompts without a terminal.** Atmos prompts only when stdin and stderr are both terminals.
+  Otherwise it fails with a hint.
+- **No keyring storage.** Helper output is never stored in the keyring. `atmos auth logout` also
+  removes stale keyring entries for this kind, without `--keychain`.
+- **Console.** `atmos auth console` works only when the helper returns temporary credentials with a
+  `SessionToken`. Long-lived keys fail.
+- **Validation.** `credential_process` is required. Atmos rejects `via`, `session`, `principal`,
+  `access_key_id`, `secret_access_key`, and `mfa_arn` on this kind. Use `aws/user` for IAM user keys.
 
 ### Chain a Role from a Helper
 
@@ -96,13 +106,21 @@ atmos aws credential-process --identity=<name> [--min-validity=15m]
 ```
 
 Prints credentials for any Atmos AWS identity in the process-credential format. The alias
-The alias `atmos auth env --format=credential-process --identity=<name>` prints the same output.
+`atmos auth env --format=credential-process --identity=<name>` prints the same output. The alias also
+accepts `--min-validity` and `ATMOS_AWS_CREDENTIAL_PROCESS_MIN_VALIDITY`. `--login=false` with this
+format is an error. `--output-file` writes the file atomically with mode `0600` and never falls back to
+`$GITHUB_ENV`.
 
-Identity resolution order: `--identity`, then `ATMOS_IDENTITY`, then the default identity. Interactive
-selection is not available because the AWS CLI captures stdout.
+Identity resolution order: `--identity`, then `ATMOS_IDENTITY`, then the single identity marked
+`default: true`. The command never prompts, so `--identity` is required unless exactly one default
+identity exists. `--identity` without a value and `--identity=false` are errors. The AWS CLI captures
+the command's output, so a selector would be invisible and would hang the `aws` command.
 
-Cached credentials that expire later than `--min-validity` (default `15m`) print immediately with no
-network call. Otherwise Atmos authenticates the identity as `atmos auth login` would.
+Cached credentials with more than `--min-validity` of lifetime left (default `15m`) print immediately
+with no network call. Credentials with less time left refresh before they expire. `--min-validity`
+needs a unit, for example `30m`. Otherwise Atmos authenticates the identity like `atmos auth login`,
+but skips integrations (ECR login, EKS kubeconfig). Env vars: `ATMOS_IDENTITY`,
+`ATMOS_AWS_CREDENTIAL_PROCESS_MIN_VALIDITY`.
 
 ### Output Contract
 
@@ -136,6 +154,14 @@ credential_process = atmos aws credential-process --identity=app-sandbox-1
 A global `~/.atmos/atmos.yaml` that defines the identities also works with no path flags. On Windows,
 quote paths that contain spaces.
 
+If the identity is defined in an Atmos profile, add Atmos's own `--profile` flag (or set
+`ATMOS_PROFILE`). It differs from `aws --profile`:
+
+```ini
+[profile plat-dev-terraform]
+credential_process = atmos --chdir=/path/to/infrastructure --profile=devops aws credential-process --identity=plat-dev/terraform
+```
+
 ### Verify
 
 ```shell
@@ -144,8 +170,12 @@ aws sts get-caller-identity --profile=app-sandbox-1
 
 ## Troubleshooting
 
-- **The command asks you to log in.** The AWS CLI owns the terminal, so an expired SSO session cannot
-  open a browser. Run `atmos auth login --identity=<name>` first, then retry.
+- **The command asks you to log in.** The AWS CLI captures stderr, so Atmos cannot prompt or open a
+  browser for an expired SSO session. It fails fast with a hint. Run `atmos auth login --identity=<name>`
+  (or `atmos auth login --provider=<name>`) in a terminal first, then retry. `aws sso login` does not
+  help: Atmos keeps its own SSO token cache.
+- **The command says an identity is required.** Pass `--identity=<name>`, set `ATMOS_IDENTITY`, or mark
+  exactly one identity `default: true`. If the identity lives in an Atmos profile, add `--profile`.
 - **Atmos cannot find the configuration.** Add `--chdir=/path/to/infrastructure` to the profile.
 - **Recursion error.** An `aws/credential-process` identity whose helper is
   `atmos aws credential-process --identity=<itself>` loops. Point the helper at a different identity.

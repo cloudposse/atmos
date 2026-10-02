@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -20,12 +19,6 @@ const (
 	// The synthetic provider name under which the
 	// Atmos-managed credential files of aws/credential-process identities are written.
 	awsCredentialProcessProviderName = types.ProviderNameAWSCredentialProcess
-
-	// How long cached helper credentials must remain valid to be
-	// reused instead of running the helper again. It matches the auth manager's credential
-	// validity buffer, so a chain never re-authenticates the root only to receive the same
-	// nearly-expired credentials back.
-	credentialProcessReuseBuffer = 15 * time.Minute
 
 	// Points users with IAM-user access keys to the right kind.
 	credentialProcessAWSUserHint = "Use an identity with kind aws/user for IAM user access keys, MFA, and session tokens."
@@ -89,6 +82,11 @@ func (i *credentialProcessIdentity) GetProviderName() (string, error) {
 	return awsCredentialProcessProviderName, nil
 }
 
+// PersistsCredentials reports that aws/credential-process credentials must never be written to the
+// keyring: the helper owns them, and the Atmos-managed AWS files are the only cache.
+// Part of the types.CredentialPersistence interface.
+func (i *credentialProcessIdentity) PersistsCredentials() bool { return false }
+
 // IsStandalone reports that aws/credential-process identities authenticate without an upstream
 // provider step. Part of the types.StandaloneIdentity interface.
 func (i *credentialProcessIdentity) IsStandalone() bool { return true }
@@ -102,7 +100,7 @@ func (i *credentialProcessIdentity) AuthenticateStandalone(ctx context.Context) 
 
 	creds, err := i.Authenticate(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: AWS credential-process identity %q authentication failed: %w", errUtils.ErrAuthenticationFailed, i.name, err)
+		return nil, errUtils.WrapAuthenticationFailed(err, "identity %q", i.name)
 	}
 
 	return creds, nil
@@ -128,7 +126,7 @@ func (i *credentialProcessIdentity) Authenticate(ctx context.Context, _ types.IC
 		return nil, err
 	}
 	if creds == nil {
-		return nil, fmt.Errorf("%w: credential_process returned no credentials for identity %q", errUtils.ErrCredentialProcessInvalidOutput, i.name)
+		return nil, awsCloud.NewInvalidProcessOutputError(i.name, "the command returned no credentials")
 	}
 
 	if creds.Region == "" {
@@ -143,8 +141,11 @@ func (i *credentialProcessIdentity) Authenticate(ctx context.Context, _ types.IC
 }
 
 // reusableFileCredentials returns the cached file credentials when they carry an expiration
-// more than credentialProcessReuseBuffer away, and nil otherwise (including when the files are
-// missing or unreadable).
+// further away than the required validity, and nil otherwise (including when the files are
+// missing or unreadable). The required validity is the caller-requested minimum carried by the
+// context (see types.WithMinCredentialValidity), or types.DefaultMinCredentialValidity, which
+// matches the auth manager's credential validity buffer so a chain never re-authenticates the
+// root only to receive the same nearly-expired credentials back.
 func (i *credentialProcessIdentity) reusableFileCredentials(ctx context.Context) *types.AWSCredentials {
 	existing, err := i.loadFileCredentials(ctx)
 	if err != nil {
@@ -155,10 +156,10 @@ func (i *credentialProcessIdentity) reusableFileCredentials(ctx context.Context)
 		log.Debug("Cached credential_process credentials have no expiration, running command", logKeyIdentity, i.name)
 		return nil
 	}
-	expTime, err := existing.GetExpiration()
-	if err != nil || expTime == nil || !expTime.After(time.Now().Add(credentialProcessReuseBuffer)) {
+	required := types.MinCredentialValidityOr(ctx, types.DefaultMinCredentialValidity)
+	if types.ExpiresWithin(existing, required) {
 		log.Debug("Cached credential_process credentials are expired or expire soon, running command",
-			logKeyIdentity, i.name, "required_buffer", credentialProcessReuseBuffer)
+			logKeyIdentity, i.name, "required_validity", required)
 		return nil
 	}
 	return existing
@@ -197,6 +198,10 @@ func (i *credentialProcessIdentity) Validate() error {
 			Err()
 	}
 
+	if err := i.validateUnsupportedSettings(); err != nil {
+		return err
+	}
+
 	for _, field := range []string{"access_key_id", "secret_access_key", "mfa_arn"} {
 		if value, ok := i.config.Credentials[field]; ok && value != nil && value != "" {
 			return errUtils.Build(fmt.Errorf("%w: aws/credential-process identity %q must not define credentials.%s",
@@ -211,6 +216,30 @@ func (i *credentialProcessIdentity) Validate() error {
 		return errUtils.Build(fmt.Errorf("%w: aws/credential-process identity %q requires credentials.credential_process",
 			errUtils.ErrInvalidIdentityConfig, i.name)).
 			WithHint("Set credentials.credential_process to the command that prints AWS credentials as JSON, for example the command from a credential_process line in ~/.aws/config.").
+			WithContext("identity", i.name).
+			Err()
+	}
+
+	return nil
+}
+
+// validateUnsupportedSettings rejects identity settings that would otherwise be silently ignored.
+// The helper owns the credentials and their session, so Atmos neither requests a session of a given
+// duration nor resolves a principal for this kind; accepting those settings would imply a behavior
+// that never happens (for example `session.duration: 12h` returning one-hour helper credentials).
+func (i *credentialProcessIdentity) validateUnsupportedSettings() error {
+	if i.config.Session != nil {
+		return errUtils.Build(fmt.Errorf("%w: aws/credential-process identity %q must not define session; the credential_process command owns the session lifetime",
+			errUtils.ErrInvalidIdentityConfig, i.name)).
+			WithHint("Remove the session section. To control how long the credentials last, configure the credential_process command itself (for example the session duration of the tool it calls).").
+			WithContext("identity", i.name).
+			Err()
+	}
+
+	if len(i.config.Principal) > 0 {
+		return errUtils.Build(fmt.Errorf("%w: aws/credential-process identity %q must not define principal; it applies to identities that Atmos assumes, not to credentials printed by a command",
+			errUtils.ErrInvalidIdentityConfig, i.name)).
+			WithHint("Remove the principal section. Use an aws/assume-role identity with via.identity pointing at this identity to assume a role with the credentials.").
 			WithContext("identity", i.name).
 			Err()
 	}

@@ -25,7 +25,8 @@ func TestCredentialProcessIdentity_LoadCredentials_IsSideEffectFree(t *testing.T
 	id := newCPIdentity(t, nil, fake)
 
 	got, err := id.LoadCredentials(context.Background())
-	require.Error(t, err, "no files means no credentials")
+	// No sentinel exists for "no credentials in the files": the AWS SDK error is surfaced as-is.
+	require.ErrorContains(t, err, "failed to load AWS config from files", "no files means no credentials")
 	assert.Nil(t, got)
 	assert.Equal(t, 0, fake.calls, "LoadCredentials must never run the helper")
 

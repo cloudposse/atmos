@@ -161,7 +161,7 @@ func executePublicLoginWithIdentity(ctx context.Context, atmosConfig *schema.Atm
 
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, err)
+		return errUtils.WrapIdentityAuthFailed(identityName, err)
 	}
 	if whoami.Credentials == nil {
 		return fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, errUtils.ErrIdentityCredentialsNone)

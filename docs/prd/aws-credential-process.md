@@ -83,10 +83,13 @@ auth:
 
 <dl>
   <dt><code>credentials.credential_process</code> (required)</dt>
-  <dd>The command to run. It is executed through the platform shell (<code>sh -c</code> on Linux and
-  macOS, <code>cmd.exe /C</code> on Windows) — exactly like the AWS CLI — so a command copied from
-  <code>~/.aws/config</code> behaves the same. Stdin and stderr are inherited so a helper can prompt
-  for MFA or print browser-login instructions.</dd>
+  <dd>The command to run. It is executed through the platform shell, like the AWS SDK for Go
+  (<code>sh -c</code> on Linux and macOS, <code>%COMSPEC% /S /C "&lt;command&gt;"</code> on Windows with the
+  command line passed verbatim). A command copied from <code>~/.aws/config</code> therefore runs as
+  written, and pipes and environment variable expansion work. The AWS CLI itself does not use a shell
+  (it splits the command into arguments), so shell-only syntax is not portable back to an AWS CLI
+  profile. Stdin and stderr are inherited so a helper can prompt for MFA or print browser-login
+  instructions when Atmos runs interactively.</dd>
   <dt><code>credentials.region</code> (optional)</dt>
   <dd>Default region written to the Atmos-managed AWS config.</dd>
   <dt><code>spec.endpoint_url</code> (optional)</dt>
@@ -116,13 +119,28 @@ result to Atmos-managed credential files, like every other Atmos AWS identity.
   never prompts for MFA.
 - **Caching.** Credentials are written to the Atmos-managed AWS files
   (`~/.config/atmos/<realm>/aws/aws-credential-process/`) with their expiration. While those
-  credentials are unexpired, Atmos reuses them instead of running the helper again.
+  credentials have at least the required validity left (15 minutes by default, or the
+  `--min-validity` of `atmos aws credential-process`), Atmos reuses them instead of running the helper
+  again. Credentials with less time left are refreshed before they expire, so a helper that returns
+  15-minute credentials runs on every invocation.
 - **No `Expiration`.** Credentials without an expiration are never reused across Atmos invocations;
   the helper owns their lifecycle and runs every time.
-- **Keyring.** Helper output is never stored in the keyring. The helper is the source of truth.
-- **Timeout.** The helper must finish within 1 minute (the AWS SDK default).
-- **Validation.** `credential_process` is required. `via`, `access_key_id`, `secret_access_key`, and
-  `mfa_arn` are rejected, with a hint pointing to `aws/user` for IAM-user credentials.
+- **Keyring.** Helper output is never stored in the keyring, on any command. The identity opts out
+  through the optional `types.CredentialPersistence` interface, and the manager skips every keyring read
+  and write for it. `atmos auth logout` removes any stale entry written by an older version, without
+  `--keychain`. The helper is the source of truth.
+- **Timeout.** The helper must finish within 1 minute (the AWS SDK default). The limit is not
+  configurable, so a helper that waits for an MFA code or a browser login can time out. After the
+  timeout, Atmos stops waiting within a couple of seconds even if grandchildren keep the output pipe open.
+- **Prompts.** Atmos prompts only when stdin and stderr are both terminals. Under a parent that
+  captures stderr, prompts fail fast with `ErrAuthPromptUnavailable` and a hint to run
+  `atmos auth login`.
+- **Console.** `atmos auth console` needs the helper to return temporary credentials with a session
+  token. Long-lived keys fail.
+- **Validation.** `credential_process` is required. `via`, `session`, `principal`, `access_key_id`,
+  `secret_access_key`, and `mfa_arn` are rejected, with hints (for example pointing to `aws/user` for
+  IAM-user credentials). The manager validates every identity in a chain before it authenticates any
+  step, so an invalid later identity never triggers an upstream helper.
 
 ### Identity Chaining Fix
 
@@ -167,16 +185,29 @@ Atmos locates `atmos.yaml` the usual way, so any of these work from any director
 
 ### Behavior
 
-1. Resolve the identity from `--identity`, then `ATMOS_IDENTITY`, then the configured default
-    identity. Interactive selection is not available because stdout is not a terminal.
-2. If cached credentials for the identity expire more than `--min-validity` (default 15 minutes) from
-    now, print them without any network call. The AWS CLI runs `credential_process` once per CLI
-    invocation, so this keeps every `aws` command fast.
-3. Otherwise authenticate the identity the same way `atmos auth login` would.
+1. Resolve the identity from `--identity`, then `ATMOS_IDENTITY`, then the single identity marked
+    `default: true`. The command never prompts: the AWS CLI captures stderr, so an interactive
+    selector would be invisible and would hang the `aws` command. `--identity=false`, `--identity`
+    without a value, no default, and multiple defaults all fail immediately with a hint
+    (`ErrCredentialProcessIdentityRequired`, `ErrNoDefaultIdentity`, `ErrMultipleDefaultIdentities`).
+2. If cached credentials for the identity have more than `--min-validity` (default 15 minutes) of
+    lifetime left, print them without any network call. The value needs a unit (for example `30m`) and
+    can also come from `ATMOS_AWS_CREDENTIAL_PROCESS_MIN_VALIDITY`. The AWS CLI runs `credential_process`
+    once per CLI invocation, so this keeps every `aws` command fast.
+3. Otherwise authenticate the identity. This is the authentication `atmos auth login` performs, except
+    that auto-triggered integrations (ECR login, EKS kubeconfig, and similar) are skipped because the
+    command runs as a non-interactive helper. Identities that cache their own credentials (`aws/user`
+    sessions, `aws/credential-process` helper output) also refresh a cache that does not satisfy
+    `--min-validity`. If the source still issues shorter-lived credentials, they are printed as is.
 4. Print exactly one JSON document to stdout. Everything else (logs, notices) goes to stderr.
 
+The alias `atmos auth env --format=credential-process` follows the same rules, and adds `--output-file`
+(written atomically with mode `0600`, never falling back to `$GITHUB_ENV`). `--login=false` with this
+format is an error, and `--min-validity` with any other format is an error.
+
 When the identity needs an interactive login that cannot happen (for example, an expired SSO session
-while the AWS CLI owns the terminal), the command fails with a hint to run `atmos auth login` first.
+while the AWS CLI captures stderr), the command fails fast with an explanation and a hint to run
+`atmos auth login --identity=<name>` (SSO errors hint `atmos auth login --provider=<name>`) first.
 
 ### Output Contract
 
@@ -194,7 +225,7 @@ every other Atmos output.
 
 ## Security
 
-- **Command execution** uses the platform shell, matching AWS CLI semantics. `credential_process`
+- **Command execution** uses the platform shell, like the AWS SDK for Go. `credential_process`
   comes from `atmos.yaml`, which is trusted configuration — the same trust level as `!exec` and
   custom commands.
 - **No secrets in errors.** The AWS SDK embeds raw helper output in its parse errors. Atmos never
@@ -208,23 +239,27 @@ every other Atmos output.
 
 | Sentinel | When | Hint |
 |---|---|---|
-| `ErrCredentialProcessFailed` | Helper could not start, exited non-zero, or timed out | Run the command manually to see its error output |
-| `ErrCredentialProcessInvalidOutput` | Helper printed something other than a valid version-1 document | Lists the missing or invalid fields, never their values |
-| `ErrCredentialProcessRecursion` | Helper re-entered Atmos for the same identity | Point the helper at a different identity |
-| `ErrIdentityNotAWS` | `credential-process` requested for a non-AWS identity | Choose an AWS identity |
+| `ErrCredentialProcessFailed` | Helper could not start, exited non-zero, or timed out | Run the credential_process command for the identity manually in a terminal to see its error output |
+| `ErrCredentialProcessInvalidOutput` | Helper printed something other than a valid version-1 document | The cause lists the missing or invalid fields, never their values. Hints describe the required format and suggest running the command manually and comparing its stdout |
+| `ErrCredentialProcessRecursion` | Helper re-entered Atmos for the same identity | Point the helper at a different identity, or remove the call back into Atmos from its command |
+| `ErrCredentialProcessIdentityRequired` | `--identity=false` or a bare `--identity` on the producer | Pass `--identity=<name>` or set `ATMOS_IDENTITY`; run `atmos auth list` |
+| `ErrNoDefaultIdentity`, `ErrMultipleDefaultIdentities` | The producer was given no identity and zero or several defaults exist | Pass `--identity=<name>` or set `ATMOS_IDENTITY`; run `atmos auth list` |
+| `ErrAuthPromptUnavailable` | A prompt (MFA, credentials, selection) is needed but stdin or stderr is not a terminal | Run `atmos auth login --identity=<name>` in a terminal first |
+| `ErrIdentityNotAWS` | `credential-process` requested for a non-AWS identity | None; the message names the identity and the credential type it produces |
 
 ## Testing
 
 - **Unit tests** use the Go test binary as a fake, cross-platform helper (no shell scripts): valid
   output with and without session token and expiration, invalid JSON, wrong version, missing keys,
   non-zero exit, timeout, recursion guard, and a regression test that secrets never appear in errors.
-- **Identity tests** cover validation, file caching and reuse, re-execution on expiry, and that STS
-  is never called.
+- **Identity tests** cover validation, file caching and reuse, re-execution on expiry, and
+  non-persistence in the keyring. The identity has no STS client at all, so no STS call is possible.
 - **Manager tests** reproduce the standalone-root chaining failure and verify provider-rooted chains
   are unchanged.
 - **Command tests** verify stdout contains exactly the JSON document, unmasked, for both the
   canonical command and the `auth env` alias.
-- **End-to-end tests against the Floci AWS emulator:**
+- **End-to-end tests against the Floci AWS emulator** (opt-in: they skip when no Floci
+  endpoint is available, and run in the Floci CI job):
   - An AWS SDK client configured with `credential_process = atmos aws credential-process …` calls
     STS and S3.
   - An `aws/credential-process` identity whose helper is Atmos itself (round trip) authenticates and

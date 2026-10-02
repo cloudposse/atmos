@@ -1059,6 +1059,11 @@ var (
 	ErrCredentialProcessFailed        = errors.New("credential_process command failed")
 	ErrCredentialProcessInvalidOutput = errors.New("credential_process returned invalid output")
 	ErrCredentialProcessRecursion     = errors.New("credential_process recursion detected")
+	// ErrCredentialProcessIdentityRequired is returned when the credential-process producer is not
+	// given a concrete identity (it never opens the interactive selector, which the AWS CLI hides).
+	ErrCredentialProcessIdentityRequired = errors.New("credential_process requires a specific identity")
+	// ErrAWSCredentialsIncomplete is returned when AWS credentials lack an access key ID or secret access key.
+	ErrAWSCredentialsIncomplete = errors.New("AWS credentials are missing an access key ID or secret access key")
 
 	// AWS SSO specific errors.
 	ErrSSOSessionExpired      = errors.New("aws sso session expired")
@@ -1116,6 +1121,7 @@ var (
 	ErrNoDefaultProvider             = errors.New("no default provider configured and multiple providers exist")
 	ErrIdentitySelectionRequiresTTY  = fmt.Errorf("interactive identity selection: %w", ErrTTYRequired)
 	ErrProviderSelectionRequiresTTY  = fmt.Errorf("interactive provider selection: %w", ErrTTYRequired)
+	ErrAuthPromptUnavailable         = fmt.Errorf("interactive authentication prompt unavailable: %w", ErrTTYRequired)
 	ErrAuthenticationChainNotBuilt   = errors.New("authentication chain not built")
 	ErrInvalidStackConfig            = errors.New("invalid stack config")
 	ErrNoCommandSpecified            = errors.New("no command specified")

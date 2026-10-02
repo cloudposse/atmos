@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +30,10 @@ const (
 	testCredentialProcessExitEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_EXIT"
 	// When set to a duration string, makes the test binary sleep first.
 	testCredentialProcessSleepEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_SLEEP"
+	// When set to a duration string, makes the test binary spawn a grandchild that keeps the
+	// inherited stdout pipe open for that long, then hang itself. It models a helper started
+	// through `sh -c` whose own child outlives it (e.g. `sleep 70`).
+	testCredentialProcessGrandchildEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_GRANDCHILD"
 )
 
 // TestMain disables homedir caching to prevent cached values from affecting test isolation.
@@ -43,6 +49,10 @@ func TestMain(m *testing.M) {
 // runFakeCredentialProcess emulates a credential helper when the test binary is executed as one.
 // It returns immediately (running the normal test suite) when no helper variable is set.
 func runFakeCredentialProcess() {
+	if grandchildSleep, ok := os.LookupEnv(testCredentialProcessGrandchildEnv); ok {
+		runFakeCredentialProcessWithGrandchild(grandchildSleep)
+	}
+
 	jsonOut, hasJSON := os.LookupEnv(testCredentialProcessJSONEnv)
 	exitCode, hasExit := os.LookupEnv(testCredentialProcessExitEnv)
 	sleep, hasSleep := os.LookupEnv(testCredentialProcessSleepEnv)
@@ -65,6 +75,37 @@ func runFakeCredentialProcess() {
 		}
 		os.Exit(code)
 	}
+	os.Exit(0)
+}
+
+// runFakeCredentialProcessWithGrandchild starts a detached grandchild that holds the inherited
+// stdout pipe open for the given duration, then blocks forever so the parent can only finish by
+// being killed. It never returns.
+func runFakeCredentialProcessWithGrandchild(grandchildSleep string) {
+	exe, err := os.Executable()
+	if err != nil {
+		os.Exit(2)
+	}
+
+	var env []string
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, testCredentialProcessGrandchildEnv+"=") {
+			continue
+		}
+		env = append(env, kv)
+	}
+
+	// Stdout is inherited on purpose; stdin and stderr stay nil (the null device) so the
+	// orphan never keeps the test runner's own pipes open after the test is over.
+	grandchild := exec.Command(exe)
+	env = append(env, testCredentialProcessSleepEnv+"="+grandchildSleep)
+	grandchild.Env = env
+	grandchild.Stdout = os.Stdout
+	if err := grandchild.Start(); err != nil {
+		os.Exit(2)
+	}
+
+	time.Sleep(time.Hour)
 	os.Exit(0)
 }
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/auth/credentialprocess"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/aws/credentialprocess"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -96,7 +97,7 @@ func TestCredentialProcessCmd_Structure(t *testing.T) {
 	assert.True(t, credentialProcessCmd.SilenceUsage)
 	assert.NotNil(t, credentialProcessCmd.Flags().Lookup("identity"))
 
-	minValidity := credentialProcessCmd.Flags().Lookup(minValidityFlagName)
+	minValidity := credentialProcessCmd.Flags().Lookup(credentialprocess.MinValidityFlagName)
 	require.NotNil(t, minValidity)
 	assert.Equal(t, "15m", minValidity.DefValue)
 	// The displayed default must stay in sync with the producer's default.
@@ -147,7 +148,7 @@ func TestExecuteCredentialProcess_AuthenticatesWhenNotCached(t *testing.T) {
 func TestExecuteCredentialProcess_DefaultIdentity(t *testing.T) {
 	initTestIO(t)
 	mgr := types.NewMockAuthManager(gomock.NewController(t))
-	mgr.EXPECT().GetDefaultIdentity(false).Return("default-id", nil)
+	mgr.EXPECT().GetIdentities().Return(map[string]schema.Identity{"default-id": {Kind: "aws/user", Default: true}})
 	mgr.EXPECT().GetCachedCredentials(gomock.Any(), "default-id").Return(testCreds(time.Now().Add(time.Hour).UTC().Format(time.RFC3339)), nil)
 	stubDependencies(t, mgr, nil)
 
@@ -186,17 +187,46 @@ func TestExecuteCredentialProcess_FlagOverridesEnvIdentity(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestExecuteCredentialProcess_SelectWithoutTTY(t *testing.T) {
+func TestExecuteCredentialProcess_NeverOpensTheIdentitySelector(t *testing.T) {
+	// The AWS CLI captures stderr, so an interactive selector would be invisible and hang the aws command.
+	// GetDefaultIdentity is not expected on the mock: gomock fails the test if the selector path is taken.
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "bare --identity", args: []string{"--identity"}},
+		{name: "--identity=false", args: []string{"--identity=false"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initTestIO(t)
+			stubDependencies(t, types.NewMockAuthManager(gomock.NewController(t)), nil)
+
+			cmd, v := newTestCredentialProcessCmd(t)
+			require.NoError(t, cmd.ParseFlags(tt.args))
+
+			out, err := captureStdout(t, func() error { return executeCredentialProcess(cmd, v) })
+			require.ErrorIs(t, err, errUtils.ErrCredentialProcessIdentityRequired)
+			assert.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), "--identity=<name>")
+			assert.NotContains(t, err.Error(), "DISABLED")
+			assert.Empty(t, out)
+		})
+	}
+}
+
+func TestExecuteCredentialProcess_NoIdentityNoDefaultFailsFast(t *testing.T) {
 	initTestIO(t)
 	mgr := types.NewMockAuthManager(gomock.NewController(t))
-	mgr.EXPECT().GetDefaultIdentity(true).Return("", errUtils.ErrIdentitySelectionRequiresTTY)
+	mgr.EXPECT().GetIdentities().Return(map[string]schema.Identity{"dev": {Kind: "aws/user"}})
 	stubDependencies(t, mgr, nil)
 
 	cmd, v := newTestCredentialProcessCmd(t)
-	require.NoError(t, cmd.ParseFlags([]string{"--identity"}))
 
 	out, err := captureStdout(t, func() error { return executeCredentialProcess(cmd, v) })
-	require.ErrorIs(t, err, errUtils.ErrIdentitySelectionRequiresTTY)
+	require.ErrorIs(t, err, errUtils.ErrNoDefaultIdentity)
+	assert.Equal(t, errUtils.ErrNoDefaultIdentity.Error(), err.Error(), "the message must be a single sentence")
+	assert.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), "atmos auth list")
 	assert.Empty(t, out)
 }
 
@@ -219,7 +249,7 @@ func TestExecuteCredentialProcess_MinValidityFlagAndEnv(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			initTestIO(t)
 			if tt.env != "" {
-				t.Setenv(minValidityEnvVar, tt.env)
+				t.Setenv(credentialprocess.MinValidityEnvVar, tt.env)
 			}
 			mgr := types.NewMockAuthManager(gomock.NewController(t))
 			mgr.EXPECT().GetCachedCredentials(gomock.Any(), "dev").Return(testCreds(soon), nil)

@@ -118,9 +118,13 @@ This backs `atmos aws credential-process` and `atmos auth env --format=credentia
 `RetrieveProcessCredentials` runs a configured `credential_process` command on behalf of the
 `aws/credential-process` identity and returns the credentials it prints.
 
-- The command runs through the platform shell (`sh -c` on Linux and macOS, `cmd.exe /C` on Windows),
-  matching AWS CLI semantics. Stdin and stderr are inherited so a helper can prompt for MFA.
-- The default timeout is 1 minute. Override it with `WithCredentialProcessTimeout`.
+- The command runs through the platform shell, like the AWS SDK for Go: `sh -c` on Linux and macOS,
+  `%COMSPEC% /S /C "<command>"` on Windows (via `pkg/process.NewShellCommand`). The AWS CLI does not
+  use a shell, so pipes and environment variable expansion work in Atmos only. Stdin and stderr are
+  inherited so a helper can prompt for MFA when Atmos runs interactively.
+- The default timeout is 1 minute. `WithCredentialProcessTimeout` overrides it for Go callers, but the
+  `aws/credential-process` identity does not expose it, so users cannot change it. `exec.Cmd.WaitDelay`
+  (2 seconds) bounds how long Wait blocks on the output pipe after a timeout kill.
 - `ATMOS_AUTH_CREDENTIAL_PROCESS_CHAIN` is set for every helper to detect recursion when a helper
   calls back into Atmos for an identity that is already resolving.
 - Errors never include the helper's stdout, because the AWS SDK embeds raw output in parse errors.

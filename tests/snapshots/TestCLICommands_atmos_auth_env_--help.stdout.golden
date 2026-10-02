@@ -13,13 +13,16 @@ USAGE
 
 FLAGS
 
-  -f, --format string       Output format: bash, dotenv, env, github, json, credential-process (default bash)
+  -f, --format string        Output format: bash, dotenv, env, github, json, credential-process (default bash)
 
-  -h, --help                help for env
+  -h, --help                 help for env
 
-      --login               Trigger authentication if credentials are missing or expired
+      --login                Trigger authentication if credentials are missing or expired
 
-  -o, --output-file string  Output file path (default: stdout, or $GITHUB_ENV for github format)
+      --min-validity string  Minimum remaining validity to reuse cached credentials (credential-process format only)
+                             (default 15m)
+
+  -o, --output-file string   Output file path (default: stdout, or $GITHUB_ENV for github format)
 
 
 

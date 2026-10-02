@@ -186,7 +186,7 @@ func (m *manager) EnsureIdentityEnvironment(ctx context.Context, identityName st
 		// Authenticate runs login-time integration triggers itself, so the returned whoami
 		// is not needed here (the cached path below uses it only to trigger integrations).
 		if _, err = m.Authenticate(ctx, identityName); err != nil {
-			return nil, fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, err)
+			return nil, errUtils.WrapIdentityAuthFailed(identityName, err)
 		}
 	} else if whoami != nil && whoami.Credentials != nil {
 		// Valid cached session — provision auto_provision integrations using the cached
@@ -259,7 +259,7 @@ func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string
 	ctxSkipIntegrations := context.WithValue(ctx, skipIntegrationsKey, true)
 	whoami, err := m.Authenticate(ctxSkipIntegrations, identityName)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, err)
+		return errUtils.WrapIdentityAuthFailed(identityName, err)
 	}
 
 	// Use credentials from authentication result.
@@ -306,7 +306,7 @@ func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName 
 	ctxSkipIntegrations := context.WithValue(ctx, skipIntegrationsKey, true)
 	whoami, err := m.Authenticate(ctxSkipIntegrations, identityName)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, err)
+		return errUtils.WrapIdentityAuthFailed(identityName, err)
 	}
 
 	// Use credentials from authentication result.

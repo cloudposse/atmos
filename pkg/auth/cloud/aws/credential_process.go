@@ -32,6 +32,12 @@ const (
 	// DefaultCredentialProcessTimeout matches the AWS SDK default for credential_process.
 	DefaultCredentialProcessTimeout = processcreds.DefaultTimeout
 
+	// The wait delay bounds how long Wait blocks for the helper's stdout pipe to drain after the
+	// helper was killed (timeout or cancellation). The shell runs the helper, so killing it leaves
+	// grandchildren (for example `sleep 70`) holding the inherited pipe open; without a bound the
+	// timeout would only be honored once those grandchildren exit on their own.
+	credentialProcessWaitDelay = 2 * time.Second
+
 	credentialProcessChainSeparator = ","
 )
 
@@ -51,8 +57,11 @@ type ProcessCredentials struct {
 func NewProcessCredentials(creds *types.AWSCredentials) (*ProcessCredentials, error) {
 	defer perf.Track(nil, "aws.NewProcessCredentials")()
 
-	if creds == nil || creds.AccessKeyID == "" || creds.SecretAccessKey == "" {
-		return nil, fmt.Errorf("%w: credentials are missing an access key ID or secret access key", errUtils.ErrIdentityNotAWS)
+	if creds == nil {
+		return nil, errUtils.ErrIdentityCredentialsNone
+	}
+	if creds.AccessKeyID == "" || creds.SecretAccessKey == "" {
+		return nil, errUtils.ErrAWSCredentialsIncomplete
 	}
 
 	out := &ProcessCredentials{
@@ -136,6 +145,7 @@ func DefaultCredentialProcessCommandBuilder(ctx context.Context, command string,
 	cmd.Env = env
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
+	cmd.WaitDelay = credentialProcessWaitDelay
 	return cmd, nil
 }
 
@@ -178,6 +188,10 @@ func RetrieveProcessCredentials(ctx context.Context, identityName, command strin
 			return nil, buildErr
 		}
 		cmd.Stdout = &stdout
+		// Custom builders get the same bound so a timeout is honored promptly.
+		if cmd.WaitDelay == 0 {
+			cmd.WaitDelay = credentialProcessWaitDelay
+		}
 		ranCmd = cmd
 		return cmd, nil
 	})
@@ -188,11 +202,7 @@ func RetrieveProcessCredentials(ctx context.Context, identityName, command strin
 
 	sdkCreds, err := provider.Retrieve(ctx)
 	if err != nil {
-		if ranCmd != nil && ranCmd.ProcessState != nil && ranCmd.ProcessState.Success() {
-			// The process succeeded, so the SDK rejected the payload. Do not wrap the SDK error.
-			return nil, fmt.Errorf("%w: identity %q: %s", errUtils.ErrCredentialProcessInvalidOutput, identityName, describeInvalidProcessOutput(stdout.Bytes()))
-		}
-		return nil, fmt.Errorf("%w: identity %q: %w", errUtils.ErrCredentialProcessFailed, identityName, err)
+		return nil, classifyProcessError(identityName, ranCmd, stdout.Bytes(), err)
 	}
 
 	creds := &types.AWSCredentials{
@@ -204,6 +214,32 @@ func RetrieveProcessCredentials(ctx context.Context, identityName, command strin
 		creds.Expiration = sdkCreds.Expires.UTC().Format(time.RFC3339)
 	}
 	return creds, nil
+}
+
+// classifyProcessError turns the SDK error into either an invalid-output error (the helper ran and
+// exited successfully, so the SDK rejected the payload) or an execution failure.
+func classifyProcessError(identityName string, ranCmd *exec.Cmd, stdout []byte, err error) error {
+	if ranCmd != nil && ranCmd.ProcessState != nil && ranCmd.ProcessState.Success() {
+		// Do not wrap the SDK error: it embeds the raw helper output, which contains secrets.
+		return NewInvalidProcessOutputError(identityName, describeInvalidProcessOutput(stdout))
+	}
+	return errUtils.Build(errUtils.ErrCredentialProcessFailed).
+		WithCause(fmt.Errorf("identity %q: %w", identityName, err)).
+		WithHintf("Run the credential_process command configured for identity %q manually in a terminal to see its error output", identityName).
+		WithContext("identity", identityName).
+		Err()
+}
+
+// NewInvalidProcessOutputError reports that the helper printed something other than a valid
+// version-1 process-credential document. The detail must describe the problem without echoing
+// any of the helper's output, which contains secrets.
+func NewInvalidProcessOutputError(identityName, detail string) error {
+	return errUtils.Build(errUtils.ErrCredentialProcessInvalidOutput).
+		WithCausef("identity %q: %s", identityName, detail).
+		WithHint("The command must print a version 1 process-credential JSON document to stdout (Version, AccessKeyId, SecretAccessKey, and optionally SessionToken and Expiration) and send diagnostics to stderr").
+		WithHintf("Run the credential_process command configured for identity %q manually in a terminal and compare its stdout with the AWS process-credential format", identityName).
+		WithContext("identity", identityName).
+		Err()
 }
 
 // credentialProcessChildEnv returns the environment for the child process with the identity
@@ -225,8 +261,12 @@ func credentialProcessChildEnv(environ []string, identityName string) ([]string,
 	}
 
 	if slices.Contains(chain, identityName) {
-		return nil, fmt.Errorf("%w: identity %q is already resolving its credential_process (chain: %s); the command must not request credentials for the same identity",
-			errUtils.ErrCredentialProcessRecursion, identityName, strings.Join(append(chain, identityName), " -> "))
+		return nil, errUtils.Build(errUtils.ErrCredentialProcessRecursion).
+			WithCausef("identity %q is already resolving its credential_process (chain: %s); the command must not request credentials for the same identity",
+				identityName, strings.Join(append(chain, identityName), " -> ")).
+			WithHintf("Point the helper at a different identity, or remove the call back into Atmos for identity %q from its credential_process command", identityName).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	chain = append(chain, identityName)

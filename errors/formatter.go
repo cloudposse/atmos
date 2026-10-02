@@ -274,7 +274,7 @@ func buildExplanationMarkdown(err error, wrappedMsg string, maxLineLength int) s
 	// maxLineLength is unused here because the markdown renderer handles wrapping.
 	_ = maxLineLength
 
-	details := errors.GetAllDetails(err)
+	details := AllDetails(err)
 	hasContent := len(details) > 0 || wrappedMsg != ""
 
 	if !hasContent {
@@ -304,7 +304,7 @@ func buildExplanationMarkdown(err error, wrappedMsg string, maxLineLength int) s
 
 // extractCustomTitle extracts the custom title from error hints.
 func extractCustomTitle(err error) string {
-	allHints := errors.GetAllHints(err)
+	allHints := AllHints(err)
 	for _, hint := range allHints {
 		if strings.HasPrefix(hint, "TITLE:") {
 			return strings.TrimPrefix(hint, "TITLE:")
@@ -334,7 +334,7 @@ func categorizeHints(allHints []string) (examples []string, hints []string) {
 
 // addExampleAndHintsSection separates hints into examples and regular hints, then adds both sections.
 func addExampleAndHintsSection(md *strings.Builder, err error, maxLineLength int) {
-	allHints := errors.GetAllHints(err)
+	allHints := AllHints(err)
 	examples, hints := categorizeHints(allHints)
 
 	// Add Example section.

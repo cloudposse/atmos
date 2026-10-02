@@ -218,7 +218,7 @@ atmos auth exec --identity azure-prod -- terraform apply -auto-approve
 Output credential environment variables for shell evaluation. Does not perform authentication by default.
 
 ```shell
-atmos auth env [--identity <name>] [--format bash|json|dotenv|credential-process] [--login]
+atmos auth env [--identity <name>] [--format bash|json|dotenv|env|github|credential-process] [--output-file <file>] [--login] [--min-validity <duration>]
 ```
 
 ### Flags
@@ -226,8 +226,10 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv|credential-process
 | Flag | Alias | Description |
 |------|-------|-------------|
 | `--identity` | `-i` | Identity to use |
-| `--format` | `-f` | Output format: `bash` (default), `json`, `dotenv`, `credential-process` (AWS process-credential JSON; alias of `atmos aws credential-process`) |
-| `--login` | | Trigger authentication if credentials are missing or expired |
+| `--format` | `-f` | Output format: `bash` (default), `json`, `dotenv`, `env` (plain `KEY=value`), `github` (`$GITHUB_ENV` lines), `credential-process` (AWS process-credential JSON; alias of `atmos aws credential-process`) |
+| `--output-file` | `-o` | Write output to a file instead of stdout. `github` defaults to `$GITHUB_ENV`. `credential-process` writes the file atomically with mode `0600` and never falls back to `$GITHUB_ENV`. |
+| `--login` | | Trigger authentication if credentials are missing or expired. With `credential-process`, `--login=false` is an error. |
+| `--min-validity` | | `credential-process` only: refresh cached credentials with less than this lifetime left. Default `15m`. Needs a unit (for example `30m`). Other formats reject it. |
 
 ### Environment Variables
 
@@ -235,6 +237,8 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv|credential-process
 |----------|---------|
 | `ATMOS_IDENTITY` | Default identity |
 | `ATMOS_AUTH_ENV_FORMAT` | Default output format |
+| `ATMOS_AUTH_ENV_OUTPUT_FILE` | Default output file |
+| `ATMOS_AWS_CREDENTIAL_PROCESS_MIN_VALIDITY` | Default for `--min-validity` (`credential-process` format) |
 
 ### Output Variables (AWS)
 
@@ -304,8 +308,8 @@ Alias with the same output: `atmos auth env --format=credential-process --identi
 
 | Flag | Alias | Description |
 |------|-------|-------------|
-| `--identity` | `-i` | Identity to print credentials for. Resolved from the flag, then `ATMOS_IDENTITY`, then the default identity. No interactive selector. |
-| `--min-validity` | | Reuse cached credentials that expire later than this. Default `15m`. Environment variable: `ATMOS_AWS_CREDENTIAL_PROCESS_MIN_VALIDITY`. |
+| `--identity` | `-i` | Identity to print credentials for. Resolved from the flag, then `ATMOS_IDENTITY`, then the single `default: true` identity. Never prompts: required unless exactly one default identity exists. |
+| `--min-validity` | | Reuse cached credentials only while more than this lifetime remains. Default `15m`. Needs a unit (for example `30m`). Environment variable: `ATMOS_AWS_CREDENTIAL_PROCESS_MIN_VALIDITY`. |
 
 ### Output
 
@@ -334,9 +338,13 @@ aws sts get-caller-identity --profile=app-sandbox-1
 
 ### Notes
 
-- Cached credentials print with no network call. Otherwise Atmos authenticates like `atmos auth login`.
-- When an interactive login is required (for example an expired SSO session), the command fails with a
+- Cached credentials with more than `--min-validity` left print with no network call. Otherwise Atmos
+  authenticates like `atmos auth login`, but skips integrations (ECR login, EKS kubeconfig).
+- Prompts need both stdin and stderr to be terminals. The AWS CLI captures stderr, so when an
+  interactive login is required (for example an expired SSO session), the command fails fast with a
   hint. Run `atmos auth login --identity=<name>` first.
+- For identities defined in an Atmos profile, add Atmos's `--profile=<name>` (or `ATMOS_PROFILE`) to
+  the `credential_process` line. It is not `aws --profile`.
 - Works with AWS identities only.
 - Full recipes and troubleshooting: [aws-credential-process.md](aws-credential-process.md).
 
