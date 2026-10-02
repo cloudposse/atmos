@@ -2199,6 +2199,20 @@
     },
     "AwsCloudFormation": {
       "properties": {
+        "auto_generate_files": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "AutoGenerateFiles enables generate blocks in isolated component workdirs."
+        },
         "base_path": {
           "anyOf": [
             {

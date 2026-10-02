@@ -102,3 +102,27 @@ func TestResolveStoreAuthPreservesConfiguredIdentityWithoutContext(t *testing.T)
 		})
 	}
 }
+
+func TestResolveStoreAuthInheritsExplicitCallerIdentity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	backend := store.NewMockIdentityAwareStore(ctrl)
+	factory := authdeferred.NewMockAuthFactory(ctrl)
+	ac := &schema.AtmosConfiguration{
+		AuthManager: authdeferred.NewManager(authdeferred.AuthOptions{Factory: factory}),
+		Stores:      store.StoreRegistry{"remote": backend},
+		Auth: schema.AuthConfig{Identities: map[string]schema.Identity{
+			"default": {Kind: "aws/user", Default: true}, "requested": {Kind: "aws/user"},
+		}},
+	}
+	manager := types.NewMockAuthManager(ctrl)
+	manager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{AuthContext: &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "requested"}}}).AnyTimes()
+	manager.EXPECT().GetChain().Return([]string{"requested"}).AnyTimes()
+	backend.EXPECT().ResetAuthContext()
+	factory.EXPECT().Create(gomock.Any(), gomock.Cond(func(config *schema.AuthConfig) bool {
+		return config.Identities["requested"].Default && !config.Identities["default"].Default
+	}), "dev").Return(manager, nil)
+	backend.EXPECT().SetAuthContext(gomock.Any(), "requested")
+	require.NoError(t, resolveStoreAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev", Identity: "requested"}, "remote"))
+	require.True(t, ac.Auth.Identities["default"].Default)
+	require.False(t, ac.Auth.Identities["requested"].Default)
+}

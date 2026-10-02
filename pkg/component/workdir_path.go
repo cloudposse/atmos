@@ -222,17 +222,19 @@ func ProvisionAndResolveComponentPath(
 	// to the source dir and concurrent `atmos terraform plan --all` runs raced on the same source
 	// backend.tf.json ("JSON data ends prematurely"). See #3192.
 	//
-	// Gated to Terraform: ProvisionWorkdir (workdir.Service.Provision) builds a terraform-specific
-	// workdir path and reads the terraform components base path, and the before-init hook that also
-	// runs it fires only for Terraform. This helper is shared by Helmfile/Packer/Ansible, so an
-	// unconditional call would resolve a local non-Terraform component through a terraform workdir.
-	//
-	// ProvisionWorkdir is otherwise a self-gating no-op unless `provision.workdir.enabled: true` AND
-	// the component has no JIT source (source components get their workdir from AutoProvisionSource
-	// below), and it also no-ops when WorkdirPathKey is already set — so the later before.terraform.init
-	// run of the same provisioner is idempotent.
+	// Local CloudFormation components use the same isolation before generation.
+	// Other callers retain their existing provisioning behavior.
 	if componentType == cfg.TerraformComponentType {
 		if err := provWorkdir.ProvisionWorkdir(ctx, atmosConfig, info.ComponentSection, info.AuthContext, writers); err != nil {
+			return "", false, errors.Join(errUtils.ErrWorkdirProvision, err)
+		}
+	} else if componentType == cfg.CloudFormationComponentType {
+		generated, _ := info.ComponentSection[cfg.GenerateSectionName].(map[string]any)
+		service := provWorkdir.NewService(provWorkdir.WithComponent(provWorkdir.ComponentOptions{
+			Type: componentType, SourcePath: fallbackComponentPath,
+			AllowMissingSource: atmosConfig.Components.CloudFormation.AutoGenerateFiles && len(generated) > 0,
+		}))
+		if err := service.Provision(ctx, atmosConfig, info.ComponentSection, writers); err != nil {
 			return "", false, errors.Join(errUtils.ErrWorkdirProvision, err)
 		}
 	}
@@ -251,6 +253,13 @@ func ProvisionAndResolveComponentPath(
 
 		// A local workdir may have just been provisioned above; if so, resolve the
 		// metadata.component subpath onto it and use it instead of the source dir.
+		if componentType == cfg.CloudFormationComponentType {
+			// Local source paths already include metadata.component; only remote checkouts need subpath resolution.
+			if path, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && path != "" {
+				exists, err := componentDirExists(path, "workdir path", errUtils.ErrWorkdirProvision)
+				return path, exists, err
+			}
+		}
 		workdirPath, subpathErr := ApplyWorkdirSubpathToSection(info)
 		if subpathErr != nil {
 			return "", false, subpathErr

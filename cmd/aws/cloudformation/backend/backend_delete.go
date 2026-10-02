@@ -123,12 +123,13 @@ func executeDelete(ctx context.Context, req deleteRequest) error {
 
 	return prov.DeleteBackend(ctx, &DeleteBackendParams{
 		CreateBackendParams: CreateBackendParams{
-			AtmosConfig:     atmosConfig,
-			Component:       req.Component,
-			Stack:           req.Stack,
-			ComponentConfig: componentConfig,
-			AuthContext:     info.AuthContext,
-			Target:          req.Target,
+			AtmosConfig:       atmosConfig,
+			RequestedIdentity: req.Identity,
+			Component:         req.Component,
+			Stack:             req.Stack,
+			ComponentConfig:   componentConfig,
+			AuthContext:       info.AuthContext,
+			Target:            req.Target,
 		},
 		Force: req.Force,
 	})

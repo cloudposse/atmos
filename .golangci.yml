@@ -108,6 +108,9 @@ linters:
             # pkg/ci/artifact/s3 is the S3-backed CI artifact store; it legitimately
             # depends on the AWS SDK, same rationale as pkg/ci/planfile/s3 above.
             - "!**/pkg/ci/artifact/s3/**"
+            # The S3 downloader signs source requests with request-scoped AWS credentials.
+            # Only this cloud-specific leaf imports the SDK; the parent downloader stays generic.
+            - "!**/pkg/downloader/s3/**"
             - "!**/pkg/github/**"
             # The S3 deployment Mage target is an AWS-specific build tool and
             # intentionally uses the AWS SDK instead of shelling out to a CLI.

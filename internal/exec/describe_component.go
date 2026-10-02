@@ -586,6 +586,9 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 		// Get the stack info from the auth manager which should contain
 		// the populated AuthContext from the authentication process.
 		managerStackInfo := params.AuthManager.GetStackInfo()
+		if managerStackInfo != nil {
+			configAndStacksInfo.RequestedIdentity = managerStackInfo.RequestedIdentity
+		}
 		if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 			// Copy the AuthContext from the manager's stack info
 			configAndStacksInfo.AuthContext = managerStackInfo.AuthContext

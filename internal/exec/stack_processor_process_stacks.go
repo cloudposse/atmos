@@ -189,6 +189,7 @@ func ProcessStackConfig(
 	cloudFormationAuth := map[string]any{}
 	cloudFormationDependencies := map[string]any{}
 	cloudFormationHooks := map[string]any{}
+	cloudFormationGenerate := map[string]any{}
 	cloudFormationSource := map[string]any{}
 	cloudFormationProvision := map[string]any{}
 
@@ -1024,6 +1025,18 @@ func ProcessStackConfig(
 		return nil, nil, err
 	}
 
+	if i, ok := globalCloudFormationSection[cfg.GenerateSectionName]; ok {
+		cloudFormationGenerate, ok = i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGenerateSection, stackName)
+		}
+	}
+
+	globalAndCloudFormationGenerate, err := m.Merge(atmosConfig, []map[string]any{globalGenerateSection, cloudFormationGenerate})
+	if err != nil {
+		return nil, nil, err
+	}
+
 	if i, ok := globalCloudFormationSection[cfg.SettingsSectionName]; ok {
 		cloudFormationSettings, ok = i.(map[string]any)
 		if !ok {
@@ -1426,28 +1439,29 @@ func ProcessStackConfig(
 			// Build options for each aws/cloudformation component.
 			buildCloudFormationOpts := func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error) {
 				return &ComponentProcessorOptions{
-					ComponentType:            cfg.CloudFormationComponentType,
-					Component:                component,
-					Stack:                    stack,
-					StackName:                stackName,
-					ComponentMap:             componentMap,
-					AllComponentsMap:         allCloudFormationComponentsMap,
-					ComponentsBasePath:       cloudFormationComponentsBasePath,
-					CheckBaseComponentExists: checkBaseComponentExists,
-					GlobalVars:               globalAndCloudFormationVars,
-					GlobalSettings:           globalAndCloudFormationSettings,
-					GlobalEnv:                globalAndCloudFormationEnv,
-					GlobalAuth:               globalAndCloudFormationAuth,
-					GlobalDependencies:       globalAndCloudFormationDependencies,
-					GlobalMetadata:           globalMetadataSection,
-					GlobalComponentRetry:     globalRetrySection,
-					GlobalCommand:            cloudFormationCommand,
-					GlobalSecrets:            globalSecretsSection,
-					AtmosGlobalAuthMap:       atmosAuthConfig,
-					GlobalAndTerraformHooks:  globalAndCloudFormationHooks,
-					GlobalSourceSection:      cloudFormationSource,
-					GlobalProvisionSection:   cloudFormationProvision,
-					AtmosConfig:              atmosConfig,
+					ComponentType:              cfg.CloudFormationComponentType,
+					Component:                  component,
+					Stack:                      stack,
+					StackName:                  stackName,
+					ComponentMap:               componentMap,
+					AllComponentsMap:           allCloudFormationComponentsMap,
+					ComponentsBasePath:         cloudFormationComponentsBasePath,
+					CheckBaseComponentExists:   checkBaseComponentExists,
+					GlobalVars:                 globalAndCloudFormationVars,
+					GlobalSettings:             globalAndCloudFormationSettings,
+					GlobalEnv:                  globalAndCloudFormationEnv,
+					GlobalAuth:                 globalAndCloudFormationAuth,
+					GlobalDependencies:         globalAndCloudFormationDependencies,
+					GlobalMetadata:             globalMetadataSection,
+					GlobalComponentRetry:       globalRetrySection,
+					GlobalCommand:              cloudFormationCommand,
+					GlobalSecrets:              globalSecretsSection,
+					AtmosGlobalAuthMap:         atmosAuthConfig,
+					GlobalAndTerraformHooks:    globalAndCloudFormationHooks,
+					GlobalAndTerraformGenerate: globalAndCloudFormationGenerate,
+					GlobalSourceSection:        cloudFormationSource,
+					GlobalProvisionSection:     cloudFormationProvision,
+					AtmosConfig:                atmosConfig,
 				}, nil
 			}
 

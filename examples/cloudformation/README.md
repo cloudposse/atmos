@@ -54,6 +54,35 @@ the value an `aws/emulator` identity targets. Add `-s local` to scope either com
 
 The `atmos test` custom command runs the full deploy/delete lifecycle end to end.
 
+## Generate a Template and Stack Policy
+
+`demo-generated` generates a YAML template and JSON stack policy from stack
+configuration. `auto_generate_files: true` is enabled in `atmos.yaml`; components
+without a `generate` block keep their existing behavior. The generated component
+shares the local `demo` source directory and uses an isolated workdir, so the
+source directory stays unchanged.
+
+Render it locally without an emulator or AWS credentials:
+
+```shell
+atmos aws cfn render demo-generated -s local
+```
+
+The output contains `hello generated from local`. To deploy it in the sandbox:
+
+```shell
+atmos emulator up aws -s local
+atmos aws cfn deploy demo-generated -s local
+atmos aws cfn output demo-generated -s local
+atmos aws cfn delete demo-generated -s local --auto-approve
+atmos emulator down aws -s local
+```
+
+The files are declared in `stacks/catalog/demo-generated.yaml`; `path` selects the
+generated template and `stack_policy.file` selects the generated policy.
+`--dry-run` does not generate files. There is no separate CloudFormation
+`generate` command.
+
 ## Learn More
 
 See the [`atmos aws cloudformation`](https://atmos.tools/cli/commands/aws/cloudformation) docs.

@@ -730,6 +730,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		for key, value := range finalComponentCloudFormation {
 			comp[key] = value
 		}
+		comp[cfg.GenerateSectionName] = finalComponentGenerate
 	}
 
 	// Merge the Helm CLI plugins list (helm and helmfile components).

@@ -1556,7 +1556,9 @@ type StackPolicy struct {
 // CloudFormation components deploy a stack-scoped CloudFormation stack directly through the
 // AWS SDK for Go v2, with no external binary/toolchain dependency.
 type AwsCloudFormation struct {
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	// AutoGenerateFiles enables generate blocks in isolated component workdirs.
+	AutoGenerateFiles bool   `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	BasePath          string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	// Template is the path to the CloudFormation template, relative to the component's base path.
 	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 	// StackName is the explicit CloudFormation stack name (no legacy name-pattern interpolation).
@@ -2117,10 +2119,13 @@ type ConfigAndStacksInfo struct {
 	TerraformPlanHideNoChanges bool
 	TerraformPlanSummaryFile   string
 	Identity                   string
-	ClusterName                string // EKS cluster name from --cluster-name flag.
-	NeedsPathResolution        bool   // True if ComponentFromArg is a path that needs resolution.
-	UIEnabled                  bool   // Enable streaming UI mode for terraform commands.
-	UIFlagExplicitlySet        bool   // Whether --ui flag was explicitly set (vs. config/default).
+	// RequestedIdentity preserves the CLI/environment choice before authentication
+	// stores an auto-selected identity. Nil means Identity has not been rewritten.
+	RequestedIdentity   *string
+	ClusterName         string // EKS cluster name from --cluster-name flag.
+	NeedsPathResolution bool   // True if ComponentFromArg is a path that needs resolution.
+	UIEnabled           bool   // Enable streaming UI mode for terraform commands.
+	UIFlagExplicitlySet bool   // Whether --ui flag was explicitly set (vs. config/default).
 
 	// NodeHooks fires per-component lifecycle hooks (user hooks + CI hooks,
 	// before and after) for each component in a multi-component/bulk

@@ -92,10 +92,12 @@ func executeList(ctx context.Context, component, stack, identity, format string)
 	}
 
 	return prov.ListBackends(ctx, &ListBackendsParams{
-		AtmosConfig:     atmosConfig,
-		Component:       component,
-		ComponentConfig: componentConfig,
-		AuthContext:     info.AuthContext,
-		Format:          format,
+		AtmosConfig:       atmosConfig,
+		RequestedIdentity: identity,
+		Stack:             stack,
+		Component:         component,
+		ComponentConfig:   componentConfig,
+		AuthContext:       info.AuthContext,
+		Format:            format,
 	})
 }

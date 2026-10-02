@@ -178,10 +178,9 @@ func TestStringifyParameterValue(t *testing.T) {
 		assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
 	})
 
-	t.Run("nil becomes empty string", func(t *testing.T) {
-		v, err := stringifyParameterValue(nil)
-		require.NoError(t, err)
-		assert.Equal(t, "", v)
+	t.Run("null cannot silently become an empty parameter", func(t *testing.T) {
+		_, err := stringifyParameterValue(nil)
+		require.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationParameters)
 	})
 
 	t.Run("bool falls back to default %v formatting", func(t *testing.T) {

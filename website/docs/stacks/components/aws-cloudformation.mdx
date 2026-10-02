@@ -10,6 +10,7 @@ id: aws-cloudformation
 import File from "@site/src/components/File";
 import Intro from "@site/src/components/Intro";
 import Experimental from "@site/src/components/Experimental";
+import EmbedFile from "@site/src/components/EmbedFile";
 
 <Intro>
   Define CloudFormation stacks in stack manifests when you want Atmos to
@@ -77,10 +78,10 @@ dependencies, and be included in affected runs.
   <dd>Cross-component ordering for `--all` and `--affected` runs.</dd>
 </dl>
 
-CloudFormation components do **not** support a `generate:` section — there is
-no codegen-artifact output the way Terraform generates backend/provider files.
-They also do not support a `plugins:` section — there is no chart-style plugin
-system, unlike native Helm.
+CloudFormation components support a [`generate:`](#generated-files) section for
+stack-specific templates, stack policies, and auxiliary files. They do not
+support a `plugins:` section — there is no chart-style plugin system, unlike
+native Helm.
 
 ## CloudFormation-Specific Sections
 
@@ -117,6 +118,9 @@ system, unlike native Helm.
     component takes toward variables, so `UsePreviousValue` is not needed in
     the map form. The list form accepts `UsePreviousValue: true` (without a
     `ParameterValue`) for the rare update that must keep a stack's current value.
+    A null value is rejected before deployment, including null returned by an
+    unavailable output dependency. Deploy the producer or provide an explicit
+    fallback; use `""` for an intentional empty string.
     To use only the `Parameters` section of a Rain config file, select it with
     `!include rain-config.yaml .Parameters`.
   </dd>
@@ -135,7 +139,8 @@ system, unlike native Helm.
   <dd>
     Protects specific resources from update during `UpdateStack`. Set
     `stack_policy.file` to a stack policy JSON document path, relative to the
-    component's base path. Applied after a successful `apply`.
+    component's base path. Installed before an update to protect the current change,
+    and after successful creation for a new stack.
   </dd>
 
   <dt>`role_arn`</dt>
@@ -234,6 +239,43 @@ components/cloudformation/
     └── stack-policy.json
 ```
 
+## Generated Files
+
+Enable `components."aws/cloudformation".auto_generate_files: true` in
+[`atmos.yaml`](/cli/configuration/components/aws-cloudformation), then define a
+component `generate` map. It uses the shared [file-generation syntax](/stacks/generate):
+filenames map to Go-template strings or structured maps serialized by extension.
+For CloudFormation intrinsic functions in a structured map, use their long form,
+such as `Ref: Marker`.
+
+Point `path` at a generated template. An inline `template` can still generate
+auxiliary files, including a JSON policy referenced by `stack_policy.file`;
+`template` and `path` remain mutually exclusive.
+
+<EmbedFile filePath="examples/cloudformation/stacks/catalog/demo-generated.yaml" />
+
+Atmos provisions local or remote component sources, resolves any source subpath,
+and then generates files before reading the template and policy. With generation
+enabled and a nonempty block, it automatically creates an isolated workdir for
+each stack/component instance. Two instances sharing one local directory or
+vendored source therefore write independently. Explicit
+`provision.workdir.enabled: false` is rejected; generated files never need to be
+written into the shared component directory. Shared `metadata.working_directory`
+and `settings.working_directory` overrides are also rejected. Source `pull --force`
+and `delete` use this same isolated directory. This isolation does not serialize
+simultaneous deployments of the same AWS stack.
+
+Generation runs for `render`, `fmt`, `validate`, `plan`/`diff`, `apply`/`deploy`,
+`changeset create`, and `stackset create`/`update`. `changeset execute` also
+generates files when it needs a configured stack policy. It does not run for
+`--dry-run` or operations that only inspect or delete deployed state, such as
+`output`, `get`, `logs`, `watch`, `tree`, `drift`, and `delete`.
+
+There is no separate CloudFormation `generate` command. Run
+`atmos aws cloudformation render demo-generated -s local` from the
+[CloudFormation example](/examples/cloudformation) to inspect the generated
+template without starting the emulator.
+
 ## Source Provisioning
 
 Point a component at a remote template through the top-level `source:`
@@ -285,6 +327,13 @@ components:
   </dd>
 </dl>
 
+Private S3 sources use `s3://bucket/key?region=us-east-2` or
+`s3::https://s3.us-east-2.amazonaws.com/bucket/key`. Atmos uses the component's
+resolved AWS identity for each download, including cold `render` and `fmt` calls.
+A warm workdir does not authenticate or fetch again until refresh is needed.
+Credentials remain scoped to the request. Plain `https://` URLs use HTTP
+retrieval; use the S3 scheme for authenticated SDK access.
+
 :::note Manifest-driven vendoring is not supported
 `aws/cloudformation` components cannot be vendored through a `vendor.yaml`
 manifest (`atmos vendor pull`) — only the `source:`-based JIT provisioning
@@ -308,10 +357,10 @@ declare additional named targets under `provision.targets`, selected with
   <dd>
     The direct-deploy target. It is implicit — named `default`, with no
     configuration — whenever nothing else is selected, so most components never
-    declare it. Declare it explicitly when it needs configuration, which today
-    means the `packaging:` field described in [Choosing the Packaging
-    Bucket](#choosing-the-packaging-bucket), or when you want a name to select
-    with `--target` or `provision.default`.
+    declare it. Declare it explicitly to select an identity with
+    [`auth`](#target-authentication), choose a `packaging:` bucket (see
+    [Choosing the Packaging Bucket](#choosing-the-packaging-bucket)), or give it
+    a name to select with `--target` or `provision.default`.
 
 ```yaml
 components:
@@ -512,6 +561,41 @@ both `accounts` and `regions`. Values that come from templates or YAML functions
 are not evaluated, so they are not judged. The output names the verb, component,
 and stack, for example `Dry run: apply vpc in plat-ue2-dev: configuration
 validated; no AWS calls made`.
+
+### Target Authentication
+
+A target's `auth` block overrides the component's auth configuration for that
+destination. An explicit `--identity` or `ATMOS_IDENTITY` takes precedence over
+target defaults. Atmos resolves a separate auth context for each target, so
+uploading to an artifact account does not change the deployment account or the
+credentials used by component hooks and secret lookups.
+
+```yaml
+provision:
+  targets:
+    artifacts:
+      kind: aws/s3
+      bucket: shared-cfn-artifacts
+      region: us-east-2
+      auth:
+        identities:
+          shared-services:
+            default: true
+```
+
+The identity must already be defined in global/component auth, or fully declared
+in the target. A target may also select a named identity with
+`auth.identity: shared-services`. Failed target authentication stops the command;
+Atmos does not retry using the component's credentials.
+
+S3 uploads, automatic bucket provisioning, and explicit `backend` commands use
+the S3 target's identity. Direct stack operations use the selected/default
+`kind: aws/cloudformation` target's identity. Cross-component
+`!aws.cloudformation.output` and `atmos.Component(...).outputs` lookups use the
+referenced component's default direct target too. StackSet `create` and `update` use
+their selected target; `delete` and `instances` do not select a target, so pass
+`--identity` when the StackSet belongs to another account. A Git target uses its
+target identity, or its repository's identity when no target/CLI override is set.
 
 ## Related
 

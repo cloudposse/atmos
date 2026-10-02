@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/go-getter"
 
 	"github.com/cloudposse/atmos/pkg/auth/broker"
+	s3source "github.com/cloudposse/atmos/pkg/downloader/s3"
 	"github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -122,7 +123,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 			"hg":    &getter.HgGetter{},
 			"http":  httpGetter,
 			"https": httpGetter,
-			// "s3": &getter.S3Getter{}, // add as needed.
+			"s3":    s3source.NewGetter(ctx),
 			// "gcs": &getter.GCSGetter{},
 		},
 	}
