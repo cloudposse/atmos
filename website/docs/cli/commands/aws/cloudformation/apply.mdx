@@ -8,13 +8,16 @@ description: Create or update a CloudFormation stack via a changeset.
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
+import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
+import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
+import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/_skip-hooks-flag.mdx'
 
 <Intro>
-  Create or update the CloudFormation stack for a component: create (or reuse)
-  a changeset and execute it. After a successful apply, Atmos applies the
-  component's `stack_policy` (if set) and renders the stack's Outputs — the
-  same view [`output`](/cli/commands/aws/cloudformation/output) renders on
-  demand.
+  Create or update the CloudFormation stack for a component: create a changeset,
+  show the predicted changes, ask for confirmation, and execute it. After a
+  successful apply, Atmos applies the component's `stack_policy` (if set) and
+  renders the stack's Outputs — the same view
+  [`output`](/cli/commands/aws/cloudformation/output) renders on demand.
 </Intro>
 
 <Experimental />
@@ -51,6 +54,31 @@ atmos aws cloudformation apply --all --tags production,tier-1
 atmos aws cloudformation apply --affected --labels cost-center=platform
 ```
 
+## How apply runs
+
+A direct stack deploy runs in this order, so you approve changes you have seen:
+
+1. Atmos creates the changeset.
+2. It prints the predicted changes (one line per added, modified, or replaced resource) on stderr.
+3. If the changeset would change nothing, Atmos deletes it, prints `No changes`, and still runs the follow-up steps (stack policy, termination protection, Outputs). Nothing is executed and no changeset is left behind.
+4. Otherwise it asks for confirmation, unless `--auto-approve` is set.
+5. If you decline, Atmos deletes the changeset and exits with a "user aborted" error; the stack is untouched.
+6. If you confirm, Atmos executes the changeset and streams the stack events until the stack reaches a final status.
+
+Without `--auto-approve` and without a terminal on stdin (for example in CI), `apply` fails before creating anything, with a hint to pass `--auto-approve`. This is a "confirmation required" error, not a user abort.
+
+For a stack that does not exist yet, CloudFormation registers an empty `REVIEW_IN_PROGRESS` stack as soon as the first changeset is created. When Atmos itself created that stack during this run and then abandons the changeset (declined prompt, a failed changeset, or a changeset that cannot be executed), it deletes the empty stack as well, after confirming it is still `REVIEW_IN_PROGRESS`. A stack that already existed is never deleted.
+
+A stack in `ROLLBACK_COMPLETE` cannot be updated: its first create failed and CloudFormation only accepts a delete. `apply` fails before creating a changeset, explains this, and hints at the recovery: run [`atmos aws cloudformation delete`](/cli/commands/aws/cloudformation/delete) for the component, then apply again. Atmos does not delete the stack for you.
+
+### Other provision targets
+
+`apply` asks no stack-change question when no stack changes:
+
+- A `kind: aws/s3` target (selected with `--target` or `provision.default`) only uploads the template. On success Atmos prints the `s3://` location and the `https://` TemplateURL, and records both in the run summary (`package_s3_uri`, `package_url`).
+- An external target such as `kind: git` prints the file it delivered and the target it went to.
+- A `kind: aws/stackset` target is not an apply target. `apply --target <name>` fails with a hint to run `atmos aws cloudformation stackset create <component> -s <stack> --target <name>` (or `stackset update`).
+
 ## Flags
 
 <dl>
@@ -61,25 +89,13 @@ atmos aws cloudformation apply --affected --labels cost-center=platform
   <dd>Provision target to deliver to. Defaults to `provision.default`, otherwise the implicit direct-deploy target.</dd>
 
   <dt>`--auto-approve` <em>(optional)</em></dt>
-  <dd>Skip the interactive confirmation prompt. Without it, `apply` prompts for confirmation on a TTY before executing the changeset.</dd>
+  <dd>Skip the interactive confirmation prompt. Without it, `apply` shows the predicted changes and then prompts for confirmation on a TTY before executing the changeset. Without a TTY, `apply` fails unless this flag is set.</dd>
 
-  <dt>`--all` <em>(optional)</em></dt>
-  <dd>Apply all `aws/cloudformation` components in dependency order.</dd>
+<SelectionFlags />
 
-  <dt>`--affected` <em>(optional)</em></dt>
-  <dd>Apply affected `aws/cloudformation` components and their dependencies.</dd>
+<GitFlags />
 
-  <dt>`--base` <em>(optional)</em></dt>
-  <dd>Git base ref or SHA to compare against for affected detection: `--base origin/main`. Used with `--affected`.</dd>
-
-  <dt>`--include-dependents` <em>(optional)</em></dt>
-  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
-
-  <dt>`--tags` <em>(optional)</em></dt>
-  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
-
-  <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+<SkipHooksFlag />
 </dl>
 
 :::note

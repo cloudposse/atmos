@@ -1,0 +1,20 @@
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Process all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Process affected `aws/cloudformation` components and their dependencies. Compares the working tree against a base: see `--base` and the Git flags below.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--base` <em>(optional)</em></dt>
+  <dd>Git base ref or SHA to compare against for affected detection: `--base=origin/main`. A value that looks like a commit SHA is treated as `--sha`, anything else as `--ref`. Used with `--affected`.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (repeatable and/or comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+
+  <dt>`--ci` <em>(optional)</em></dt>
+  <dd>Enable native CI integration (requires `ci.enabled`): writes the job summary and output variables for the operation. Also enabled by the `CI` and `ATMOS_CI` environment variables.</dd>
