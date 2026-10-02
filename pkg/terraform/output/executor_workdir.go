@@ -34,12 +34,12 @@ var workdirProvisionGroup singleflight.Group
 // and force a full re-init on every subsequent `terraform output`.
 var workdirProvisionCache sync.Map
 
-// doChanEntryHook, when non-nil, is called immediately before every
+// doChanRegisteredHook, when non-nil, is called immediately after every
 // workdirProvisionGroup.DoChan call -- a test-only seam letting a concurrency test
-// deterministically confirm a caller has reached singleflight registration, instead of
+// deterministically confirm a caller has completed singleflight registration, instead of
 // inferring it from scheduling behavior (e.g. runtime.Gosched()) that proves nothing about
 // which goroutine the runtime actually chose to run next.
-var doChanEntryHook func()
+var doChanRegisteredHook func()
 
 // ResetWorkdirProvisionCache clears the workdir provision cache.
 // Exported for use in tests to ensure cache isolation between test functions.
@@ -129,9 +129,9 @@ func (e *Executor) ensureWorkdirProvisioned(
 
 	cacheKey := stackComponentKey(stack, component)
 
-	if doChanEntryHook != nil {
-		doChanEntryHook()
-	}
+	// Capture before launching the provisioner: tests may install a follower-only
+	// hook after the leader enters Provision, while its DoChan is still returning.
+	onRegistered := doChanRegisteredHook
 
 	resultCh := workdirProvisionGroup.DoChan(cacheKey, func() (any, error) {
 		// LoadOrStore at the TOP of the closure: atomically claim the key before
@@ -188,6 +188,9 @@ func (e *Executor) ensureWorkdirProvisioned(
 
 		return freshlyProvisioned, nil
 	})
+	if onRegistered != nil {
+		onRegistered()
+	}
 
 	// DoChan returns a buffered channel (capacity 1) so the leader's result is
 	// never lost even if this goroutine exits early via ctx.Done(). The select

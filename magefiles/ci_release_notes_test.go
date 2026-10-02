@@ -45,7 +45,7 @@ func fakeAPIs(t *testing.T) (releasenotes.HTTPClient, map[string]int) {
 		switch {
 		case req.Method == http.MethodGet && strings.Contains(url, "/releases/"):
 			calls["get-release"]++
-			return jsonResponse(`{"body":"- feat: x @a (#1)\n"}`), nil
+			return jsonResponse(`{"body":"- feat: x @a (#1)\n","tag_name":"v1.230.1"}`), nil
 		case req.Method == http.MethodGet && strings.Contains(url, "/pulls/1"):
 			calls["get-pr"]++
 			return jsonResponse(`{"body":"Does x in detail."}`), nil
@@ -54,7 +54,7 @@ func fakeAPIs(t *testing.T) (releasenotes.HTTPClient, map[string]int) {
 			return jsonResponse(`{"choices":[{"message":{"content":"[{\"number\":1,\"summary\":\"Does x.\"}]"}}]}`), nil
 		case req.Method == http.MethodPatch:
 			calls["patch"]++
-			return jsonResponse(`{}`), nil
+			return jsonResponse(`{"tag_name":"v1.230.1"}`), nil
 		}
 		t.Fatalf("unexpected request %s %s", req.Method, url)
 		return nil, nil
