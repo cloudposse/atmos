@@ -5,6 +5,7 @@ import "testing"
 func TestSchemaCloudFormationTypeDefaults(t *testing.T) {
 	schemas := map[string][]byte{"manifest": loadEmbeddedSchemaBytes(t), "stack-config": loadStackConfigSchemaBytes(t)}
 	defaults := map[string]any{
+		"generate":     map[string]any{"template.yaml": "Resources: {}"},
 		"locals":       map[string]any{"region": "us-east-1"},
 		"auth":         map[string]any{},
 		"dependencies": map[string]any{"components": []any{map[string]any{"component": "network"}}},
