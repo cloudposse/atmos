@@ -209,13 +209,14 @@ func extractSourceAndComponent(componentConfig map[string]any) (*schema.VendorCo
 	return sourceSpec, component, nil
 }
 
-// vendorToTarget creates the target directory and vendors the source.
+// vendorTarget identifies the provisioning destination and progress output streams.
 type vendorTarget struct {
 	path      string
 	component string
 	writers   provisioner.OutputWriters
 }
 
+// vendorToTarget provisions with progress reporting and removes a newly created target when downloading fails.
 func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, target vendorTarget) error {
 	progressMsg := fmt.Sprintf("Auto-provisioning source for '%s'", target.component)
 	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", target.path)

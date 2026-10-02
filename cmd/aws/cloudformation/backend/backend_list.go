@@ -76,6 +76,7 @@ func init() {
 	}
 }
 
+// executeList loads the component and forwards the explicit identity when inspecting all S3 targets.
 func executeList(ctx context.Context, component, stack, identity, format string) error {
 	if err := requireComponentAndStack("list", component, stack); err != nil {
 		return err

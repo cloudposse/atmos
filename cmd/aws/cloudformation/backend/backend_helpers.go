@@ -43,6 +43,7 @@ type ConfigInitializer interface {
 
 type defaultConfigInitializer struct{}
 
+// InitConfigAndAuth loads CLI configuration and authenticates the selected component scope.
 func (d *defaultConfigInitializer) InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, error) {
 	info := schema.ConfigAndStacksInfo{
 		ComponentFromArg: component,
@@ -66,6 +67,7 @@ func (d *defaultConfigInitializer) InitConfigAndAuth(component, stack, identity 
 	return &atmosConfig, &info, nil
 }
 
+// DescribeComponent resolves component templates using the authenticated caller without evaluating YAML functions.
 func (d *defaultConfigInitializer) DescribeComponent(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, component, stack string) (map[string]any, error) {
 	var authManager auth.AuthManager
 	if info != nil {
@@ -81,6 +83,7 @@ func (d *defaultConfigInitializer) DescribeComponent(atmosConfig *schema.AtmosCo
 	})
 }
 
+// DescribeComponentStatic reads the manifest without authentication or dynamic evaluation for dry runs.
 func (d *defaultConfigInitializer) DescribeComponentStatic(component, stack string) (map[string]any, error) {
 	info := schema.ConfigAndStacksInfo{ComponentFromArg: component, Stack: stack}
 	atmosConfig, err := cfg.InitCliConfig(info, true)
@@ -151,6 +154,7 @@ type Provisioner interface {
 // provisioner.DescribeBackend/ListBackends Terraform itself uses today).
 type defaultProvisioner struct{}
 
+// CreateBackend resolves the S3 target and provisions it with that target's independent credentials.
 func (d *defaultProvisioner) CreateBackend(ctx context.Context, params *CreateBackendParams) error {
 	provisionSection, _ := params.ComponentConfig[cfg.ProvisionSectionName].(map[string]any)
 	s3cfg, err := pkgcfn.ResolveS3BackendTarget(provisionSection, params.Target)
@@ -173,6 +177,7 @@ func (d *defaultProvisioner) CreateBackend(ctx context.Context, params *CreateBa
 	})
 }
 
+// BackendExists checks the selected bucket using the same target credentials as backend creation.
 func (d *defaultProvisioner) BackendExists(ctx context.Context, params *CreateBackendParams) (bool, error) {
 	provisionSection, _ := params.ComponentConfig[cfg.ProvisionSectionName].(map[string]any)
 	s3cfg, err := pkgcfn.ResolveS3BackendTarget(provisionSection, params.Target)
@@ -192,6 +197,7 @@ func (d *defaultProvisioner) BackendExists(ctx context.Context, params *CreateBa
 	return status.Exists, nil
 }
 
+// DeleteBackend adapts the S3 target and its credentials to the shared backend deletion service.
 func (d *defaultProvisioner) DeleteBackend(ctx context.Context, params *DeleteBackendParams) error {
 	provisionSection, _ := params.ComponentConfig[cfg.ProvisionSectionName].(map[string]any)
 	s3cfg, err := pkgcfn.ResolveS3BackendTarget(provisionSection, params.Target)
@@ -219,6 +225,7 @@ func (d *defaultProvisioner) DeleteBackend(ctx context.Context, params *DeleteBa
 	})
 }
 
+// DescribeBackend reads and formats one S3 target using its own authentication scope.
 func (d *defaultProvisioner) DescribeBackend(ctx context.Context, params *DescribeBackendParams) error {
 	provisionSection, _ := params.ComponentConfig[cfg.ProvisionSectionName].(map[string]any)
 	s3cfg, err := pkgcfn.ResolveS3BackendTarget(provisionSection, params.Target)
@@ -239,6 +246,7 @@ func (d *defaultProvisioner) DescribeBackend(ctx context.Context, params *Descri
 	return renderBackendStatuses(params.Format, []*pkgcfn.S3BackendStatus{status})
 }
 
+// ListBackends reads S3 targets in name order, resolving credentials independently for each target.
 func (d *defaultProvisioner) ListBackends(ctx context.Context, params *ListBackendsParams) error {
 	provisionSection, _ := params.ComponentConfig[cfg.ProvisionSectionName].(map[string]any)
 	targets := pkgcfn.FindS3BackendTargets(provisionSection)
@@ -321,6 +329,7 @@ func renderBackendStatuses(format string, statuses []*pkgcfn.S3BackendStatus) er
 // backendTableRowFormat lays out the target/bucket/region/status table.
 const backendTableRowFormat = "%-20s %-30s %-14s %s\n"
 
+// renderBackendStatusesTable writes bucket existence information or an explicit empty-target message.
 func renderBackendStatusesTable(statuses []*pkgcfn.S3BackendStatus) error {
 	if len(statuses) == 0 {
 		return data.Writeln("No `kind: aws/s3` provision targets declared.")

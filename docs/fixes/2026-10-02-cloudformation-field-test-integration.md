@@ -65,6 +65,18 @@ are included in this change at the user's request; no follow-up issue is needed.
   evidence are retained under the originating workspace's
   `.context/field-test-cfn-gaps-20261001-2314/`.
 
+## Review validation
+
+- Preserve the original CLI identity request when deferred stores resolve credentials
+  after component authentication. Six cases cover explicit, implicit, legacy,
+  store-specific, interactive-selection and disabled-selection values.
+- Normalize S3 object-key separators before inspecting every destination ancestor,
+  including intermediate links followed by missing directories. Regression tests
+  assert rejection before object retrieval and no writes outside the destination.
+- Full S3 downloader and deferred-store tests, race tests and affected builds passed.
+  Package statement coverage is 93.9% and 100%, respectively. The broader
+  patch-scoped package test run and changed-line lint also passed.
+
 ## Follow-ups
 
 None.

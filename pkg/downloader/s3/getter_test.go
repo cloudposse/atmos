@@ -33,6 +33,7 @@ func TestS3SourceURLForms(t *testing.T) {
 	for _, tc := range []struct{ uri, bucket, key, region, endpoint string }{
 		{"s3://bucket/nested/template.yaml?region=us-east-2", "bucket", "nested/template.yaml", "us-east-2", ""},
 		{"https://s3.us-east-2.amazonaws.com/bucket/nested/template.yaml", "bucket", "nested/template.yaml", "us-east-2", ""},
+		{"https://s3.amazonaws.com/bucket/key", "bucket", "key", "us-east-1", ""},
 		{"https://s3-us-west-2.amazonaws.com/bucket/key", "bucket", "key", "us-west-2", ""},
 		{"https://bucket.s3.us-west-2.amazonaws.com/key", "bucket", "key", "us-west-2", ""},
 		{"https://bucket.with.dots.s3-us-west-2.amazonaws.com/key", "bucket.with.dots", "key", "us-west-2", ""},
@@ -185,6 +186,7 @@ func TestS3ClientModeErrors(t *testing.T) {
 		{name: "head denied", key: "template.yaml", headErr: denied, wantErr: denied, heads: 1},
 		{name: "prefix", key: "prefix", headErr: notFound, keys: []string{"prefix-other", "prefix/template.yaml"}, mode: getter.ClientModeDir, heads: 1, lists: 1},
 		{name: "prefix denied", key: "prefix", headErr: notFound, listErr: denied, wantErr: denied, heads: 1, lists: 1},
+		{name: "object appears after head", key: "template.yaml", headErr: notFound, keys: []string{"template.yaml"}, mode: getter.ClientModeFile, heads: 1, lists: 1},
 		{name: "absent", key: "missing", headErr: notFound, mode: getter.ClientModeFile, heads: 1, lists: 1},
 		{name: "version", key: "template.yaml?version=recorded-version", headErr: denied, listErr: denied, mode: getter.ClientModeFile},
 	} {
@@ -270,4 +272,64 @@ func TestS3FileRejectsDestinationSymlink(t *testing.T) {
 	data, err := os.ReadFile(outside)
 	require.NoError(t, err)
 	assert.Equal(t, "unchanged", string(data))
+}
+
+// TestS3SourceRejectsIntermediateSymlink checks slash-delimited object keys even
+// when a later child is absent; Windows must inspect each key component too.
+func TestS3SourceRejectsIntermediateSymlink(t *testing.T) {
+	for _, tc := range []struct{ name, symlinkDir, key string }{
+		{"first directory", "", "prefix/nested/missing/template.yaml"},
+		{"deeper directory", "level", "prefix/level/nested/missing/template.yaml"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, outside := t.TempDir(), t.TempDir()
+			parent := filepath.Join(root, tc.symlinkDir)
+			require.NoError(t, os.MkdirAll(parent, 0o755))
+			require.NoError(t, os.Symlink(outside, filepath.Join(parent, "nested")))
+			client := &s3SourceFixtureClient{keys: []string{tc.key}}
+			g := &Getter{ctx: t.Context(), newClient: func(context.Context, *sourceLocation) (sourceClient, error) { return client, nil }}
+			u, err := url.Parse("s3://bucket/prefix/")
+			require.NoError(t, err)
+			require.ErrorIs(t, g.Get(root, u), errUtils.ErrPathTraversal)
+			assert.Zero(t, client.gets, "reject paths before retrieving object contents")
+			entries, err := os.ReadDir(outside)
+			require.NoError(t, err)
+			assert.Empty(t, entries, "neither directories nor objects may escape the destination")
+		})
+	}
+}
+
+// TestS3SourceRejectsInvalidLocations ensures malformed sources fail before any
+// authentication or object operation in both directory and file dispatch.
+func TestS3SourceRejectsInvalidLocations(t *testing.T) {
+	for _, uri := range []string{"s3:///template.yaml", "https://ec2.amazonaws.com/bucket/key"} {
+		t.Run(uri, func(t *testing.T) {
+			g := &Getter{ctx: t.Context(), newClient: func(context.Context, *sourceLocation) (sourceClient, error) {
+				t.Error("invalid sources must not create a client")
+				return nil, errUtils.ErrDownloadFile
+			}}
+			u, err := url.Parse(uri)
+			require.NoError(t, err)
+			_, err = g.ClientMode(u)
+			require.ErrorIs(t, err, errUtils.ErrDownloadFile)
+			require.ErrorIs(t, g.Get(t.TempDir(), u), errUtils.ErrDownloadFile)
+			require.ErrorIs(t, g.GetFile(filepath.Join(t.TempDir(), "template.yaml"), u), errUtils.ErrDownloadFile)
+		})
+	}
+}
+
+// TestS3DirectoryListFailure preserves authorization failures without creating
+// destination files or attempting object downloads.
+func TestS3DirectoryListFailure(t *testing.T) {
+	denied := &smithy.GenericAPIError{Code: "AccessDenied", Message: "denied"}
+	client := &s3SourceFixtureClient{listErr: denied}
+	g := &Getter{ctx: t.Context(), newClient: func(context.Context, *sourceLocation) (sourceClient, error) { return client, nil }}
+	u, err := url.Parse("s3://bucket/prefix/")
+	require.NoError(t, err)
+	root := t.TempDir()
+	require.ErrorIs(t, g.Get(root, u), denied)
+	assert.Zero(t, client.gets)
+	entries, err := os.ReadDir(root)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
 }

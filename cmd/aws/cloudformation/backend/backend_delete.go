@@ -102,6 +102,7 @@ type deleteRequest struct {
 	DryRun    bool
 }
 
+// executeDelete validates the component scope and preserves a side-effect-free dry-run path.
 func executeDelete(ctx context.Context, req deleteRequest) error {
 	if err := requireComponentAndStack(verbDelete, req.Component, req.Stack); err != nil {
 		return err

@@ -48,6 +48,7 @@ func clientForOperation(octx *opContext, operation Operation) (CloudFormationCli
 	return newClient(awsConfig, resolveEndpointURL(info)), nil
 }
 
+// operationTargetConfig selects the operation-specific auth scope without requiring targets for StackSet teardown.
 func operationTargetConfig(octx *opContext, operation Operation) (map[string]any, error) {
 	provision, _ := octx.Info.ComponentSection[cfg.ProvisionSectionName].(map[string]any)
 	name, _ := octx.Flags[targetKey].(string)

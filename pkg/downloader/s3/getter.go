@@ -73,6 +73,7 @@ func NewGetter(ctx context.Context) *Getter {
 	return g
 }
 
+// buildClient creates an AWS SDK client using credentials resolved once for this download.
 func (g *Getter) buildClient(ctx context.Context, loc *sourceLocation) (sourceClient, error) {
 	g.authOnce.Do(func() { g.auth, g.authErr = resolveAuth(ctx) })
 	if g.authErr != nil {
@@ -94,6 +95,7 @@ func (g *Getter) buildClient(ctx context.Context, loc *sourceLocation) (sourceCl
 	}), nil
 }
 
+// resolveAuth prefers explicit request credentials over a deferred resolver.
 func resolveAuth(ctx context.Context) (*schema.AWSAuthContext, error) {
 	if auth, ok := ctx.Value(sourceAWSAuthKey{}).(*schema.AWSAuthContext); ok && auth != nil {
 		return auth, nil
@@ -112,6 +114,7 @@ func (g *Getter) SetClient(c *getter.Client) {
 	}
 }
 
+// resolve parses a source URL and constructs its scoped client.
 func (g *Getter) resolve(u *url.URL) (sourceClient, *sourceLocation, error) {
 	loc, err := parseS3SourceURL(u)
 	if err != nil {
@@ -145,6 +148,7 @@ func (g *Getter) ClientMode(u *url.URL) (getter.ClientMode, error) {
 	return g.prefixMode(client, loc)
 }
 
+// objectNotFound distinguishes missing objects from authorization and transport failures.
 func objectNotFound(err error) bool {
 	var apiErr smithy.APIError
 	if !errors.As(err, &apiErr) {
@@ -158,6 +162,7 @@ func objectNotFound(err error) bool {
 	}
 }
 
+// prefixMode recognizes only exact keys or descendants within the requested prefix.
 func (g *Getter) prefixMode(client sourceClient, loc *sourceLocation) (getter.ClientMode, error) {
 	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{Bucket: aws.String(loc.bucket), Prefix: aws.String(loc.key)})
 	for paginator.HasMorePages() {
@@ -214,6 +219,7 @@ func (g *Getter) Get(dst string, u *url.URL) error {
 	return nil
 }
 
+// getDirectoryObject rejects escaping keys before downloading a prefix member.
 func (g *Getter) getDirectoryObject(client sourceClient, loc *sourceLocation, dst, prefix, key string) error {
 	if strings.HasSuffix(key, "/") {
 		return nil
@@ -231,6 +237,7 @@ func (g *Getter) getDirectoryObject(client sourceClient, loc *sourceLocation, ds
 	return g.getObject(client, &object, destination)
 }
 
+// getObject writes the selected object version and preserves download or filesystem errors.
 func (g *Getter) getObject(client sourceClient, loc *sourceLocation, dst string) error {
 	if info, err := os.Lstat(dst); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("%w: refusing S3 download through symlink %q", errUtils.ErrPathTraversal, dst)
@@ -287,6 +294,7 @@ func parseS3SourceURL(u *url.URL) (*sourceLocation, error) {
 	return validateS3Source(loc)
 }
 
+// awsHostSuffix identifies supported AWS hostname suffixes, including China regions.
 func awsHostSuffix(host string) string {
 	for _, candidate := range []string{".amazonaws.com.cn", ".amazonaws.com"} {
 		if strings.HasSuffix(host, candidate) {
@@ -296,6 +304,7 @@ func awsHostSuffix(host string) string {
 	return ""
 }
 
+// serviceRegion extracts the region from standard and dualstack S3 service names.
 func serviceRegion(service string) string {
 	region := strings.TrimPrefix(strings.TrimPrefix(service, "s3"), ".")
 	region = strings.TrimPrefix(region, "-")
@@ -306,6 +315,7 @@ func serviceRegion(service string) string {
 	return region
 }
 
+// validateS3Source requires a bucket before any AWS operation.
 func validateS3Source(loc *sourceLocation) (*sourceLocation, error) {
 	if loc.bucket == "" {
 		return loc, fmt.Errorf("%w: S3 source must name a bucket", errUtils.ErrDownloadFile)
@@ -316,7 +326,7 @@ func validateS3Source(loc *sourceLocation) (*sourceLocation, error) {
 // safeS3Destination refuses symlinks inside a caller-owned existing destination.
 func safeS3Destination(root, relative string) (string, error) {
 	current := root
-	for _, part := range append([]string{""}, strings.Split(relative, string(filepath.Separator))...) {
+	for _, part := range append([]string{""}, strings.Split(filepath.ToSlash(relative), "/")...) {
 		current = filepath.Join(current, part)
 		info, err := os.Lstat(current)
 		if err != nil && !os.IsNotExist(err) {

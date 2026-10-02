@@ -98,8 +98,8 @@ Publish-only (`aws/s3`) and external (`git`) targets change no stack and never a
 `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table` (default on a TTY), and `github` (GitHub
 Actions `$GITHUB_OUTPUT` syntax via `atmos aws cloudformation output vpc -s dev --format=github`),
 plus `--flatten` and `--uppercase` key options. An unsupported `--format` lists the valid ones. A
-stack with no Outputs prints `Stack <name> has no outputs`. The `key` argument cannot be combined
-with bulk selection.
+stack with no Outputs prints `Stack <name> has no outputs` only in table format; JSON and YAML
+print an empty document. The `key` argument cannot be combined with bulk selection.
 
 With masking enabled, standalone output and apply summaries read the deployed template
 (`cloudformation:GetTemplate`) and redact outputs that reference NoEcho parameters, including

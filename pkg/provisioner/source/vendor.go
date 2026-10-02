@@ -315,6 +315,7 @@ func effectiveRetryConfig(sourceSpec *schema.VendorComponentSource) *schema.Retr
 	return defaultSourceRetryConfig()
 }
 
+// localDirectorySource recognizes existing local directories while leaving remote URIs to the downloader.
 func localDirectorySource(uri string) (string, bool, error) {
 	switch {
 	case vendor.IsFileURI(uri):
@@ -330,6 +331,7 @@ func localDirectorySource(uri string) (string, bool, error) {
 	}
 }
 
+// validateVendorTargetDir rejects empty, parent-relative, and filesystem-root provisioning destinations.
 func validateVendorTargetDir(targetDir string) error {
 	trimmed := strings.TrimSpace(targetDir)
 	cleaned := filepath.Clean(trimmed)
@@ -343,6 +345,7 @@ func validateVendorTargetDir(targetDir string) error {
 	return nil
 }
 
+// isFilesystemRoot recognizes platform roots, including Windows drive and volume roots.
 func isFilesystemRoot(path string) bool {
 	if path == string(filepath.Separator) {
 		return true
@@ -376,6 +379,7 @@ func targetPathBlockedByFile(path string) bool {
 	}
 }
 
+// fileURIPath converts local file URIs to native paths and leaves remote file hosts unresolved.
 func fileURIPath(uri string) (string, error) {
 	parsed, err := url.Parse(uri)
 	if err != nil {
@@ -401,6 +405,7 @@ func fileURIPath(uri string) (string, error) {
 	return filepath.FromSlash(path), nil
 }
 
+// isWindowsDriveHost recognizes a drive letter encoded as the host of a file URI.
 func isWindowsDriveHost(host string) bool {
 	if len(host) != 2 || host[1] != ':' {
 		return false
@@ -408,6 +413,7 @@ func isWindowsDriveHost(host string) bool {
 	return (host[0] >= 'A' && host[0] <= 'Z') || (host[0] >= 'a' && host[0] <= 'z')
 }
 
+// existingDirectory returns the normalized path only when it names an existing directory.
 func existingDirectory(path string) (string, bool, error) {
 	cleanPath := filepath.Clean(path)
 	// #nosec G703 -- local source paths are user-configured inputs that must be inspected before copying.
@@ -418,6 +424,7 @@ func existingDirectory(path string) (string, bool, error) {
 	return cleanPath, true, nil
 }
 
+// copySourceToTarget prepares the destination and copies files using the source include and exclude filters.
 func copySourceToTarget(
 	sourceDir string,
 	targetDir string,
@@ -568,6 +575,7 @@ func copySingleFileToDirectory(srcFile, targetDir string, spec *schema.VendorCom
 	return copySingleFileToTarget(srcFile, filepath.Join(targetDir, filepath.Base(srcFile)), opts)
 }
 
+// prepareVendorTarget creates the parent directory and enforces the configured target replacement policy.
 func prepareVendorTarget(targetDir string, vendorOpts vendorSourceOptions) error {
 	if err := os.MkdirAll(filepath.Dir(targetDir), TargetDirPermissions); err != nil {
 		return errUtils.Build(errUtils.ErrSourceCopyFailed).
@@ -590,6 +598,7 @@ func prepareVendorTarget(targetDir string, vendorOpts vendorSourceOptions) error
 	return nil
 }
 
+// handleExistingVendorTarget removes a prior target only when replacement was explicitly enabled.
 func handleExistingVendorTarget(targetDir string, vendorOpts vendorSourceOptions) error {
 	if !vendorOpts.replaceTarget {
 		return errUtils.Build(errUtils.ErrSourceCopyFailed).

@@ -92,6 +92,7 @@ type describeRequest struct {
 	Format    string
 }
 
+// executeDescribe loads the component and forwards the explicit identity to target-scoped backend inspection.
 func executeDescribe(ctx context.Context, req *describeRequest) error {
 	if err := requireComponentAndStack("describe", req.Component, req.Stack); err != nil {
 		return err

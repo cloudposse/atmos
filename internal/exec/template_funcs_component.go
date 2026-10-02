@@ -37,6 +37,7 @@ type ComponentFuncOutputsExecutor interface {
 // defaultComponentFuncOutputsExecutor implements ComponentFuncOutputsExecutor using pkg/terraform/output.
 type defaultComponentFuncOutputsExecutor struct{}
 
+// ExecuteWithSections reads Terraform outputs using the already resolved sections and target auth context.
 func (defaultComponentFuncOutputsExecutor) ExecuteWithSections(
 	atmosConfig *schema.AtmosConfiguration,
 	component, stack string,
@@ -52,6 +53,7 @@ func (defaultComponentFuncOutputsExecutor) ExecuteWithSections(
 // verified without invoking Terraform or a remote backend.
 var componentFuncOutputsExecutor ComponentFuncOutputsExecutor = defaultComponentFuncOutputsExecutor{}
 
+// componentFunc resolves template component references and caches outputs within the selected target identity.
 func componentFunc(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,

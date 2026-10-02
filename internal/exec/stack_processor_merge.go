@@ -796,6 +796,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	return comp, deferredContexts, nil
 }
 
+// mergeComponentAnySection merges non-nil section values in precedence order using the configured merge rules.
 func mergeComponentAnySection(atmosConfig *schema.AtmosConfiguration, key string, values ...any) (any, error) {
 	sections := make([]map[string]any, 0, len(values))
 	for _, value := range values {
