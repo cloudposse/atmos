@@ -1,1 +1,3 @@
 website/docs/cli/commands/azure/azure-aks-token.mdx:generic-api-key:84
+pkg/component/helm/secret_values_integration_test.go:private-key:25
+pkg/io/masker_test.go:private-key:272
