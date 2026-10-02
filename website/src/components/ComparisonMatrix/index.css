@@ -1,0 +1,216 @@
+.comparison-matrix {
+  margin: 1.5rem 0;
+}
+
+.comparison-matrix__table-wrapper {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+[data-theme='dark'] .comparison-matrix__table-wrapper {
+  /* No border in dark mode either */
+}
+
+.comparison-matrix__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.comparison-matrix__header {
+  padding: 1rem 1.25rem;
+  text-align: left;
+  font-weight: 600;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+[data-theme='dark'] .comparison-matrix__header {
+  background-color: #1f2937;
+  border-bottom-color: #374151;
+}
+
+.comparison-matrix__header--capability {
+  width: 25%;
+  min-width: 180px;
+}
+
+.comparison-matrix__header--atmos {
+  width: 120px;
+  text-align: center;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: #fff;
+}
+
+[data-theme='dark'] .comparison-matrix__header--atmos {
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+}
+
+.comparison-matrix__header--alternatives {
+  width: auto;
+  white-space: nowrap;
+}
+
+.comparison-matrix__row {
+  /* Clean rows without heavy borders */
+}
+
+[data-theme='dark'] .comparison-matrix__row {
+  /* Dark mode inherits clean look */
+}
+
+.comparison-matrix__row:not(:last-child) td {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+[data-theme='dark'] .comparison-matrix__row:not(:last-child) td {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+.comparison-matrix__row:hover {
+  background-color: #f9fafb;
+}
+
+[data-theme='dark'] .comparison-matrix__row:hover {
+  background-color: #111827;
+}
+
+.comparison-matrix__cell {
+  padding: 0.875rem 1.25rem;
+  vertical-align: middle;
+}
+
+.comparison-matrix__cell--capability {
+  font-weight: 500;
+  color: #1f2937;
+}
+
+[data-theme='dark'] .comparison-matrix__cell--capability {
+  color: #f9fafb;
+}
+
+.comparison-matrix__capability-btn {
+  display: inline-block;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-weight: 500;
+  color: #1f2937;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s;
+}
+
+.comparison-matrix__capability-btn:hover {
+  color: #3b82f6;
+}
+
+[data-theme='dark'] .comparison-matrix__capability-btn {
+  color: #f9fafb;
+}
+
+[data-theme='dark'] .comparison-matrix__capability-btn:hover {
+  color: #60a5fa;
+}
+
+.comparison-matrix__cell--atmos {
+  text-align: center;
+  background-color: #eff6ff;
+}
+
+[data-theme='dark'] .comparison-matrix__cell--atmos {
+  background-color: #1e3a5f;
+}
+
+.comparison-matrix__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  color: #fff;
+  font-size: 1.125rem;
+}
+
+.comparison-matrix__check--small {
+  width: 20px;
+  height: 20px;
+  font-size: 0.875rem;
+}
+
+.comparison-matrix__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.comparison-matrix__tool-badge {
+  display: inline-block;
+  padding: 0.25rem 0.625rem;
+  background-color: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-family: inherit;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.comparison-matrix__tool-badge:hover {
+  background-color: #f3f4f6;
+  color: #1f2937;
+}
+
+[data-theme='dark'] .comparison-matrix__tool-badge {
+  background-color: transparent;
+  color: #9ca3af;
+}
+
+[data-theme='dark'] .comparison-matrix__tool-badge:hover {
+  background-color: #374151;
+  color: #f9fafb;
+}
+
+.comparison-matrix__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background-color: #f9fafb;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+[data-theme='dark'] .comparison-matrix__legend {
+  background-color: #1f2937;
+  color: #9ca3af;
+}
+
+.comparison-matrix__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .comparison-matrix__header--capability {
+    min-width: 120px;
+  }
+
+  .comparison-matrix__cell {
+    padding: 0.75rem 1rem;
+  }
+
+  .comparison-matrix__legend {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
