@@ -144,7 +144,6 @@ jobs:
       contents: read
       id-token: write
       statuses: write
-      checks: write
       pull-requests: write
     env:
       ATMOS_PROFILE: github
@@ -281,8 +280,10 @@ details.
   `atmos terraform cache` for the Terraform registry cache. Do not confuse either with
   Terraform's plugin cache.
 - **Statuses, checks, comments, and summaries**: configure `ci.summary`, `ci.output`, `ci.checks`,
-  and `ci.comments` in `atmos.yaml`; grant only the permissions needed, such as `statuses: write`,
-  `checks: write`, or `pull-requests: write`, based on the chosen reporting mode.
+  and `ci.comments` in `atmos.yaml`. The current GitHub provider needs `statuses: write` for
+  `ci.checks` and `pull-requests: write` for comments; `checks: write` is for retained integrations
+  using the separate Checks API. Follow [the permission mapping](references/native-ci.md#minimal-permissions)
+  for scanner uploads, token wiring, and fork PR restrictions.
 - **Step and job outputs**: let Native CI write to `$GITHUB_OUTPUT`, then pass values with step
   `id`, job `outputs`, and `needs.<job>.outputs.*`.
 - **Atmos CI creation**: add the `ci` section, configure toolchain aliases and `dependencies.tools`,

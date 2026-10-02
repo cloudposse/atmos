@@ -60,8 +60,10 @@ as `output_<name>` — those bypass the allowlist and are always included.
 | Job summaries | `ci.summary.enabled` | none |
 | Output variables | `ci.output.enabled` | none |
 | Log groups | `ci.groups.mode` | none |
-| Commit statuses/checks | `ci.checks.enabled` | `statuses: write` or `checks: write` |
+| Commit statuses (current GitHub implementation) | `ci.checks.enabled` | `statuses: write` |
 | PR comments | `ci.comments.enabled` | `pull-requests: write` |
+| Inline scanner annotations | `ci.annotations.enabled` | none |
+| SARIF uploads to Code Scanning | `ci.results.enabled` (opt-in) | `security-events: write` |
 
 Set `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` when checks or comments are enabled.
 
@@ -122,7 +124,9 @@ or custom command that invokes the tool.
 
 ## Minimal Permissions
 
-Start with the minimum permissions for the workflow:
+When migrating a workflow, inventory its API operations and set permissions on the jobs that
+perform them. Load [atmos-auth](../../atmos-auth/SKILL.md) for OIDC and GitHub STS. Start with
+`contents: read` for checkout; add `id-token: write` only for OIDC authentication:
 
 ```yaml
 permissions:
@@ -130,14 +134,47 @@ permissions:
   id-token: write
 ```
 
-Add reporting permissions only when needed:
+Add reporting permissions only for enabled features, retaining `contents: read` and any required
+OIDC permission in the same job block. Explicit permission blocks set omitted permissions to
+`none`; reusable workflows cannot elevate permissions beyond their caller.
 
 ```yaml
 permissions:
-  statuses: write       # commit statuses
-  checks: write         # check runs
-  pull-requests: write  # PR comments
+  contents: read
+  statuses: write        # ci.checks uses the Commit Status API today
+  pull-requests: write   # ci.comments
+  security-events: write # Only when enabling SARIF Code Scanning uploads
+env:
+  GITHUB_TOKEN: ${{ github.token }}
 ```
+
+`checks: write` is required by integrations that create/update GitHub Check Runs through the
+Checks API; it is not a substitute for `statuses: write`. Despite the `ci.checks` name, the current
+Atmos GitHub provider writes commit statuses. Keep `checks: write` only if another retained step
+needs it. Job summaries, `$GITHUB_OUTPUT`, log groups, and workflow-command annotations do not
+require these write permissions.
+
+For native SARIF uploads, enable `ci.enabled: true` and `ci.results.enabled: true`, verify that
+Code Scanning is available/enabled for the repository, and supply the API token. Upload failures
+are best-effort reporting failures, so explicitly confirm receipt in Code Scanning; a green scan
+step alone does not prove publication succeeded. Preserve separate artifact retention/upload
+steps when downstream consumers need the raw report. Cross-run GitHub planfile reads also need
+`actions: read`; runtime artifact credentials are separate from these API token permissions.
+
+Atmos CI token precedence is `ATMOS_CI_GITHUB_TOKEN`, `ATMOS_PRO_GITHUB_TOKEN`, `GITHUB_TOKEN`, then
+`GH_TOKEN`. If Terraform needs a different `GITHUB_TOKEN`, set `ATMOS_CI_GITHUB_TOKEN` to the
+workflow token for reporting. Workflow `permissions` only controls the default token, not a
+separately supplied App/PAT token; verify that token's repository access and grants separately.
+
+Fork PRs normally receive a read-only token and no repository secrets. Preserve the workflow's
+trust boundary: run permitted scans and local summaries, withhold unavailable privileged reporting,
+and report the limitation. Do not switch to `pull_request_target` or execute untrusted fork code
+with write tokens/secrets just to make reporting work. Check organization policy and caller-job
+permissions when diagnosing 403/404 responses. Preserve required status/check names or coordinate
+their branch-protection changes during cutover.
+
+See GitHub's [workflow permissions reference](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions)
+and [pull_request_target security guidance](https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target).
 
 ## Pull Request Plan
 
@@ -156,7 +193,6 @@ jobs:
       contents: read
       id-token: write
       statuses: write
-      checks: write
       pull-requests: write
     env:
       ATMOS_PROFILE: github
@@ -181,7 +217,6 @@ jobs:
       contents: read
       id-token: write
       statuses: write
-      checks: write
       pull-requests: write
     env:
       ATMOS_PROFILE: github

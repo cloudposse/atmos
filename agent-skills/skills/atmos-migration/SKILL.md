@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Terragrunt, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration; also covers migrating tool-version management from mise or Aqua CLI to the Atmos toolchain, migrating AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, and okta-aws-cli to atmos auth, and migrating third-party GitHub Actions CI (dflook, tfcmt, cloud OIDC actions) to Atmos Native CI."
+description: "Migrate to Atmos from native Terraform, Terraform Workspaces, Terramate, Terragrunt, Make, Just, or Task; migrate tool versions from mise or Aqua CLI; migrate AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, or okta-aws-cli to atmos auth; and replace GitHub Actions CI (dflook, tfcmt, cloud OIDC, component updater, TFLint, Checkov, Trivy, KICS, Infracost, tfsec) with Atmos Native CI. Use for incremental adoption that preserves layout, state, task behavior, and CI enforcement."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -25,6 +25,7 @@ references:
   - references/from-aws2saml.md
   - references/from-okta-cli.md
   - references/to-native-ci.md
+  - references/to-native-ci-scanners.md
 ---
 
 # Migrating to Atmos
@@ -116,6 +117,7 @@ reference file:
 | mise config (`mise.toml`, `.mise.toml`, `.mise/config.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
 | `aqua.yaml` (Aqua CLI) for tool versions                             | [from-aqua.md](references/from-aqua.md) |
 | CI on GitHub Actions (setup-terraform, configure-aws-credentials, dflook, tfcmt) | [to-native-ci.md](references/to-native-ci.md) |
+| Scanner actions (TFLint, Checkov, Trivy, KICS, Infracost, tfsec) | [to-native-ci-scanners.md](references/to-native-ci-scanners.md) |
 
 The remote-state-bridge pattern makes progressive migration possible. It lets a team migrate one
 component at a time. Without it, the team must migrate everything at once. Use this pattern when

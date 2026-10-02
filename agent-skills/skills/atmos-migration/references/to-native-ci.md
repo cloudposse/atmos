@@ -53,6 +53,12 @@ other section in this file builds on.
 | Sends a Slack/Teams/custom notification, or runs an arbitrary script step         | [Custom bolted-on steps](#custom-bolted-on-steps-notifications-scripts) |
 | Posts commit statuses/checks or a custom-formatted PR comment                     | [Status checks and comments](#status-checks-and-comments----beyond-the-basics) |
 | Serializes Terraform runs with a `concurrency:` group                             | [Concurrency groups and state locks](#concurrency-groups-and-state-locks) |
+| Updates vendored components and opens PRs (`cloudposse/github-action-atmos-component-updater`) | [Component updater migration](from-component-updater.md) |
+
+For every replacement, review the job's token wiring and permissions against
+[Native CI permissions](../../atmos-ci/references/native-ci.md#minimal-permissions). Distinguish
+commit statuses (`statuses: write`) from Check Runs (`checks: write`), and preserve PR comments,
+scanner uploads, artifact access, and required-check behavior only with the permissions they need.
 
 ## Replacing Terraform/OpenTofu Setup Actions
 
@@ -259,7 +265,6 @@ jobs:
       contents: read
       id-token: write
       statuses: write
-      checks: write
       pull-requests: write
     env:
       ATMOS_PROFILE: github
@@ -284,7 +289,6 @@ jobs:
       contents: read
       id-token: write
       statuses: write
-      checks: write
       pull-requests: write
     env:
       ATMOS_PROFILE: github
@@ -391,23 +395,16 @@ them; `mode: env` needs no further per-step wiring:
 
 ## Linting and Static Analysis
 
-Split by what's actually native vs. not -- don't overclaim:
+When replacing TFLint, Checkov, Trivy, KICS, Infracost, or tfsec actions, read
+[to-native-ci-scanners.md](to-native-ci-scanners.md). Load
+[atmos-toolchain](../../atmos-toolchain/SKILL.md) for version pins,
+[atmos-lint](../../atmos-lint/SKILL.md) for TFLint, and
+[atmos-hooks](../../atmos-hooks/SKILL.md) for native scanner hooks.
 
-- **`tfsec`/`checkov`/`kics`-style scanning actions** → native zero-config hook kinds
-  (`kind: checkov` / `kind: trivy` / `kind: kics`), rendered through a shared SARIF parser into
-  terminal/PR/Pro summaries:
-  ```yaml
-  hooks:
-    scan:
-      events: [after.terraform.plan]
-      kind: trivy   # or: checkov / kics
-  ```
-- **Cost-estimate actions** (`infracost/actions`) → native `kind: infracost` hook, same pattern.
-- **`tflint`** has **no** purpose-built hook kind -- do not claim one exists. Map
-  `terraform-linters/setup-tflint` to a `dependencies.tools` pin, and the lint-run step to a
-  `kind: command` hook invoking `tflint` directly.
-- Do **not** conflate any of this with `atmos validate` -- that's OPA/JSON Schema validation of
-  Atmos stack manifests, not Terraform/HCL code linting.
+Replace scanner setup with `dependencies.tools` and supported scan operations with native hooks
+or `atmos terraform lint`. Preserve targets, arguments, exclusions, and failure thresholds;
+blocking checks need both a nonzero scanner exit on policy violations and `on_failure: fail`.
+Keep unsupported scanning modes in command hooks or workflow steps.
 
 ## Custom Bolted-On Steps (Notifications, Scripts)
 
@@ -549,4 +546,5 @@ A short, honest list -- Atmos does not invent replacements it doesn't have:
 - **Profile activation, directory layout, merge behavior** → [atmos-profiles](../../atmos-profiles/SKILL.md)
 - **Tool versions, `dependencies.tools`, PATH behavior** → [atmos-toolchain](../../atmos-toolchain/SKILL.md)
 - **Hook kinds, events, `when:` scoping** → [atmos-hooks](../../atmos-hooks/SKILL.md)
+- **TFLint execution, config discovery, and rules** → [atmos-lint](../../atmos-lint/SKILL.md)
 - **Back to the migration decision guide** → [atmos-migration SKILL.md](../SKILL.md)
