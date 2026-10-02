@@ -9,6 +9,7 @@ import (
 
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/providers"
@@ -125,4 +126,55 @@ func TestResolveStoreAuthInheritsExplicitCallerIdentity(t *testing.T) {
 	require.NoError(t, resolveStoreAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev", Identity: "requested"}, "remote"))
 	require.True(t, ac.Auth.Identities["default"].Default)
 	require.False(t, ac.Auth.Identities["requested"].Default)
+}
+
+// TestResolveStoreAuthUsesOriginalRequest preserves explicit caller and store
+// selection after the component manager has replaced Identity with its chain.
+func TestResolveStoreAuthUsesOriginalRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name, caller, configured, want string
+		request                        *string
+	}{
+		{name: "original explicit request", caller: "component", request: new("requested"), want: "requested"},
+		{name: "original empty request", caller: "component", request: new(""), want: "default"},
+		{name: "legacy caller", caller: "requested", want: "requested"},
+		{name: "store overrides caller", caller: "component", request: new("requested"), configured: "store", want: "store"},
+		{name: "select is not an identity", caller: "component", request: new(cfg.IdentityFlagSelectValue), want: "default"},
+		{name: "disabled is not an identity", caller: "component", request: new(cfg.IdentityFlagDisabledValue), want: "default"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			backend := store.NewMockIdentityAwareStore(ctrl)
+			factory := authdeferred.NewMockAuthFactory(ctrl)
+			ac := &schema.AtmosConfiguration{
+				AuthManager:  authdeferred.NewManager(authdeferred.AuthOptions{Factory: factory}),
+				Stores:       store.StoreRegistry{"remote": backend},
+				StoresConfig: map[string]store.StoreConfig{"remote": {Identity: tc.configured}},
+				Auth: schema.AuthConfig{Identities: map[string]schema.Identity{
+					"default": {Kind: "aws/user", Default: true}, "component": {Kind: "aws/user"},
+					"requested": {Kind: "aws/user"}, "store": {Kind: "aws/user"},
+				}},
+			}
+			info := &schema.ConfigAndStacksInfo{Stack: "dev", Identity: tc.caller, RequestedIdentity: tc.request}
+			manager := types.NewMockAuthManager(ctrl)
+			manager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{AuthContext: &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: tc.want}}}).AnyTimes()
+			manager.EXPECT().GetChain().Return([]string{tc.want}).AnyTimes()
+			backend.EXPECT().ResetAuthContext()
+			factory.EXPECT().Create(gomock.Any(), gomock.Any(), "dev").Do(func(_ *schema.AtmosConfiguration, config *schema.AuthConfig, _ string) {
+				for name, identity := range config.Identities {
+					assert.Equal(t, name == tc.want, identity.Default, "default selection for %s", name)
+				}
+			}).Return(manager, nil)
+			backend.EXPECT().SetAuthContext(gomock.Any(), tc.want).Do(func(resolver store.AuthContextResolver, identity string) {
+				resolved, err := resolver.ResolveAWSAuthContext(t.Context(), identity)
+				require.NoError(t, err)
+				assert.Equal(t, tc.want, resolved.Profile)
+			})
+			require.NoError(t, resolveStoreAuth(ac, info, "remote"))
+			assert.Equal(t, tc.caller, info.Identity)
+			assert.Equal(t, tc.request, info.RequestedIdentity)
+			assert.True(t, ac.Auth.Identities["default"].Default)
+			assert.False(t, ac.Auth.Identities["requested"].Default)
+		})
+	}
 }
