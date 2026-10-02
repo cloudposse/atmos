@@ -189,6 +189,10 @@ func getMergedAuthConfigWithFetcher(
 // to reuse the identity without re-prompting for credentials.
 // The chain is ordered from base to final identity, so we take the last element.
 func storeAutoDetectedIdentity(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo) {
+	if info.RequestedIdentity == nil {
+		requested := info.Identity
+		info.RequestedIdentity = &requested
+	}
 	if authManager == nil || (info.Identity != "" && info.Identity != cfg.IdentityFlagSelectValue) {
 		return
 	}

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -40,6 +41,10 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 		return errUtils.Build(errUtils.ErrNilParam).
 			WithExplanation("provision params cannot be nil").
 			Err()
+	}
+
+	if params.AuthContext != nil {
+		ctx = downloader.WithAWSAuthContext(ctx, params.AuthContext.AWS)
 	}
 
 	// Extract source from component config.

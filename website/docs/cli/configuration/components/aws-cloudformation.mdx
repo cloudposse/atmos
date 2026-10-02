@@ -92,8 +92,9 @@ component `env` sets one of them to a different region than the one Atmos
 resolved, Atmos prints a warning that the value is ignored. Set
 `settings.aws_cloudformation.region` to override the region.
 
-There is no per-component account override outside stack sets — the account is
-always the active identity's account.
+The account is the active identity's account. A [delivery target's auth block](/stacks/components/aws-cloudformation#target-authentication)
+can select a different identity for that destination; an explicit CLI identity
+still takes precedence.
 
 See the [`atmos aws cloudformation`](/cli/commands/aws/cloudformation)
 command reference and the

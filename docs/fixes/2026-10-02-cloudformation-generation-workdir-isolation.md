@@ -53,8 +53,8 @@ The implementation was developed in a separate checkout to preserve existing wor
   self-managed sparse StackSet teardown, policy-denied rollback, and two PTY
   interruptions followed by AWS rollback and cleanup.
 - SSM and Secrets Manager set/get/rotation/validation and `!secret` deployment
-  passed with ambient credentials; configured store identities exposed failures
-  recorded separately. CLI secret output was masked.
+  passed with ambient credentials and configured store identities after the
+  integration fixes recorded separately. CLI secret output was masked.
 - Explicit dependency `kind` enabled Terraform/CloudFormation dependency discovery,
   affected propagation and output consumption. Type-specific bulk commands stayed
   within their own component type. Graph and CloudFormation output references also
@@ -65,13 +65,10 @@ The implementation was developed in a separate checkout to preserve existing wor
   IAM roles remained across both accounts and us-east-2/us-west-2.
 - Exact commands, fixtures, outcomes and cleanup evidence are retained under the
   originating workspace's `.context/field-test-cfn-gaps-20261001-2314/`. S3 source
-  success is blocked by the downloader's unsupported scheme. Organizations and
-  service-managed StackSet changes were excluded.
+  support and the other reproduced integration failures were fixed and validated
+  in [the integration fix record](2026-10-02-cloudformation-field-test-integration.md).
+  Organizations and service-managed StackSet changes were excluded.
 
 ## Follow-ups
 
-[#3247](https://github.com/cloudposse/atmos/issues/3247) tracks reproduced findings
-in delivery/store identities, secret validation credentials, advertised S3 sources,
-failed-operation CI evidence, independent CI output emission and cold Terraform
-output behavior. These were investigated without expanding this implementation's
-scope to fix them.
+None.

@@ -94,6 +94,7 @@ func TestCredentialFreeSkip(t *testing.T) {
 		strings.TrimPrefix(u.AtmosYamlFuncStoreGet, "!"),
 		strings.TrimPrefix(u.AtmosYamlFuncTerraformOutput, "!"),
 		strings.TrimPrefix(u.AtmosYamlFuncTerraformState, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncAwsCloudFormationOutput, "!"),
 	}
 	require.ElementsMatch(t, want, got, "credentialFreeSkip must skip every credentialed read function")
 

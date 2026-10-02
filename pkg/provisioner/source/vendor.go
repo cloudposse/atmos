@@ -53,11 +53,7 @@ func WithBaseDir(baseDir string) VendorSourceOption {
 
 // VendorSource vendors a component source to the target directory.
 // It uses go-getter via the existing downloader infrastructure.
-// Note: Authentication is not yet supported - credentials must be configured
-// via environment variables or cloud provider credential chains.
-// The context bounds the OCI download path (downloadOCISource derives a
-// DefaultVendorTimeout deadline from it); go-getter downloads keep their own
-// explicit timeout parameter independent of it.
+// Downloads preserve caller cancellation and scoped source credentials.
 func VendorSource(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
@@ -238,7 +234,7 @@ func downloadSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 	if vendor.IsOCIURI(uri) {
 		return downloadOCISource(ctx, atmosConfig, uri, tempDir)
 	}
-	return downloadGoGetterSource(atmosConfig, sourceSpec, uri, tempDir)
+	return downloadGoGetterSource(ctx, atmosConfig, sourceSpec, uri, tempDir)
 }
 
 // downloadOCISource pulls an oci:// source directly via pkg/oci. Go-containerregistry
@@ -262,10 +258,11 @@ func downloadOCISource(ctx context.Context, atmosConfig *schema.AtmosConfigurati
 }
 
 // downloadGoGetterSource fetches a non-OCI source via the go-getter downloader.
-func downloadGoGetterSource(atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
+func downloadGoGetterSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
 	downloadOpts := []downloader.GoGetterOption{downloader.WithRetryConfig(effectiveRetryConfig(sourceSpec))}
 	dl := downloader.NewGoGetterDownloader(atmosConfig, downloadOpts...)
-	if err := dl.Fetch(uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout); err != nil {
+	_, err := dl.(downloader.ContextFileDownloader).FetchWithMetadataContext(ctx, uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout)
+	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
 			WithExplanation("Failed to download source").

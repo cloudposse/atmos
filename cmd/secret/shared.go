@@ -37,12 +37,19 @@ func credentialFreeSkip() []string {
 		u.AtmosYamlFuncStoreGet,
 		u.AtmosYamlFuncTerraformOutput,
 		u.AtmosYamlFuncTerraformState,
+		u.AtmosYamlFuncAwsCloudFormationOutput,
 	}
 	skip := make([]string, len(tags))
 	for i, tag := range tags {
 		skip[i] = strings.TrimPrefix(tag, "!")
 	}
 	return skip
+}
+
+// Resolve declarations and their local template dependencies, without evaluating
+// unrelated component inputs or outputs during secret discovery.
+func secretDeclarationEvaluation() e.DescribeStacksErrorOptions {
+	return e.DescribeStacksErrorOptions{EvaluationPaths: [][]string{{cfg.SecretsSectionName}}}
 }
 
 // secretScope holds the parsed common flags for a secret subcommand.
@@ -197,8 +204,9 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 		// Skip the same credential/state-fetching functions `secret list` already skips (see
 		// credentialFreeSkip): resolving where to write/read a secret only needs secrets.vars/
 		// secrets.providers, never a sibling component's terraform state or store contents.
-		Skip:        credentialFreeSkip(),
-		AuthManager: authManager,
+		Skip:         credentialFreeSkip(),
+		AuthManager:  authManager,
+		ErrorOptions: secretDeclarationEvaluation(),
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load component config: %w", err)
@@ -240,6 +248,7 @@ func loadServiceForList(scope secretScope, verify bool) (*secrets.Service, error
 		Skip:         credentialFreeSkip(),
 		AuthManager:  nil,
 		AuthDisabled: true, // listing reads declarations only — no identity, no decryption.
+		ErrorOptions: secretDeclarationEvaluation(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to load component config: %w", err)

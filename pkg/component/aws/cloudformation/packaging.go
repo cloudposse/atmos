@@ -93,11 +93,16 @@ func packageTemplate(octx *opContext, req *packagingRequest) error {
 		return err
 	}
 
+	info, err := ResolveTargetAuth(octx.AtmosConfig, octx.Info, targetConfigByName(octx.Info.ComponentSection, s3Target.Name), octx.RequestedIdentity)
+	if err != nil {
+		return err
+	}
+
 	args := autoProvisionArgs{
 		AtmosConfig:     octx.AtmosConfig,
 		S3Target:        s3Target,
 		ComponentConfig: octx.Info.ComponentSection,
-		AuthContext:     octx.Info.AuthContext,
+		AuthContext:     info.AuthContext,
 		Component:       octx.Info.ComponentFromArg,
 		Stack:           octx.Info.Stack,
 	}
@@ -110,7 +115,7 @@ func packageTemplate(octx *opContext, req *packagingRequest) error {
 		return err
 	}
 
-	pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, octx.Info, s3Target, req.Spec.TemplateBody)
+	pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, info, s3Target, req.Spec.TemplateBody)
 	if err != nil {
 		return err
 	}

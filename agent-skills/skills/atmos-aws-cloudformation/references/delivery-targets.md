@@ -133,3 +133,20 @@ Account IDs must be quoted 12-digit strings, including leading zeroes. Numeric o
 accounts and malformed regions fail before mutation, including during static dry-run. Omitted
 target dimensions remain supported. The S3 target's prefix is applied once to both the uploaded
 object and its TemplateURL; metadata sidecars use the same effective key.
+
+## Target Authentication
+
+Target `auth` overrides component auth only for that destination. Merge order is
+global, component, target; an explicit `--identity`/`ATMOS_IDENTITY` still wins.
+Select an existing identity with `auth.identities.<name>.default: true` (or
+`auth.identity: <name>`), or fully declare it in the target. Resolution failures
+stop delivery without falling back to component credentials. Each target gets an
+independent manager; packaging does not change deployment, hook, or secret auth.
+
+- S3: uploads, auto-provisioning, and explicit backend verbs use target auth.
+- Direct CloudFormation: stack operations use the selected/default direct target;
+  YAML/template output references follow the referenced component's default direct target.
+- StackSets: create/update use target auth; delete/instances deliberately use the
+  component or CLI identity because they do not select/require a target.
+- Git: target auth is passed to the Git identity environment; absent a target or
+  CLI override, the repository identity remains authoritative.

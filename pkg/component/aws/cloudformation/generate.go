@@ -10,7 +10,9 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -86,6 +88,9 @@ func prepareComponentFiles(ctx context.Context, atmosConfig *schema.AtmosConfigu
 	if err != nil {
 		return "", err
 	}
+	ctx = downloader.WithAWSAuthResolver(ctx, func(context.Context) (*schema.AWSAuthContext, error) {
+		return resolveSourceAWSAuth(atmosConfig, info)
+	})
 	path, _, err = provisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, config.CloudFormationComponentType, path)
 	if err != nil {
 		return "", err
@@ -94,6 +99,34 @@ func prepareComponentFiles(ctx context.Context, atmosConfig *schema.AtmosConfigu
 		return "", err
 	}
 	return path, nil
+}
+
+// resolveSourceAWSAuth runs only when the S3 downloader needs credentials. Local
+// templates, other source protocols and a warm source cache never authenticate.
+func resolveSourceAWSAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AWSAuthContext, error) {
+	defer perf.Track(atmosConfig, "cloudformation.resolveSourceAWSAuth")()
+	if info.DryRun || info.AuthDisabled || authdeferred.AuthDisabled(atmosConfig.AuthManager) {
+		return nil, nil
+	}
+	if info.AuthContext != nil {
+		return info.AuthContext.AWS, nil
+	}
+	identity := config.NormalizeIdentityValue(info.Identity)
+	if identity == config.IdentityFlagDisabledValue {
+		return nil, nil
+	}
+	if identity == config.IdentityFlagSelectValue {
+		identity = ""
+	}
+	resolved, err := authdeferred.Credentials(atmosConfig, info, identity).Resolve()
+	if err != nil {
+		return nil, err
+	}
+	info.AuthManager, info.AuthContext = resolved.AuthManager, resolved.AuthContext
+	if info.AuthContext == nil {
+		return nil, nil
+	}
+	return info.AuthContext.AWS, nil
 }
 
 func generateComponentFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, path string) error {

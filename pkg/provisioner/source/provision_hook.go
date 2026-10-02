@@ -140,6 +140,10 @@ func AutoProvisionSource(
 		}
 	}
 
+	if authContext != nil {
+		ctx = downloader.WithAWSAuthContext(ctx, authContext.AWS)
+	}
+
 	// Vendor the source to target directory.
 	if err := vendorToTarget(ctx, atmosConfig, sourceSpec, vendorTarget{path: targetDir, component: component, writers: writers}); err != nil {
 		return err

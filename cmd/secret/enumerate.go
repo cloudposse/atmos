@@ -54,9 +54,12 @@ func enumerateSecretScopes(facet secretScope) ([]scopeEntry, *schema.AtmosConfig
 	// `!terraform.state`/`!terraform.output`/`!store` would fall back to the default AWS chain and
 	// fail (e.g. an unreachable EC2 IMDS endpoint) even though enumeration never needs the resolved
 	// value. See credentialFreeSkip.
-	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
+	// Limit template evaluation as well as YAML tags: unrelated atmos.Component
+	// expressions can fetch live outputs even when credentialed tags are skipped.
+	stacksMap, err := e.ExecuteDescribeStacksWithOptions(
 		&atmosConfig, facet.Stack, components, nil, nil,
 		false, true, true, false, credentialFreeSkip(), nil, true,
+		secretDeclarationEvaluation(),
 	)
 	if err != nil {
 		return nil, nil, err

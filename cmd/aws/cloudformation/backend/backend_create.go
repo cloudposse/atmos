@@ -136,12 +136,13 @@ func executeCreateOrUpdate(ctx context.Context, args createOrUpdateArgs) error {
 	}
 
 	params := &CreateBackendParams{
-		AtmosConfig:     atmosConfig,
-		Component:       args.Component,
-		Stack:           args.Stack,
-		ComponentConfig: componentConfig,
-		AuthContext:     info.AuthContext,
-		Target:          args.Target,
+		AtmosConfig:       atmosConfig,
+		RequestedIdentity: args.Identity,
+		Component:         args.Component,
+		Stack:             args.Stack,
+		ComponentConfig:   componentConfig,
+		AuthContext:       info.AuthContext,
+		Target:            args.Target,
 	}
 
 	if err := confirmExistingBackendOverwrite(ctx, params, args.AutoApprove); err != nil {

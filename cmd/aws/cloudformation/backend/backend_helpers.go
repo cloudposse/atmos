@@ -98,12 +98,13 @@ func (d *defaultConfigInitializer) DescribeComponentStatic(component, stack stri
 
 // CreateBackendParams contains parameters for the CreateBackend/UpdateBackend operations.
 type CreateBackendParams struct {
-	AtmosConfig     *schema.AtmosConfiguration
-	Component       string
-	Stack           string
-	ComponentConfig map[string]any
-	AuthContext     *schema.AuthContext
-	Target          string
+	RequestedIdentity string
+	AtmosConfig       *schema.AtmosConfiguration
+	Component         string
+	Stack             string
+	ComponentConfig   map[string]any
+	AuthContext       *schema.AuthContext
+	Target            string
 }
 
 // DeleteBackendParams contains parameters for the DeleteBackend operation.
@@ -120,11 +121,13 @@ type DescribeBackendParams struct {
 
 // ListBackendsParams contains parameters for the ListBackends operation.
 type ListBackendsParams struct {
-	AtmosConfig     *schema.AtmosConfiguration
-	Component       string
-	ComponentConfig map[string]any
-	AuthContext     *schema.AuthContext
-	Format          string
+	RequestedIdentity string
+	Stack             string
+	AtmosConfig       *schema.AtmosConfiguration
+	Component         string
+	ComponentConfig   map[string]any
+	AuthContext       *schema.AuthContext
+	Format            string
 }
 
 // Provisioner abstracts backend provisioning operations for testability.
@@ -155,11 +158,16 @@ func (d *defaultProvisioner) CreateBackend(ctx context.Context, params *CreateBa
 		return err
 	}
 
+	authContext, err := resolveBackendTargetAuth(params, s3cfg.Name)
+	if err != nil {
+		return err
+	}
+
 	return pkgcfn.ProvisionS3BackendTarget(ctx, &pkgcfn.ProvisionS3BackendParams{
 		AtmosConfig:     params.AtmosConfig,
 		Target:          s3cfg,
 		ComponentConfig: params.ComponentConfig,
-		AuthContext:     params.AuthContext,
+		AuthContext:     authContext,
 		Component:       params.Component,
 		Stack:           params.Stack,
 	})
@@ -172,7 +180,12 @@ func (d *defaultProvisioner) BackendExists(ctx context.Context, params *CreateBa
 		return false, err
 	}
 
-	status, err := pkgcfn.DescribeS3BackendTarget(ctx, params.AtmosConfig, s3cfg, params.ComponentConfig, params.AuthContext)
+	authContext, err := resolveBackendTargetAuth(params, s3cfg.Name)
+	if err != nil {
+		return false, err
+	}
+
+	status, err := pkgcfn.DescribeS3BackendTarget(ctx, params.AtmosConfig, s3cfg, params.ComponentConfig, authContext)
 	if err != nil {
 		return false, err
 	}
@@ -186,8 +199,13 @@ func (d *defaultProvisioner) DeleteBackend(ctx context.Context, params *DeleteBa
 		return err
 	}
 
+	authContext, err := resolveBackendTargetAuth(&params.CreateBackendParams, s3cfg.Name)
+	if err != nil {
+		return err
+	}
+
 	describeFunc := func(string, string) (map[string]any, error) {
-		return pkgcfn.BuildSyntheticBackendConfig(s3cfg, params.ComponentConfig, params.AuthContext), nil
+		return pkgcfn.BuildSyntheticBackendConfig(s3cfg, params.ComponentConfig, authContext), nil
 	}
 
 	return provisioner.DeleteBackendWithParams(&provisioner.DeleteBackendParams{
@@ -196,7 +214,7 @@ func (d *defaultProvisioner) DeleteBackend(ctx context.Context, params *DeleteBa
 		Stack:             params.Stack,
 		Force:             params.Force,
 		DescribeComponent: describeFunc,
-		AuthContext:       params.AuthContext,
+		AuthContext:       authContext,
 		Context:           ctx,
 	})
 }
@@ -208,7 +226,12 @@ func (d *defaultProvisioner) DescribeBackend(ctx context.Context, params *Descri
 		return err
 	}
 
-	status, err := pkgcfn.DescribeS3BackendTarget(ctx, params.AtmosConfig, s3cfg, params.ComponentConfig, params.AuthContext)
+	authContext, err := resolveBackendTargetAuth(&params.CreateBackendParams, s3cfg.Name)
+	if err != nil {
+		return err
+	}
+
+	status, err := pkgcfn.DescribeS3BackendTarget(ctx, params.AtmosConfig, s3cfg, params.ComponentConfig, authContext)
 	if err != nil {
 		return err
 	}
@@ -228,7 +251,15 @@ func (d *defaultProvisioner) ListBackends(ctx context.Context, params *ListBacke
 
 	statuses := make([]*pkgcfn.S3BackendStatus, 0, len(names))
 	for _, name := range names {
-		status, err := pkgcfn.DescribeS3BackendTarget(ctx, params.AtmosConfig, targets[name], params.ComponentConfig, params.AuthContext)
+		authContext, err := resolveBackendTargetAuth(&CreateBackendParams{
+			AtmosConfig: params.AtmosConfig, Component: params.Component, Stack: params.Stack,
+			ComponentConfig: params.ComponentConfig, AuthContext: params.AuthContext,
+			RequestedIdentity: params.RequestedIdentity,
+		}, name)
+		if err != nil {
+			return err
+		}
+		status, err := pkgcfn.DescribeS3BackendTarget(ctx, params.AtmosConfig, targets[name], params.ComponentConfig, authContext)
 		if err != nil {
 			return err
 		}
@@ -240,8 +271,9 @@ func (d *defaultProvisioner) ListBackends(ctx context.Context, params *ListBacke
 
 // Package-level dependencies for production use. These can be overridden in tests.
 var (
-	configInit ConfigInitializer = &defaultConfigInitializer{}
-	prov       Provisioner       = &defaultProvisioner{}
+	resolveTargetAuth                   = pkgcfn.ResolveTargetAuth
+	configInit        ConfigInitializer = &defaultConfigInitializer{}
+	prov              Provisioner       = &defaultProvisioner{}
 )
 
 // SetConfigInitializer sets the config initializer (for testing).
@@ -306,4 +338,22 @@ func renderBackendStatusesTable(statuses []*pkgcfn.S3BackendStatus) error {
 		}
 	}
 	return nil
+}
+
+// resolveBackendTargetAuth isolates one bucket's credentials from component auth
+// and from sibling buckets listed in the same command.
+func resolveBackendTargetAuth(params *CreateBackendParams, name string) (*schema.AuthContext, error) {
+	provision, _ := params.ComponentConfig[cfg.ProvisionSectionName].(map[string]any)
+	targets, _ := provision["targets"].(map[string]any)
+	block, _ := targets[name].(map[string]any)
+	info := &schema.ConfigAndStacksInfo{
+		Stack: params.Stack, ComponentFromArg: params.Component,
+		ComponentSection: params.ComponentConfig, AuthContext: params.AuthContext,
+		Identity: cfg.NormalizeIdentityValue(params.RequestedIdentity),
+	}
+	resolved, err := resolveTargetAuth(params.AtmosConfig, info, block, params.RequestedIdentity)
+	if err != nil {
+		return nil, err
+	}
+	return resolved.AuthContext, nil
 }
