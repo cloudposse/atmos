@@ -54,6 +54,12 @@ are included in this change at the user's request; no follow-up issue is needed.
   twice in dev; an explicit CLI override selected sandbox twice, and returning
   to implicit selection restored dev. Describe now carries the original identity
   request from its authenticated manager into nested evaluation.
+- Final independent cleanup verified 20 empty inventories across dev and sandbox
+  in us-east-2 and us-west-2, including StackSet children, secret deletion state,
+  versioned objects, parameters and IAM roles.
+- After stacking on the latest published baseline, `atmos test --full` passed
+  for CloudFormation, workdir, source, config-schema and datafetcher packages.
+  Focused race tests passed for the describe identity and cache regressions.
 - `go build ./...`, patch-scoped `atmos lint --changed`, the generated-schema check
   and the website production build passed. Exact fixtures, commands and AWS
   evidence are retained under the originating workspace's
