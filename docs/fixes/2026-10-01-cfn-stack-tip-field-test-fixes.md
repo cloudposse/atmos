@@ -47,6 +47,7 @@ The full report and per-lane repros live in the field-test working notes; they w
   - The non-TTY gate fails before any packaging or changeset when `--auto-approve` is missing. It uses its own sentinel instead of "user aborted".
   - `discardChangeSet` removes an empty stub stack that Atmos itself created during the same invocation. It never removes a stack that existed before.
   - `ROLLBACK_COMPLETE` fails with a hint to run `delete` and then re-apply.
+  - The `ROLLBACK_COMPLETE` and StackSet-target hints name the real component and stack, for example `delete vpc -s dev`. They used to show `<component> -s <stack>` placeholders. The spec now records the Atmos component and stack when it is built, and placeholders appear only for a part that was never recorded.
   - No-op changesets are deleted, and the doubled name prefix is fixed.
 - **Publish-only and external delivery**
   - Publish-only apply reports the `s3://` location and the TemplateURL. External delivery reports what it delivered.
@@ -60,7 +61,7 @@ The full report and per-lane repros live in the field-test working notes; they w
   - The backend non-TTY error carries an `--auto-approve` hint.
   - `backend list` errors name the right command.
   - Backend tables have headers, and backend JSON keys are snake_case.
-  - The shared S3 backend delete no longer prints a double warning icon or a redundant success line.
+  - The shared S3 backend delete no longer prints a double warning icon or redundant success lines. The provisioner spinner's `Deleted S3 backend … for <component> in stack <stack>` line is the only success line now, for both `atmos aws cloudformation backend delete` and `atmos terraform backend delete`.
 - **Delete and idempotency**
   - A successful delete prints a success line.
   - Deleting a stack that does not exist reports "nothing to delete" consistently, with or without a TTY.
@@ -132,6 +133,7 @@ The full report and per-lane repros live in the field-test working notes; they w
   - `--skip-hooks` was accepted. The CI summary and `GITHUB_OUTPUT` rendered, and `plan` is titled "Plan" after the alias fix.
   - `apply --target <aws/stackset>` failed with the StackSet hint, in both dry-run and real runs, and created nothing.
   - Bulk delete removed the consumer before the producer. `backend delete --force` showed a single warning icon.
+  - Once the hints were fixed, a live `ROLLBACK_COMPLETE` apply suggested `delete rollback -s fx`, and a StackSet-target apply suggested `stackset create sstarget -s fx --target fleet`. A live `backend delete` printed one success line.
   - Independent queries found no stacks, StackSets, SSM parameters, or buckets with the prefix in dev or sandbox.
 
 ## Follow-ups

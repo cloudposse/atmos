@@ -58,7 +58,7 @@ func deliverApply(octx *opContext, client CloudFormationClient, spec *stackSpec)
 	}
 
 	if selected.Kind == kindAwsStackSet {
-		return summary, nil, stackSetTargetError(selected.Name)
+		return summary, nil, stackSetTargetError(selected.Name, spec)
 	}
 
 	// Only a direct stack deploy asks the stack-change question. Fail fast, before
