@@ -290,6 +290,11 @@ details.
 
 ## Concurrency Warning
 
+Advise against GitHub Actions `concurrency` groups for serializing Terraform runs or as a deploy
+queue. To make concurrent runs wait for a held state lock instead of failing on Terraform's `0s`
+default, set `components.terraform.flags.lock_timeout` (e.g. `"5m"`) in `atmos.yaml`; see
+[atmos-terraform](../atmos-terraform/SKILL.md) for stack and component overrides.
+
 By default (`queue: single`), a GitHub Actions `concurrency` group holds one in-progress and one
 pending run; a third trigger evicts the pending run regardless of `cancel-in-progress`.
 `cancel-in-progress: true` also cancels a running Terraform command, which can leave a state lock

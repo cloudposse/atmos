@@ -22,9 +22,10 @@ convention used throughout this reference:
 
 ## Foundational: Run Atmos From the Container, Not an Install Step
 
-Before mapping anything else, replace any Atmos-install step -- a `curl | sh` bootstrap, a
-hypothetical `setup-atmos`-style action, or Cloud Posse's own deprecated
-`cloudposse/github-action-setup-atmos` -- with the job-level container:
+Before mapping anything else, replace any step that installs Atmos -- Cloud Posse's deprecated
+`cloudposse/github-action-setup-atmos`, a version-manager action such as `jdx/mise-action` or
+`aquaproj/aqua-installer`, Homebrew, or a `curl` download of the release binary -- with the
+job-level container:
 
 ```yaml
 jobs:
@@ -42,7 +43,7 @@ other section in this file builds on.
 
 | Existing step/action does...                                                    | Replace with...                                  |
 |-----------------------------------------------------------------------------------|---------------------------------------------------|
-| Installs the Atmos CLI itself (`curl` bootstrap, `setup-atmos`)                   | [Foundational: the container image](#foundational-run-atmos-from-the-container-not-an-install-step) |
+| Installs the Atmos CLI itself (`cloudposse/github-action-setup-atmos`, mise/aqua actions, Homebrew, `curl`) | [Foundational: the container image](#foundational-run-atmos-from-the-container-not-an-install-step) |
 | Installs Terraform/OpenTofu (`hashicorp/setup-terraform`, `opentofu/setup-opentofu`) | [Toolchain](#replacing-terraformopentofu-setup-actions) |
 | Assumes a cloud role via OIDC (`aws-actions/configure-aws-credentials`, `azure/login`, `google-github-actions/auth`) | [Auth and profiles](#replacing-cloud-oidc-role-assumption-actions) |
 | Runs plan/apply and posts PR comments (`dflook/terraform-plan`/`terraform-apply`) | [Replacing dflook](#replacing-dflookterraform-github-actions) |
@@ -51,6 +52,7 @@ other section in this file builds on.
 | Runs `tfsec`/`checkov`/`kics`/`infracost`/`tflint`                                | [Linting and static analysis](#linting-and-static-analysis) |
 | Sends a Slack/Teams/custom notification, or runs an arbitrary script step         | [Custom bolted-on steps](#custom-bolted-on-steps-notifications-scripts) |
 | Posts commit statuses/checks or a custom-formatted PR comment                     | [Status checks and comments](#status-checks-and-comments----beyond-the-basics) |
+| Serializes Terraform runs with a `concurrency:` group                             | [Concurrency groups and state locks](#concurrency-groups-and-state-locks) |
 
 ## Replacing Terraform/OpenTofu Setup Actions
 
@@ -488,6 +490,33 @@ history, a remediation workflow, and a dashboard. For teams not ready to adopt P
 with `ci.output`'s `has_changes` variable, is a lighter-weight non-Pro alternative for a simple
 scheduled diff check.
 
+## Concurrency Groups and State Locks
+
+Hand-rolled Terraform workflows often add a GitHub Actions `concurrency:` group to keep two runs
+from touching the same state. Don't carry it over:
+
+- A group holds one running and one pending run; a third trigger evicts the pending one, so queued
+  deploys are silently dropped. It is not a FIFO deploy queue.
+- `cancel-in-progress: true` kills a running `terraform apply` mid-write and can leave the state
+  lock held. Recovery means confirming the run stopped, then `atmos terraform force-unlock`.
+
+Terraform's state lock already prevents two writers. What's missing is waiting: Terraform's
+`-lock-timeout` defaults to `0s`, so a run that finds the lock held fails immediately. Set a lock
+timeout once and every `plan`/`apply`/`destroy`/`refresh`/`import` retries the held lock instead:
+
+```yaml
+# atmos.yaml
+components:
+  terraform:
+    flags:
+      lock_timeout: "5m"
+```
+
+Override it per stack (root-level `terraform.flags`) or per component (the component's `flags:`),
+or set `ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT`. For ordering across deploys, use the merge
+queue, GitHub Environments, or Atmos Pro's dependency-ordered applies -- see the Concurrency Warning
+in [atmos-ci](../../atmos-ci/SKILL.md).
+
 ## Other Actions Seen in the Wild
 
 A short, honest list -- Atmos does not invent replacements it doesn't have:
@@ -509,6 +538,9 @@ A short, honest list -- Atmos does not invent replacements it doesn't have:
   -- it diffs stored-vs-fresh and applies fresh unless `--verify-plan=false`/`--from-plan` is used.
 - **Reaching for `ci.templates` by default** instead of the native comment/summary format -- it's an
   escape hatch, not a starting point.
+- **Porting a `concurrency:` group to serialize Terraform** -- it drops queued runs and, with
+  `cancel-in-progress`, can strand a state lock. Set `components.terraform.flags.lock_timeout`
+  instead.
 
 ## Related Skills
 
