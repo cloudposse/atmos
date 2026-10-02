@@ -32,8 +32,10 @@ func TestSummaryFailureStillWritesOutputs(t *testing.T) {
 					config.CI.Summary.Template = "missing-template"
 					wantError = errUtils.ErrTemplateEvaluation
 				}
-				ctx := &plugin.HookContext{Provider: fakeProvider{writer: provider.NewFileOutputWriter(outputs, summary)}, TemplateLoader: templates.NewLoader(nil), Config: config, Command: "apply", ExitCode: code,
-					Aggregate: &schema.CloudFormationCIResult{ChangeSetName: "reviewed", HasChanges: true, StackStatus: "ROLLBACK_COMPLETE"}}
+				ctx := &plugin.HookContext{
+					Provider: fakeProvider{writer: provider.NewFileOutputWriter(outputs, summary)}, TemplateLoader: templates.NewLoader(nil), Config: config, Command: "apply", ExitCode: code,
+					Aggregate: &schema.CloudFormationCIResult{ChangeSetName: "reviewed", HasChanges: true, StackStatus: "ROLLBACK_COMPLETE"},
+				}
 				if code != 0 {
 					ctx.CommandError = errUtils.ErrAwsCloudFormationOperationFailed
 				}

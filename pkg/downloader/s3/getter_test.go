@@ -114,6 +114,7 @@ func (c *s3SourceFixtureClient) HeadObject(context.Context, *s3.HeadObjectInput,
 	c.heads++
 	return &s3.HeadObjectOutput{}, c.headErr
 }
+
 func (c *s3SourceFixtureClient) ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 	c.lists++
 	if c.listErr != nil {
@@ -128,6 +129,7 @@ func (c *s3SourceFixtureClient) ListObjectsV2(context.Context, *s3.ListObjectsV2
 	}
 	return out, nil
 }
+
 func (c *s3SourceFixtureClient) GetObject(_ context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 	c.gets++
 	c.version = aws.ToString(input.VersionId)
