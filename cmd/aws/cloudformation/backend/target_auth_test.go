@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestBackendTargetAuthReachesEveryOperation verifies each backend verb stops before AWS calls when target authentication fails.
 func TestBackendTargetAuthReachesEveryOperation(t *testing.T) {
 	for _, operation := range []string{"create", "exists", "delete", "describe", "list"} {
 		t.Run(operation, func(t *testing.T) {

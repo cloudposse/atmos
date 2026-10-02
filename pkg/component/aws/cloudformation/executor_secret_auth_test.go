@@ -64,6 +64,7 @@ func TestExecuteSingleSecretAuthIsScoped(t *testing.T) {
 	}
 }
 
+// TestSourceAWSAuthResolvesOnlyWhenRequested checks lazy source credentials, disabled authentication and preservation of existing contexts.
 func TestSourceAWSAuthResolvesOnlyWhenRequested(t *testing.T) {
 	for _, scenario := range []string{"default", "explicit", "dry-run", "disabled", "existing", "failure"} {
 		t.Run(scenario, func(t *testing.T) {

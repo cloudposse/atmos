@@ -29,6 +29,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestS3SourceURLForms checks native, regional, virtual-hosted and custom-endpoint source parsing.
 func TestS3SourceURLForms(t *testing.T) {
 	for _, tc := range []struct{ uri, bucket, key, region, endpoint string }{
 		{"s3://bucket/nested/template.yaml?region=us-east-2", "bucket", "nested/template.yaml", "us-east-2", ""},
@@ -111,11 +112,13 @@ type s3SourceFixtureClient struct {
 	version string
 }
 
+// HeadObject records object probes and returns the configured metadata failure.
 func (c *s3SourceFixtureClient) HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 	c.heads++
 	return &s3.HeadObjectOutput{}, c.headErr
 }
 
+// ListObjectsV2 returns deterministic prefix members or the configured listing failure.
 func (c *s3SourceFixtureClient) ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 	c.lists++
 	if c.listErr != nil {
@@ -131,12 +134,14 @@ func (c *s3SourceFixtureClient) ListObjectsV2(context.Context, *s3.ListObjectsV2
 	return out, nil
 }
 
+// GetObject records the requested version and returns synthetic object contents.
 func (c *s3SourceFixtureClient) GetObject(_ context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 	c.gets++
 	c.version = aws.ToString(input.VersionId)
 	return &s3.GetObjectOutput{Body: io.NopCloser(strings.NewReader("canary"))}, nil
 }
 
+// TestS3SourceDirectoryBoundaries checks prefix filtering, traversal rejection and destination containment.
 func TestS3SourceDirectoryBoundaries(t *testing.T) {
 	for _, prefix := range []string{"", "prefix/"} {
 		t.Run(prefix, func(t *testing.T) {
@@ -257,6 +262,7 @@ func TestS3ArchiveSubdirectory(t *testing.T) {
 	assert.Equal(t, body, data)
 }
 
+// TestS3FileRejectsDestinationSymlink preserves an outside file when the download destination is a symlink.
 func TestS3FileRejectsDestinationSymlink(t *testing.T) {
 	root := t.TempDir()
 	outside := filepath.Join(root, "outside")

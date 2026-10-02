@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// setupCloudFormationTargetOutputFixture creates a direct-target fixture with distinct dev and sandbox identities.
 func setupCloudFormationTargetOutputFixture(t *testing.T) schema.AtmosConfiguration {
 	t.Helper()
 	dir := t.TempDir()
@@ -61,6 +62,7 @@ components:
 	return ac
 }
 
+// TestCloudFormationOutputTargetAuthSameProcess checks YAML and template output caches across identity changes and authentication failures.
 func TestCloudFormationOutputTargetAuthSameProcess(t *testing.T) {
 	for _, mode := range []string{"yaml", "template"} {
 		t.Run(mode, func(t *testing.T) {
@@ -111,6 +113,7 @@ func TestCloudFormationOutputTargetAuthSameProcess(t *testing.T) {
 	}
 }
 
+// stubCloudFormationDeliveryAuth provides observable target identities and an injectable authentication failure.
 func stubCloudFormationDeliveryAuth(t *testing.T, fail *bool) {
 	t.Helper()
 	original := createCloudFormationTargetAuthManager
@@ -131,6 +134,7 @@ func stubCloudFormationDeliveryAuth(t *testing.T, fail *bool) {
 	}
 }
 
+// TestCloudFormationOutputAuthIgnoresNonDirectTargets keeps component credentials for outputs when the delivery target does not deploy a stack.
 func TestCloudFormationOutputAuthIgnoresNonDirectTargets(t *testing.T) {
 	for _, kind := range []string{"aws/s3", "git", "aws/stackset"} {
 		section := map[string]any{cfg.ProvisionSectionName: map[string]any{

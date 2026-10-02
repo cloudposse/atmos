@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// targetAuthFixture provides global identities with independent component and target defaults.
 func targetAuthFixture() (*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, map[string]any) {
 	ac := &schema.AtmosConfiguration{Auth: schema.AuthConfig{Identities: map[string]schema.Identity{
 		"sandbox": {Kind: "aws/user", Default: true},
@@ -42,6 +43,7 @@ func targetAuthFixture() (*schema.AtmosConfiguration, *schema.ConfigAndStacksInf
 	return ac, info, block
 }
 
+// stubTargetAuthentication injects observable target credentials without authenticating against AWS.
 func stubTargetAuthentication(t *testing.T, endpoint, credentials string) {
 	t.Helper()
 	original := createTargetAuthManager
@@ -70,6 +72,7 @@ func stubTargetAuthentication(t *testing.T, endpoint, credentials string) {
 	}
 }
 
+// TestResolveTargetAuthPrecedenceAndIsolation checks CLI and target selection without mutating the parent auth scope.
 func TestResolveTargetAuthPrecedenceAndIsolation(t *testing.T) {
 	for _, tc := range []struct {
 		name, requested, want string
@@ -97,6 +100,7 @@ func TestResolveTargetAuthPrecedenceAndIsolation(t *testing.T) {
 	}
 }
 
+// TestResolveTargetAuthAbsentDisabledAndInvalid checks omitted, disabled and malformed target-auth configuration.
 func TestResolveTargetAuthAbsentDisabledAndInvalid(t *testing.T) {
 	ac, info, block := targetAuthFixture()
 	original := createTargetAuthManager
@@ -120,6 +124,7 @@ func TestResolveTargetAuthAbsentDisabledAndInvalid(t *testing.T) {
 	}
 }
 
+// TestResolveTargetAuthFailureDoesNotFallBack ensures failed target authentication cannot reuse component credentials.
 func TestResolveTargetAuthFailureDoesNotFallBack(t *testing.T) {
 	ac, info, block := targetAuthFixture()
 	original := createTargetAuthManager
@@ -133,6 +138,7 @@ func TestResolveTargetAuthFailureDoesNotFallBack(t *testing.T) {
 	assert.Equal(t, "sandbox", info.AuthContext.AWS.Profile)
 }
 
+// TestTargetAuthReachesS3SignedRequests verifies packaging requests are signed with the target credentials.
 func TestTargetAuthReachesS3SignedRequests(t *testing.T) {
 	for _, requested := range []string{"", "sandbox"} {
 		t.Run("identity="+requested, func(t *testing.T) {
@@ -174,6 +180,7 @@ func TestTargetAuthReachesS3SignedRequests(t *testing.T) {
 	}
 }
 
+// writeTargetCredentials writes synthetic credentials for local signing tests.
 func writeTargetCredentials(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "credentials")
@@ -181,6 +188,7 @@ func writeTargetCredentials(t *testing.T) string {
 	return path
 }
 
+// TestTargetAuthReachesCloudFormationClient verifies deployment requests use the direct target's signing credentials.
 func TestTargetAuthReachesCloudFormationClient(t *testing.T) {
 	for _, operation := range []Operation{OperationApply, OperationDiff, OperationOutput, OperationDelete, OperationChangesetExecute, OperationStackSetCreate, OperationStackSetUpdate} {
 		t.Run(string(operation), func(t *testing.T) {
@@ -207,6 +215,7 @@ func TestTargetAuthReachesCloudFormationClient(t *testing.T) {
 	}
 }
 
+// TestExternalTargetAuthIdentityAndRepositoryFallback checks Git target identity selection and repository-auth fallback.
 func TestExternalTargetAuthIdentityAndRepositoryFallback(t *testing.T) {
 	ac, info, block := targetAuthFixture()
 	stubTargetAuthentication(t, "", "")
@@ -227,6 +236,7 @@ func TestExternalTargetAuthIdentityAndRepositoryFallback(t *testing.T) {
 	assert.Equal(t, "sandbox", info.Identity)
 }
 
+// TestStackSetReadDeleteDoNotRequireTargetAuth keeps existing StackSet operations independent of delivery-target selection.
 func TestStackSetReadDeleteDoNotRequireTargetAuth(t *testing.T) {
 	ac, info, block := targetAuthFixture()
 	block["auth"] = "invalid-but-unselected"
@@ -237,6 +247,7 @@ func TestStackSetReadDeleteDoNotRequireTargetAuth(t *testing.T) {
 	}
 }
 
+// TestExternalTargetAuthExplicitIdentityWithoutTargetBlock preserves a CLI identity when external delivery has no auth override.
 func TestExternalTargetAuthExplicitIdentityWithoutTargetBlock(t *testing.T) {
 	ac, info, _ := targetAuthFixture()
 	_, block, err := externalTargetAuth(&opContext{AtmosConfig: ac, Info: info, RequestedIdentity: "sandbox"}, &target.SelectedTarget{Kind: "git"})

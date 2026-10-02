@@ -57,6 +57,7 @@ If component is not specified, prompts interactively for selection.`, cfg.TypeLa
 	return cmd
 }
 
+// executePull resolves CLI scope and destination policy before downloading component source.
 func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.StandardParser) error {
 	defer perf.Track(nil, fmt.Sprintf("source.%s.pull.RunE", cfg.ComponentType))()
 

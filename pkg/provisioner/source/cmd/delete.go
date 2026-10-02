@@ -61,6 +61,7 @@ type deleteOptions struct {
 	GlobalFlags global.Flags
 }
 
+// executeDelete resolves CLI scope and the component destination before removing provisioned source.
 func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *flags.StandardParser) error {
 	defer perf.Track(nil, fmt.Sprintf("source.%s.delete.RunE", config.ComponentType))()
 

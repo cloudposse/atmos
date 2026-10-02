@@ -69,6 +69,7 @@ func TestGenerationConcurrentProcesses(t *testing.T) {
 	assert.Equal(t, "unchanged", string(data))
 }
 
+// TestGenerateForLocalTemplateOperations checks generation dispatch for operations that consume local templates.
 func TestGenerateForLocalTemplateOperations(t *testing.T) {
 	for _, op := range []Operation{OperationRender, OperationValidate, OperationDiff, OperationApply, OperationChangesetCreate, OperationStackSetCreate, OperationStackSetUpdate, OperationFmt} {
 		t.Run(string(op), func(t *testing.T) {
