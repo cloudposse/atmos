@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,6 +102,11 @@ type PIMClient interface {
 
 	// GetRequestStatus returns the current provisioning status of a request by resource name.
 	GetRequestStatus(ctx context.Context, requestName string) (string, error)
+
+	// PolicyMaxDuration returns the maximum activation duration allowed by the role's
+	// PIM policy at the client's scope. found is false when no policy assignment or
+	// activation expiration rule is configured for the role.
+	PolicyMaxDuration(ctx context.Context, roleDefinitionID string) (maxDuration time.Duration, found bool, err error)
 }
 
 // httpDoer is the minimal HTTP surface the ARM client depends on, so tests can inject a
@@ -396,4 +403,221 @@ func goDurationToISO8601(d time.Duration) string {
 		fmt.Fprintf(&sb, "%dS", seconds)
 	}
 	return sb.String()
+}
+
+// armPolicyAssignmentEnvelope is the ARM list response shape for roleManagementPolicyAssignments.
+type armPolicyAssignmentEnvelope struct {
+	Value []armPolicyAssignmentItem `json:"value"`
+}
+
+// armPolicyAssignmentItem captures a roleManagementPolicyAssignment resource.
+type armPolicyAssignmentItem struct {
+	Name       string                        `json:"name"`
+	Properties armPolicyAssignmentProperties `json:"properties"`
+}
+
+// armPolicyAssignmentProperties captures the assignment's role definition and rules.
+type armPolicyAssignmentProperties struct {
+	RoleDefinitionID string                    `json:"roleDefinitionId"`
+	EffectiveRules   []armPolicyAssignmentRule `json:"effectiveRules"`
+	Rules            []armPolicyAssignmentRule `json:"rules"`
+}
+
+// armPolicyAssignmentRule captures rule properties across policy rule types.
+type armPolicyAssignmentRule struct {
+	ID              string                        `json:"id"`
+	RuleType        string                        `json:"ruleType"`
+	MaximumDuration string                        `json:"maximumDuration"`
+	Target          armPolicyAssignmentRuleTarget `json:"target"`
+}
+
+// armPolicyAssignmentRuleTarget captures target metadata (e.g. caller: EndUser, level: Assignment).
+type armPolicyAssignmentRuleTarget struct {
+	Caller string `json:"caller"`
+	Level  string `json:"level"`
+}
+
+// isActivationExpirationRule reports whether a policy rule governs the maximum duration
+// of an EndUser self-activation assignment.
+func isActivationExpirationRule(r *armPolicyAssignmentRule) bool {
+	if !strings.EqualFold(r.RuleType, "RoleManagementPolicyExpirationRule") {
+		return false
+	}
+	if r.MaximumDuration == "" {
+		return false
+	}
+	if strings.EqualFold(r.Target.Caller, "EndUser") {
+		return r.Target.Level == "" || strings.EqualFold(r.Target.Level, "Assignment")
+	}
+	if strings.EqualFold(r.ID, "Expiration_EndUser_Assignment") || strings.Contains(strings.ToLower(r.ID), "enduser") {
+		return true
+	}
+	return false
+}
+
+// PolicyMaxDuration implements PIMClient.
+func (c *armPIMClient) PolicyMaxDuration(ctx context.Context, roleDefinitionID string) (time.Duration, bool, error) {
+	defer perf.Track(nil, "azure.armPIMClient.PolicyMaxDuration")()
+
+	assignments, err := c.listPolicyAssignments(ctx)
+	if err != nil {
+		return 0, false, err
+	}
+	for i := range assignments {
+		if !sameRoleDefinition(assignments[i].Properties.RoleDefinitionID, roleDefinitionID) {
+			continue
+		}
+		rules := assignments[i].Properties.EffectiveRules
+		if len(rules) == 0 {
+			rules = assignments[i].Properties.Rules
+		}
+		for j := range rules {
+			if isActivationExpirationRule(&rules[j]) {
+				d, err := parseISO8601Duration(rules[j].MaximumDuration)
+				if err != nil {
+					return 0, false, fmt.Errorf("%w: parsing policy maximumDuration %q: %w", errUtils.ErrAzurePIMRequestFailed, rules[j].MaximumDuration, err)
+				}
+				return d, true, nil
+			}
+		}
+	}
+	return 0, false, nil
+}
+
+// listPolicyAssignments retrieves role management policy assignments for the client's scope.
+func (c *armPIMClient) listPolicyAssignments(ctx context.Context) ([]armPolicyAssignmentItem, error) {
+	path := fmt.Sprintf("%s/providers/Microsoft.Authorization/roleManagementPolicyAssignments", c.scope)
+	raw, err := c.do(ctx, http.MethodGet, path, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	var env armPolicyAssignmentEnvelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return nil, fmt.Errorf("%w: decoding roleManagementPolicyAssignments: %w", errUtils.ErrAzurePIMRequestFailed, err)
+	}
+	return env.Value, nil
+}
+
+// parseISO8601Duration parses an ISO-8601 duration string into a time.Duration.
+// It supports day (D), hour (H), minute (M), and second (S) designators, as well as
+// week (W), month (M), and year (Y).
+func parseISO8601Duration(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, errors.New("empty ISO-8601 duration")
+	}
+	if !strings.HasPrefix(s, "P") && !strings.HasPrefix(s, "p") {
+		return 0, fmt.Errorf("invalid ISO-8601 duration %q: missing 'P' prefix", s)
+	}
+	s = s[1:]
+	if s == "" {
+		return 0, errors.New("invalid ISO-8601 duration: empty after 'P'")
+	}
+
+	var datePart, timePart string
+	tIdx := strings.IndexAny(s, "Tt")
+	if tIdx >= 0 {
+		datePart = s[:tIdx]
+		timePart = s[tIdx+1:]
+		if timePart == "" && datePart == "" {
+			return 0, errors.New("invalid ISO-8601 duration: no designators found")
+		}
+	} else {
+		datePart = s
+	}
+
+	var total time.Duration
+	foundDesignator := false
+
+	if datePart != "" {
+		cur := ""
+		for _, r := range datePart {
+			switch {
+			case (r >= '0' && r <= '9') || r == '.':
+				cur += string(r)
+			case r == 'Y' || r == 'y':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad year in %q", datePart)
+				}
+				total += time.Duration(val * 365 * 24 * float64(time.Hour))
+				cur = ""
+				foundDesignator = true
+			case r == 'M' || r == 'm':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad month in %q", datePart)
+				}
+				total += time.Duration(val * 30 * 24 * float64(time.Hour))
+				cur = ""
+				foundDesignator = true
+			case r == 'W' || r == 'w':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad week in %q", datePart)
+				}
+				total += time.Duration(val * 7 * 24 * float64(time.Hour))
+				cur = ""
+				foundDesignator = true
+			case r == 'D' || r == 'd':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad day in %q", datePart)
+				}
+				total += time.Duration(val * 24 * float64(time.Hour))
+				cur = ""
+				foundDesignator = true
+			default:
+				return 0, fmt.Errorf("invalid ISO-8601 duration character %q in date part", r)
+			}
+		}
+		if cur != "" {
+			return 0, fmt.Errorf("invalid ISO-8601 duration: unparsed number %q in date part", cur)
+		}
+	}
+
+	if timePart != "" {
+		cur := ""
+		for _, r := range timePart {
+			switch {
+			case (r >= '0' && r <= '9') || r == '.':
+				cur += string(r)
+			case r == 'H' || r == 'h':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad hour in %q", timePart)
+				}
+				total += time.Duration(val * float64(time.Hour))
+				cur = ""
+				foundDesignator = true
+			case r == 'M' || r == 'm':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad minute in %q", timePart)
+				}
+				total += time.Duration(val * float64(time.Minute))
+				cur = ""
+				foundDesignator = true
+			case r == 'S' || r == 's':
+				val, err := strconv.ParseFloat(cur, 64)
+				if err != nil || cur == "" {
+					return 0, fmt.Errorf("invalid ISO-8601 duration: bad second in %q", timePart)
+				}
+				total += time.Duration(val * float64(time.Second))
+				cur = ""
+				foundDesignator = true
+			default:
+				return 0, fmt.Errorf("invalid ISO-8601 duration character %q in time part", r)
+			}
+		}
+		if cur != "" {
+			return 0, fmt.Errorf("invalid ISO-8601 duration: unparsed number %q in time part", cur)
+		}
+	}
+
+	if !foundDesignator {
+		return 0, errors.New("invalid ISO-8601 duration: no valid designators found")
+	}
+
+	return total, nil
 }
