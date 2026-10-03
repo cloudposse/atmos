@@ -350,38 +350,6 @@ func providerStatusIsLocal(provider providers.Provider) bool {
 	return ok && ls.LocalStatusCheck()
 }
 
-// FileDependencies returns the distinct backing files this scope's file-based declared secrets
-// (currently SOPS) resolve to, for `describe affected` to treat as implicit dependencies: a
-// changed secret file then marks every component that consumes it. Secrets whose backend is not
-// file-based (store-backed) contribute nothing. It is best-effort — declarations whose provider
-// or path cannot be resolved are skipped rather than failing the whole computation. Results are
-// de-duplicated and sorted.
-func (s *Service) FileDependencies() []string {
-	defer perf.Track(s.atmosConfig, "secrets.Service.FileDependencies")()
-
-	seen := make(map[string]bool)
-	var files []string
-	for _, decl := range s.Declarations() {
-		d := decl
-		provider, err := s.provider(&d)
-		if err != nil {
-			continue
-		}
-		fp, ok := provider.(providers.FilePathProvider)
-		if !ok {
-			continue
-		}
-		path, err := fp.FilePath(coordinateForDeclaration(&d, s.stack, s.component))
-		if err != nil || path == "" || seen[path] {
-			continue
-		}
-		seen[path] = true
-		files = append(files, path)
-	}
-	sort.Strings(files)
-	return files
-}
-
 // ScopeOf returns the resolved scope of a declared secret and whether it is declared. An undeclared
 // name returns ("", false). A declaration with no explicit scope defaults to ScopeInstance.
 func (s *Service) ScopeOf(name string) (Scope, bool) {
