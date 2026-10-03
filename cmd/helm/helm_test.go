@@ -408,6 +408,49 @@ func configuredOperationCommand(t *testing.T, name string, flags map[string]stri
 	return cmd
 }
 
+func TestServerSideApplyFlagsRegisteredOnApplyOperations(t *testing.T) {
+	for _, operation := range []string{"apply", "deploy"} {
+		t.Run(operation, func(t *testing.T) {
+			cmd := newOperationCommand(operation, operation)
+			require.NotNil(t, cmd.Flag("server-side-apply"))
+			require.NotNil(t, cmd.Flag("force-conflicts"))
+			// A bare --server-side-apply must select "true" without consuming the next argument.
+			assert.Equal(t, "true", cmd.Flag("server-side-apply").NoOptDefVal)
+		})
+	}
+
+	// The apply-method controls are install/upgrade concepts; delete and template must not expose them.
+	for _, operation := range []string{"delete", "template"} {
+		t.Run(operation, func(t *testing.T) {
+			cmd := newOperationCommand(operation, operation)
+			assert.Nil(t, cmd.Flag("server-side-apply"))
+			assert.Nil(t, cmd.Flag("force-conflicts"))
+		})
+	}
+}
+
+func TestBareServerSideApplyDoesNotConsumeComponentArgument(t *testing.T) {
+	cmd := newOperationCommand("apply", "Apply")
+	require.NoError(t, cmd.ParseFlags([]string{"--server-side-apply", "app"}))
+	assert.Equal(t, "true", cmd.Flag("server-side-apply").Value.String())
+	assert.Equal(t, []string{"app"}, cmd.Flags().Args())
+}
+
+func TestGetOperationFlagsMapsServerSideApplyControls(t *testing.T) {
+	cmd := configuredOperationCommand(t, "apply", map[string]string{
+		"server-side-apply": "false",
+		"force-conflicts":   "true",
+	})
+	actual := getOperationFlags(cmd)
+	assert.Equal(t, "false", actual[cfg.HelmServerSideApplySectionName])
+	assert.Equal(t, true, actual[cfg.HelmForceConflictsSectionName])
+
+	// Unset flags must not leak into the resolved map.
+	defaults := getOperationFlags(newOperationCommand("apply", "Apply"))
+	assert.NotContains(t, defaults, cfg.HelmServerSideApplySectionName)
+	assert.NotContains(t, defaults, cfg.HelmForceConflictsSectionName)
+}
+
 func TestValidateOperationArgs(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -150,6 +150,8 @@ const (
 	HelmHistoryMaxSectionName         = "max"
 	HelmChartHooksSectionName         = "chart_hooks"
 	HelmCRDsSectionName               = "crds"
+	HelmServerSideApplySectionName    = "server_side_apply"
+	HelmForceConflictsSectionName     = "force_conflicts"
 	HelmDependencyUpdateSectionName   = "dependency_update"
 	HelmCreateNamespaceSectionName    = "create_namespace"
 	HelmDefaultMaxHistory             = 10
