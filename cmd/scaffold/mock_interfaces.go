@@ -154,6 +154,18 @@ func (mr *MockScaffoldUIMockRecorder) SetDryRun(dryRun any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDryRun", reflect.TypeOf((*MockScaffoldUI)(nil).SetDryRun), dryRun)
 }
 
+// SetMaxChanges mocks base method.
+func (m *MockScaffoldUI) SetMaxChanges(thresholdPercent int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetMaxChanges", thresholdPercent)
+}
+
+// SetMaxChanges indicates an expected call of SetMaxChanges.
+func (mr *MockScaffoldUIMockRecorder) SetMaxChanges(thresholdPercent any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMaxChanges", reflect.TypeOf((*MockScaffoldUI)(nil).SetMaxChanges), thresholdPercent)
+}
+
 // SetMergeDriver mocks base method.
 func (m *MockScaffoldUI) SetMergeDriver(driver merge.Driver) {
 	m.ctrl.T.Helper()
