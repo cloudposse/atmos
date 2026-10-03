@@ -283,18 +283,18 @@ func TestInitUI_WriteOutput(t *testing.T) {
 	}
 }
 
-// TestInitUI_SetThreshold tests the threshold setter.
-func TestInitUI_SetThreshold(t *testing.T) {
+// TestInitUI_SetMaxChanges tests the threshold setter.
+func TestInitUI_SetMaxChanges(t *testing.T) {
 	ui := createTestUI(t)
 
 	// Test setting threshold
-	ui.SetThreshold(75)
+	ui.SetMaxChanges(75)
 
 	// We can't directly verify the processor's internal state,
 	// but we can verify the method doesn't panic
-	ui.SetThreshold(50)
-	ui.SetThreshold(100)
-	ui.SetThreshold(0)
+	ui.SetMaxChanges(50)
+	ui.SetMaxChanges(100)
+	ui.SetMaxChanges(0)
 }
 
 // TestInitUI_GetTerminalWidth tests terminal width detection.

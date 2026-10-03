@@ -15,6 +15,12 @@ import (
 // cmd/scaffold's ScaffoldUI, which solves the same problem for the sibling
 // command.
 type InitUI interface {
+	// SetMaxChanges sets the maximum percentage of changed lines allowed in a
+	// 3-way merge before --update fails instead of applying it. Note:
+	// engine.Processor.SetMaxChanges replaces the processor's merger wholesale,
+	// so callers must call SetMaxChanges before SetConflictStrategy/SetMergeDriver
+	// or those settings would be discarded.
+	SetMaxChanges(thresholdPercent int)
 	SetConflictStrategy(strategy merge.ConflictStrategy)
 	SetMergeDriver(driver merge.Driver)
 	SetSkipHooks(skip func(string) bool)

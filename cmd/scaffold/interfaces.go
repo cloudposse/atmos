@@ -13,6 +13,12 @@ import (
 // command depends on, extracted so tests can substitute a mock instead of
 // driving the real interactive TUI (prompts, huh forms) end to end.
 type ScaffoldUI interface {
+	// SetMaxChanges sets the maximum percentage of changed lines allowed in a
+	// 3-way merge before --update fails instead of applying it. Note:
+	// engine.Processor.SetMaxChanges replaces the processor's merger wholesale,
+	// so callers must call SetMaxChanges before SetConflictStrategy/SetMergeDriver
+	// or those settings would be discarded.
+	SetMaxChanges(thresholdPercent int)
 	SetConflictStrategy(strategy merge.ConflictStrategy)
 	// SetMergeDriver selects the merger used by scaffold updates (YAML-aware
 	// auto-detection vs. forcing the line-oriented text merger).
