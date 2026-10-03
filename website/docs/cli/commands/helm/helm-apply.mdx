@@ -115,6 +115,12 @@ through the masked UI stream; chart hook container logs are not streamed automat
   <dt>`--skip-crds` <em>(optional)</em></dt>
   <dd>Skip CRD installation on a first install. Fails if the selected operation is upgrade.</dd>
 
+  <dt>`--server-side-apply[=auto|true|false]` <em>(optional)</em></dt>
+  <dd>Override the apply method for this operation. A bare `--server-side-apply` selects `true`. Omit to use the Helm default (server-side apply on install; the prior release's method on upgrade).</dd>
+
+  <dt>`--force-conflicts` <em>(optional)</em></dt>
+  <dd>Resolve server-side apply field-ownership conflicts by overwriting the contested fields and becoming their sole manager. Opt-in; use it for a single recovery apply without editing stack configuration.</dd>
+
   <dt>`--all` <em>(optional)</em></dt>
   <dd>Apply all Helm components in dependency order.</dd>
 
