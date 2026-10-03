@@ -78,6 +78,7 @@ git:
       init:
         from: https://github.com/acme/flux-template.git   # optional seed source for `atmos git init`
         keep_history: false                # preserve source history as `upstream` (requires `from`)
+        ref: main                          # optional branch or tag of `from` (default: its default branch)
 ```
 </File>
 
@@ -155,6 +156,11 @@ git:
   <dt>`init.keep_history`</dt>
   <dd>
     When seeding via `init.from`, preserve the source's full history and keep it reachable as the `upstream` remote so future updates can be pulled. Default: `false` (fresh history — a single initial commit). Only valid together with `init.from`. Overridable per invocation with `--keep-history`.
+  </dd>
+
+  <dt>`init.ref`</dt>
+  <dd>
+    Branch or tag of `init.from` to seed from. Default: the source's default branch. The repository's `branch` always names the new repository's branch and does not need to exist in the source — with `keep_history`, it is created at this ref. Pointing `init.from` at the repository's own `uri` with `keep_history: true` starts a new branch from this ref in the same repository (no `upstream` remote is added).
   </dd>
 </dl>
 

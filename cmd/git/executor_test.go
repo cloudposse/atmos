@@ -96,6 +96,11 @@ func TestInitCompletedMessage(t *testing.T) {
 			want: "Initialized Git repository deploy in /w from https://x/old.git (history preserved; source kept as 'upstream').",
 		},
 		{
+			name: "seeded keep history from same repository",
+			opts: &atmosgit.InitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}, URI: "https://x/old.git", FromURI: "https://x/old.git", KeepHistory: true},
+			want: "Initialized Git repository deploy in /w from https://x/old.git (history preserved).",
+		},
+		{
 			name:      "force re-initialize empty",
 			opts:      &atmosgit.InitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}, Force: true},
 			reconcile: false,

@@ -643,3 +643,27 @@ func TestIntegration(t *testing.T) {
 	assert.NotEmpty(t, info.LocalRepoPath)
 	assert.NotNil(t, info.LocalWorktree)
 }
+
+func TestSameRepositoryURI(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b string
+		want bool
+	}{
+		{"identical", "https://github.com/acme/deploy.git", "https://github.com/acme/deploy.git", true},
+		{".git suffix ignored", "https://github.com/acme/deploy.git", "https://github.com/acme/deploy", true},
+		{"trailing slash ignored", "https://github.com/acme/deploy/", "https://github.com/acme/deploy.git", true},
+		{"scheme and host case-insensitive", "HTTPS://GitHub.com/acme/deploy", "https://github.com/acme/deploy.git", true},
+		{"credentials ignored", "https://x-access-token:secret@github.com/acme/deploy.git", "https://github.com/acme/deploy", true},
+		{"different repository", "https://github.com/acme/deploy.git", "https://github.com/acme/template.git", false},
+		{"different host", "https://github.com/acme/deploy.git", "https://gitlab.com/acme/deploy.git", false},
+		{"ssh vs https not equated", "git@github.com:acme/deploy.git", "https://github.com/acme/deploy.git", false},
+		{"ssh compared exactly", "git@github.com:acme/deploy.git", "git@github.com:acme/deploy", false},
+		{"local paths compared exactly", "/srv/repos/deploy", "/srv/repos/deploy", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, SameRepositoryURI(tt.a, tt.b))
+		})
+	}
+}

@@ -46,6 +46,29 @@ git:
       init:
         from: https://github.com/acme/flux-template.git
         keep_history: false
+        ref: v1.2.0   # optional branch or tag of the source; default: its default branch
+```
+
+The configured `branch` names the new repository's branch; it does not need to
+exist in the seed source. Use `init.ref` to pick which source branch or tag to
+seed from.
+
+Setting `init.from` to the repository's own `uri` together with
+`keep_history: true` starts a new `branch` from `init.ref` in the same
+repository, preserving its history. No `upstream` remote is added, since the
+source already is the configured remote. HTTPS URIs match regardless of host
+case, credentials, or a trailing `.git`; SSH URIs must match exactly.
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      branch: staging
+      init:
+        from: https://github.com/acme/flux-deploy.git
+        ref: main
+        keep_history: true
 ```
 
 The `--from` and `--keep-history` flags override these configured defaults.

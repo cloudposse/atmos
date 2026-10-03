@@ -147,6 +147,10 @@ type InitOptions struct {
 	// pulled. When false (the default), the source content is imported with a
 	// single fresh initial commit and no link to the source remains.
 	KeepHistory bool
+	// FromRef is the branch or tag of FromURI to seed from; empty means the
+	// source's default branch. Branch always names the new repository's
+	// branch, never a ref in FromURI.
+	FromRef string
 	// Signing selects the signing mode for the fresh initial commit created
 	// when FromURI is set without KeepHistory; empty means SigningAuto.
 	Signing SigningMode

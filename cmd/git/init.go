@@ -134,6 +134,7 @@ func runInit(ctx context.Context, opts *initOptions, args []string) error {
 			Env:     env,
 		},
 		URI:         resolved.URI,
+		FromRef:     resolved.FromRef,
 		FromURI:     opts.From,
 		KeepHistory: opts.KeepHistory,
 		Signing:     resolved.Signing,
@@ -184,6 +185,8 @@ func reportInitDryRun(name, workdir, branch, uri string, opts *initOptions) {
 	switch {
 	case opts.From == "":
 		ui.Infof("[dry-run] Would initialize empty repository %q at %s (branch %q, remote -> %s).", name, workdir, branch, uri)
+	case opts.KeepHistory && atmosgit.SameRepositoryURI(opts.From, uri):
+		ui.Infof("[dry-run] Would clone %s (full history) into %s and check out branch %q.", opts.From, workdir, branch)
 	case opts.KeepHistory:
 		ui.Infof("[dry-run] Would clone %s (full history) into %s, keep it pullable as the 'upstream' remote, and wire the configured remote to %s.", opts.From, workdir, uri)
 	default:

@@ -20,7 +20,7 @@ var (
 	_ = schema.GitCloneConfig{Depth: 1, Filter: "blob:none", SingleBranch: true, Submodules: false}
 	_ = schema.GitCommitConfig{Signing: "auto", Author: schema.GitAuthorConfig{Name: "", Email: ""}}
 	_ = schema.GitAuthConfig{Identity: ""}
-	_ = schema.GitInitConfig{From: "", KeepHistory: false}
+	_ = schema.GitInitConfig{From: "", KeepHistory: false, Ref: ""}
 )
 
 func gitConfigFixture() *schema.GitConfig {
@@ -40,6 +40,7 @@ func gitConfigFixture() *schema.GitConfig {
 				Init: schema.GitInitConfig{
 					From:        "https://github.com/acme/template.git",
 					KeepHistory: true,
+					Ref:         "v1.2.0",
 				},
 			},
 			"minimal": {
@@ -68,6 +69,7 @@ func TestResolveRepositoryAppliesExplicitConfig(t *testing.T) {
 	assert.True(t, resolved.Clone.SingleBranch)
 	assert.Equal(t, "https://github.com/acme/template.git", resolved.From)
 	assert.True(t, resolved.KeepHistory)
+	assert.Equal(t, "v1.2.0", resolved.FromRef)
 }
 
 func TestResolveRepositoryAppliesDefaults(t *testing.T) {
@@ -85,6 +87,7 @@ func TestResolveRepositoryAppliesDefaults(t *testing.T) {
 	assert.Equal(t, 0, resolved.Clone.Depth)
 	assert.Empty(t, resolved.From)
 	assert.False(t, resolved.KeepHistory)
+	assert.Empty(t, resolved.FromRef)
 
 	// Automatic XDG workdir: <cache>/atmos/git/repositories/<name>.
 	expected := filepath.Join(cacheRoot, "atmos", "git", "repositories", "minimal")

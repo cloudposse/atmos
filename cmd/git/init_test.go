@@ -61,6 +61,7 @@ func TestRunInit_UsesConfiguredFrom(t *testing.T) {
 			Init: schema.GitInitConfig{
 				From:        "https://github.com/acme/template.git",
 				KeepHistory: true,
+				Ref:         "release",
 			},
 		},
 	})
@@ -78,6 +79,7 @@ func TestRunInit_UsesConfiguredFrom(t *testing.T) {
 	require.NotNil(t, got)
 	assert.Equal(t, "https://github.com/acme/template.git", got.FromURI)
 	assert.True(t, got.KeepHistory)
+	assert.Equal(t, "release", got.FromRef)
 }
 
 // TestRunInit_FlagFromOverridesConfig: the --from flag wins over init.from.
