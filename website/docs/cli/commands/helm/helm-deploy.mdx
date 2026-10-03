@@ -42,4 +42,7 @@ atmos helm deploy --affected --labels cost-center=platform
 
   <dt>`--tags` / `--labels` <em>(optional)</em></dt>
   <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` or `key:value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>Release lifecycle flags <em>(optional)</em></dt>
+  <dd>`--on-failure`, `--cleanup-on-failure`, `--wait`, `--wait-for-jobs`, `--timeout`, `--history-max`, `--no-hooks`, `--skip-crds`, `--server-side-apply`, and `--force-conflicts` behave the same as for [`apply`](/cli/commands/helm/apply#flags) and take precedence over stack `release` configuration.</dd>
 </dl>
