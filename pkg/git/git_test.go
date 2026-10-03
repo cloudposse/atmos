@@ -644,6 +644,8 @@ func TestIntegration(t *testing.T) {
 	assert.NotNil(t, info.LocalWorktree)
 }
 
+// TestSameRepositoryURI covers HTTP(S) normalization and exact matching for
+// SSH, scp-style, and local-path URIs.
 func TestSameRepositoryURI(t *testing.T) {
 	tests := []struct {
 		name string

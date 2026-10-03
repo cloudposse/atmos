@@ -88,7 +88,7 @@ func TestRunInit_FlagFromOverridesConfig(t *testing.T) {
 		"docs": {
 			URI:     "https://github.com/acme/docs.git",
 			Workdir: t.TempDir(),
-			Init:    schema.GitInitConfig{From: "https://github.com/acme/config-template.git"},
+			Init:    schema.GitInitConfig{From: "https://github.com/acme/config-template.git", Ref: "release"},
 		},
 	})
 
@@ -105,6 +105,34 @@ func TestRunInit_FlagFromOverridesConfig(t *testing.T) {
 
 	require.NotNil(t, got)
 	assert.Equal(t, "https://github.com/acme/flag-template.git", got.FromURI)
+	// init.ref names a ref of the configured source, not of the override.
+	assert.Empty(t, got.FromRef)
+}
+
+// TestRunInit_FlagFromSameSourceKeepsConfiguredRef: a --from naming the
+// configured source (spelled differently) keeps init.ref.
+func TestRunInit_FlagFromSameSourceKeepsConfiguredRef(t *testing.T) {
+	setInitTestConfig(t, map[string]schema.GitRepository{
+		"docs": {
+			URI:     "https://github.com/acme/docs.git",
+			Workdir: t.TempDir(),
+			Init:    schema.GitInitConfig{From: "https://github.com/acme/config-template.git", Ref: "release"},
+		},
+	})
+
+	var got *atmosgit.InitOptions
+	withTestProvider(t, &stubGitProvider{
+		initFn: func(_ context.Context, opts *atmosgit.InitOptions) error {
+			got = opts
+			return nil
+		},
+	})
+
+	opts := &initOptions{From: "https://github.com/acme/config-template"}
+	require.NoError(t, runInit(context.Background(), opts, []string{"docs"}))
+
+	require.NotNil(t, got)
+	assert.Equal(t, "release", got.FromRef)
 }
 
 func TestRunInit_UnknownRepository(t *testing.T) {

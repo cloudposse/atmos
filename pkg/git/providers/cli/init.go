@@ -192,13 +192,7 @@ func (p *Provider) initFromSourceKeepHistory(ctx context.Context, opts *atmosgit
 	// Seeding a new branch from another ref of the same repository: the
 	// cloned remote already is the configured one, so no "upstream" is kept.
 	if atmosgit.SameRepositoryURI(opts.FromURI, opts.URI) {
-		if configured == atmosgit.DefaultRemote {
-			return nil
-		}
-		if result, err := p.run(ctx, opts.Workdir, opts.Env, remoteSubcommand, "rename", atmosgit.DefaultRemote, configured); err != nil {
-			return classify(err, result, "remote rename")
-		}
-		return nil
+		return p.adoptClonedRemote(ctx, opts, configured)
 	}
 
 	source := sourceRemoteName
@@ -213,6 +207,22 @@ func (p *Provider) initFromSourceKeepHistory(ctx context.Context, opts *atmosgit
 	}
 
 	return p.addRemote(ctx, opts.RepoContext, configured, opts.URI)
+}
+
+// adoptClonedRemote keeps the clone's remote as the configured remote when the
+// source is the repository itself: it is renamed to the configured name and
+// re-pointed at the configured URI, since FromURI may be spelled differently
+// (e.g. without ".git" or with embedded credentials).
+func (p *Provider) adoptClonedRemote(ctx context.Context, opts *atmosgit.InitOptions, configured string) error {
+	if configured != atmosgit.DefaultRemote {
+		if result, err := p.run(ctx, opts.Workdir, opts.Env, remoteSubcommand, "rename", atmosgit.DefaultRemote, configured); err != nil {
+			return classify(err, result, "remote rename")
+		}
+	}
+	if result, err := p.run(ctx, opts.Workdir, opts.Env, remoteSubcommand, "set-url", configured, opts.URI); err != nil {
+		return classify(err, result, "remote set-url")
+	}
+	return nil
 }
 
 // cloneSource clones the --from repository into the workdir at FromRef (the

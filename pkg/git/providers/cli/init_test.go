@@ -116,6 +116,9 @@ func TestInitFromFreshSignsAndSetsAuthor(t *testing.T) {
 	}, commitCall)
 }
 
+// TestInitFromKeepHistoryPreservesSourceAsUpstream: keep-history clones the
+// source's default branch, creates the configured branch, and keeps the source
+// as "upstream".
 func TestInitFromKeepHistoryPreservesSourceAsUpstream(t *testing.T) {
 	runner := newFakeRunner()
 	provider := New(WithRunner(runner))
@@ -181,9 +184,11 @@ func TestInitFromKeepHistorySameRepoCreatesBranch(t *testing.T) {
 	require.NoError(t, err)
 
 	calls := runner.joinedCalls()
-	require.Len(t, calls, 2)
+	require.Len(t, calls, 3)
 	assert.Equal(t, "clone --branch main -- https://GitHub.com/acme/deploy "+workdir, calls[0])
 	assert.Equal(t, "checkout -B feature", calls[1])
+	// The remote keeps the configured spelling of the URI, not --from's.
+	assert.Equal(t, "remote set-url origin https://github.com/acme/deploy.git", calls[2])
 }
 
 // TestInitFromKeepHistorySameRepoRenamesToConfiguredRemote: a non-default
@@ -202,10 +207,11 @@ func TestInitFromKeepHistorySameRepoRenamesToConfiguredRemote(t *testing.T) {
 	require.NoError(t, err)
 
 	calls := runner.joinedCalls()
-	require.Len(t, calls, 3)
+	require.Len(t, calls, 4)
 	assert.Equal(t, "clone -- https://github.com/acme/deploy.git "+workdir, calls[0])
 	assert.Equal(t, "checkout -B feature", calls[1])
 	assert.Equal(t, "remote rename origin gitops", calls[2])
+	assert.Equal(t, "remote set-url gitops https://github.com/acme/deploy.git", calls[3])
 }
 
 // TestInitFromFreshClonesFromRef: FromRef also selects the source ref in fresh
@@ -332,6 +338,8 @@ func TestInitForceDeletesAndReinitializes(t *testing.T) {
 	assert.Equal(t, "remote add origin https://github.com/acme/deploy.git", calls[1])
 }
 
+// TestInitForceWithFromDeletesThenSeeds: --force removes an existing workdir
+// before seeding from the source.
 func TestInitForceWithFromDeletesThenSeeds(t *testing.T) {
 	runner := newFakeRunner()
 	provider := New(WithRunner(runner))

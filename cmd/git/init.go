@@ -64,7 +64,9 @@ Arguments after -- are passed verbatim to the underlying git invocation
 type initOptions struct {
 	From        string
 	KeepHistory bool
-	Branch      string
+	// FromRef is the resolved init.ref; set by resolveInitSeed, not a flag.
+	FromRef string
+	Branch  string
 	Workdir     string
 	Force       bool
 	DryRun      bool
@@ -134,7 +136,7 @@ func runInit(ctx context.Context, opts *initOptions, args []string) error {
 			Env:     env,
 		},
 		URI:         resolved.URI,
-		FromRef:     resolved.FromRef,
+		FromRef:     opts.FromRef,
 		FromURI:     opts.From,
 		KeepHistory: opts.KeepHistory,
 		Signing:     resolved.Signing,
@@ -163,9 +165,14 @@ func resolveInitName(args []string) (string, error) {
 // resolveInitSeed folds the repository's configured seed defaults into opts so
 // downstream code reads a single source of truth: CLI flags override the
 // repository config, which supplies the default seed source. It also validates
-// that keep-history has a seed source to keep history from.
+// that keep-history has a seed source to keep history from. The configured
+// init.ref names a ref of init.from, so it is dropped when --from selects a
+// different source.
 func resolveInitSeed(opts *initOptions, resolved *atmosgit.ResolvedRepository) error {
 	opts.From = resolveStringPrecedence(opts.From, resolved.From)
+	if atmosgit.SameRepositoryURI(opts.From, resolved.From) {
+		opts.FromRef = resolved.FromRef
+	}
 	opts.KeepHistory = opts.KeepHistory || resolved.KeepHistory
 	if opts.KeepHistory && opts.From == "" {
 		return errUtils.Build(errUtils.ErrInvalidFlag).

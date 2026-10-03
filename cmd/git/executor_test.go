@@ -73,6 +73,8 @@ func (s *stubGitProvider) Push(ctx context.Context, opts *atmosgit.PushOptions) 
 
 // ---- Executor.Status tests ----
 
+// TestInitCompletedMessage covers the mode-aware init success message,
+// including the same-repository keep-history wording.
 func TestInitCompletedMessage(t *testing.T) {
 	tests := []struct {
 		name      string

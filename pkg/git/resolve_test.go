@@ -23,6 +23,8 @@ var (
 	_ = schema.GitInitConfig{From: "", KeepHistory: false, Ref: ""}
 )
 
+// gitConfigFixture returns a git config with one fully specified repository
+// and one minimal repository.
 func gitConfigFixture() *schema.GitConfig {
 	retries := 5
 	return &schema.GitConfig{
@@ -50,6 +52,8 @@ func gitConfigFixture() *schema.GitConfig {
 	}
 }
 
+// TestResolveRepositoryAppliesExplicitConfig verifies explicit repository
+// settings, including init.from/keep_history/ref, are resolved verbatim.
 func TestResolveRepositoryAppliesExplicitConfig(t *testing.T) {
 	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
 
@@ -72,6 +76,8 @@ func TestResolveRepositoryAppliesExplicitConfig(t *testing.T) {
 	assert.Equal(t, "v1.2.0", resolved.FromRef)
 }
 
+// TestResolveRepositoryAppliesDefaults verifies defaults for a minimal
+// repository entry, including empty init seed settings.
 func TestResolveRepositoryAppliesDefaults(t *testing.T) {
 	cacheRoot := t.TempDir()
 	t.Setenv("ATMOS_XDG_CACHE_HOME", cacheRoot)
