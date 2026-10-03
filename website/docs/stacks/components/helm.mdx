@@ -181,7 +181,7 @@ flags have the highest precedence.
   <dd><strong>Default:</strong> Helm default. <strong>Operations:</strong> install, upgrade. Select the apply method: <code>auto</code>, <code>true</code>, or <code>false</code>. Omit to keep the Helm default (server-side apply on install; the prior release's method on upgrade). On install, <code>auto</code> and <code>true</code> both enable server-side apply.</dd>
 
   <dt>`release.force_conflicts`</dt>
-  <dd><strong>Default:</strong> <code>false</code>. <strong>Operations:</strong> install, upgrade. When server-side apply meets a field owned by another manager, overwrite the contested fields and become their sole manager. Opt-in, because it overrides other field managers.</dd>
+  <dd><strong>Default:</strong> <code>false</code>. <strong>Operations:</strong> install, upgrade. When server-side apply meets a field owned by another manager, overwrite the contested fields and become their sole manager. Opt-in, because it overrides other field managers. Requires server-side apply: setting it together with <code>server_side_apply: false</code> is rejected before any chart download.</dd>
 </dl>
 
 `release.install.timeout`, `release.upgrade.timeout`, and

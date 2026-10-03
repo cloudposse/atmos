@@ -1691,6 +1691,7 @@ var (
 	ErrHelmFailureActionInvalid      = errors.New("invalid helm on_failure action")
 	ErrHelmWaitStrategyInvalid       = errors.New("invalid helm wait strategy")
 	ErrHelmServerSideApplyInvalid    = errors.New("invalid helm server_side_apply value")
+	ErrHelmForceConflictsRequiresSSA = errors.New("helm force_conflicts requires server-side apply to be enabled")
 	ErrHelmTimeoutInvalid            = errors.New("invalid helm release timeout")
 	ErrHelmMaxHistoryInvalid         = errors.New("invalid helm release history limit")
 	ErrHelmWaitForJobsRequiresWait   = errors.New("helm wait_for_jobs requires watcher or legacy wait strategy")

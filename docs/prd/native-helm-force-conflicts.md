@@ -37,12 +37,12 @@ Helm 4 applies release manifests server-side by default, so field ownership of a
 actor that writes the same fields. Two situations put another field manager on fields a release also sets:
 
 1. **A controller reconciles the same object.** An operator that continuously updates an object it also received from a
-   release can take ownership of fields the release declares.
+    release can take ownership of fields the release declares.
 2. **An object's field-ownership ledger is orphaned.** When an object's `managedFields` is lost - for example, a custom
-   resource whose CRD hosts its own conversion webhook loses its ledger if a conversion fails during a controller
-   disruption, on Kubernetes versions before the upstream fix - the next server-side apply synthesizes a stand-in
-   manager that owns the pre-existing fields. A subsequent release apply that changes those fields then conflicts with
-   the stand-in.
+    resource whose CRD hosts its own conversion webhook loses its ledger if a conversion fails during a controller
+    disruption, on Kubernetes versions before the upstream fix - the next server-side apply synthesizes a stand-in
+    manager that owns the pre-existing fields. A subsequent release apply that changes those fields then conflicts with
+    the stand-in.
 
 In both cases the server-side apply reports a field-ownership conflict and Atmos aborts the install or upgrade. Because
 Atmos sets no conflict-resolution option, there is no way to clear the conflict through the normal deploy path. The
@@ -185,7 +185,13 @@ The settings reuse the existing native Helm release-policy pipeline:
   `pkg/datafetcher/schema/stacks/stack-config/1.0.json` model the two keys on the
   install, upgrade, and release policies (not delete). `server_side_apply` uses a
   `oneOf` of boolean or the string enum.
-- **Error** - `ErrHelmServerSideApplyInvalid` in `errors/errors.go`.
+- **Cross-field validation** - Helm rejects `force_conflicts` when server-side apply is disabled
+  (`forceConflicts enabled when serverSideApply disabled`). The statically-determinable case -
+  `force_conflicts: true` with an explicit `server_side_apply: false` - is rejected during
+  resolution (config and CLI) before chart download. The upgrade `auto` method resolves against
+  the previous release's apply method at apply time, so that case surfaces at runtime.
+- **Errors** - `ErrHelmServerSideApplyInvalid` and `ErrHelmForceConflictsRequiresSSA` in
+  `errors/errors.go`.
 
 Tests cover parsing, release-wide and per-phase resolution precedence, CLI flag
 precedence, delete inapplicability, bool-and-string decoding, schema validation (both

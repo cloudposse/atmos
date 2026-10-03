@@ -303,6 +303,15 @@ func validateAndDeriveLifecycle(resolution *releaseLifecycleResolution) error {
 	if resolution.Policy.WaitForJobs && resolution.Policy.WaitStrategy == kube.HookOnlyStrategy {
 		return errUtils.ErrHelmWaitForJobsRequiresWait
 	}
+	// Helm rejects force_conflicts when server-side apply is disabled
+	// ("forceConflicts enabled when serverSideApply disabled"). Catch the
+	// statically-determinable case - an explicit server_side_apply: false with
+	// force_conflicts enabled - before chart download instead of failing mid-apply.
+	// The upgrade "auto" method resolves against the previous release's apply
+	// method at apply time, so that case can only surface at runtime.
+	if resolution.Policy.ForceConflicts && resolution.Policy.ServerSideApply == serverSideApplyFalse {
+		return errUtils.ErrHelmForceConflictsRequiresSSA
+	}
 	return nil
 }
 

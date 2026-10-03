@@ -1,11 +1,13 @@
 package helm
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/action"
+	release "helm.sh/helm/v4/pkg/release/v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -117,12 +119,20 @@ func TestResolveServerSideApplyFlagPrecedence(t *testing.T) {
 	require.NoError(t, err)
 
 	resolution, err := resolveReleaseLifecycleWithFlags(input, releaseOperationInstall, map[string]any{
-		cfg.HelmServerSideApplySectionName: "false",
+		cfg.HelmServerSideApplySectionName: "true",
 		cfg.HelmForceConflictsSectionName:  true,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, serverSideApplyFalse, resolution.Policy.ServerSideApply)
+	assert.Equal(t, serverSideApplyTrue, resolution.Policy.ServerSideApply)
 	assert.True(t, resolution.Policy.ForceConflicts)
+
+	// A flag that disables server-side apply also overrides a configured method.
+	disabled, err := resolveReleaseLifecycleWithFlags(input, releaseOperationInstall, map[string]any{
+		cfg.HelmServerSideApplySectionName: "false",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, serverSideApplyFalse, disabled.Policy.ServerSideApply)
+	assert.False(t, disabled.Policy.ForceConflicts)
 }
 
 func TestResolveServerSideApplyInvalidFlag(t *testing.T) {
@@ -267,4 +277,117 @@ func TestConfigureUpgradeLifecycleServerSideApply(t *testing.T) {
 		configureUpgradeLifecycle(client, effectiveReleasePolicy{ForceConflicts: true})
 		assert.True(t, client.ForceConflicts)
 	})
+}
+
+// TestForceConflictsRequiresServerSideApply confirms the statically-incompatible
+// combination (force_conflicts with an explicit server_side_apply: false) is
+// rejected before chart download, for both config and CLI flags, on install and
+// upgrade. Helm itself errors with "forceConflicts enabled when serverSideApply
+// disabled"; Atmos catches the config-level case up front.
+func TestForceConflictsRequiresServerSideApply(t *testing.T) {
+	t.Run("rejected in release-wide config", func(t *testing.T) {
+		_, err := decodeReleasePolicy(map[string]any{
+			cfg.HelmReleaseSectionName: map[string]any{
+				cfg.HelmServerSideApplySectionName: false,
+				cfg.HelmForceConflictsSectionName:  true,
+			},
+		})
+		require.ErrorIs(t, err, errUtils.ErrHelmForceConflictsRequiresSSA)
+	})
+
+	t.Run("rejected in per-phase install config", func(t *testing.T) {
+		_, err := decodeReleasePolicy(map[string]any{
+			cfg.HelmReleaseSectionName: map[string]any{
+				cfg.HelmInstallSectionName: map[string]any{
+					cfg.HelmServerSideApplySectionName: false,
+					cfg.HelmForceConflictsSectionName:  true,
+				},
+			},
+		})
+		require.ErrorIs(t, err, errUtils.ErrHelmForceConflictsRequiresSSA)
+	})
+
+	t.Run("rejected when CLI flags combine them", func(t *testing.T) {
+		input, err := decodeReleasePolicy(map[string]any{})
+		require.NoError(t, err)
+		for _, operation := range []string{releaseOperationInstall, releaseOperationUpgrade} {
+			_, err := resolveReleaseLifecycleWithFlags(input, operation, map[string]any{
+				cfg.HelmServerSideApplySectionName: "false",
+				cfg.HelmForceConflictsSectionName:  true,
+			})
+			require.ErrorIs(t, err, errUtils.ErrHelmForceConflictsRequiresSSA, operation)
+		}
+	})
+
+	t.Run("allowed when server-side apply is enabled or unset", func(t *testing.T) {
+		// Explicit true, and unset (install defaults to SSA enabled) are both fine.
+		for _, releaseCfg := range []map[string]any{
+			{cfg.HelmServerSideApplySectionName: true, cfg.HelmForceConflictsSectionName: true},
+			{cfg.HelmServerSideApplySectionName: "auto", cfg.HelmForceConflictsSectionName: true},
+			{cfg.HelmForceConflictsSectionName: true},
+		} {
+			_, err := decodeReleasePolicy(map[string]any{cfg.HelmReleaseSectionName: releaseCfg})
+			require.NoError(t, err)
+		}
+	})
+}
+
+// TestEnsureUpgradeForceConflictsCompatible covers the dynamic upgrade preflight:
+// when force_conflicts is on and the apply method resolves to client-side (an
+// explicit false, or unset/auto against a client-side previous release), Helm
+// would reject the upgrade after loading the chart, so Atmos rejects it first.
+func TestEnsureUpgradeForceConflictsCompatible(t *testing.T) {
+	tests := []struct {
+		name        string
+		policy      effectiveReleasePolicy
+		seed        bool
+		applyMethod string
+		wantErr     bool
+	}{
+		{name: "force off is a no-op", policy: effectiveReleasePolicy{}, seed: true, applyMethod: "csa"},
+		{name: "explicit true bypasses prior client-side", policy: effectiveReleasePolicy{ForceConflicts: true, ServerSideApply: serverSideApplyTrue}, seed: true, applyMethod: "csa"},
+		{name: "explicit false rejected", policy: effectiveReleasePolicy{ForceConflicts: true, ServerSideApply: serverSideApplyFalse}, seed: true, applyMethod: "ssa", wantErr: true},
+		{name: "auto with client-side prior rejected", policy: effectiveReleasePolicy{ForceConflicts: true, ServerSideApply: serverSideApplyAuto}, seed: true, applyMethod: "csa", wantErr: true},
+		{name: "unset with client-side prior rejected", policy: effectiveReleasePolicy{ForceConflicts: true}, seed: true, applyMethod: "csa", wantErr: true},
+		{name: "unset with empty apply method rejected", policy: effectiveReleasePolicy{ForceConflicts: true}, seed: true, applyMethod: "", wantErr: true},
+		{name: "unset with server-side prior allowed", policy: effectiveReleasePolicy{ForceConflicts: true}, seed: true, applyMethod: "ssa"},
+		{name: "no prior release is allowed", policy: effectiveReleasePolicy{ForceConflicts: true}, seed: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actx := memoryActionContext(t)
+			spec := &chartSpec{ReleaseName: "rel", Namespace: "ns"}
+			spec.Lifecycle.Policy = tt.policy
+			if tt.seed {
+				rel := release.Mock(&release.MockReleaseOptions{Name: spec.ReleaseName, Namespace: spec.Namespace})
+				rel.ApplyMethod = tt.applyMethod
+				require.NoError(t, actx.cfg.Releases.Create(rel))
+			}
+			err := ensureUpgradeForceConflictsCompatible(actx, spec)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrHelmForceConflictsRequiresSSA)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestApplyReleaseRejectsForceConflictsOnClientSideUpgrade proves the preflight
+// runs through applyRelease before the chart is located (no render error).
+func TestApplyReleaseRejectsForceConflictsOnClientSideUpgrade(t *testing.T) {
+	actx := memoryActionContext(t)
+	stubActionContext(t, actx)
+	spec := testdataChartSpec(t, "csa-upgrade")
+
+	rel := release.Mock(&release.MockReleaseOptions{Name: spec.ReleaseName, Namespace: spec.Namespace})
+	rel.ApplyMethod = string(release.ApplyMethodClientSideApply)
+	require.NoError(t, actx.cfg.Releases.Create(rel))
+
+	force := true
+	spec.Release.ForceConflicts = &force // release-wide; server_side_apply unset -> auto.
+
+	_, err := applyRelease(context.Background(), spec, false)
+	require.ErrorIs(t, err, errUtils.ErrHelmForceConflictsRequiresSSA)
+	assert.NotErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 }
