@@ -29,7 +29,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/alecthomas/participle/v2 v2.1.4
 	github.com/alicebob/miniredis/v2 v2.37.0
-	github.com/anthropics/anthropic-sdk-go v1.43.0
+	github.com/anthropics/anthropic-sdk-go v1.68.0
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.45.1
@@ -317,7 +317,7 @@ require (
 	github.com/iancoleman/orderedmap v0.3.0 // indirect
 	github.com/iancoleman/strcase v0.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/invopop/jsonschema v0.13.0 // Pinned: anthropic-sdk-go uses wk8/go-ordered-map/v2 for jsonschema.Schema.Properties. invopop/jsonschema v0.14.0+ switched to pb33f/ordered-map/v2, breaking type compatibility. Bump after anthropic-sdk-go migrates. Also used by the pkg/config/schema generator; a bump that changes output will trip the atmos.yaml schema drift test - regenerate deliberately.
+	github.com/invopop/jsonschema v0.14.0 // Pinned: anthropic-sdk-go uses wk8/go-ordered-map/v2 for jsonschema.Schema.Properties. invopop/jsonschema v0.14.0+ switched to pb33f/ordered-map/v2, breaking type compatibility. Bump after anthropic-sdk-go migrates. Also used by the pkg/config/schema generator; a bump that changes output will trip the atmos.yaml schema drift test - regenerate deliberately.
 	github.com/itchyny/gojq v0.12.19 // indirect
 	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
@@ -579,6 +579,7 @@ require (
 	github.com/moby/term v0.5.2 // indirect
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
+	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
