@@ -233,8 +233,7 @@ func (i *awsAmbientIdentity) AuthenticateStandalone(ctx context.Context) (types.
 	// AWS ambient identities resolve credentials from the default chain.
 	credentials, err := i.Authenticate(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: AWS ambient identity %q authentication failed: %w",
-			errUtils.ErrAuthenticationFailed, i.name, err)
+		return nil, errUtils.WrapAuthenticationFailed(err, "identity %q", i.name)
 	}
 
 	log.Debug("AWS ambient identity authenticated successfully", logKeyAmbientIdentity, i.name)

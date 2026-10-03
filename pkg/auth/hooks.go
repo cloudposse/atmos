@@ -27,10 +27,7 @@ type (
 	Validator       = types.Validator
 )
 
-const (
-	hookOpTerraformPreHook = "TerraformPreHook"
-	identityKey            = "identity"
-)
+const identityKey = "identity"
 
 // TerraformPreHook runs before Terraform commands to set up authentication.
 func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
@@ -65,8 +62,8 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 	authManager, err := newAuthManager(&authConfig, stackInfo, atmosConfig.CliConfigPath)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrAuthManager, hookOpTerraformPreHook, "failed to create auth manager")
-		return errUtils.ErrAuthManager
+		// Returned, not printed: the caller renders the error once.
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthManager, err)
 	}
 
 	// Determine target identity and authenticate.
@@ -85,8 +82,10 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 func decodeAuthConfigFromStack(stackInfo *schema.ConfigAndStacksInfo) (schema.AuthConfig, error) {
 	var authConfig schema.AuthConfig
 	if err := mapstructure.Decode(stackInfo.ComponentAuthSection, &authConfig); err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, hookOpTerraformPreHook, "failed to decode component auth config - check atmos.yaml or component auth section")
-		return schema.AuthConfig{}, errUtils.ErrInvalidAuthConfig
+		return schema.AuthConfig{}, errUtils.Build(errUtils.ErrInvalidAuthConfig).
+			WithCause(err).
+			WithHint("Failed to decode the component auth config. Check the auth section in atmos.yaml and in the component's stack configuration.").
+			Err()
 	}
 	return authConfig, nil
 }
@@ -118,8 +117,9 @@ func resolveTargetIdentityName(ctx context.Context, stackInfo *schema.ConfigAndS
 
 	// No default identity found — error out.
 	// The "required" field is about auto-authentication, not primary selection.
-	errUtils.CheckErrorAndPrint(errUtils.ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
-	return "", errUtils.ErrNoDefaultIdentity
+	return "", errUtils.Build(errUtils.ErrNoDefaultIdentity).
+		WithHint("Use the identity flag or specify an identity as default.").
+		Err()
 }
 
 // isNoAuthConfigError reports whether err indicates a terminal state where

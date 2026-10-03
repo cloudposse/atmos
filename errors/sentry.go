@@ -88,7 +88,7 @@ func CaptureError(err error) {
 		}
 
 		// Extract and set hints as breadcrumbs.
-		hints := errors.GetAllHints(err)
+		hints := AllHints(err)
 		for _, hint := range hints {
 			scope.AddBreadcrumb(&sentry.Breadcrumb{
 				Type:     "info",
@@ -139,7 +139,7 @@ func CaptureErrorWithContext(err error, context map[string]string) {
 		}
 
 		// Extract and set hints as breadcrumbs.
-		hints := errors.GetAllHints(err)
+		hints := AllHints(err)
 		for _, hint := range hints {
 			scope.AddBreadcrumb(&sentry.Breadcrumb{
 				Type:     "info",

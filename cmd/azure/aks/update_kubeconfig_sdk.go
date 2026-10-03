@@ -91,7 +91,7 @@ func executeAKSUpdateKubeconfigDirect(p *aksKubeconfigDirectParams) error {
 	ctx := context.Background()
 	whoami, err := mgr.Authenticate(ctx, p.identityName)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrIdentityAuthFailed, err)
+		return errUtils.WrapIdentityAuthFailed(p.identityName, err)
 	}
 
 	// mgr is an AuthManager interface; guard against a nil whoami (a (nil, nil) return) before

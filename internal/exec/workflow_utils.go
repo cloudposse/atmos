@@ -218,7 +218,8 @@ func prepareStepEnvironment(
 			if errors.Is(err, errUtils.ErrUserAborted) {
 				return nil, errUtils.ErrUserAborted
 			}
-			return nil, fmt.Errorf("%w for identity %q in step %q: %w", errUtils.ErrAuthenticationFailed, stepIdentity, stepName, err)
+			// Scope with the identity first so it is never lost (the manager's own scope is deduplicated).
+			return nil, errUtils.WrapAuthenticationFailed(errUtils.WrapAuthenticationFailed(err, "identity %q", stepIdentity), "step %q", stepName)
 		}
 	}
 

@@ -65,6 +65,11 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 // in-memory Credentials field is nil.
 func (m *manager) cacheWhoamiCredentials(identityName string, creds types.ICredentials, info *types.WhoamiInfo) {
 	switch {
+	case !m.identityPersistsCredentials(identityName):
+		log.Debug("Skipping keyring cache for identity that does not persist credentials in WhoamiInfo", logKeyIdentity, identityName)
+		// Self-heal entries written by older versions, then keep the reference for in-memory lookups.
+		m.purgeCachedCredentials(identityName)
+		info.CredentialsRef = identityName
 	case m.identityChainRootIsAmbient(identityName):
 		log.Debug("Skipping keyring cache for ambient chain in WhoamiInfo", logKeyIdentity, identityName)
 		// Still set the reference so callers can look up the in-memory credentials.
@@ -115,7 +120,8 @@ func (m *manager) buildWhoamiInfoFromEnvironment(identityName string) *types.Who
 		// This enables credential validation in whoami when using noop keyring.
 		ctx := context.Background()
 		creds, err := identity.LoadCredentials(ctx)
-		log.Debug("LoadCredentials result",
+		log.Debug(
+			"LoadCredentials result",
 			logKeyIdentity, identityName,
 			"creds_nil", creds == nil,
 			"error", err,
@@ -124,11 +130,13 @@ func (m *manager) buildWhoamiInfoFromEnvironment(identityName string) *types.Who
 			info.Credentials = creds
 			// Populate whoami info fields (expiration, region, etc.) from credentials.
 			creds.BuildWhoamiInfo(info)
-			log.Debug("Loaded credentials from identity storage",
+			log.Debug(
+				"Loaded credentials from identity storage",
 				logKeyIdentity, identityName,
 			)
 		} else if err != nil {
-			log.Debug("Failed to load credentials from identity storage",
+			log.Debug(
+				"Failed to load credentials from identity storage",
 				logKeyIdentity, identityName,
 				"error", err,
 			)

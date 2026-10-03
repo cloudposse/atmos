@@ -70,7 +70,7 @@ func executeEKSUpdateKubeconfigDirect(clusterName, region, kubeconfigPath, alias
 	ctx := context.Background()
 	whoami, err := mgr.Authenticate(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrIdentityAuthFailed, err)
+		return errUtils.WrapIdentityAuthFailed(identityName, err)
 	}
 
 	if whoami.Credentials == nil {

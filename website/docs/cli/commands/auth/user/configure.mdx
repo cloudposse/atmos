@@ -21,8 +21,21 @@ Use this command whenever an identity is backed by a **user** credential source 
 ## Usage
 
 ```shell
-atmos auth user configure
+atmos auth user configure [--identity=<name>]
 ```
+
+## Flags
+
+<dl>
+  <dt>`--identity` (alias `-i`)</dt>
+  <dd>
+    The `aws/user` identity to configure, for example `--identity=emergency-user`. Setting `ATMOS_IDENTITY` has the same effect. When provided, Atmos skips the identity selector, so the command can run from a script or from the hint printed by another `atmos auth` command.
+
+    The name must match an identity with `kind: aws/user` under `auth.identities`. Otherwise the command fails and lists the available `aws/user` identities.
+
+    Without this flag, the command shows a selector. It needs a terminal for that and fails immediately, with a hint to pass `--identity`, when run without one.
+  </dd>
+</dl>
 
 ## Description
 
@@ -37,14 +50,19 @@ This command provides an interactive way to configure AWS IAM user credentials a
 
 **Storage:**
 
-- Credentials are stored in your OS keychain (macOS Keychain, GNOME Keyring, Windows Credential Manager)
+- Credentials go to the keyring backend selected by [`auth.keyring`](/cli/configuration/auth/keyring) (or `ATMOS_KEYRING_TYPE`). With the default `system` type, that is your OS keychain (macOS Keychain, GNOME Keyring, Windows Credential Manager). With `type: file`, they are written to the encrypted keyring file, and with `type: memory` they are not persisted
+- This is the same backend `atmos auth login` reads from, so credentials stored here are the credentials login uses
 - The storage key matches your `aws/user` identity name from `atmos.yaml`
 - Only identities with `kind: aws/user` are selectable
+- The command needs a terminal to prompt for the credentials, and fails immediately when none is available
 
 ## Examples
 
 ```shell
-# Configure credentials for an aws/user identity
+# Configure credentials for a specific aws/user identity (no selector)
+atmos auth user configure --identity=emergency-user
+
+# Choose the identity from a selector
 atmos auth user configure
 
 # Example interactive session:

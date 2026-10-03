@@ -33,6 +33,9 @@ func init() {
 	// Add EKS subcommand from the eks subpackage.
 	awsCmd.AddCommand(eks.EksCmd)
 
+	// Add credential-process subcommand (flags are registered in credential_process.go).
+	awsCmd.AddCommand(credentialProcessCmd)
+
 	// Add Security subcommand from the security subpackage.
 	awsCmd.AddCommand(awssecurity.SecurityCmd)
 

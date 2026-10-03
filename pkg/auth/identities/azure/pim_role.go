@@ -530,9 +530,12 @@ func subscriptionIDFromScope(scope string) string {
 	return ""
 }
 
-// defaultIsTTY reports whether stdin is an interactive terminal.
+// defaultIsTTY reports whether the justification prompt can be used: the prompt text is written
+// to stderr and the answer is read from stdin, so both must be terminals. A captured stderr
+// (for example a parent process wrapping this one) would otherwise hide the prompt and hang.
 func defaultIsTTY() bool {
-	return isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())
+	return (isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())) &&
+		(isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd()))
 }
 
 // defaultJustificationPrompt reads a one-line justification from stdin.

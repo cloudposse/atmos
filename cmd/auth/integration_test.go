@@ -13,10 +13,10 @@ import (
 // all supported formats (json + pkg/env.SupportedFormats). Ported from main's
 // auth_integration_test.go (PR #1984).
 func TestAuthEnvFormatCompletion(t *testing.T) {
-	// Build expected formats: json + env.SupportedFormats.
-	// JSON is handled separately in cmd/auth/env.go, not via pkg/env.
-	expectedFormats := make([]string, 0, len(env.SupportedFormats)+1)
-	expectedFormats = append(expectedFormats, "json")
+	// Build expected formats: json + credential-process + env.SupportedFormats.
+	// JSON and credential-process are handled separately in cmd/auth/env.go, not via pkg/env.
+	expectedFormats := make([]string, 0, len(env.SupportedFormats)+2)
+	expectedFormats = append(expectedFormats, "json", FormatCredentialProcess)
 	for _, f := range env.SupportedFormats {
 		expectedFormats = append(expectedFormats, string(f))
 	}

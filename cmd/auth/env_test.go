@@ -221,7 +221,8 @@ func TestSupportedFormats(t *testing.T) {
 	assert.Contains(t, SupportedFormats, "dotenv")
 	assert.Contains(t, SupportedFormats, "env")
 	assert.Contains(t, SupportedFormats, "github")
-	assert.Len(t, SupportedFormats, 5)
+	assert.Contains(t, SupportedFormats, "credential-process")
+	assert.Len(t, SupportedFormats, 6)
 }
 
 func TestFormatFlagName(t *testing.T) {
