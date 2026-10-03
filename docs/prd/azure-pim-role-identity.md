@@ -78,14 +78,14 @@ auth:
       principal:
         role_definition_id: "/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c"
         scope: "/subscriptions/00000000-0000-0000-0000-000000000000"
-        duration: "8h"               # Go-style; converted to ISO-8601. Azure rejects values over the role's policy max (Atmos does not pre-cap; see §5)
+        duration: "8h"               # Go-style; converted to ISO-8601. Clamped to the role's policy max pre-flight (see §5)
         justification: "planned change window"   # optional default; see care points
 ```
 
 Principal fields: `role_definition_id` (required, full role definition id - the API needs the id, not a
 name), `scope` (required - subscription, resource group, or resource ARM id), `duration` (optional Go-style
-duration converted to the `scheduleInfo` ISO-8601 the API requires; Atmos sends it as-is without pre-capping,
-and Azure rejects a value over the role's PIM activation-policy maximum - see the §5 deferred follow-up),
+duration converted to the `scheduleInfo` ISO-8601 the API requires; clamped to the role's PIM activation-policy
+maximum pre-flight via `roleManagementPolicyAssignments` - see §5),
 `justification` (optional default, overridden per-invocation by the `--justification` global flag or
 `ATMOS_AUTH_JUSTIFICATION`). `via.identity` chains from the identity whose token holds the
 eligibility; `via.provider` is allowed but less common.
@@ -257,9 +257,7 @@ end-to-end activation against a real eligible role remains a manual verification
 
 ### Deferred (non-goals or follow-ups)
 
-- Capping `duration` at the role's PIM activation-policy maximum pre-flight (would require the
-  `roleManagementPolicyAssignments` API) - tracked in
-  [#3238](https://github.com/cloudposse/atmos/issues/3238). Today an over-long duration is rejected
-  by ARM server-side; the create-failure path surfaces ARM's message plus an actionable hint to
-  lower `duration`, so the gap is only the pre-flight clamp.
+- Capping `duration` at the role's PIM activation-policy maximum pre-flight is implemented
+  ([#3238](https://github.com/cloudposse/atmos/issues/3238)) by querying `roleManagementPolicyAssignments`
+  for the scope and clamping the effective duration before submitting the request.
 - Entra directory roles, PIM for Groups, and configuring approvers remain out of scope (Section 3).
