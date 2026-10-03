@@ -134,6 +134,16 @@ If no target directory is specified, you will be prompted for one.`,
 				WithExitCode(2).
 				Err()
 		}
+		maxChanges := v.GetInt("max-changes")
+		if maxChanges < 0 {
+			return errUtils.Build(errUtils.ErrInvalidFlagValue).
+				WithExplanationf("`--max-changes` must be non-negative, got: %d", maxChanges).
+				WithHint("`0` disables the threshold check entirely (guaranteed to never fail); any positive value is compared against a computed change percentage that has no upper bound, so no positive value is a guaranteed bypass the way `0` is").
+				WithContext("flag", "max-changes").
+				WithContext("value", fmt.Sprintf("%d", maxChanges)).
+				WithExitCode(2).
+				Err()
+		}
 		// Only pre-resolve here when target is already the real, final
 		// target directory (i.e. it was given positionally). When target is
 		// "" the interactive flow still has to prompt for one -- see
@@ -218,6 +228,7 @@ If no target directory is specified, you will be prompted for one.`,
 			mergeStrategy:  mergeStrategy,
 			mergeDriver:    mergeDriver,
 			updateStrategy: updateStrategy,
+			maxChanges:     maxChanges,
 			skipHooks:      skipHooks,
 		})
 	},
@@ -240,6 +251,7 @@ type scaffoldGenerateOptions struct {
 	mergeStrategy  string
 	mergeDriver    string
 	updateStrategy string
+	maxChanges     int
 	skipHooks      func(string) bool
 }
 
@@ -296,6 +308,8 @@ func init() {
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
 		flags.WithStringFlag("update-strategy", "", "tracked", "Where --update's 3-way merge base comes from: tracked (the target's own git history at --base-ref, default), rendered (a pristine re-render of the template at the ref that produced what's currently on disk, using its recorded answers; requires a prior generation's scaffold.yaml record, no git dependency)"),
 		flags.WithValidValues("update-strategy", "tracked", "rendered"),
+		flags.WithIntFlag("max-changes", "", engine.DefaultMergeThreshold, "Maximum percentage of changed lines allowed in a 3-way merge during --update before failing; 0 disables this check entirely, no upper bound"),
+		flags.WithEnvVars("max-changes", "ATMOS_SCAFFOLD_MAX_CHANGES"),
 		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
 		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
 		// hooks for this invocation; --skip-hooks=name1,name2 skips only the
@@ -399,36 +413,12 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 		return err
 	}
 
-	conflictStrategy, err := merge.ResolveConflictStrategy(opts.mergeStrategy, opts.force, opts.update)
+	renderedBaseCleanup, err := configureScaffoldMergeSettings(scaffoldUI, opts, absTargetDir)
+	if renderedBaseCleanup != nil {
+		defer renderedBaseCleanup()
+	}
 	if err != nil {
 		return err
-	}
-	scaffoldUI.SetConflictStrategy(conflictStrategy)
-
-	mergeDriver, err := merge.ParseDriver(opts.mergeDriver)
-	if err != nil {
-		return err
-	}
-	scaffoldUI.SetMergeDriver(mergeDriver)
-
-	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
-	if err != nil {
-		return err
-	}
-	scaffoldUI.SetUpdateStrategy(updateStrategy)
-
-	// Only resolve here when target is already the real, final target
-	// directory (positional). The no-target interactive flow resolves this
-	// itself once the real directory is known -- see
-	// resolveInteractiveBaseRef, mirroring --base-ref's own split
-	// resolution above.
-	if opts.update && updateStrategy == engine.UpdateStrategyRendered && absTargetDir != "" {
-		renderedBase, err := source.ResolveRenderedBase(absTargetDir, opts.sourceOverride)
-		if err != nil {
-			return err
-		}
-		defer renderedBase.Cleanup()
-		scaffoldUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
 	}
 
 	// Select template (interactive or by name)
@@ -470,6 +460,56 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 
 	// Execute template generation.
 	return executeTemplateGeneration(&selectedConfig, absTargetDir, opts, scaffoldUI)
+}
+
+// configureScaffoldMergeSettings wires opts' merge-related settings onto
+// scaffoldUI before template selection/generation runs. SetMaxChanges is
+// called first because engine.Processor.SetMaxChanges replaces the
+// processor's merger wholesale, which would silently discard
+// SetConflictStrategy/SetMergeDriver if called after them (see
+// ScaffoldUI.SetMaxChanges's doc comment).
+//
+// Returns a cleanup func for the update-strategy=rendered old-ref source
+// fetch (see source.ResolveRenderedBase), non-nil only when one was made --
+// callers must nil-check before deferring it, and must still check it even
+// when err is non-nil, since the resolution itself can fail after making
+// the fetch.
+func configureScaffoldMergeSettings(scaffoldUI ScaffoldUI, opts *scaffoldGenerateOptions, absTargetDir string) (cleanup func(), err error) {
+	scaffoldUI.SetMaxChanges(opts.maxChanges)
+
+	conflictStrategy, err := merge.ResolveConflictStrategy(opts.mergeStrategy, opts.force, opts.update)
+	if err != nil {
+		return nil, err
+	}
+	scaffoldUI.SetConflictStrategy(conflictStrategy)
+
+	mergeDriver, err := merge.ParseDriver(opts.mergeDriver)
+	if err != nil {
+		return nil, err
+	}
+	scaffoldUI.SetMergeDriver(mergeDriver)
+
+	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if err != nil {
+		return nil, err
+	}
+	scaffoldUI.SetUpdateStrategy(updateStrategy)
+
+	// Only resolve here when target is already the real, final target
+	// directory (positional). The no-target interactive flow resolves this
+	// itself once the real directory is known -- see
+	// resolveInteractiveBaseRef, mirroring --base-ref's own split
+	// resolution above.
+	if opts.update && updateStrategy == engine.UpdateStrategyRendered && absTargetDir != "" {
+		renderedBase, err := source.ResolveRenderedBase(absTargetDir, opts.sourceOverride)
+		if err != nil {
+			return nil, err
+		}
+		scaffoldUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
+		return renderedBase.Cleanup, nil
+	}
+
+	return nil, nil
 }
 
 // selectGenerateTemplate selects the template for generation, refusing to
