@@ -1,0 +1,92 @@
+---
+slug: cloudformation-templated-policies-and-cross-account-outputs
+title: "Templated CloudFormation stack policies and account-safe output references"
+authors: [osterman]
+tags: [feature, experimental]
+---
+
+A CloudFormation stack policy usually differs by environment: production protects a database from
+replacement, while development lets everything update. Until now a stack policy had to be a static JSON file,
+so each environment needed its own copy. Multi-account setups have a related problem: a stack that reads
+another stack's outputs must read them from the account where that stack actually lives, even when an
+operator runs the command with a different identity.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos already renders an inline `template:` with stack configuration, so a template can use `{{ .vars.stage }}`
+or `!store` like any other stack value. A stack policy could only come from a file, and files are used exactly
+as written.
+
+Output references (`!aws.cloudformation.output` and `atmos.Component`) need a predictable identity. If a
+producer stack is deployed into a shared-services account through its own deployment target, a consumer in a
+workload account must read it from shared services. Reading it with whatever identity the operator passed on
+the command line can find a same-named stack in the wrong account and silently use its values.
+
+## The Fix
+
+Stack policies can now be written inline with `stack_policy.body`. The body is rendered by Atmos templates and
+YAML functions, the same as an inline `template:`, and is mutually exclusive with `stack_policy.file`.
+
+Output references now follow the producer's deployment target. When that target declares an identity, Atmos
+reads the outputs with it, whatever `--identity` the operator passed. A target without its own identity still
+uses the caller's credentials. The `describe component` and `describe stacks` commands resolve these
+references the same way a deployment does, so what you inspect is what you deploy.
+
+Misconfigured deployment targets now fail early instead of falling back silently. Unknown keys or typos in a
+target's `auth` block, a target that selects no identity, and a `region` on a direct-deploy target (region
+comes from `settings.aws_cloudformation.region`) are all reported with the target and component named.
+
+## How to Use It
+
+Put stack-specific content in an inline template and policy:
+
+```yaml
+components:
+  "aws/cloudformation":
+    database:
+      stack_name: "database-{{ .vars.stage }}"
+      template:
+        Resources:
+          Endpoint:
+            Type: AWS::SSM::Parameter
+            Properties:
+              Type: String
+              Value: "db.{{ .vars.stage }}.example.com"
+      stack_policy:
+        body:
+          Statement:
+            - Effect: Deny
+              Action: "Update:Replace"
+              Principal: "*"
+              Resource: "LogicalResourceId/Endpoint"
+            - Effect: Allow
+              Action: "Update:*"
+              Principal: "*"
+              Resource: "*"
+```
+
+Inline templates require `templates.settings.enabled: true`. CloudFormation dynamic references need one level
+of escaping so Atmos leaves them for CloudFormation: `'{{ "{{" }}resolve:ssm:/app/token}}'`.
+
+To pin where a producer's outputs are read, give its deployment target an identity:
+
+```yaml
+components:
+  "aws/cloudformation":
+    network:
+      provision:
+        targets:
+          default:
+            kind: aws/cloudformation
+            auth:
+              identity: shared-services/deployer
+```
+
+## Get Involved
+
+See the [CloudFormation component documentation](/stacks/components/aws-cloudformation) for templates, stack
+policies and deployment targets. This builds on [native CloudFormation stacks](/changelog/native-cloudformation-component)
+and [CloudFormation CI summaries](/changelog/cloudformation-ci-lifecycle). Share feedback in the
+[Atmos GitHub discussions](https://github.com/cloudposse/atmos/discussions).

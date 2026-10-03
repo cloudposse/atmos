@@ -72,6 +72,28 @@ Findings, by area:
   the generation blog post and roadmap entry; superseded note on
   `2026-10-02-cloudformation-generation-workdir-isolation.md`.
 
+- **Stack-introduced leftovers, fixed in this PR.** `describe affected` no longer silently skips SOPS files
+  chosen by a selector: without credentials it falls back to the SOPS provider's configured locations and logs
+  a warning naming the component and declaration. The CloudFormation help casts were regenerated. `-i` was not
+  added to `source list/describe/delete`: those verbs never authenticate, so the flag would be a no-op.
+- **Pre-existing bugs fixed at the maintainer's request.** `--query` results keep their types (account IDs
+  such as `068007702576` no longer become floats; unquoted leading-zero digit strings load as strings), and a
+  top-level string result prints raw for shell capture while JSON stays quoted. A manifest with `locals:` and
+  `atmos.Component` no longer recurses forever: load-time rendering defers `atmos.Component` to the
+  per-component render, and genuine cycles report `ErrCircularDependency`.
+- **Intended behavior documented.** YAML functions inside `!include`d files are not evaluated; the
+  `!include` page now says so.
+- **Process.** The fix-log skill now triages follow-ups by origin: fix what the PR or stack introduced, ask per
+  item about pre-existing bugs, document intended behavior.
+- **Release docs.** New changelog post `cloudformation-templated-policies-and-cross-account-outputs` and a
+  linked roadmap milestone.
+
+- **`describe component` names the missing producer.** Type auto-detection first checks which
+  `components.<type>` sections of the merged stack define the component (no template, YAML-function or auth
+  evaluation), then processes only that type, so a consumer whose producer is missing reports the producer
+  instead of claiming the consumer does not exist. A name defined under two types is now a duplicate error
+  rather than silently resolving to Terraform.
+
 ## Validation
 
 - `go build ./...` passed on the integrated tree.
@@ -98,12 +120,4 @@ Findings, by area:
 
 ## Follow-ups
 
-Issues are not yet opened (pending maintainer approval); each needs a number before merge:
-
-- Regenerate `atmos-aws-cloudformation--help`, `-render--help` and `-apply--help` casts.
-- `detectComponentType` (`internal/exec/describe_component.go`) treats a nested `ErrInvalidComponent` as
-  "component not found", misreporting a missing producer as a missing consumer.
-- `describe affected` skips selector-backed SOPS files (`Service.FileDependencies()` has no evaluator).
-- `-i` is not registered on `source list/describe/delete`.
-- Pre-existing, outside CloudFormation: `locals:` plus `atmos.Component` in one file recurses forever;
-  YAML tags inside `!include`d files are dropped; `--query` renders account IDs as floats.
+None.

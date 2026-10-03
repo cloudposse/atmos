@@ -60,6 +60,28 @@ With `!include` it's possible to import multiple different file formats into Atm
     (e.g., `.json`) or save the content to a local file with the correct extension first.
 </Note>
 
+### Included Content Is Data
+
+`!include` inserts the parsed content of a file as plain data. YAML functions inside an included YAML file are
+not evaluated: the tag is dropped and its argument remains as a string. This is intended behavior.
+
+```yaml title="stacks/catalog/settings.yaml"
+home: !env HOME     # Included as the string "HOME", not the environment value.
+region: us-east-2
+```
+
+```yaml title="stacks/deploy/dev.yaml"
+components:
+  terraform:
+    app:
+      vars:
+        settings: !include stacks/catalog/settings.yaml
+        home: !env HOME   # Evaluated: YAML functions work in the manifest itself.
+```
+
+To compute a value, put the YAML function in the stack manifest rather than in the included file, or use
+[imports](/stacks/imports), whose manifests are processed with YAML functions and templates.
+
 ### URL Query Strings and Fragments
 
 When including files from URLs with query strings or fragments, the extension detection ignores these URL components:

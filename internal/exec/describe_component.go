@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component/typedetect"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/deferred"
@@ -511,6 +512,20 @@ func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.Con
 	return result, err
 }
 
+// autoDetectComponentTypes lists the component types considered, in order, when the caller
+// does not name one.
+var autoDetectComponentTypes = []string{
+	cfg.TerraformComponentType,
+	cfg.HelmfileComponentType,
+	cfg.PackerComponentType,
+	cfg.AnsibleComponentType,
+	cfg.ContainerComponentType,
+	cfg.EmulatorComponentType,
+	cfg.KubernetesComponentType,
+	cfg.HelmComponentType,
+	cfg.CloudFormationComponentType,
+}
+
 // detectComponentType tries to detect component type (Terraform, Helmfile, Packer, Ansible, Kubernetes, or custom).
 func detectComponentType(
 	atmosConfig *schema.AtmosConfiguration,
@@ -535,21 +550,29 @@ func detectComponentType(
 		return tryProcessWithComponentType(&baseParams)
 	}
 
-	// Auto-detect the component type by trying each in order; the first type whose
-	// section contains the component wins. A non "component not found" error (e.g.
-	// invalid HCL) is reported immediately rather than masked as "component not
-	// found" by trying the remaining types (see issue #1864).
-	componentTypes := []string{
-		cfg.TerraformComponentType,
-		cfg.HelmfileComponentType,
-		cfg.PackerComponentType,
-		cfg.AnsibleComponentType,
-		cfg.ContainerComponentType,
-		cfg.EmulatorComponentType,
-		cfg.KubernetesComponentType,
-		cfg.HelmComponentType,
-		cfg.CloudFormationComponentType,
+	// Auto-detect the component type. Presence is decided first, from the merged stack
+	// manifests alone, so the component is then processed exactly once under the one type
+	// that defines it. This keeps an error raised while evaluating the component (for
+	// example a YAML function referencing a missing producer) from being mistaken for
+	// "component not found in this type" and reported against the wrong component.
+	if baseParams.configAndStacksInfo.ComponentFromArg != "" && baseParams.configAndStacksInfo.Stack != "" {
+		probe := newManifestPresenceProbe(atmosConfig, &baseParams.configAndStacksInfo, params.AuthManager)
+		detected, err := typedetect.Resolve(params.Component, params.Stack, autoDetectComponentTypes, probe)
+		if err != nil {
+			return baseParams.configAndStacksInfo, err
+		}
+		if detected != "" {
+			baseParams.componentType = detected
+			return tryProcessWithComponentType(&baseParams)
+		}
 	}
+
+	// No type defines the component (or detection preconditions are unmet): try each type in
+	// order so the existing "component not found" error is reported unchanged. The first type
+	// whose section contains the component wins. A non "component not found" error (e.g.
+	// invalid HCL) is reported immediately rather than masked as "component not found" by
+	// trying the remaining types (see issue #1864).
+	componentTypes := autoDetectComponentTypes
 
 	var result schema.ConfigAndStacksInfo
 	var err error

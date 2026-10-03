@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -1182,6 +1183,265 @@ func TestExtractImportsList(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := extractImportsList(tt.input)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// writeComponentTypeDetectionFixture writes a stack-only fixture into a temp dir, points
+// ATMOS_CLI_CONFIG_PATH at it and changes into it. The fixture needs no cloud access: the
+// consumer components reference producers that are intentionally absent from the stack.
+func writeComponentTypeDetectionFixture(t *testing.T, stackYAML string) {
+	t.Helper()
+
+	dir := t.TempDir()
+	atmosYAML := `base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_template: "{{ .vars.stage }}"
+templates:
+  settings:
+    enabled: true
+    gomplate:
+      enabled: true
+logs:
+  level: Info
+`
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(stackYAML), 0o644))
+
+	t.Chdir(dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+}
+
+// TestDescribeComponent_MissingProducerReportsProducer verifies that a consumer whose YAML
+// functions or templates reference a producer that does not exist reports the producer as
+// the missing component, never the consumer that does exist in the stack.
+func TestDescribeComponent_MissingProducerReportsProducer(t *testing.T) {
+	const stackYAML = `vars:
+  stage: dev
+components:
+  terraform:
+    consumer-tf-output:
+      vars:
+        value: !terraform.output missing-producer dev out
+    consumer-tf-template:
+      vars:
+        value: '{{ (atmos.Component "missing-producer" "dev").outputs.out }}'
+    consumer-tf-cfn-output:
+      vars:
+        value: !aws.cloudformation.output missing-producer dev Out
+  helmfile:
+    consumer-hf-cfn-output:
+      vars:
+        value: !aws.cloudformation.output missing-producer dev Out
+  aws/cloudformation:
+    consumer-cfn-output:
+      path: template.yaml
+      stack_name: consumer
+      vars:
+        value: !aws.cloudformation.output missing-producer dev Out
+`
+	tests := []struct {
+		name      string
+		component string
+	}{
+		{name: "terraform consumer with !terraform.output", component: "consumer-tf-output"},
+		{name: "terraform consumer with atmos.Component template", component: "consumer-tf-template"},
+		{name: "terraform consumer with !aws.cloudformation.output", component: "consumer-tf-cfn-output"},
+		{name: "helmfile consumer with !aws.cloudformation.output", component: "consumer-hf-cfn-output"},
+		{name: "cloudformation consumer with !aws.cloudformation.output", component: "consumer-cfn-output"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writeComponentTypeDetectionFixture(t, stackYAML)
+
+			_, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+				Component:            tt.component,
+				Stack:                "dev",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "missing-producer", "the producer must be named")
+			assert.NotContains(t, err.Error(), "`"+tt.component+"`", "the existing consumer must not be reported as missing")
+		})
+	}
+}
+
+// TestDescribeComponent_AutoDetectsEachComponentType verifies that a component is found under
+// whichever component type defines it when the caller does not name the type.
+func TestDescribeComponent_AutoDetectsEachComponentType(t *testing.T) {
+	const stackYAML = `vars:
+  stage: dev
+components:
+  terraform:
+    app-terraform:
+      vars: {}
+  helmfile:
+    app-helmfile:
+      vars: {}
+  packer:
+    app-packer:
+      vars: {}
+  ansible:
+    app-ansible:
+      vars: {}
+  container:
+    app-container:
+      vars: {}
+  emulator:
+    app-emulator:
+      vars: {}
+  kubernetes:
+    app-kubernetes:
+      vars: {}
+  helm:
+    app-helm:
+      vars: {}
+  aws/cloudformation:
+    app-cloudformation:
+      path: template.yaml
+      stack_name: app
+      vars: {}
+`
+	tests := []struct {
+		componentType string
+	}{
+		{componentType: cfg.TerraformComponentType},
+		{componentType: cfg.HelmfileComponentType},
+		{componentType: cfg.PackerComponentType},
+		{componentType: cfg.AnsibleComponentType},
+		{componentType: cfg.ContainerComponentType},
+		{componentType: cfg.EmulatorComponentType},
+		{componentType: cfg.KubernetesComponentType},
+		{componentType: cfg.HelmComponentType},
+		{componentType: cfg.CloudFormationComponentType},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.componentType, func(t *testing.T) {
+			writeComponentTypeDetectionFixture(t, stackYAML)
+
+			result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+				Component: "app-" + strings.TrimPrefix(tt.componentType, "aws/"),
+				Stack:     "dev",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tt.componentType, result.ComponentSection[cfg.ComponentTypeSectionName])
+			assert.Equal(t, "dev", result.ComponentSection["stack"])
+		})
+	}
+}
+
+// TestDescribeComponent_AutoDetectErrors verifies the errors reported by component type
+// auto-detection when no type, or more than one type, defines the component.
+func TestDescribeComponent_AutoDetectErrors(t *testing.T) {
+	const stackYAML = `vars:
+  stage: dev
+components:
+  terraform:
+    shared-name:
+      vars: {}
+  helmfile:
+    shared-name:
+      vars: {}
+`
+	tests := []struct {
+		name        string
+		component   string
+		stack       string
+		wantErr     error
+		wantMessage string
+	}{
+		{
+			name:        "component defined in no type is not found",
+			component:   "nope",
+			stack:       "dev",
+			wantErr:     errUtils.ErrInvalidComponent,
+			wantMessage: "Could not find the component `nope` in the stack `dev`",
+		},
+		{
+			name:        "component in a missing stack is not found",
+			component:   "shared-name",
+			stack:       "prod",
+			wantErr:     errUtils.ErrInvalidComponent,
+			wantMessage: "Could not find the component `shared-name` in the stack `prod`",
+		},
+		{
+			name:        "component defined under two types is a duplicate",
+			component:   "shared-name",
+			stack:       "dev",
+			wantErr:     errUtils.ErrDuplicateComponentConfig,
+			wantMessage: "terraform, helmfile",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writeComponentTypeDetectionFixture(t, stackYAML)
+
+			_, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+				Component: tt.component,
+				Stack:     tt.stack,
+			})
+			require.ErrorIs(t, err, tt.wantErr)
+			assert.Contains(t, err.Error(), tt.wantMessage)
+		})
+	}
+}
+
+// TestDescribeComponent_AutoDetectKeysOnStackComponentName verifies that detection is by the
+// component's key in the stack, so abstract components, components inheriting through
+// metadata.component and keys that differ from their directory still resolve.
+func TestDescribeComponent_AutoDetectKeysOnStackComponentName(t *testing.T) {
+	const stackYAML = `vars:
+  stage: dev
+components:
+  terraform:
+    base:
+      metadata:
+        type: abstract
+        component: vpc
+      vars: {}
+    child:
+      metadata:
+        inherits:
+          - base
+      vars: {}
+    disabled:
+      metadata:
+        enabled: false
+        component: vpc
+      vars: {}
+`
+	tests := []struct {
+		name          string
+		component     string
+		wantComponent string
+	}{
+		{name: "abstract component", component: "base", wantComponent: "vpc"},
+		{name: "component inheriting an abstract base", component: "child", wantComponent: "child"},
+		{name: "disabled component", component: "disabled", wantComponent: "vpc"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writeComponentTypeDetectionFixture(t, stackYAML)
+
+			result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+				Component: tt.component,
+				Stack:     "dev",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, cfg.TerraformComponentType, result.ComponentSection[cfg.ComponentTypeSectionName])
+			assert.Equal(t, tt.wantComponent, result.ComponentSection[cfg.ComponentSectionName])
 		})
 	}
 }

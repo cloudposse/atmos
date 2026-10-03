@@ -20,10 +20,12 @@ import (
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfgpkg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	atmostmpl "github.com/cloudposse/atmos/pkg/template"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -60,19 +62,75 @@ func ProcessTmpl(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmpl")()
 
+	return processTmpl(atmosConfig, tmplInput{name: tmplName, value: tmplValue, data: tmplData, ignoreMissing: ignoreMissingTemplateValues})
+}
+
+// tmplInput describes a template to render with processTmpl.
+type tmplInput struct {
+	name          string
+	value         string
+	data          any
+	ignoreMissing bool
+	// manifestLoadFile is set while a stack manifest (or a section of it) is rendered during stack
+	// loading. atmos.Component then must not describe the target component: that loads every stack
+	// manifest again, including the one being rendered, and recursed without limit. Plain
+	// atmos.Component actions are left as template text for the later per-component render; other
+	// forms fail with ErrComponentFuncDuringManifestLoad.
+	manifestLoadFile string
+}
+
+// manifestLoadOnlyContextKeys returns the top-level keys of the manifest-load template context that
+// the later per-component render does not have: file-scoped `locals` and import `context` values.
+// The `vars`, `settings` and `env` sections are excluded because the component sections provide them.
+func manifestLoadOnlyContextKeys(tmplData any) []string {
+	ctxMap, ok := tmplData.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	keys := make([]string, 0, len(ctxMap))
+	for key := range ctxMap {
+		switch key {
+		case cfgpkg.VarsSectionName, cfgpkg.SettingsSectionName, cfgpkg.EnvSectionName:
+			continue
+		}
+		keys = append(keys, key)
+	}
+
+	return keys
+}
+
+// processTmpl parses and executes Go templates. A non-empty in.manifestLoadFile selects the
+// manifest-load behavior.
+func processTmpl(atmosConfig *schema.AtmosConfiguration, in tmplInput) (string, error) {
 	d := data.Data{}
 	ctx := context.TODO()
 
 	// Add Gomplate, Sprig and Atmos template functions.
-	cfg := atmosConfig
-	if cfg == nil {
-		cfg = &schema.AtmosConfiguration{}
+	tmplConfig := atmosConfig
+	if tmplConfig == nil {
+		tmplConfig = &schema.AtmosConfiguration{}
 	}
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
+	var atmosFuncMap template.FuncMap
+	if in.manifestLoadFile != "" {
+		atmosFuncMap = manifestLoadFuncMap(tmplConfig, &schema.ConfigAndStacksInfo{}, ctx, &d, in.manifestLoadFile)
+	} else {
+		atmosFuncMap = FuncMap(tmplConfig, &schema.ConfigAndStacksInfo{}, ctx, &d)
+	}
+	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), atmosFuncMap)
 
-	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
+	t, err := template.New(in.name).Funcs(funcs).Parse(in.value)
 	if err != nil {
 		return "", err
+	}
+
+	// While stack manifests are loading, leave atmos.Component actions as template text for the
+	// later per-component render (which runs after all manifests are loaded) and render the rest
+	// of the manifest now. `locals` and import context values exist only in this pass, so
+	// they are resolved inside the deferred actions. Actions that cannot be deferred fail with
+	// ErrComponentFuncDuringManifestLoad.
+	if in.manifestLoadFile != "" {
+		atmostmpl.DeferCalls(t.Tree, "atmos", "Component", in.data, manifestLoadOnlyContextKeys(in.data)...)
 	}
 
 	// Control the behavior during execution if a map is indexed with a key that is not present in the map.
@@ -82,14 +140,14 @@ func ProcessTmpl(
 
 	option := "missingkey=error"
 
-	if ignoreMissingTemplateValues {
+	if in.ignoreMissing {
 		option = "missingkey=default"
 	}
 
 	t.Option(option)
 
 	var res bytes.Buffer
-	err = t.Execute(&res, tmplData)
+	err = t.Execute(&res, in.data)
 	if err != nil {
 		return "", err
 	}
