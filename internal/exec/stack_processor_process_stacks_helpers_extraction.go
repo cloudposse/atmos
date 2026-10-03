@@ -456,7 +456,6 @@ func extractCloudFormationComponentSection(componentMap map[string]any) map[stri
 	return bag
 }
 
-// supportsComponentHooks identifies component types whose lifecycle executes configured hooks.
 func supportsComponentHooks(componentType string) bool {
 	return componentType == cfg.TerraformComponentType ||
 		componentType == cfg.KubernetesComponentType ||
@@ -465,10 +464,8 @@ func supportsComponentHooks(componentType string) bool {
 		componentType == cfg.CloudFormationComponentType
 }
 
-// supportsGenerate identifies component types that preserve generated-file definitions during stack processing.
 func supportsGenerate(componentType string) bool {
-	return componentType == cfg.CloudFormationComponentType ||
-		componentType == cfg.TerraformComponentType ||
+	return componentType == cfg.TerraformComponentType ||
 		componentType == cfg.KubernetesComponentType ||
 		componentType == cfg.HelmComponentType
 }
@@ -480,7 +477,6 @@ func supportsPlugins(componentType string) bool {
 	return componentType == cfg.HelmComponentType || componentType == cfg.HelmfileComponentType
 }
 
-// supportsSourceProvision identifies component types that support automatic source provisioning.
 func supportsSourceProvision(componentType string) bool {
 	switch componentType {
 	case cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType, cfg.KubernetesComponentType, cfg.HelmComponentType, cfg.CloudFormationComponentType:

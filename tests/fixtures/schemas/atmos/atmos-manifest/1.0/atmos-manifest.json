@@ -1172,13 +1172,29 @@
               "$ref": "#/definitions/component"
             },
             "template": {
-              "type": "string"
+              "description": "Inline CloudFormation template body: a YAML/JSON string, or a structured map. Mutually exclusive with 'path'.",
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "minProperties": 1
+                }
+              ]
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Path to the CloudFormation template file, relative to the component's base path. Mutually exclusive with 'template'."
             },
             "stack_name": {
               "type": "string"
             },
             "parameters": {
-              "type": "object"
+              "description": "Template parameters: a map of name to value, or a list of {ParameterKey, ParameterValue} entries.",
+              "type": ["object", "array"]
             },
             "capabilities": {
               "type": "array",
@@ -1195,9 +1211,21 @@
             "stack_policy": {
               "type": "object",
               "additionalProperties": false,
+              "description": "Stack policy: 'file' (path relative to the component's base path) or inline 'body'. 'file' and 'body' are mutually exclusive.",
               "properties": {
                 "file": {
                   "type": "string"
+                },
+                "body": {
+                  "description": "Inline stack policy: a JSON string, or a structured map serialized to JSON. Mutually exclusive with 'file'.",
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object"
+                    }
+                  ]
                 }
               }
             },

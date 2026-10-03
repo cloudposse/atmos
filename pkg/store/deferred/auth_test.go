@@ -1,6 +1,7 @@
 package deferred
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -179,4 +180,69 @@ func TestResolveStoreAuthUsesOriginalRequest(t *testing.T) {
 			assert.False(t, ac.Auth.Identities["requested"].Default)
 		})
 	}
+}
+
+// TestResolveStoreAuthWarnsWhenDisabledBypassesPinnedIdentity documents the `--identity=false`
+// decision: Atmos authentication is disabled globally, so a store pinned to an explicit identity
+// uses ambient credentials. That is announced once per store (naming the bypassed identity) instead
+// of happening silently, and only for stores that actually pin an identity.
+func TestResolveStoreAuthWarnsWhenDisabledBypassesPinnedIdentity(t *testing.T) {
+	var warnings []string
+	orig := warnFn
+	warnFn = func(format string, args ...any) { warnings = append(warnings, fmt.Sprintf(format, args...)) }
+	t.Cleanup(func() { warnFn = orig })
+	pinnedIdentityWarned.Clear()
+	t.Cleanup(pinnedIdentityWarned.Clear)
+
+	build := func(t *testing.T, pinned string) *schema.AtmosConfiguration {
+		t.Helper()
+		s, err := providers.NewSSMStore(providers.SSMStoreOptions{Region: "us-east-1"}, "")
+		require.NoError(t, err)
+		return &schema.AtmosConfiguration{
+			Stores:       store.StoreRegistry{"remote": s},
+			StoresConfig: store.StoresConfig{"remote": {Identity: pinned}},
+			AuthManager:  authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true}),
+		}
+	}
+
+	t.Run("pinned store warns once", func(t *testing.T) {
+		warnings = nil
+		ac := build(t, "prod-admin")
+		for range 3 {
+			require.NoError(t, resolveStoreAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev"}, "remote"))
+		}
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "`remote`")
+		assert.Contains(t, warnings[0], "`prod-admin`")
+		assert.Contains(t, warnings[0], "--identity=false")
+	})
+
+	t.Run("unpinned store does not warn", func(t *testing.T) {
+		warnings = nil
+		ac := build(t, "")
+		require.NoError(t, resolveStoreAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev"}, "remote"))
+		assert.Empty(t, warnings)
+	})
+
+	t.Run("component-level disable also warns", func(t *testing.T) {
+		warnings = nil
+		pinnedIdentityWarned.Clear()
+		ac := build(t, "prod-admin")
+		ac.AuthManager = authdeferred.NewManager(authdeferred.AuthOptions{Factory: authdeferred.NewMockAuthFactory(gomock.NewController(t))})
+		require.NoError(t, resolveStoreAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev", AuthDisabled: true}, "remote"))
+		assert.Len(t, warnings, 1)
+	})
+
+	t.Run("enabled authentication never warns", func(t *testing.T) {
+		warnings = nil
+		pinnedIdentityWarned.Clear()
+		ctrl := gomock.NewController(t)
+		factory := authdeferred.NewMockAuthFactory(ctrl)
+		factory.EXPECT().Create(gomock.Any(), gomock.Any(), "dev").Return(nil, nil)
+		ac := build(t, "prod-admin")
+		ac.Auth = schema.AuthConfig{Identities: map[string]schema.Identity{"prod-admin": {Kind: "aws/user"}}}
+		ac.AuthManager = authdeferred.NewManager(authdeferred.AuthOptions{Factory: factory})
+		require.NoError(t, resolveStoreAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev"}, "remote"))
+		assert.Empty(t, warnings)
+	})
 }
