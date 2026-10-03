@@ -71,6 +71,21 @@ type MergeResult struct {
 func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	defer perf.Track(nil, "merge.TextMerger.Merge")()
 
+	// base/theirs are frequently sourced from a fresh git clone of the
+	// template (e.g. --update-strategy=rendered, or any initial fetch),
+	// which on a checkout with core.autocrlf=true (the default Git-for-Windows
+	// install option) rewrites committed LF line endings to CRLF. ours is the
+	// user's own file on disk, untouched by that checkout, and keeps whatever
+	// style it already had. Left unnormalized, that mismatch makes every
+	// untouched line look changed, inflating calculateChangePercentage far
+	// past the real edit size -- so normalize all three to LF before diffing,
+	// then restore ours' original style on the result, conflict markers
+	// included.
+	oursHadCRLF := strings.Contains(ours, "\r\n")
+	base = normalizeLineEndings(base)
+	ours = normalizeLineEndings(ours)
+	theirs = normalizeLineEndings(theirs)
+
 	// Perform the 3-way merge using diff3.
 	// Parameter order: (mine/ours, original/base, yours/theirs).
 	//
@@ -129,12 +144,29 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 		}
 	}
 
+	// Restore ours' original CRLF style even when a manual conflict remains:
+	// ours' own unconflicted lines would otherwise silently flatten to LF in
+	// the written-out file. This also expands diff3's own marker lines
+	// ("<<<<<<< Ours", "=======", ">>>>>>> Theirs") to CRLF, so
+	// HasUnresolvedConflictMarkers trims the restored trailing "\r" before
+	// comparing.
+	if oursHadCRLF {
+		mergedContent = strings.ReplaceAll(mergedContent, newlineSeparator, "\r\n")
+	}
+
 	return &MergeResult{
 		Content:       mergedContent,
 		HasConflicts:  hasConflicts,
 		HasMarkers:    hasConflicts,
 		ConflictCount: conflictCount,
 	}, nil
+}
+
+// normalizeLineEndings collapses CRLF to LF. This lets content from a git
+// checkout be compared against a file written directly to disk without
+// line-ending noise.
+func normalizeLineEndings(s string) string {
+	return strings.ReplaceAll(s, "\r\n", newlineSeparator)
 }
 
 // applyConflictStrategy auto-resolves every conflict block to the chosen
@@ -288,7 +320,10 @@ func HasUnresolvedConflictMarkers(content string) bool {
 
 	sawOurs, sawSeparator := false, false
 	for _, line := range strings.Split(content, newlineSeparator) {
-		trimmed := strings.TrimLeft(line, " ")
+		// TrimRight the "\r" too: TextMerger's CRLF-restoration path expands
+		// every line (including the bare marker lines) to CRLF, so a line
+		// split on "\n" alone leaves a trailing "\r" here.
+		trimmed := strings.TrimRight(strings.TrimLeft(line, " "), "\r")
 		switch {
 		case !sawOurs:
 			// Exact match: both TextMerger (via diff3's "<<<<<<< %s" label
