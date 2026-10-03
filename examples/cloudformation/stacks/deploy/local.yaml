@@ -3,7 +3,6 @@
 import:
   - catalog/emulator/aws
   - catalog/demo
-  - catalog/demo-generated
 
 vars:
   stage: local
@@ -19,8 +18,5 @@ components:
         type: real
         tags: ["group-b"]
     demo-inline:
-      metadata:
-        type: real
-    demo-generated:
       metadata:
         type: real

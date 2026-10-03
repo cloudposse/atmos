@@ -16,7 +16,8 @@ func TestService_SopsPlacements(t *testing.T) {
 	cfg, section, file := newSopsServiceConfig(t, true)
 	svc := NewService(cfg, "dev", "api", section)
 
-	placements := svc.SopsPlacements()
+	placements, err := svc.SopsPlacements()
+	require.NoError(t, err)
 	require.Len(t, placements, 2, "both SOPS-backed secrets produce a placement")
 	for _, p := range placements {
 		assert.Equal(t, file, p.File)
@@ -36,7 +37,9 @@ func TestService_SopsPlacements_SkipsStoreBacked(t *testing.T) {
 	cfg, section := serviceTestConfig(store.NewMockStore(ctrl))
 	svc := NewService(cfg, "prod", "api", section)
 
-	assert.Empty(t, svc.SopsPlacements(), "store-backed secrets are not SOPS placements")
+	placements, err := svc.SopsPlacements()
+	require.NoError(t, err)
+	assert.Empty(t, placements, "store-backed secrets are not SOPS placements")
 }
 
 // TestDetectSopsCollisions_EmptyAndSingle proves the trivial inputs (no placements, one placement)

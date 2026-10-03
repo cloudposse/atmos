@@ -1,6 +1,8 @@
 package secrets
 
 import (
+	"fmt"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/secrets/providers"
 )
@@ -51,6 +53,20 @@ type Declaration struct {
 	// during stack processing (top-level `secrets:` → stack; component `secrets:` → instance) and
 	// stamped onto the declaration; an empty Scope is treated as ScopeInstance.
 	Scope Scope
+	// PositionScope is the position-derived scope recorded when an explicit `scope` was a template
+	// or YAML function validated only after rendering. Empty otherwise; see ScopeConflict.
+	PositionScope Scope
+}
+
+// ScopeConflict returns ErrScopeConflict when a rendered explicit scope violates the one-way rule
+// against the declaration's position (an instance-declared secret can never be stack-scoped, and a
+// stack-level declaration can't be instance-scoped; `global` is exempt). It is nil when the scope was
+// validated during stack processing (PositionScope empty) or is consistent.
+func (d *Declaration) ScopeConflict() error { //nolint:lintroller // trivial pure check; perf.Track overhead is unwarranted.
+	if d.PositionScope == "" || d.Scope == d.PositionScope || d.Scope == ScopeGlobal {
+		return nil
+	}
+	return fmt.Errorf("%w: secret %q declares scope %q but its position implies %q", ErrScopeConflict, d.Name, d.Scope, d.PositionScope)
 }
 
 // IsStackScoped reports whether the declaration is stored once per stack (shared by all instances).
@@ -69,6 +85,11 @@ type Status struct {
 	// checked, but remote stores are reported as Unknown unless `--verify` is passed. When Unknown
 	// is true, Initialized is meaningless.
 	Unknown bool
+	// Unresolved is true when the declaration's backend is a YAML-function selector that was not
+	// evaluated (credential-free listing). It implies Unknown; Reason explains how to resolve it.
+	Unresolved bool
+	// Reason is a human-readable explanation for an Unknown or errored status (empty otherwise).
+	Reason string
 	// Err holds any error encountered while checking status (e.g. access denied).
 	Err error
 }

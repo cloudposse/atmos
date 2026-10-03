@@ -323,16 +323,16 @@ components:
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "dev.yaml"), []byte(manifest), 0o644))
 	t.Chdir(dir)
 	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
-	require.NoError(t, checkStackSopsCollisions("dev"))
+	require.NoError(t, checkStackSopsCollisions(secretScope{Stack: "dev"}))
 	svc, err := loadService(secretScope{Stack: "dev", Component: "vpc"})
 	require.NoError(t, err)
 	require.True(t, svc.IsDeclared("TOKEN"))
 	require.Equal(t, "vault", svc.Declarations()[0].BackendName)
 }
 
-// TestSecretBackendSelectorsResolveCloudFormationOutputs verifies authenticated
-// declaration loading resolves both backend selectors, while listing remains
-// credential-free and unrelated component outputs are never fetched.
+// TestSecretBackendSelectorsResolveCloudFormationOutputs verifies the authenticated service resolves
+// both backend selectors lazily for the declarations used, while listing remains credential-free and
+// unrelated component outputs are never fetched.
 func TestSecretBackendSelectorsResolveCloudFormationOutputs(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -391,17 +391,20 @@ components:
 	loaded, err := loadService(scope)
 	require.NoError(t, err)
 	require.Len(t, loaded.Declarations(), 2)
-	for _, declaration := range loaded.Declarations() {
-		switch declaration.Name {
-		case "API_KEY":
-			assert.Equal(t, "resolved-store", declaration.BackendName)
-		case "SOPS_KEY":
-			assert.Equal(t, "resolved-sops", declaration.BackendName)
-		default:
-			t.Errorf("unexpected declaration %q", declaration.Name)
-		}
-	}
-	assert.Positive(t, requests.Load(), "authenticated loading must resolve selectors through CloudFormation")
+	assert.Zero(t, requests.Load(), "loading must not evaluate selectors for declarations no command uses")
+
+	// Selectors resolve lazily, per declaration actually used. The resolved names are not configured
+	// in this project, so each lookup fails on the resolved name (not on the raw selector text), which
+	// proves the CloudFormation output was read and substituted.
+	_, err = loaded.Get("API_KEY", secrets.ResolveOptions{})
+	require.ErrorIs(t, err, secrets.ErrStoreNotFound)
+	assert.Contains(t, err.Error(), `"resolved-store"`)
+	assert.Equal(t, int32(1), requests.Load(), "only the used declaration is resolved")
+
+	_, err = loaded.Get("SOPS_KEY", secrets.ResolveOptions{})
+	require.ErrorIs(t, err, secrets.ErrProviderNotFound)
+	assert.Contains(t, err.Error(), `"resolved-sops"`)
+	assert.Equal(t, int32(2), requests.Load())
 }
 
 // TestSecretDeclarationFieldsAndProvidersPreserved covers supported fields and

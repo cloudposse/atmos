@@ -2199,20 +2199,6 @@
     },
     "AwsCloudFormation": {
       "properties": {
-        "auto_generate_files": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/yamlFunction"
-            }
-          ],
-          "description": "AutoGenerateFiles enables generate blocks in isolated component workdirs."
-        },
         "base_path": {
           "anyOf": [
             {
@@ -9684,6 +9670,17 @@
             }
           ],
           "description": "File is the path to the stack policy JSON document, relative to the component's base path."
+        },
+        "body": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "description": "Body is an inline stack policy document, either a JSON string or a map serialized to JSON.\nIt is mutually exclusive with File and needs no component directory."
         }
       },
       "type": "object",

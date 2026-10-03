@@ -1709,40 +1709,59 @@ var (
 	ErrHelmReleaseOperation          = errors.New("failed to perform helm release operation")
 
 	// Native aws/cloudformation component errors.
-	ErrMissingAwsCloudFormationTemplate                   = errors.New("aws/cloudformation component is missing a template: set 'template' (inline body) or 'path' (file reference)")
-	ErrMissingAwsCloudFormationStackName                  = errors.New("aws/cloudformation component is missing a 'stack_name'")
-	ErrInvalidAwsCloudFormationCapabilities               = errors.New("invalid aws/cloudformation capabilities")
-	ErrInvalidAwsCloudFormationSettings                   = errors.New("invalid aws/cloudformation settings")
-	ErrInvalidComponentsAwsCloudFormation                 = errors.New("invalid 'components.aws/cloudformation' section")
-	ErrInvalidSpecificAwsCloudFormationComponent          = errors.New("invalid aws/cloudformation component configuration")
-	ErrAwsCloudFormationChangeSetFailed                   = errors.New("aws/cloudformation changeset failed")
-	ErrAwsCloudFormationChangeSetNotFound                 = errors.New("aws/cloudformation changeset not found")
-	ErrAwsCloudFormationDriftDetected                     = errors.New("aws/cloudformation stack has drifted")
-	ErrAwsCloudFormationFlagsMutuallyExclusive            = errors.New("--all and --affected are mutually exclusive")
-	ErrAwsCloudFormationComponentArgWithSelection         = errors.New("component argument cannot be used with --all, --affected, --tags, or --labels")
-	ErrAwsCloudFormationComponentArgRequired              = errors.New("requires exactly one component argument unless --all, --affected, --tags, or --labels is set")
-	ErrAwsCloudFormationIdentityResolutionFailed          = errors.New("aws/cloudformation component requested an identity, but the auth manager could not resolve it")
-	ErrAwsCloudFormationAPICallFailed                     = errors.New("aws/cloudformation API call failed")
-	ErrAwsCloudFormationFmtNotClean                       = errors.New("aws/cloudformation template is not formatted")
-	ErrAwsCloudFormationFmtWriteFailed                    = errors.New("aws/cloudformation failed to write formatted template")
-	ErrAwsCloudFormationStackNotFound                     = errors.New("aws/cloudformation stack not found")
-	ErrAwsCloudFormationStackSetFailed                    = errors.New("aws/cloudformation stackset operation failed")
-	ErrAwsCloudFormationLogsFollowChartExclusive          = errors.New("--follow and --chart are mutually exclusive")
-	ErrAwsCloudFormationOperationFailed                   = errors.New("aws/cloudformation operation did not complete successfully")
-	ErrAwsCloudFormationBackendMissing                    = errors.New("aws/cloudformation packaging bucket does not exist")
-	ErrAwsCloudFormationIncludeDependentsRequiresAffected = errors.New("--include-dependents requires --affected")
-	ErrAwsCloudFormationTemplateAndPathMutuallyExclusive  = errors.New("'template' and 'path' are mutually exclusive: 'template' is an inline template body, 'path' is a file reference")
-	ErrAwsCloudFormationFmtRequiresPath                   = errors.New("aws/cloudformation fmt only applies to file-based templates ('path:'); inline 'template:' bodies have no file to format in place")
-	ErrAwsCloudFormationTemplateMissingResources          = errors.New("aws/cloudformation inline template is missing a top-level 'Resources' section")
-	ErrInvalidAwsCloudFormationParameters                 = errors.New("invalid aws/cloudformation parameters")
-	ErrAwsCloudFormationStackNotDeployed                  = errors.New("aws/cloudformation stack is not deployed")
-	ErrAwsCloudFormationOutputNotFound                    = errors.New("aws/cloudformation output not found")
-	ErrAwsCloudFormationInvalidFlagCombination            = errors.New("invalid flag combination")
-	ErrAwsCloudFormationConfirmationRequired              = errors.New("aws/cloudformation operation requires confirmation; pass --auto-approve in a non-interactive session")
-	ErrAwsCloudFormationStackRollbackComplete             = errors.New("aws/cloudformation stack is in ROLLBACK_COMPLETE and cannot be updated")
-	ErrAwsCloudFormationStackSetTargetNotApplicable       = errors.New("aws/cloudformation apply cannot deliver to a `kind: aws/stackset` provision target")
-	ErrAwsCloudFormationTerminationProtectionEnabled      = errors.New("aws/cloudformation stack has termination protection enabled")
-	ErrAwsCloudFormationRetainResourcesNotApplicable      = errors.New("--retain-resources is only valid for a stack in DELETE_FAILED status")
+	ErrMissingAwsCloudFormationTemplate                         = errors.New("aws/cloudformation component is missing a template: set 'template' (inline body) or 'path' (file reference)")
+	ErrMissingAwsCloudFormationStackName                        = errors.New("aws/cloudformation component is missing a 'stack_name'")
+	ErrInvalidAwsCloudFormationCapabilities                     = errors.New("invalid aws/cloudformation capabilities")
+	ErrInvalidAwsCloudFormationSettings                         = errors.New("invalid aws/cloudformation settings")
+	ErrAwsCloudFormationGenerateUnsupported                     = errors.New("aws/cloudformation components do not support a 'generate' section")
+	ErrAwsCloudFormationStackPolicyFileAndBodyMutuallyExclusive = errors.New("'stack_policy.file' and 'stack_policy.body' are mutually exclusive: 'file' is a file reference, 'body' is an inline policy")
+	ErrInvalidComponentsAwsCloudFormation                       = errors.New("invalid 'components.aws/cloudformation' section")
+	ErrInvalidSpecificAwsCloudFormationComponent                = errors.New("invalid aws/cloudformation component configuration")
+	ErrAwsCloudFormationChangeSetFailed                         = errors.New("aws/cloudformation changeset failed")
+	ErrAwsCloudFormationChangeSetNotFound                       = errors.New("aws/cloudformation changeset not found")
+	ErrAwsCloudFormationDriftDetected                           = errors.New("aws/cloudformation stack has drifted")
+	ErrAwsCloudFormationFlagsMutuallyExclusive                  = errors.New("--all and --affected are mutually exclusive")
+	ErrAwsCloudFormationComponentArgWithSelection               = errors.New("component argument cannot be used with --all, --affected, --tags, or --labels")
+	ErrAwsCloudFormationComponentArgRequired                    = errors.New("requires exactly one component argument unless --all, --affected, --tags, or --labels is set")
+	ErrAwsCloudFormationIdentityResolutionFailed                = errors.New("aws/cloudformation component requested an identity, but the auth manager could not resolve it")
+	ErrAwsCloudFormationAPICallFailed                           = errors.New("aws/cloudformation API call failed")
+	ErrAwsCloudFormationFmtNotClean                             = errors.New("aws/cloudformation template is not formatted")
+	ErrAwsCloudFormationFmtWriteFailed                          = errors.New("aws/cloudformation failed to write formatted template")
+	ErrAwsCloudFormationStackNotFound                           = errors.New("aws/cloudformation stack not found")
+	ErrAwsCloudFormationStackSetFailed                          = errors.New("aws/cloudformation stackset operation failed")
+	ErrAwsCloudFormationLogsFollowChartExclusive                = errors.New("--follow and --chart are mutually exclusive")
+	ErrAwsCloudFormationOperationFailed                         = errors.New("aws/cloudformation operation did not complete successfully")
+	ErrAwsCloudFormationBackendMissing                          = errors.New("aws/cloudformation packaging bucket does not exist")
+	ErrAwsCloudFormationIncludeDependentsRequiresAffected       = errors.New("--include-dependents requires --affected")
+	ErrAwsCloudFormationTemplateAndPathMutuallyExclusive        = errors.New("'template' and 'path' are mutually exclusive: 'template' is an inline template body, 'path' is a file reference")
+	ErrAwsCloudFormationFmtRequiresPath                         = errors.New("aws/cloudformation fmt only applies to file-based templates ('path:'); inline 'template:' bodies have no file to format in place")
+	ErrAwsCloudFormationTemplateMissingResources                = errors.New("aws/cloudformation inline template is missing a top-level 'Resources' section")
+	ErrInvalidAwsCloudFormationParameters                       = errors.New("invalid aws/cloudformation parameters")
+	ErrAwsCloudFormationStackNotDeployed                        = errors.New("aws/cloudformation stack is not deployed")
+	ErrAwsCloudFormationOutputNotFound                          = errors.New("aws/cloudformation output not found")
+	ErrAwsCloudFormationInvalidFlagCombination                  = errors.New("invalid flag combination")
+	ErrAwsCloudFormationConfirmationRequired                    = errors.New("aws/cloudformation operation requires confirmation; pass --auto-approve in a non-interactive session")
+	ErrAwsCloudFormationStackRollbackComplete                   = errors.New("aws/cloudformation stack is in ROLLBACK_COMPLETE and cannot be updated")
+	ErrAwsCloudFormationStackSetTargetNotApplicable             = errors.New("aws/cloudformation apply cannot deliver to a `kind: aws/stackset` provision target")
+	ErrAwsCloudFormationTerminationProtectionEnabled            = errors.New("aws/cloudformation stack has termination protection enabled")
+	ErrAwsCloudFormationRetainResourcesNotApplicable            = errors.New("--retain-resources is only valid for a stack in DELETE_FAILED status")
+	ErrAwsCloudFormationBackendTargetsFailed                    = errors.New("aws/cloudformation backend targets could not be inspected")
+)
+
+// Provision-target authentication errors.
+var (
+	// ErrProvisionTargetAuthInvalid indicates a provision target's auth block is malformed.
+	ErrProvisionTargetAuthInvalid = errors.New("provision target auth is invalid")
+	// ErrProvisionTargetAuthUnknownKey indicates a provision target's auth block has an unsupported key.
+	ErrProvisionTargetAuthUnknownKey = errors.New("provision target auth has an unsupported key")
+	// ErrProvisionTargetAuthNoIdentity indicates a provision target's auth block selects no identity.
+	ErrProvisionTargetAuthNoIdentity = errors.New("provision target auth did not select an identity")
+	// ErrProvisionTargetAuthFailed indicates the identity a provision target selected could not be used.
+	ErrProvisionTargetAuthFailed = errors.New("provision target authentication failed")
+	// ErrAwsCloudFormationTargetAuthFailed indicates a CloudFormation delivery target's own authentication failed.
+	ErrAwsCloudFormationTargetAuthFailed = errors.New("aws/cloudformation provision target could not authenticate")
+	// ErrAwsCloudFormationTargetKeyUnsupported indicates a `kind: aws/cloudformation` target has an unsupported key.
+	ErrAwsCloudFormationTargetKeyUnsupported = errors.New("aws/cloudformation provision target has an unsupported key")
 )
 
 // Stack dependency (`depends_on`) resolution errors.
@@ -1851,6 +1870,26 @@ var (
 	ErrReleaseTagMissing = errors.New("release tag is missing")
 	// ErrReleaseTagMismatch indicates GitHub did not preserve the tag during a notes update.
 	ErrReleaseTagMismatch = errors.New("release tag changed during notes update")
+)
+
+// Source provisioning, S3 source, and stack-manifest hardening errors (field-test findings, PR #3251).
+var (
+	// ErrSourceComponentNameInvalid indicates a component name (metadata.component) that cannot be
+	// used as a source provisioning destination: absolute, volume-qualified, or escaping the
+	// components directory.
+	ErrSourceComponentNameInvalid = errors.New("invalid component name for source provisioning")
+	// ErrSourceDeleteRefused indicates `source delete` declined to remove a directory it cannot
+	// prove the source provisioner created, or that another component owns.
+	ErrSourceDeleteRefused = errors.New("refusing to delete source directory")
+	// ErrS3SourceRegionMismatch indicates an S3 source bucket lives in a different region than the
+	// one used for the request.
+	ErrS3SourceRegionMismatch = errors.New("S3 source bucket is in a different region than the request")
+	// ErrS3SourceForbidden indicates S3 answered 403 for an object probe: either access is denied
+	// or the key does not exist and the principal lacks s3:ListBucket.
+	ErrS3SourceForbidden = errors.New("S3 source access was forbidden")
+	// ErrS3SourceUnsupportedParam indicates an S3 source URL carries credential query parameters
+	// that the Atmos S3 getter never honors.
+	ErrS3SourceUnsupportedParam = errors.New("unsupported S3 source authentication parameter")
 )
 
 // GitHub mock test-helper errors (tests/testhelpers/httpmock).

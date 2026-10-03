@@ -20,22 +20,25 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// credentialFreeSkip lists the YAML functions that must NOT be evaluated during credential-free
-// secret operations (enumeration and `secret list` without `--verify`). Listing only needs the
-// static `secrets.vars` declarations (see secrets.ExtractDeclarations); it never needs a resolved
-// value. These functions all perform an authenticated backend read, so with auth disabled they
-// fall back to the default AWS credential chain and fail (e.g. the S3 backend assumes a role with
-// no base credentials and the SDK ultimately dials the EC2 IMDS endpoint, which is unreachable on
-// a workstation). Skipping them keeps listing genuinely credential-free: a skipped function leaves
-// its raw declaration string in place without resolving backend selectors or values. `!secret`
-// is included because retrieving secret values is a separate, explicit step.
+// credentialFreeSkip lists the YAML functions that must NOT be evaluated eagerly during secret
+// operations: enumeration, `secret list` without `--verify`, and the base component load of every
+// other secret command. Declarations only need their static `secrets.vars` fields (see
+// secrets.ExtractDeclarations); resolving a value or a backend selector is a separate, lazy,
+// per-declaration step (see newSelectorEvaluator). These functions all perform an authenticated
+// backend read, so with auth disabled they fall back to the default AWS credential chain and fail
+// (e.g. the S3 backend assumes a role with no base credentials and the SDK ultimately dials the EC2
+// IMDS endpoint, which is unreachable on a workstation). A skipped function leaves its raw string
+// in place. `!aws.cloudformation.output` is included so a backend selector that cannot be resolved
+// (for example because its producer is not deployed) never blocks commands on declarations that do
+// not use it. `!secret` is included because retrieving secret values is a separate, explicit step.
 func credentialFreeSkip() []string {
 	return append(authenticatedSecretSkip(), strings.TrimPrefix(u.AtmosYamlFuncAwsCloudFormationOutput, "!"))
 }
 
-// authenticatedSecretSkip leaves secret values and Terraform/store reads lazy,
-// while allowing CloudFormation outputs to resolve secret backend selectors.
-// The evaluation scope includes only declarations and their local dependencies.
+// authenticatedSecretSkip leaves secret values and Terraform/store reads lazy, while allowing
+// CloudFormation outputs to resolve secret backend selectors. It is used by the per-declaration
+// selector evaluator, whose evaluation scope is narrowed to a single declaration field and its
+// local dependencies.
 func authenticatedSecretSkip() []string {
 	// skipFunc compares against the tag with the leading "!" trimmed, so the skip tokens are bare.
 	tags := []string{
@@ -169,12 +172,16 @@ func requireScopeComponent(scope secretScope, cmd *cobra.Command, args []string)
 }
 
 // loadService initializes config + auth and returns a secrets.Service scoped to (stack,
-// component). It resolves the component section with authenticatedSecretSkip()'s functions skipped
-// (`!secret`, `!store`, `!store.get`, `!terraform.output`, `!terraform.state`) so declarations and
-// includes resolve without retrieving secret values (a separate, explicit step) and without
-// requiring sibling components' terraform state or store contents to already exist. CloudFormation
-// output selectors in secrets.vars/secrets.providers resolve using the authenticated scope;
-// unrelated component inputs and outputs remain outside the evaluation scope.
+// component). It resolves the component section with credentialFreeSkip()'s functions skipped
+// (`!secret`, `!store`, `!store.get`, `!terraform.output`, `!terraform.state`,
+// `!aws.cloudformation.output`) so declarations and includes resolve without retrieving secret
+// values (a separate, explicit step), without requiring sibling components' terraform state or
+// store contents to already exist, and without requiring every backend selector to resolve.
+//
+// A declaration whose `store:`/`sops:` (or SOPS provider) is a CloudFormation output selector keeps
+// its raw selector here; the returned service evaluates it lazily, with the authenticated scope,
+// only for the declaration a command actually uses. An unresolvable selector therefore fails just
+// that declaration (naming it) instead of every command on the component.
 func loadService(scope secretScope) (*secrets.Service, error) {
 	defer perf.Track(nil, "secret.loadService")()
 
@@ -188,33 +195,22 @@ func loadService(scope secretScope) (*secrets.Service, error) {
 func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosConfiguration, error) {
 	defer perf.Track(nil, "secret.loadServiceAndConfig")()
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
-		ComponentFromArg: scope.Component,
-		Stack:            scope.Stack,
-	}, true)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
-	}
-
-	authManager, err := buildAuthManager(&atmosConfig, scope)
+	// Bridge auth credentials into identity-aware secret stores and cloud-KMS SOPS providers
+	// (lazy resolution).
+	atmosConfig, authManager, err := loadConfigAndAuth(scope)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Bridge auth credentials into identity-aware secret stores and cloud-KMS SOPS providers
-	// (lazy resolution).
-	injectSecretStoreAuthResolver(&atmosConfig, authManager, scope)
-
 	section, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
-		AtmosConfig:          &atmosConfig,
+		AtmosConfig:          atmosConfig,
 		Component:            scope.Component,
 		Stack:                scope.Stack,
 		ComponentType:        scope.ComponentType,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
-		// Resolve CloudFormation backend selectors inside declarations while keeping
-		// secret values and unrelated state/store reads deferred.
-		Skip:         authenticatedSecretSkip(),
+		// Keep backend selectors, secret values and unrelated state/store reads deferred.
+		Skip:         credentialFreeSkip(),
 		AuthManager:  authManager,
 		ErrorOptions: secretDeclarationEvaluation(),
 	})
@@ -222,7 +218,16 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 		return nil, nil, fmt.Errorf("failed to load component config: %w", err)
 	}
 
-	return secrets.NewService(&atmosConfig, scope.Stack, scope.Component, section), &atmosConfig, nil
+	// Selector evaluation describes the component again; pin the type the first describe detected so
+	// that a nested "producer component not found" error cannot be mistaken for this component
+	// being missing during type auto-detection.
+	evalScope := scope
+	if evalScope.ComponentType == "" {
+		evalScope.ComponentType = sectionComponentType(section)
+	}
+	svc := secrets.NewService(atmosConfig, scope.Stack, scope.Component, section,
+		secrets.WithSelectorEvaluator(newSelectorEvaluator(atmosConfig, authManager, evalScope)))
+	return svc, atmosConfig, nil
 }
 
 // loadServiceForList loads a scoped secrets service for `secret list`. It is credential-free by

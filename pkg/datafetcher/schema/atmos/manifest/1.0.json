@@ -1477,9 +1477,6 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "generate": {
-              "$ref": "#/definitions/generate"
-            },
             "vars": {
               "$ref": "#/definitions/vars"
             },
@@ -1543,9 +1540,6 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "generate": {
-              "$ref": "#/definitions/generate"
-            },
             "metadata": {
               "$ref": "#/definitions/metadata"
             },
@@ -1592,9 +1586,21 @@
             "stack_policy": {
               "type": "object",
               "additionalProperties": false,
+              "description": "Stack policy: 'file' (path relative to the component's base path) or inline 'body'. 'file' and 'body' are mutually exclusive.",
               "properties": {
                 "file": {
                   "type": "string"
+                },
+                "body": {
+                  "description": "Inline stack policy: a JSON string, or a structured map serialized to JSON. Mutually exclusive with 'file'.",
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object"
+                    }
+                  ]
                 }
               }
             },
@@ -2118,6 +2124,57 @@
         }
       ]
     },
+    "provision_target_auth": {
+      "title": "provision_target_auth",
+      "description": "Per-target authentication for a provision target. Accepts the same sections as component-level auth (providers, identities, integrations, realm) plus the 'identity' shorthand that selects a named identity. Unknown keys are rejected so typos such as 'identitty' fail validation.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "string",
+              "description": "Name of the Atmos Auth identity used for this target (shorthand for selecting an identity defined in global, component, or target auth)."
+            },
+            "require_identity": {
+              "type": "boolean",
+              "description": "Require an Atmos Auth identity and reject ambient credentials."
+            },
+            "realm": {
+              "type": "string",
+              "description": "Credential isolation realm."
+            },
+            "providers": {
+              "$ref": "#/definitions/auth_providers"
+            },
+            "identities": {
+              "$ref": "#/definitions/auth_identities"
+            },
+            "integrations": {
+              "type": "object",
+              "description": "Client-only credential materializations (e.g., ECR, EKS).",
+              "additionalProperties": true
+            },
+            "logs": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "keyring": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "console": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      ]
+    },
     "provision": {
       "title": "provision",
       "description": "Provision section for component provisioning configuration, including workdir and delivery targets",
@@ -2159,14 +2216,7 @@
                     "description": "For kind 'git': true fans out one file per rendered object under 'path' (a directory); false writes 'path' as a single multi-document YAML file. When unset, inferred from whether the last segment of 'path' looks like a manifest filename (matches /\\.(ya?ml|json)$/i): a match defaults to single-file mode, otherwise the directory default is preserved."
                   },
                   "auth": {
-                    "type": "object",
-                    "properties": {
-                      "identity": {
-                        "type": "string",
-                        "description": "Atmos Auth identity used for the delivery"
-                      }
-                    },
-                    "additionalProperties": false
+                    "$ref": "#/definitions/provision_target_auth"
                   },
                   "commit": {
                     "type": "object",
