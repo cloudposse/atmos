@@ -33,6 +33,7 @@ var (
 	ErrSimulateTypedRequiresText     = errUtils.ErrSimulateTypedRequiresText
 	ErrInvalidSimulateJitter         = errUtils.ErrInvalidSimulateJitter
 	ErrUnsupportedPromptStyle        = errUtils.ErrUnsupportedPromptStyle
+	ErrScreenshotActionRequiresPath  = errUtils.ErrScreenshotActionRequiresPath
 )
 
 const wrappedQuotedErrorFormat = "%w: %q"
@@ -87,6 +88,9 @@ func (h *CastHandler) Validate(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.CastHandler.Validate")()
 
 	applyCastRecordingDefaults(step)
+	if err := expandCastTape(step); err != nil {
+		return err
+	}
 	mode := castMode(step)
 	switch mode {
 	case "steps":
@@ -113,6 +117,10 @@ func validateCastStepsMode(step *schema.WorkflowStep) error {
 			applyCastSimulateDefaults(step, &clone)
 			if err := validateCastSimulateStep(&clone); err != nil {
 				return fmt.Errorf("cast simulate step %d: %w", i+1, err)
+			}
+		case schema.TaskTypeScreenshot:
+			if child.Path == "" {
+				return fmt.Errorf("cast screenshot step %d: %w", i+1, ErrScreenshotActionRequiresPath)
 			}
 		case castSessionStepType:
 			if err := validateCastSessionMode(child); err != nil {
@@ -163,6 +171,9 @@ func (h *CastHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Work
 	} else {
 		ui.Successf("Cast recorded: %s", rec.Path())
 		runErr = renderCastOutputs(step, rec.Path())
+		if runErr == nil {
+			runErr = asciicast.RenderMarkerScreenshots(rec.Path())
+		}
 	}
 	result := NewStepResult(rec.Path()).WithMetadata("cast", rec.Path())
 	if step.CastOutput != nil {
@@ -355,6 +366,9 @@ func applyCastRecordingDefaults(step *schema.WorkflowStep) {
 }
 
 func runCastBody(ctx context.Context, castStep *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) error {
+	if err := runCastTapeRequirements(ctx, castStep, vars); err != nil {
+		return err
+	}
 	switch castMode(castStep) {
 	case "steps":
 		return runCastStepMode(ctx, castStep, vars, workflow)
@@ -363,6 +377,26 @@ func runCastBody(ctx context.Context, castStep *schema.WorkflowStep, vars *Varia
 	default:
 		return fmt.Errorf(wrappedQuotedErrorFormat, ErrInvalidCastMode, castStep.Mode)
 	}
+}
+
+// runCastTapeRequirements checks any tool names collected from a tape's
+// Require directives (via castStep.Tools) by synthesizing and running a real
+// {type: require} step through the existing step registry -- genuine
+// black-box reuse: identical error/hint UX to a hand-written type: require
+// step, and it works uniformly for both cast modes since a PATH check has
+// nothing PTY-specific about it. A no-op when the step has no tape-derived
+// (or hand-authored) Tools.
+func runCastTapeRequirements(ctx context.Context, castStep *schema.WorkflowStep, vars *Variables) error {
+	if len(castStep.Tools) == 0 {
+		return nil
+	}
+	requireStep := &schema.WorkflowStep{
+		Name:  castStep.Name + "_require",
+		Type:  "require",
+		Tools: castStep.Tools,
+	}
+	_, err := NewStepExecutorWithVars(vars).Execute(ctx, requireStep)
+	return err
 }
 
 func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) error {
@@ -409,12 +443,15 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 }
 
 // runCastChildStep executes one child step of a steps-mode cast: simulate
-// steps replay scripted output, everything else runs through the executor
-// followed by the configured input pause. The skipPrompt flag suppresses a
-// simulate step's own prompt draw when a real prompt is already visible (see the
-// prevWasSession tracking in runCastStepMode, and castSessionActions' Fn
-// wrapper, which always skips it since a live session's real shell prompt is
-// always already showing before any of its actions run).
+// steps replay scripted output, screenshot steps record a marker (no PTY is
+// needed, only the shared recorder both modes install identically, so
+// Screenshot works the same in mode: steps as in mode: session), everything
+// else runs through the executor followed by the configured input pause. The
+// skipPrompt flag suppresses a simulate step's own prompt draw when a real
+// prompt is already visible (see the prevWasSession tracking in
+// runCastStepMode, and castSessionActions' Fn wrapper, which always skips it
+// since a live session's real shell prompt is always already showing before
+// any of its actions run).
 type castChildStepRunner struct {
 	ctx      context.Context
 	castStep *schema.WorkflowStep
@@ -427,6 +464,9 @@ func (r castChildStepRunner) run(child *schema.WorkflowStep, skipPrompt bool) er
 	switch child.Type {
 	case schema.TaskTypeSimulate:
 		return runCastSimulateStep(r.ctx, r.castStep, child, r.vars, skipPrompt)
+	case schema.TaskTypeScreenshot:
+		iolib.RecordMarker(child.Path)
+		return nil
 	case castSessionStepType:
 		return runCastSessionBlock(r.ctx, r.castStep, child, r.vars, r.workflow)
 	default:
@@ -704,6 +744,13 @@ func validateCastSessionAction(castStep, action *schema.WorkflowStep) error {
 		return validatePauseAction(action)
 	case "wait":
 		return validateWaitAction(action)
+	case "hide", "show":
+		return nil
+	case schema.TaskTypeScreenshot:
+		if action.Path == "" {
+			return ErrScreenshotActionRequiresPath
+		}
+		return nil
 	case schema.TaskTypeSimulate:
 		child := *action
 		applyCastSimulateDefaults(castStep, &child)

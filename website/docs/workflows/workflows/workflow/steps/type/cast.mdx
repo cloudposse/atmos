@@ -76,3 +76,66 @@ steps:
 </dl>
 
 Use shared YAML includes for repeated recording settings when multiple casts should have the same terminal dimensions, playback rate, simulated prompt, or recording environment.
+
+## Tape interpretation
+
+A cast step can interpret [VHS](https://github.com/charmbracelet/vhs)-dialect tape script text directly, in memory, instead of a hand-authored `steps:` list — useful when you already have a `.tape` file (for example, one written for the real `vhs` binary) and want to point Atmos at it directly.
+
+<dl>
+  <dt>`tape`</dt>
+  <dd>Inline, multi-line VHS-dialect script. Mutually exclusive with `tape_file` and with an explicit `steps:` list.</dd>
+
+  <dt>`tape_file`</dt>
+  <dd>Path to an external `.tape` file, interpreted the same way as `tape`. `Source` directives anywhere in it (including nested `Source`s) resolve relative to the step's `working_directory` (or the process CWD if unset) — the same base `tape_file` itself resolves against, matching real `vhs`, which resolves every `Source` in a script relative to its own invocation directory, not relative to whichever file a `Source` happens to be read from.</dd>
+</dl>
+
+```yaml
+steps:
+  - name: hero-demo
+    type: cast
+    mode: session
+    tape_file: demo/hero.tape
+    output:
+      mp4: hero.mp4
+```
+
+```yaml
+steps:
+  - name: quick-check
+    type: cast
+    mode: steps
+    tape: |
+      Type "atmos list stacks" Enter
+      Type "atmos validate stacks" Enter
+    output:
+      cast: quick-check.cast
+```
+
+### `mode: steps` vs `mode: session`
+
+The existing `mode` field governs how a tape is translated, and it determines whether a failing typed command actually fails the step:
+
+- **`mode: steps`** (exit-code fidelity) — each `Type "cmd" Enter` becomes a `type: simulate` child (so it looks typed in the recording) paired with a real `type: shell` child that actually executes `cmd`, with a real, tracked exit code. `Sleep`/`Wait` are dropped (step execution is already synchronous). A visible `cd`/`export`/`unset`/`clear` command updates the following real steps' `working_directory`/`env` instead of running as its own (state-losing) subprocess. `Screenshot` is supported. Any directive with no discrete-step equivalent — a bare keypress, `Hide`/`Show`, or a `Type` with no trailing `Enter` — is a **parse-time error** naming the offending line, telling you to switch to `mode: session`.
+- **`mode: session`** (raw keypress/PTY fidelity) — `Type`/`Sleep`/`Wait`/keypresses (including `Ctrl+<letter>`) map onto the existing `write`/`key`/`pause`/`wait` session actions. This keeps `mode: session`'s existing limitation: no per-command exit code, since the whole script drives one continuous PTY session.
+
+### `Set`, `Output`, `Require`, `Source`
+
+| VHS directive | Atmos target | Notes |
+|---|---|---|
+| `Set Shell`, `Set Width`, `Set Height`, `Set TypingSpeed`, `Set WaitTimeout` | `shell`, `width`/`height`, `write_rate`, default `Wait` timeout | An explicit field on the step always wins over a tape-implied value. |
+| `Set FontFamily`/`FontSize`/`Theme`/`Margin`/`Padding`/`BorderRadius`/`Framerate`/`CursorBlink`/`WaitPattern`/... | *(ignored)* | Cosmetic VHS options with no Atmos rendering analog. |
+| `Output <path>` | `output.*` | One per supported extension (`.cast`, `.gif`, `.mp4`, `.html`, `.ascii`, `.png`, `.jpg`/`.jpeg`) — **`.webm` and `.txt` are not supported** and produce an error. |
+| `Require <program>` | a synthesized `type: require` child | Runs the same tool-presence check as a hand-authored `type: require` step, before the cast body executes. |
+| `Source <file>` | inlined directives | Resolved relative to the step's `working_directory` (or the process CWD) — the same fixed base used for `tape_file` itself and for every `Source`, no matter how deeply nested. |
+| `Hide` / `Show` | lifted into `env:`/`working_directory:`, or literal replay | A `Hide...Show` region whose commands are only `export`/`unset`/`cd`/`clear` is lifted into the step's own config (no PTY replay needed); anything else falls back to literal typing while muted. `mode: steps` has no PTY at all, so `Hide`/`Show` are always an error there. |
+| `Copy`, `Paste`, `Env` | *(unsupported)* | Always a parse error in both modes — rewrite the tape (inline `Env` as a shell `export`, replace `Copy`/`Paste` with a direct `Type`) before using `tape:`/`tape_file:`. |
+
+### `atmos cast record`
+
+For a one-off tape with no workflow YAML at all, use the `record` subcommand directly:
+
+```shell
+atmos cast record demo/hero.tape --output=hero.mp4
+```
+
+`record` builds an ephemeral `type: cast` step from the tape and runs it through the same interpreter — see [`atmos cast record`](/cli/commands/cast/record) for the full flag reference. For the complete supported/ignored/error directive matrix and worked migration examples, see the `atmos-vhs` skill.
