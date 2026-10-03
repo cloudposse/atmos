@@ -130,6 +130,18 @@ func (mr *MockInitUIMockRecorder) SetConflictStrategy(strategy any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetConflictStrategy", reflect.TypeOf((*MockInitUI)(nil).SetConflictStrategy), strategy)
 }
 
+// SetMaxChanges mocks base method.
+func (m *MockInitUI) SetMaxChanges(thresholdPercent int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetMaxChanges", thresholdPercent)
+}
+
+// SetMaxChanges indicates an expected call of SetMaxChanges.
+func (mr *MockInitUIMockRecorder) SetMaxChanges(thresholdPercent any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMaxChanges", reflect.TypeOf((*MockInitUI)(nil).SetMaxChanges), thresholdPercent)
+}
+
 // SetMergeDriver mocks base method.
 func (m *MockInitUI) SetMergeDriver(driver merge.Driver) {
 	m.ctrl.T.Helper()
