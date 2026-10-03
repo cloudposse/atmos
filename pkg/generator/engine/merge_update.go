@@ -20,9 +20,11 @@ import (
 // used when regenerating files that already exist on disk.
 
 // SetMaxChanges sets the maximum percentage of changes allowed for 3-way merge operations.
-// The thresholdPercent parameter controls how aggressive the merge behavior is:
-// a lower value (e.g., 30) is more conservative, while a higher value (e.g., 80)
-// allows more extensive changes during merges.
+// A thresholdPercent of 0 disables the check entirely: the merge is never rejected for
+// having too many changes, regardless of size. Any positive value is compared against a
+// computed change percentage that has no upper bound (see TextMerger/YAMLMerger's
+// calculateChangePercentage), so no positive thresholdPercent is a guaranteed bypass the way
+// 0 is -- raising it only makes rejection less likely, never impossible.
 func (p *Processor) SetMaxChanges(thresholdPercent int) {
 	defer perf.Track(nil, "engine.Processor.SetMaxChanges")()
 
