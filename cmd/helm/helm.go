@@ -199,6 +199,9 @@ func operationFlagOptions(name string) []flags.Option {
 			flags.WithIntFlag("history-max", "", cfg.HelmDefaultMaxHistory, "Maximum release revisions to retain; 0 means unlimited."),
 			flags.WithBoolFlag("no-hooks", "", false, "Disable Helm chart hooks."),
 			flags.WithBoolFlag("skip-crds", "", false, "Do not install chart CRDs on first install."),
+			flags.WithStringFlag("server-side-apply", "", "", "Apply method: auto, true, or false. A bare --server-side-apply selects true. Omit to use the Helm default."),
+			flags.WithNoOptDefVal("server-side-apply", valueTrue),
+			flags.WithBoolFlag("force-conflicts", "", false, "Resolve server-side apply field-ownership conflicts by overwriting the contested fields and becoming their sole manager (opt-in)."),
 		)
 	}
 	if name == "delete" {
@@ -364,6 +367,7 @@ func addLifecycleOperationFlags(cmd *cobra.Command, result map[string]any) {
 	boolFlags := map[string]string{
 		"wait-for-jobs":      cfg.HelmWaitJobsSectionName,
 		"cleanup-on-failure": cfg.HelmCleanupOnFailureSectionName,
+		"force-conflicts":    cfg.HelmForceConflictsSectionName,
 	}
 	if flag := cmd.Flag("on-failure"); flag != nil && flag.Changed {
 		result[cfg.HelmOnFailureSectionName] = flag.Value.String()
@@ -384,8 +388,9 @@ func addLifecycleOperationFlags(cmd *cobra.Command, result map[string]any) {
 		}
 	}
 	stringFlags := map[string]string{
-		flagWait:  cfg.HelmWaitStrategySectionName,
-		"timeout": cfg.HelmTimeoutSectionName,
+		flagWait:            cfg.HelmWaitStrategySectionName,
+		"timeout":           cfg.HelmTimeoutSectionName,
+		"server-side-apply": cfg.HelmServerSideApplySectionName,
 	}
 	for flagName, fieldName := range stringFlags {
 		if flag := cmd.Flag(flagName); flag != nil && flag.Changed {
