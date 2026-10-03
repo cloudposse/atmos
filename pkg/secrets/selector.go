@@ -85,7 +85,7 @@ func memoizeSelectorEvaluator(evaluator SelectorEvaluator) SelectorEvaluator {
 func IsSelector(value string) bool {
 	defer perf.Track(nil, "secrets.IsSelector")()
 
-	return strings.HasPrefix(strings.TrimSpace(value), "!")
+	return providers.IsSelector(value)
 }
 
 // containsSelector reports whether any string inside a (possibly nested) value is a selector.

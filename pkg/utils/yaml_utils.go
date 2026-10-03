@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/yaml/expand"
+	"github.com/cloudposse/atmos/pkg/yaml/scalar"
 )
 
 const (
@@ -497,6 +498,9 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 		expand.KeyDelimiters(&parsedNode, keyDelimiter)
 	}
 
+	// Keep unquoted digit-only scalars the decoder would turn into lossy floats (e.g. 068007702576) as strings.
+	scalar.PreserveDigitStrings(&parsedNode)
+
 	// Process custom tags.
 	if err := processCustomTags(atmosConfig, &parsedNode, file); err != nil {
 		return nil, nil, err
@@ -571,11 +575,34 @@ func PrintAsYAMLSimple(atmosConfig *schema.AtmosConfiguration, data any) error {
 	}
 
 	indent := getIndentFromConfig(atmosConfig)
-	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
+	y, err := convertToYAMLOutput(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
 	}
 	return pkgdata.Writeln(y)
+}
+
+// rawScalarOutput reports whether data is a top-level string scalar that must be printed verbatim
+// (without YAML quoting) and returns its text. This mirrors how yq prints a scalar result, so
+// `acct=$(atmos describe component ... --query .vars.acct)` captures the bare value. Maps and lists,
+// as well as non-string scalars (integers, floats, booleans, null), keep their regular YAML encoding,
+// which already prints them as plain scalars. Strings nested inside maps and lists are still quoted
+// when the quoting is required to preserve their type.
+func rawScalarOutput(data any) (string, bool) {
+	str, ok := data.(string)
+	if !ok {
+		return "", false
+	}
+	return str + "\n", true
+}
+
+// convertToYAMLOutput converts data to YAML text for printing or writing a describe-style result.
+// It differs from ConvertToYAML only in that a top-level string scalar is emitted verbatim.
+func convertToYAMLOutput(data any, opts YAMLOptions) (string, error) {
+	if raw, ok := rawScalarOutput(data); ok {
+		return raw, nil
+	}
+	return ConvertToYAML(data, opts)
 }
 
 func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
@@ -587,6 +614,11 @@ func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
 
 func GetHighlightedYAML(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
 	defer perf.Track(atmosConfig, "utils.GetHighlightedYAML")()
+
+	// A top-level string scalar is printed verbatim; it is a value, not a YAML document to highlight.
+	if raw, ok := rawScalarOutput(data); ok {
+		return raw, nil
+	}
 
 	y, err := ConvertToYAML(data, YAMLOptions{Indent: getIndentFromConfig(atmosConfig)})
 	if err != nil {
@@ -646,7 +678,7 @@ func WriteToFileAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, filePat
 	indent := getIndentFromConfig(atmosConfig)
 	log.Debug("WriteToFileAsYAMLWithConfig", "tabWidth", indent, "filePath", filePath)
 
-	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
+	y, err := convertToYAMLOutput(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
 	}
@@ -836,6 +868,9 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 	if atmosConfig.Settings.YAML.KeyDelimiter != "" {
 		expand.KeyDelimiters(&node, atmosConfig.Settings.YAML.KeyDelimiter)
 	}
+
+	// Keep unquoted digit-only scalars the decoder would turn into lossy floats (e.g. 068007702576) as strings.
+	scalar.PreserveDigitStrings(&node)
 
 	if err := processCustomTags(atmosConfig, &node, file); err != nil {
 		return zeroValue, err
