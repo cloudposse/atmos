@@ -1,0 +1,61 @@
+---
+slug: native-helm-force-conflicts
+title: "Clear server-side apply conflicts without leaving the deploy path"
+authors: [aknysh]
+tags: [feature]
+---
+
+Kubernetes server-side apply tracks who owns every field of a managed object. When two actors write the same field - a controller that reconciles an object a release also sets, or an object whose ownership ledger was lost - the next apply fails with a field-ownership conflict. The standard escape is a one-off `kubectl apply --server-side --force-conflicts` or hand-editing `managedFields`, then re-running your deploy. That is fine on a laptop and impossible in CI, and a conflicted release blocks every dependent waiting on it.
+
+Native Helm components now expose the two Helm 4 controls that resolve this - `server_side_apply` and `force_conflicts` - as release-policy settings and command-line flags, so a conflict clears in the normal `atmos helm apply` path.
+
+<!--truncate-->
+
+## The Problem
+
+Helm 4 applies release manifests with server-side apply by default, so field ownership is shared with any other actor that writes the same fields. Two situations routinely put another manager on a field a release also declares:
+
+- A controller continuously reconciles an object it also received from a release, and takes ownership of fields the release sets.
+- An object's `managedFields` ledger is orphaned - for example, a custom resource whose CRD hosts a conversion webhook loses its ledger when a conversion fails during a controller disruption. The next apply synthesizes a stand-in manager that owns the pre-existing fields, and a later release apply that changes those fields conflicts with it.
+
+In both cases the apply reports a conflict and the install or upgrade aborts. Because Atmos set no conflict-resolution option, there was no way to clear it through the deploy path: you had to repair the object out of band and re-run. That breaks dependency-ordered rollouts, cannot be remediated in CI, and hid a control Helm 4 already implements.
+
+## The Fix
+
+Two keys are added to the native Helm [`release` policy](/stacks/components/helm#release-lifecycle), alongside the existing wait, timeout, history, install, and upgrade controls:
+
+```yaml
+components:
+  helm:
+    my-component:
+      release:
+        # Apply method. Omit to use the Helm default.
+        server_side_apply: true
+        # Resolve field-ownership conflicts by overwriting the contested
+        # fields and becoming their sole manager. Opt-in; default false.
+        force_conflicts: false
+```
+
+With `force_conflicts` enabled, a release apply that meets a field owned by another manager overwrites the contested fields and becomes their sole owner, so the release reaches a successful completion state and its dependents proceed. It is opt-in by design: forcing overrides other managers, so a controller that legitimately co-owns a field loses it on the next apply. That trade-off is yours to make per component, which is why the default leaves conflicts fatal and visible.
+
+`server_side_apply` accepts `auto`, `true`, or `false`. Omitting it preserves the Helm default - server-side apply on install, and the prior release's method on upgrade - so a release that sets neither key behaves exactly as before.
+
+Both settings resolve through the same path as the rest of the release lifecycle: stack type defaults, base-component inheritance, concrete component configuration, and command-line override. A release-wide value is the common case, and the per-phase `install` and `upgrade` blocks can override it when first install and later upgrades need different behavior. The configured values are validated before any chart download or cluster mutation.
+
+## How to Use It
+
+Set the policy in a stack for steady-state behavior, or force a single recovery apply from the command line without editing configuration:
+
+```shell
+# One-off recovery: take ownership of the contested fields and continue.
+atmos helm apply my-component -s plat-ue2-prod --force-conflicts
+
+# Override the apply method for this run (a bare flag selects true).
+atmos helm apply my-component -s plat-ue2-prod --server-side-apply=false
+```
+
+The [`--force-conflicts` and `--server-side-apply`](/cli/commands/helm/apply#flags) flags are available on `apply` and `deploy`, and take precedence over stack `release` configuration.
+
+## Get Involved
+
+See the [native Helm release lifecycle](/stacks/components/helm#release-lifecycle) documentation for the full policy reference. If you hit a server-side apply scenario this does not cover, open an issue or discussion on [GitHub](https://github.com/cloudposse/atmos) - we would like to hear about it.
