@@ -382,6 +382,16 @@ func configureInstallLifecycle(client *action.Install, policy effectiveReleasePo
 	client.Timeout = policy.Timeout
 	client.DisableHooks = !policy.ChartHooks
 	client.SkipCRDs = policy.CRDs == crdPolicySkip
+	// Install exposes ServerSideApply as a bool; leave the Helm default (true)
+	// untouched when unset so omitting the setting is byte-for-byte unchanged.
+	switch policy.ServerSideApply {
+	case serverSideApplyFalse:
+		client.ServerSideApply = false
+	case serverSideApplyAuto, serverSideApplyTrue:
+		client.ServerSideApply = true
+	case serverSideApplyUnset:
+	}
+	client.ForceConflicts = policy.ForceConflicts
 }
 
 func configureUpgradeLifecycle(client *action.Upgrade, policy effectiveReleasePolicy) {
@@ -392,6 +402,12 @@ func configureUpgradeLifecycle(client *action.Upgrade, policy effectiveReleasePo
 	client.CleanupOnFail = policy.CleanupOnFailure
 	client.MaxHistory = policy.MaxHistory
 	client.DisableHooks = !policy.ChartHooks
+	// Upgrade exposes ServerSideApply as a string (auto|true|false); leave the
+	// Helm default ("auto") untouched when unset.
+	if policy.ServerSideApply != serverSideApplyUnset {
+		client.ServerSideApply = string(policy.ServerSideApply)
+	}
+	client.ForceConflicts = policy.ForceConflicts
 }
 
 func configureUninstallLifecycle(client *action.Uninstall, policy effectiveReleasePolicy, dryRun bool) {

@@ -1,6 +1,6 @@
 # PRD: Native Helm Server-Side Apply Conflict Control
 
-**Status:** Draft
+**Status:** Implemented
 
 **Last Updated:** 2026-10-02
 
@@ -154,3 +154,40 @@ visible.
 - Both settings resolve correctly through stack type defaults, base-component inheritance, concrete component
   configuration, and command-line override, and are validated before any chart download or cluster mutation.
 - With both settings unset, native Helm behavior is byte-for-byte unchanged from today.
+
+## Implementation
+
+The settings reuse the existing native Helm release-policy pipeline:
+
+- **Configuration keys** - `server_side_apply` (accepts `auto`, `true`, or `false`; a
+  YAML boolean is normalized to its string form) and `force_conflicts` (boolean) are
+  added to the release-wide `release` block and the per-phase `install` and `upgrade`
+  blocks. They are rejected on the `delete` block, which has no server-side apply
+  surface. Section-name constants live in `pkg/config/const.go`.
+- **Decode** - `pkg/component/helm/lifecycle_decode.go` decodes both keys into the
+  presence-aware input structs. A dedicated `optionalServerSideApplyField` accepts a
+  YAML boolean or the string `auto`, and `rejectUnknownFields` allow-lists them only
+  where they apply.
+- **Resolve** - `pkg/component/helm/lifecycle.go` resolves the apply method through
+  built-in default (unset) -> release-wide -> per-phase -> CLI flag, for install and
+  upgrade only. `parseServerSideApply` validates the enum before any chart download or
+  cluster mutation (the decode pass resolves every operation up front).
+- **Plumb** - `pkg/component/helm/client.go` sets the Helm 4 action fields, honoring the
+  shape difference: `action.Install.ServerSideApply` is a bool (`auto`/`true` map to
+  `true`), `action.Upgrade.ServerSideApply` is the pass-through string, and both actions
+  take `ForceConflicts`. When `server_side_apply` is unset, Atmos sets nothing so the
+  Helm default is preserved.
+- **Command-line overrides** - `cmd/helm/helm.go` adds `--server-side-apply` (bare value
+  selects `true`) and `--force-conflicts` to the `apply` and `deploy` operations, mapped
+  into the lifecycle flag overlay.
+- **Schema** - the native Helm policy definitions in both
+  `pkg/datafetcher/schema/atmos/manifest/1.0.json` and
+  `pkg/datafetcher/schema/stacks/stack-config/1.0.json` model the two keys on the
+  install, upgrade, and release policies (not delete). `server_side_apply` uses a
+  `oneOf` of boolean or the string enum.
+- **Error** - `ErrHelmServerSideApplyInvalid` in `errors/errors.go`.
+
+Tests cover parsing, release-wide and per-phase resolution precedence, CLI flag
+precedence, delete inapplicability, bool-and-string decoding, schema validation (both
+copies), and the install/upgrade action plumbing including the unset-preserves-default
+guarantee.
