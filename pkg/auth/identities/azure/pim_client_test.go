@@ -292,3 +292,233 @@ func TestSnippet(t *testing.T) {
 	assert.True(t, strings.HasSuffix(snippet([]byte(long)), "..."))
 	assert.LessOrEqual(t, len(snippet([]byte(long))), 303)
 }
+
+func TestARMPIMClient_PolicyMaxDuration_Found(t *testing.T) {
+	body := `{
+		"value": [
+			{
+				"name": "assignment-1",
+				"properties": {
+					"roleDefinitionId": "` + testRoleDefID + `",
+					"effectiveRules": [
+						{
+							"id": "Expiration_Admin_Eligibility",
+							"ruleType": "RoleManagementPolicyExpirationRule",
+							"maximumDuration": "P90D",
+							"target": {"caller": "Admin", "level": "Eligibility"}
+						},
+						{
+							"id": "Expiration_EndUser_Assignment",
+							"ruleType": "RoleManagementPolicyExpirationRule",
+							"maximumDuration": "PT4H",
+							"target": {"caller": "EndUser", "level": "Assignment"}
+						}
+					]
+				}
+			}
+		]
+	}`
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, body), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	maxDuration, found, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, 4*time.Hour, maxDuration)
+
+	// Verify request attributes: GET, scoped path, no $filter, api-version, bearer auth.
+	req := doer.requests[0]
+	assert.Equal(t, http.MethodGet, req.Method)
+	assert.Contains(t, req.URL.Path, "/providers/Microsoft.Authorization/roleManagementPolicyAssignments")
+	assert.Equal(t, "2020-10-01", req.URL.Query().Get("api-version"))
+	assert.Empty(t, req.URL.Query().Get("$filter"))
+	assert.Equal(t, "Bearer test-token", req.Header.Get("Authorization"))
+}
+
+func TestARMPIMClient_PolicyMaxDuration_NotFound(t *testing.T) {
+	body := `{
+		"value": [
+			{
+				"name": "assignment-other",
+				"properties": {
+					"roleDefinitionId": "/providers/Microsoft.Authorization/roleDefinitions/other",
+					"effectiveRules": [
+						{
+							"id": "Expiration_EndUser_Assignment",
+							"ruleType": "RoleManagementPolicyExpirationRule",
+							"maximumDuration": "PT4H",
+							"target": {"caller": "EndUser", "level": "Assignment"}
+						}
+					]
+				}
+			}
+		]
+	}`
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, body), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	maxDuration, found, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.NoError(t, err)
+	assert.False(t, found)
+	assert.Equal(t, time.Duration(0), maxDuration)
+}
+
+func TestARMPIMClient_PolicyMaxDuration_NoExpirationRule(t *testing.T) {
+	body := `{
+		"value": [
+			{
+				"name": "assignment-1",
+				"properties": {
+					"roleDefinitionId": "` + testRoleDefID + `",
+					"effectiveRules": [
+						{
+							"id": "Expiration_Admin_Eligibility",
+							"ruleType": "RoleManagementPolicyExpirationRule",
+							"maximumDuration": "P90D",
+							"target": {"caller": "Admin", "level": "Eligibility"}
+						}
+					]
+				}
+			}
+		]
+	}`
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, body), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	maxDuration, found, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.NoError(t, err)
+	assert.False(t, found)
+	assert.Equal(t, time.Duration(0), maxDuration)
+}
+
+func TestARMPIMClient_PolicyMaxDuration_RulesFallback(t *testing.T) {
+	body := `{
+		"value": [
+			{
+				"name": "assignment-1",
+				"properties": {
+					"roleDefinitionId": "` + testRoleDefID + `",
+					"rules": [
+						{
+							"id": "Expiration_EndUser_Assignment",
+							"ruleType": "RoleManagementPolicyExpirationRule",
+							"maximumDuration": "PT2H",
+							"target": {"caller": "EndUser", "level": "Assignment"}
+						}
+					]
+				}
+			}
+		]
+	}`
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, body), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	maxDuration, found, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, 2*time.Hour, maxDuration)
+}
+
+func TestARMPIMClient_PolicyMaxDuration_HTTPError(t *testing.T) {
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusInternalServerError, `{"error":{"code":"InternalServerError"}}`), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	_, _, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMRequestFailed)
+	assert.Contains(t, err.Error(), "500")
+}
+
+func TestARMPIMClient_PolicyMaxDuration_BadJSON(t *testing.T) {
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{not-json`), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	_, _, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMRequestFailed)
+}
+
+func TestARMPIMClient_PolicyMaxDuration_BadDurationFormat(t *testing.T) {
+	body := `{
+		"value": [
+			{
+				"name": "assignment-1",
+				"properties": {
+					"roleDefinitionId": "` + testRoleDefID + `",
+					"effectiveRules": [
+						{
+							"id": "Expiration_EndUser_Assignment",
+							"ruleType": "RoleManagementPolicyExpirationRule",
+							"maximumDuration": "invalid-iso",
+							"target": {"caller": "EndUser", "level": "Assignment"}
+						}
+					]
+				}
+			}
+		]
+	}`
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, body), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	_, _, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMRequestFailed)
+	assert.Contains(t, err.Error(), "invalid-iso")
+}
+
+func TestParseISO8601Duration(t *testing.T) {
+	validTests := []struct {
+		in   string
+		want time.Duration
+	}{
+		{"PT8H", 8 * time.Hour},
+		{"PT7H", 7 * time.Hour},
+		{"PT1H30M", 90 * time.Minute},
+		{"PT30M", 30 * time.Minute},
+		{"PT45S", 45 * time.Second},
+		{"PT1H30M15S", 1*time.Hour + 30*time.Minute + 15*time.Second},
+		{"P1D", 24 * time.Hour},
+		{"P1DT8H", 32 * time.Hour},
+		{"P2W", 14 * 24 * time.Hour},
+		{"PT0.5H", 30 * time.Minute},
+		{"PT0S", 0},
+		{"pt8h", 8 * time.Hour},
+		{"P90D", 90 * 24 * time.Hour},
+	}
+	for _, tt := range validTests {
+		t.Run(tt.in, func(t *testing.T) {
+			got, err := parseISO8601Duration(tt.in)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+
+	invalidTests := []string{
+		"",
+		"   ",
+		"8h",
+		"P",
+		"PT",
+		"P1X",
+		"PT1",
+		"invalid",
+		"P1D1H",
+	}
+	for _, in := range invalidTests {
+		t.Run("invalid_"+in, func(t *testing.T) {
+			_, err := parseISO8601Duration(in)
+			assert.Error(t, err)
+		})
+	}
+}
