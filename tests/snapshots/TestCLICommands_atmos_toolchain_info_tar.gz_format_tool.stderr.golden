@@ -7,17 +7,8 @@ Repository: https://github.com/junegunn/fzf
 No versions installed
 
 Available Versions (latest 10):
-    VERSION                DATE                   TITLE
-────────────────────────────────────────────────────────────────────────
-    X.X.X                 YYYY-MM-DD             X.X.X
-    X.X.X                 YYYY-MM-DD             X.X.X
-    X.X.X                 YYYY-MM-DD             X.X.X
-    X.X.X                 YYYY-MM-DD             X.X.X
-    X.X.X                 YYYY-MM-DD             X.X.X
-    X.X.X                 YYYY-MM-DD             X.X.X
-    X.X.X                 YYYY-MM-DD             Demo: change-with-nth
-    X.X.X                 YYYY-MM-DD             X.X.X
-    X.X.X                 YYYY-MM-DD             X.X.X
-    X.X.X                 YYYY-MM-DD             X.X.X
+    VERSION                             DATE                                TITLE
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    0.67.0                                                                  0.67.0
 
 💡 Use atmos toolchain install junegunn/fzf@<version> to install
