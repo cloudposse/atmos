@@ -22,9 +22,15 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// Default threshold and permission constants.
+// DefaultMergeThreshold is the default percentage of changed lines allowed
+// in a 3-way merge before --update fails instead of applying it. Exported so
+// cmd/scaffold and cmd/init can register their --max-changes flag's default
+// against the same single source of truth this package's own NewProcessor
+// uses, instead of duplicating the literal.
+const DefaultMergeThreshold = 50
+
+// Default permission and delimiter constants.
 const (
-	defaultMergeThreshold = 50    // Default 50% threshold for 3-way merges.
 	dirPermissions        = 0o755 // Default directory permissions.
 	maxValuePreviewLen    = 200   // Maximum length for value previews in logs.
 	defaultLeftDelimiter  = "{{"  // Default Go template left delimiter.
@@ -106,7 +112,7 @@ func NewProcessor() *Processor {
 	defer perf.Track(nil, "engine.NewProcessor")()
 
 	return &Processor{
-		merger: merge.NewThreeWayMerger(defaultMergeThreshold), // Default 50% threshold
+		merger: merge.NewThreeWayMerger(DefaultMergeThreshold), // Default 50% threshold
 	}
 }
 
