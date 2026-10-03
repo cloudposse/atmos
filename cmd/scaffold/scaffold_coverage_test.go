@@ -374,6 +374,46 @@ func TestScaffoldGenerateRunE_MergeStrategyInvalidValueRejected(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
 }
 
+// TestScaffoldGenerateRunE_MaxChangesNegativeRejected covers --max-changes's
+// manual range validation (non-negative only; there is no upper bound
+// because the underlying computed change percentage isn't capped at 100
+// either -- see engine.Processor.SetMaxChanges's doc comment -- checked
+// directly in RunE since pkg/flags has no built-in numeric-range validation
+// option): a negative value must be rejected with errUtils.ErrInvalidFlagValue
+// before any generation work starts, mirroring
+// TestScaffoldGenerateRunE_UpdateStrategyInvalidValueRejected above.
+func TestScaffoldGenerateRunE_MaxChangesNegativeRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("max-changes", "-1"))
+
+	err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestScaffoldGenerateRunE_MaxChangesAboveHundredAccepted covers the flip
+// side of the above: --max-changes has no upper bound, so a value above 100
+// (previously rejected before this was changed to an unbounded flag) must be
+// accepted, not rejected.
+func TestScaffoldGenerateRunE_MaxChangesAboveHundredAccepted(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("set", "project_name=demo"))
+	require.NoError(t, cmd.Flags().Set("max-changes", "1000"))
+
+	err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.NoError(t, err)
+}
+
 // TestScaffoldGenerateRunE_BaseRefWithRenderedStrategyRejected covers the
 // explicit --base-ref + --update-strategy=rendered mutual-exclusion check:
 // rendered's base ref comes from the target's own recorded scaffold.yaml,
@@ -1112,4 +1152,52 @@ func TestFindScaffoldFilesInDirectory_WalkError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldDirectoryRead)
+}
+
+// TestConfigureScaffoldMergeSettings_InvalidMergeStrategyPropagatesError
+// covers configureScaffoldMergeSettings's own merge.ResolveConflictStrategy
+// error branch. RunE's WithValidValues registration for --merge-strategy
+// already rejects a bogus value before executeScaffoldGenerate is ever
+// reached (see TestScaffoldGenerateRunE_MergeStrategyInvalidValueRejected),
+// so this exercises configureScaffoldMergeSettings directly to prove it
+// still fails safely -- returning the error and a nil cleanup, and never
+// reaching SetConflictStrategy/SetMergeDriver/SetUpdateStrategy -- for any
+// other caller that skips that upfront validation.
+func TestConfigureScaffoldMergeSettings_InvalidMergeStrategyPropagatesError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockScaffoldUI(ctrl)
+	mockUI.EXPECT().SetMaxChanges(42)
+	// No SetConflictStrategy/SetMergeDriver/SetUpdateStrategy expectations:
+	// gomock fails the test if any of them are called after the error.
+
+	opts := &scaffoldGenerateOptions{maxChanges: 42, mergeStrategy: "bogus"}
+
+	cleanup, err := configureScaffoldMergeSettings(mockUI, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}
+
+// TestConfigureScaffoldMergeSettings_InvalidUpdateStrategyPropagatesError
+// covers configureScaffoldMergeSettings's engine.ParseUpdateStrategy error
+// branch, mirroring
+// TestConfigureScaffoldMergeSettings_InvalidMergeStrategyPropagatesError
+// above for the strategy parsed last (after SetConflictStrategy/
+// SetMergeDriver have already run).
+func TestConfigureScaffoldMergeSettings_InvalidUpdateStrategyPropagatesError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockUI := NewMockScaffoldUI(ctrl)
+	gomock.InOrder(
+		mockUI.EXPECT().SetMaxChanges(0),
+		mockUI.EXPECT().SetConflictStrategy(gomock.Any()),
+		mockUI.EXPECT().SetMergeDriver(gomock.Any()),
+	)
+	// No SetUpdateStrategy expectation: gomock fails the test if it's called.
+
+	opts := &scaffoldGenerateOptions{updateStrategy: "bogus"}
+
+	cleanup, err := configureScaffoldMergeSettings(mockUI, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
 }
