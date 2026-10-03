@@ -322,10 +322,13 @@ func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}
 
 	log.Debugf("Registered %d tools", registry.Count())
 
-	// Create permission checker with MCP-appropriate settings. Allowed/Restricted/Blocked
-	// still apply — they govern *which* tools and *how* they run, not whether tool-serving
-	// is enabled at all.
-	// For MCP server, use a non-interactive prompter since stdio is used for protocol.
+	// Create permission checker with operator-configured settings. The MCP server
+	// enforces the same server-side permission policy (Allowed/Restricted/Blocked)
+	// as the AI chat command. Operators must explicitly enable YOLO mode via
+	// ai.tools.yolo_mode if they want to bypass permission checks. For restricted
+	// tools that require confirmation, the MCP server will deny execution unless
+	// YOLO mode is enabled, since stdio is reserved for the MCP protocol and
+	// cannot be used for interactive prompts.
 	permConfig := &permission.Config{
 		Mode:       getPermissionMode(atmosConfig),
 		Allowed:    atmosConfig.AI.Tools.Allowed,
@@ -333,9 +336,11 @@ func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}
 		Blocked:    atmosConfig.AI.Tools.Blocked,
 		YOLOMode:   atmosConfig.AI.Tools.YOLOMode,
 	}
-	// Use YOLO mode for MCP to avoid blocking on prompts (client handles permissions).
-	permConfig.YOLOMode = true
-	permChecker := permission.NewChecker(permConfig, permission.NewCLIPrompter())
+	// Use a non-interactive prompter that denies by default. Since the MCP protocol
+	// uses stdio for communication, interactive prompts are not possible. Tools that
+	// require confirmation will be denied unless they are in the Allowed list or
+	// YOLO mode is explicitly enabled by the operator.
+	permChecker := permission.NewChecker(permConfig, permission.NewNonInteractivePrompter())
 
 	// Create tool executor.
 	executor := tools.NewExecutor(registry, permChecker, tools.DefaultTimeout)
