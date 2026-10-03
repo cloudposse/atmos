@@ -86,8 +86,14 @@ and `pkg/generator/` for the source of truth on current behavior.
 
 **Still not implemented** (see "Future Enhancements" below):
 - ❌ Remote-template caching/version pinning beyond a single `--ref`
-- ❌ A `--max-changes` CLI flag — the merger has an internal conflict-percentage
-  threshold (hardcoded default, currently 50%), but it isn't exposed as a flag
+
+**Implemented since the above was written**:
+- ✅ `--max-changes` (both `atmos scaffold generate --update` and `atmos init --update`) —
+  exposes the merger's conflict-percentage threshold as a real flag (default `50`,
+  minimum `0`, no upper bound; env vars `ATMOS_SCAFFOLD_MAX_CHANGES` / `ATMOS_INIT_MAX_CHANGES`).
+  See `pkg/generator/engine.DefaultMergeThreshold` for the shared default. Only `0` disables
+  the check entirely (guaranteed to never fail); the computed change percentage itself has no
+  upper bound, so no positive value is a guaranteed bypass the way `0` is.
 
 ## Goals
 
@@ -233,7 +239,7 @@ atmos scaffold
     --update-strategy           # Where --update's merge base comes from: tracked (default, needs a git base; see --base-ref) or rendered (no git dependency; see the "--update-strategy" note above)
     --base-ref                  # Git ref to use as the 3-way merge base with --update-strategy=tracked (defaults to HEAD)
     --merge-strategy            # Conflict resolution for --update: manual (default), ours, theirs
-    --max-changes               # Change threshold (not implemented — no CLI flag; internal default is hardcoded)
+    --max-changes               # Maximum percentage of changed lines allowed in a 3-way merge before --update fails (default 50, minimum 0/no upper bound, 0 disables the check entirely; ATMOS_SCAFFOLD_MAX_CHANGES/ATMOS_INIT_MAX_CHANGES)
 
   list                          # List available templates
 
