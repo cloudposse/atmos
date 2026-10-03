@@ -176,11 +176,19 @@ flags have the highest precedence.
 
   <dt>`release.upgrade.cleanup_on_failure`</dt>
   <dd><strong>Default:</strong> <code>false</code>. <strong>Operation:</strong> upgrade. Independently remove resources newly created by a failed upgrade.</dd>
+
+  <dt>`release.server_side_apply`</dt>
+  <dd><strong>Default:</strong> Helm default. <strong>Operations:</strong> install, upgrade. Select the apply method: <code>auto</code>, <code>true</code>, or <code>false</code>. Omit to keep the Helm default (server-side apply on install; the prior release's method on upgrade). On install, <code>auto</code> and <code>true</code> both enable server-side apply.</dd>
+
+  <dt>`release.force_conflicts`</dt>
+  <dd><strong>Default:</strong> <code>false</code>. <strong>Operations:</strong> install, upgrade. When server-side apply meets a field owned by another manager, overwrite the contested fields and become their sole manager. Opt-in, because it overrides other field managers. Requires server-side apply: setting it together with <code>server_side_apply: false</code> is rejected before any chart download.</dd>
 </dl>
 
 `release.install.timeout`, `release.upgrade.timeout`, and
 `release.delete.timeout` override the release-wide timeout only for that action.
-The same operation sections can override `chart_hooks` and `wait`.
+The same operation sections can override `chart_hooks` and `wait`, and the
+`install` and `upgrade` sections can override `server_side_apply` and
+`force_conflicts` when first install and later upgrades need different behavior.
 
 :::warning Timeout and history migration
 For one minor release, omitting `release.timeout` and the selected operation
@@ -189,6 +197,18 @@ behavior and emits a warning. The following minor changes the omitted default to
 `5m`. Set `release.timeout: 0s` explicitly to remain unbounded, or set a duration
 such as `30m`. An omitted `release.history.max` retains ten revisions; set it to
 `0` if unlimited release history is required.
+:::
+
+:::tip Forcing server-side apply conflicts
+Helm 4 applies releases with Kubernetes server-side apply, where every field of a
+managed object is owned by a field manager. An apply that writes a field already
+owned by a different manager (a controller that reconciles the same object, or an
+object whose ownership ledger was orphaned) fails with a conflict. Set
+`release.force_conflicts: true` so the release overwrites the contested fields and
+becomes their sole manager, which clears the conflict through the normal
+`atmos helm apply` path instead of out-of-band cluster repair. Keep it off by
+default - forcing overrides other field managers, so a controller that legitimately
+co-owns a field loses it on every apply.
 :::
 
 <File title="stacks/catalog/demo-release.yaml">
