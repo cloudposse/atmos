@@ -54,7 +54,10 @@ func TestTerraformPlanCI(t *testing.T) {
 // `atmos terraform plan mycomponent -s prod --ci` uploads the planfile
 // to the local store, and `atmos terraform planfile list` shows the record.
 func TestTerraformPlanCIUploadAndPlanfileList(t *testing.T) {
-	// Unset GITHUB_ACTIONS to avoid using the GitHub Actions provider for atmos CI hooks
+	// Unset GITHUB_ACTIONS so the CI hooks do not select the GitHub Actions
+	// provider and try to create check runs against the GitHub API. The planfile
+	// store is chosen by config (the native-ci fixture defaults to the local
+	// store), not by this variable.
 	os.Unsetenv("GITHUB_ACTIONS")
 
 	// Skip if terraform is not installed.
