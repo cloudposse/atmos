@@ -67,3 +67,8 @@ already existed, a warning explains which existing settings (versioning,
 encryption, public access, tags) are being overwritten. The warning prints
 before the final `Provisioned` line, so the last line reports the completed
 result.
+
+The target's identity is resolved once per run: the existence check that decides
+whether to prompt and the provisioning step that follows share the same
+credentials, so `backend create` (and `backend update`) authenticate the target a
+single time even without `--auto-approve`.

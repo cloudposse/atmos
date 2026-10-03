@@ -55,7 +55,7 @@ components:
       tags:
         team: platform
       stack_policy:
-        file: stack-policy.json
+        file: stack-policy.json              # or an inline `body:` (JSON string or YAML map)
       role_arn: "arn:aws:iam::123456789012:role/cfn-deploy"
       termination_protection: true
       timeout_in_minutes: 30
@@ -78,19 +78,20 @@ components:
 
 CloudFormation components use the same stack sections as other component types — `vars`, `env`,
 `auth`, `metadata`, `settings`, `dependencies`, `hooks`, `source`/`provision`, inheritance, and
-overrides — plus CloudFormation-specific fields. `generate:` supports templates and auxiliary
-files in isolated workdirs when `auto_generate_files` is enabled. See
-[generated files](references/generated-files.md) for configuration and operation coverage.
-`plugins:` is not supported (no chart-style plugin system).
+overrides — plus CloudFormation-specific fields. `generate:` and `plugins:` are not supported: a
+`generate:` key on a component, under the `aws/cloudformation:` type-level section, or in
+CloudFormation `overrides` is a stack-processing error. Use an inline `template:` instead — Atmos
+renders it with Go templates (when `templates.settings.enabled: true`) and YAML functions, so
+per-stack template content needs no generated files.
 
 | Field | Purpose |
 |---|---|
-| `template` / `path` *(exactly one required)* | `template` is an **inline** body (string or YAML map) that flows through Atmos's `{{ }}` templating before reaching CloudFormation. `path` is a **file reference**, read as raw bytes, no templating. Setting both is an error. |
+| `template` / `path` *(exactly one required)* | `template` is an **inline** body (string or YAML map) rendered by Atmos Go templates (`templates.settings.enabled: true`) and YAML functions (`!env`, `!store`, `!aws.cloudformation.output`, ...) before reaching CloudFormation. `path` is a **file reference**, read as raw bytes, no templating. Setting both is an error. To pass a CloudFormation dynamic reference through the template renderer, escape the opening braces once: `Value: '{{ "{{" }}resolve:ssm:/my/param}}'`. |
 | `stack_name` | Explicit stack name. Supports Go templates; no legacy name-pattern interpolation. |
 | `parameters` | A map of name to value, or an AWS CLI/Rain list of `{ParameterKey, ParameterValue}` entries (`UsePreviousValue: true` allowed; also `!include` of a JSON array). Scalars stringified, lists comma-joined for `List<Type>`. Other shapes are an error. For a Rain config file use `!include rain.yaml .Parameters`. |
 | `capabilities` | Acknowledged IAM capabilities: `CAPABILITY_IAM`, `CAPABILITY_NAMED_IAM`, `CAPABILITY_AUTO_EXPAND` (macros/SAM). Validated locally; an unknown value fails with the valid set. |
 | `tags` | `map[string]string` tags on the stack — distinct from Atmos's own component `tags`/`--tags`. |
-| `stack_policy.file` | JSON policy path. Set before UPDATE execution (apply/deploy or explicit changeset execute), after successful CREATE. Policy-setting errors stop pending updates; blocked updates never trigger an automatic override. |
+| `stack_policy.file` / `stack_policy.body` *(mutually exclusive; setting both is a validation error)* | `file` is a JSON policy path relative to the component's base path, read verbatim. `body` is an inline policy: a JSON string (used as written) or a YAML map (serialized to JSON). `body` needs no component directory and is rendered by Atmos templates and YAML functions like an inline `template`. Atmos installs the policy before UPDATE execution (apply/deploy or explicit changeset execute), and after a successful CREATE or a no-op apply. Policy-setting errors stop pending updates; blocked updates never trigger an automatic override. |
 | `role_arn` | The CloudFormation **service role**, not caller credentials — `CreateChangeSet`'s `RoleARN`. |
 | `notification_arns` | SNS topic ARNs CloudFormation publishes stack events to. |
 | `disable_rollback` | Prevents automatic rollback on stack creation/update failure. |
@@ -103,7 +104,7 @@ files in isolated workdirs when `auto_generate_files` is enabled. See
 
 | Command | Purpose |
 |---|---|
-| `atmos aws cloudformation render <component> -s <stack>` | Render the local template client-side. No API calls. |
+| `atmos aws cloudformation render <component> -s <stack>` | Render the template client-side without deploying or validating it through the CloudFormation API. Local or already-provisioned sources render offline without AWS credentials; source provisioning (for example a cold private S3 source) and configured secret or output lookups can still require authentication and network access. |
 | `atmos aws cloudformation validate <component> -s <stack>` | Server-side `ValidateTemplate` — syntax and capability discovery, not a local linter. |
 | `atmos aws cloudformation diff <component> -s <stack>` | Creates (or reuses) a changeset and previews the changes an apply would make, then deletes the preview changeset (best-effort cleanup) so it never leaks against the account's changeset quota. `plan` is an alias. |
 | `atmos aws cloudformation apply <component> -s <stack>` | Executes the changeset (`ExecuteChangeSet`), creating or updating the stack — never a direct `CreateStack`/`UpdateStack` call. Streams per-resource stack events live and ends with a rendered Outputs summary. |
@@ -191,6 +192,10 @@ components:
 A single-file source URI (e.g. a raw `https://.../dns.yaml` link) is fetched directly and used
 as-is — `path:` isn't needed in that case.
 
+`provision.workdir.enabled` only applies to a `source:` (it selects the per-instance download
+directory). Setting it on a component without a `source:` is an error, because CloudFormation does
+not copy local components into workdirs.
+
 Inspect and manage vendored sources with the `source` verb group:
 
 ```shell
@@ -255,13 +260,12 @@ table.
 components:
   "aws/cloudformation":
     base_path: components/cloudformation   # default
-    auto_generate_files: false             # opt in to component generate blocks
 ```
 
-`base_path` and `auto_generate_files` are project-wide settings. Other CloudFormation fields (`template`/`path`,
+`base_path` is a project-wide setting. Other CloudFormation fields (`template`/`path`,
 `stack_name`, `parameters`, `capabilities`, `tags`, `stack_policy`, `role_arn`, `notification_arns`,
-`disable_rollback`, `termination_protection`, `timeout_in_minutes`, `source`, `provision`, `generate`, `auth`,
-`dependencies`) is configured per stack, not in `atmos.yaml`.
+`disable_rollback`, `termination_protection`, `timeout_in_minutes`, `source`, `provision`, `auth`,
+`dependencies`) are configured per stack, not in `atmos.yaml`.
 
 ## Native CI Summaries
 
@@ -305,8 +309,9 @@ Rain-verb-to-`atmos aws cloudformation`-verb cross-reference (`fmt`→`fmt`, `ca
 
 ## Guidance
 
-- Prefer `path:` for templates that live in the component directory; use inline `template:` only
-  when the body needs Atmos's own `{{ }}` templating before reaching CloudFormation.
+- Prefer `path:` for templates that live in the component directory; use inline `template:` when
+  the body needs Atmos's own `{{ }}` templating or YAML functions before reaching CloudFormation.
+  CloudFormation has no `generate:` — inline templating replaces it.
 - Use `dependencies.components` so `--all`/`--affected` deploys stacks in the right order — a
   Terraform component can `depends_on` a CFN stack and vice versa.
 - Use `provision.backend.enabled: true` for a zero-friction dev sandbox; use explicit

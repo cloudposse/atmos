@@ -1,7 +1,6 @@
 package cloudformation
 
 import (
-	"fmt"
 	"maps"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -16,28 +15,41 @@ import (
 var createTargetAuthManager = auth.CreateAndAuthenticateManagerWithAtmosConfigForStack
 
 // ResolveTargetAuth authenticates one CFN delivery target without modifying its parent.
-func ResolveTargetAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, targetConfig map[string]any, requestedIdentity string) (*schema.ConfigAndStacksInfo, error) {
+// The target name only labels diagnostics and the --identity=false warning.
+func ResolveTargetAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, targetName string, targetConfig map[string]any, requestedIdentity string) (*schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(atmosConfig, "cloudformation.ResolveTargetAuth")()
 
 	resolved, err := auth.ResolveTargetAuth(&auth.TargetAuthOptions{
-		AtmosConfig: atmosConfig, Info: info, TargetConfig: targetConfig,
+		AtmosConfig: atmosConfig, Info: info, TargetName: targetName, TargetConfig: targetConfig,
 		RequestedIdentity: requestedIdentity, CreateManager: createTargetAuthManager,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationIdentityResolutionFailed, err)
+		return nil, errUtils.Build(errUtils.ErrAwsCloudFormationTargetAuthFailed).WithCause(err).Err()
 	}
 	return resolved, nil
+}
+
+// validateTargetAuth statically validates the selected target's auth block, so a dry
+// run rejects what a real run would, without authenticating or calling AWS.
+func validateTargetAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, targetName string, targetConfig map[string]any, requestedIdentity string) error {
+	err := auth.ValidateTargetAuth(&auth.TargetAuthOptions{
+		AtmosConfig: atmosConfig, Info: info, TargetName: targetName, TargetConfig: targetConfig, RequestedIdentity: requestedIdentity,
+	})
+	if err != nil {
+		return errUtils.Build(errUtils.ErrAwsCloudFormationTargetAuthFailed).WithCause(err).Err()
+	}
+	return nil
 }
 
 // clientForOperation uses a direct deploy target for stack operations, while
 // StackSet create/update resolve their own target. Delete/instances deliberately
 // use component auth: those verbs do not select or require a StackSet target.
 func clientForOperation(octx *opContext, operation Operation) (CloudFormationClient, error) {
-	block, err := operationTargetConfig(octx, operation)
+	name, block, err := operationTargetConfig(octx, operation)
 	if err != nil {
 		return nil, err
 	}
-	info, err := ResolveTargetAuth(octx.AtmosConfig, octx.Info, block, octx.RequestedIdentity)
+	info, err := ResolveTargetAuth(octx.AtmosConfig, octx.Info, name, block, octx.RequestedIdentity)
 	if err != nil {
 		return nil, err
 	}
@@ -48,30 +60,31 @@ func clientForOperation(octx *opContext, operation Operation) (CloudFormationCli
 	return newClient(awsConfig, resolveEndpointURL(info)), nil
 }
 
-// operationTargetConfig selects the operation-specific auth scope without requiring targets for StackSet teardown.
-func operationTargetConfig(octx *opContext, operation Operation) (map[string]any, error) {
+// operationTargetConfig selects the operation-specific auth scope, returning the target's name and
+// block, without requiring targets for StackSet teardown.
+func operationTargetConfig(octx *opContext, operation Operation) (string, map[string]any, error) {
 	provision, _ := octx.Info.ComponentSection[cfg.ProvisionSectionName].(map[string]any)
 	name, _ := octx.Flags[targetKey].(string)
 	switch operation {
 	case OperationStackSetCreate, OperationStackSetUpdate:
 		selected, err := resolveStackSetTarget(provision, name)
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 		targets, _ := provision["targets"].(map[string]any)
 		block, _ := targets[selected.Name].(map[string]any)
-		return block, nil
+		return selected.Name, block, nil
 	case OperationStackSetDelete, OperationStackSetInstances:
-		return nil, nil
+		return "", nil, nil
 	default:
 		selected, err := target.SelectTargetWithDefault(provision, name, "default", cfg.CloudFormationComponentType)
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 		if selected.Kind == cfg.CloudFormationComponentType {
-			return selected.Config, nil
+			return selected.Name, selected.Config, nil
 		}
-		return nil, nil
+		return "", nil, nil
 	}
 }
 
@@ -79,7 +92,7 @@ func operationTargetConfig(octx *opContext, operation Operation) (map[string]any
 // target's auth.identity selector. Keep the repository identity when no target
 // or CLI override exists, and never change the original target configuration.
 func externalTargetAuth(octx *opContext, selected *target.SelectedTarget) (*schema.ConfigAndStacksInfo, map[string]any, error) {
-	info, err := ResolveTargetAuth(octx.AtmosConfig, octx.Info, selected.Config, octx.RequestedIdentity)
+	info, err := ResolveTargetAuth(octx.AtmosConfig, octx.Info, selected.Name, selected.Config, octx.RequestedIdentity)
 	if err != nil {
 		return nil, nil, err
 	}

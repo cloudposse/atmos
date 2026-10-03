@@ -3,32 +3,23 @@ title: atmos aws cloudformation render
 sidebar_label: render
 sidebar_class_name: command
 id: render
-description: Render a CloudFormation template client-side, provisioning sources and generating configured files first.
+description: Render a CloudFormation template client-side, without deploying or validating it through the CloudFormation API.
 ---
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import SelectionFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_selection-flags.mdx'
 import GitFlags from '@site/docs/cli/commands/aws/cloudformation/_partials/_git-flags.mdx'
 
 <Intro>
   Render the component's inline `template:` or file-based `path:` template,
-  provisioning `source:` and generating configured files first when enabled. Local
-  or already-provisioned sources can render offline without AWS credentials when
-  their configuration does not require remote lookups. A cold remote `source:` must
-  be fetched first; private S3 sources use the component’s resolved AWS identity.
+  provisioning `source:` first when it is set. Local or already-provisioned
+  sources can render offline without AWS credentials when their configuration
+  does not require remote lookups. A cold remote `source:` must be fetched
+  first; private S3 sources use the component's resolved AWS identity.
 </Intro>
 
 <Experimental />
-
-<ActionCard title="Configure Generated Templates">
-  Enable automatic file generation to render stack-specific templates in isolated workdirs.
-  <div>
-    <PrimaryCTA to="/cli/configuration/components/aws-cloudformation">Configuration Reference</PrimaryCTA>
-  </div>
-</ActionCard>
 
 <CastPlayer title="atmos aws cloudformation render --help" src="/casts/screengrabs/atmos-aws-cloudformation-render--help.cast" static chrome />
 
@@ -74,7 +65,3 @@ authentication and network access. To preview the changes an `apply` would
 actually make against the deployed stack, use
 [`diff`](/cli/commands/aws/cloudformation/diff) (alias [`plan`](/cli/commands/aws/cloudformation/plan)).
 :::
-
-When [`auto_generate_files`](/cli/configuration/components/aws-cloudformation) is enabled,
-`render` writes the component's [`generate`](/stacks/components/aws-cloudformation#generated-files)
-files into its isolated workdir before loading `path`. `--dry-run` skips generation.

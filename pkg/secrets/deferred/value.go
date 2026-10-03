@@ -11,8 +11,9 @@ import (
 )
 
 // NewValue defers the entire lookup, including preparation of store or cloud
-// credentials. Masked values retain validation without contacting a backend.
-func NewValue(ac *schema.AtmosConfiguration, input, stack string, info *schema.ConfigAndStacksInfo) deferred.Resolver[any] {
+// credentials. Masked values retain validation without contacting a backend. Options such as
+// secrets.WithSelectorEvaluator let a declaration's `store:`/`sops:` selector resolve lazily.
+func NewValue(ac *schema.AtmosConfiguration, input, stack string, info *schema.ConfigAndStacksInfo, opts ...secrets.Option) deferred.Resolver[any] {
 	defer perf.Track(ac, "secrets.deferred.NewValue")()
 
 	return deferred.Func[any](func() (any, error) {
@@ -26,6 +27,6 @@ func NewValue(ac *schema.AtmosConfiguration, input, stack string, info *schema.C
 				return nil, err
 			}
 		}
-		return secrets.Resolve(&config, input, stack, info)
+		return secrets.Resolve(&config, input, stack, info, opts...)
 	})
 }

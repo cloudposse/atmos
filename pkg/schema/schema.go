@@ -1550,15 +1550,16 @@ type Helm struct {
 type StackPolicy struct {
 	// File is the path to the stack policy JSON document, relative to the component's base path.
 	File string `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
+	// Body is an inline stack policy document, either a JSON string or a map serialized to JSON.
+	// It is mutually exclusive with File and needs no component directory.
+	Body any `yaml:"body,omitempty" json:"body,omitempty" mapstructure:"body" jsonschema:"oneof_type=string;object"`
 }
 
 // AwsCloudFormation defines configuration for native aws/cloudformation components.
 // CloudFormation components deploy a stack-scoped CloudFormation stack directly through the
 // AWS SDK for Go v2, with no external binary/toolchain dependency.
 type AwsCloudFormation struct {
-	// AutoGenerateFiles enables generate blocks in isolated component workdirs.
-	AutoGenerateFiles bool   `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
-	BasePath          string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	// Template is the path to the CloudFormation template, relative to the component's base path.
 	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 	// StackName is the explicit CloudFormation stack name (no legacy name-pattern interpolation).

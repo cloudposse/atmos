@@ -3,8 +3,6 @@ base_path: "./"
 components:
   "aws/cloudformation":
     base_path: "components/cloudformation"
-    # Only components with a generate block write files, in isolated workdirs.
-    auto_generate_files: true
 
 stacks:
   base_path: "stacks"

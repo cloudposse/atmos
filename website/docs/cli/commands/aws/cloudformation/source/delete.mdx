@@ -71,6 +71,14 @@ Explanation: Deletion requires --force flag for safety
 Hint: Use --force to confirm deletion
 ```
 
+### Preview with `--dry-run`
+
+`--dry-run` runs every check of a real deletion (the component exists, has a `source`, its directory resolves, and the directory is safe to delete) and only skips the prompt and the deletion:
+
+```shell
+atmos aws cloudformation source delete vpc --stack dev --dry-run
+```
+
 ## Arguments
 
 <dl>
@@ -95,6 +103,8 @@ The `delete` command has several safety features:
 1. **Requires --force** - Prevents accidental deletion
 2. **Only deletes source-managed components** - Only works on components with `source` configured
 3. **Non-destructive on missing directories** - Shows a warning if the directory doesn't exist instead of failing
+4. **Targets the directory the component runs from** - The directory is `metadata.component` (the base component), not the instance name, and follows `working_directory` and `provision.workdir.enabled` exactly like `source pull` and just-in-time provisioning
+5. **Only deletes directories Atmos provisioned** - `source pull` and just-in-time provisioning record where they wrote in `.atmos/source.json` (workdir targets use `.atmos/metadata.json`). The command refuses to delete a directory without that record, and refuses a directory that is the local component directory of another component in the same stack that has no `source`. Directories vendored by an earlier Atmos version have no record: run `source pull --force` to re-provision them (which adds it), or delete them by hand
 
 ## See Also
 

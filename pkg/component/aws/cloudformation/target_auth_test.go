@@ -84,7 +84,7 @@ func TestResolveTargetAuthPrecedenceAndIsolation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ac, info, block := targetAuthFixture()
 			stubTargetAuthentication(t, "", "")
-			resolved, err := ResolveTargetAuth(ac, info, block, tc.requested)
+			resolved, err := ResolveTargetAuth(ac, info, "artifacts", block, tc.requested)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, resolved.Identity)
 			assert.Equal(t, tc.want, resolved.AuthContext.AWS.Profile)
@@ -109,17 +109,17 @@ func TestResolveTargetAuthAbsentDisabledAndInvalid(t *testing.T) {
 		t.Fatal("invalid, absent, or disabled auth must not authenticate")
 		return nil, nil
 	}
-	resolved, err := ResolveTargetAuth(ac, info, nil, "")
+	resolved, err := ResolveTargetAuth(ac, info, "", nil, "")
 	require.NoError(t, err)
 	assert.Same(t, info, resolved)
-	resolved, err = ResolveTargetAuth(ac, info, block, cfg.IdentityFlagDisabledValue)
+	resolved, err = ResolveTargetAuth(ac, info, "artifacts", block, cfg.IdentityFlagDisabledValue)
 	require.NoError(t, err)
 	assert.True(t, resolved.AuthDisabled)
 	assert.Nil(t, resolved.AuthContext)
 	assert.Equal(t, "sandbox", info.AuthContext.AWS.Profile)
 
 	for _, raw := range []any{"dev", map[string]any{"identity": 123}, map[string]any{"identities": map[string]any{"missing": map[string]any{"default": true}}}} {
-		_, err := ResolveTargetAuth(ac, info, map[string]any{"auth": raw}, "")
+		_, err := ResolveTargetAuth(ac, info, "artifacts", map[string]any{"auth": raw}, "")
 		require.Error(t, err)
 	}
 }
@@ -132,9 +132,14 @@ func TestResolveTargetAuthFailureDoesNotFallBack(t *testing.T) {
 	createTargetAuthManager = func(string, *schema.AuthConfig, string, *schema.AtmosConfiguration, string) (auth.AuthManager, error) {
 		return nil, errUtils.ErrAuthenticationFailed
 	}
-	_, err := ResolveTargetAuth(ac, info, block, "")
-	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationIdentityResolutionFailed)
+	_, err := ResolveTargetAuth(ac, info, "artifacts", block, "")
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationTargetAuthFailed)
+	assert.ErrorIs(t, err, errUtils.ErrProvisionTargetAuthFailed)
 	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	targetName, _ := errUtils.GetContext(err, "target")
+	assert.Equal(t, "artifacts", targetName)
+	componentName, _ := errUtils.GetContext(err, "component")
+	assert.Equal(t, "demo", componentName)
 	assert.Equal(t, "sandbox", info.AuthContext.AWS.Profile)
 }
 
@@ -241,7 +246,7 @@ func TestStackSetReadDeleteDoNotRequireTargetAuth(t *testing.T) {
 	ac, info, block := targetAuthFixture()
 	block["auth"] = "invalid-but-unselected"
 	for _, operation := range []Operation{OperationStackSetDelete, OperationStackSetInstances} {
-		selected, err := operationTargetConfig(&opContext{AtmosConfig: ac, Info: info}, operation)
+		_, selected, err := operationTargetConfig(&opContext{AtmosConfig: ac, Info: info}, operation)
 		require.NoError(t, err)
 		assert.Nil(t, selected)
 	}

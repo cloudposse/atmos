@@ -22,6 +22,10 @@ func cloudFormationOutputScope(stack string, caller *schema.ConfigAndStacksInfo,
 }
 
 // cloudFormationOutputAuthForSections follows only a default direct stack target.
+// The identity that target declares always wins over the caller's --identity: the
+// producer's stack lives in the account its own target selects, and a same-named
+// stack in the caller's account must never answer instead. A target that declares
+// no auth uses the caller's credentials.
 // Publish-only, Git and StackSet destinations do not describe a single deployed
 // stack; their authentication must not affect CloudFormation output references.
 func cloudFormationOutputAuthForSections(ac *schema.AtmosConfiguration, sections map[string]any, scope *schema.ConfigAndStacksInfo, parent *schema.AuthContext) (*schema.AuthContext, error) {
@@ -40,8 +44,8 @@ func cloudFormationOutputAuthForSections(ac *schema.AtmosConfiguration, sections
 		requested = *info.RequestedIdentity
 	}
 	resolved, err := auth.ResolveTargetAuth(&auth.TargetAuthOptions{
-		AtmosConfig: ac, Info: &info, TargetConfig: selected.Config,
-		RequestedIdentity: requested, CreateManager: createCloudFormationTargetAuthManager,
+		AtmosConfig: ac, Info: &info, TargetName: selected.Name, TargetConfig: selected.Config,
+		RequestedIdentity: requested, DeclaredIdentityWins: true, CreateManager: createCloudFormationTargetAuthManager,
 	})
 	if err != nil {
 		return nil, err

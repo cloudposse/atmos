@@ -93,7 +93,7 @@ func packageTemplate(octx *opContext, req *packagingRequest) error {
 		return err
 	}
 
-	info, err := ResolveTargetAuth(octx.AtmosConfig, octx.Info, targetConfigByName(octx.Info.ComponentSection, s3Target.Name), octx.RequestedIdentity)
+	info, err := ResolveTargetAuth(octx.AtmosConfig, octx.Info, s3Target.Name, targetConfigByName(octx.Info.ComponentSection, s3Target.Name), octx.RequestedIdentity)
 	if err != nil {
 		return err
 	}

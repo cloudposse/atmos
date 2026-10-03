@@ -150,3 +150,45 @@ independent manager; packaging does not change deployment, hook, or secret auth.
   component or CLI identity because they do not select/require a target.
 - Git: target auth is passed to the Git identity environment; absent a target or
   CLI override, the repository identity remains authoritative.
+
+### Strict validation
+
+A target's `auth` block is validated before any AWS call, in real runs and `--dry-run`:
+
+- Unknown keys fail (for example `identitty` instead of `identity`). Supported keys are `identity`, `identities`,
+  `providers`, `integrations`, `console`, `logs`, `keyring`, and `realm`.
+- A block that declares `auth.identities` but neither marks one `default: true` nor sets `auth.identity` fails, unless
+  `--identity` selects one. Two `default: true` identities in one target fail.
+- A target `auth` value must be a mapping and `auth.identity` a nonempty string.
+- A `kind: aws/cloudformation` target accepts only `kind`, `auth`, and `packaging`. A `region` there fails with a hint:
+  a direct-deploy target has no region of its own. Set `settings.aws_cloudformation.region` on the component (then the
+  identity's region, then the AWS SDK chain). Only `kind: aws/s3` targets take a `region`.
+
+Errors name the target, component, stack, and identity, and carry a hint.
+
+### Output references and `--identity`
+
+`!aws.cloudformation.output` and `atmos.Component(...).outputs` read the producer's stack with the identity its default
+direct target declares (`auth.identity`, or the `default: true` entry in `auth.identities`), whatever `--identity` or
+`ATMOS_IDENTITY` the consumer was run with. A same-named stack in the caller's account never answers instead. When the
+producer's target declares no auth, the lookup uses the caller's credentials. `--identity=false` still disables Atmos
+auth for the lookup.
+
+### `--identity=false`
+
+`--identity=false` (or `ATMOS_IDENTITY=false`) disables Atmos authentication, so a target's declared identity is not
+used and the AWS SDK default credential chain applies. Atmos prints one warning per target naming the target and the
+identity being bypassed.
+
+### Default identities
+
+A component-level `default: true` identity supersedes a stack-level (or type-level) default, so one default survives.
+Two defaults at the same level conflict: without a terminal Atmos fails with the list of defaults and a hint to pass
+`--identity=<name>` or remove one, instead of silently using the SDK default credential chain. A bare `--identity`
+needs a terminal; without one, pass `--identity=<name>`. Operation verbs accept `-i` as the `--identity` shorthand.
+
+### `describe` and stores
+
+`atmos describe component` and `atmos describe stacks` bind an explicit `--identity`/`ATMOS_IDENTITY` to stores that
+have no `identity:` of their own, the same way deploy does, so the same command line yields the same values. Stores
+with their own `identity:` keep it.

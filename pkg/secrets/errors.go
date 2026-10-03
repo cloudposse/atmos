@@ -56,6 +56,20 @@ var (
 	// sharing a file (no isolation), or a stack-scoped secret resolving per-component (not shared).
 	ErrSopsCollision = errors.New("SOPS secret files collide across scopes")
 
+	// ErrSelectorUnresolved indicates a declaration's `store:`/`sops:` value (or the SOPS provider it
+	// names) is a YAML-function selector (for example `!aws.cloudformation.output ...`) that could not
+	// be resolved to a concrete backend. Only the declaration that needs the backend fails; sibling
+	// declarations with literal backends are unaffected.
+	ErrSelectorUnresolved = errors.New("secret backend selector could not be resolved")
+
+	// ErrSelectorEvaluatorUnavailable indicates a backend selector was found but no selector
+	// evaluator (credentials plus component evaluation context) is available in this code path, such
+	// as credential-free listing.
+	ErrSelectorEvaluatorUnavailable = errors.New("backend selectors are not evaluated here (they require credentials)")
+
+	// ErrSelectorResult indicates a backend selector evaluated to something other than a backend name.
+	ErrSelectorResult = errors.New("selector did not evaluate to a backend name")
+
 	// ErrImportSourceStore indicates the import source store could not be determined: the
 	// declaration is not store-backed and no explicit source store was given.
 	ErrImportSourceStore = errors.New("import source store is required (the declaration has no `store:` to default to)")

@@ -13,7 +13,6 @@ func resolveExecutionPolicy(ctx context.Context, atmosConfig *schema.AtmosConfig
 	if err != nil {
 		return nil, err
 	}
-
 	spec.StackPolicyBody, err = loadStackPolicyBody(componentPath, spec)
 	if err != nil {
 		return nil, err

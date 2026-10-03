@@ -54,7 +54,7 @@ type sourceClient interface {
 	ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
 }
 
-type sourceLocation struct{ bucket, key, region, endpoint, version string }
+type sourceLocation struct{ bucket, key, region, endpoint, version, uri string }
 
 // Getter downloads S3 objects and prefixes with request-scoped authentication.
 type Getter struct {
@@ -120,6 +120,7 @@ func (g *Getter) resolve(u *url.URL) (sourceClient, *sourceLocation, error) {
 	if err != nil {
 		return nil, loc, err
 	}
+	loc.uri = displayURI(u)
 	client, err := g.newClient(g.ctx, loc)
 	return client, loc, err
 }
@@ -143,7 +144,7 @@ func (g *Getter) ClientMode(u *url.URL) (getter.ClientMode, error) {
 	if _, err := client.HeadObject(g.ctx, head); err == nil {
 		return getter.ClientModeFile, nil
 	} else if !objectNotFound(err) {
-		return 0, err
+		return 0, wrapS3Error(err, loc)
 	}
 	return g.prefixMode(client, loc)
 }
@@ -168,7 +169,7 @@ func (g *Getter) prefixMode(client sourceClient, loc *sourceLocation) (getter.Cl
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(g.ctx)
 		if err != nil {
-			return 0, err
+			return 0, wrapS3Error(err, loc)
 		}
 		for _, obj := range page.Contents {
 			key := aws.ToString(obj.Key)
@@ -208,7 +209,7 @@ func (g *Getter) Get(dst string, u *url.URL) error {
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(g.ctx)
 		if err != nil {
-			return err
+			return wrapS3Error(err, loc)
 		}
 		for _, obj := range page.Contents {
 			if err := g.getDirectoryObject(client, loc, dst, prefix, aws.ToString(obj.Key)); err != nil {
@@ -250,7 +251,7 @@ func (g *Getter) getObject(client sourceClient, loc *sourceLocation, dst string)
 	}
 	result, err := client.GetObject(g.ctx, input)
 	if err != nil {
-		return err
+		return wrapS3Error(err, loc)
 	}
 	defer result.Body.Close()
 	if err := os.MkdirAll(filepath.Dir(dst), directoryMode); err != nil {
@@ -266,6 +267,9 @@ func (g *Getter) getObject(client sourceClient, loc *sourceLocation, dst string)
 
 // parseS3SourceURL accepts native s3 URLs and go-getter's forced HTTPS S3 URLs.
 func parseS3SourceURL(u *url.URL) (*sourceLocation, error) {
+	if err := rejectUnsupportedAuthParams(u); err != nil {
+		return &sourceLocation{}, err
+	}
 	loc := &sourceLocation{region: u.Query().Get("region"), version: u.Query().Get("version")}
 	if u.Scheme == "s3" {
 		loc.bucket = u.Host

@@ -2,6 +2,13 @@
 
 **Date:** 2026-10-02
 
+> **Superseded.** Generate blocks and workdir isolation were removed for
+> CloudFormation components: `generate:` is now a stack-processing error, and
+> `auto_generate_files` no longer applies to CloudFormation. Inline `template:`
+> (rendered by Atmos Go templates and YAML functions) replaces it. See
+> [`docs/prd/aws-cloudformation-component.md`](../prd/aws-cloudformation-component.md).
+> The text below is kept as historical record.
+
 ## Summary
 
 CloudFormation components can opt into `generate:` with

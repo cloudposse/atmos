@@ -8,10 +8,14 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// pullMissingSourceHint is the hint shown when `source pull` targets a component without source.
+const pullMissingSourceHint = "Add source to the component configuration in your stack manifest"
 
 // PullCommand creates a pull command for the given component type.
 func PullCommand(cfg *Config) *cobra.Command {
@@ -57,7 +61,6 @@ If component is not specified, prompts interactively for selection.`, cfg.TypeLa
 	return cmd
 }
 
-// executePull resolves CLI scope and destination policy before downloading component source.
 func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.StandardParser) error {
 	defer perf.Track(nil, fmt.Sprintf("source.%s.pull.RunE", cfg.ComponentType))()
 
@@ -105,8 +108,7 @@ func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.S
 	}
 
 	if sourceDryRun(cmd) {
-		ui.Info(fmt.Sprintf("Dry run: would pull source for %s in stack %s", component, stack))
-		return nil
+		return dryRunPull(cmd, cfg, component, stack)
 	}
 
 	opts := &CommonOptions{
@@ -137,13 +139,8 @@ func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.S
 		return errUtils.Build(errUtils.ErrSourceMissing).
 			WithContext("component", component).
 			WithContext("stack", opts.Stack).
-			WithHint("Add source to the component configuration in your stack manifest").
+			WithHint(pullMissingSourceHint).
 			Err()
-	}
-
-	componentConfig, err = cfg.prepareComponentConfig(atmosConfig, componentConfig)
-	if err != nil {
-		return err
 	}
 
 	// Provision the source using command context for cancellation propagation.
@@ -156,4 +153,29 @@ func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.S
 		AuthContext:     authContext,
 		Force:           opts.Force,
 	})
+}
+
+// dryRunPull runs the validation of a real pull (config, component exists, declares source,
+// destination resolvable) without authenticating or touching the filesystem.
+func dryRunPull(cmd *cobra.Command, cfg *Config, component, stack string) error {
+	atmosConfig, componentConfig, err := loadSourceComponent(component, stack, globalFlagsFor(cmd), pullMissingSourceHint)
+	if err != nil {
+		return err
+	}
+	target, err := source.ResolveTarget(atmosConfig, cfg.ComponentType, component, componentConfig)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrSourceProvision).
+			WithCause(err).
+			WithContext("component", component).
+			WithContext("stack", stack).
+			Err()
+	}
+	ui.Info(fmt.Sprintf("Dry run: would pull source for %s in stack %s to %s", component, stack, target.Dir))
+	return nil
+}
+
+// globalFlagsFor parses the global flags of cmd.
+func globalFlagsFor(cmd *cobra.Command) *global.Flags {
+	parsed := flags.ParseGlobalFlags(cmd, viper.GetViper())
+	return &parsed
 }

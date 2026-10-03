@@ -228,7 +228,7 @@ func TestCheckStackSopsCollisions(t *testing.T) {
 			{Stack: "prod", Component: "web", Section: sopsSection("secrets/prod.web.enc.yaml")},
 		}, nil)
 
-		require.NoError(t, checkStackSopsCollisions("prod"))
+		require.NoError(t, checkStackSopsCollisions(secretScope{Stack: "prod"}))
 	})
 
 	t.Run("shared instance file collides", func(t *testing.T) {
@@ -237,13 +237,13 @@ func TestCheckStackSopsCollisions(t *testing.T) {
 			{Stack: "prod", Component: "web", Section: sopsSection("secrets/shared.enc.yaml")},
 		}, nil)
 
-		require.ErrorIs(t, checkStackSopsCollisions("prod"), secrets.ErrSopsCollision)
+		require.ErrorIs(t, checkStackSopsCollisions(secretScope{Stack: "prod"}), secrets.ErrSopsCollision)
 	})
 
 	t.Run("enumerate error is returned", func(t *testing.T) {
 		sentinel := errors.New("enumerate failed")
 		overrideEnumerateScopes(t, nil, sentinel)
 
-		require.ErrorIs(t, checkStackSopsCollisions("prod"), sentinel)
+		require.ErrorIs(t, checkStackSopsCollisions(secretScope{Stack: "prod"}), sentinel)
 	})
 }

@@ -116,6 +116,8 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		Dst:              dest,
 		Mode:             clientMode,
 		DisableSymlinks:  false,
+		// Warn when an archive carries link entries, which go-getter extracts as empty files.
+		Decompressors: linkAuditedDecompressors(),
 		Getters: map[string]getter.Getter{
 			// Overriding 'git'.
 			"git":   &CustomGitGetter{RetryConfig: f.retryConfig, RetryAuthErrors: retryAuthErrors, OnRetry: f.onRetry},

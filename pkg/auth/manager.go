@@ -534,7 +534,12 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 		// Check if we're in interactive mode (have TTY).
 		if !isInteractive() {
 			// User requested interactive selection but we don't have a TTY.
-			return "", errUtils.ErrIdentitySelectionRequiresTTY
+			available := m.ListIdentities()
+			sort.Strings(available)
+			return "", errUtils.Build(errUtils.ErrIdentitySelectionRequiresTTY).
+				WithHint("Pass `--identity=<name>` to choose an identity without a prompt, or set `ATMOS_IDENTITY=<name>`.").
+				WithContext("available_identities", strings.Join(available, ",")).
+				Err()
 		}
 		// We have a TTY - show selector.
 		return m.promptForIdentity("Select an identity:", m.ListIdentities())
@@ -565,7 +570,11 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	default:
 		// Multiple default identities found.
 		if !isInteractive() {
-			return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedFmt, defaultIdentities))
+			sort.Strings(defaultIdentities)
+			return "", errUtils.Build(fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedFmt, defaultIdentities))).
+				WithExplanationf("Identities marked `default: true`: %s. Without a terminal Atmos cannot ask which one to use, and silently falling back to the AWS SDK default credential chain could target the wrong account.", strings.Join(defaultIdentities, ", ")).
+				WithHint("Pass `--identity=<name>` (or set `ATMOS_IDENTITY=<name>`) to choose one, or remove `default: true` from all but one identity. A component-level default overrides a stack-level default; two defaults at the same level conflict.").
+				Err()
 		}
 		// In interactive mode, prompt user to choose from default identities.
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)

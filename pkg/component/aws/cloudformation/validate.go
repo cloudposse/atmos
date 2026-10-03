@@ -33,6 +33,14 @@ func validateComponentConfig(config map[string]any) error {
 		return nil
 	}
 
+	if err := validateWorkdirRequiresSource(config); err != nil {
+		return err
+	}
+
+	if err := validateDirectTargets(config); err != nil {
+		return err
+	}
+
 	stackName, _ := config[cfg.StackNameSectionName].(string)
 	templateRaw := config[cfg.TemplateSectionName]
 	path, _ := config[cfg.TemplatePathSectionName].(string)
@@ -56,6 +64,21 @@ func validateComponentConfig(config map[string]any) error {
 	}
 
 	return nil
+}
+
+// validateWorkdirRequiresSource rejects `provision.workdir.enabled: true` on a component without a
+// `source:`. CloudFormation never copies a local component into a workdir; the setting only
+// selects the per-instance download directory of a JIT source, so it would otherwise be ignored silently.
+func validateWorkdirRequiresSource(config map[string]any) error {
+	provision, _ := config[cfg.ProvisionSectionName].(map[string]any)
+	workdir, _ := provision["workdir"].(map[string]any)
+	if enabled, _ := workdir["enabled"].(bool); !enabled || source.HasSource(config) {
+		return nil
+	}
+	return errUtils.Build(errUtils.ErrInvalidAwsCloudFormationSettings).
+		WithExplanation("'provision.workdir.enabled' is set on a CloudFormation component without a 'source'.").
+		WithHint("CloudFormation does not copy local components into workdirs; 'provision.workdir.enabled' only applies to JIT 'source:' downloads. Remove it, or add a 'source:'.").
+		Err()
 }
 
 // isTemplatePresent reports whether the raw `template` value is a non-empty

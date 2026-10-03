@@ -10,7 +10,6 @@ id: aws-cloudformation
 import File from "@site/src/components/File";
 import Intro from "@site/src/components/Intro";
 import Experimental from "@site/src/components/Experimental";
-import EmbedFile from "@site/src/components/EmbedFile";
 
 <Intro>
   Define CloudFormation stacks in stack manifests when you want Atmos to
@@ -78,10 +77,13 @@ dependencies, and be included in affected runs.
   <dd>Cross-component ordering for `--all` and `--affected` runs.</dd>
 </dl>
 
-CloudFormation components support a [`generate:`](#generated-files) section for
-stack-specific templates, stack policies, and auxiliary files. They do not
-support a `plugins:` section — there is no chart-style plugin system, unlike
-native Helm.
+CloudFormation components do not support a `generate:` section or isolated
+workdirs, and they do not support a `plugins:` section — there is no chart-style
+plugin system, unlike native Helm. A `generate:` key on a CloudFormation
+component, under the `aws/cloudformation:` type-level section, or in
+CloudFormation `overrides` is a stack-processing error. See
+[Inline Templates and Templating](#inline-templates-and-templating) for how to
+produce stack-specific templates instead.
 
 ## CloudFormation-Specific Sections
 
@@ -92,11 +94,13 @@ native Helm.
 
     - `template` — an **inline** template body, either a literal string (a
       `|` block scalar, YAML or JSON) or a structured YAML map. Because it's
-      inline stack config, it flows through Atmos's own `{{ }}` templating
-      pipeline before being sent to CloudFormation — file-based templates
-      (`path:`) do not get this.
+      inline stack config, Atmos renders it with Go templates (when
+      `templates.settings.enabled: true`) and evaluates YAML functions in it
+      before sending it to CloudFormation. See
+      [Inline Templates and Templating](#inline-templates-and-templating).
     - `path` — a **file reference**: the path to a template file, relative to
-      the component's base path.
+      the component's base path. Atmos uses the file verbatim: it does not
+      render Go templates or YAML functions in it.
 
     Setting both is an error.
   </dd>
@@ -137,10 +141,21 @@ native Helm.
 
   <dt>`stack_policy`</dt>
   <dd>
-    Protects specific resources from update during `UpdateStack`. Set
-    `stack_policy.file` to a stack policy JSON document path, relative to the
-    component's base path. Installed before an update to protect the current change,
-    and after successful creation for a new stack.
+    Protects specific resources from update during `UpdateStack`. Provide the
+    policy one of two mutually exclusive ways; setting both `file` and `body`
+    is a validation error:
+
+    - `stack_policy.file` — the path to a stack policy JSON document, relative
+      to the component's base path. Atmos uses the file verbatim.
+    - `stack_policy.body` — an inline stack policy, either a JSON string or a
+      YAML map. A map is serialized to JSON; a string is used as written. An
+      inline body needs no component directory, and Atmos renders it with Go
+      templates and YAML functions the same way it renders an inline
+      `template`.
+
+    Atmos installs the policy before it executes an update, so the policy
+    governs that update. For a new stack, it installs the policy after the
+    create succeeds.
   </dd>
 
   <dt>`role_arn`</dt>
@@ -239,42 +254,73 @@ components/cloudformation/
     └── stack-policy.json
 ```
 
-## Generated Files
+## Inline Templates and Templating
 
-Enable `components."aws/cloudformation".auto_generate_files: true` in
-[`atmos.yaml`](/cli/configuration/components/aws-cloudformation), then define a
-component `generate` map. It uses the shared [file-generation syntax](/stacks/generate):
-filenames map to Go-template strings or structured maps serialized by extension.
-For CloudFormation intrinsic functions in a structured map, use their long form,
-such as `Ref: Marker`.
+An inline `template:` is stack configuration, so Atmos renders it before it
+sends the body to CloudFormation. Two mechanisms apply:
 
-Point `path` at a generated template. An inline `template` can still generate
-auxiliary files, including a JSON policy referenced by `stack_policy.file`;
-`template` and `path` remain mutually exclusive.
+- **Go templates** — values such as `{{ .vars.stage }}` and the rest of the
+  [template context](/templates), when `templates.settings.enabled: true` in
+  `atmos.yaml`.
+- **YAML functions** — `!env`, `!store`, `!aws.cloudformation.output`, and the
+  other [YAML functions](/functions/yaml), evaluated like in any other stack
+  value.
 
-<EmbedFile filePath="examples/cloudformation/stacks/catalog/demo-generated.yaml" />
+A template file referenced by `path:` is used verbatim. Atmos does not render Go
+templates or YAML functions in it, so a `{{ }}` sequence in a file stays literal.
+Use an inline `template:` whenever a template needs per-stack values. Go
+templates work in both the string and map forms; YAML functions apply to values
+in the map form. In the map form, write CloudFormation intrinsic functions in
+their long form, such as `Ref:` and `Fn::GetAtt:`:
 
-Atmos provisions local or remote component sources, resolves any source subpath,
-and then generates files before reading the template and policy. With generation
-enabled and a nonempty block, it automatically creates an isolated workdir for
-each stack/component instance. Two instances sharing one local directory or
-vendored source therefore write independently. Explicit
-`provision.workdir.enabled: false` is rejected; generated files never need to be
-written into the shared component directory. Shared `metadata.working_directory`
-and `settings.working_directory` overrides are also rejected. Source `pull --force`
-and `delete` use this same isolated directory. This isolation does not serialize
-simultaneous deployments of the same AWS stack.
+<File title="stacks/catalog/marker.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    marker:
+      stack_name: "{{ .vars.stage }}-marker"
+      template:
+        AWSTemplateFormatVersion: "2010-09-09"
+        Resources:
+          Marker:
+            Type: AWS::SSM::Parameter
+            Properties:
+              Name: "/atmos/{{ .vars.stage }}/marker"
+              Type: String
+              Value: !env MARKER_VALUE
+        Outputs:
+          ParameterName:
+            Value:
+              Ref: Marker
+      stack_policy:
+        body:
+          Statement:
+            - Effect: Allow
+              Action: "Update:*"
+              Principal: "*"
+              Resource: "*"
+```
+</File>
 
-Generation runs for `render`, `fmt`, `validate`, `plan`/`diff`, `apply`/`deploy`,
-`changeset create`, and `stackset create`/`update`. `changeset execute` also
-generates files when it needs a configured stack policy. It does not run for
-`--dry-run` or operations that only inspect or delete deployed state, such as
-`output`, `get`, `logs`, `watch`, `tree`, `drift`, and `delete`.
+CloudFormation has its own dynamic references that use the same `{{ }}` syntax,
+such as `{{resolve:ssm:/my/param}}`. Escape the opening braces once so that
+Atmos emits them literally and CloudFormation receives the reference:
 
-There is no separate CloudFormation `generate` command. Run
-`atmos aws cloudformation render demo-generated -s local` from the
-[CloudFormation example](/examples/cloudformation) to inspect the generated
-template without starting the emulator.
+```yaml
+template: |
+  Resources:
+    Param:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Type: String
+        Value: '{{ "{{" }}resolve:ssm:/my/param}}'
+```
+
+CloudFormation components do not support `generate:` blocks. The error hint points
+to the supported alternatives: an inline `template:`
+(rendered by Atmos as described here) or a `path:` to a file you maintain. The
+root-level stack `generate:` section is Terraform's global scope and is not
+applied to CloudFormation components.
 
 ## Source Provisioning
 
@@ -330,9 +376,31 @@ components:
 Private S3 sources use `s3://bucket/key?region=us-east-2` or
 `s3::https://s3.us-east-2.amazonaws.com/bucket/key`. Atmos uses the component's
 resolved AWS identity for each download, including cold `render` and `fmt` calls.
-A warm workdir does not authenticate or fetch again until refresh is needed.
+A warm source directory does not authenticate or fetch again until refresh is needed.
 Credentials remain scoped to the request. Plain `https://` URLs use HTTP
 retrieval; use the S3 scheme for authenticated SDK access.
+
+Pass `?region=` when the bucket is not in the identity's default region: a cross-region bucket
+fails with a region-mismatch error that names the bucket's region. S3 sources authenticate only
+through the component's Atmos identity; the go-getter credential parameters `aws_profile`,
+`aws_access_key_id`, `aws_access_key_secret` and `aws_access_token` are rejected rather than
+silently ignored. A `403` for an object usually means a permission problem, but it also appears when
+the key does not exist and the identity lacks `s3:ListBucket`.
+
+The source is vendored to `components/cloudformation/<component>`, where `<component>` is
+`metadata.component` (the base component) and not the instance name, so every instance of one base
+component shares a directory. `metadata.component` must be a relative path inside the components
+directory; an absolute path or one that climbs out of it is rejected. `atmos aws cloudformation
+source pull` and `source delete` act on exactly this directory.
+
+Archives that contain symbolic or hard links are extracted with each link as an empty regular file,
+and Atmos logs a warning naming the first one.
+
+`provision.workdir.enabled` only applies to a `source:`: it places the
+downloaded source in a per-instance directory. CloudFormation does not copy a
+local component into a workdir, so setting `provision.workdir.enabled: true` on a
+component without a `source:` fails before any AWS call. Remove the setting, or
+add a `source:`.
 
 :::note Manifest-driven vendoring is not supported
 `aws/cloudformation` components cannot be vendored through a `vendor.yaml`
@@ -596,6 +664,36 @@ referenced component's default direct target too. StackSet `create` and `update`
 their selected target; `delete` and `instances` do not select a target, so pass
 `--identity` when the StackSet belongs to another account. A Git target uses its
 target identity, or its repository's identity when no target/CLI override is set.
+
+#### Validation
+
+Atmos validates the selected target's `auth` block, and the keys of every
+`kind: aws/cloudformation` target, before calling AWS, including in `--dry-run`. A
+misspelled key under `auth` (for example `identitty`) fails instead of silently
+running the target as the component's identity, and so does an `auth.identities`
+block that never selects an identity: mark one `default: true`, set
+`auth.identity`, or pass `--identity`. Errors name the target, component, stack,
+and identity, and include a hint.
+
+A `kind: aws/cloudformation` target accepts only `kind`, `auth`, and `packaging`.
+It has no `region`: set `settings.aws_cloudformation.region` on the component
+(then the identity's region, then the AWS SDK chain). Only `kind: aws/s3` targets
+take a `region`.
+
+#### Output references
+
+`!aws.cloudformation.output` and `atmos.Component(...).outputs` read the
+producer's stack with the identity its default direct target declares, whatever
+`--identity` or `ATMOS_IDENTITY` the consumer runs with. A same-named stack in
+the caller's account never answers instead. When the producer's target declares
+no auth, the lookup uses the caller's credentials.
+
+#### Disabling authentication
+
+`--identity=false` (or `ATMOS_IDENTITY=false`) disables Atmos authentication, so
+a target's declared identity is not used and the AWS SDK default credential chain
+applies. Atmos prints one warning per target naming the target and the identity it
+bypasses.
 
 ## Related
 

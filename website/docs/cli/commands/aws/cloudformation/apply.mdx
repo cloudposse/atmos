@@ -19,8 +19,10 @@ import SkipHooksFlag from '@site/docs/cli/commands/aws/cloudformation/_partials/
   [`output`](/cli/commands/aws/cloudformation/output) renders on demand.
 </Intro>
 
-Atmos applies the component's `stack_policy` (if set) after CREATE and no-op
-applies. An UPDATE that changes resources retains the existing stack policy.
+When the component sets `stack_policy`, Atmos installs the policy before it
+executes an UPDATE (after you confirm, so the policy governs that update). It
+installs the policy after a CREATE succeeds, because a stack that does not
+exist yet cannot carry one, and after a no-op apply.
 
 <Experimental />
 

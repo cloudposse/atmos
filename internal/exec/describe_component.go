@@ -216,15 +216,39 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 
 // injectDescribeComponentStoreAuthResolver wires the auth manager into atmosConfig
 // as the store auth-context resolver so identity-aware stores can resolve
-// credentials lazily during describe-component. It is a no-op when either argument
-// is nil.
+// credentials lazily during describe. It is a no-op when either argument is nil.
+// Stores without their own `identity:` inherit the
+// caller's explicit --identity/ATMOS_IDENTITY, exactly as the deploy path does,
+// so the same command line yields the same values in describe and deploy.
 func injectDescribeComponentStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) {
 	if atmosConfig == nil || authManager == nil {
 		return
 	}
 
-	resolver := authbridge.NewResolver(authManager, authManager.GetStackInfo())
-	atmosConfig.Stores.SetAuthContextResolver(resolver)
+	stackInfo := authManager.GetStackInfo()
+	resolver := authbridge.NewResolver(authManager, stackInfo)
+	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, describeStoreDefaultIdentity(authManager, stackInfo))
+}
+
+// describeStoreDefaultIdentity returns the identity that stores without their own
+// `identity:` should authenticate as: the caller's explicit selection, or the
+// identity chosen by a bare --identity prompt. It returns "" when no identity was
+// requested (stores then keep the SDK default credential chain) or auth is disabled.
+func describeStoreDefaultIdentity(authManager auth.AuthManager, stackInfo *schema.ConfigAndStacksInfo) string {
+	if stackInfo == nil || stackInfo.RequestedIdentity == nil {
+		return ""
+	}
+	switch requested := cfg.NormalizeIdentityValue(*stackInfo.RequestedIdentity); requested {
+	case "", cfg.IdentityFlagDisabledValue:
+		return ""
+	case cfg.IdentityFlagSelectValue:
+		if chain := authManager.GetChain(); len(chain) > 0 {
+			return chain[len(chain)-1]
+		}
+		return ""
+	default:
+		return requested
+	}
 }
 
 func (d *DescribeComponentExec) viewConfig(atmosConfig *schema.AtmosConfiguration, displayName string, format string, data any) error {

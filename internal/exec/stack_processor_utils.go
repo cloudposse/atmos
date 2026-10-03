@@ -19,6 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfnmanifest "github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -173,7 +174,10 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		// that aren't valid YAML. Files with .yaml.tmpl extension are processed
 		// as templates first, which allows non-YAML-valid Go template syntax.
 		hint := ""
-		if !strings.HasSuffix(filePath, u.TemplateExtension) {
+		if cfnHint := cfnmanifest.UnsupportedTagHint(err); cfnHint != "" {
+			// A CloudFormation short-form intrinsic (!Ref, !Sub, ...) is not a templating problem.
+			hint = " (hint: " + cfnHint + ")"
+		} else if !strings.HasSuffix(filePath, u.TemplateExtension) {
 			hint = " (hint: if this file contains Go template directives, rename it to .yaml.tmpl)"
 		}
 		return nil, fmt.Errorf("%w: failed to parse YAML for locals extraction%s: %w", errUtils.ErrInvalidStackManifest, hint, err)
@@ -890,8 +894,9 @@ func isSchemaBranchWrapperMessage(msg string) bool {
 // editorconfig --format=gcc` already uses, instead of a raw BasicOutput JSON
 // dump. BasicOutput's first entry is always a generic "doesn't validate with
 // <schema>" wrapper around the whole document (empty KeywordLocation);
-// wrapper entries throughout (including nested oneOf/anyOf branch failures)
-// are dropped in favor of the specific leaf violations.
+// wrapper entries throughout (including nested oneOf/anyOf branch failures
+// and message-less nodes that only group several failed keywords) are dropped
+// in favor of the specific leaf violations.
 //
 // Markdown list syntax (not plain lines) is deliberate: the CLI's error box
 // renders this as CommonMark, which treats a lone "\n" between plain
@@ -939,6 +944,12 @@ func collectManifestSchemaErrorItems(e *jsonschema.ValidationError, positions u.
 	alternatives := make(map[string]*manifestSchemaTypeAlternatives)
 	for _, basicErr := range e.BasicOutput().Errors {
 		if basicErr.KeywordLocation == "" || isSchemaBranchWrapperMessage(basicErr.Error) {
+			continue
+		}
+		// A schema node with several failing keywords is reported as a wrapper
+		// with an empty message; its causes carry the real findings, so printing
+		// it would only produce a bullet with a location and no explanation.
+		if strings.TrimSpace(basicErr.Error) == "" {
 			continue
 		}
 		path := jsonPointerToPositionKey(basicErr.InstanceLocation)

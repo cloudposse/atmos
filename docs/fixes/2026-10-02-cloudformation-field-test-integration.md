@@ -2,6 +2,10 @@
 
 **Date:** 2026-10-02
 
+> Note: references to generated deployments below are historical; CloudFormation
+> `generate:` was later removed. See
+> [`docs/prd/aws-cloudformation-component.md`](../prd/aws-cloudformation-component.md).
+
 ## Summary
 
 Fix the seven integration failures reproduced while field-testing CloudFormation

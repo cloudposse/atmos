@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -564,10 +567,14 @@ func TestCreateAndAuthenticateManager_AutoDetectEmptyIdentities(t *testing.T) {
 func TestCreateAndAuthenticateManager_AutoDetectMultipleDefaults(t *testing.T) {
 	// When no identity flag is provided and MULTIPLE default identities exist,
 	// behavior depends on terminal mode:
-	// - CI mode (no TTY): GetDefaultIdentity errors, we return nil (no auth)
+	// - CI mode (no TTY): GetDefaultIdentity errors and the conflict is reported (never a silent
+	//   fallback to the SDK default credential chain)
 	// - Interactive mode (TTY): GetDefaultIdentity prompts to choose from ONLY the defaults
 	//
-	// This test runs in CI-like environment (no TTY), so we expect nil.
+	// This test forces non-interactive mode, so we expect the error.
+	previous := viper.GetBool("interactive")
+	t.Cleanup(func() { viper.Set("interactive", previous) })
+	viper.Set("interactive", false)
 
 	authConfig := &schema.AuthConfig{
 		Realm: "test-realm",
@@ -611,11 +618,12 @@ func TestCreateAndAuthenticateManager_AutoDetectMultipleDefaults(t *testing.T) {
 	// No identity flag provided
 	manager, err := CreateAndAuthenticateManager("", authConfig, "__SELECT__")
 
-	// In CI mode (no TTY), GetDefaultIdentity errors with multiple defaults.
-	// autoDetectDefaultIdentity handles this gracefully by returning empty string,
-	// which causes CreateAndAuthenticateManager to return nil (no authentication).
-	assert.NoError(t, err, "Should not propagate error from GetDefaultIdentity")
+	// In CI mode (no TTY), GetDefaultIdentity errors with multiple defaults and the error must reach
+	// the caller: returning no manager would run the command on the SDK default credential chain.
+	require.ErrorIs(t, err, errUtils.ErrMultipleDefaultIdentities)
 	assert.Nil(t, manager, "Manager should be nil when multiple defaults in CI mode")
+	assert.Contains(t, strings.Join(cockroachErrors.GetAllDetails(err), " "), "default-1, default-2")
+	assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), " "), "--identity=<name>")
 
 	// NOTE: In interactive mode (TTY available), GetDefaultIdentity would prompt
 	// the user to choose from ONLY the two default identities (not all identities).

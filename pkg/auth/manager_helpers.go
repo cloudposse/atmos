@@ -59,6 +59,12 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig, cliConfigPath stri
 			return "", err
 		}
 
+		// Several defaults cannot be resolved without a prompt. Falling back to no identity would
+		// silently use the SDK default credential chain, so surface the conflict instead.
+		if errors.Is(err, errUtils.ErrMultipleDefaultIdentities) {
+			return "", err
+		}
+
 		// For other errors (no default identity in CI mode, etc.), return empty string.
 		// This maintains backward compatibility where no authentication is performed
 		// when a default identity cannot be determined automatically.

@@ -26,11 +26,12 @@ func TestBackendTargetAuthReachesEveryOperation(t *testing.T) {
 				}}},
 			}
 			called := false
-			resolveTargetAuth = func(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, block map[string]any, requested string) (*schema.ConfigAndStacksInfo, error) {
+			resolveTargetAuth = func(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, targetName string, block map[string]any, requested string) (*schema.ConfigAndStacksInfo, error) {
 				called = true
 				assert.Same(t, params.AtmosConfig, ac)
 				assert.Equal(t, "test", info.Stack)
 				assert.Equal(t, "demo", info.ComponentFromArg)
+				assert.Equal(t, "artifacts", targetName)
 				assert.Equal(t, "cli-override", requested)
 				assert.Equal(t, targetAuth, block["auth"])
 				return nil, errUtils.ErrAuthenticationFailed

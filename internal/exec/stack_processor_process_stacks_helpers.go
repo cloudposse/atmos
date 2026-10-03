@@ -1,6 +1,8 @@
 package exec
 
 import (
+	cfnmanifest "github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -190,6 +192,13 @@ func processComponent(opts *ComponentProcessorOptions) (*ComponentProcessorResul
 		ComponentEnv:      make(map[string]any, componentSmallMapCapacity),
 		ComponentMetadata: make(map[string]any, componentSettingsCapacity),
 		BaseComponents:    []string{},
+	}
+
+	// CloudFormation components render inline templates instead of generating files.
+	if opts.ComponentType == cfg.CloudFormationComponentType {
+		if err := cfnmanifest.RejectComponentGenerate(opts.StackName, opts.Component, opts.ComponentMap); err != nil {
+			return nil, err
+		}
 	}
 
 	// Extract component sections.

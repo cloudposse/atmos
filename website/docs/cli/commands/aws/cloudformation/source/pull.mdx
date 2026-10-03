@@ -40,6 +40,8 @@ The `pull` command vendors an `aws/cloudformation` component source by:
 
 If the component is already vendored, it will be skipped unless `--force` is specified.
 
+The destination is the same directory the component uses at run time: `metadata.component` (the base component, not the instance name), unless `working_directory` or `provision.workdir.enabled` places it elsewhere. A `metadata.component` that is an absolute path, or that climbs out of the components directory, is rejected.
+
 ## Examples
 
 ### Basic Usage
@@ -64,6 +66,14 @@ Use a specific identity for authentication:
 
 ```shell
 atmos aws cloudformation source pull vpc --stack dev --identity admin
+```
+
+### Preview with `--dry-run`
+
+`--dry-run` runs every check of a real pull (the component exists, has a `source`, and its destination resolves) without authenticating or downloading:
+
+```shell
+atmos aws cloudformation source pull vpc --stack dev --dry-run
 ```
 
 ## Arguments

@@ -93,6 +93,11 @@ atmos aws cfn apply vpc -s plat-ue2-dev
 ## Execution controls
 
 <dl>
+  <dt>`--identity`, `-i`</dt>
+  <dd>Atmos identity to authenticate with, accepted by every `aws cloudformation` verb with the same
+  `-i` shorthand `atmos terraform` uses. `--identity` with no value selects an identity
+  interactively. Same as the `ATMOS_IDENTITY` environment variable. A `provision.targets.<name>.auth`
+  block can still override the identity for one delivery target.</dd>
   <dt>`--dry-run`</dt>
   <dd>Validate static configuration without YAML functions, template evaluation, authentication,
   source downloads, hooks, or cloud operations. This also applies to `render` and bulk/affected

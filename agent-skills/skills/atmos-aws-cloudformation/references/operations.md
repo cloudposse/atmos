@@ -26,6 +26,9 @@ acknowledgments in `capabilities:` independently.
   no-op changeset (CloudFormation's `FAILED` "didn't contain changes") is deleted and reported as `No changes`;
   the stack-policy, termination-protection, and Outputs follow-ups still run. Changeset names are
   `atmos-<stack>-<timestamp>` (the `atmos-` prefix is not repeated for stacks already named `atmos-...`).
+- **Stack policy timing**: with `stack_policy` set, an UPDATE installs the policy after confirmation and
+  before `ExecuteChangeSet`, so the policy governs that update. A CREATE installs it after the stack is
+  created, and a no-op apply installs it right after the no-op is reported.
 - **Never-deployed stacks**: the first CREATE changeset makes CloudFormation register an empty
   `REVIEW_IN_PROGRESS` stack. `diff`/`plan`, a declined `apply`, a failed changeset, and a changeset that
   cannot be executed delete that stub (only when this run created it and it is still `REVIEW_IN_PROGRESS`);

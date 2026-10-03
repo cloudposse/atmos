@@ -274,16 +274,17 @@ components:
 
 When enabled, Atmos generates files from the `generate` section before executing any terraform command (`plan`, `apply`, etc.).
 
-### CloudFormation Templates and Policies
+### Supported Component Types
 
-Native CloudFormation components use the same `generate` map and serializers.
-Enable `components."aws/cloudformation".auto_generate_files: true`, define
-`components."aws/cloudformation".<component>.generate`, and point `path` at the
-generated template. Unlike Terraform's standalone generation command,
-CloudFormation generates files as part of operations that read the template or
-policy, in an isolated workdir per stack/component instance. `--dry-run` skips
-file generation. See [CloudFormation generated files](/stacks/components/aws-cloudformation#generated-files)
-for the operation list, source handling, and a runnable example.
+The `generate` section applies to Terraform components and, with the same syntax,
+to native Kubernetes and Helm components. CloudFormation components do not
+support `generate`: a `generate:` key on a CloudFormation component, under the
+`aws/cloudformation:` type-level section, or in CloudFormation `overrides` is a
+stack-processing error. The root-level stack `generate:` section is Terraform's
+global scope and is not applied to CloudFormation components. To produce a
+stack-specific CloudFormation template, use an inline `template:`, which Atmos
+renders with Go templates and YAML functions. See
+[CloudFormation inline templates](/stacks/components/aws-cloudformation#inline-templates-and-templating).
 
 ## Examples
 

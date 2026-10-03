@@ -62,3 +62,24 @@ at once.
 The `table` format prints a header row (`TARGET`, `BUCKET`, `REGION`,
 `STATUS`). The `json` and `yaml` formats use snake_case keys; see [`backend
 describe`](/cli/commands/aws/cloudformation/backend/describe) for the shape.
+
+### Targets that cannot be inspected
+
+Each target authenticates with its own credentials, so one broken target (for
+example a mistyped `auth.identity`) never hides the others. `backend list` renders
+every declared target. A target whose authentication or bucket check fails
+appears as an error row that names the target and the cause, and the healthy
+targets print as usual:
+
+```text
+TARGET               BUCKET                         REGION         STATUS
+a-broken             broken-bucket                  us-east-1      error: aws/cloudformation component requested an identity, but the auth manager could not resolve it: identity "devv" not found
+b-good               good-bucket                    us-east-1      exists
+```
+
+In the `json` and `yaml` formats the failed entry carries an `error` field with
+the same cause; healthy entries omit it.
+
+After the rows print, the command exits non-zero if any target failed. The
+error names the failed targets and their count, and hints to run
+`atmos aws cloudformation backend describe --target <name>` for details.

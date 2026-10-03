@@ -20,6 +20,17 @@ import (
 // setupCloudFormationTargetOutputFixture creates a direct-target fixture with distinct dev and sandbox identities.
 func setupCloudFormationTargetOutputFixture(t *testing.T) schema.AtmosConfiguration {
 	t.Helper()
+	return setupCloudFormationTargetOutputFixtureWithAuth(t, `            auth:
+              identities:
+                dev:
+                  default: true
+`)
+}
+
+// setupCloudFormationTargetOutputFixtureWithAuth creates the same fixture with a caller-supplied target auth block,
+// indented to sit under the target (12 spaces).
+func setupCloudFormationTargetOutputFixtureWithAuth(t *testing.T, targetAuth string) schema.AtmosConfiguration {
+	t.Helper()
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`base_path: "."
@@ -50,11 +61,7 @@ components:
         targets:
           deployment:
             kind: aws/cloudformation
-            auth:
-              identities:
-                dev:
-                  default: true
-`), 0o600))
+`+targetAuth), 0o600))
 	t.Chdir(dir)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", dir)
 	ac, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
@@ -62,7 +69,8 @@ components:
 	return ac
 }
 
-// TestCloudFormationOutputTargetAuthSameProcess checks YAML and template output caches across identity changes and authentication failures.
+// TestCloudFormationOutputTargetAuthSameProcess checks YAML and template output caches across caller identity changes
+// (the producer's declared identity always wins) and authentication failures.
 func TestCloudFormationOutputTargetAuthSameProcess(t *testing.T) {
 	for _, mode := range []string{"yaml", "template"} {
 		t.Run(mode, func(t *testing.T) {
@@ -95,7 +103,7 @@ func TestCloudFormationOutputTargetAuthSameProcess(t *testing.T) {
 				}
 				return value.(map[string]any)[cfg.OutputsSectionName].(map[string]any)["VpcId"], nil
 			}
-			for _, tc := range []struct{ requested, expected string }{{"", "dev"}, {"sandbox", "sandbox"}, {"", "dev"}} {
+			for _, tc := range []struct{ requested, expected string }{{"", "dev"}, {"sandbox", "dev"}, {"", "dev"}} {
 				requested = tc.requested
 				value, err := read()
 				require.NoError(t, err)
@@ -190,10 +198,8 @@ func TestDescribeCloudFormationOutputTargetIdentity(t *testing.T) {
 			ProcessTemplates: true, ProcessYamlFunctions: true, AuthManager: manager,
 		})
 		require.NoError(t, err)
-		expected := requested
-		if expected == "" {
-			expected = "dev"
-		}
+		// The producer's declared identity wins over the caller's selection.
+		expected := "dev"
 		vars := result[cfg.VarsSectionName].(map[string]any)
 		assert.Equal(t, expected, vars["yaml_value"])
 		assert.Equal(t, expected, vars["template_value"])

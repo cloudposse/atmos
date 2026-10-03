@@ -625,6 +625,9 @@ func TestAddCloudFormationSectionAffected(t *testing.T) {
 	}{
 		{"stack_name", sectionNameStackName, "vpc-prod", "vpc-staging", affectedReasonStackStackName},
 		{"template", sectionNameTemplate, "template-a.yaml", "template-b.yaml", affectedReasonStackTemplate},
+		{"path", sectionNamePath, "template-a.yaml", "template-b.yaml", affectedReasonStackPath},
+		{"source", sectionNameSource, map[string]any{"uri": "s3://bucket/a.yaml"}, map[string]any{"uri": "s3://bucket/b.yaml"}, affectedReasonStackSource},
+		{"provision", sectionNameProvision, map[string]any{"workdir": map[string]any{"enabled": true}}, map[string]any{"workdir": map[string]any{"enabled": false}}, affectedReasonStackProvision},
 		{"parameters", sectionNameParameters, map[string]any{"CidrBlock": "10.0.0.0/16"}, map[string]any{"CidrBlock": "10.1.0.0/16"}, affectedReasonStackParameters},
 		{"capabilities", sectionNameCapabilities, []any{"CAPABILITY_IAM"}, []any{"CAPABILITY_NAMED_IAM"}, affectedReasonStackCapabilities},
 		{"tags", sectionNameTags, map[string]any{"env": "a"}, map[string]any{"env": "b"}, affectedReasonStackTags},
@@ -710,6 +713,9 @@ func TestAddCloudFormationSectionAffected_SectionRemoved(t *testing.T) {
 		{"tags", sectionNameTags, map[string]any{"env": "prod"}, affectedReasonStackTags},
 		{"stack_policy", sectionNameStackPolicy, map[string]any{"file": "policy.json"}, affectedReasonStackStackPolicy},
 		{"role_arn", sectionNameRoleArn, "arn:aws:iam::111:role/deploy", affectedReasonStackRoleArn},
+		{"path", sectionNamePath, "template.yaml", affectedReasonStackPath},
+		{"source", sectionNameSource, map[string]any{"uri": "s3://bucket/a.yaml"}, affectedReasonStackSource},
+		{"provision", sectionNameProvision, map[string]any{"workdir": map[string]any{"enabled": true}}, affectedReasonStackProvision},
 	}
 
 	for _, tt := range tests {
@@ -799,6 +805,61 @@ func TestProcessCloudFormationComponentsIndexed(t *testing.T) {
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackMetadata)
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackStackName)
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+}
+
+// TestProcessCloudFormationComponentsIndexed_PathSourceProvisionOnly guards the case where the
+// only edit is to `path`, `source` or `provision`: each retargets what gets deployed (a different
+// template file, a different vendored source, a different destination) and must mark the
+// component affected, while identical values on both refs must not.
+func TestProcessCloudFormationComponentsIndexed_PathSourceProvisionOnly(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		section    string
+		local      any
+		remote     any
+		wantReason string
+	}{
+		{"path changed", sectionNamePath, "other.yaml", "template.yaml", affectedReasonStackPath},
+		{"source changed", sectionNameSource, map[string]any{"uri": "s3://b/new.yaml"}, map[string]any{"uri": "s3://b/old.yaml"}, affectedReasonStackSource},
+		{"provision changed", sectionNameProvision, map[string]any{"workdir": map[string]any{"enabled": true}}, map[string]any{"workdir": map[string]any{"enabled": false}}, affectedReasonStackProvision},
+		{"path unchanged", sectionNamePath, "template.yaml", "template.yaml", ""},
+		{"source unchanged", sectionNameSource, map[string]any{"uri": "s3://b/a.yaml"}, map[string]any{"uri": "s3://b/a.yaml"}, ""},
+		{"provision unchanged", sectionNameProvision, map[string]any{"workdir": map[string]any{"enabled": true}}, map[string]any{"workdir": map[string]any{"enabled": true}}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			atmosConfig := cfnAtmosConfig()
+			cloudFormationSection := map[string]any{
+				cfnTestComponent: map[string]any{
+					sectionNameStackName: "vpc-prod",
+					tt.section:           tt.local,
+				},
+			}
+			remoteStacks := cfnRemoteStacksWith(map[string]any{
+				sectionNameStackName: "vpc-prod",
+				tt.section:           tt.remote,
+			})
+
+			affected, err := processCloudFormationComponentsIndexed(
+				cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+				atmosConfig, newChangedFilesIndex(atmosConfig, nil, ""), newComponentPathPatternCache(),
+				false, true, false,
+			)
+			require.NoError(t, err)
+
+			if tt.wantReason == "" {
+				assert.Empty(t, affected)
+				return
+			}
+			require.Len(t, affected, 1)
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+		})
+	}
 }
 
 // TestProcessCloudFormationComponentsIndexed_MetadataRemovedLocally guards

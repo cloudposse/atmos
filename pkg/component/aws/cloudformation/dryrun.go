@@ -32,13 +32,7 @@ var packagingOperations = map[Operation]bool{
 // (packaging-target resolution, StackSet target shape), so a dry run does not
 // report a configuration valid that the real run would reject.
 func validateDryRun(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, flags map[string]any, operation Operation) error {
-	copyInfo := *info
-	if !operationsSkippingTemplateLoad[operation] {
-		if err := prepareGeneration(atmosConfig, &copyInfo); err != nil {
-			return err
-		}
-	}
-	section := maps.Clone(copyInfo.ComponentSection)
+	section := maps.Clone(info.ComponentSection)
 	if body, ok := section["template"].(string); ok && deferredExpression(atmosConfig, body) {
 		section["template"] = "Resources: {}"
 	}
@@ -50,13 +44,11 @@ func validateDryRun(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigA
 		return err
 	}
 	spec.withAtmosIdentity(info)
-	if operation == OperationChangesetExecute && spec.StackPolicyFile != "" {
-		if _, err := PrepareSourceComponentConfig(atmosConfig, section); err != nil {
-			return err
-		}
-	}
 	check := &dryRunCheck{AtmosConfig: atmosConfig, Info: info, Section: section, Flags: flags, Operation: operation, Spec: spec}
 	if err := check.validateStackSet(); err != nil {
+		return err
+	}
+	if err := check.validateTargetAuth(); err != nil {
 		return err
 	}
 	if err := check.validatePackaging(); err != nil {
