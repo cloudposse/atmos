@@ -437,7 +437,9 @@ func (i *pimRoleIdentity) resolveEffectiveDuration(ctx context.Context, client P
 
 	policyMax, found, err := client.PolicyMaxDuration(ctx, i.roleDefinitionID)
 	if err != nil {
-		return "", err
+		log.Debug("Could not read PIM policy maximum; sending configured duration",
+			azureCloud.LogFieldIdentity, i.name, "error", err)
+		return goDurationToISO8601(d), nil
 	}
 	if found && policyMax > 0 && d > policyMax {
 		clampedISO := goDurationToISO8601(policyMax)

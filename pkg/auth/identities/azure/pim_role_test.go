@@ -916,13 +916,20 @@ func TestPIMRole_PolicyMaxQueryError(t *testing.T) {
 		eligFound:      true,
 		eligScheduleID: testEligID,
 		policyMaxErr:   sentinel,
+		statuses:       []string{pimStatusProvisioned},
+		createResult:   ActivationResult{RequestName: "test-req", Status: pimStatusProvisioned},
 	}
 	id := newTestIdentity(t, defaultPrincipal(), mock)
+	var warnings []string
+	id.warn = func(msg string) { warnings = append(warnings, msg) }
 
 	_, err := id.Authenticate(context.Background(), testAzureCreds())
-	require.ErrorIs(t, err, sentinel)
+	require.NoError(t, err)
+
 	assert.Equal(t, 1, mock.policyMaxCalls)
-	assert.Equal(t, 0, mock.createCalls, "must not proceed with activation if policy query fails")
+	assert.Equal(t, 1, mock.createCalls, "activation must proceed when policy query fails")
+	assert.Equal(t, "PT8H", mock.createdReq.Duration)
+	assert.Empty(t, warnings)
 }
 
 func TestPIMRole_EmptyDuration_SkipsPolicyMaxQuery(t *testing.T) {
