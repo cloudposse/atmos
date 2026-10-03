@@ -128,11 +128,35 @@ components:
 atmos terraform plan app -s dev --use-mocks
 ```
 
-`mocks:` is Terraform-only, never templated or YAML-function-processed, and (unlike a `//`
-default) requires the referenced component to declare `mocks:` -- with one exception: a `//`
-default in the caller's expression is still honored even when the referenced component declares
-no `mocks:` section at all, mirroring how a `//` default rescues a component with no real state.
-Do not conflate this feature with the `//`-default idiom above; they're separate mechanisms.
+By default (`components.terraform.mocks.mode: fallback`), mocks are fallbacks: the real value is used
+when it exists, and the producer's `mocks:` value is used only when the component is not provisioned
+or the output is missing. Credential, network, and backend errors still fail (the error hints at
+`--use-mocks=always`). The precedence is real value, then mock, then the caller's `//` default, then the
+original error. Map outputs are deep-merged: mocks sit under the real outputs, every value in real
+state wins, and a mock fills keys missing from a real map (real `{a: 1}` plus mock `{a: 0, b: 2}`
+gives `{a: 1, b: 2}`). Lists and scalars are never merged; a real list replaces the mock list.
+Terraform does not record `null` outputs in state, so in fallback mode a `null` output resolves to
+the mock; do not declare a mock for an output that can be `null`, or use `always`.
+
+`--use-mocks` values (case-insensitive): absent, empty, or a false boolean (`false`, `0`, `f`) is off;
+bare `--use-mocks` or a true boolean (`true`, `1`, `t`) is on using the configured mode;
+`--use-mocks=fallback` or `--use-mocks=always` is on and overrides the configured mode for that run;
+any other value is an error. Attach the mode with `=`: `--use-mocks always` leaves `always` as a
+positional argument and Atmos errors. Only `atmos terraform plan` and `atmos describe component`
+accept the flag; other terraform subcommands reject it. `ATMOS_USE_MOCKS` accepts the same values for
+`atmos terraform plan` only; `atmos describe component` reads the flag, not the variable, and an
+exported `ATMOS_USE_MOCKS` makes `apply`, `deploy`, `destroy`, and other non-plan terraform subcommands
+fail until it is unset. Mode `always` is the hermetic behavior: lookups
+resolve from `mocks:` only and never initialize Terraform, authenticate, or read a backend for those
+lookups (a `terraform plan` still uses the planned component's own backend and credentials), and a
+missing `mocks:` map or output is an error (a `//` default still rescues it). The mode also comes from
+`ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`; an invalid mode in `atmos.yaml` or that variable fails at
+config load. Unpinned projects default to `fallback`; projects whose
+`atmos.yaml` `edition` is pinned before 2026-10-01 default to `always`.
+
+`mocks:` is Terraform-only and never templated or YAML-function-processed. Do not conflate this
+feature with the `//`-default idiom above; they're separate mechanisms, and a `//` default in the
+caller's expression is still honored even when the referenced component declares no `mocks:` section.
 
 ## `!terraform.output` -- Remote State Access
 

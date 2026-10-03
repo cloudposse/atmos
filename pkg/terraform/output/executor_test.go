@@ -812,6 +812,12 @@ func TestExtractYqValue(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, exists)
 	assert.Nil(t, val)
+
+	// Test the bare identity expression: it returns the whole map and always exists.
+	val, exists, err = extractYqValue(atmosConfig, data, ".", "test context")
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, data, val)
 }
 
 func TestGetStaticRemoteStateOutput(t *testing.T) {
@@ -833,6 +839,12 @@ func TestGetStaticRemoteStateOutput(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, exists)
 	assert.Nil(t, val)
+
+	// Test the bare identity expression: it returns the whole static remote state.
+	val, exists, err = GetStaticRemoteStateOutput(atmosConfig, "comp", "stack", remoteState, ".")
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, remoteState, val)
 }
 
 func TestExecutor_ExecuteWithSections_QuietMode(t *testing.T) {
@@ -2769,4 +2781,9 @@ func TestExecuteWithSections_ReturnsErrWhenProvisionFails(t *testing.T) {
 	require.Error(t, err, "ExecuteWithSections must surface provisioner errors to the caller")
 	require.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
 		"error must wrap ErrWorkdirProvision, got: %v", err)
+}
+
+func TestFetchingOutputMessage(t *testing.T) {
+	assert.Equal(t, "Fetching vpc_id output from vpc in dev", fetchingOutputMessage("vpc_id", "vpc", "dev"))
+	assert.Equal(t, "Fetching all outputs from vpc in dev", fetchingOutputMessage(".", "vpc", "dev"))
 }
