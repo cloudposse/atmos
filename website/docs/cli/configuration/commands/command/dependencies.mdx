@@ -169,7 +169,7 @@ The combination of `.tool-versions` for project-wide defaults and per-command `d
 
 ## Named command and workflow dependencies
 
-`dependencies.commands` and `dependencies.workflows` declare other named custom commands and [workflows](/workflows) that must complete before this command runs its own steps. They resolve and run **concurrently by default** — like go-task's `deps:` — through the same generic DAG scheduler used by [`parallel`](/workflows/steps/type/parallel)/[`matrix`](/workflows/steps/type/matrix) `needs:` and Terraform's `dependencies.components`:
+`dependencies.commands` and `dependencies.workflows` declare other named custom commands and [workflows](/workflows) that must complete before this command runs its own steps. They resolve and run **concurrently by default** — like go-task's `deps:` — through the same generic DAG scheduler used by [`parallel`](/steps/type/parallel)/[`matrix`](/steps/type/matrix) `needs:` and Terraform's `dependencies.components`:
 
 ```yaml
 commands:
@@ -233,7 +233,7 @@ commands:
 
 ### Failure propagation
 
-By default (`wait_all`), a failed dependency skips everything that transitively depends on it. `fail` reuses the exact same modes [`parallel`](/workflows/steps/type/parallel#failure-behavior) uses, derived from every direct dependency entry on this command (`best_effort` wins if any sets it, else `fail_fast` if any sets it, else `wait_all`):
+By default (`wait_all`), a failed dependency skips everything that transitively depends on it. `fail` reuses the exact same modes [`parallel`](/steps/type/parallel#failure-behavior) uses, derived from every direct dependency entry on this command (`best_effort` wins if any sets it, else `fail_fast` if any sets it, else `wait_all`):
 
 ```yaml
 dependencies:

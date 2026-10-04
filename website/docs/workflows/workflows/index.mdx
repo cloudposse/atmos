@@ -12,6 +12,8 @@ import DocCardList from '@theme/DocCardList'
 Atmos workflows are versioned runbooks for infrastructure operations. Use them to turn repeatable deployment, validation, maintenance, and release procedures into YAML that runs the same way on a laptop, in CI, or from a Git hook.
 </Intro>
 
+Browse the shared [Steps reference](/steps) and [step type catalog](/steps/type) for the building blocks available in workflows, custom commands, and lifecycle hooks.
+
 Workflow manifests live under the directory configured by [`workflows.base_path`](/cli/configuration/workflows) in `atmos.yaml`. Each manifest has a top-level `workflows` map. Each key under that map is a named [workflow](/workflows/workflow) that Atmos can run with [`atmos workflow`](/cli/commands/workflow).
 
 <File title="stacks/workflows/deploy.yaml">
@@ -155,7 +157,7 @@ workflows:
 ## Related
 
 - [workflow](/workflows/workflow) describes one named entry under `workflows`.
-- [steps](/workflows/steps) describes the workflow's ordered step array.
+- [steps](/steps) describes the workflow's ordered step array.
 - [CLI workflow configuration](/cli/configuration/workflows) describes the `atmos.yaml` `workflows.base_path` setting.
 
 <span id="step-types" />
@@ -165,7 +167,7 @@ workflows:
 
 Older section links now point to YAML-shaped pages:
 
-- [steps type](/workflows/steps/type)
-- [steps retry](/workflows/steps/retry)
+- [steps type](/steps/type)
+- [steps retry](/steps/retry)
 - [workflow container](/workflows/container)
-- [steps identity](/workflows/steps/identity)
+- [steps identity](/steps/identity)
