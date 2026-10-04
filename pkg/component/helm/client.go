@@ -21,6 +21,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -157,7 +158,16 @@ func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	client := newInstallClient(actx, spec, dryRun)
 	manifest, err := runInstall(ctx, client, actx.settings, spec)
 	if err != nil {
-		return "", releaseOperationError("install", spec, err)
+		// Capture crash-looping pod diagnostics BEFORE the uninstall deletes the
+		// failed first-install resources, then perform the uninstall Atmos now owns.
+		diagnostics := ""
+		if !dryRun {
+			diagnostics = diagnoseReleaseFailure(ctx, actx, spec)
+			if spec.Lifecycle.Policy.OnFailure == failurePolicyUninstall {
+				err = uninstallFailedInstall(actx, spec, err)
+			}
+		}
+		return "", releaseOperationErrorWithDiagnostics("install", spec, err, diagnostics)
 	}
 	return manifest, nil
 }
@@ -212,16 +222,20 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	client.WaitOptions = releaseWaitOptions(operationCtx)
 
 	rel, err := client.RunWithContext(operationCtx, spec.ReleaseName, loaded, spec.Values)
-	if err != nil && !dryRun && spec.Lifecycle.Policy.OnFailure == failurePolicyRollback {
-		if historyErr := enforceReleaseHistoryLimit(actx.cfg.Releases, spec.ReleaseName, spec.Lifecycle.Policy.MaxHistory); historyErr != nil {
-			err = errors.Join(err, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr))
-		}
-	}
 	if err != nil {
-		if ctxErr := operationCtx.Err(); ctxErr != nil {
-			return "", releaseOperationError("upgrade", spec, errors.Join(ctxErr, err))
+		// Capture crash-looping pod diagnostics BEFORE the rollback replaces the
+		// failing pods, then perform the rollback Atmos now owns.
+		diagnostics := ""
+		if !dryRun {
+			diagnostics = diagnoseReleaseFailure(ctx, actx, spec)
+			if spec.Lifecycle.Policy.OnFailure == failurePolicyRollback {
+				err = rollbackFailedUpgrade(actx, spec, err)
+			}
 		}
-		return "", releaseOperationError("upgrade", spec, err)
+		if ctxErr := operationCtx.Err(); ctxErr != nil {
+			err = errors.Join(ctxErr, err)
+		}
+		return "", releaseOperationErrorWithDiagnostics("upgrade", spec, err, diagnostics)
 	}
 	rendered, ok := rel.(*release.Release)
 	if !ok {
@@ -366,20 +380,87 @@ func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 }
 
 func releaseOperationError(operation string, spec *chartSpec, cause error) error {
+	return releaseOperationErrorWithDiagnostics(operation, spec, cause, "")
+}
+
+// releaseOperationErrorWithDiagnostics builds the #2849 failure error and, when
+// diagnostics is non-empty, folds the crash-looping pod summary into the
+// explanation so the cause is legible from the Atmos output alone
+// (cloudposse/atmos#3271).
+func releaseOperationErrorWithDiagnostics(operation string, spec *chartSpec, cause error, diagnostics string) error {
 	policy := spec.Lifecycle.Policy
-	return errUtils.Build(errUtils.ErrHelmReleaseOperation).
+	builder := errUtils.Build(errUtils.ErrHelmReleaseOperation).
 		WithCause(cause).
 		WithContext("operation", operation).
 		WithContext("release", spec.ReleaseName).
 		WithContext("namespace", spec.Namespace).
 		WithContext("wait_strategy", policy.WaitStrategy).
 		WithContext("timeout", policy.Timeout).
-		WithContext("timeout_field", spec.Lifecycle.TimeoutField).
-		Err()
+		WithContext("timeout_field", spec.Lifecycle.TimeoutField)
+	if diagnostics != "" {
+		builder = builder.WithExplanation("workload diagnostics:\n" + diagnostics)
+	}
+	return builder.Err()
+}
+
+// releaseDiagnosticsTimeout bounds the best-effort pod-diagnostics collection so a
+// slow or unreachable cluster never delays surfacing the original failure.
+const releaseDiagnosticsTimeout = 30 * time.Second
+
+// diagnoseReleaseFailure collects crash-looping pod diagnostics for a failed
+// release operation before any rollback/uninstall deletes the evidence. The log
+// tail and events are gated behind debug/trace so normal output is unchanged. It
+// derives a short, independently-bounded context so a cluster that is slow to
+// answer cannot stall the error, and so a readiness timeout on the operation
+// context does not pre-cancel the queries.
+func diagnoseReleaseFailure(ctx context.Context, actx *actionContext, spec *chartSpec) string {
+	diagCtx, cancel := context.WithTimeout(ctx, releaseDiagnosticsTimeout)
+	defer cancel()
+	verbose := log.GetLevel() <= log.DebugLevel
+	return collectReleaseFailureDiagnostics(diagCtx, actx, spec, verbose)
+}
+
+// rollbackFailedUpgrade performs the rollback Atmos owns (Helm's inline
+// RollbackOnFailure is disabled so diagnostics can run first), joining any
+// rollback or history-trim error onto the upgrade error. MaxHistory and
+// CleanupOnFail mirror the configured policy; enforceReleaseHistoryLimit remains
+// as the authoritative history trim.
+func rollbackFailedUpgrade(actx *actionContext, spec *chartSpec, upgradeErr error) error {
+	policy := spec.Lifecycle.Policy
+	rollback := action.NewRollback(actx.cfg)
+	rollback.MaxHistory = policy.MaxHistory
+	rollback.CleanupOnFail = policy.CleanupOnFailure
+	rollback.WaitStrategy = policy.WaitStrategy
+	rollback.WaitForJobs = policy.WaitForJobs
+	rollback.Timeout = policy.Timeout
+	if rbErr := rollback.Run(spec.ReleaseName); rbErr != nil {
+		upgradeErr = errors.Join(upgradeErr, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseRollback, spec.ReleaseName, rbErr))
+	}
+	if historyErr := enforceReleaseHistoryLimit(actx.cfg.Releases, spec.ReleaseName, policy.MaxHistory); historyErr != nil {
+		upgradeErr = errors.Join(upgradeErr, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr))
+	}
+	return upgradeErr
+}
+
+// uninstallFailedInstall removes a failed first install (Atmos owns the
+// uninstall-on-failure so diagnostics can run first), joining any uninstall error
+// onto the install error. A release that is already gone is not an error.
+func uninstallFailedInstall(actx *actionContext, spec *chartSpec, installErr error) error {
+	policy := spec.Lifecycle.Policy
+	uninstall := action.NewUninstall(actx.cfg)
+	uninstall.WaitStrategy = policy.WaitStrategy
+	uninstall.Timeout = policy.Timeout
+	if _, rbErr := uninstall.Run(spec.ReleaseName); rbErr != nil && !errors.Is(rbErr, driver.ErrReleaseNotFound) {
+		installErr = errors.Join(installErr, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, rbErr))
+	}
+	return installErr
 }
 
 func configureInstallLifecycle(client *action.Install, policy effectiveReleasePolicy) {
-	client.RollbackOnFailure = policy.OnFailure == failurePolicyUninstall
+	// Atmos owns the uninstall-on-failure so it can capture crash-looping pod
+	// diagnostics before the failed resources are deleted (cloudposse/atmos#3271);
+	// see installRelease. Helm's own RollbackOnFailure is therefore left off.
+	client.RollbackOnFailure = false
 	client.WaitStrategy = policy.WaitStrategy
 	client.WaitForJobs = policy.WaitForJobs
 	client.Timeout = policy.Timeout
@@ -398,7 +479,11 @@ func configureInstallLifecycle(client *action.Install, policy effectiveReleasePo
 }
 
 func configureUpgradeLifecycle(client *action.Upgrade, policy effectiveReleasePolicy) {
-	client.RollbackOnFailure = policy.OnFailure == failurePolicyRollback
+	// Atmos owns the rollback-on-failure so it can capture crash-looping pod
+	// diagnostics before the rollback replaces the failing pods
+	// (cloudposse/atmos#3271); see upgradeRelease. Helm's own RollbackOnFailure is
+	// therefore left off.
+	client.RollbackOnFailure = false
 	client.WaitStrategy = policy.WaitStrategy
 	client.WaitForJobs = policy.WaitForJobs
 	client.Timeout = policy.Timeout
