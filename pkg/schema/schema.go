@@ -681,7 +681,10 @@ type Terraform struct {
 	Command           string        `yaml:"command" json:"command" mapstructure:"command"`
 	Shell             ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
 	Init              TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
-	Plan              TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
+	// Mocks configures how `--use-mocks` resolves Terraform state/output lookups against a
+	// component's literal `mocks` map.
+	Mocks TerraformMocks `yaml:"mocks,omitempty" json:"mocks,omitempty" mapstructure:"mocks"`
+	Plan  TerraformPlan  `yaml:"plan" json:"plan" mapstructure:"plan"`
 	// Lint configures the built-in `atmos terraform lint` command.
 	// A configured config path is used when a component does not provide its own
 	// .tflint.hcl file.
@@ -885,6 +888,49 @@ type TerraformInit struct {
 	// when terraform/tofu reports that an upgrade is required, `always` adds it on every init,
 	// and `never` never adds it.
 	Upgrade TerraformInitUpgrade `yaml:"upgrade,omitempty" json:"upgrade,omitempty" mapstructure:"upgrade"`
+}
+
+// TerraformMocks configures component mock resolution for `--use-mocks`.
+type TerraformMocks struct {
+	// Mode controls how `--use-mocks` resolves a lookup: `fallback` (default since 2026-10-01;
+	// a project pinned to an earlier edition gets `always` restored) uses the real value when
+	// it exists and the component mock only when the state is not provisioned or the output is
+	// missing, and `always` resolves every lookup from the mocks without reading real state.
+	Mode TerraformMocksMode `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode" jsonschema:"enum=,enum=fallback,enum=always"`
+}
+
+// TerraformMocksMode controls how component mocks are resolved when `--use-mocks` is set.
+type TerraformMocksMode string
+
+const (
+	// TerraformMocksModeFallback uses real state when it exists and mocks only on a recoverable miss.
+	TerraformMocksModeFallback TerraformMocksMode = "fallback"
+	// TerraformMocksModeAlways resolves every lookup from mocks and never reads real state.
+	TerraformMocksModeAlways TerraformMocksMode = "always"
+)
+
+// IsValid reports whether the mode is empty (unset) or one of the known values.
+func (m TerraformMocksMode) IsValid() bool {
+	switch m {
+	case "", TerraformMocksModeFallback, TerraformMocksModeAlways:
+		return true
+	default:
+		return false
+	}
+}
+
+// EffectiveMocksMode returns the configured mocks mode, defaulting to fallback when unset.
+//
+// For any config loaded through LoadConfig, "unset" is resolved by Viper's defaults layer
+// (pkg/config/load.go's setDefaultConfiguration sets "fallback") before this method ever sees
+// it, with a project pinned to an edition before 2026-10-01 getting "always" restored instead
+// (see pkg/edition/journal.go). The literal "fallback" below only matters for a Terraform
+// struct built directly in Go, bypassing config loading entirely.
+func (t *Terraform) EffectiveMocksMode() TerraformMocksMode {
+	if t.Mocks.Mode == "" {
+		return TerraformMocksModeFallback
+	}
+	return t.Mocks.Mode
 }
 
 // TerraformInitMode controls whether Atmos runs `terraform init` before a subcommand.
@@ -2002,7 +2048,10 @@ type ConfigAndStacksInfo struct {
 	ProcessFunctions          bool
 	// UseMocks resolves Terraform state/output YAML functions from the referenced
 	// component's literal `mocks` map instead of remote Terraform state.
-	UseMocks   bool
+	UseMocks bool
+	// MocksMode overrides components.terraform.mocks.mode from atmos.yaml (fallback, always)
+	// for this run; set by `--use-mocks=fallback|always`.
+	MocksMode  string
 	Skip       []string
 	CliArgs    []string
 	Affected   bool

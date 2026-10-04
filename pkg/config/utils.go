@@ -298,6 +298,15 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE", foundEnvVarMessage,
+		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode, &atmosConfig.Components.Terraform.Mocks.Mode); err != nil {
+		return fmt.Errorf("%w (from ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE)", err)
+	}
+
+	if err := normalizeConfiguredMocksMode(atmosConfig); err != nil {
+		return err
+	}
+
 	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", foundEnvVarMessage,
 		schema.TerraformInitReconfigure.IsValid, errUtils.ErrInvalidInitReconfigure, &atmosConfig.Components.Terraform.Init.Reconfigure); err != nil {
 		return err
@@ -529,6 +538,19 @@ func setInitEnumEnvVar[T ~string](envVar, foundEnvVarMessage string, isValid fun
 		return err
 	}
 	*dest = normalized
+	return nil
+}
+
+// normalizeConfiguredMocksMode lower-cases and validates components.terraform.mocks.mode as loaded
+// from atmos.yaml, so a typo fails at config load (as an invalid ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE
+// does) instead of being accepted silently until a --use-mocks lookup runs.
+func normalizeConfiguredMocksMode(atmosConfig *schema.AtmosConfiguration) error {
+	mode, err := normalizeInitEnumValue(string(atmosConfig.Components.Terraform.Mocks.Mode),
+		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode)
+	if err != nil {
+		return fmt.Errorf("%w (from components.terraform.mocks.mode in atmos.yaml)", err)
+	}
+	atmosConfig.Components.Terraform.Mocks.Mode = mode
 	return nil
 }
 
@@ -827,6 +849,10 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 	}
 	if err := applyInitEnumFlag(configAndStacksInfo.InitUpgrade, InitUpgradeFlag,
 		schema.TerraformInitUpgrade.IsValid, errUtils.ErrInvalidInitUpgrade, &atmosConfig.Components.Terraform.Init.Upgrade); err != nil {
+		return err
+	}
+	if err := applyInitEnumFlag(configAndStacksInfo.MocksMode, UseMocksFlag,
+		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode, &atmosConfig.Components.Terraform.Mocks.Mode); err != nil {
 		return err
 	}
 	if len(configAndStacksInfo.PlanSkipPlanfile) > 0 {

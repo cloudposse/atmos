@@ -32,7 +32,11 @@ go run . <repo-root> [output-path]
     (`GET /repos/cloudposse/atmos`) for NOTICE's tagline, and stamps the
     copyright line with the current year -- both regenerated fresh every run
     instead of hand-maintained, so they can't drift or go stale the way a
-    literal string does. See `repo.go`.
+    literal string does. See `repo.go`. If the fetch fails (for example a
+    403 from the unauthenticated API's per-IP rate limit on a shared CI
+    runner), the tagline already in the existing `NOTICE` is kept with a
+    warning; generation fails only when there is no existing tagline to
+    reuse. See `resolveDescription` in `generate.go`.
 5. Renders `NOTICE`, grouped by license family: Apache-2.0 and BSD sections
     are always present (even if empty); MPL-2.0 and MIT sections only appear
     when there's at least one matching dependency. Other license families
