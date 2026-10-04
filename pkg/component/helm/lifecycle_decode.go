@@ -23,11 +23,14 @@ func decodeReleasePolicy(section map[string]any) (releasePolicyInput, error) {
 		return releasePolicyInput{}, decodeFieldError(cfg.HelmReleaseSectionName, "an object", raw)
 	}
 
-	if err := rejectUnknownFields(releaseMap, cfg.HelmReleaseSectionName,
+	if err := rejectUnknownFields(
+		releaseMap, cfg.HelmReleaseSectionName,
 		cfg.HelmTimeoutSectionName,
 		cfg.HelmChartHooksSectionName,
 		cfg.HelmWaitSectionName,
 		cfg.HelmHistorySectionName,
+		cfg.HelmServerSideApplySectionName,
+		cfg.HelmForceConflictsSectionName,
 		cfg.HelmInstallSectionName,
 		cfg.HelmUpgradeSectionName,
 		cfg.HelmDeleteSectionName,
@@ -47,6 +50,12 @@ func decodeReleasePolicy(section map[string]any) (releasePolicyInput, error) {
 		return releasePolicyInput{}, err
 	}
 	if input.History, err = decodeHistoryPolicy(releaseMap); err != nil {
+		return releasePolicyInput{}, err
+	}
+	if input.ServerSideApply, err = optionalServerSideApplyField(releaseMap, cfg.HelmServerSideApplySectionName, "release.server_side_apply"); err != nil {
+		return releasePolicyInput{}, err
+	}
+	if input.ForceConflicts, err = optionalBoolField(releaseMap, cfg.HelmForceConflictsSectionName, "release.force_conflicts"); err != nil {
 		return releasePolicyInput{}, err
 	}
 	if input.Install, err = decodeInstallPolicy(releaseMap); err != nil {
@@ -118,12 +127,15 @@ func decodeInstallPolicy(releaseMap map[string]any) (installPolicyInput, error) 
 	if err != nil || operationMap == nil {
 		return installPolicyInput{}, err
 	}
-	if err := rejectUnknownFields(operationMap, "release.install",
+	if err := rejectUnknownFields(
+		operationMap, "release.install",
 		cfg.HelmTimeoutSectionName,
 		cfg.HelmChartHooksSectionName,
 		cfg.HelmWaitSectionName,
 		cfg.HelmCRDsSectionName,
 		cfg.HelmOnFailureSectionName,
+		cfg.HelmServerSideApplySectionName,
+		cfg.HelmForceConflictsSectionName,
 	); err != nil {
 		return installPolicyInput{}, err
 	}
@@ -143,6 +155,12 @@ func decodeInstallPolicy(releaseMap map[string]any) (installPolicyInput, error) 
 	if input.OnFailure, err = optionalStringField(operationMap, cfg.HelmOnFailureSectionName, "release.install.on_failure"); err != nil {
 		return installPolicyInput{}, err
 	}
+	if input.ServerSideApply, err = optionalServerSideApplyField(operationMap, cfg.HelmServerSideApplySectionName, "release.install.server_side_apply"); err != nil {
+		return installPolicyInput{}, err
+	}
+	if input.ForceConflicts, err = optionalBoolField(operationMap, cfg.HelmForceConflictsSectionName, "release.install.force_conflicts"); err != nil {
+		return installPolicyInput{}, err
+	}
 	return input, nil
 }
 
@@ -151,12 +169,15 @@ func decodeUpgradePolicy(releaseMap map[string]any) (upgradePolicyInput, error) 
 	if err != nil || operationMap == nil {
 		return upgradePolicyInput{}, err
 	}
-	if err := rejectUnknownFields(operationMap, "release.upgrade",
+	if err := rejectUnknownFields(
+		operationMap, "release.upgrade",
 		cfg.HelmTimeoutSectionName,
 		cfg.HelmChartHooksSectionName,
 		cfg.HelmWaitSectionName,
 		cfg.HelmOnFailureSectionName,
 		cfg.HelmCleanupOnFailureSectionName,
+		cfg.HelmServerSideApplySectionName,
+		cfg.HelmForceConflictsSectionName,
 	); err != nil {
 		return upgradePolicyInput{}, err
 	}
@@ -176,6 +197,12 @@ func decodeUpgradePolicy(releaseMap map[string]any) (upgradePolicyInput, error) 
 	if input.CleanupOnFailure, err = optionalBoolField(operationMap, cfg.HelmCleanupOnFailureSectionName, "release.upgrade.cleanup_on_failure"); err != nil {
 		return upgradePolicyInput{}, err
 	}
+	if input.ServerSideApply, err = optionalServerSideApplyField(operationMap, cfg.HelmServerSideApplySectionName, "release.upgrade.server_side_apply"); err != nil {
+		return upgradePolicyInput{}, err
+	}
+	if input.ForceConflicts, err = optionalBoolField(operationMap, cfg.HelmForceConflictsSectionName, "release.upgrade.force_conflicts"); err != nil {
+		return upgradePolicyInput{}, err
+	}
 	return input, nil
 }
 
@@ -184,7 +211,8 @@ func decodeDeletePolicy(releaseMap map[string]any) (deletePolicyInput, error) {
 	if err != nil || operationMap == nil {
 		return deletePolicyInput{}, err
 	}
-	if err := rejectUnknownFields(operationMap, "release.delete",
+	if err := rejectUnknownFields(
+		operationMap, "release.delete",
 		cfg.HelmTimeoutSectionName,
 		cfg.HelmChartHooksSectionName,
 		cfg.HelmWaitSectionName,
@@ -226,6 +254,29 @@ func optionalBoolField(section map[string]any, key, path string) (*bool, error) 
 		return nil, decodeFieldError(path, "a boolean", value)
 	}
 	return &typed, nil
+}
+
+// optionalServerSideApplyField decodes server_side_apply, which accepts either a
+// YAML boolean (true/false) or the string "auto". A bare `true`/`false` in YAML
+// decodes to a Go bool, so both shapes are normalized to the string form the
+// policy resolver validates.
+func optionalServerSideApplyField(section map[string]any, key, path string) (*string, error) {
+	value, ok := section[key]
+	if !ok {
+		return nil, nil
+	}
+	switch typed := value.(type) {
+	case bool:
+		normalized := "false"
+		if typed {
+			normalized = "true"
+		}
+		return &normalized, nil
+	case string:
+		return &typed, nil
+	default:
+		return nil, decodeFieldError(path, "'auto', true, or false", value)
+	}
 }
 
 func optionalStringField(section map[string]any, key, path string) (*string, error) {

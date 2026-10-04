@@ -542,8 +542,9 @@ func NewInitUI(ioCtx iolib.Context, term terminal.Terminal) *InitUI {
 	}
 }
 
-// SetThreshold sets the threshold for merge operations.
-func (ui *InitUI) SetThreshold(thresholdPercent int) {
+// SetMaxChanges sets the maximum percentage of changed lines allowed in a
+// 3-way merge before --update fails instead of applying it.
+func (ui *InitUI) SetMaxChanges(thresholdPercent int) {
 	ui.processor.SetMaxChanges(thresholdPercent)
 }
 

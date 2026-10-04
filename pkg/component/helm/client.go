@@ -193,6 +193,9 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
+	if err := ensureUpgradeForceConflictsCompatible(actx, spec); err != nil {
+		return "", err
+	}
 
 	chartRef := resolveUpgradeChartRef(client, spec)
 	chartPath, err := client.LocateChart(chartRef, actx.settings)
@@ -382,6 +385,16 @@ func configureInstallLifecycle(client *action.Install, policy effectiveReleasePo
 	client.Timeout = policy.Timeout
 	client.DisableHooks = !policy.ChartHooks
 	client.SkipCRDs = policy.CRDs == crdPolicySkip
+	// Install exposes ServerSideApply as a bool; leave the Helm default (true)
+	// untouched when unset so omitting the setting is byte-for-byte unchanged.
+	switch policy.ServerSideApply {
+	case serverSideApplyFalse:
+		client.ServerSideApply = false
+	case serverSideApplyAuto, serverSideApplyTrue:
+		client.ServerSideApply = true
+	case serverSideApplyUnset:
+	}
+	client.ForceConflicts = policy.ForceConflicts
 }
 
 func configureUpgradeLifecycle(client *action.Upgrade, policy effectiveReleasePolicy) {
@@ -392,6 +405,49 @@ func configureUpgradeLifecycle(client *action.Upgrade, policy effectiveReleasePo
 	client.CleanupOnFail = policy.CleanupOnFailure
 	client.MaxHistory = policy.MaxHistory
 	client.DisableHooks = !policy.ChartHooks
+	// Upgrade exposes ServerSideApply as a string (auto|true|false); leave the
+	// Helm default ("auto") untouched when unset.
+	if policy.ServerSideApply != serverSideApplyUnset {
+		client.ServerSideApply = string(policy.ServerSideApply)
+	}
+	client.ForceConflicts = policy.ForceConflicts
+}
+
+// ensureUpgradeForceConflictsCompatible rejects force_conflicts on an upgrade
+// whose resolved apply method is client-side, which Helm refuses only after the
+// chart is loaded and a revision is persisted ("forceConflicts enabled when
+// serverSideApply disabled"). An explicit server_side_apply: false is already
+// rejected at resolution; here we resolve the unset/auto method against the
+// previous release's recorded apply method so the failure surfaces before any
+// chart download or cluster mutation, and so an automatic rollback does not
+// inherit the same doomed combination.
+func ensureUpgradeForceConflictsCompatible(actx *actionContext, spec *chartSpec) error {
+	policy := spec.Lifecycle.Policy
+	if !policy.ForceConflicts || policy.ServerSideApply == serverSideApplyTrue {
+		return nil
+	}
+	if policy.ServerSideApply == serverSideApplyFalse {
+		return errUtils.ErrHelmForceConflictsRequiresSSA
+	}
+	// Unset or auto: Helm enables server-side apply only when the previous
+	// release used it, so inspect the recorded apply method.
+	lastReleaser, err := actx.cfg.Releases.Last(spec.ReleaseName)
+	if err != nil {
+		// No readable release history (e.g. a storage error or missing release):
+		// this preflight has no basis to reject, so defer to Helm's own handling
+		// rather than blocking the upgrade. Absence of history is not a validation
+		// failure.
+		return nil //nolint:nilerr // intentional: unreadable history means "cannot preflight", not "invalid".
+	}
+	if lastReleaser == nil {
+		return nil
+	}
+	last, ok := lastReleaser.(*release.Release)
+	if !ok || last.ApplyMethod == string(release.ApplyMethodServerSideApply) {
+		return nil
+	}
+	return fmt.Errorf("%w: the current release of %q uses client-side apply, so upgrade 'auto' leaves it disabled; set server_side_apply: true to force conflicts",
+		errUtils.ErrHelmForceConflictsRequiresSSA, spec.ReleaseName)
 }
 
 func configureUninstallLifecycle(client *action.Uninstall, policy effectiveReleasePolicy, dryRun bool) {

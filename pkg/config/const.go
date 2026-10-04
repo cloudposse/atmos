@@ -62,6 +62,7 @@ const (
 	InitRunReconfigure          = "--init-run-reconfigure"
 	InitPassVars                = "--init-pass-vars"
 	InitModeFlag                = "--init-mode"
+	UseMocksFlag                = "--use-mocks"
 	InitReconfigureFlag         = "--init-reconfigure"
 	InitUpgradeFlag             = "--init-upgrade"
 	PlanSkipPlanfile            = "--skip-planfile"
@@ -150,6 +151,8 @@ const (
 	HelmHistoryMaxSectionName         = "max"
 	HelmChartHooksSectionName         = "chart_hooks"
 	HelmCRDsSectionName               = "crds"
+	HelmServerSideApplySectionName    = "server_side_apply"
+	HelmForceConflictsSectionName     = "force_conflicts"
 	HelmDependencyUpdateSectionName   = "dependency_update"
 	HelmCreateNamespaceSectionName    = "create_namespace"
 	HelmDefaultMaxHistory             = 10
