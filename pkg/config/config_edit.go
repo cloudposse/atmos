@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	goyaml "go.yaml.in/yaml/v3"
-
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -87,63 +85,57 @@ func ResolveEditableConfigFile(atmosConfig *schema.AtmosConfiguration, override 
 // config fragments, matching the directories mergeDefaultImports auto-discovers.
 var configImportDirCandidates = []string{AtmosDefaultImportsDirName, DotAtmosDefaultImportsDirName}
 
-// ResolveEditableConfigFileForSection returns the config file that edits to the
-// given top-level section (e.g. "mcp") should target. It extends
-// ResolveEditableConfigFile with fragment-awareness: when no explicit override is
-// given and an auto-discovered `atmos.d/`/`.atmos.d/` fragment already declares the
-// section, that fragment is edited instead of the root atmos.yaml, so a project
-// that keeps modular config in fragments is not silently split across two files
-// (cloudposse/atmos#3269). Precedence:
+// EffectiveConfigFilesAscending returns the config files that participate in the
+// merged configuration, in ascending precedence order (a later file overrides an
+// earlier one). Config-editing commands that must edit the file whose value is
+// actually effective for a key - rather than guessing by top-level section
+// presence - select the last (highest-precedence) candidate that declares the key
+// (cloudposse/atmos#3269).
 //
-//  1. an explicit override (the --config flag or ATMOS_CLI_CONFIG_PATH);
-//  2. an auto-discovered fragment that already declares the section;
-//  3. the root atmos.yaml / .atmos.yaml (via ResolveEditableConfigFile).
-func ResolveEditableConfigFileForSection(atmosConfig *schema.AtmosConfiguration, override, section string) (string, error) {
-	defer perf.Track(atmosConfig, "config.ResolveEditableConfigFileForSection")()
+// The order mirrors how Atmos loads config:
+//
+//  1. git-repository-root `atmos.d/` and `.atmos.d/` fragments (lowest precedence);
+//  2. the current working directory's `atmos.d/` and `.atmos.d/` fragments, but
+//     only when the CWD has its own root atmos.yaml - otherwise the loader uses
+//     the git root and the CWD fragments are not merged;
+//  3. the root atmos.yaml / .atmos.yaml itself (highest precedence - Atmos
+//     reapplies it after its imports, so an explicit root value overrides a
+//     fragment).
+//
+// Within a fragment directory, files follow SearchAtmosConfig order (depth, then
+// name), matching the loader's later-overrides-earlier merge.
+func EffectiveConfigFilesAscending(atmosConfig *schema.AtmosConfiguration) []string {
+	defer perf.Track(atmosConfig, "config.EffectiveConfigFilesAscending")()
 
-	if override != "" {
-		return resolveOverridePath(override)
-	}
-	if fragment, ok := fragmentDeclaringSection(section); ok {
-		return fragment, nil
-	}
-	return ResolveEditableConfigFile(atmosConfig, "")
-}
-
-// fragmentDeclaringSection returns the first auto-discovered config fragment that
-// declares the given top-level section, searching the current working directory
-// first and the git repository root second -- mirroring how mergeDefaultImports
-// discovers atmos.d/.atmos.d. Returns false when no fragment declares the
-// section, so the caller falls back to the root atmos.yaml.
-func fragmentDeclaringSection(section string) (string, bool) {
-	for _, dir := range fragmentSearchDirs() {
-		for _, importDir := range configImportDirCandidates {
-			candidate := filepath.Join(dir, importDir)
-			if info, err := os.Stat(candidate); err != nil || !info.IsDir() {
-				continue
-			}
-			files, err := SearchAtmosConfig(candidate)
-			if err != nil {
-				continue
-			}
-			for _, file := range files {
-				if declares, derr := fileDeclaresTopLevelKey(file, section); derr == nil && declares {
-					return file, true
-				}
-			}
+	var cwd string
+	cwdHasConfig := false
+	if wd, err := os.Getwd(); err == nil {
+		cwd = wd
+		if _, ok, probeErr := firstExistingConfig(wd); probeErr == nil && ok {
+			cwdHasConfig = true
 		}
 	}
-	return "", false
+
+	var files []string
+	for _, dir := range fragmentDirsAscending(cwd, cwdHasConfig) {
+		files = append(files, fragmentFiles(dir)...)
+	}
+	if root, err := ResolveEditableConfigFile(atmosConfig, ""); err == nil {
+		files = append(files, root)
+	}
+	return files
 }
 
-// fragmentSearchDirs returns the directories whose atmos.d/.atmos.d fragments are
-// in effect: the current working directory first, then the git repository root
-// (when different). A CWD fragment is preferred over a git-root one, mirroring
-// mergeDefaultImports' precedence.
-func fragmentSearchDirs() []string {
+// fragmentDirsAscending returns the directories whose atmos.d/.atmos.d fragments
+// are in effect, in ascending precedence: the git repository root first (lowest),
+// then the current working directory (higher) when it carries its own root config.
+func fragmentDirsAscending(cwd string, cwdHasConfig bool) []string {
 	seen := make(map[string]struct{})
 	var dirs []string
 	add := func(dir string) {
+		if dir == "" {
+			return
+		}
 		abs, err := filepath.Abs(dir)
 		if err != nil {
 			return
@@ -154,38 +146,35 @@ func fragmentSearchDirs() []string {
 		seen[abs] = struct{}{}
 		dirs = append(dirs, abs)
 	}
-	if cwd, err := os.Getwd(); err == nil {
-		add(cwd)
-	}
-	if gitRoot, err := u.ProcessTagGitRoot("!repo-root ."); err == nil && gitRoot != "" {
+	// ProcessTagGitRoot returns "." (not an error) when there is no real git
+	// repository, which must not be treated as a root -- otherwise the CWD would be
+	// searched here, bypassing the cwdHasConfig gate below. This mirrors the guard
+	// in loadAtmosDFromGitRoot.
+	if gitRoot, err := u.ProcessTagGitRoot("!repo-root ."); err == nil && gitRoot != "" && gitRoot != "." {
 		add(gitRoot)
+	}
+	if cwdHasConfig {
+		add(cwd)
 	}
 	return dirs
 }
 
-// fileDeclaresTopLevelKey reports whether the YAML file at path has key at the
-// top level of its root mapping. Used to detect which fragment owns a section
-// (e.g. "mcp") so edits land in the file that already declares it, rather than
-// splitting config across the root atmos.yaml and a fragment.
-func fileDeclaresTopLevelKey(path, key string) (bool, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return false, err
-	}
-	var root goyaml.Node
-	if err := goyaml.Unmarshal(content, &root); err != nil {
-		return false, err
-	}
-	if len(root.Content) == 0 || root.Content[0].Kind != goyaml.MappingNode {
-		return false, nil
-	}
-	mapping := root.Content[0]
-	for i := 0; i+1 < len(mapping.Content); i += 2 {
-		if mapping.Content[i].Value == key {
-			return true, nil
+// fragmentFiles returns the config fragment files under dir's atmos.d/ and
+// .atmos.d/ directories, in SearchAtmosConfig order.
+func fragmentFiles(dir string) []string {
+	var files []string
+	for _, importDir := range configImportDirCandidates {
+		base := filepath.Join(dir, importDir)
+		if info, err := os.Stat(base); err != nil || !info.IsDir() {
+			continue
 		}
+		found, err := SearchAtmosConfig(base)
+		if err != nil {
+			continue
+		}
+		files = append(files, found...)
 	}
-	return false, nil
+	return files
 }
 
 // resolveOverridePath resolves an explicit override that may point at either a

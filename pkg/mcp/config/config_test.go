@@ -263,24 +263,10 @@ func TestHasServerWithURL(t *testing.T) {
 	assert.False(t, HasServerWithURL(servers, "https://other.example.com/mcp"))
 }
 
-func TestResolveFile(t *testing.T) {
-	dir := t.TempDir()
-	file := filepath.Join(dir, "atmos.yaml")
-	require.NoError(t, os.WriteFile(file, []byte("base_path: \"./\"\n"), 0o600))
-
-	cmd := &cobra.Command{}
-	cmd.Flags().StringSlice("config", nil, "")
-	require.NoError(t, cmd.Flags().Set("config", file))
-
-	resolved, err := ResolveFile(cmd, &schema.AtmosConfiguration{})
-	require.NoError(t, err)
-	assert.Equal(t, file, resolved)
-}
-
 // chdir switches to dir for the duration of the test, restoring the previous
-// working directory on cleanup. ResolveFile probes the current directory for
-// atmos.yaml and `.atmos.d/` fragments, so these tests must run from a known
-// temp dir rather than the package directory.
+// working directory on cleanup. ResolveServerFile/ResolveEnableFile probe the
+// current directory for atmos.yaml and `.atmos.d/` fragments, so these tests must
+// run from a known temp dir rather than the package directory.
 func chdir(t *testing.T, dir string) {
 	t.Helper()
 	prev, err := os.Getwd()
@@ -289,96 +275,174 @@ func chdir(t *testing.T, dir string) {
 	t.Cleanup(func() { _ = os.Chdir(prev) })
 }
 
-// TestResolveFile_PrefersAtmosDFragmentDeclaringMCP reproduces cloudposse/atmos#3269:
-// when a project keeps its MCP config in a `.atmos.d/` fragment, `atmos mcp add`
-// must edit that fragment instead of splitting the config by writing to the root
-// atmos.yaml.
-func TestResolveFile_PrefersAtmosDFragmentDeclaringMCP(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("base_path: \"./\"\n"), 0o600))
-	fragmentDir := filepath.Join(dir, ".atmos.d")
-	require.NoError(t, os.MkdirAll(fragmentDir, 0o755))
-	fragment := filepath.Join(fragmentDir, "mcp.yaml")
-	require.NoError(t, os.WriteFile(fragment, []byte("mcp:\n  enabled: true\n  servers:\n    my-server:\n      command: some-binary\n"), 0o600))
-
-	chdir(t, dir)
-	cmd := &cobra.Command{}
-	cmd.Flags().StringSlice("config", nil, "")
-
-	resolved, err := ResolveFile(cmd, &schema.AtmosConfiguration{})
-	require.NoError(t, err)
-
-	wantFragment, err := filepath.EvalSymlinks(fragment)
-	require.NoError(t, err)
-	gotResolved, err := filepath.EvalSymlinks(resolved)
-	require.NoError(t, err)
-	assert.Equal(t, wantFragment, gotResolved, "mcp add must target the .atmos.d fragment that declares mcp, not the root atmos.yaml")
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 }
 
-// TestResolveFile_FallsBackToRootWithoutMCPFragment confirms the fragment
-// preference does not fire when no `.atmos.d/` fragment declares an `mcp:`
-// section: a `.atmos.d/` fragment about something else must not hijack the
-// target, and the root atmos.yaml stays the edit target.
-func TestResolveFile_FallsBackToRootWithoutMCPFragment(t *testing.T) {
-	dir := t.TempDir()
-	rootFile := filepath.Join(dir, "atmos.yaml")
-	require.NoError(t, os.WriteFile(rootFile, []byte("base_path: \"./\"\n"), 0o600))
-	fragmentDir := filepath.Join(dir, ".atmos.d")
-	require.NoError(t, os.MkdirAll(fragmentDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(fragmentDir, "commands.yaml"), []byte("commands:\n  - name: noop\n"), 0o600))
-
-	chdir(t, dir)
-	cmd := &cobra.Command{}
-	cmd.Flags().StringSlice("config", nil, "")
-
-	resolved, err := ResolveFile(cmd, &schema.AtmosConfiguration{})
+func sameFile(t *testing.T, want, got string) {
+	t.Helper()
+	w, err := filepath.EvalSymlinks(want)
 	require.NoError(t, err)
-
-	wantRoot, err := filepath.EvalSymlinks(rootFile)
+	g, err := filepath.EvalSymlinks(got)
 	require.NoError(t, err)
-	gotResolved, err := filepath.EvalSymlinks(resolved)
-	require.NoError(t, err)
-	assert.Equal(t, wantRoot, gotResolved, "without an mcp fragment, the root atmos.yaml stays the edit target")
+	assert.Equal(t, w, g)
 }
 
-// TestResolveFile_ExplicitConfigOverridesFragment confirms an explicit --config
-// still wins over `.atmos.d/` fragment auto-detection.
-func TestResolveFile_ExplicitConfigOverridesFragment(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("base_path: \"./\"\n"), 0o600))
-	fragmentDir := filepath.Join(dir, ".atmos.d")
-	require.NoError(t, os.MkdirAll(fragmentDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(fragmentDir, "mcp.yaml"), []byte("mcp:\n  servers: {}\n"), 0o600))
-	override := filepath.Join(dir, "custom.yaml")
-	require.NoError(t, os.WriteFile(override, []byte("base_path: \"./\"\n"), 0o600))
-
-	chdir(t, dir)
+func noConfigCmd() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Flags().StringSlice("config", nil, "")
-	require.NoError(t, cmd.Flags().Set("config", override))
-
-	resolved, err := ResolveFile(cmd, &schema.AtmosConfiguration{})
-	require.NoError(t, err)
-	assert.Equal(t, override, resolved, "an explicit --config must win over .atmos.d fragment detection")
+	return cmd
 }
 
-// TestResolveFile_MultipleConfigFilesAmbiguous guards against the same bug fixed in
-// cmd/config's resolveConfigFile (cloudposse/atmos#2867/#2868): ResolveFile silently used only
-// the FIRST --config file when multiple were given, so `mcp client add --config a,b` could
-// silently edit the wrong file.
-func TestResolveFile_MultipleConfigFilesAmbiguous(t *testing.T) {
+func TestResolveServerFile_Override(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	writeFile(t, file, "mcp:\n  servers:\n    demo:\n      command: x\n")
+
+	cmd := noConfigCmd()
+	require.NoError(t, cmd.Flags().Set("config", file))
+
+	resolved, declared, err := ResolveServerFile(cmd, &schema.AtmosConfiguration{}, "demo")
+	require.NoError(t, err)
+	assert.Equal(t, file, resolved)
+	assert.True(t, declared, "override file declares the server")
+}
+
+// TestResolveServerFile_NewServerJoinsFragment reproduces cloudposse/atmos#3269:
+// a new server is written to the `.atmos.d/` fragment that already holds
+// mcp.servers, not split into the root atmos.yaml.
+func TestResolveServerFile_NewServerJoinsFragment(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "atmos.yaml"), "base_path: \"./\"\n")
+	fragment := filepath.Join(dir, ".atmos.d", "mcp.yaml")
+	writeFile(t, fragment, "mcp:\n  enabled: true\n  servers:\n    existing:\n      command: some-binary\n")
+
+	chdir(t, dir)
+	resolved, declared, err := ResolveServerFile(noConfigCmd(), &schema.AtmosConfiguration{}, "newone")
+	require.NoError(t, err)
+	assert.False(t, declared, "a brand-new server does not exist yet")
+	sameFile(t, fragment, resolved)
+}
+
+// TestResolveServerFile_ExistingServerInFragment confirms overwriting a server
+// that lives only in a fragment targets that fragment.
+func TestResolveServerFile_ExistingServerInFragment(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "atmos.yaml"), "base_path: \"./\"\n")
+	fragment := filepath.Join(dir, ".atmos.d", "mcp.yaml")
+	writeFile(t, fragment, "mcp:\n  servers:\n    demo:\n      command: FRAG\n")
+
+	chdir(t, dir)
+	resolved, declared, err := ResolveServerFile(noConfigCmd(), &schema.AtmosConfiguration{}, "demo")
+	require.NoError(t, err)
+	assert.True(t, declared)
+	sameFile(t, fragment, resolved)
+}
+
+// TestResolveServerFile_RootShadowsFragment is the security case from the #3270
+// review: when the same server is declared in BOTH the root atmos.yaml and a
+// fragment, the root wins the merge, so the overwrite must target the root -
+// editing the fragment would report success while the effective value is
+// unchanged.
+func TestResolveServerFile_RootShadowsFragment(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "atmos.yaml")
+	writeFile(t, root, "mcp:\n  servers:\n    demo:\n      command: ROOT\n")
+	writeFile(t, filepath.Join(dir, ".atmos.d", "mcp.yaml"), "mcp:\n  servers:\n    demo:\n      command: FRAG\n")
+
+	chdir(t, dir)
+	resolved, declared, err := ResolveServerFile(noConfigCmd(), &schema.AtmosConfiguration{}, "demo")
+	require.NoError(t, err)
+	assert.True(t, declared)
+	sameFile(t, root, resolved)
+}
+
+// TestResolveServerFile_NewServerNoMCPFallsBackToRoot confirms behavior is
+// unchanged (root atmos.yaml) when nothing declares mcp.servers.
+func TestResolveServerFile_NewServerNoMCPFallsBackToRoot(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "atmos.yaml")
+	writeFile(t, root, "base_path: \"./\"\n")
+	writeFile(t, filepath.Join(dir, ".atmos.d", "commands.yaml"), "commands: []\n")
+
+	chdir(t, dir)
+	resolved, declared, err := ResolveServerFile(noConfigCmd(), &schema.AtmosConfiguration{}, "newone")
+	require.NoError(t, err)
+	assert.False(t, declared)
+	sameFile(t, root, resolved)
+}
+
+// TestResolveServerFile_RemoveUnknownIsNotDeclared confirms remove's
+// "not configured" path: an unknown server is reported as not declared rather
+// than silently targeting an arbitrary fragment.
+func TestResolveServerFile_RemoveUnknownIsNotDeclared(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "atmos.yaml"), "base_path: \"./\"\n")
+	writeFile(t, filepath.Join(dir, ".atmos.d", "mcp.yaml"), "mcp:\n  servers:\n    other:\n      command: x\n")
+
+	chdir(t, dir)
+	_, declared, err := ResolveServerFile(noConfigCmd(), &schema.AtmosConfiguration{}, "missing")
+	require.NoError(t, err)
+	assert.False(t, declared, "an unconfigured server must be reported as not declared")
+}
+
+func TestResolveServerFile_MultipleConfigFilesAmbiguous(t *testing.T) {
 	dir := t.TempDir()
 	fileA := filepath.Join(dir, "a.yaml")
 	fileB := filepath.Join(dir, "b.yaml")
-	require.NoError(t, os.WriteFile(fileA, []byte("base_path: \"./\"\n"), 0o600))
-	require.NoError(t, os.WriteFile(fileB, []byte("base_path: \"./\"\n"), 0o600))
+	writeFile(t, fileA, "base_path: \"./\"\n")
+	writeFile(t, fileB, "base_path: \"./\"\n")
 
 	cmd := &cobra.Command{}
 	cmd.Flags().StringSlice("config", []string{fileA, fileB}, "")
 
-	_, err := ResolveFile(cmd, &schema.AtmosConfiguration{})
+	_, _, err := ResolveServerFile(cmd, &schema.AtmosConfiguration{}, "demo")
 	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
 	details := strings.Join(ckerrors.GetAllDetails(err), "\n")
 	assert.Contains(t, details, "a.yaml")
 	assert.Contains(t, details, "b.yaml")
+}
+
+// TestResolveEnableFile_RootWins is the finding-3b case: mcp.enabled must be
+// written to the root atmos.yaml, whose explicit value overrides any fragment, so
+// enabling actually takes effect.
+func TestResolveEnableFile_RootWins(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "atmos.yaml")
+	writeFile(t, root, "mcp:\n  enabled: false\n")
+	writeFile(t, filepath.Join(dir, ".atmos.d", "mcp.yaml"), "mcp:\n  enabled: true\n")
+
+	chdir(t, dir)
+	resolved, err := ResolveEnableFile(noConfigCmd(), &schema.AtmosConfiguration{})
+	require.NoError(t, err)
+	sameFile(t, root, resolved)
+}
+
+// TestResolveEnableFile_FragmentWhenRootSilent confirms that when only a fragment
+// declares mcp.enabled, the fragment is targeted (its value is effective).
+func TestResolveEnableFile_FragmentWhenRootSilent(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "atmos.yaml"), "base_path: \"./\"\n")
+	fragment := filepath.Join(dir, ".atmos.d", "mcp.yaml")
+	writeFile(t, fragment, "mcp:\n  enabled: true\n")
+
+	chdir(t, dir)
+	resolved, err := ResolveEnableFile(noConfigCmd(), &schema.AtmosConfiguration{})
+	require.NoError(t, err)
+	sameFile(t, fragment, resolved)
+}
+
+// TestResolveEnableFile_FallsBackToRoot confirms the default target when nothing
+// declares mcp.enabled yet.
+func TestResolveEnableFile_FallsBackToRoot(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "atmos.yaml")
+	writeFile(t, root, "base_path: \"./\"\n")
+
+	chdir(t, dir)
+	resolved, err := ResolveEnableFile(noConfigCmd(), &schema.AtmosConfiguration{})
+	require.NoError(t, err)
+	sameFile(t, root, resolved)
 }

@@ -29,7 +29,13 @@ Running `atmos mcp add` with no target defaults to `atmos mcp add self`.
 
 ### Which file is edited
 
-By default `add` writes to the root `atmos.yaml`. If the project already keeps its MCP configuration in an auto-discovered [`.atmos.d/`](/cli/configuration#automatic-configuration-imports-atmosd) (or `atmos.d/`) fragment - that is, a fragment that declares an `mcp:` section - `add` edits that fragment instead, so a modular-config project is not silently split across the root `atmos.yaml` and a fragment. Pass `--config <file>` to target a specific file explicitly. The current working directory is checked before the git repository root, matching how Atmos discovers these fragments when it loads config.
+`add` (and `remove`) edit the config file whose value is actually in effect for the server, so an edit is never silently shadowed by a higher-precedence file. Without an explicit `--config`, the target is resolved by the server's effective provenance:
+
+- **Overwrite** an existing server: the highest-precedence file that already declares `mcp.servers.<name>` (Atmos reapplies the root `atmos.yaml` over its imports, so a root entry wins over a fragment).
+- **New** server: the highest-precedence file that already declares `mcp.servers` - typically an auto-discovered [`.atmos.d/`](/cli/configuration#automatic-configuration-imports-atmosd) (or `atmos.d/`) fragment - so a modular-config project is not silently split across the root `atmos.yaml` and a fragment. If nothing declares `mcp.servers`, the root `atmos.yaml` is used.
+- **`mcp.enabled`** (flipped when adding the `self` preset): written to the file whose value wins - the root `atmos.yaml` - so enabling actually takes effect.
+
+Only effective config roots are searched (the git repository root always; the current working directory only when it has its own root `atmos.yaml`). Pass `--config <file>` to target a specific file explicitly.
 
 Only the config file is written - `add` never touches an AI client's config file. Use `--install` to also push the new server into detected AI clients in the same step, or run [`atmos mcp install`](/cli/commands/mcp/install) separately.
 
