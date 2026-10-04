@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
@@ -20,6 +21,10 @@ const initSubcommand = "init"
 
 // remoteSubcommand is the git subcommand for managing remotes.
 const remoteSubcommand = "remote"
+
+// legacyDefaultBranch is Git's built-in initial branch name on versions that
+// predate `git var GIT_DEFAULT_BRANCH`.
+const legacyDefaultBranch = "master"
 
 // Init creates a repository workdir — the inverse of Clone, for GitOps
 // repositories whose remote has no content yet.
@@ -181,8 +186,8 @@ func (p *Provider) initFromSourceKeepHistory(ctx context.Context, opts *atmosgit
 
 	// The configured branch belongs to the destination repository and need
 	// not exist in the source, so create (or reset) it at the cloned ref.
-	if opts.Branch != "" {
-		if result, err := p.run(ctx, opts.Workdir, opts.Env, "checkout", "-B", opts.Branch); err != nil {
+	if branch := p.keepHistoryBranch(ctx, opts); branch != "" {
+		if result, err := p.run(ctx, opts.Workdir, opts.Env, "checkout", "-B", branch); err != nil {
 			return classify(err, result, "checkout")
 		}
 	}
@@ -207,6 +212,24 @@ func (p *Provider) initFromSourceKeepHistory(ctx context.Context, opts *atmosgit
 	}
 
 	return p.addRemote(ctx, opts.RepoContext, configured, opts.URI)
+}
+
+// keepHistoryBranch returns the branch to create after a keep-history clone:
+// the configured branch, or, when none is configured and a tag FromRef left
+// HEAD detached, Git's default initial branch (the documented fallback for an
+// unset branch). Empty means stay on the branch the clone checked out.
+func (p *Provider) keepHistoryBranch(ctx context.Context, opts *atmosgit.InitOptions) string {
+	if opts.Branch != "" || opts.FromRef == "" {
+		return opts.Branch
+	}
+	if _, err := p.run(ctx, opts.Workdir, opts.Env, "symbolic-ref", "-q", "HEAD"); err == nil {
+		return "" // FromRef named a branch; HEAD is on it.
+	}
+	result, err := p.run(ctx, opts.Workdir, opts.Env, "var", "GIT_DEFAULT_BRANCH")
+	if branch := strings.TrimSpace(result.Stdout); err == nil && branch != "" {
+		return branch
+	}
+	return legacyDefaultBranch
 }
 
 // adoptClonedRemote keeps the clone's remote as the configured remote when the
