@@ -16,6 +16,7 @@ import styles from "./styles.module.css";
 
 type NavigatorProps = Props & { sidebarName: string };
 
+/** Render focused menus while preserving each visited section's expansion state. */
 export default function SidebarNavigator({
   items,
   activePath,
@@ -79,12 +80,14 @@ export default function SidebarNavigator({
     return () => window.clearTimeout(timer);
   }, [activePath, section, filtering]);
 
+  /** Announce a menu change after React renders its heading, without scrolling. */
   function focusHeading() {
     window.requestAnimationFrame(() =>
       headingRef.current?.focus({ preventScroll: true }),
     );
   }
 
+  /** Reveal a section's saved menu without dismissing the mobile drawer. */
   function selectSection(index: number) {
     setView({ path: activePath, section: index });
     setVisited((previous) =>
@@ -96,6 +99,7 @@ export default function SidebarNavigator({
     focusHeading();
   }
 
+  /** Restore the section list without navigating away from the current article. */
   function returnToSections() {
     setView({ path: activePath, section: null });
     setQuery("");
@@ -104,6 +108,7 @@ export default function SidebarNavigator({
     focusHeading();
   }
 
+  /** Clear filtering and dismiss the drawer for article links, but not toggles. */
   function navigate(item: PropSidebarItem) {
     // Native category toggles also invoke this callback. Only article navigation
     // should close the mobile drawer or clear the filter.
@@ -229,7 +234,8 @@ export default function SidebarNavigator({
                       )
                         return;
                       selectSection(index);
-                      onItemClick?.(item);
+                      // Load the overview through Link, but keep the drawer open
+                      // so the selected section's local menu remains available.
                     }}
                   >
                     <span>

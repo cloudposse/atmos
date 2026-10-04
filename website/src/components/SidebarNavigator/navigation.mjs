@@ -1,12 +1,12 @@
-/** Pure navigation operations shared by desktop and mobile. */
+/** Compare routes independently of query strings, anchors, and trailing slashes. */
 export function normalizePath(href = "") {
   return href.split(/[?#]/)[0].replace(/\/$/, "") || "/";
 }
 
-// A canonical doc/category owns a route. Cross-links in another section must
-// not steal it (for example Steps -> Using steps -> Workflows).
+/** Find the owning section, preferring canonical pages over cross-section links. */
 export function findSection(items, activePath) {
   const path = normalizePath(activePath);
+  /** Rank canonical matches above ordinary links throughout a subtree. */
   function score(item) {
     const own =
       item.href && normalizePath(item.href) === path
@@ -28,6 +28,7 @@ export function findSection(items, activePath) {
   return section;
 }
 
+/** Clone resolved items with closed categories and hide inactive unlisted pages. */
 export function prepareItems(items, activePath) {
   return items
     .filter(
@@ -47,9 +48,11 @@ export function prepareItems(items, activePath) {
     );
 }
 
+/** Prune by label and ancestry, expanding matches without changing saved menus. */
 export function filterItems(items, query, ancestors = []) {
   const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return items;
+  /** Reveal all descendants when the query matches their parent category. */
   function expand(item) {
     return item.type === "category"
       ? { ...item, collapsed: false, items: item.items.map(expand) }
@@ -68,6 +71,7 @@ export function filterItems(items, query, ancestors = []) {
   });
 }
 
+/** Convert Docusaurus sidebar IDs to labels used by filtering and back controls. */
 export function sidebarLabel(name) {
   return (
     {

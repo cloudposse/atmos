@@ -3,6 +3,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
+/** Map a migrated document to its release-era path, respecting directory boundaries. */
 function historicalPathFor(relativePath, mappings = []) {
   const normalized = relativePath.split(path.sep).join("/");
   const mapping = mappings.find(({ from }) =>
