@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "@docusaurus/Link";
+import { FiArrowLeft, FiChevronRight, FiSearch, FiX } from "react-icons/fi";
 import OriginalDocSidebarItems from "@theme-original/DocSidebarItems";
 import type { Props } from "@theme/DocSidebarItems";
 import type { PropSidebarItem } from "@docusaurus/plugin-content-docs";
@@ -168,26 +169,17 @@ export default function SidebarNavigator({
           Filter navigation
         </label>
         <div className={styles.filterRow}>
-          <svg
+          <FiSearch
             className={styles.searchIcon}
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-            strokeLinecap="round"
+            size={16}
             aria-hidden="true"
-          >
-            <circle cx="10.5" cy="10.5" r="6.5" />
-            <path d="m16 16 4.5 4.5" />
-          </svg>
+          />
           <input
             ref={inputRef}
             id={inputId}
             type="search"
             value={query}
-            placeholder="Filter sidebar…"
+            placeholder="Filter sidebar..."
             autoComplete="off"
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
@@ -208,18 +200,7 @@ export default function SidebarNavigator({
                 inputRef.current?.focus();
               }}
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                aria-hidden="true"
-              >
-                <path d="m6 6 12 12M6 18 18 6" />
-              </svg>
+              <FiX size={14} aria-hidden="true" />
             </button>
           )}
         </div>
@@ -229,7 +210,8 @@ export default function SidebarNavigator({
             className={styles.back}
             onClick={returnToSections}
           >
-            ← All {sidebarLabel(sidebarName)}
+            <FiArrowLeft size={16} aria-hidden="true" />
+            All {sidebarLabel(sidebarName)}
           </button>
         )}
         <h2
@@ -293,7 +275,11 @@ export default function SidebarNavigator({
                       {item.label}
                       {isExperimentalRoute(item.href) && <ExperimentalDot />}
                     </span>
-                    <span aria-hidden="true">›</span>
+                    <FiChevronRight
+                      className={styles.sectionChevron}
+                      size={16}
+                      aria-hidden="true"
+                    />
                   </Link>
                 ) : (
                   <button
@@ -302,7 +288,11 @@ export default function SidebarNavigator({
                     onClick={() => selectSection(index)}
                   >
                     <span>{item.label}</span>
-                    <span aria-hidden="true">›</span>
+                    <FiChevronRight
+                      className={styles.sectionChevron}
+                      size={16}
+                      aria-hidden="true"
+                    />
                   </button>
                 )}
               </li>

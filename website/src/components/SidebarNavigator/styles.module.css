@@ -92,7 +92,9 @@
 }
 
 .back {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.65rem 0;
   text-align: left;
   font-size: 0.875rem;
@@ -149,6 +151,12 @@
   text-align: left;
   cursor: pointer;
   padding-left: var(--ifm-menu-link-padding-horizontal) !important;
+}
+
+.sectionChevron {
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--navigation-muted);
 }
 
 .navigator :global(.menu__link),
