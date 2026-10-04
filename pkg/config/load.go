@@ -896,6 +896,12 @@ func setDefaultConfiguration(v *viper.Viper) {
 	// -upgrade automatically before this setting existed). A project pinned to an edition before
 	// that date gets "never" restored by applyEditionDefaults.
 	v.SetDefault("components.terraform.init.upgrade", "auto")
+	// With --use-mocks, Terraform state/output lookups use real state when it exists and fall
+	// back to component mocks only on a recoverable miss, since 2026-10-01 (journaled in
+	// pkg/edition; previously always, since mocks short-circuited every lookup and real state
+	// was never read). A project pinned to an edition before that date gets "always" restored
+	// by applyEditionDefaults -- byte-for-byte the prior hermetic behavior.
+	v.SetDefault("components.terraform.mocks.mode", "fallback")
 	// components.terraform.init.reconfigure is deliberately NOT given a Viper default here,
 	// unlike init.mode/init.upgrade above. EffectiveInitReconfigure's legacy fallback
 	// (deprecated init_run_reconfigure) depends on t.Init.Reconfigure being genuinely empty
