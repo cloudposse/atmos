@@ -410,7 +410,7 @@ This writes Terraform outputs to the configured store after apply completes. The
 
 You can get raw read and write access to any configured store. This access does not depend on a
 Terraform output. Use the [`atmos store`](/cli/commands/store/usage) CLI command group or a
-[`type: store`](/workflows/steps/type/store) workflow step. Not every backend supports every
+[`type: store`](/steps/type/store) workflow step. Not every backend supports every
 operation. For example, `atmos store delete` returns an error for Redis and Artifactory, because
 these backends do not support deletion:
 
@@ -451,5 +451,5 @@ steps:
 - [External Stores](/stacks/sharing-state/stores) - Using `!store` function in stacks
 - [Hooks](/stacks/hooks) - Writing to stores with hooks
 - [`atmos store` CLI](/cli/commands/store/usage) - Read, write, delete, and list store values
-- [`type: store` workflow step](/workflows/steps/type/store) - Write a store value from a workflow, custom command, or hook
+- [`type: store` workflow step](/steps/type/store) - Write a store value from a workflow, custom command, or hook
 - [Terraform State](/stacks/sharing-state/terraform-state) - Alternative data sharing method
