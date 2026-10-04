@@ -19,6 +19,8 @@ components:
             pass_vars: false
             mode: auto
             upgrade: auto
+        mocks:
+            mode: fallback
         plan:
             skip_planfile: false
         plugin_cache: true
