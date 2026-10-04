@@ -181,8 +181,11 @@ A `//` default is a one-off fallback baked into a single expression. If you want
 component to declare its mock outputs once and have every consumer resolve them consistently,
 use the dedicated [`mocks`](/stacks/components/mocks) stack-config section with the
 `--use-mocks` flag instead — see [Component Mocks for Terraform YAML Lookups](/changelog/terraform-component-mocks).
-A `//` default in the caller's expression still applies even when the referenced component
-declares no `mocks` section at all; without one, an undeclared `mocks` section is a hard error.
+By default (`components.terraform.mocks.mode: fallback`), `--use-mocks` uses the real output when it exists and the
+component's mock only when the component is not provisioned or the output is missing; credential, network, and
+backend errors still fail. The precedence is real value, then mock, then the caller's `//` default, then the original error.
+With `--use-mocks=always`, lookups resolve from `mocks` only and never touch Terraform or a backend; a missing mock is then an error,
+unless the caller's `//` default supplies a value.
 :::
 
 :::tip Default Value Behavior
