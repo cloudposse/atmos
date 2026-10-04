@@ -9,6 +9,8 @@ import (
 	git "github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestResolveEditableConfigFile_Override(t *testing.T) {
@@ -225,6 +227,43 @@ func TestEffectiveConfigFilesAscending_GitRootAndCWD(t *testing.T) {
 	require.GreaterOrEqual(t, rootIdx, 0, "git-root fragment must be included")
 	require.GreaterOrEqual(t, subIdx, 0, "CWD fragment must be included")
 	assert.Less(t, rootIdx, subIdx, "git-root fragment must have lower precedence than the CWD fragment")
+}
+
+// TestEffectiveConfigFilesAscending_IncludesActiveProfile covers the #3270 review
+// gap: an active profile's files participate in the merge at the highest precedence
+// (after the root atmos.yaml), so they must appear last in the ascending list.
+func TestEffectiveConfigFilesAscending_IncludesActiveProfile(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("ATMOS_PROFILE", "")
+
+	dir := t.TempDir()
+	root := filepath.Join(dir, AtmosConfigFileName)
+	require.NoError(t, os.WriteFile(root, []byte("base_path: \"./\"\n"), 0o644))
+	profileFile := filepath.Join(dir, "profiles", "dev", "mcp.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(profileFile), 0o755))
+	require.NoError(t, os.WriteFile(profileFile, []byte("mcp:\n  servers: {}\n"), 0o644))
+
+	chdirForTest(t, dir)
+	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: dir}
+	atmosConfig.Profiles.Default = "dev"
+
+	files := EffectiveConfigFilesAscending(atmosConfig)
+	require.NotEmpty(t, files)
+	resolved := make([]string, len(files))
+	for i, f := range files {
+		resolved[i] = evalSymlinks(t, f)
+	}
+	assert.Equal(t, evalSymlinks(t, profileFile), resolved[len(resolved)-1],
+		"active profile file must be highest precedence (last in ascending order)")
+	rootIdx := indexOf(resolved, evalSymlinks(t, root))
+	profIdx := indexOf(resolved, evalSymlinks(t, profileFile))
+	require.GreaterOrEqual(t, rootIdx, 0)
+	assert.Less(t, rootIdx, profIdx, "root atmos.yaml must have lower precedence than an active profile")
+}
+
+// TestActiveProfileFilesNilConfig confirms nil atmosConfig is handled (no panic).
+func TestActiveProfileFilesNilConfig(t *testing.T) {
+	assert.Nil(t, activeProfileFiles(nil))
 }
 
 // TestFragmentFilesSkipsNonDirImportPath covers fragmentFiles when an import name

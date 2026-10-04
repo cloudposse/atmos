@@ -32,6 +32,11 @@ the merge precedence (verified empirically) is:
 So an explicit value in the root `atmos.yaml` overrides a fragment, and within a fragment directory a
 later file (by load order) overrides an earlier one.
 
+**Profiles** add a fourth, highest-precedence layer: an active profile (selected via `--profile`,
+`ATMOS_PROFILE`, or `profiles.default`) is merged *after* the root `atmos.yaml`, so a profile that
+declares `mcp.servers.<name>` or `mcp.enabled` wins over the root. A plain invocation with no active
+profile is unaffected.
+
 ## Root cause
 
 `mcpconfig.ResolveFile` resolved the file to edit via `config.ResolveEditableConfigFile`, which only
@@ -42,9 +47,11 @@ targeted only the root, which is what produced the split.
 ## Changes
 
 - `pkg/config/config_edit.go`: new `EffectiveConfigFilesAscending(atmosConfig)` returns the config
-  files that participate in the merge, in ascending precedence (root `atmos.yaml` last). Helpers
-  `fragmentDirsAscending` (git root, then CWD only when it carries its own root config; `"."` from a
-  non-repo is treated as "no git root") and `fragmentFiles` (via `SearchAtmosConfig`).
+  files that participate in the merge, in ascending precedence (fragments, then root `atmos.yaml`, then
+  active-profile files last). Helpers `fragmentDirsAscending` (git root, then CWD only when it carries
+  its own root config; `"."` from a non-repo is treated as "no git root"), `fragmentFiles` (via
+  `SearchAtmosConfig`), and `activeProfileFiles` (reuses the loader's `GetActiveProfiles`,
+  `discoverProfileLocations`, and `findProfileDirectory`, so profile precedence matches config loading).
 - `pkg/mcp/config/config.go`: replaced `ResolveFile` with
   - `ResolveServerFile(cmd, atmosConfig, name) (file, declared, err)` - picks the explicit `--config`
     override, else the highest-precedence file that already declares `mcp.servers.<name>` (correct
@@ -67,6 +74,8 @@ targeted only the root, which is what produced the split.
 - Server declared in both root and a fragment → the root is edited (its value is effective), so the
   overwrite takes effect instead of being silently shadowed.
 - Same server in two fragments → the later (highest-precedence) fragment is edited.
+- An active profile declares the server or `mcp.enabled` → the profile file is edited (it overrides the
+  root), and `remove` finds a profile-only server instead of reporting "not configured".
 - `remove <name>` when the server is not declared anywhere → "not configured" error.
 - `mcp.enabled` → the root `atmos.yaml` (or the fragment that owns it when the root is silent).
 - `--config <file>` → that file, regardless of provenance; multiple `--config` files → still rejected

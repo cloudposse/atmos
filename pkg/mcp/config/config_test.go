@@ -482,3 +482,62 @@ func TestResolveServerFile_OverrideMissingErrors(t *testing.T) {
 	_, _, err := ResolveServerFile(cmd, &schema.AtmosConfiguration{}, "demo")
 	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
 }
+
+// profileConfig builds an atmosConfig with an active default profile rooted at dir,
+// so discoverProfileLocations finds dir/profiles/<name>.
+func profileConfig(dir, profile string) *schema.AtmosConfiguration {
+	cfg := &schema.AtmosConfiguration{CliConfigPath: dir}
+	cfg.Profiles.Default = profile
+	return cfg
+}
+
+// TestResolveServerFile_ProfileOwnsServer covers the #3270 review's profiles gap:
+// an active profile is merged over the root, so when it declares the server the
+// edit must target the profile file (not the shadowed root).
+func TestResolveServerFile_ProfileOwnsServer(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("ATMOS_PROFILE", "")
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "atmos.yaml"), "mcp:\n  servers:\n    demo:\n      command: ROOT\n")
+	profileFile := filepath.Join(dir, "profiles", "dev", "mcp.yaml")
+	writeFile(t, profileFile, "mcp:\n  servers:\n    demo:\n      command: PROFILE\n")
+
+	chdir(t, dir)
+	resolved, declared, err := ResolveServerFile(noConfigCmd(), profileConfig(dir, "dev"), "demo")
+	require.NoError(t, err)
+	assert.True(t, declared)
+	sameFile(t, profileFile, resolved)
+}
+
+// TestResolveServerFile_RemoveProfileOnlyServerIsDeclared confirms remove finds a
+// server defined only in an active profile, instead of reporting "not configured".
+func TestResolveServerFile_RemoveProfileOnlyServerIsDeclared(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("ATMOS_PROFILE", "")
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "atmos.yaml"), "base_path: \"./\"\n")
+	profileFile := filepath.Join(dir, "profiles", "dev", "mcp.yaml")
+	writeFile(t, profileFile, "mcp:\n  servers:\n    demo:\n      command: PROFILE\n")
+
+	chdir(t, dir)
+	resolved, declared, err := ResolveServerFile(noConfigCmd(), profileConfig(dir, "dev"), "demo")
+	require.NoError(t, err)
+	assert.True(t, declared, "a profile-only server must be found")
+	sameFile(t, profileFile, resolved)
+}
+
+// TestResolveEnableFile_ProfileWins confirms mcp.enabled targets an active profile
+// that declares it, because the profile overrides the root value.
+func TestResolveEnableFile_ProfileWins(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("ATMOS_PROFILE", "")
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "atmos.yaml"), "mcp:\n  enabled: true\n")
+	profileFile := filepath.Join(dir, "profiles", "dev", "mcp.yaml")
+	writeFile(t, profileFile, "mcp:\n  enabled: false\n")
+
+	chdir(t, dir)
+	resolved, err := ResolveEnableFile(noConfigCmd(), profileConfig(dir, "dev"))
+	require.NoError(t, err)
+	sameFile(t, profileFile, resolved)
+}

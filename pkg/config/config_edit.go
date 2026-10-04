@@ -123,6 +123,42 @@ func EffectiveConfigFilesAscending(atmosConfig *schema.AtmosConfiguration) []str
 	if root, err := ResolveEditableConfigFile(atmosConfig, ""); err == nil {
 		files = append(files, root)
 	}
+	// Active profiles are merged over the root atmos.yaml, so they have the highest
+	// precedence and are appended last (cloudposse/atmos#3270 review).
+	files = append(files, activeProfileFiles(atmosConfig)...)
+	return files
+}
+
+// activeProfileFiles returns the config files of the active profiles, in ascending
+// precedence (the loader applies active profiles left-to-right, a later profile
+// overriding an earlier one, so the files are returned in that order). Profiles are
+// merged after the root atmos.yaml, so callers append these at the highest
+// precedence. Returns nil when no profile is active -- the common case for a plain
+// invocation with no --profile/ATMOS_PROFILE and no profiles.default.
+func activeProfileFiles(atmosConfig *schema.AtmosConfiguration) []string {
+	if atmosConfig == nil {
+		return nil
+	}
+	profiles := GetActiveProfiles(atmosConfig)
+	if len(profiles) == 0 {
+		return nil
+	}
+	locations, err := discoverProfileLocations(atmosConfig)
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, name := range profiles {
+		dir, _, derr := findProfileDirectory(name, locations)
+		if derr != nil {
+			continue
+		}
+		found, serr := SearchAtmosConfig(dir)
+		if serr != nil {
+			continue
+		}
+		files = append(files, found...)
+	}
 	return files
 }
 
