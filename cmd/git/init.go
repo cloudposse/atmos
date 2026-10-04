@@ -64,9 +64,7 @@ Arguments after -- are passed verbatim to the underlying git invocation
 type initOptions struct {
 	From        string
 	KeepHistory bool
-	// FromRef is the resolved init.ref; set by resolveInitSeed, not a flag.
-	FromRef string
-	Branch  string
+	Branch      string
 	Workdir     string
 	Force       bool
 	DryRun      bool
@@ -136,7 +134,6 @@ func runInit(ctx context.Context, opts *initOptions, args []string) error {
 			Env:     env,
 		},
 		URI:         resolved.URI,
-		FromRef:     opts.FromRef,
 		FromURI:     opts.From,
 		KeepHistory: opts.KeepHistory,
 		Signing:     resolved.Signing,
@@ -165,14 +162,9 @@ func resolveInitName(args []string) (string, error) {
 // resolveInitSeed folds the repository's configured seed defaults into opts so
 // downstream code reads a single source of truth: CLI flags override the
 // repository config, which supplies the default seed source. It also validates
-// that keep-history has a seed source to keep history from. The configured
-// init.ref names a ref of init.from, so it is dropped when --from selects a
-// different source.
+// that keep-history has a seed source to keep history from.
 func resolveInitSeed(opts *initOptions, resolved *atmosgit.ResolvedRepository) error {
 	opts.From = resolveStringPrecedence(opts.From, resolved.From)
-	if atmosgit.SameRepositoryURI(opts.From, resolved.From) {
-		opts.FromRef = resolved.FromRef
-	}
 	opts.KeepHistory = opts.KeepHistory || resolved.KeepHistory
 	if opts.KeepHistory && opts.From == "" {
 		return errUtils.Build(errUtils.ErrInvalidFlag).
@@ -192,8 +184,6 @@ func reportInitDryRun(name, workdir, branch, uri string, opts *initOptions) {
 	switch {
 	case opts.From == "":
 		ui.Infof("[dry-run] Would initialize empty repository %q at %s (branch %q, remote -> %s).", name, workdir, branch, uri)
-	case opts.KeepHistory && atmosgit.SameRepositoryURI(opts.From, uri):
-		ui.Infof("[dry-run] Would clone %s (full history) into %s and check out branch %q.", opts.From, workdir, branch)
 	case opts.KeepHistory:
 		ui.Infof("[dry-run] Would clone %s (full history) into %s, keep it pullable as the 'upstream' remote, and wire the configured remote to %s.", opts.From, workdir, uri)
 	default:

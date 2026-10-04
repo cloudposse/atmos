@@ -116,9 +116,6 @@ func TestInitFromFreshSignsAndSetsAuthor(t *testing.T) {
 	}, commitCall)
 }
 
-// TestInitFromKeepHistoryPreservesSourceAsUpstream: keep-history clones the
-// source's default branch, creates the configured branch, and keeps the source
-// as "upstream".
 func TestInitFromKeepHistoryPreservesSourceAsUpstream(t *testing.T) {
 	runner := newFakeRunner()
 	provider := New(WithRunner(runner))
@@ -135,175 +132,11 @@ func TestInitFromKeepHistoryPreservesSourceAsUpstream(t *testing.T) {
 	calls := runner.joinedCalls()
 	require.Len(t, calls, 4)
 	// Full history (no --depth) from the source's default branch; the configured
-	// branch belongs to the destination and is created at the cloned ref.
+	// branch belongs to the destination and is created at the cloned HEAD.
 	assert.Equal(t, "clone -- https://github.com/acme/old-deploy.git "+workdir, calls[0])
 	assert.Equal(t, "checkout -B main", calls[1])
 	assert.Equal(t, "remote rename origin upstream", calls[2])
 	assert.Equal(t, "remote add origin https://github.com/acme/deploy.git", calls[3])
-}
-
-// TestInitFromKeepHistoryClonesFromRef: FromRef selects the source ref, and the
-// configured branch (absent from the source) is created on top of it.
-func TestInitFromKeepHistoryClonesFromRef(t *testing.T) {
-	runner := newFakeRunner()
-	provider := New(WithRunner(runner))
-	workdir := filepath.Join(t.TempDir(), "deploy")
-
-	err := provider.Init(context.Background(), &atmosgit.InitOptions{
-		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "init", Remote: "origin"},
-		URI:         "https://github.com/acme/deploy.git",
-		FromURI:     "https://github.com/acme/template.git",
-		FromRef:     "v1.2.0",
-		KeepHistory: true,
-	})
-	require.NoError(t, err)
-
-	calls := runner.joinedCalls()
-	require.Len(t, calls, 4)
-	assert.Equal(t, "clone --branch v1.2.0 -- https://github.com/acme/template.git "+workdir, calls[0])
-	assert.Equal(t, "checkout -B init", calls[1])
-	assert.Equal(t, "remote rename origin upstream", calls[2])
-	assert.Equal(t, "remote add origin https://github.com/acme/deploy.git", calls[3])
-}
-
-// TestInitFromKeepHistoryTagRefWithoutBranchUsesDefaultBranch: a tag ref
-// leaves HEAD detached, so with no configured branch Git's default initial
-// branch is created instead of leaving the workdir detached.
-func TestInitFromKeepHistoryTagRefWithoutBranchUsesDefaultBranch(t *testing.T) {
-	runner := newFakeRunner()
-	runner.on("symbolic-ref -q HEAD", atmosgit.RunResult{}, exitErr(1))
-	runner.on("var GIT_DEFAULT_BRANCH", atmosgit.RunResult{Stdout: "trunk\n"}, nil)
-	provider := New(WithRunner(runner))
-	workdir := filepath.Join(t.TempDir(), "deploy")
-
-	err := provider.Init(context.Background(), &atmosgit.InitOptions{
-		RepoContext: atmosgit.RepoContext{Workdir: workdir, Remote: "origin"},
-		URI:         "https://github.com/acme/deploy.git",
-		FromURI:     "https://github.com/acme/template.git",
-		FromRef:     "v1.2.0",
-		KeepHistory: true,
-	})
-	require.NoError(t, err)
-
-	calls := runner.joinedCalls()
-	require.Len(t, calls, 6)
-	assert.Equal(t, "clone --branch v1.2.0 -- https://github.com/acme/template.git "+workdir, calls[0])
-	assert.Equal(t, "symbolic-ref -q HEAD", calls[1])
-	assert.Equal(t, "var GIT_DEFAULT_BRANCH", calls[2])
-	assert.Equal(t, "checkout -B trunk", calls[3])
-	assert.Equal(t, "remote add origin https://github.com/acme/deploy.git", calls[5])
-}
-
-// TestInitFromKeepHistoryTagRefFallsBackToLegacyDefaultBranch: Git versions
-// without `git var GIT_DEFAULT_BRANCH` use their built-in "master".
-func TestInitFromKeepHistoryTagRefFallsBackToLegacyDefaultBranch(t *testing.T) {
-	runner := newFakeRunner()
-	runner.on("symbolic-ref -q HEAD", atmosgit.RunResult{}, exitErr(1))
-	runner.on("var GIT_DEFAULT_BRANCH", atmosgit.RunResult{}, exitErr(128))
-	provider := New(WithRunner(runner))
-	workdir := filepath.Join(t.TempDir(), "deploy")
-
-	err := provider.Init(context.Background(), &atmosgit.InitOptions{
-		RepoContext: atmosgit.RepoContext{Workdir: workdir},
-		URI:         "https://github.com/acme/deploy.git",
-		FromURI:     "https://github.com/acme/template.git",
-		FromRef:     "v1.2.0",
-		KeepHistory: true,
-	})
-	require.NoError(t, err)
-
-	assert.Contains(t, runner.joinedCalls(), "checkout -B master")
-}
-
-// TestInitFromKeepHistoryBranchRefWithoutBranchStaysOnIt: a branch ref
-// leaves HEAD attached, so no branch is created.
-func TestInitFromKeepHistoryBranchRefWithoutBranchStaysOnIt(t *testing.T) {
-	runner := newFakeRunner()
-	provider := New(WithRunner(runner))
-	workdir := filepath.Join(t.TempDir(), "deploy")
-
-	err := provider.Init(context.Background(), &atmosgit.InitOptions{
-		RepoContext: atmosgit.RepoContext{Workdir: workdir},
-		URI:         "https://github.com/acme/deploy.git",
-		FromURI:     "https://github.com/acme/template.git",
-		FromRef:     "release",
-		KeepHistory: true,
-	})
-	require.NoError(t, err)
-
-	calls := runner.joinedCalls()
-	require.Len(t, calls, 4)
-	assert.Equal(t, "symbolic-ref -q HEAD", calls[1])
-	assert.Equal(t, "remote rename origin upstream", calls[2])
-}
-
-// TestInitFromKeepHistorySameRepoCreatesBranch: seeding a new branch from
-// another ref of the same repository keeps the clone's remote as the
-// configured one and adds no redundant "upstream".
-func TestInitFromKeepHistorySameRepoCreatesBranch(t *testing.T) {
-	runner := newFakeRunner()
-	provider := New(WithRunner(runner))
-	workdir := filepath.Join(t.TempDir(), "deploy")
-
-	err := provider.Init(context.Background(), &atmosgit.InitOptions{
-		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "feature", Remote: "origin"},
-		URI:         "https://github.com/acme/deploy.git",
-		FromURI:     "https://GitHub.com/acme/deploy",
-		FromRef:     "main",
-		KeepHistory: true,
-	})
-	require.NoError(t, err)
-
-	calls := runner.joinedCalls()
-	require.Len(t, calls, 3)
-	assert.Equal(t, "clone --branch main -- https://GitHub.com/acme/deploy "+workdir, calls[0])
-	assert.Equal(t, "checkout -B feature", calls[1])
-	// The remote keeps the configured spelling of the URI, not --from's.
-	assert.Equal(t, "remote set-url origin https://github.com/acme/deploy.git", calls[2])
-}
-
-// TestInitFromKeepHistorySameRepoRenamesToConfiguredRemote: a non-default
-// configured remote takes over the clone's "origin".
-func TestInitFromKeepHistorySameRepoRenamesToConfiguredRemote(t *testing.T) {
-	runner := newFakeRunner()
-	provider := New(WithRunner(runner))
-	workdir := filepath.Join(t.TempDir(), "deploy")
-
-	err := provider.Init(context.Background(), &atmosgit.InitOptions{
-		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "feature", Remote: "gitops"},
-		URI:         "https://github.com/acme/deploy.git",
-		FromURI:     "https://github.com/acme/deploy.git",
-		KeepHistory: true,
-	})
-	require.NoError(t, err)
-
-	calls := runner.joinedCalls()
-	require.Len(t, calls, 4)
-	assert.Equal(t, "clone -- https://github.com/acme/deploy.git "+workdir, calls[0])
-	assert.Equal(t, "checkout -B feature", calls[1])
-	assert.Equal(t, "remote rename origin gitops", calls[2])
-	assert.Equal(t, "remote set-url gitops https://github.com/acme/deploy.git", calls[3])
-}
-
-// TestInitFromFreshClonesFromRef: FromRef also selects the source ref in fresh
-// mode, while the configured branch still names the new history.
-func TestInitFromFreshClonesFromRef(t *testing.T) {
-	runner := newFakeRunner()
-	provider := New(WithRunner(runner))
-	workdir := filepath.Join(t.TempDir(), "deploy")
-
-	err := provider.Init(context.Background(), &atmosgit.InitOptions{
-		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main", Remote: "origin"},
-		URI:         "https://github.com/acme/deploy.git",
-		FromURI:     "https://github.com/acme/template.git",
-		FromRef:     "release",
-	})
-	require.NoError(t, err)
-
-	calls := runner.joinedCalls()
-	require.Len(t, calls, 5)
-	assert.Equal(t, "clone --depth 1 --branch release -- https://github.com/acme/template.git "+workdir, calls[0])
-	assert.Equal(t, "init -b main", calls[1])
 }
 
 func TestInitFromKeepHistoryWithUpstreamRemoteUsesSource(t *testing.T) {
@@ -409,8 +242,6 @@ func TestInitForceDeletesAndReinitializes(t *testing.T) {
 	assert.Equal(t, "remote add origin https://github.com/acme/deploy.git", calls[1])
 }
 
-// TestInitForceWithFromDeletesThenSeeds: --force removes an existing workdir
-// before seeding from the source.
 func TestInitForceWithFromDeletesThenSeeds(t *testing.T) {
 	runner := newFakeRunner()
 	provider := New(WithRunner(runner))

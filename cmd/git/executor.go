@@ -112,8 +112,6 @@ func initCompletedMessage(label string, opts *atmosgit.InitOptions, reconcile bo
 	switch {
 	case opts.FromURI == "":
 		return fmt.Sprintf("%s empty Git repository %s in %s.", verb, label, opts.Workdir)
-	case opts.KeepHistory && atmosgit.SameRepositoryURI(opts.FromURI, opts.URI):
-		return fmt.Sprintf("%s Git repository %s in %s from %s (history preserved).", verb, label, opts.Workdir, opts.FromURI)
 	case opts.KeepHistory:
 		return fmt.Sprintf("%s Git repository %s in %s from %s (history preserved; source kept as 'upstream').", verb, label, opts.Workdir, opts.FromURI)
 	default:

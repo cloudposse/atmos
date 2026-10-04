@@ -20,11 +20,9 @@ var (
 	_ = schema.GitCloneConfig{Depth: 1, Filter: "blob:none", SingleBranch: true, Submodules: false}
 	_ = schema.GitCommitConfig{Signing: "auto", Author: schema.GitAuthorConfig{Name: "", Email: ""}}
 	_ = schema.GitAuthConfig{Identity: ""}
-	_ = schema.GitInitConfig{From: "", KeepHistory: false, Ref: ""}
+	_ = schema.GitInitConfig{From: "", KeepHistory: false}
 )
 
-// gitConfigFixture returns a git config with one fully specified repository
-// and one minimal repository.
 func gitConfigFixture() *schema.GitConfig {
 	retries := 5
 	return &schema.GitConfig{
@@ -42,7 +40,6 @@ func gitConfigFixture() *schema.GitConfig {
 				Init: schema.GitInitConfig{
 					From:        "https://github.com/acme/template.git",
 					KeepHistory: true,
-					Ref:         "v1.2.0",
 				},
 			},
 			"minimal": {
@@ -52,8 +49,6 @@ func gitConfigFixture() *schema.GitConfig {
 	}
 }
 
-// TestResolveRepositoryAppliesExplicitConfig verifies explicit repository
-// settings, including init.from/keep_history/ref, are resolved verbatim.
 func TestResolveRepositoryAppliesExplicitConfig(t *testing.T) {
 	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
 
@@ -73,11 +68,8 @@ func TestResolveRepositoryAppliesExplicitConfig(t *testing.T) {
 	assert.True(t, resolved.Clone.SingleBranch)
 	assert.Equal(t, "https://github.com/acme/template.git", resolved.From)
 	assert.True(t, resolved.KeepHistory)
-	assert.Equal(t, "v1.2.0", resolved.FromRef)
 }
 
-// TestResolveRepositoryAppliesDefaults verifies defaults for a minimal
-// repository entry, including empty init seed settings.
 func TestResolveRepositoryAppliesDefaults(t *testing.T) {
 	cacheRoot := t.TempDir()
 	t.Setenv("ATMOS_XDG_CACHE_HOME", cacheRoot)
@@ -93,7 +85,6 @@ func TestResolveRepositoryAppliesDefaults(t *testing.T) {
 	assert.Equal(t, 0, resolved.Clone.Depth)
 	assert.Empty(t, resolved.From)
 	assert.False(t, resolved.KeepHistory)
-	assert.Empty(t, resolved.FromRef)
 
 	// Automatic XDG workdir: <cache>/atmos/git/repositories/<name>.
 	expected := filepath.Join(cacheRoot, "atmos", "git", "repositories", "minimal")

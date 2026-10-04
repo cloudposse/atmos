@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
@@ -21,10 +20,6 @@ const initSubcommand = "init"
 
 // remoteSubcommand is the git subcommand for managing remotes.
 const remoteSubcommand = "remote"
-
-// legacyDefaultBranch is Git's built-in initial branch name on versions that
-// predate `git var GIT_DEFAULT_BRANCH`.
-const legacyDefaultBranch = "master"
 
 // Init creates a repository workdir — the inverse of Clone, for GitOps
 // repositories whose remote has no content yet.
@@ -176,30 +171,23 @@ func (p *Provider) initFromSourceFresh(ctx context.Context, opts *atmosgit.InitO
 }
 
 // initFromSourceKeepHistory clones the source with its full history, checks
-// out the configured branch at the cloned ref, keeps the source reachable under
-// the "upstream" remote (so updates can be pulled), and wires the configured
-// remote to the configured URI.
+// out the configured branch at the source's default branch, keeps the source
+// reachable under the "upstream" remote (so updates can be pulled), and wires
+// the configured remote to the configured URI.
 func (p *Provider) initFromSourceKeepHistory(ctx context.Context, opts *atmosgit.InitOptions) error {
 	if err := p.cloneSource(ctx, opts); err != nil {
 		return err
 	}
 
 	// The configured branch belongs to the destination repository and need
-	// not exist in the source, so create (or reset) it at the cloned ref.
-	if branch := p.keepHistoryBranch(ctx, opts); branch != "" {
-		if result, err := p.run(ctx, opts.Workdir, opts.Env, "checkout", "-B", branch); err != nil {
+	// not exist in the source, so create (or reset) it at the cloned HEAD.
+	if opts.Branch != "" {
+		if result, err := p.run(ctx, opts.Workdir, opts.Env, "checkout", "-B", opts.Branch); err != nil {
 			return classify(err, result, "checkout")
 		}
 	}
 
 	configured := remoteOrDefault(opts.Remote)
-
-	// Seeding a new branch from another ref of the same repository: the
-	// cloned remote already is the configured one, so no "upstream" is kept.
-	if atmosgit.SameRepositoryURI(opts.FromURI, opts.URI) {
-		return p.adoptClonedRemote(ctx, opts, configured)
-	}
-
 	source := sourceRemoteName
 	if source == configured {
 		// The configured remote claims "upstream"; keep the source under
@@ -214,43 +202,9 @@ func (p *Provider) initFromSourceKeepHistory(ctx context.Context, opts *atmosgit
 	return p.addRemote(ctx, opts.RepoContext, configured, opts.URI)
 }
 
-// keepHistoryBranch returns the branch to create after a keep-history clone:
-// the configured branch, or, when none is configured and a tag FromRef left
-// HEAD detached, Git's default initial branch (the documented fallback for an
-// unset branch). Empty means stay on the branch the clone checked out.
-func (p *Provider) keepHistoryBranch(ctx context.Context, opts *atmosgit.InitOptions) string {
-	if opts.Branch != "" || opts.FromRef == "" {
-		return opts.Branch
-	}
-	if _, err := p.run(ctx, opts.Workdir, opts.Env, "symbolic-ref", "-q", "HEAD"); err == nil {
-		return "" // FromRef named a branch; HEAD is on it.
-	}
-	result, err := p.run(ctx, opts.Workdir, opts.Env, "var", "GIT_DEFAULT_BRANCH")
-	if branch := strings.TrimSpace(result.Stdout); err == nil && branch != "" {
-		return branch
-	}
-	return legacyDefaultBranch
-}
-
-// adoptClonedRemote keeps the clone's remote as the configured remote when the
-// source is the repository itself: it is renamed to the configured name and
-// re-pointed at the configured URI, since FromURI may be spelled differently
-// (e.g. without ".git" or with embedded credentials).
-func (p *Provider) adoptClonedRemote(ctx context.Context, opts *atmosgit.InitOptions, configured string) error {
-	if configured != atmosgit.DefaultRemote {
-		if result, err := p.run(ctx, opts.Workdir, opts.Env, remoteSubcommand, "rename", atmosgit.DefaultRemote, configured); err != nil {
-			return classify(err, result, "remote rename")
-		}
-	}
-	if result, err := p.run(ctx, opts.Workdir, opts.Env, remoteSubcommand, "set-url", configured, opts.URI); err != nil {
-		return classify(err, result, "remote set-url")
-	}
-	return nil
-}
-
-// cloneSource clones the --from repository into the workdir at FromRef (the
-// source's default branch when empty). The configured branch is never passed
-// here: it names the new repository's history, not a ref in the source.
+// cloneSource clones the --from repository's default branch into the workdir.
+// The configured branch is never passed here: it names the new repository's
+// history, not a branch in the source.
 func (p *Provider) cloneSource(ctx context.Context, opts *atmosgit.InitOptions, extra ...string) error {
 	if err := os.MkdirAll(filepath.Dir(opts.Workdir), workdirParentPerm); err != nil {
 		return fmt.Errorf("creating workdir parent for %q: %w", opts.Workdir, err)
@@ -258,9 +212,6 @@ func (p *Provider) cloneSource(ctx context.Context, opts *atmosgit.InitOptions, 
 
 	args := []string{"clone"}
 	args = append(args, extra...)
-	if opts.FromRef != "" {
-		args = append(args, "--branch", opts.FromRef)
-	}
 	args = append(args, opts.ExtraArgs...)
 	args = append(args, "--", opts.FromURI, opts.Workdir)
 

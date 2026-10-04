@@ -73,8 +73,6 @@ func (s *stubGitProvider) Push(ctx context.Context, opts *atmosgit.PushOptions) 
 
 // ---- Executor.Status tests ----
 
-// TestInitCompletedMessage covers the mode-aware init success message,
-// including the same-repository keep-history wording.
 func TestInitCompletedMessage(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -96,11 +94,6 @@ func TestInitCompletedMessage(t *testing.T) {
 			name: "seeded keep history",
 			opts: &atmosgit.InitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}, FromURI: "https://x/old.git", KeepHistory: true},
 			want: "Initialized Git repository deploy in /w from https://x/old.git (history preserved; source kept as 'upstream').",
-		},
-		{
-			name: "seeded keep history from same repository",
-			opts: &atmosgit.InitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}, URI: "https://x/old.git", FromURI: "https://x/old.git", KeepHistory: true},
-			want: "Initialized Git repository deploy in /w from https://x/old.git (history preserved).",
 		},
 		{
 			name:      "force re-initialize empty",

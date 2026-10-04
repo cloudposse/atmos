@@ -46,10 +46,6 @@ type GitInitConfig struct {
 	// reachable as the 'upstream' remote. Only valid together with From.
 	// The `--keep-history` flag also enables it.
 	KeepHistory bool `yaml:"keep_history,omitempty" json:"keep_history,omitempty" mapstructure:"keep_history"`
-	// Ref is the branch or tag of From to seed from. Empty means the source's
-	// default branch. The configured repository branch names the new history,
-	// not a ref in From.
-	Ref string `yaml:"ref,omitempty" json:"ref,omitempty" mapstructure:"ref"`
 }
 
 // GitCloneConfig controls clone behavior for a managed repository.

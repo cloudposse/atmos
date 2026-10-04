@@ -46,29 +46,6 @@ git:
       init:
         from: https://github.com/acme/flux-template.git
         keep_history: false
-        ref: v1.2.0   # optional branch or tag of the source; default: its default branch
-```
-
-The configured `branch` names the new repository's branch; it does not need to
-exist in the seed source. Use `init.ref` to pick which source branch or tag to
-seed from.
-
-Setting `init.from` to the repository's own `uri` together with
-`keep_history: true` starts a new `branch` from `init.ref` in the same
-repository, preserving its history. No `upstream` remote is added, since the
-source already is the configured remote. HTTPS URIs match regardless of host
-case, credentials, or a trailing `.git`; SSH URIs must match exactly.
-
-```yaml
-git:
-  repositories:
-    flux-deploy:
-      uri: https://github.com/acme/flux-deploy.git
-      branch: staging
-      init:
-        from: https://github.com/acme/flux-deploy.git
-        ref: main
-        keep_history: true
 ```
 
 The `--from` and `--keep-history` flags override these configured defaults.
@@ -111,7 +88,7 @@ atmos git init flux-deploy -- --template=/path/to/git-template
 | `--from=<uri>` (default) | Single fresh initial commit (`Initialize from <uri>`); source history discarded | `origin` → configured `uri` |
 | `--from=<uri> --keep-history` | Source's full history preserved | `origin` → configured `uri`, `upstream` → source `uri` (pull future template updates with `git pull upstream`) |
 
-In fresh mode the configured `branch` names the **new** history (`git init -b <branch>`); the source's default branch supplies the content. In keep-history mode the source is cloned at `init.ref` (default: its default branch) and the configured `branch` is created there, so it does not need to exist in the source. If `branch` is unset and `init.ref` is a tag, Git's default initial branch is created rather than leaving `HEAD` detached.
+In fresh mode the configured `branch` names the **new** history (`git init -b <branch>`); the source's default branch supplies the content. In keep-history mode the source is cloned at its default branch and the configured `branch` is created there, so it does not need to exist in the source repository.
 
 The initial commit created in fresh mode honors the repository's [`commit.signing`](/cli/configuration/git) mode and `commit.author` override.
 

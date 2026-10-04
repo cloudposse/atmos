@@ -75,29 +75,6 @@ func ParseGenericGitURL(repoUrl string) (GitURLParts, bool) {
 	return GitURLParts{}, false
 }
 
-// SameRepositoryURI reports whether two repository URIs address the same
-// repository. HTTP(S) URIs are normalized: scheme and host are compared
-// case-insensitively, credentials are ignored, and a trailing "/" or ".git"
-// is dropped. Any other form (SSH, scp-style, local paths) must match exactly.
-func SameRepositoryURI(a, b string) bool {
-	return normalizeHTTPRepoURI(a) == normalizeHTTPRepoURI(b)
-}
-
-// normalizeHTTPRepoURI canonicalizes an HTTP(S) repository URI; non-HTTP(S)
-// input is returned unchanged.
-func normalizeHTTPRepoURI(uri string) string {
-	u, err := url.Parse(uri)
-	if err != nil || u.Host == "" {
-		return uri
-	}
-	scheme := strings.ToLower(u.Scheme)
-	if scheme != "http" && scheme != "https" {
-		return uri
-	}
-	path := strings.TrimSuffix(strings.TrimRight(u.Path, "/"), ".git")
-	return scheme + "://" + strings.ToLower(u.Host) + path
-}
-
 func GetLocalRepo() (*git.Repository, error) {
 	localPath := "."
 

@@ -43,9 +43,6 @@ type ResolvedRepository struct {
 	// KeepHistory is the default for init's --keep-history (preserve source
 	// history, keep it pullable as 'upstream'). Only meaningful with From.
 	KeepHistory bool
-	// FromRef is the branch or tag of From to seed from; empty means the
-	// source's default branch.
-	FromRef string
 }
 
 // ResolveRepository looks up a named repository under git.repositories and
@@ -78,7 +75,6 @@ func ResolveRepository(cfg *schema.GitConfig, name string) (*ResolvedRepository,
 		PushRetries: resolveRetries(repo.Push.Retries),
 		From:        repo.Init.From,
 		KeepHistory: repo.Init.KeepHistory,
-		FromRef:     repo.Init.Ref,
 	}
 
 	return resolved, nil

@@ -5336,17 +5336,6 @@
             }
           ],
           "description": "KeepHistory preserves the source's full history and keeps the source\nreachable as the 'upstream' remote. Only valid together with From.\nThe `--keep-history` flag also enables it."
-        },
-        "ref": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Ref is the branch or tag of From to seed from. Empty means the source's\ndefault branch. The configured repository branch names the new history,\nnot a ref in From."
         }
       },
       "type": "object",
