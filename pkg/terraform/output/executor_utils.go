@@ -140,7 +140,7 @@ func resolveOutputFromCache(atmosConfig *schema.AtmosConfiguration, stackSlug an
 	}
 
 	log.Debug("Cache hit for terraform output", "stack", stack, "component", component, "output", output)
-	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+	message := fetchingOutputMessage(output, component, stack)
 
 	value, exists, err := getOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
 	if err != nil {
@@ -198,4 +198,14 @@ func outputLookupFailed(message string) {
 
 func outputLookupVisible() bool {
 	return !spinnersSuppressed()
+}
+
+// fetchingOutputMessage builds the progress message for an output lookup. The YQ identity `.`
+// requests the whole output map (component mocks in fallback mode use it), so it reads as
+// "all outputs" instead of a literal "." output name.
+func fetchingOutputMessage(output, component, stack string) string {
+	if output == dotSeparator {
+		return fmt.Sprintf("Fetching all outputs from %s in %s", component, stack)
+	}
+	return fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 }
