@@ -33,7 +33,7 @@ Running `atmos mcp add` with no target defaults to `atmos mcp add self`.
 
 - **Overwrite** an existing server: the highest-precedence file that already declares `mcp.servers.<name>` (Atmos reapplies the root `atmos.yaml` over its imports, so a root entry wins over a fragment).
 - **New** server: the highest-precedence file that already declares `mcp.servers` - typically an auto-discovered [`.atmos.d/`](/cli/configuration#automatic-configuration-imports-atmosd) (or `atmos.d/`) fragment - so a modular-config project is not silently split across the root `atmos.yaml` and a fragment. If nothing declares `mcp.servers`, the root `atmos.yaml` is used.
-- **`mcp.enabled`** (flipped when adding the `self` preset): written to the file whose value wins - the root `atmos.yaml` - so enabling actually takes effect.
+- **`mcp.enabled`** (flipped when adding the `self` preset): written to the highest-precedence file that already declares it, else the root `atmos.yaml`, so enabling actually takes effect.
 
 Only effective config roots are searched (the git repository root always; the current working directory only when it has its own root `atmos.yaml`). Pass `--config <file>` to target a specific file explicitly.
 
