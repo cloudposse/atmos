@@ -46,6 +46,33 @@ export default function SidebarNavigator({
   const rootRef = useRef<HTMLLIElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const previousSection = useRef(section);
+
+  useEffect(() => {
+    const changed = previousSection.current !== section;
+    previousSection.current = section;
+    if (
+      !changed ||
+      filtering ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      return;
+    const panel = rootRef.current?.querySelector<HTMLElement>(
+      section === null ? "[data-sections]" : `[data-section="${section}"]`,
+    );
+    const animation = panel?.animate(
+      [
+        {
+          opacity: 0,
+          transform: `translateX(${section === null ? -8 : 8}px)`,
+          filter: "blur(2px)",
+        },
+        { opacity: 1, transform: "translateX(0)", filter: "blur(0)" },
+      ],
+      { duration: 200, easing: "ease-out" },
+    );
+    return () => animation?.cancel();
+  }, [section, filtering]);
 
   useEffect(() => {
     setView({ path: activePath, section: destination });
@@ -210,12 +237,36 @@ export default function SidebarNavigator({
           tabIndex={-1}
           className={filtering ? styles.srOnly : styles.heading}
         >
-          {filtering
-            ? `Matches in ${sidebarLabel(sidebarName)}`
-            : selected?.label || `All ${sidebarLabel(sidebarName)}`}
+          {filtering ? (
+            `Matches in ${sidebarLabel(sidebarName)}`
+          ) : selected?.type === "category" &&
+            selected.href &&
+            !selected.linkUnlisted ? (
+            <Link
+              className={styles.sectionOverview}
+              to={selected.href}
+              aria-current={
+                normalizePath(selected.href) === normalizePath(activePath)
+                  ? "page"
+                  : undefined
+              }
+              onClick={() =>
+                navigate({
+                  type: "link",
+                  label: selected.label,
+                  href: selected.href!,
+                })
+              }
+            >
+              {selected.label}
+              {isExperimentalRoute(selected.href) && <ExperimentalDot />}
+            </Link>
+          ) : (
+            selected?.label || `All ${sidebarLabel(sidebarName)}`
+          )}
         </h2>
       </div>
-      <div hidden={filtering || section !== null}>
+      <div data-sections hidden={filtering || section !== null}>
         <ul className="menu__list">
           {prepared.map((item, index) =>
             item.type === "category" ? (
@@ -276,18 +327,7 @@ export default function SidebarNavigator({
           >
             <ul className="menu__list">
               <OriginalDocSidebarItems
-                items={[
-                  ...(item.href && !item.linkUnlisted
-                    ? [
-                        {
-                          type: "link" as const,
-                          label: "Overview",
-                          href: item.href,
-                        },
-                      ]
-                    : []),
-                  ...item.items,
-                ]}
+                items={item.items}
                 activePath={activePath}
                 level={2}
                 onItemClick={navigate}

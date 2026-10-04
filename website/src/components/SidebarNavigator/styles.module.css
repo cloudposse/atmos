@@ -122,6 +122,22 @@
   outline-offset: 2px;
 }
 
+.navigator .heading:focus {
+  outline: none;
+}
+
+.sectionOverview {
+  display: block;
+  color: inherit;
+  border-radius: 4px;
+}
+
+.sectionOverview:hover,
+.sectionOverview[aria-current="page"] {
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+}
+
 .sectionLink {
   display: flex;
   justify-content: space-between;

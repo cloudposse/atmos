@@ -337,7 +337,7 @@ module.exports = {
                 {
                     type: 'doc',
                     id: 'components/custom',
-                    label: 'Custom',
+                    label: 'Custom Components',
                 },
             ]
         },
