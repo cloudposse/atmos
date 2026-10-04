@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -142,10 +143,10 @@ func TestTerraformRunWithOptionsMockGuards(t *testing.T) {
 
 func TestValidateTerraformMockFlagsBeforeHooks(t *testing.T) {
 	cmd := &cobra.Command{Use: "apply"}
-	cmd.Flags().Bool("use-mocks", true, "")
+	cmd.Flags().String("use-mocks", "true", "")
 	cmd.Flags().Bool("process-functions", true, "")
 
-	err := validateTerraformMockFlags(cmd)
+	err := validateTerraformMockFlags(cmd, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "supported only by `atmos terraform plan`")
 }
@@ -154,26 +155,37 @@ func TestValidateTerraformMockFlags(t *testing.T) {
 	tests := []struct {
 		name             string
 		command          *cobra.Command
-		useMocks         bool
+		useMocks         string
 		processFunctions bool
 		wantErr          string
+		wantErrIs        error
 	}{
 		{name: "nil command"},
 		{name: "command without mock flag", command: &cobra.Command{Use: "plan"}},
 		{name: "mocks disabled", command: &cobra.Command{Use: "apply"}, processFunctions: true},
-		{name: "mocks require function processing", command: &cobra.Command{Use: "plan"}, useMocks: true, wantErr: "requires --process-functions=true"},
-		{name: "mocks require plan", command: &cobra.Command{Use: "apply"}, useMocks: true, processFunctions: true, wantErr: "supported only by `atmos terraform plan`"},
-		{name: "valid mock plan", command: &cobra.Command{Use: "plan"}, useMocks: true, processFunctions: true},
+		{name: "mocks explicitly false on apply", command: &cobra.Command{Use: "apply"}, useMocks: "false", processFunctions: true},
+		{name: "mocks require function processing", command: &cobra.Command{Use: "plan"}, useMocks: "true", wantErr: "requires --process-functions=true"},
+		{name: "mocks require plan", command: &cobra.Command{Use: "apply"}, useMocks: "true", processFunctions: true, wantErr: "supported only by `atmos terraform plan`"},
+		{name: "apply rejects fallback", command: &cobra.Command{Use: "apply"}, useMocks: "fallback", processFunctions: true, wantErr: "supported only by `atmos terraform plan`"},
+		{name: "deploy rejects always", command: &cobra.Command{Use: "deploy"}, useMocks: "always", processFunctions: true, wantErr: "supported only by `atmos terraform plan`"},
+		{name: "valid mock plan", command: &cobra.Command{Use: "plan"}, useMocks: "true", processFunctions: true},
+		{name: "valid fallback plan", command: &cobra.Command{Use: "plan"}, useMocks: "fallback", processFunctions: true},
+		{name: "valid always plan", command: &cobra.Command{Use: "plan"}, useMocks: "always", processFunctions: true},
+		{name: "invalid value is rejected", command: &cobra.Command{Use: "plan"}, useMocks: "sometimes", processFunctions: true, wantErrIs: errUtils.ErrInvalidFlagValue},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.command != nil && tt.name != "command without mock flag" {
-				tt.command.Flags().Bool("use-mocks", tt.useMocks, "")
+				tt.command.Flags().String("use-mocks", tt.useMocks, "")
 				tt.command.Flags().Bool("process-functions", tt.processFunctions, "")
 			}
 
-			err := validateTerraformMockFlags(tt.command)
+			err := validateTerraformMockFlags(tt.command, nil)
+			if tt.wantErrIs != nil {
+				assert.ErrorIs(t, err, tt.wantErrIs)
+				return
+			}
 			if tt.wantErr == "" {
 				assert.NoError(t, err)
 				return
@@ -188,6 +200,40 @@ func TestValidateTerraformMockOptions(t *testing.T) {
 	assert.ErrorContains(t, validateTerraformMockOptions("plan", true, false), "requires --process-functions=true")
 	assert.ErrorContains(t, validateTerraformMockOptions("apply", true, true), "supported only by `atmos terraform plan`")
 	assert.NoError(t, validateTerraformMockOptions("plan", true, true))
+
+	// The env var can turn mocks on without the user typing the flag, so the error names it and
+	// the hint says to unset it.
+	err := validateTerraformMockOptions("apply", true, true)
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.Contains(t, err.Error(), "ATMOS_USE_MOCKS")
+	assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), "\n"), "unset it for `atmos terraform apply`")
+}
+
+// TestValidateTerraformMockFlagsSeparatedMode covers `--use-mocks always` (a space instead of `=`):
+// the mode word lands among the positional arguments after the component and would otherwise be
+// passed to Terraform as a stray argument.
+func TestValidateTerraformMockFlagsSeparatedMode(t *testing.T) {
+	newPlan := func(useMocks string) *cobra.Command {
+		cmd := &cobra.Command{Use: "plan"}
+		cmd.Flags().String("use-mocks", useMocks, "")
+		cmd.Flags().Bool("process-functions", true, "")
+		return cmd
+	}
+
+	err := validateTerraformMockFlags(newPlan("true"), []string{"app", "always"})
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), "\n"), "--use-mocks=always")
+
+	// A component that happens to be named like a mode is not flagged.
+	require.NoError(t, validateTerraformMockFlags(newPlan("true"), []string{"always"}))
+	// An explicit mode means the word is not the flag's value.
+	require.NoError(t, validateTerraformMockFlags(newPlan("always"), []string{"app", "always"}))
+
+	err = terraformRunWithOptions(&cobra.Command{Use: "terraform"}, &cobra.Command{Use: "plan"}, []string{"app", "fallback"}, &TerraformRunOptions{
+		ProcessFunctions: true,
+		UseMocks:         true,
+	})
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
 }
 
 func TestIsCompoundTerraformCommandWithoutComponent(t *testing.T) {
@@ -206,7 +252,7 @@ func TestIsCompoundTerraformCommandWithoutComponent(t *testing.T) {
 
 func TestRunBeforeHooksRejectsInvalidMocksBeforeResolution(t *testing.T) {
 	cmd := &cobra.Command{Use: "apply"}
-	cmd.Flags().Bool("use-mocks", true, "")
+	cmd.Flags().String("use-mocks", "true", "")
 	cmd.Flags().Bool("process-functions", true, "")
 
 	err := runBeforeHooks(h.HookEvent("before.terraform.apply"), cmd, nil)

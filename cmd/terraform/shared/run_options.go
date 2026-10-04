@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -26,7 +27,10 @@ type RunOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	UseMocks         bool
-	Skip             []string
+	// MocksMode overrides components.terraform.mocks.mode (fallback, always) when
+	// --use-mocks carries an explicit mode; empty means use the configured mode.
+	MocksMode string
+	Skip      []string
 
 	// Execution flags.
 	DryRun       bool
@@ -93,7 +97,6 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 	opts := &RunOptions{
 		ProcessTemplates:        v.GetBool("process-templates"),
 		ProcessFunctions:        v.GetBool("process-functions"),
-		UseMocks:                v.GetBool("use-mocks"),
 		Skip:                    v.GetStringSlice("skip"),
 		DryRun:                  v.GetBool("dry-run"),
 		SkipInit:                v.GetBool("skip-init"),
@@ -126,6 +129,10 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		return nil, err
 	}
 	opts.Labels = labels
+
+	if opts.UseMocks, opts.MocksMode, err = cfg.ParseUseMocksValue(v.GetString("use-mocks"), cfg.UseMocksFlagAndEnvSource); err != nil {
+		return nil, err
+	}
 
 	if opts.IncludeDependencies, err = flags.ParseClosureDepth("include-dependencies", v.GetString("include-dependencies")); err != nil {
 		return nil, err
@@ -181,6 +188,7 @@ func ApplyRunOptions(info *schema.ConfigAndStacksInfo, opts *RunOptions) {
 	info.ProcessTemplates = opts.ProcessTemplates
 	info.ProcessFunctions = opts.ProcessFunctions
 	info.UseMocks = opts.UseMocks
+	info.MocksMode = opts.MocksMode
 	info.Skip = opts.Skip
 	info.Components = opts.Components
 	info.Tags = opts.Tags
