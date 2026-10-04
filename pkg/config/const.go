@@ -62,6 +62,7 @@ const (
 	InitRunReconfigure          = "--init-run-reconfigure"
 	InitPassVars                = "--init-pass-vars"
 	InitModeFlag                = "--init-mode"
+	UseMocksFlag                = "--use-mocks"
 	InitReconfigureFlag         = "--init-reconfigure"
 	InitUpgradeFlag             = "--init-upgrade"
 	PlanSkipPlanfile            = "--skip-planfile"

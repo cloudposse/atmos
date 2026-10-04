@@ -76,7 +76,7 @@ func TestGetRunnableDescribeComponentCmd_MissingStackTriggersPrompt(t *testing.T
 	testCmd.Flags().String("file", "", "")
 	testCmd.Flags().Bool("process-templates", true, "")
 	testCmd.Flags().Bool("process-functions", true, "")
-	testCmd.Flags().Bool("use-mocks", false, "")
+	testCmd.Flags().String("use-mocks", "", "")
 	testCmd.Flags().String("query", "", "")
 	testCmd.Flags().StringSlice("skip", nil, "")
 	testCmd.Flags().Bool("provenance", false, "")
@@ -214,7 +214,7 @@ func TestGetRunnableDescribeComponentCmd_StackPromptErrorPropagates(t *testing.T
 	testCmd.Flags().String("file", "", "")
 	testCmd.Flags().Bool("process-templates", true, "")
 	testCmd.Flags().Bool("process-functions", true, "")
-	testCmd.Flags().Bool("use-mocks", false, "")
+	testCmd.Flags().String("use-mocks", "", "")
 	testCmd.Flags().String("query", "", "")
 	testCmd.Flags().StringSlice("skip", nil, "")
 	testCmd.Flags().Bool("provenance", false, "")
@@ -604,4 +604,120 @@ func TestDescribeComponentCmd_AuthManager(t *testing.T) {
 		errStr := err.Error()
 		assert.NotContains(tk, errStr, "auth manager creation failed", "Auth manager should initialize without errors")
 	}
+}
+
+// TestParseDescribeComponentFlags_UseMocks covers the string-valued --use-mocks flag: a bare flag
+// means "true" (use the configured mocks mode), and fallback/always also override the mode.
+func TestParseDescribeComponentFlags_UseMocks(t *testing.T) {
+	// The registered flag must treat a bare --use-mocks as "true".
+	registered := describeComponentCmd.PersistentFlags().Lookup("use-mocks")
+	require.NotNil(t, registered)
+	assert.Equal(t, "true", registered.NoOptDefVal)
+
+	tests := []struct {
+		name         string
+		args         []string
+		wantUseMocks bool
+		wantMode     string
+		wantErr      bool
+	}{
+		{name: "absent", args: nil},
+		{name: "false", args: []string{"--use-mocks=false"}},
+		{name: "bare flag", args: []string{"--use-mocks"}, wantUseMocks: true},
+		{name: "bare flag before positional", args: []string{"--use-mocks", "vpc"}, wantUseMocks: true},
+		{name: "true", args: []string{"--use-mocks=true"}, wantUseMocks: true},
+		{name: "fallback", args: []string{"--use-mocks=fallback"}, wantUseMocks: true, wantMode: "fallback"},
+		{name: "always", args: []string{"--use-mocks=always"}, wantUseMocks: true, wantMode: "always"},
+		{name: "invalid", args: []string{"--use-mocks=sometimes"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testCmd := &cobra.Command{Use: "component"}
+			testCmd.Flags().String("stack", "", "")
+			testCmd.Flags().String("format", "yaml", "")
+			testCmd.Flags().String("file", "", "")
+			testCmd.Flags().Bool("process-templates", true, "")
+			testCmd.Flags().Bool("process-functions", true, "")
+			testCmd.Flags().String("use-mocks", "", "")
+			testCmd.Flags().Lookup("use-mocks").NoOptDefVal = "true"
+			testCmd.Flags().String("query", "", "")
+			testCmd.Flags().StringSlice("skip", nil, "")
+			testCmd.Flags().Bool("provenance", false, "")
+			require.NoError(t, testCmd.ParseFlags(tt.args))
+			if len(tt.args) == 2 {
+				assert.Equal(t, []string{"vpc"}, testCmd.Flags().Args(), "a positional argument must not be consumed as the flag value")
+			}
+
+			f, err := parseDescribeComponentFlags(testCmd)
+
+			if tt.wantErr {
+				assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantUseMocks, f.useMocks)
+			assert.Equal(t, tt.wantMode, f.mocksMode)
+		})
+	}
+}
+
+// TestDescribeComponentArgs covers `--use-mocks always` (a space instead of `=`): the arity check
+// lets it through so RunE reports the mode word with a hint instead of the generic
+// "accepts 1 arg(s), received 2" usage error.
+func TestDescribeComponentArgs(t *testing.T) {
+	newCmd := func(useMocks string) *cobra.Command {
+		testCmd := &cobra.Command{Use: "component"}
+		testCmd.Flags().String("use-mocks", useMocks, "")
+		return testCmd
+	}
+
+	require.NoError(t, describeComponentArgs(newCmd(""), []string{"vpc"}))
+
+	require.NoError(t, describeComponentArgs(newCmd("true"), []string{"vpc", "always"}))
+	err := checkDescribeComponentSeparatedMocksMode(newCmd("true"), []string{"vpc", "always"})
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.Contains(t, err.Error(), `"always"`)
+	require.NoError(t, checkDescribeComponentSeparatedMocksMode(newCmd("true"), []string{"vpc"}))
+
+	// Any other extra argument keeps the standard arity error.
+	err = describeComponentArgs(newCmd("true"), []string{"vpc", "extra"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "accepts 1 arg(s), received 2")
+	assert.NotErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+
+	// An explicit mode means the extra word is not the flag's value.
+	err = describeComponentArgs(newCmd("always"), []string{"vpc", "always"})
+	assert.Contains(t, err.Error(), "accepts 1 arg(s), received 2")
+}
+
+// TestDescribeComponentSeparatedMocksModeErrors covers the branches of the separated-mode check that
+// return an error other than the hint: a missing flag and an unparseable --use-mocks value.
+func TestDescribeComponentSeparatedMocksModeErrors(t *testing.T) {
+	withoutFlag := &cobra.Command{Use: "component"}
+	require.Error(t, checkDescribeComponentSeparatedMocksMode(withoutFlag, []string{"vpc", "always"}))
+
+	invalid := &cobra.Command{Use: "component"}
+	invalid.Flags().String(useMocksFlagName, "sometimes", "")
+	require.ErrorIs(t, checkDescribeComponentSeparatedMocksMode(invalid, []string{"vpc", "always"}), errUtils.ErrInvalidFlagValue)
+	// The arity check defers to RunE, which reports the same invalid value from flag parsing.
+	require.NoError(t, describeComponentArgs(invalid, []string{"vpc", "always"}))
+}
+
+// TestDescribeComponentRunESeparatedMocksMode verifies that RunE reports `--use-mocks always`
+// before resolving the stack or loading configuration.
+func TestDescribeComponentRunESeparatedMocksMode(t *testing.T) {
+	run := getRunnableDescribeComponentCmd(getRunnableDescribeComponentCmdProps{
+		checkAtmosConfigE: func(opts ...AtmosValidateOption) error { return nil },
+		initCliConfig: func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			t.Fatal("configuration must not load when --use-mocks has a separated mode")
+			return schema.AtmosConfiguration{}, nil
+		},
+	})
+	testCmd := &cobra.Command{Use: "component"}
+	testCmd.Flags().String(useMocksFlagName, "true", "")
+
+	err := run(testCmd, []string{"vpc", "always"})
+
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.Contains(t, err.Error(), `"always"`)
 }
