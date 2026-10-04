@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const matter = require('gray-matter');
 const { getBuildTimestamp } = require('../build-timestamp');
+const { historicalPathFor, changedLinesAtHistoricalPath } = require('./history');
 
 // A page that already existed at the latest stable tag is still considered released
 // as long as fewer than this fraction of its lines changed since that tag. Above this
@@ -209,6 +210,15 @@ function determineRelease(filePath, repoState) {
       if (totalLines > 0 && changedLines / totalLines < UNRELEASED_THRESHOLD) {
         return latestStableTag;
       }
+    } else {
+      const historicalPath = historicalPathFor(relPath, repoState.historicalPaths);
+      if (historicalPath) {
+        const changedLines = changedLinesAtHistoricalPath(repoRoot, latestStableTag, historicalPath, filePath);
+        const totalLines = countLines(filePath);
+        if (changedLines !== null && totalLines > 0 && changedLines / totalLines < UNRELEASED_THRESHOLD) {
+          return latestStableTag;
+        }
+      }
     }
   }
 
@@ -306,6 +316,7 @@ module.exports = function docReleaseDataPlugin(context, options) {
       const repoState = {
         repoRoot: getRepoRoot(),
         latestStableTag: getLatestStableTag(),
+        historicalPaths: options.historicalPaths || [],
       };
 
       // Find all doc files recursively.
