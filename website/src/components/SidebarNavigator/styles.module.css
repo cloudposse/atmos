@@ -1,0 +1,215 @@
+.navigator {
+  --navigation-muted: color-mix(in srgb, var(--ifm-font-color-base) 70%, var(--ifm-background-color));
+  margin: 0;
+  padding: 0;
+}
+
+.navigator [hidden] {
+  display: none !important;
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0.5rem 0.5rem 0.75rem;
+  background: var(--ifm-background-color);
+}
+
+.filterRow {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  gap: 0.5rem;
+  padding: 0 0.625rem;
+  border: 1px solid color-mix(in srgb, var(--ifm-font-color-base) 16%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ifm-font-color-base) 3%, var(--ifm-background-color));
+  color: var(--ifm-color-content-secondary);
+}
+
+.filterRow:hover {
+  border-color: color-mix(in srgb, var(--ifm-font-color-base) 28%, transparent);
+}
+
+.filterRow:focus-within {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.searchIcon {
+  flex-shrink: 0;
+  color: var(--navigation-muted);
+}
+
+.filterRow input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ifm-font-color-base);
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.25;
+  outline: none;
+  box-shadow: none;
+  appearance: none;
+}
+
+.filterRow input::placeholder {
+  color: var(--navigation-muted);
+  opacity: 1;
+}
+
+.filterRow input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.clear,
+.back {
+  border: 0;
+  background: transparent;
+  color: var(--ifm-color-content-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 28px;
+  padding: 0;
+  margin-right: -0.25rem;
+  border-radius: 4px;
+}
+
+.back {
+  display: block;
+  padding: 0.65rem 0;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.back:hover,
+.clear:hover {
+  color: var(--ifm-color-primary);
+}
+
+.heading {
+  margin: 1.25rem 0 0;
+  color: var(--navigation-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.back + .heading {
+  margin-top: 0;
+}
+
+.navigator :focus-visible:not(input) {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.sectionLink {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding-left: var(--ifm-menu-link-padding-horizontal) !important;
+}
+
+.navigator :global(.menu__link),
+.navigator :global(.menu__list-item-collapsible) {
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.navigator :global(.menu__link) {
+  min-height: 36px;
+  padding: 0.45rem 0.75rem;
+}
+
+.navigator :global(.menu__list-item > .menu__link:not(.menu__link--sublist-caret)) {
+  padding-left: 0.75rem;
+}
+
+.navigator :global(.menu__link--active) {
+  font-weight: 500;
+}
+
+.navigator :global(.menu__caret) {
+  order: 1;
+  margin: 0 0.25rem 0 0;
+  padding: 0.4rem;
+}
+
+.navigator :global(.menu__link--sublist-caret)::after {
+  order: 1;
+  margin: 0 0 0 0.5rem;
+}
+
+.navigator :global(.menu__list .menu__list) {
+  margin: 0.25rem 0 0.25rem 0.75rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid color-mix(in srgb, var(--ifm-font-color-base) 12%, transparent);
+}
+
+.results > :global(.menu__list) > :global(li) {
+  border: 0;
+  padding-top: 0;
+  margin-top: 0.75rem !important;
+}
+
+.results > :global(.menu__list) > :global(li > div > a.menu__link) {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--navigation-muted);
+}
+
+.results > :global(.menu__list) > :global(li > ul.menu__list) {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+
+.empty {
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--ifm-color-content-secondary);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navigator :global(.menu__list) {
+    transition: none !important;
+  }
+}
