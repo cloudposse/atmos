@@ -27,7 +27,11 @@ The `atmos mcp add` command writes a new entry under `mcp.servers` in `atmos.yam
 
 Running `atmos mcp add` with no target defaults to `atmos mcp add self`.
 
-Only `atmos.yaml` is written — `add` never touches an AI client's config file. Use `--install` to also push the new server into detected AI clients in the same step, or run [`atmos mcp install`](/cli/commands/mcp/install) separately.
+### Which file is edited
+
+By default `add` writes to the root `atmos.yaml`. If the project already keeps its MCP configuration in an auto-discovered [`.atmos.d/`](/cli/configuration#automatic-configuration-imports-atmosd) (or `atmos.d/`) fragment - that is, a fragment that declares an `mcp:` section - `add` edits that fragment instead, so a modular-config project is not silently split across the root `atmos.yaml` and a fragment. Pass `--config <file>` to target a specific file explicitly. The current working directory is checked before the git repository root, matching how Atmos discovers these fragments when it loads config.
+
+Only the config file is written - `add` never touches an AI client's config file. Use `--install` to also push the new server into detected AI clients in the same step, or run [`atmos mcp install`](/cli/commands/mcp/install) separately.
 
 If the target resolves to the `self` preset and `mcp.enabled` is `false` in `atmos.yaml`, `add` prompts (when running interactively) to enable it — the `self` entry won't work at runtime until Atmos can run as an MCP server itself. Non-interactively, it errors with the exact `atmos config set` command to run instead.
 

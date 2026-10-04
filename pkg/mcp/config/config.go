@@ -19,7 +19,14 @@ import (
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
-const mcpServersPathPrefix = "mcp.servers."
+const (
+	mcpServersPathPrefix = "mcp.servers."
+	// The mcpConfigSection constant is the top-level atmos.yaml key MCP config
+	// lives under. ResolveFile uses it to detect a `.atmos.d/` fragment that
+	// already owns the MCP config so `add`/`remove` edit that fragment instead of
+	// the root atmos.yaml (cloudposse/atmos#3269).
+	mcpConfigSection = "mcp"
+)
 
 var (
 	errEmptyTarget          = errors.New("target must not be empty")
@@ -238,7 +245,11 @@ func ParseHeaderPairs(pairs []string) (map[string]string, error) {
 }
 
 // ResolveFile picks the atmos.yaml file `add`/`remove` should edit, honoring
-// an explicit --config override the same way `atmos config set`/`get` does.
+// an explicit --config override the same way `atmos config set`/`get` does. When
+// no override is given and the project already keeps its MCP config in an
+// auto-discovered `atmos.d/`/`.atmos.d/` fragment, that fragment is edited instead
+// of the root atmos.yaml, so modular config is not silently split across two
+// files (cloudposse/atmos#3269).
 func ResolveFile(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (string, error) {
 	defer perf.Track(atmosConfig, "mcpconfig.ResolveFile")()
 
@@ -251,7 +262,7 @@ func ResolveFile(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (st
 			Err()
 	}
 
-	file, err := pkgconfig.ResolveEditableConfigFile(atmosConfig, override)
+	file, err := pkgconfig.ResolveEditableConfigFileForSection(atmosConfig, override, mcpConfigSection)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrInvalidArgumentError).
 			WithExplanation(err.Error()).

@@ -277,6 +277,91 @@ func TestResolveFile(t *testing.T) {
 	assert.Equal(t, file, resolved)
 }
 
+// chdir switches to dir for the duration of the test, restoring the previous
+// working directory on cleanup. ResolveFile probes the current directory for
+// atmos.yaml and `.atmos.d/` fragments, so these tests must run from a known
+// temp dir rather than the package directory.
+func chdir(t *testing.T, dir string) {
+	t.Helper()
+	prev, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(dir))
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+}
+
+// TestResolveFile_PrefersAtmosDFragmentDeclaringMCP reproduces cloudposse/atmos#3269:
+// when a project keeps its MCP config in a `.atmos.d/` fragment, `atmos mcp add`
+// must edit that fragment instead of splitting the config by writing to the root
+// atmos.yaml.
+func TestResolveFile_PrefersAtmosDFragmentDeclaringMCP(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("base_path: \"./\"\n"), 0o600))
+	fragmentDir := filepath.Join(dir, ".atmos.d")
+	require.NoError(t, os.MkdirAll(fragmentDir, 0o755))
+	fragment := filepath.Join(fragmentDir, "mcp.yaml")
+	require.NoError(t, os.WriteFile(fragment, []byte("mcp:\n  enabled: true\n  servers:\n    my-server:\n      command: some-binary\n"), 0o600))
+
+	chdir(t, dir)
+	cmd := &cobra.Command{}
+	cmd.Flags().StringSlice("config", nil, "")
+
+	resolved, err := ResolveFile(cmd, &schema.AtmosConfiguration{})
+	require.NoError(t, err)
+
+	wantFragment, err := filepath.EvalSymlinks(fragment)
+	require.NoError(t, err)
+	gotResolved, err := filepath.EvalSymlinks(resolved)
+	require.NoError(t, err)
+	assert.Equal(t, wantFragment, gotResolved, "mcp add must target the .atmos.d fragment that declares mcp, not the root atmos.yaml")
+}
+
+// TestResolveFile_FallsBackToRootWithoutMCPFragment confirms the fragment
+// preference does not fire when no `.atmos.d/` fragment declares an `mcp:`
+// section: a `.atmos.d/` fragment about something else must not hijack the
+// target, and the root atmos.yaml stays the edit target.
+func TestResolveFile_FallsBackToRootWithoutMCPFragment(t *testing.T) {
+	dir := t.TempDir()
+	rootFile := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(rootFile, []byte("base_path: \"./\"\n"), 0o600))
+	fragmentDir := filepath.Join(dir, ".atmos.d")
+	require.NoError(t, os.MkdirAll(fragmentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(fragmentDir, "commands.yaml"), []byte("commands:\n  - name: noop\n"), 0o600))
+
+	chdir(t, dir)
+	cmd := &cobra.Command{}
+	cmd.Flags().StringSlice("config", nil, "")
+
+	resolved, err := ResolveFile(cmd, &schema.AtmosConfiguration{})
+	require.NoError(t, err)
+
+	wantRoot, err := filepath.EvalSymlinks(rootFile)
+	require.NoError(t, err)
+	gotResolved, err := filepath.EvalSymlinks(resolved)
+	require.NoError(t, err)
+	assert.Equal(t, wantRoot, gotResolved, "without an mcp fragment, the root atmos.yaml stays the edit target")
+}
+
+// TestResolveFile_ExplicitConfigOverridesFragment confirms an explicit --config
+// still wins over `.atmos.d/` fragment auto-detection.
+func TestResolveFile_ExplicitConfigOverridesFragment(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("base_path: \"./\"\n"), 0o600))
+	fragmentDir := filepath.Join(dir, ".atmos.d")
+	require.NoError(t, os.MkdirAll(fragmentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(fragmentDir, "mcp.yaml"), []byte("mcp:\n  servers: {}\n"), 0o600))
+	override := filepath.Join(dir, "custom.yaml")
+	require.NoError(t, os.WriteFile(override, []byte("base_path: \"./\"\n"), 0o600))
+
+	chdir(t, dir)
+	cmd := &cobra.Command{}
+	cmd.Flags().StringSlice("config", nil, "")
+	require.NoError(t, cmd.Flags().Set("config", override))
+
+	resolved, err := ResolveFile(cmd, &schema.AtmosConfiguration{})
+	require.NoError(t, err)
+	assert.Equal(t, override, resolved, "an explicit --config must win over .atmos.d fragment detection")
+}
+
 // TestResolveFile_MultipleConfigFilesAmbiguous guards against the same bug fixed in
 // cmd/config's resolveConfigFile (cloudposse/atmos#2867/#2868): ResolveFile silently used only
 // the FIRST --config file when multiple were given, so `mcp client add --config a,b` could

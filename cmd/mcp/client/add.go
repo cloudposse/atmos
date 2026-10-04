@@ -26,7 +26,7 @@ var addLongMarkdown string
 
 var addCmd = &cobra.Command{
 	Use:   "add [preset-name|url|command] [flags]",
-	Short: "Add an MCP server to mcp.servers in atmos.yaml",
+	Short: "Add an MCP server to mcp.servers in atmos.yaml or a .atmos.d fragment",
 	Long:  addLongMarkdown,
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  executeMCPAdd,

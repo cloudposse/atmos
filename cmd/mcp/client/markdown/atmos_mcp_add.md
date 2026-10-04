@@ -1,9 +1,15 @@
 Add an MCP server to `mcp.servers` in `atmos.yaml` without hand-editing YAML.
 
 The target can be a built-in preset (`self` for Atmos's own MCP server, `atmos-pro`
-for the Atmos Pro MCP server), an `http(s)://` URL, or a local stdio command. Only
-`atmos.yaml` is written by default — use `--install` to also push the new server
-into your AI client's config in the same step, or run `atmos mcp install` separately.
+for the Atmos Pro MCP server), an `http(s)://` URL, or a local stdio command.
+
+By default the server is written to the root `atmos.yaml`. If the project already
+keeps its MCP config in an auto-discovered `.atmos.d/` (or `atmos.d/`) fragment -
+a fragment that declares an `mcp:` section - that fragment is edited instead, so
+modular config stays in one place. Pass `--config <file>` to target a specific file
+explicitly. Only the config file is written; use `--install` to also push the new
+server into your AI client's config in the same step, or run `atmos mcp install`
+separately.
 
 **Examples:**
 ```bash

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	goyaml "go.yaml.in/yaml/v3"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -79,6 +81,111 @@ func ResolveEditableConfigFile(atmosConfig *schema.AtmosConfiguration, override 
 	}
 
 	return "", ErrNoEditableConfig
+}
+
+// configImportDirCandidates lists the default-import directory names probed for
+// config fragments, matching the directories mergeDefaultImports auto-discovers.
+var configImportDirCandidates = []string{AtmosDefaultImportsDirName, DotAtmosDefaultImportsDirName}
+
+// ResolveEditableConfigFileForSection returns the config file that edits to the
+// given top-level section (e.g. "mcp") should target. It extends
+// ResolveEditableConfigFile with fragment-awareness: when no explicit override is
+// given and an auto-discovered `atmos.d/`/`.atmos.d/` fragment already declares the
+// section, that fragment is edited instead of the root atmos.yaml, so a project
+// that keeps modular config in fragments is not silently split across two files
+// (cloudposse/atmos#3269). Precedence:
+//
+//  1. an explicit override (the --config flag or ATMOS_CLI_CONFIG_PATH);
+//  2. an auto-discovered fragment that already declares the section;
+//  3. the root atmos.yaml / .atmos.yaml (via ResolveEditableConfigFile).
+func ResolveEditableConfigFileForSection(atmosConfig *schema.AtmosConfiguration, override, section string) (string, error) {
+	defer perf.Track(atmosConfig, "config.ResolveEditableConfigFileForSection")()
+
+	if override != "" {
+		return resolveOverridePath(override)
+	}
+	if fragment, ok := fragmentDeclaringSection(section); ok {
+		return fragment, nil
+	}
+	return ResolveEditableConfigFile(atmosConfig, "")
+}
+
+// fragmentDeclaringSection returns the first auto-discovered config fragment that
+// declares the given top-level section, searching the current working directory
+// first and the git repository root second -- mirroring how mergeDefaultImports
+// discovers atmos.d/.atmos.d. Returns false when no fragment declares the
+// section, so the caller falls back to the root atmos.yaml.
+func fragmentDeclaringSection(section string) (string, bool) {
+	for _, dir := range fragmentSearchDirs() {
+		for _, importDir := range configImportDirCandidates {
+			candidate := filepath.Join(dir, importDir)
+			if info, err := os.Stat(candidate); err != nil || !info.IsDir() {
+				continue
+			}
+			files, err := SearchAtmosConfig(candidate)
+			if err != nil {
+				continue
+			}
+			for _, file := range files {
+				if declares, derr := fileDeclaresTopLevelKey(file, section); derr == nil && declares {
+					return file, true
+				}
+			}
+		}
+	}
+	return "", false
+}
+
+// fragmentSearchDirs returns the directories whose atmos.d/.atmos.d fragments are
+// in effect: the current working directory first, then the git repository root
+// (when different). A CWD fragment is preferred over a git-root one, mirroring
+// mergeDefaultImports' precedence.
+func fragmentSearchDirs() []string {
+	seen := make(map[string]struct{})
+	var dirs []string
+	add := func(dir string) {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return
+		}
+		if _, ok := seen[abs]; ok {
+			return
+		}
+		seen[abs] = struct{}{}
+		dirs = append(dirs, abs)
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		add(cwd)
+	}
+	if gitRoot, err := u.ProcessTagGitRoot("!repo-root ."); err == nil && gitRoot != "" {
+		add(gitRoot)
+	}
+	return dirs
+}
+
+// fileDeclaresTopLevelKey reports whether the YAML file at path has key at the
+// top level of its root mapping. Used to detect which fragment owns a section
+// (e.g. "mcp") so edits land in the file that already declares it, rather than
+// splitting config across the root atmos.yaml and a fragment.
+func fileDeclaresTopLevelKey(path, key string) (bool, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	var root goyaml.Node
+	if err := goyaml.Unmarshal(content, &root); err != nil {
+		return false, err
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != goyaml.MappingNode {
+		return false, nil
+	}
+	mapping := root.Content[0]
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // resolveOverridePath resolves an explicit override that may point at either a
