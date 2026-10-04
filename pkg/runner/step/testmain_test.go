@@ -76,6 +76,7 @@ func TestMain(m *testing.M) {
 	data.InitWriter(ioCtx)
 	ui.InitFormatter(ioCtx)
 
+	builtInStepTypes = registeredStepTypesForDocumentation()
 	os.Exit(m.Run())
 }
 

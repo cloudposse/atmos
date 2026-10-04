@@ -9,7 +9,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `atmos store` command group manages raw values in store backends. You configure these backends under `stores:` in `atmos.yaml`. Supported backends are AWS SSM, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, 1Password, Keychain, and GitHub Actions. Unlike [`atmos secret`](/cli/commands/secret/usage), store values need no declaration in stack configuration. You can read or write any key directly by name against a named store. Deletion support depends on the backend. Redis and Artifactory do not support deletion (see [`store delete`](/cli/commands/store/delete)). You can read values written here with the [`!store`](/functions/yaml/store) and [`!store.get`](/functions/yaml/store.get) YAML functions. You can also write values with a [`type: store`](/workflows/steps/type/store) workflow step.
+The `atmos store` command group manages raw values in store backends. You configure these backends under `stores:` in `atmos.yaml`. Supported backends are AWS SSM, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, 1Password, Keychain, and GitHub Actions. Unlike [`atmos secret`](/cli/commands/secret/usage), store values need no declaration in stack configuration. You can read or write any key directly by name against a named store. Deletion support depends on the backend. Redis and Artifactory do not support deletion (see [`store delete`](/cli/commands/store/delete)). You can read values written here with the [`!store`](/functions/yaml/store) and [`!store.get`](/functions/yaml/store.get) YAML functions. You can also write values with a [`type: store`](/steps/type/store) workflow step.
 </Intro>
 
 <CastPlayer title="atmos store --help" src="/casts/screengrabs/atmos-store--help.cast" static chrome />
@@ -120,5 +120,5 @@ uses the stack and component together to build the underlying key.
 - [`!store` YAML function](/functions/yaml/store)
 - [`!store.get` YAML function](/functions/yaml/store.get)
 - [Stores configuration](/cli/configuration/stores)
-- [`type: store` workflow step](/workflows/steps/type/store)
+- [`type: store` workflow step](/steps/type/store)
 - [atmos secret](/cli/commands/secret/usage) — declared, scope-tracked secrets
