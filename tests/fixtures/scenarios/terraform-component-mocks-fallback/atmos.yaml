@@ -1,0 +1,34 @@
+# Component mocks in fallback mode against real Terraform state.
+#
+# - stacks/dev.yaml uses a local backend (internal/exec/terraform_mocks_fallback_test.go).
+# - stacks/emu.yaml uses an S3 backend on the Floci emulator
+#   (tests/terraform_mocks_fallback_floci_test.go).
+#
+# components.terraform.mocks.mode is intentionally unset so the edition-aware default applies.
+base_path: "./"
+
+# OpenTofu for the emu stack is installed into the fixture copy by the toolchain,
+# so the Floci test needs no pre-installed binary.
+toolchain:
+  install_path: .tools
+  versions_file: .tool-versions
+  registries:
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+components:
+  terraform:
+    base_path: components/terraform
+    auto_generate_backend_file: true
+    deploy_run_init: true
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+logs:
+  level: Warning

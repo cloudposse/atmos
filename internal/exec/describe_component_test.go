@@ -1140,3 +1140,42 @@ func TestExtractImportsList(t *testing.T) {
 		})
 	}
 }
+
+// TestExecuteDescribeComponentCmd_MocksModeReachesConfigInit verifies the --use-mocks=<mode>
+// override is carried into config initialization, where it is applied to
+// components.terraform.mocks.mode, and that UseMocks reaches the describe call.
+func TestExecuteDescribeComponentCmd_MocksModeReachesConfigInit(t *testing.T) {
+	for _, mode := range []string{"", "fallback", "always"} {
+		t.Run("mode="+mode, func(t *testing.T) {
+			var initInfo schema.ConfigAndStacksInfo
+			var describeParams *ExecuteDescribeComponentParams
+
+			mockedExec := &DescribeComponentExec{
+				printOrWriteToFile:    func(*schema.AtmosConfiguration, string, string, any) error { return nil },
+				IsTTYSupportForStdout: func() bool { return false },
+				initCliConfig: func(info schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+					initInfo = info
+					return schema.AtmosConfiguration{}, nil
+				},
+				executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+					describeParams = params
+					return map[string]any{}, nil
+				},
+				evaluateYqExpression: func(_ *schema.AtmosConfiguration, data any, _ string) (any, error) { return data, nil },
+			}
+
+			err := mockedExec.ExecuteDescribeComponentCmd(DescribeComponentParams{
+				Component: "vpc",
+				Stack:     "dev",
+				Format:    "yaml",
+				UseMocks:  true,
+				MocksMode: mode,
+			})
+
+			require.NoError(t, err)
+			assert.Equal(t, mode, initInfo.MocksMode)
+			require.NotNil(t, describeParams)
+			assert.True(t, describeParams.UseMocks)
+		})
+	}
+}

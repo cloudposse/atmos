@@ -62,6 +62,11 @@ var (
 					// earlier edition gets "never" restored -- see EffectiveInitUpgrade's doc comment.
 					Upgrade: schema.TerraformInitUpgradeAuto,
 				},
+				// Fallback since 2026-10-01 (journaled in pkg/edition); a project pinned to an
+				// earlier edition gets "always" restored.
+				Mocks: schema.TerraformMocks{
+					Mode: schema.TerraformMocksModeFallback,
+				},
 				Plan: schema.TerraformPlan{
 					SkipPlanfile: false,
 				},
