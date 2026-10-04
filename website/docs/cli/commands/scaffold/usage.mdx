@@ -112,7 +112,7 @@ spec:
           command: terraform validate
 ```
 
-For `kind: step`, `type:` selects one registered [step type](/workflows/steps/type) and `with:`
+For `kind: step`, `type:` selects one registered [step type](/steps/type) and `with:`
 is its configuration. For `kind: steps`, `with:` is an ordered step list. The envelope owns
 `events`, `when`, `env`, `retry`, and `on_failure`; answer values are available in conditions as
 `answers` and in step templates as `{{ .Answers.<field> }}`. Hooks run in stable name order.
@@ -169,5 +169,5 @@ golden path.
 
 - [Generate from a scaffold](/cli/commands/scaffold/generate)
 - [Validate a scaffold](/cli/commands/scaffold/validate)
-- [Workflow and hook step types](/workflows/steps/type)
+- [Workflow and hook step types](/steps/type)
 - [Manage lifecycle events with hooks](/stacks/hooks)

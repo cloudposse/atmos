@@ -12,7 +12,7 @@ import CastEmbed from '@site/src/components/CastEmbed'
 
 A successful deployment still needs checks that the application is healthy.
 Running those checks as ordinary commands can bury failures in successful logs
-or stop before the remaining tests run. The new [test step](/workflows/steps/type/test)
+or stop before the remaining tests run. The new [test step](/steps/type/test)
 collects the results, keeps passing output quiet, and reveals each failed check's logs.
 
 <!--truncate-->
@@ -31,8 +31,8 @@ reporting make that behavior harder to reuse locally and across deployments.
 
 Atmos supports `type: test` in workflows, custom commands, and lifecycle hooks.
 Tests continue by default, while a tree with green/red dots and a bottom progress
-bar shows the results. Nested [parallel](/workflows/steps/type/parallel) and
-[matrix](/workflows/steps/type/matrix) groups share the same report.
+bar shows the results. Nested [parallel](/steps/type/parallel) and
+[matrix](/steps/type/matrix) groups share the same report.
 
 ## How to Use It
 
@@ -41,7 +41,7 @@ Attach a test step to an `after.terraform.apply` hook with `kind: step` and
 when debugging, or `fail.mode: fail_fast` when remaining checks should stop after
 an error. CI receives a static tree with the same failure details.
 
-See the [test step reference](/workflows/steps/type/test) for configuration and
+See the [test step reference](/steps/type/test) for configuration and
 failure behavior.
 
 The local example runs without stacks. Running bare [`atmos`](/cli) now displays
