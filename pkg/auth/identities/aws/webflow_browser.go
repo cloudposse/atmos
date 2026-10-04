@@ -262,12 +262,18 @@ func (i *userIdentity) waitForCallbackWithSpinner(ctx context.Context, resultCh 
 	ctx, cancel := context.WithTimeout(ctx, webflowCallbackTimeout)
 	defer cancel()
 
-	tokenCh := startSpinnerExchangeGoroutine(ctx, resultCh, ex)
+	// stopWaiting ends the wait for the callback (spinner abort or fallback) without canceling a
+	// code exchange that is already in flight; the exchange is bounded by ctx, which the deferred
+	// cancel above ends when this function returns.
+	waitCtx, stopWaiting := context.WithCancel(ctx)
+	defer stopWaiting()
 
-	finalModel, err := runSpinnerProgramFunc(newWebflowSpinnerModel(tokenCh, cancel))
+	tokenCh := startSpinnerExchangeGoroutine(waitCtx, ctx, resultCh, ex)
+
+	finalModel, err := runSpinnerProgramFunc(newWebflowSpinnerModel(tokenCh, stopWaiting))
 	if err != nil {
 		return i.handleSpinnerFallback(&spinnerFallbackParams{
-			cancel: cancel, tokenCh: tokenCh, resultCh: resultCh, exchange: ex, runErr: err,
+			cancel: stopWaiting, tokenCh: tokenCh, resultCh: resultCh, exchange: ex, runErr: err,
 		})
 	}
 
@@ -284,10 +290,12 @@ func (i *userIdentity) waitForCallbackWithSpinner(ctx context.Context, resultCh 
 }
 
 // startSpinnerExchangeGoroutine launches a goroutine that races the OAuth
-// callback against the context deadline and exchanges the authorization code
-// for tokens when the callback arrives. The returned channel delivers either
-// a successful response or a wrapped error.
-func startSpinnerExchangeGoroutine(ctx context.Context, resultCh <-chan webflowResult, ex webflowExchange) chan webflowSpinnerTokenResult {
+// callback against waitCtx and exchanges the authorization code for tokens
+// when the callback arrives. The exchange runs under exchangeCtx, not waitCtx,
+// so ending the wait (the spinner fallback cancels it) never aborts an
+// exchange that is already in flight. The returned channel delivers either a
+// successful response or a wrapped error.
+func startSpinnerExchangeGoroutine(waitCtx, exchangeCtx context.Context, resultCh <-chan webflowResult, ex webflowExchange) chan webflowSpinnerTokenResult {
 	tokenCh := make(chan webflowSpinnerTokenResult, 1)
 	go func() {
 		defer close(tokenCh)
@@ -297,12 +305,12 @@ func startSpinnerExchangeGoroutine(ctx context.Context, resultCh <-chan webflowR
 				tokenCh <- webflowSpinnerTokenResult{err: wrapWebflowErr(errUtils.ErrWebflowAuthFailed, result.err)}
 				return
 			}
-			resp, err := exchangeCodeForCredentials(ctx, defaultHTTPClient, exchangeCodeParams{
+			resp, err := exchangeCodeForCredentials(exchangeCtx, defaultHTTPClient, exchangeCodeParams{
 				region: ex.region, code: result.code, codeVerifier: ex.verifier, redirectURI: ex.redirectURI, dpopKey: ex.dpopKey,
 			})
 			tokenCh <- webflowSpinnerTokenResult{resp: resp, err: err}
-		case <-ctx.Done():
-			tokenCh <- webflowSpinnerTokenResult{err: wrapWebflowErr(errUtils.ErrWebflowTimeout, ctx.Err())}
+		case <-waitCtx.Done():
+			tokenCh <- webflowSpinnerTokenResult{err: wrapWebflowErr(errUtils.ErrWebflowTimeout, waitCtx.Err())}
 		}
 	}()
 	return tokenCh
