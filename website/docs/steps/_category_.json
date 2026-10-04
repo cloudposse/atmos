@@ -1,0 +1,10 @@
+{
+  "label": "steps",
+  "position": 8,
+  "collapsible": true,
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "steps/index"
+  }
+}
