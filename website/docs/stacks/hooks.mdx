@@ -15,6 +15,8 @@ operations. Built-in kinds cover cost analysis, security scanning, stores, Git, 
 and `kind: steps` make the complete typed step library available at lifecycle events.
 </Intro>
 
+Browse the shared [Steps reference](/steps) and [step type catalog](/steps/type) for the building blocks available in workflows, custom commands, and lifecycle hooks.
+
 ## Hooks Schema
 
 Each hook has a `kind` that selects an engine and a set of defaults. The
@@ -533,7 +535,7 @@ real time — same UX as Terraform plan output.
 
 ### `kind: step` (run a step type)
 
-Runs any registered [workflow / custom-command step type](/workflows/steps/type)
+Runs any registered [step type](/steps/type)
 — `container`, `toast`, `log`, `markdown`, `http`, and the rest — on a
 lifecycle event. Instead of growing the hook-kind list one tool at a
 time, `kind: step` makes the whole step library available as hooks, so a
@@ -588,7 +590,7 @@ hooks:
         tags: [example:latest]
 ```
 
-A common pairing is the [`emulator` step type](/workflows/steps/type/emulator) on the
+A common pairing is the [`emulator` step type](/steps/type/emulator) on the
 `terraform test` events: bring a local cloud [emulator](/stacks/components/emulator) up before the tests
 and tear it down after (`when: always` guarantees teardown even when a test fails), so
 `atmos terraform test` runs against a local sandbox with no cloud account:
@@ -608,7 +610,7 @@ hooks:
     with: { component: aws, action: down }
 ```
 
-Another common pairing is the [`archive` step type](/workflows/steps/type/archive)
+Another common pairing is the [`archive` step type](/steps/type/archive)
 on `before.terraform.*` events — rebuild a Lambda-style `handler.zip` fresh
 before every plan/apply/destroy, replacing a Terragrunt-style `before_hook`
 shell-out to `zip`:
@@ -647,7 +649,7 @@ hooks, since neither a workflow nor a custom command has a single component in s
 does. Outside hooks, a relative `working_directory` resolves one of two ways depending on the
 step type, never against the component: a [custom command's](/cli/configuration/commands/working-directory)
 own `working_directory`, a workflow's own [workflow-level default](/workflows/working-directory),
-and a `type: shell`/`exec`/`atmos` [workflow step's `working_directory`](/workflows/steps/working-directory)
+and a `type: shell`/`exec`/`atmos` [workflow step's `working_directory`](/steps/working-directory)
 all resolve against the Atmos `base_path`; an extended step type's own `working_directory` (for
 example `archive`, `file`, `junit`, `workdir`, or `container`) resolves against the current working
 directory instead.
@@ -663,7 +665,7 @@ directory instead.
   <dd>Declarative condition controlling whether this hook runs. See [Reacting to success or failure](#reacting-to-success-or-failure).</dd>
 
   <dt>`retry`</dt>
-  <dd>Optional. Wraps the step execution in Atmos's retry policy — same schema as a [workflow step's `retry`](/workflows/steps/retry). Applied by the hook runner, not the step.</dd>
+  <dd>Optional. Wraps the step execution in Atmos's retry policy — same schema as a [workflow step's `retry`](/steps/retry). Applied by the hook runner, not the step.</dd>
 
   <dt>`env`</dt>
   <dd>Extra environment variables layered on top of the standard `ATMOS_*` variables (`ATMOS_STACK`, `ATMOS_COMPONENT`, `ATMOS_COMPONENT_PATH`, …) the step receives.</dd>
