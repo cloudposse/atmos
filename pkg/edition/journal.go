@@ -205,6 +205,20 @@ var journal = []Entry{
 		Description: "Atmos adds -upgrade to terraform init automatically when Terraform/OpenTofu reports one is required, instead of requiring it to be typed by hand.",
 		Ref:         "https://github.com/cloudposse/atmos/pull/3127",
 	},
+	{
+		// components.terraform.mocks.mode is a brand-new key, journaled the same way as
+		// components.terraform.init.mode above: it governs behavior --use-mocks already had a
+		// fixed answer for (always: mocks short-circuited every lookup and real state was never
+		// read), just not a configurable one. A project pinned before this date keeps that
+		// hermetic behavior with no explicit mocks.mode: always needed.
+		Date:        "2026-10-01",
+		Key:         "components.terraform.mocks.mode",
+		Kind:        KindValue,
+		Old:         "always",
+		New:         "fallback",
+		Description: "With --use-mocks, Terraform lookups use real state when it exists and fall back to component mocks only when the state isn't provisioned or the output is missing.",
+		Ref:         "https://atmos.tools/changelog/terraform-component-mocks-fallback",
+	},
 }
 
 // Journal returns a copy of the journal sorted by date (oldest first), then key.
