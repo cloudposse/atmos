@@ -63,7 +63,7 @@ application, scripts, and required tools are available.
 | `cmds:` (list of shell commands)                  | `steps:` (`type: shell`, or `type: atmos` for any atmos command)  |
 | `deps:` (runs at the same time by default)        | Command [`dependencies.commands`](/cli/configuration/commands/dependencies#named-command-and-workflow-dependencies), concurrent by default |
 | `vars:` / `env:`                                  | Command `flags:` (with `default:`) / `env:` map                   |
-| `sources:` / `generates:` (freshness check)       | Step [`inputs.sources`](/workflows/steps/inputs) / [`artifacts.paths`](/workflows/steps/artifacts) |
+| `sources:` / `generates:` (freshness check)       | Step [`inputs.sources`](/steps/inputs) / [`artifacts.paths`](/steps/artifacts) |
 | `includes:` (multi-file composition)              | Auto-discovered `atmos.d/*.yaml`, or separate workflow files       |
 | `internal: true` task                             | Command `internal: true` (weaker guarantee -- see below)             |
 
@@ -74,7 +74,7 @@ contrast, run one after another by default — so a `deps:` entry is not a step 
 one. It maps to the command-level
 [`dependencies.commands`](/cli/configuration/commands/dependencies#named-command-and-workflow-dependencies)
 field, which resolves through the same DAG scheduler as
-[`parallel`](/workflows/steps/type/parallel)/[`matrix`](/workflows/steps/type/matrix) `needs:` and
+[`parallel`](/steps/type/parallel)/[`matrix`](/steps/type/matrix) `needs:` and
 runs concurrently by default — matching Task's `deps:` behavior directly, not working around it:
 
 <Tabs>
@@ -127,8 +127,8 @@ commands side by side that were never their own Task tasks to begin with.
 
 Task skips a task's `cmds:` when its `sources:` files match its `generates:` outputs, checked by
 default with a content hash (Task also supports `method: timestamp` for an mtime-based check).
-The step-level [`inputs.sources`](/workflows/steps/inputs) and
-[`artifacts.paths`](/workflows/steps/artifacts) fields are the direct match, with the same
+The step-level [`inputs.sources`](/steps/inputs) and
+[`artifacts.paths`](/steps/artifacts) fields are the direct match, with the same
 checksum-by-default/timestamp-as-an-option choice:
 
 ```yaml
@@ -148,9 +148,9 @@ With no explicit `when:`, declaring `inputs`/`artifacts` on a step is enough —
 `when: checksum.changed`, and the step is skipped when the hash of the matched source files
 matches the hash recorded after the last successful run. Run the same command twice in a row and
 the second run skips the build step; edit a matched source file and the next run executes it
-again. See [inputs](/workflows/steps/inputs) for the full field reference, including the
+again. See [inputs](/steps/inputs) for the full field reference, including the
 `timestamp.changed` fact for an mtime-based check matching Task's `method: timestamp` mode.
-[`require`/`assert`](/workflows/steps/type/require) is a different, older step type — it only
+[`require`/`assert`](/steps/type/require) is a different, older step type — it only
 checks that a file, tool, or directory exists, not whether it is fresh, so it does not replace
 `inputs`/`artifacts`.
 
@@ -285,7 +285,7 @@ Choose the one that fits what you are splitting:
 - **Discoverable commands.** Add descriptions, typed flags, defaults, and per-command help for
   your team's tasks with `atmos --help` and `atmos <command> --help`.
 - **Typed steps.** Combine shell commands with HTTP requests, containers, parallel execution,
-  matrices, and other [step types](/workflows/steps/type).
+  matrices, and other [step types](/steps/type).
 - **Interactive workflows.** Add prompts, confirmations, and structured output where your
   tasks need them.
 - **Tool dependencies.** Declare required CLI versions with `dependencies.tools` so Atmos
