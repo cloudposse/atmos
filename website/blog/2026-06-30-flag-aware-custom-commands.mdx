@@ -10,7 +10,7 @@ castTitle: "atmos interactive workflow steps"
 
 import CastEmbed from '@site/src/components/CastEmbed'
 
-Custom command steps can now read their own command-line flags through `{{ .Flags.<name> }}`, and the [`table`](/workflows/steps/type/table) step templates its `data`, `columns`, and `title` per-step. Together they let you build flag-driven runbooks — rich, dynamic output assembled declaratively in `atmos.yaml`, no shell scripting required.
+Custom command steps can now read their own command-line flags through `{{ .Flags.<name> }}`, and the [`table`](/steps/type/table) step templates its `data`, `columns`, and `title` per-step. Together they let you build flag-driven runbooks — rich, dynamic output assembled declaratively in `atmos.yaml`, no shell scripting required.
 
 <!--truncate-->
 
@@ -18,8 +18,8 @@ Custom command steps can now read their own command-line flags through `{{ .Flag
 
 Two things came together:
 
-1. **Flags are now template variables.** When a custom command declares flags, each one is exposed to its steps as `{{ .Flags.<name> }}`. Step titles, shell commands, working directories, and [`table`](/workflows/steps/type/table) data all resolve those values.
-2. **`table` steps are fully templated.** A `table` step's `title`, `columns`, and every cell in `data` are rendered as Go templates, so the table content can depend on flags and other [step variables](/workflows/steps/type).
+1. **Flags are now template variables.** When a custom command declares flags, each one is exposed to its steps as `{{ .Flags.<name> }}`. Step titles, shell commands, working directories, and [`table`](/steps/type/table) data all resolve those values.
+2. **`table` steps are fully templated.** A `table` step's `title`, `columns`, and every cell in `data` are rendered as Go templates, so the table content can depend on flags and other [step variables](/steps/type).
 
 ## How to Use It
 
@@ -76,4 +76,4 @@ For usage and configuration, see [flags](/cli/configuration/commands/flags).
 
 ## Get Involved
 
-See the [workflow step types](/workflows/steps/type) and the [`table` step](/workflows/steps/type/table) reference to start building. Share what you create with the [Atmos community](https://github.com/cloudposse/atmos).
+See the [workflow step types](/steps/type) and the [`table` step](/steps/type/table) reference to start building. Share what you create with the [Atmos community](https://github.com/cloudposse/atmos).
