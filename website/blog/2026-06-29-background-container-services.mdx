@@ -36,13 +36,13 @@ A workflow runner should be able to say "start this service, wait until it's hea
 
 ## What's New
 
-A [`container`](/workflows/steps/type/container#background-services) step with `background: true` starts a long-running service detached and lets the workflow continue. Three pieces work together:
+A [`container`](/steps/type/container#background-services) step with `background: true` starts a long-running service detached and lets the workflow continue. Three pieces work together:
 
 - **`background: true`** on an `action: run` step starts the service detached.
 - **`healthcheck`** (under `with:`) gates readiness — Atmos blocks until the container is healthy before the next step runs.
-- **[`cancel`](/workflows/steps/type/cancel)** stops and removes the service; if you never cancel it, Atmos tears it down automatically when the workflow ends.
+- **[`cancel`](/steps/type/cancel)** stops and removes the service; if you never cancel it, Atmos tears it down automatically when the workflow ends.
 
-There are also two readiness-gating control steps: [`wait`](/workflows/steps/type/wait) blocks on named services, and `wait-all` blocks on every background service started so far.
+There are also two readiness-gating control steps: [`wait`](/steps/type/wait) blocks on named services, and `wait-all` blocks on every background service started so far.
 
 ## A Background Emulator
 
@@ -100,7 +100,7 @@ Start several services and wait for all of them at once with `wait-all`:
 - type: wait-all
 ```
 
-The ordinary [`needs`](/workflows/steps) field is unchanged — it expresses step ordering, while `wait`/`wait-all` express service readiness.
+The ordinary [`needs`](/steps) field is unchanged — it expresses step ordering, while `wait`/`wait-all` express service readiness.
 
 ## Teardown You Don't Have to Remember
 
@@ -134,4 +134,4 @@ For usage and configuration, see [Using Containers](/components/container).
 
 ## Get Involved
 
-For the full reference, see [background services](/workflows/steps/type/container#background-services) on the `container` step page, and the [`wait`](/workflows/steps/type/wait) and [`cancel`](/workflows/steps/type/cancel) step types. Try it on a real end-to-end workflow and tell us where the readiness and teardown semantics feel right — or where you want more control.
+For the full reference, see [background services](/steps/type/container#background-services) on the `container` step page, and the [`wait`](/steps/type/wait) and [`cancel`](/steps/type/cancel) step types. Try it on a real end-to-end workflow and tell us where the readiness and teardown semantics feel right — or where you want more control.
