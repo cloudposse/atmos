@@ -405,6 +405,9 @@ const config = {
                 // URLs (still bookmarked/indexed externally) to their current
                 // /changelog/<slug> location.
                 createRedirects(existingPath) {
+                    if (existingPath === '/steps' || existingPath.startsWith('/steps/')) {
+                        return [existingPath.replace(/^\/steps(?=\/|$)/, '/workflows/steps')];
+                    }
                     if (existingPath.startsWith('/changelog/')) {
                         return [existingPath.replace('/changelog/', '/blog/')];
                     }
@@ -455,7 +458,12 @@ const config = {
             path.resolve(__dirname, 'plugins', 'blog-release-data'), {}
         ],
         [
-            path.resolve(__dirname, 'plugins', 'doc-release-data'), {}
+            path.resolve(__dirname, 'plugins', 'doc-release-data'), {
+                historicalPaths: [{
+                    from: 'website/docs/steps',
+                    to: 'website/docs/workflows/workflows/workflow/steps',
+                }],
+            }
         ],
         [
             path.resolve(__dirname, 'plugins', 'fetch-security-posture'), {}
@@ -623,7 +631,7 @@ const config = {
             docs: {
                 sidebar: {
                     hideable: true,
-                    autoCollapseCategories: true,
+                    autoCollapseCategories: false,
                 },
             },
             navbar: {
