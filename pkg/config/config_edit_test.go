@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	git "github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -191,6 +192,58 @@ func indexOf(s []string, v string) int {
 		}
 	}
 	return -1
+}
+
+// TestEffectiveConfigFilesAscending_GitRootAndCWD exercises the git-root branch of
+// fragmentDirsAscending: from a subdirectory that has its own root atmos.yaml, both
+// the git-root `.atmos.d` fragments and the CWD `.atmos.d` fragments participate,
+// with the git-root fragment at lower precedence (earlier) than the CWD fragment.
+func TestEffectiveConfigFilesAscending_GitRootAndCWD(t *testing.T) {
+	repo := t.TempDir()
+	_, err := git.PlainInit(repo, false)
+	require.NoError(t, err)
+
+	rootFragment := filepath.Join(repo, ".atmos.d", "mcp.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(rootFragment), 0o755))
+	require.NoError(t, os.WriteFile(rootFragment, []byte("mcp:\n  servers: {}\n"), 0o644))
+
+	sub := filepath.Join(repo, "project")
+	require.NoError(t, os.MkdirAll(filepath.Join(sub, ".atmos.d"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sub, AtmosConfigFileName), []byte("base_path: \"./\"\n"), 0o644))
+	subFragment := filepath.Join(sub, ".atmos.d", "mcp.yaml")
+	require.NoError(t, os.WriteFile(subFragment, []byte("mcp:\n  servers: {}\n"), 0o644))
+
+	chdirForTest(t, sub)
+	files := EffectiveConfigFilesAscending(nil)
+	resolved := make([]string, len(files))
+	for i, f := range files {
+		resolved[i] = evalSymlinks(t, f)
+	}
+
+	rootIdx := indexOf(resolved, evalSymlinks(t, rootFragment))
+	subIdx := indexOf(resolved, evalSymlinks(t, subFragment))
+	require.GreaterOrEqual(t, rootIdx, 0, "git-root fragment must be included")
+	require.GreaterOrEqual(t, subIdx, 0, "CWD fragment must be included")
+	assert.Less(t, rootIdx, subIdx, "git-root fragment must have lower precedence than the CWD fragment")
+}
+
+// TestFragmentFilesSkipsNonDirImportPath covers fragmentFiles when an import name
+// exists as a file rather than a directory: it must be skipped, and the real
+// `.atmos.d/` directory still searched.
+func TestFragmentFilesSkipsNonDirImportPath(t *testing.T) {
+	dir := t.TempDir()
+	// `atmos.d` is a FILE here, not a directory.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.d"), []byte("ignored\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".atmos.d"), 0o755))
+	fragment := filepath.Join(dir, ".atmos.d", "mcp.yaml")
+	require.NoError(t, os.WriteFile(fragment, []byte("mcp:\n  servers: {}\n"), 0o644))
+
+	files := fragmentFiles(dir)
+	resolved := make([]string, len(files))
+	for i, f := range files {
+		resolved[i] = evalSymlinks(t, f)
+	}
+	assert.Contains(t, resolved, evalSymlinks(t, fragment))
 }
 
 // TestResolveConfigOverride covers all three branches: zero, one, and multiple --config files.

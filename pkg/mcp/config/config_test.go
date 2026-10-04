@@ -446,3 +446,39 @@ func TestResolveEnableFile_FallsBackToRoot(t *testing.T) {
 	require.NoError(t, err)
 	sameFile(t, root, resolved)
 }
+
+func TestResolveEnableFile_Override(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	writeFile(t, file, "mcp:\n  enabled: false\n")
+
+	cmd := noConfigCmd()
+	require.NoError(t, cmd.Flags().Set("config", file))
+	resolved, err := ResolveEnableFile(cmd, &schema.AtmosConfiguration{})
+	require.NoError(t, err)
+	assert.Equal(t, file, resolved)
+}
+
+// TestResolveServerFile_NoEditableConfigErrors covers the fallback error path:
+// with no fragment, no root atmos.yaml, and no git repo, resolution surfaces a
+// usage error rather than silently writing nowhere.
+func TestResolveServerFile_NoEditableConfigErrors(t *testing.T) {
+	chdir(t, t.TempDir())
+	_, _, err := ResolveServerFile(noConfigCmd(), &schema.AtmosConfiguration{}, "demo")
+	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+func TestResolveEnableFile_NoEditableConfigErrors(t *testing.T) {
+	chdir(t, t.TempDir())
+	_, err := ResolveEnableFile(noConfigCmd(), &schema.AtmosConfiguration{})
+	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// TestResolveServerFile_OverrideMissingErrors covers the override error path: a
+// --config pointing at a nonexistent file surfaces a usage error.
+func TestResolveServerFile_OverrideMissingErrors(t *testing.T) {
+	cmd := noConfigCmd()
+	require.NoError(t, cmd.Flags().Set("config", filepath.Join(t.TempDir(), "nope.yaml")))
+	_, _, err := ResolveServerFile(cmd, &schema.AtmosConfiguration{}, "demo")
+	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
