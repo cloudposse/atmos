@@ -72,8 +72,9 @@ atmos terraform cache trust
 # `secret init` also accepts the file through stdin: `atmos secret init < .env.local ...`.
 atmos secret init --input .env.local -s plat-ue2-dev -c app-config
 
-# Plan every component before state exists. `--use-mocks` resolves Terraform lookup
-# functions from literal, component-owned mocks instead of the cold remote state. Exit code 2
+# Plan every component before state exists. `--use-mocks` fills Terraform lookup
+# functions from literal, component-owned mocks wherever the remote state is still cold
+# (real state wins once it exists; `--use-mocks=always` ignores state). Exit code 2
 # means Terraform found changes and is expected for a first plan.
 atmos terraform plan --all -s plat-ue2-dev --use-mocks
 
