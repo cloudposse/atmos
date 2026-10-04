@@ -19,6 +19,9 @@
           "mode": "auto",
           "upgrade": "auto"
         },
+        "mocks": {
+          "mode": "fallback"
+        },
         "plan": {
           "skip_planfile": false
         },

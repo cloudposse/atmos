@@ -527,3 +527,44 @@ func TestIdentityFlagConfiguration(t *testing.T) {
 	assert.Equal(t, "i", strFlag.Shorthand, "identity should have -i shorthand")
 	assert.Contains(t, strFlag.EnvVars, "ATMOS_IDENTITY")
 }
+
+// TestUseMocksFlagRegistration verifies --use-mocks is a string flag whose bare form means "true"
+// and that a following positional argument is never consumed as its value.
+func TestUseMocksFlagRegistration(t *testing.T) {
+	t.Parallel()
+
+	flag, ok := TerraformFlags().Get("use-mocks").(*flags.StringFlag)
+	require.True(t, ok, "use-mocks should be a string flag")
+	assert.Equal(t, "true", flag.NoOptDefVal)
+	assert.True(t, flag.NoOptDefValNoSpaceValue, "a positional argument after --use-mocks must stay positional")
+	assert.False(t, flag.GetNoOptDefValConsumesNextArg())
+	assert.Contains(t, flag.EnvVars, "ATMOS_USE_MOCKS")
+
+	tests := []struct {
+		name     string
+		args     []string
+		wantFlag string
+		wantArgs []string
+	}{
+		{name: "absent", args: []string{"app"}, wantFlag: "", wantArgs: []string{"app"}},
+		{name: "bare flag then positional", args: []string{"--use-mocks", "app"}, wantFlag: "true", wantArgs: []string{"app"}},
+		{name: "positional then bare flag", args: []string{"app", "--use-mocks"}, wantFlag: "true", wantArgs: []string{"app"}},
+		{name: "explicit true", args: []string{"--use-mocks=true", "app"}, wantFlag: "true", wantArgs: []string{"app"}},
+		{name: "explicit false", args: []string{"--use-mocks=false", "app"}, wantFlag: "false", wantArgs: []string{"app"}},
+		{name: "fallback", args: []string{"--use-mocks=fallback", "app"}, wantFlag: "fallback", wantArgs: []string{"app"}},
+		{name: "always", args: []string{"--use-mocks=always", "app"}, wantFlag: "always", wantArgs: []string{"app"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cmd := &cobra.Command{Use: "plan", RunE: func(*cobra.Command, []string) error { return nil }}
+			flags.NewStandardParser(WithTerraformFlags()).RegisterFlags(cmd)
+			require.NoError(t, cmd.ParseFlags(tt.args))
+
+			got, err := cmd.Flags().GetString("use-mocks")
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantFlag, got)
+			assert.Equal(t, tt.wantArgs, cmd.Flags().Args())
+		})
+	}
+}

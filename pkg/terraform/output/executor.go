@@ -222,7 +222,7 @@ func (e *Executor) GetOutput(
 		}
 	}
 
-	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+	message := fetchingOutputMessage(output, component, stack)
 	stopSpinner := startSpinnerOrLog(atmosConfig, message, component, stack)
 	defer stopSpinner()
 
@@ -314,7 +314,7 @@ func (e *Executor) GetOutputWithOptions(
 		}
 	}
 
-	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+	message := fetchingOutputMessage(output, component, stack)
 	stopSpinner := startSpinnerOrLog(atmosConfig, message, component, stack)
 	defer stopSpinner()
 
