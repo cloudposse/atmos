@@ -14,6 +14,8 @@ import DemoVideo from '@site/src/components/Video/DemoVideo'
 Atmos can be extended to support any number of custom CLI commands. Custom commands are exposed through the `atmos` CLI and appear in `atmos help`. They are a great way to centralize how operational tools are run and improve developer experience.
 </Intro>
 
+Browse the shared [Steps reference](/steps) and [step type catalog](/steps/type) for the building blocks available in workflows, custom commands, and lifecycle hooks.
+
 <DemoVideo id="commands" title="Atmos Custom Commands" showCaption={false} />
 
 One great way to use custom commands is to tie all your miscellaneous scripts into one consistent CLI interface. Then you can kiss those ugly, inconsistent arguments to bash scripts goodbye — just wire up the commands in `atmos` to call the script. Developers can then run `atmos help` and discover every available command.

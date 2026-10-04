@@ -1,0 +1,69 @@
+## Command Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| [`atmos`](/steps/type/atmos) | Run an Atmos CLI command. This is the default for command steps. | `command`, `stack`, `identity` |
+| [`shell`](/steps/type/shell) | Run a shell command or script. | `command`, `working_directory`, `env`, `tty`, `interactive` |
+| [`script`](/steps/type/script) | Run an inline script with an explicit interpreter. | `interpreter`, `script`, `working_directory` |
+| [`exec`](/steps/type/exec) | Replace the Atmos process with another executable. Must be the final step. | `command` |
+| [`container`](/steps/type/container) | Build, push, run, or inspect containers. | `action`, `build`, `push`, `run`, `inspect` |
+| [`emulator`](/steps/type/emulator) | Start, stop, or reset a local cloud emulator component. | `component`, `stack`, `action` |
+| [`http`](/steps/type/http) | Call an HTTP endpoint (alias: `webhook`). | `url`, `method`, `body`/`form`, `expect`, `retry` |
+| [`archive`](/steps/type/archive) | Pack (or update) a zip/tar/tgz archive. | `source`, `destination`, `action`, `format` |
+| [`require`](/steps/type/require) | Assert that required tools are on PATH and files/dirs exist (alias: `assert`). | `tools`, `files`, `dirs`, `hint` |
+| [`workdir`](/steps/type/workdir) | Provision a repeatable writable directory from a source. | `path`, `source`, `reset` |
+| [`cast`](/steps/type/cast) | Record nested steps or a terminal session as an asciicast. | `mode`, `steps`, `output.cast` |
+| [`store`](/steps/type/store) | Write a value to a configured store backend. | `store`, `key`, `value`, `stack`, `component` |
+| [`tflint`](/steps/type/tflint) | Lint a Terraform component and report findings. | `component`, `stack`, `args`, `env` |
+
+## Orchestration Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| [`parallel`](/steps/type/parallel) | Run child steps concurrently with dependencies and bounded concurrency. | `steps`, `max_concurrency`, `fail`, `output`, `needs` |
+| [`test`](/steps/type/test) | Run checks with a test tree, progress, and failure-only logs. | `steps`, `title`, `fail`, `output` |
+| [`matrix`](/steps/type/matrix) | Expand axes into generated child steps and run them concurrently. | `matrix`, `steps`, `max_concurrency`, `fail`, `output` |
+| [`wait`](/steps/type/wait) | Block until named background container services are healthy. | `for` |
+| [`wait-all`](/steps/type/wait#wait-all) | Block until every background container service is healthy. | none |
+| [`cancel`](/steps/type/cancel) | Stop and remove a background container service. | `for` |
+
+## Interactive Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| [`input`](/steps/type/input) | Prompt for single-line text. | `prompt`, `placeholder`, `default`, `password` |
+| [`confirm`](/steps/type/confirm) | Prompt for yes/no confirmation. | `prompt`, `default` |
+| [`choose`](/steps/type/choose) | Select one option. | `prompt`, `options`, `default` |
+| [`filter`](/steps/type/filter) | Filter and select options, optionally multiple. | `prompt`, `options`, `multiple`, `limit` |
+| [`file`](/steps/type/file) | Select a file. | `prompt`, `path`, `extensions` |
+| [`write`](/steps/type/write) | Capture multi-line text. | `prompt`, `placeholder`, `height` |
+
+## UI and Output Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| [`toast`](/steps/type/toast) | Display a themed status message. | `content`, `level` |
+| [`hint`](/steps/type/hint) | Display a muted tip message. | `content` |
+| [`markdown`](/steps/type/markdown) | Render Markdown content. | `content` |
+| [`spin`](/steps/type/spin) | Display a spinner while running a command. | `title`, `command`, `timeout` |
+| [`table`](/steps/type/table) | Display tabular data. | `title`, `columns`, `data` |
+| [`pager`](/steps/type/pager) | Display content in a pager. | `title`, `content`, `path`, `markdown` |
+| [`format`](/steps/type/format) | Render a Go template string. | `content` |
+| [`join`](/steps/type/join) | Join strings. | `options`, `separator`, `content` |
+| [`style`](/steps/type/style) | Apply terminal styling. | `content`, `foreground`, `background`, `border`, `padding` |
+| [`log`](/steps/type/log) | Emit a structured log message. | `level`, `content`, `fields` |
+| [`junit`](/steps/type/junit) | Read JUnit XML and publish a CI summary and test annotations. | `files`, `action`, `title` |
+
+## Terminal and Control Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| [`alert`](/steps/type/alert) | Ring the terminal bell and optionally print a message. | `content` |
+| [`say`](/steps/type/say) | Speak a message aloud via text-to-speech, with graceful fallback to printing. | `content`, `voice`, `rate`, `print` |
+| [`title`](/steps/type/title) | Set or restore the terminal title. | `content` |
+| [`clear`](/steps/type/clear) | Clear the current terminal line. | none |
+| [`linebreak`](/steps/type/linebreak) | Print blank lines. | `count` |
+| [`stage`](/steps/type/stage) | Print the current workflow stage position. | `title` |
+| [`sleep`](/steps/type/sleep) | Pause workflow execution. | `timeout` |
+| [`env`](/steps/type/env) | Set variables for subsequent workflow steps. | `vars` |
+| [`exit`](/steps/type/exit) | Exit the workflow immediately. | `code`, `content` |
