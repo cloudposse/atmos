@@ -31,11 +31,14 @@ type DescribeComponentParams struct {
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	UseMocks             bool
-	Skip                 []string
-	Query                string
-	Format               string
-	File                 string
-	Provenance           bool
+	// MocksMode overrides components.terraform.mocks.mode (fallback, always) for this run when
+	// --use-mocks carries an explicit mode; empty means use the configured mode.
+	MocksMode  string
+	Skip       []string
+	Query      string
+	Format     string
+	File       string
+	Provenance bool
 	// ProvenanceExplicit marks that --provenance was set on the command line, so
 	// Provenance overrides the `describe.provenance` config default.
 	ProvenanceExplicit bool
@@ -93,6 +96,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	atmosConfig, err = d.initCliConfig(schema.ConfigAndStacksInfo{
 		ComponentFromArg: component,
 		Stack:            stack,
+		MocksMode:        describeComponentParams.MocksMode,
 	}, true)
 	if err != nil {
 		return err
