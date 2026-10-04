@@ -491,7 +491,16 @@ func TestParseISO8601Duration(t *testing.T) {
 		{"P1D", 24 * time.Hour},
 		{"P1DT8H", 32 * time.Hour},
 		{"P2W", 14 * 24 * time.Hour},
+		{"P1Y", 365 * 24 * time.Hour},
+		{"P2Y", 2 * 365 * 24 * time.Hour},
+		{"p1y", 365 * 24 * time.Hour},
+		{"P1M", 30 * 24 * time.Hour},
+		{"P6M", 6 * 30 * 24 * time.Hour},
+		{"p1m", 30 * 24 * time.Hour},
+		{"P1Y2M3W4DT5H6M7S", time.Duration(1*365*24+2*30*24+3*7*24+4*24+5)*time.Hour + 6*time.Minute + 7*time.Second},
 		{"PT0.5H", 30 * time.Minute},
+		{"PT0.5M", 30 * time.Second},
+		{"PT0.5S", 500 * time.Millisecond},
 		{"PT0S", 0},
 		{"pt8h", 8 * time.Hour},
 		{"P90D", 90 * 24 * time.Hour},
@@ -510,10 +519,24 @@ func TestParseISO8601Duration(t *testing.T) {
 		"8h",
 		"P",
 		"PT",
+		"P.",
+		"PT.",
 		"P1X",
 		"PT1",
 		"invalid",
 		"P1D1H",
+		"P.Y",
+		"P.M",
+		"P.W",
+		"P.D",
+		"P1D2",
+		"P1D!",
+		"PT.H",
+		"PT.M",
+		"PT.S",
+		"PT1H2",
+		"PT1X",
+		"PT!",
 	}
 	for _, in := range invalidTests {
 		t.Run("invalid_"+in, func(t *testing.T) {
@@ -522,3 +545,118 @@ func TestParseISO8601Duration(t *testing.T) {
 		})
 	}
 }
+
+func TestIsActivationExpirationRule(t *testing.T) {
+	tests := []struct {
+		name string
+		rule armPolicyAssignmentRule
+		want bool
+	}{
+		{
+			name: "valid EndUser Assignment",
+			rule: armPolicyAssignmentRule{
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "PT8H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "EndUser",
+					Level:  "Assignment",
+				},
+			},
+			want: true,
+		},
+		{
+			name: "valid EndUser empty level",
+			rule: armPolicyAssignmentRule{
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "PT8H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "EndUser",
+					Level:  "",
+				},
+			},
+			want: true,
+		},
+		{
+			name: "EndUser with non-assignment level",
+			rule: armPolicyAssignmentRule{
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "PT8H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "EndUser",
+					Level:  "Eligibility",
+				},
+			},
+			want: false,
+		},
+		{
+			name: "wrong rule type",
+			rule: armPolicyAssignmentRule{
+				RuleType:        "RoleManagementPolicyNotificationRule",
+				MaximumDuration: "PT8H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "EndUser",
+					Level:  "Assignment",
+				},
+			},
+			want: false,
+		},
+		{
+			name: "empty maximumDuration",
+			rule: armPolicyAssignmentRule{
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "EndUser",
+					Level:  "Assignment",
+				},
+			},
+			want: false,
+		},
+		{
+			name: "fallback by ID Expiration_EndUser_Assignment",
+			rule: armPolicyAssignmentRule{
+				ID:              "Expiration_EndUser_Assignment",
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "PT4H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "OtherCaller",
+					Level:  "OtherLevel",
+				},
+			},
+			want: true,
+		},
+		{
+			name: "fallback by ID containing enduser",
+			rule: armPolicyAssignmentRule{
+				ID:              "custom_enduser_rule",
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "PT4H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "OtherCaller",
+					Level:  "OtherLevel",
+				},
+			},
+			want: true,
+		},
+		{
+			name: "unmatched non-enduser rule",
+			rule: armPolicyAssignmentRule{
+				ID:              "Expiration_Admin_Eligibility",
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "PT4H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "Admin",
+					Level:  "Eligibility",
+				},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isActivationExpirationRule(&tt.rule))
+		})
+	}
+}
+

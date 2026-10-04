@@ -952,3 +952,29 @@ func TestPIMRole_EmptyDuration_SkipsPolicyMaxQuery(t *testing.T) {
 	assert.Equal(t, 1, mock.createCalls)
 	assert.Equal(t, "", mock.createdReq.Duration)
 }
+
+func TestPIMRole_ZeroOrNegativeDuration_SkipsPolicyMaxQuery(t *testing.T) {
+	for _, d := range []string{"0s", "0h", "-1h"} {
+		t.Run("duration_"+d, func(t *testing.T) {
+			mock := &mockPIMClient{
+				eligFound:         true,
+				eligScheduleID:    testEligID,
+				policyMaxFound:    true,
+				policyMaxDuration: 4 * time.Hour,
+				statuses:          []string{pimStatusProvisioned},
+				createResult:      ActivationResult{RequestName: "test-req", Status: pimStatusProvisioned},
+			}
+			principal := defaultPrincipal()
+			principal["duration"] = d
+			id := newTestIdentity(t, principal, mock)
+
+			_, err := id.Authenticate(context.Background(), testAzureCreds())
+			require.NoError(t, err)
+
+			assert.Equal(t, 0, mock.policyMaxCalls, "non-positive duration must omit policy max query")
+			assert.Equal(t, 1, mock.createCalls)
+			assert.Equal(t, "", mock.createdReq.Duration)
+		})
+	}
+}
+
