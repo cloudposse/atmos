@@ -25,6 +25,7 @@ const titles = new Map(
 const usedDocs = new Set();
 const sorted = (items) => items.sort((a, b) => a.label.localeCompare(b.label));
 
+/** Register a page once; later occurrences link back to its canonical location. */
 function doc(label, id) {
   const type = usedDocs.has(id) ? "ref" : "doc";
   usedDocs.add(id);
@@ -37,6 +38,7 @@ function doc(label, id) {
   };
 }
 
+/** Build an alphabetical YAML grouping, optionally linked to an existing page. */
 function category(label, items, id) {
   const yamlReference = Boolean(id && usedDocs.has(id));
   if (id) usedDocs.add(id);
@@ -69,6 +71,7 @@ const fields = {
   vars: "stacks/vars",
 };
 
+/** Resolve a documented key to the page and children supported at its YAML scope. */
 function field(key, kind, scope) {
   if (key === "settings") {
     return category(
@@ -266,6 +269,7 @@ const defaultFields = {
     "vars",
   ],
 };
+/** Preserve component overview IDs, including Terraform's nested index page. */
 const overview = (kind) =>
   `stacks/components/${kind}${kind === "terraform" ? "/index" : ""}`;
 

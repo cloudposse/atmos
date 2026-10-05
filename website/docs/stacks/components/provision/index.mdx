@@ -57,7 +57,9 @@ components:
 | Key | Applies To | Documentation |
 |---|---|---|
 | `provision.backend.enabled` | Terraform components only | [Backend Provisioning](/stacks/components/provision/backend) |
-| `provision.workdir.enabled` | Terraform, Helmfile, Packer, Helm, Kubernetes | [Workdir Provisioning](/stacks/components/provision/workdir) |
+| `provision.workdir.enabled` | Terraform; Helmfile, Packer, Helm, and Kubernetes components with a top-level `source` | [Workdir Provisioning](/stacks/components/provision/workdir) |
+
+For components with a `source`, a `metadata.working_directory` or `settings.working_directory` override takes precedence over an isolated workdir. Local components without a `source` support workdir provisioning only for Terraform. See [Workdir Provisioning](/stacks/components/provision/workdir#configuration) for configuration examples and restrictions.
 
 ## Related
 
