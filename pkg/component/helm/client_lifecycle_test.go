@@ -19,6 +19,7 @@ import (
 	kubefake "helm.sh/helm/v4/pkg/kube/fake"
 	"helm.sh/helm/v4/pkg/registry"
 	helmrelease "helm.sh/helm/v4/pkg/release"
+	rcommon "helm.sh/helm/v4/pkg/release/common"
 	release "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage"
 	"helm.sh/helm/v4/pkg/storage/driver"
@@ -411,4 +412,52 @@ func releaseVersions(t *testing.T, history []helmrelease.Releaser) []int {
 		versions[i] = typed.Version
 	}
 	return versions
+}
+
+// TestLastSuccessfulRevision confirms the rollback target is the highest deployed
+// or superseded revision, skipping failed ones (cloudposse/atmos#3273 review).
+func TestLastSuccessfulRevision(t *testing.T) {
+	releases := storage.Init(driver.NewMemory())
+	seed := func(version int, status rcommon.Status) {
+		rel := release.Mock(&release.MockReleaseOptions{Name: "rel", Version: version, Namespace: "ns"})
+		rel.Info.Status = status
+		require.NoError(t, releases.Create(rel))
+	}
+	seed(1, rcommon.StatusSuperseded)
+	seed(2, rcommon.StatusDeployed)
+	seed(3, rcommon.StatusFailed)
+
+	version, ok, err := lastSuccessfulRevision(releases, "rel")
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, 2, version, "the failed revision 3 must not be selected")
+}
+
+func TestLastSuccessfulRevision_NoneSuccessful(t *testing.T) {
+	releases := storage.Init(driver.NewMemory())
+	rel := release.Mock(&release.MockReleaseOptions{Name: "rel", Version: 1, Namespace: "ns"})
+	rel.Info.Status = rcommon.StatusFailed
+	require.NoError(t, releases.Create(rel))
+
+	_, ok, err := lastSuccessfulRevision(releases, "rel")
+	require.NoError(t, err)
+	assert.False(t, ok, "a release with no successful revision has no rollback target")
+}
+
+func TestLastSuccessfulRevision_NoRelease(t *testing.T) {
+	releases := storage.Init(driver.NewMemory())
+	_, ok, err := lastSuccessfulRevision(releases, "missing")
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+// TestReleaseRecordExists confirms the signal used to gate install failure
+// recovery: true only when a release revision is stored (the op reached the
+// cluster), false for a never-created release (cloudposse/atmos#3273 review).
+func TestReleaseRecordExists(t *testing.T) {
+	actx := memoryActionContext(t)
+	assert.False(t, releaseRecordExists(actx, "none"))
+
+	require.NoError(t, actx.cfg.Releases.Create(release.Mock(&release.MockReleaseOptions{Name: "rel", Namespace: "ns"})))
+	assert.True(t, releaseRecordExists(actx, "rel"))
 }
