@@ -4,6 +4,15 @@ tags: [Components]
 cast:
   file: /casts/demo/fixtures/demo-vendoring/pull.cast
   title: atmos vendor pull
+related_docs:
+  - label: "Vendor commands"
+    url: /cli/commands/vendor/usage
+  - label: "Vendor manifest"
+    url: /vendor/vendor-config
+  - label: "Vendoring"
+    url: /vendor/
+  - label: "CLI Configuration"
+    url: /cli/configuration/vendor
 ---
 
 # Example: Demo Vendoring
@@ -41,9 +50,3 @@ atmos vendor pull --component=weather
 | `vendor.yaml` | Main vendor manifest with component sources |
 | `vendor.d/` | Modular vendor configurations |
 | `vendor/` | Downloaded components (after `atmos vendor pull`) |
-
-## Related Documentation
-
-- [Vendor commands](https://atmos.tools/cli/commands/vendor/usage)
-- [Vendor manifest](https://atmos.tools/vendor/vendor-config)
-- [CLI Configuration](https://atmos.tools/cli/configuration/vendor)

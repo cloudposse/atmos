@@ -8,6 +8,11 @@ description: >-
 cast:
   file: /casts/examples/version-tracker/tracks-and-vars.cast
   title: atmos version tracker — independent dev/prod tracks
+related_docs:
+  - label: "Version tracking commands and catalog configuration"
+    url: /cli/commands/version/track
+  - label: "Version catalogs"
+    url: /cli/commands/version/track/add
 ---
 
 # Version Tracker
@@ -83,7 +88,3 @@ git checkout -- atmos.yaml versions.lock.yaml
 ```
 
 The desired versions in this example are concrete, so every command works offline — no registry or GitHub API access is needed. This example is exercised end-to-end in CI by `.github/workflows/version-tracker.yaml`.
-
-## Related Documentation
-
-- [Version catalogs](https://atmos.tools/cli/commands/version/track/add)

@@ -1,3 +1,13 @@
+---
+related_docs:
+  - label: "Initialize a project"
+    url: /cli/commands/init
+  - label: "Scaffold generation and template configuration"
+    url: /cli/commands/scaffold/generate
+  - label: "Glob Paths and Directory-Level Matrix"
+    url: /cli/commands/scaffold/generate#glob-paths-and-directory-level-matrix
+---
+
 # Example: Scaffold Directory-Level Matrix
 
 Duplicate an entire directory's worth of files once per selection, instead of hand-maintaining a
@@ -45,8 +55,3 @@ A glob `path:` can also skip (or gate) an entire directory recursively with just
 [`atmos scaffold generate`](https://atmos.tools/cli/commands/scaffold/generate) docs' "Glob Paths
 and Directory-Level Matrix" section for the full reference, including the precedence rule for
 when more than one entry's `path:` matches the same file.
-
-## Related Documentation
-
-- [Initialize a project](https://atmos.tools/cli/commands/init)
-- [Glob Paths and Directory-Level Matrix](https://atmos.tools/cli/commands/scaffold/generate#glob-paths-and-directory-level-matrix)

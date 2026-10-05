@@ -4,6 +4,13 @@ tags: [Automation]
 cast:
   file: /casts/examples/demo-workflows/deploy.cast
   title: atmos workflows
+related_docs:
+  - label: "Run workflows"
+    url: /cli/commands/workflow
+  - label: "Workflow configuration"
+    url: /workflows
+  - label: "CLI Configuration"
+    url: /cli/configuration/workflows
 ---
 
 # Example: Demo Workflows
@@ -36,8 +43,3 @@ atmos workflow deploy -s dev
 |------|---------|
 | `atmos.yaml` | Configures workflow base path |
 | `stacks/workflows/` | Workflow definitions |
-
-## Related Documentation
-
-- [Run workflows](https://atmos.tools/cli/commands/workflow)
-- [CLI Configuration](https://atmos.tools/cli/configuration/workflows)

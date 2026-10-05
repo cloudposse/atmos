@@ -4,11 +4,18 @@ tags: [Automation]
 cast:
   file: /casts/examples/parallel-steps/control-steps.cast
   title: atmos parallel workflow steps
+related_docs:
+  - label: "Run workflows"
+    url: /cli/commands/workflow
+  - label: "Parallel steps"
+    url: /steps/type/parallel
+  - label: "Matrix steps"
+    url: /steps/type/matrix
 ---
 
 # Example: Parallel Workflow Steps
 
-This example demonstrates `parallel` and `matrix` workflow control steps with `needs`, configurable output, and failure behavior.
+This example demonstrates [`parallel`](https://atmos.tools/steps/type/parallel) and [`matrix`](https://atmos.tools/steps/type/matrix) workflow control steps with `needs`, configurable output, and failure behavior.
 
 ## Try It
 
@@ -29,9 +36,3 @@ atmos workflow matrix -f parallel
 - `output.mode: grouped` captures each child and prints labeled blocks.
 - `output.mode: prefixed` streams child output live with line prefixes.
 - `matrix` expands literal axes and runs generated shell steps through the same scheduler.
-
-## Related Documentation
-
-- [Run workflows](https://atmos.tools/cli/commands/workflow)
-- [Parallel steps](https://atmos.tools/steps/type/parallel)
-- [Matrix steps](https://atmos.tools/steps/type/matrix)

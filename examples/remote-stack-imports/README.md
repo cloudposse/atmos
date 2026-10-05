@@ -4,6 +4,11 @@ tags: [Stacks]
 cast:
   file: /casts/examples/remote-stack-imports/remote-vars.cast
   title: atmos remote stack imports
+related_docs:
+  - label: "Import configuration"
+    url: /stacks/imports
+  - label: "Describe a component"
+    url: /cli/commands/describe/component
 ---
 
 # Remote Stack Imports Example
@@ -92,7 +97,3 @@ import:
 
 - [Stack Imports Documentation](https://atmos.tools/stacks/imports)
 - [go-getter URL Formats](https://github.com/hashicorp/go-getter#url-format)
-
-## Related Documentation
-
-- [Describe a component](https://atmos.tools/cli/commands/describe/component)

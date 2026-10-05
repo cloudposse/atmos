@@ -7,6 +7,15 @@ description: >-
 cast:
   file: /casts/examples/quick-start-simple/list-and-plan.cast
   title: atmos quick start simple
+related_docs:
+  - label: "Terraform commands"
+    url: /cli/commands/terraform/usage
+  - label: "Stack configuration"
+    url: /stacks
+  - label: "Quick Start"
+    url: /quick-start
+  - label: "Simple Tutorial"
+    url: /quick-start/simple
 ---
 
 # Example: Quick Start Simple
@@ -44,8 +53,3 @@ atmos terraform plan --all -s dev
 | `stacks/deploy/` | Environment-specific stack files (dev, staging, prod) |
 | `stacks/catalog/` | Shared component defaults |
 | `components/terraform/station/` | Simple Terraform component |
-
-## Related Documentation
-
-- [Terraform commands](https://atmos.tools/cli/commands/terraform/usage)
-- [Simple Tutorial](https://atmos.tools/quick-start/simple)

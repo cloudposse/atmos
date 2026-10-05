@@ -4,11 +4,16 @@ tags: [Hooks]
 cast:
   file: /casts/examples/hooks-trivy/security-scan.cast
   title: atmos Trivy hook
+related_docs:
+  - label: "Terraform plan"
+    url: /cli/commands/terraform/plan
+  - label: "Lifecycle hook configuration"
+    url: /stacks/hooks
 ---
 
 # `hooks-trivy`
 
-Demonstrates the **`trivy`** hook kind: an `after.terraform.plan` hook that
+Demonstrates the [**`trivy`** hook kind](https://atmos.tools/stacks/hooks): an `after.terraform.plan` hook that
 runs `trivy config` against the component and renders a SARIF findings
 summary in the terminal.
 
@@ -42,8 +47,3 @@ shows the dummy resources.
 
 - `components/terraform/bucket/main.tf` — intentionally insecure HCL so
   trivy has something to find.
-
-## Related Documentation
-
-- [Terraform plan](https://atmos.tools/cli/commands/terraform/plan)
-- [Lifecycle hook configuration](https://atmos.tools/stacks/hooks)

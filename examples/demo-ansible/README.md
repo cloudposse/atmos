@@ -4,6 +4,13 @@ tags: [Automation]
 cast:
   file: /casts/examples/demo-ansible/playbook.cast
   title: atmos Ansible playbook
+related_docs:
+  - label: "Ansible commands"
+    url: /cli/commands/ansible/usage
+  - label: "Ansible component configuration"
+    url: /stacks/components/ansible
+  - label: "Ansible Playbook"
+    url: /cli/commands/ansible/playbook
 ---
 
 # Example: Ansible Hello World
@@ -45,8 +52,3 @@ atmos ansible playbook hello-world -s prod
 | `stacks/deploy/` | Per-environment stack files (dev, prod) |
 | `stacks/catalog/` | Shared component defaults |
 | `components/ansible/hello-world/` | Ansible playbook and inventory |
-
-## Related Documentation
-
-- [Ansible commands](https://atmos.tools/cli/commands/ansible/usage)
-- [Ansible component configuration](https://atmos.tools/stacks/components/ansible)

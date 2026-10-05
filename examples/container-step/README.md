@@ -4,11 +4,16 @@ tags: [Automation]
 cast:
   file: /casts/examples/container-step/build-run.cast
   title: atmos container build run
+related_docs:
+  - label: "Run workflows"
+    url: /cli/commands/workflow
+  - label: "Container steps"
+    url: /steps/type/container
 ---
 
 # Example: Container Step
 
-Build, push, and run containers from Atmos workflows and custom commands.
+Build, push, and run [containers](https://atmos.tools/steps/type/container) from [Atmos workflows](https://atmos.tools/cli/commands/workflow) and custom commands.
 
 ## Container runtime
 
@@ -91,8 +96,3 @@ needed. See [Auth & Integrations](https://atmos.tools/cli/configuration/auth) an
 | `Dockerfile` | Tiny image used by the build/run examples |
 | `docker-bake.hcl` | Docker Buildx Bake build definition |
 | `workflows/container-step.yaml` | Workflow examples for container steps and workflow-level container sandboxes |
-
-## Related Documentation
-
-- [Run workflows](https://atmos.tools/cli/commands/workflow)
-- [Container steps](https://atmos.tools/steps/type/container)

@@ -1,6 +1,14 @@
+---
+related_docs:
+  - label: "Custom commands"
+    url: /cli/configuration/commands
+  - label: "Test steps"
+    url: /steps/type/test
+---
+
 # Test steps
 
-Run these commands from this directory. No cloud credentials or deployment are needed.
+Use [test steps](https://atmos.tools/steps/type/test) in [custom commands](https://atmos.tools/cli/configuration/commands) to run checks and report their results. Run these commands from this directory. No cloud credentials or deployment are needed.
 
 ```shell
 atmos test
@@ -45,8 +53,3 @@ or `best_effort` to report failures without failing the group.
 The recorded demo is published at
 `website/static/casts/examples/tests/tests.cast`. Regenerate it from the repository
 root with `atmos --chdir=demo/casts casts generate demo fixtures tests`.
-
-## Related Documentation
-
-- [Custom commands](https://atmos.tools/cli/configuration/commands)
-- [Test steps](https://atmos.tools/steps/type/test)

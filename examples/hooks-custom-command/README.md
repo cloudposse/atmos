@@ -4,11 +4,16 @@ tags: [Hooks]
 cast:
   file: /casts/examples/hooks-custom-command/hook-config.cast
   title: atmos custom command hook
+related_docs:
+  - label: "Terraform plan"
+    url: /cli/commands/terraform/plan
+  - label: "Lifecycle hook configuration"
+    url: /stacks/hooks
 ---
 
 # `hooks-custom-command`
 
-Demonstrates the generic **`kind: command`** hook by wiring a custom
+Demonstrates the generic [**`kind: command`** hook](https://atmos.tools/stacks/hooks) by wiring a custom
 Python script as an `after.terraform.plan` hook — the pattern for
 **anything** Atmos doesn't ship a named kind for.
 
@@ -69,8 +74,3 @@ standard, prefer a named kind — `checkov`, `trivy`, `kics`, or
 `infracost`. Those parse their tool's native output into structured
 summaries with severity counts, cost diffs, etc. `kind: command` is
 the escape hatch for everything else.
-
-## Related Documentation
-
-- [Terraform plan](https://atmos.tools/cli/commands/terraform/plan)
-- [Lifecycle hook configuration](https://atmos.tools/stacks/hooks)

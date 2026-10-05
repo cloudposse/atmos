@@ -8,6 +8,15 @@ description: >-
 cast:
   file: /casts/examples/quick-start-advanced/list-instances.cast
   title: atmos quick start advanced
+related_docs:
+  - label: "Terraform commands"
+    url: /cli/commands/terraform/usage
+  - label: "Stack configuration"
+    url: /stacks
+  - label: "Quick Start"
+    url: /quick-start
+  - label: "Advanced Tutorial"
+    url: /quick-start/advanced
 ---
 
 # Atmos Quick Start (Advanced)
@@ -149,9 +158,3 @@ atmos operator inspect <component> -s <stack>     # describe component config wi
 ```
 
 For the full CLI configuration and command reference, see [Atmos CLI](https://atmos.tools/cli/configuration).
-
-## Related Documentation
-
-- [Terraform commands](https://atmos.tools/cli/commands/terraform/usage)
-- [Stack configuration](https://atmos.tools/stacks)
-- [Quick Start](https://atmos.tools/quick-start)

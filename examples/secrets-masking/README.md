@@ -4,11 +4,16 @@ tags: [DX]
 cast:
   file: /casts/examples/secrets-masking/masked-plan.cast
   title: atmos secrets masking
+related_docs:
+  - label: "Secret masking configuration"
+    url: /cli/configuration/settings/mask
+  - label: "Custom commands"
+    url: /cli/configuration/commands
 ---
 
 # Secrets Masking Example
 
-This example demonstrates Atmos's automatic secrets masking feature.
+This example demonstrates Atmos's [automatic secrets masking](https://atmos.tools/cli/configuration/settings/mask) feature.
 
 ## Overview
 
@@ -92,8 +97,3 @@ atmos terraform plan component -s stack --mask=false
 # Via environment variable
 export ATMOS_TERMINAL_MASK_ENABLED=false
 ```
-
-## Related Documentation
-
-- [Secret masking configuration](https://atmos.tools/cli/configuration/settings/mask)
-- [Custom commands](https://atmos.tools/cli/configuration/commands)

@@ -1,6 +1,11 @@
 ---
 title: AI with Claude Code CLI
 tags: [AI]
+related_docs:
+  - label: "AI commands"
+    url: /cli/commands/ai/usage
+  - label: "AI providers"
+    url: /cli/configuration/ai/providers
 ---
 
 # Example: AI with Claude Code CLI
@@ -59,8 +64,3 @@ atmos ai ask "What did we spend on EC2 last month?"
 | `atmos.yaml`                | AI provider, MCP servers, and auth configuration |
 | `stacks/`                   | Minimal stack configuration                      |
 | `components/terraform/vpc/` | Mock VPC component                               |
-
-## Related Documentation
-
-- [AI commands](https://atmos.tools/cli/commands/ai/usage)
-- [AI providers](https://atmos.tools/cli/configuration/ai/providers)

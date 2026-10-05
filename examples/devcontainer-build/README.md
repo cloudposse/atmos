@@ -4,11 +4,16 @@ tags: [DX]
 cast:
   file: /casts/examples/devcontainer-build/build-config.cast
   title: atmos devcontainer build config
+related_docs:
+  - label: "Devcontainer commands"
+    url: /cli/commands/devcontainer/
+  - label: "Devcontainer configuration"
+    url: /cli/configuration/devcontainer
 ---
 
 # Custom Dockerfile Devcontainer Example
 
-This example demonstrates using a custom Dockerfile with Atmos devcontainers. The Dockerfile extends the Geodesic base image and pre-installs Atmos.
+This example demonstrates using a custom Dockerfile with [Atmos devcontainers](https://atmos.tools/cli/commands/devcontainer/). The Dockerfile extends the Geodesic base image and pre-installs Atmos.
 
 ## Files
 
@@ -162,8 +167,3 @@ atmos devcontainer shell geodesic --replace
 - **Consistency** - Same environment across team members
 - **Customization** - Add project-specific tools and configuration
 - **Version control** - Dockerfile is versioned with your project
-
-## Related Documentation
-
-- [Devcontainer commands](https://atmos.tools/cli/commands/devcontainer/)
-- [Devcontainer configuration](https://atmos.tools/cli/configuration/devcontainer)

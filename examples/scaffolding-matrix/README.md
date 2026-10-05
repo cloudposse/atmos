@@ -1,3 +1,13 @@
+---
+related_docs:
+  - label: "Initialize a project"
+    url: /cli/commands/init
+  - label: "Scaffold generation and template configuration"
+    url: /cli/commands/scaffold/generate
+  - label: "Dynamic File Generation (matrix)"
+    url: /cli/commands/scaffold/generate#dynamic-file-generation
+---
+
 # Example: Scaffold Matrix
 
 Generate one file per selection instead of hand-maintaining a pile of near-duplicate files.
@@ -40,8 +50,3 @@ An axis's values aren't limited to a literal list or a `multiselect` answer — 
 from a free-text answer or be computed from nested/structured answer data. See the
 [`atmos scaffold generate`](https://atmos.tools/cli/commands/scaffold/generate) docs for the full
 `matrix` reference.
-
-## Related Documentation
-
-- [Initialize a project](https://atmos.tools/cli/commands/init)
-- [Dynamic File Generation (matrix)](https://atmos.tools/cli/commands/scaffold/generate#dynamic-file-generation)

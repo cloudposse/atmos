@@ -4,6 +4,13 @@ tags: [Components]
 cast:
   file: /casts/examples/demo-component-versions/vendor-versions.cast
   title: atmos component version vendoring
+related_docs:
+  - label: "Vendor commands"
+    url: /cli/commands/vendor/usage
+  - label: "Vendor manifest"
+    url: /vendor/vendor-config
+  - label: "Component Versions"
+    url: /design-patterns/version-management
 ---
 
 # Example: Demo Component Versions
@@ -39,8 +46,3 @@ ls components/terraform/
 |------|---------|
 | `vendor.yaml` | Vendor manifest with version pinning and YAML anchors |
 | `components/terraform/*/` | Versioned components (after vendor pull) |
-
-## Related Documentation
-
-- [Vendor commands](https://atmos.tools/cli/commands/vendor/usage)
-- [Component Versions](https://atmos.tools/design-patterns/version-management)

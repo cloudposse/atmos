@@ -7,6 +7,13 @@ description: >-
 cast:
   file: /casts/examples/demo-auth/auth-list.cast
   title: atmos auth identities
+related_docs:
+  - label: "Authentication commands"
+    url: /cli/commands/auth/usage
+  - label: "Authentication configuration"
+    url: /cli/configuration/auth
+  - label: "Authentication"
+    url: /stacks/auth
 ---
 
 # Demo: Auth
@@ -59,8 +66,3 @@ atmos auth logout --tags enterprise
 ## Learn More
 
 See [the Atmos docs](https://atmos.tools/cli/commands/auth/usage) for more information.
-
-## Related Documentation
-
-- [Authentication configuration](https://atmos.tools/cli/configuration/auth)
-- [Authentication](https://atmos.tools/stacks/auth)

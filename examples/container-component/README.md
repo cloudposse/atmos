@@ -4,13 +4,18 @@ tags: [Components]
 cast:
   file: /casts/examples/container-component/lifecycle.cast
   title: atmos container component lifecycle
+related_docs:
+  - label: "Container commands"
+    url: /cli/commands/container/usage
+  - label: "Container component configuration"
+    url: /stacks/components/container
 ---
 
 # Container Components
 
-This example demonstrates the **`container` component kind**: stack-scoped,
+This example demonstrates the [**`container` component kind**](https://atmos.tools/stacks/components/container): stack-scoped,
 Atmos-native, **persistent** containers. One component is one service. Atmos owns
-the image artifact (build/push/pull) and a long-running named container lifecycle
+the image artifact (build/push/pull) and a long-running named [container lifecycle](https://atmos.tools/cli/commands/container/usage)
 (up/ps/logs/exec/restart/stop/rm/down), discovered by labels derived from the
 canonical component instance address — not from local state files.
 
@@ -88,8 +93,3 @@ closed contract, but fulfillment is open). Declaring `composition:` for a servic
 
 A working Docker or Podman runtime. With Podman, `container.runtime.auto_start`
 in `atmos.yaml` initializes/starts the Podman machine automatically.
-
-## Related Documentation
-
-- [Container commands](https://atmos.tools/cli/commands/container/usage)
-- [Container component configuration](https://atmos.tools/stacks/components/container)

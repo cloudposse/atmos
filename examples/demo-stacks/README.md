@@ -7,6 +7,13 @@ description: >-
 cast:
   file: /casts/examples/demo-stacks/inheritance.cast
   title: atmos stack inheritance
+related_docs:
+  - label: "Describe stack configuration"
+    url: /cli/commands/describe/stacks
+  - label: "Terraform commands"
+    url: /cli/commands/terraform/usage
+  - label: "Stack configuration"
+    url: /stacks
 ---
 
 # Example: Demo Stacks
@@ -45,9 +52,3 @@ atmos describe stacks --components myapp --sections vars
 | `stacks/catalog/myapp.yaml` | Base component configuration (shared defaults) |
 | `stacks/deploy/dev.yaml` | Dev environment with imports and overrides |
 | `stacks/deploy/prod.yaml` | Prod environment with different overrides |
-
-## Related Documentation
-
-- [Terraform commands](https://atmos.tools/cli/commands/terraform/usage)
-- [Stack configuration](https://atmos.tools/stacks)
-- [Describe stack configuration](https://atmos.tools/cli/commands/describe/stacks)

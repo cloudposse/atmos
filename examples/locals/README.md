@@ -4,11 +4,18 @@ tags: [Stacks]
 cast:
   file: /casts/examples/locals/structured-values.cast
   title: atmos locals structured values
+related_docs:
+  - label: "Describe locals"
+    url: /cli/commands/describe/locals
+  - label: "Locals configuration"
+    url: /stacks/locals
+  - label: "Describe a component"
+    url: /cli/commands/describe/component
 ---
 
 # Example: Locals
 
-Reduce repetition and build computed values using file-scoped locals.
+Reduce repetition and build computed values using [file-scoped locals](https://atmos.tools/stacks/locals).
 
 Learn more about [Locals](https://atmos.tools/stacks/locals).
 
@@ -99,8 +106,3 @@ affects the other. Locals never propagate across file boundaries via imports.
 | `stacks/deploy/dev.yaml`            | Dev stack: all locals features             |
 | `stacks/deploy/prod.yaml`           | Prod stack: same patterns, different values |
 | `components/terraform/myapp/main.tf` | Mock Terraform component                   |
-
-## Related Documentation
-
-- [Describe a component](https://atmos.tools/cli/commands/describe/component)
-- [Describe locals](https://atmos.tools/cli/commands/describe/locals)

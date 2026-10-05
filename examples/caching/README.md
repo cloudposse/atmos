@@ -4,6 +4,11 @@ tags: [Components]
 cast:
   file: /casts/examples/caching/registry-cache.cast
   title: atmos terraform registry cache
+related_docs:
+  - label: "Terraform cache commands"
+    url: /cli/commands/terraform/cache
+  - label: "Terraform cache configuration"
+    url: /cli/configuration/components/terraform
 ---
 
 # Terraform Registry Cache
@@ -107,7 +112,3 @@ offline (`filesystem_mirror`).
 - [Registry cache configuration](https://atmos.tools/cli/configuration/components/terraform#cache)
 - [`atmos terraform cache`](https://atmos.tools/cli/commands/terraform/cache)
 - [`atmos terraform cache mirror`](https://atmos.tools/cli/commands/terraform/cache/mirror)
-
-## Related Documentation
-
-- [Terraform cache configuration](https://atmos.tools/cli/configuration/components/terraform)

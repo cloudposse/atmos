@@ -4,6 +4,11 @@ tags: [Emulators, Kubernetes]
 cast:
   file: /casts/examples/emulator-k8s/lifecycle.cast
   title: atmos kubernetes emulator lifecycle
+related_docs:
+  - label: "Emulator commands"
+    url: /cli/commands/emulator/usage
+  - label: "Emulator component configuration"
+    url: /stacks/components/emulator
 ---
 
 ## Notes
@@ -34,7 +39,3 @@ atmos emulator down kubernetes -s local  # stop and remove the sandbox container
 ```
 
 The `atmos test` custom command runs the full apply/destroy lifecycle.
-
-## Related Documentation
-
-- [Emulator component configuration](https://atmos.tools/stacks/components/emulator)

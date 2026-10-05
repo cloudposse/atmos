@@ -4,15 +4,20 @@ tags: [Kubernetes]
 cast:
   file: /casts/examples/kustomize/lifecycle.cast
   title: atmos kustomize lifecycle
+related_docs:
+  - label: "Kubernetes commands"
+    url: /cli/commands/kubernetes/usage
+  - label: "Kubernetes component configuration"
+    url: /stacks/components/kubernetes
 ---
 
 # Example: Kustomize Components
 
-Render and deploy Kustomize overlays with Atmos-native Kubernetes components against a local Kubernetes emulator (k3s).
+Render and deploy Kustomize overlays with Atmos-native [Kubernetes components](https://atmos.tools/stacks/components/kubernetes) against a local Kubernetes emulator (k3s).
 
 This example uses `provider: kustomize`, so Atmos renders the overlay with the Kustomize Go API and then applies the resulting objects through the Kubernetes Go SDK. It does not require the `kustomize` or `kubectl` binaries.
 
-The local cluster is managed by the native **emulator** feature — Atmos starts the k3s container, harvests its kubeconfig, and injects `KUBECONFIG` for you. There is no `docker-compose.yml` and no manual kubeconfig wiring.
+The local cluster is managed by the native [**emulator**](https://atmos.tools/cli/commands/emulator/usage) feature — Atmos starts the k3s container, harvests its kubeconfig, and injects `KUBECONFIG` for you. There is no `docker-compose.yml` and no manual kubeconfig wiring.
 
 ## Try It
 
@@ -53,8 +58,3 @@ this same lifecycle.
 The `local-k3s` identity uses `kind: kubernetes/emulator`, bound to the `kubernetes` emulator component. Running with `--identity local-k3s` makes Atmos resolve the running k3s container, harvest its admin kubeconfig, and export `KUBECONFIG` into the component environment — so the Kubernetes SDK client talks to the emulator with no extra configuration.
 
 For real EKS clusters, pair an AWS identity with an `aws/eks` integration that writes kubeconfig for the cluster.
-
-## Related Documentation
-
-- [Kubernetes commands](https://atmos.tools/cli/commands/kubernetes/usage)
-- [Kubernetes component configuration](https://atmos.tools/stacks/components/kubernetes)

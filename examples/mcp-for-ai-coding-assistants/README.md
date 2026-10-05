@@ -1,6 +1,11 @@
 ---
 title: MCP for AI Coding Assistants
 tags: [AI]
+related_docs:
+  - label: "MCP commands"
+    url: /mcp
+  - label: "MCP configuration"
+    url: /cli/configuration/mcp
 ---
 
 # Example: MCP for AI Coding Assistants
@@ -203,8 +208,3 @@ Two things to notice:
 - **[Atmos AI (multi-provider)](/examples/ai)** — You want to
   chat with your infrastructure using API-key providers (Anthropic, OpenAI).
   Multi-provider Atmos AI setup, no external CLI needed.
-
-## Related Documentation
-
-- [MCP commands](https://atmos.tools/mcp)
-- [MCP configuration](https://atmos.tools/cli/configuration/mcp)

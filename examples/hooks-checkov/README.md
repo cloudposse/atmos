@@ -4,11 +4,16 @@ tags: [Hooks]
 cast:
   file: /casts/examples/hooks-checkov/security-scan.cast
   title: atmos Checkov hook
+related_docs:
+  - label: "Terraform plan"
+    url: /cli/commands/terraform/plan
+  - label: "Lifecycle hook configuration"
+    url: /stacks/hooks
 ---
 
 # `hooks-checkov`
 
-Demonstrates the **`checkov`** hook kind: an `after.terraform.plan` hook
+Demonstrates the [**`checkov`** hook kind](https://atmos.tools/stacks/hooks): an `after.terraform.plan` hook
 that runs `checkov` against the component and renders a SARIF findings
 summary in the terminal.
 
@@ -32,8 +37,3 @@ atmos terraform plan bucket -s test
 
 Expected: checkov runs before plan and flags issues on the misconfigured
 S3 bucket and security group.
-
-## Related Documentation
-
-- [Terraform plan](https://atmos.tools/cli/commands/terraform/plan)
-- [Lifecycle hook configuration](https://atmos.tools/stacks/hooks)

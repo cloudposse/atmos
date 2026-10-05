@@ -4,11 +4,16 @@ tags: [Stacks]
 cast:
   file: /casts/examples/demo-env/masked-token.cast
   title: atmos env masked token
+related_docs:
+  - label: "Export environment variables"
+    url: /cli/commands/env
+  - label: "Environment configuration"
+    url: /stacks/env
 ---
 
 # Demo: Using `atmos env` with GitHub Provider
 
-This example demonstrates how to use `atmos env` to export environment variables
+This example demonstrates how to use [`atmos env`](https://atmos.tools/cli/commands/env) to export [environment variables](https://atmos.tools/stacks/env)
 for Terraform providers that authenticate via environment variables.
 
 ## Overview
@@ -117,8 +122,3 @@ for development, consider these security practices:
 
 4. **Output masking**: Atmos automatically masks detected secrets in terminal output
     to prevent accidental exposure in logs.
-
-## Related Documentation
-
-- [Export environment variables](https://atmos.tools/cli/commands/env)
-- [Environment configuration](https://atmos.tools/stacks/env)

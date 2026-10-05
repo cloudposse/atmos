@@ -8,6 +8,11 @@ description: >-
 cast:
   file: /casts/examples/emulator-aws/lifecycle.cast
   title: atmos emulator aws lifecycle
+related_docs:
+  - label: "Emulator commands"
+    url: /cli/commands/emulator/usage
+  - label: "Emulator component configuration"
+    url: /stacks/components/emulator
 ---
 
 ## Notes
@@ -49,7 +54,3 @@ Other lifecycle verbs include `atmos emulator logs aws -s local`.
 
 The `atmos test` custom command runs the full apply/destroy lifecycle across the `dev`,
 `staging`, and `prod` stacks.
-
-## Related Documentation
-
-- [Emulator component configuration](https://atmos.tools/stacks/components/emulator)

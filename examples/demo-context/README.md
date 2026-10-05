@@ -7,6 +7,11 @@ description: >-
 cast:
   file: /casts/examples/demo-context/name-template.cast
   title: atmos configuration context
+related_docs:
+  - label: "Describe configuration"
+    url: /cli/commands/describe/config
+  - label: "Templates"
+    url: /templates/
 ---
 
 # Example: Demo Context

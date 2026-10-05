@@ -7,6 +7,11 @@ description: >-
 cast:
   file: /casts/examples/demo-schemas/validate.cast
   title: atmos validate schema
+related_docs:
+  - label: "Validate files against schemas"
+    url: /cli/commands/validate/schema
+  - label: "Schema configuration"
+    url: /cli/configuration/schemas
 ---
 
 # Example: Demo Schemas
@@ -39,7 +44,3 @@ atmos validate schema
 | `config.yaml` | Validated against local schema |
 | `bower.yaml` | Validated against remote schema |
 | `inline.yaml` | Validated against inline schema |
-
-## Related Documentation
-
-- [Validate files against schemas](https://atmos.tools/cli/commands/validate/schema)

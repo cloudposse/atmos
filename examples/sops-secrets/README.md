@@ -8,6 +8,11 @@ description: >-
 cast:
   file: /casts/examples/sops-secrets/secret-lifecycle.cast
   title: atmos sops secrets lifecycle
+related_docs:
+  - label: "Secret commands"
+    url: /cli/commands/secret/usage
+  - label: "Secret configuration"
+    url: /cli/configuration/secrets
 ---
 
 # SOPS Secrets Example
@@ -46,7 +51,3 @@ Two cases worth watching:
 - `stacks/catalog/api.yaml` — the `!secret` declarations that consume it.
 - [Secrets configuration guide](https://atmos.tools/cli/configuration/secrets) — the full reference,
   including how to keep the age key in your OS keychain instead of a file.
-
-## Related Documentation
-
-- [Secret commands](https://atmos.tools/cli/commands/secret/usage)

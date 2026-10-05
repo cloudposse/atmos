@@ -157,11 +157,9 @@ const CATEGORY_LABELS = {
   scaffolding: 'Scaffolding & Init',
 };
 
-// Cast recordings for examples whose README.md doubles as copied scaffold
-// template output (`atmos scaffold generate` copies the whole source
-// directory verbatim) — Docusaurus front matter in that README would leak
-// into every generated project, so the cast is registered here instead. A
-// README front matter `cast:` block still wins when present.
+// Keep site-only recordings out of copied scaffold READMEs. Those READMEs carry
+// related documentation in front matter, but generated projects should not
+// inherit the example's recording. A README `cast:` block still wins when present.
 const CAST_MAP = {
   scaffolding: { file: '/casts/examples/scaffolding/generate-example.cast', title: 'atmos scaffold generate' },
   'scaffolding-matrix': {
@@ -169,9 +167,6 @@ const CAST_MAP = {
     title: 'atmos scaffold: one file per selection via matrix',
   },
 };
-
-// Curated command and configuration references for every example.
-const DOCS_MAP = require('./example-docs.json');
 
 // Map file extensions to syntax highlighting languages.
 const LANGUAGE_MAP = {
@@ -297,6 +292,18 @@ function parseReadmeFrontmatter(content) {
     // Malformed front matter: fall back to treating the whole file as body.
     return { data: {}, body: content };
   }
+}
+
+/** Read related documentation from the item's own README or SKILL front matter. */
+function parseRelatedDocs(value, filePath) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((doc) =>
+    !doc || typeof doc.label !== 'string' || !doc.label.trim() ||
+    typeof doc.url !== 'string' || !doc.url.trim()
+  )) {
+    throw new Error(`${filePath}: related_docs must be a list of nonempty label/url pairs`);
+  }
+  return value.map(({ label, url }) => ({ label: label.trim(), url: url.trim() }));
 }
 
 /**
@@ -519,7 +526,7 @@ function scanExamples(sourceDir, options) {
       hasAtmosYaml,
       featured: FEATURED.includes(entry.name),
       tags,
-      docs: DOCS_MAP[entry.name] || [],
+      docs: parseRelatedDocs(readmeMetadata.data.related_docs, tree.readme?.path || entry.name),
       cast: {
         file: cast.file || '',
         title: cast.title || '',

@@ -1,3 +1,11 @@
+---
+related_docs:
+  - label: "Initialize a project"
+    url: /cli/commands/init
+  - label: "Scaffold generation and template configuration"
+    url: /cli/commands/scaffold/generate
+---
+
 # Example: Scaffold Templates
 
 Scaffold templates for generating new Atmos projects and components.
@@ -65,7 +73,3 @@ Scaffold templates use Go templates with access to:
 - Gomplate functions for advanced templating
 
 See the [Scaffold Templates Guide](https://atmos.tools/cli/commands/scaffold/generate) for more details.
-
-## Related Documentation
-
-- [Initialize a project](https://atmos.tools/cli/commands/init)

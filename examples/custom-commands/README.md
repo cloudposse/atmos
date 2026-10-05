@@ -7,6 +7,11 @@ description: >-
 cast:
   file: /casts/examples/custom-commands/hello-greet.cast
   title: atmos custom commands
+related_docs:
+  - label: "Custom command configuration"
+    url: /cli/configuration/commands
+  - label: "List commands"
+    url: /cli/commands/
 ---
 
 # Custom Commands
@@ -245,7 +250,3 @@ Steps can access various template variables:
 - [Custom Commands Documentation](https://atmos.tools/cli/configuration/commands)
 - [Workflows Documentation](https://atmos.tools/workflows)
 - [Interactive Workflows Example](../interactive-workflows)
-
-## Related Documentation
-
-- [List commands](https://atmos.tools/cli/commands/)

@@ -4,6 +4,11 @@ tags: [Automation]
 cast:
   file: /casts/examples/demo-atlantis/repo-config.cast
   title: atmos Atlantis repo config
+related_docs:
+  - label: "Atlantis commands"
+    url: /cli/commands/atlantis/usage
+  - label: "Atlantis configuration"
+    url: /cli/configuration/integrations/atlantis
 ---
 
 # Example: Demo Atlantis
@@ -36,7 +41,3 @@ atmos atlantis build-all
 |------|---------|
 | `atmos.yaml` | Atlantis templates and custom commands |
 | `stacks/` | Stack definitions that become Atlantis projects |
-
-## Related Documentation
-
-- [Atlantis commands](https://atmos.tools/cli/commands/atlantis/usage)

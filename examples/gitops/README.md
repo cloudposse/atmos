@@ -4,6 +4,13 @@ tags: [Kubernetes, Automation]
 cast:
   file: /casts/examples/gitops/reconcile.cast
   title: atmos git clone, status, and diff
+related_docs:
+  - label: "Git commands"
+    url: /cli/commands/git/usage
+  - label: "Managed repository configuration"
+    url: /cli/configuration/git
+  - label: "Initialize a repository"
+    url: /cli/commands/git/init
 ---
 
 # GitOps Publishing Demo

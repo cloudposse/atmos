@@ -4,12 +4,17 @@ tags: [Stacks]
 cast:
   file: /casts/examples/onepassword-secrets/connect-mock.cast
   title: atmos 1Password Connect mock
+related_docs:
+  - label: "Secret commands"
+    url: /cli/commands/secret/usage
+  - label: "Secret configuration"
+    url: /cli/configuration/secrets
 ---
 
 # 1Password secrets example
 
-Declarative secrets backed by [1Password](https://developer.1password.com/), resolved with the
-`!secret` YAML function and the `atmos secret` CLI.
+[Declarative secrets](https://atmos.tools/cli/configuration/secrets) backed by [1Password](https://developer.1password.com/), resolved with the
+`!secret` YAML function and the [`atmos secret` CLI](https://atmos.tools/cli/commands/secret/usage).
 
 This example runs against a local [Mockoon](https://mockoon.com/) 1Password Connect mock through
 Atmos emulator components, so it is testable without a 1Password account.
@@ -64,8 +69,3 @@ atmos secret delete DB_PASSWORD --stack dev --component api --force
 # Stop the emulator
 atmos emulator down onepassword-connect --stack dev
 ```
-
-## Related Documentation
-
-- [Secret commands](https://atmos.tools/cli/commands/secret/usage)
-- [Secret configuration](https://atmos.tools/cli/configuration/secrets)

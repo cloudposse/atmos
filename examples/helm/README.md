@@ -4,11 +4,16 @@ tags: [Kubernetes]
 cast:
   file: /casts/examples/helm/lifecycle.cast
   title: atmos native helm lifecycle
+related_docs:
+  - label: "Helm commands"
+    url: /cli/commands/helm/usage
+  - label: "Helm component configuration"
+    url: /stacks/components/helm
 ---
 
 # Native Helm Component Example
 
-A minimal, credential-free example of a native Helm component. The chart lives in
+A minimal, credential-free example of a [native Helm component](https://atmos.tools/stacks/components/helm). The chart lives in
 `components/helm/demo` and is configured by `stacks/deploy/dev.yaml`.
 
 ## Try It
@@ -91,7 +96,3 @@ atmos helm repo list demo-repo -s dev
 
 See the [`atmos helm`](https://atmos.tools/cli/commands/helm/usage) docs for the full
 command and flag reference.
-
-## Related Documentation
-
-- [Helm component configuration](https://atmos.tools/stacks/components/helm)

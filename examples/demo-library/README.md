@@ -4,11 +4,18 @@ tags: [Components]
 cast:
   file: /casts/examples/demo-library/modules.cast
   title: atmos component library
+related_docs:
+  - label: "Terraform commands"
+    url: /cli/commands/terraform/usage
+  - label: "Stack configuration"
+    url: /stacks
+  - label: "Components"
+    url: /components
 ---
 
 # Demo Components
 
-Here are some examples of distributing reusable components as part of a library.
+Here are some examples of distributing [reusable components](https://atmos.tools/components) as part of a library.
 
 Typically, a component library will be a separate repository containing only components with a monorepo design.
 
@@ -34,9 +41,3 @@ The [`weather`](weather/) example component requests weather data from `wttr.in`
 ### IP Info
 
 The [`ipinfo`](ipinfo/) example component returns information about your current IP.
-
-## Related Documentation
-
-- [Terraform commands](https://atmos.tools/cli/commands/terraform/usage)
-- [Stack configuration](https://atmos.tools/stacks)
-- [Components](https://atmos.tools/components)

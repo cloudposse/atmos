@@ -1,6 +1,14 @@
+---
+related_docs:
+  - label: "Terraform plan"
+    url: /cli/commands/terraform/plan
+  - label: "Lifecycle hook configuration"
+    url: /stacks/hooks
+---
+
 # `hooks-tflint`
 
-Demonstrates the **`tflint`** hook kind: a `before.terraform.init` hook that
+Demonstrates the [**`tflint`** hook kind](https://atmos.tools/stacks/hooks): a `before.terraform.init` hook that
 lints a component with [tflint](https://github.com/terraform-linters/tflint)
 and renders a SARIF findings summary in the terminal.
 
@@ -49,8 +57,3 @@ variable; the command then proceeds (`on_failure: warn`).
 
 - `components/terraform/example/variables.tf` — declares an unused variable so
   tflint has a deterministic finding.
-
-## Related Documentation
-
-- [Terraform plan](https://atmos.tools/cli/commands/terraform/plan)
-- [Lifecycle hook configuration](https://atmos.tools/stacks/hooks)
