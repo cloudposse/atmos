@@ -504,7 +504,11 @@ stores, Git, and CI integrations.
     dependency on the target being a Git repository at all. This needs the template itself to
     define a `scaffold.yaml` manifest (so the old ref's fields can be resolved) and the target to
     already carry a prior generation's `.atmos/scaffold.yaml` record (so the original answers are
-    recoverable) — two separate files, not one.
+    recoverable) — two separate files, not one. Under `rendered`, `--update` also deletes a file
+    the template stopped generating between refs, unless you've edited it locally — in that case
+    the update fails with an unresolved conflict instead of silently deleting or keeping it.
+    `tracked` doesn't support this: there's no safe way to know which files a historical commit
+    actually belonged to the template.
   </dd>
 
   <dt>`--merge-driver` (default `auto`)</dt>
@@ -525,6 +529,15 @@ stores, Git, and CI integrations.
     other value is compared against a computed change percentage that has no upper bound, so no
     positive value is a guaranteed bypass the way `0` is — raising it only makes a hard failure
     less likely, not impossible. Configurable via `ATMOS_SCAFFOLD_MAX_CHANGES`.
+  </dd>
+
+  <dt>`--recreate-deleted` (default `false`)</dt>
+  <dd>
+    By default, `--update` leaves in place a file you deleted that the template still generates,
+    instead of silently recreating it. Pass `--recreate-deleted` to always recreate it with the
+    template's current content. This is independent of `--force`/`--merge-strategy`: `--force`
+    already means "on conflict, the template's version wins," so tying recreation to it would make
+    manual conflict resolution and recreating a deleted file mutually exclusive.
   </dd>
 
   <dt>`--skip-hooks`</dt>
