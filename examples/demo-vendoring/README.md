@@ -41,3 +41,9 @@ atmos vendor pull --component=weather
 | `vendor.yaml` | Main vendor manifest with component sources |
 | `vendor.d/` | Modular vendor configurations |
 | `vendor/` | Downloaded components (after `atmos vendor pull`) |
+
+## Related Documentation
+
+- [Vendor commands](https://atmos.tools/cli/commands/vendor/usage)
+- [Vendor manifest](https://atmos.tools/vendor/vendor-config)
+- [CLI Configuration](https://atmos.tools/cli/configuration/vendor)

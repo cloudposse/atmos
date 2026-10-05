@@ -107,3 +107,7 @@ offline (`filesystem_mirror`).
 - [Registry cache configuration](https://atmos.tools/cli/configuration/components/terraform#cache)
 - [`atmos terraform cache`](https://atmos.tools/cli/commands/terraform/cache)
 - [`atmos terraform cache mirror`](https://atmos.tools/cli/commands/terraform/cache/mirror)
+
+## Related Documentation
+
+- [Terraform cache configuration](https://atmos.tools/cli/configuration/components/terraform)

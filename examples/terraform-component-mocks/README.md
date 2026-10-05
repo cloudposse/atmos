@@ -55,3 +55,8 @@ components:
 Projects pinned to a [config edition](https://atmos.tools/cli/configuration/edition) before 2026-10-01 get `always` by default, which is how bare `--use-mocks` behaved before mocks became fallbacks.
 
 `--use-mocks` is accepted only by `atmos terraform plan` and `atmos describe component`; every other `atmos terraform` subcommand (for example `apply`, `deploy`, and `destroy`) rejects it. Attach the mode with `=`, as in `--use-mocks=always`; `--use-mocks always` does not select a mode. It affects only Terraform state/output YAML functions; it does not mock Terraform resources or providers.
+
+## Related Documentation
+
+- [Terraform plan](https://atmos.tools/cli/commands/terraform/plan)
+- [Component mock configuration](https://atmos.tools/stacks/components/mocks)

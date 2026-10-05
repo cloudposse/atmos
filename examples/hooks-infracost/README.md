@@ -51,3 +51,8 @@ summary showing the NAT gateway and EIP monthly costs.
 
 `subnet_id` is a placeholder ID. We don't need a real subnet because we
 never apply — infracost prices resources from HCL/plan, not from live state.
+
+## Related Documentation
+
+- [Terraform plan](https://atmos.tools/cli/commands/terraform/plan)
+- [Lifecycle hook configuration](https://atmos.tools/stacks/hooks)

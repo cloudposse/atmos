@@ -44,3 +44,8 @@ atmos terraform plan --all -s dev
 | `stacks/deploy/` | Environment-specific stack files (dev, staging, prod) |
 | `stacks/catalog/` | Shared component defaults |
 | `components/terraform/station/` | Simple Terraform component |
+
+## Related Documentation
+
+- [Terraform commands](https://atmos.tools/cli/commands/terraform/usage)
+- [Simple Tutorial](https://atmos.tools/quick-start/simple)

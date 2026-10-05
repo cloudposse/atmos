@@ -162,3 +162,8 @@ atmos devcontainer shell geodesic --replace
 - **Consistency** - Same environment across team members
 - **Customization** - Add project-specific tools and configuration
 - **Version control** - Dockerfile is versioned with your project
+
+## Related Documentation
+
+- [Devcontainer commands](https://atmos.tools/cli/commands/devcontainer/)
+- [Devcontainer configuration](https://atmos.tools/cli/configuration/devcontainer)

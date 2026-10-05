@@ -39,3 +39,9 @@ atmos packer build alpine -s alpine
 | `atmos.yaml` | Atmos configuration: Packer component path + toolchain-managed Packer install |
 | `stacks/alpine.yaml` | Single flat stack declaring the `alpine` Packer component |
 | `components/packer/alpine/image.pkr.hcl` | Packer template using the Docker builder |
+
+## Related Documentation
+
+- [Packer commands](https://atmos.tools/cli/commands/packer/usage)
+- [Packer component configuration](https://atmos.tools/stacks/components/packer)
+- [Packer Build](https://atmos.tools/cli/commands/packer/build)

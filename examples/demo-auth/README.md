@@ -59,3 +59,8 @@ atmos auth logout --tags enterprise
 ## Learn More
 
 See [the Atmos docs](https://atmos.tools/cli/commands/auth/usage) for more information.
+
+## Related Documentation
+
+- [Authentication configuration](https://atmos.tools/cli/configuration/auth)
+- [Authentication](https://atmos.tools/stacks/auth)

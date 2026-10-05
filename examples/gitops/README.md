@@ -3,14 +3,16 @@ title: GitOps Publishing
 tags: [Kubernetes, Automation]
 cast:
   file: /casts/examples/gitops/reconcile.cast
-  title: atmos gitops reconcile
+  title: atmos git clone, status, and diff
 ---
 
 # GitOps Publishing Demo
 
-This example shows the **publishing half of a GitOps pipeline** — reconcile, review, and publish artifacts to a managed deployment repository using `atmos git`. A reconciler such as Argo CD or Flux (or your CI) consumes what gets published; Atmos is the producer side.
+Use the built-in [`atmos git` commands](https://atmos.tools/cli/commands/git/usage) to clone a deployment repository and review its changes by name. In a GitOps pipeline, you can then commit and push generated manifests for Argo CD or Flux to deploy. This example demonstrates the repository operations; it does not generate manifests or run a deployment controller.
 
-The repository is named `deploy` and intentionally omits `workdir`, so Atmos uses the automatic XDG cache location. It also configures an `init.from` template, so `atmos git init deploy` bootstraps the repository from a starting point (the `--from` / `--keep-history` flags override these defaults):
+## Configure the repository
+
+The [managed repository configuration](https://atmos.tools/cli/configuration/git) names the repository `deploy`. With no `workdir` set, Atmos keeps its checkout in the XDG cache. The optional `init.from` setting supplies a template for [`atmos git init`](https://atmos.tools/cli/commands/git/init); cloning an existing repository does not use that template.
 
 ```yaml
 git:
@@ -27,22 +29,27 @@ git:
 ```shell
 cd examples/gitops
 
-# Bootstrap the deploy repository from the configured init.from template.
-# Add --dry-run to preview, or --force to re-initialize an existing workdir.
-atmos git init deploy --dry-run
-
+# Clone or update the managed checkout.
 atmos git clone deploy
+
+# Inspect the checkout and review changes.
 atmos git status deploy
 atmos git diff deploy
+
+# Preview cleanup, then remove the demo checkout.
 atmos git clean deploy --dry-run
+atmos git clean deploy
 ```
 
-The custom commands wrap the same Atmos Git operations — showing how to compose your own GitOps publishing workflow from the `atmos git` primitives:
+An unchanged checkout has no diff. In your own project, configure `git.repositories.deploy.uri` to point to a repository you control, then write your generated manifests into its managed workdir. Review and publish those changes with:
 
 ```shell
-atmos gitops reconcile
-atmos gitops review
-atmos gitops clean
+atmos git status deploy
+atmos git diff deploy
+atmos git commit deploy --message "Update generated deployment artifacts"
+atmos git push deploy
 ```
 
-`atmos gitops publish` commits pending changes in the managed workdir. Its push step is commented out in `atmos.yaml` so the example cannot publish to the sandbox repository by accident.
+Run the publishing commands against your own repository with the appropriate authentication, rather than the sandbox URL included here.
+
+To start a new repository from the configured template instead of cloning existing content, preview the operation with `atmos git init deploy --dry-run` and omit `--dry-run` when ready to initialize it.

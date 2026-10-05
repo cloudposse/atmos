@@ -45,3 +45,8 @@ or `best_effort` to report failures without failing the group.
 The recorded demo is published at
 `website/static/casts/examples/tests/tests.cast`. Regenerate it from the repository
 root with `atmos --chdir=demo/casts casts generate demo fixtures tests`.
+
+## Related Documentation
+
+- [Custom commands](https://atmos.tools/cli/configuration/commands)
+- [Test steps](https://atmos.tools/steps/type/test)

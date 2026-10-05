@@ -188,3 +188,8 @@ cat components/terraform/demo/config.json
 # Clean up
 atmos terraform generate files demo -s dev --clean
 ```
+
+## Related Documentation
+
+- [Generate Terraform files](https://atmos.tools/cli/commands/terraform/generate/files)
+- [File generation configuration](https://atmos.tools/stacks/generate)

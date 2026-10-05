@@ -14,7 +14,7 @@ Learn more about [Workflows](https://atmos.tools/workflows).
 
 ## What You'll See
 
-- [Workflow definitions](https://atmos.tools/workflows/workflow-manifest) in stack manifests
+- [Workflow definitions](https://atmos.tools/workflows/workflow) in stack manifests
 - Chaining multiple `atmos terraform` commands
 - Parameterized workflows with arguments
 
@@ -36,3 +36,8 @@ atmos workflow deploy -s dev
 |------|---------|
 | `atmos.yaml` | Configures workflow base path |
 | `stacks/workflows/` | Workflow definitions |
+
+## Related Documentation
+
+- [Run workflows](https://atmos.tools/cli/commands/workflow)
+- [CLI Configuration](https://atmos.tools/cli/configuration/workflows)

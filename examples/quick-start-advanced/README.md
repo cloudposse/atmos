@@ -140,7 +140,7 @@ atmos terraform plan --all --labels tier=foundational -s plat-ue2-dev --use-mock
 
 ## Operator commands
 
-This example also registers operator-focused [custom commands](https://atmos.tools/core-concepts/custom-commands)
+This example also registers operator-focused [custom commands](https://atmos.tools/cli/configuration/commands)
 in `atmos.yaml`:
 
 ```shell
@@ -149,3 +149,9 @@ atmos operator inspect <component> -s <stack>     # describe component config wi
 ```
 
 For the full CLI configuration and command reference, see [Atmos CLI](https://atmos.tools/cli/configuration).
+
+## Related Documentation
+
+- [Terraform commands](https://atmos.tools/cli/commands/terraform/usage)
+- [Stack configuration](https://atmos.tools/stacks)
+- [Quick Start](https://atmos.tools/quick-start)

@@ -100,3 +100,7 @@ atmos terraform plan service -s test
 Atmos executes `tfmigrate` from the component working directory, so migration
 files live beside the component. In production, confirm the migration context
 with `atmos terraform migrate list`.
+
+## Related Documentation
+
+- [Lifecycle hook configuration](https://atmos.tools/stacks/hooks)

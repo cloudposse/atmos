@@ -87,3 +87,8 @@ atmos describe component vpc -s production
 # This will NOT work (filename is not the canonical name):
 # atmos terraform plan vpc -s prod
 ```
+
+## Related Documentation
+
+- [Terraform commands](https://atmos.tools/cli/commands/terraform/usage)
+- [Stack configuration](https://atmos.tools/stacks)

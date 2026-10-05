@@ -69,3 +69,8 @@ standard, prefer a named kind — `checkov`, `trivy`, `kics`, or
 `infracost`. Those parse their tool's native output into structured
 summaries with severity counts, cost diffs, etc. `kind: command` is
 the escape hatch for everything else.
+
+## Related Documentation
+
+- [Terraform plan](https://atmos.tools/cli/commands/terraform/plan)
+- [Lifecycle hook configuration](https://atmos.tools/stacks/hooks)

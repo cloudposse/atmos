@@ -76,3 +76,8 @@ atmos test
 
 In CI (where `$GITHUB_STEP_SUMMARY` is set and CI is auto-detected), `atmos terraform test` writes a
 pass/fail **step summary** to the GitHub Actions job summary — the same native-CI path as `plan`/`apply`.
+
+## Related Documentation
+
+- [Run Terraform tests](https://atmos.tools/cli/commands/terraform/test)
+- [Emulator component configuration](https://atmos.tools/stacks/components/emulator)

@@ -40,3 +40,8 @@ An axis's values aren't limited to a literal list or a `multiselect` answer — 
 from a free-text answer or be computed from nested/structured answer data. See the
 [`atmos scaffold generate`](https://atmos.tools/cli/commands/scaffold/generate) docs for the full
 `matrix` reference.
+
+## Related Documentation
+
+- [Initialize a project](https://atmos.tools/cli/commands/init)
+- [Dynamic File Generation (matrix)](https://atmos.tools/cli/commands/scaffold/generate#dynamic-file-generation)

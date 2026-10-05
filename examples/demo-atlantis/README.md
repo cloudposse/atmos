@@ -10,11 +10,11 @@ cast:
 
 Generate Atlantis configuration for PR-based Terraform automation.
 
-Learn more about [Atlantis Integration](https://atmos.tools/integrations/atlantis/).
+Learn more about [Atlantis Integration](https://atmos.tools/cli/configuration/integrations/atlantis).
 
 ## What You'll See
 
-- [Atlantis repo config](https://atmos.tools/integrations/atlantis/repo-config/) generation
+- [Atlantis repo config](https://atmos.tools/cli/configuration/integrations/atlantis) generation
 - [Custom commands](https://atmos.tools/cli/configuration/commands) for build automation
 - Varfile generation for Atlantis projects
 
@@ -36,3 +36,7 @@ atmos atlantis build-all
 |------|---------|
 | `atmos.yaml` | Atlantis templates and custom commands |
 | `stacks/` | Stack definitions that become Atlantis projects |
+
+## Related Documentation
+
+- [Atlantis commands](https://atmos.tools/cli/commands/atlantis/usage)

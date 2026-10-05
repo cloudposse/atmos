@@ -303,4 +303,10 @@ atmos --profile base --profile developer ...  # color: true (developer wins)
 
 - [Atmos Profiles PRD](../../docs/prd/atmos-profiles.md) - Complete design documentation
 - [CLI Configuration](https://atmos.tools/cli/configuration) - Base configuration reference
-- [Authentication](https://atmos.tools/cli/commands/auth) - Auth configuration guide
+- [Authentication](https://atmos.tools/cli/commands/auth/usage) - Auth configuration guide
+
+## Related Documentation
+
+- [Configuration profiles](https://atmos.tools/cli/configuration/profiles)
+- [Describe configuration](https://atmos.tools/cli/commands/describe/config)
+- [Profile commands](https://atmos.tools/cli/commands/profile/usage)

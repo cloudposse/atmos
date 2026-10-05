@@ -123,3 +123,8 @@ List installed voices with `say -v "?"` (macOS), `espeak --voices` (Linux), or v
 ## CI/CD Considerations
 
 `say` never fails a workflow. In CI it skips speech and follows the `print` policy (`fallback` by default prints the message), so you can leave `say` steps in workflows that run both locally and in pipelines.
+
+## Related Documentation
+
+- [Run workflows](https://atmos.tools/cli/commands/workflow)
+- [Speech steps](https://atmos.tools/steps/type/say)

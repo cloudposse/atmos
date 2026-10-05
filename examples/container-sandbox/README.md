@@ -33,3 +33,8 @@ atmos workflow sandbox -f container-sandbox
 |------|---------|
 | `atmos.yaml` | Configures the workflow base path |
 | `workflows/container-sandbox.yaml` | Workflow-level container sandbox example |
+
+## Related Documentation
+
+- [Run workflows](https://atmos.tools/cli/commands/workflow)
+- [Workflow containers](https://atmos.tools/workflows/container)

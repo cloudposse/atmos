@@ -34,3 +34,9 @@ The [`weather`](weather/) example component requests weather data from `wttr.in`
 ### IP Info
 
 The [`ipinfo`](ipinfo/) example component returns information about your current IP.
+
+## Related Documentation
+
+- [Terraform commands](https://atmos.tools/cli/commands/terraform/usage)
+- [Stack configuration](https://atmos.tools/stacks)
+- [Components](https://atmos.tools/components)

@@ -88,3 +88,8 @@ closed contract, but fulfillment is open). Declaring `composition:` for a servic
 
 A working Docker or Podman runtime. With Podman, `container.runtime.auto_start`
 in `atmos.yaml` initializes/starts the Podman machine automatically.
+
+## Related Documentation
+
+- [Container commands](https://atmos.tools/cli/commands/container/usage)
+- [Container component configuration](https://atmos.tools/stacks/components/container)

@@ -133,3 +133,8 @@ composition can group any component kinds. Operate the group with
 or operate an individual member with its own component command (for example,
 `atmos container up frontend -s local`). Unsupported provider subcommands return
 clear errors for the affected members.
+
+## Related Documentation
+
+- [Composition commands and membership](https://atmos.tools/cli/commands/composition/usage)
+- [Container component configuration](https://atmos.tools/stacks/components/container)

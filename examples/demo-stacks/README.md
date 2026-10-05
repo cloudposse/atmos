@@ -45,3 +45,9 @@ atmos describe stacks --components myapp --sections vars
 | `stacks/catalog/myapp.yaml` | Base component configuration (shared defaults) |
 | `stacks/deploy/dev.yaml` | Dev environment with imports and overrides |
 | `stacks/deploy/prod.yaml` | Prod environment with different overrides |
+
+## Related Documentation
+
+- [Terraform commands](https://atmos.tools/cli/commands/terraform/usage)
+- [Stack configuration](https://atmos.tools/stacks)
+- [Describe stack configuration](https://atmos.tools/cli/commands/describe/stacks)

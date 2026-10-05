@@ -120,3 +120,10 @@ This is the Kubernetes-native vision in miniature: a component is **rendered**,
 **committed**, and **pushed** to Git, and the cluster **self-reconciles** from
 there. Swap the Gitea emulator for a real Git host and the k3s emulator for a real
 cluster, and the exact same Atmos components drive production GitOps.
+
+## Related Documentation
+
+- [Kubernetes commands and GitOps publishing](https://atmos.tools/cli/commands/kubernetes/usage)
+- [Kubernetes component configuration](https://atmos.tools/stacks/components/kubernetes)
+- [Managed repository configuration](https://atmos.tools/cli/configuration/git)
+- [Emulator commands](https://atmos.tools/cli/commands/emulator/usage)

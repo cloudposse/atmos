@@ -151,3 +151,9 @@ Interactive steps require a TTY. In CI environments:
 - Use `--dry-run` to preview workflows
 - Set default values in configuration
 - Use environment variables instead of prompts.
+
+## Related Documentation
+
+- [Run workflows](https://atmos.tools/cli/commands/workflow)
+- [Workflow configuration](https://atmos.tools/workflows)
+- [CLI Configuration](https://atmos.tools/cli/configuration/workflows)

@@ -91,3 +91,7 @@ atmos helm repo list demo-repo -s dev
 
 See the [`atmos helm`](https://atmos.tools/cli/commands/helm/usage) docs for the full
 command and flag reference.
+
+## Related Documentation
+
+- [Helm component configuration](https://atmos.tools/stacks/components/helm)

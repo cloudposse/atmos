@@ -14,8 +14,8 @@ Learn more about [Vendoring](https://atmos.tools/vendor).
 
 ## What You'll See
 
-- [Version pinning](https://atmos.tools/vendor#versioning) with git refs
-- [YAML anchors](https://atmos.tools/vendor/vendor-manifest#yaml-anchors) to DRY up vendor configs
+- [Version pinning](https://atmos.tools/vendor/url-syntax#query-parameters) with git refs
+- [YAML anchors](https://atmos.tools/vendor/vendor-config) to DRY up vendor configs
 - Multiple component versions side-by-side
 
 ## Try It
@@ -39,3 +39,8 @@ ls components/terraform/
 |------|---------|
 | `vendor.yaml` | Vendor manifest with version pinning and YAML anchors |
 | `components/terraform/*/` | Versioned components (after vendor pull) |
+
+## Related Documentation
+
+- [Vendor commands](https://atmos.tools/cli/commands/vendor/usage)
+- [Component Versions](https://atmos.tools/design-patterns/version-management)

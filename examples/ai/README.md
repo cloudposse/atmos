@@ -49,3 +49,7 @@ atmos terraform plan vpc -s dev --ai
 | `ATMOS.md`              | Project instructions the AI reads automatically  |
 | `stacks/`               | Stack configuration files                        |
 | `components/terraform/` | Mock Terraform components (VPC, Transit Gateway) |
+
+## Related Documentation
+
+- [AI commands](https://atmos.tools/cli/commands/ai/usage)

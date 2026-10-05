@@ -201,3 +201,8 @@ Two things to notice:
 - **[Atmos AI (multi-provider)](/examples/ai)** — You want to
   chat with your infrastructure using API-key providers (Anthropic, OpenAI).
   Multi-provider Atmos AI setup, no external CLI needed.
+
+## Related Documentation
+
+- [MCP commands](https://atmos.tools/mcp)
+- [MCP configuration](https://atmos.tools/cli/configuration/mcp)

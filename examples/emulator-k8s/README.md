@@ -34,3 +34,7 @@ atmos emulator down kubernetes -s local  # stop and remove the sandbox container
 ```
 
 The `atmos test` custom command runs the full apply/destroy lifecycle.
+
+## Related Documentation
+
+- [Emulator component configuration](https://atmos.tools/stacks/components/emulator)

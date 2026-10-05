@@ -47,4 +47,9 @@ atmos store get prod/ssm image_tag --stack=prod --component=ecs-service
 
 ## Learn More
 
-See [Stores documentation](https://atmos.tools/core-concepts/stacks/stores/).
+See [Stores documentation](https://atmos.tools/cli/configuration/stores).
+
+## Related Documentation
+
+- [Store commands](https://atmos.tools/cli/commands/store/usage)
+- [Authentication configuration](https://atmos.tools/cli/configuration/auth)

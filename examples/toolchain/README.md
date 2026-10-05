@@ -48,3 +48,7 @@ atmos workflow convert -f toolchain-demo
 | `atmos.yaml` | Inline registry + Aqua fallback, aliases, custom commands |
 | `.tool-versions` | Project tool defaults (jq 1.7.1, yq 4.45.1) |
 | `workflows/toolchain-demo.yaml` | Workflow versions of the same 4 patterns |
+
+## Related Documentation
+
+- [Toolchain commands](https://atmos.tools/cli/commands/toolchain/usage)

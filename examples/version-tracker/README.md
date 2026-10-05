@@ -83,3 +83,7 @@ git checkout -- atmos.yaml versions.lock.yaml
 ```
 
 The desired versions in this example are concrete, so every command works offline — no registry or GitHub API access is needed. This example is exercised end-to-end in CI by `.github/workflows/version-tracker.yaml`.
+
+## Related Documentation
+
+- [Version catalogs](https://atmos.tools/cli/commands/version/track/add)

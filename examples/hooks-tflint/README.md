@@ -49,3 +49,8 @@ variable; the command then proceeds (`on_failure: warn`).
 
 - `components/terraform/example/variables.tf` — declares an unused variable so
   tflint has a deterministic finding.
+
+## Related Documentation
+
+- [Terraform plan](https://atmos.tools/cli/commands/terraform/plan)
+- [Lifecycle hook configuration](https://atmos.tools/stacks/hooks)

@@ -58,3 +58,8 @@ atmos workflow fanout -f background
 
 See the [`parallel`](../parallel-steps) example for the complementary *structured*
 concurrency (`parallel`/`matrix`) control steps.
+
+## Related Documentation
+
+- [Run workflows](https://atmos.tools/cli/commands/workflow)
+- [Container steps](https://atmos.tools/steps/type/container)

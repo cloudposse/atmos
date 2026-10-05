@@ -92,3 +92,7 @@ import:
 
 - [Stack Imports Documentation](https://atmos.tools/stacks/imports)
 - [go-getter URL Formats](https://github.com/hashicorp/go-getter#url-format)
+
+## Related Documentation
+
+- [Describe a component](https://atmos.tools/cli/commands/describe/component)

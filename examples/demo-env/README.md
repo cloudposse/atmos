@@ -117,3 +117,8 @@ for development, consider these security practices:
 
 4. **Output masking**: Atmos automatically masks detected secrets in terminal output
    to prevent accidental exposure in logs.
+
+## Related Documentation
+
+- [Export environment variables](https://atmos.tools/cli/commands/env)
+- [Environment configuration](https://atmos.tools/stacks/env)

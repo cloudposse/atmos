@@ -76,3 +76,9 @@ examples/custom-components/
     - For sensitive values, use `!secret NAME` in the `env` section so the value resolves from a
       secret backend and is masked in output — never inline a secret into the command string.
       See [Passing secrets](https://atmos.tools/cli/configuration/secrets).
+
+## Related Documentation
+
+- [Custom component types](https://atmos.tools/components/custom)
+- [Custom command configuration](https://atmos.tools/cli/configuration/commands)
+- [Custom Component Types Reference](https://atmos.tools/cli/configuration/commands/component#custom-component-types)

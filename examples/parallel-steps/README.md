@@ -29,3 +29,9 @@ atmos workflow matrix -f parallel
 - `output.mode: grouped` captures each child and prints labeled blocks.
 - `output.mode: prefixed` streams child output live with line prefixes.
 - `matrix` expands literal axes and runs generated shell steps through the same scheduler.
+
+## Related Documentation
+
+- [Run workflows](https://atmos.tools/cli/commands/workflow)
+- [Parallel steps](https://atmos.tools/steps/type/parallel)
+- [Matrix steps](https://atmos.tools/steps/type/matrix)

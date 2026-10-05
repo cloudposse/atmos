@@ -53,3 +53,8 @@ this same lifecycle.
 The `local-k3s` identity uses `kind: kubernetes/emulator`, bound to the `kubernetes` emulator component. Running with `--identity local-k3s` makes Atmos resolve the running k3s container, harvest its admin kubeconfig, and export `KUBECONFIG` into the component environment — so the Kubernetes SDK client talks to the emulator with no extra configuration.
 
 For real EKS clusters, pair an AWS identity with an `aws/eks` integration that writes kubeconfig for the cluster.
+
+## Related Documentation
+
+- [Kubernetes commands](https://atmos.tools/cli/commands/kubernetes/usage)
+- [Kubernetes component configuration](https://atmos.tools/stacks/components/kubernetes)

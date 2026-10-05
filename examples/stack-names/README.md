@@ -52,3 +52,8 @@ atmos terraform plan mock -s production
 - The `name` field takes precedence over the filename
 - Only the canonical name is valid for the `-s` flag
 - This is useful for migrations, legacy infrastructure, or matching existing Terraform workspace names
+
+## Related Documentation
+
+- [Stack names](https://atmos.tools/stacks/name)
+- [List stacks](https://atmos.tools/cli/commands/list/stacks)

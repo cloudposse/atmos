@@ -92,3 +92,8 @@ atmos terraform plan component -s stack --mask=false
 # Via environment variable
 export ATMOS_TERMINAL_MASK_ENABLED=false
 ```
+
+## Related Documentation
+
+- [Secret masking configuration](https://atmos.tools/cli/configuration/settings/mask)
+- [Custom commands](https://atmos.tools/cli/configuration/commands)

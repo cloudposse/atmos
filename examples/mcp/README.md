@@ -246,3 +246,7 @@ $ atmos ai ask "List all IAM roles with admin access"
 - [AWS MCP Servers](https://github.com/awslabs/mcp)
 - [Atmos AI Documentation](https://atmos.tools/ai)
 - [Atmos Auth Documentation](https://atmos.tools/cli/configuration/auth)
+
+## Related Documentation
+
+- [MCP commands](https://atmos.tools/mcp)

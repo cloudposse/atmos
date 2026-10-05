@@ -42,3 +42,8 @@ shows the dummy resources.
 
 - `components/terraform/bucket/main.tf` — intentionally insecure HCL so
   trivy has something to find.
+
+## Related Documentation
+
+- [Terraform plan](https://atmos.tools/cli/commands/terraform/plan)
+- [Lifecycle hook configuration](https://atmos.tools/stacks/hooks)

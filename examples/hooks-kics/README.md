@@ -52,3 +52,8 @@ atmos terraform plan bucket -s test
 
 Expected: kics runs before plan and reports findings on the over-permissive
 security group and S3 misconfigurations.
+
+## Related Documentation
+
+- [Terraform plan](https://atmos.tools/cli/commands/terraform/plan)
+- [Lifecycle hook configuration](https://atmos.tools/stacks/hooks)

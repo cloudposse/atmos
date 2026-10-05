@@ -49,3 +49,7 @@ Other lifecycle verbs include `atmos emulator logs aws -s local`.
 
 The `atmos test` custom command runs the full apply/destroy lifecycle across the `dev`,
 `staging`, and `prod` stacks.
+
+## Related Documentation
+
+- [Emulator component configuration](https://atmos.tools/stacks/components/emulator)

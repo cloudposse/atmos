@@ -70,3 +70,8 @@ The `!emulator kubernetes kubeconfig` function harvests the running emulator's a
 ## Toolchain
 
 `atmos.yaml` declares the Aqua public registry, and the `demo` component declares `helmfile`, `helm`, and `kubectl` as tool dependencies. On the first `atmos helmfile *` run, Atmos installs them under `.tools/` and puts them on `PATH` for Helmfile and its hooks — no manual installation required.
+
+## Related Documentation
+
+- [Helmfile commands](https://atmos.tools/cli/commands/helmfile/usage)
+- [Helmfile component configuration](https://atmos.tools/stacks/components/helmfile)

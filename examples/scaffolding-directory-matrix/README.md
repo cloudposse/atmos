@@ -45,3 +45,8 @@ A glob `path:` can also skip (or gate) an entire directory recursively with just
 [`atmos scaffold generate`](https://atmos.tools/cli/commands/scaffold/generate) docs' "Glob Paths
 and Directory-Level Matrix" section for the full reference, including the precedence rule for
 when more than one entry's `path:` matches the same file.
+
+## Related Documentation
+
+- [Initialize a project](https://atmos.tools/cli/commands/init)
+- [Glob Paths and Directory-Level Matrix](https://atmos.tools/cli/commands/scaffold/generate#glob-paths-and-directory-level-matrix)

@@ -32,3 +32,8 @@ atmos terraform plan bucket -s test
 
 Expected: checkov runs before plan and flags issues on the misconfigured
 S3 bucket and security group.
+
+## Related Documentation
+
+- [Terraform plan](https://atmos.tools/cli/commands/terraform/plan)
+- [Lifecycle hook configuration](https://atmos.tools/stacks/hooks)

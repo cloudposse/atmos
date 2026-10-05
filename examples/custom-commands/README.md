@@ -245,3 +245,7 @@ Steps can access various template variables:
 - [Custom Commands Documentation](https://atmos.tools/cli/configuration/commands)
 - [Workflows Documentation](https://atmos.tools/workflows)
 - [Interactive Workflows Example](../interactive-workflows)
+
+## Related Documentation
+
+- [List commands](https://atmos.tools/cli/commands/)

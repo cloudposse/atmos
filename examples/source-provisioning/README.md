@@ -43,3 +43,8 @@ atmos terraform workdir list
 ```bash
 rm -rf .workdir/
 ```
+
+## Related Documentation
+
+- [Terraform source commands](https://atmos.tools/cli/commands/terraform/source)
+- [Component source configuration](https://atmos.tools/vendor/component-manifest/source)

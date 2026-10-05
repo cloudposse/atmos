@@ -51,3 +51,8 @@ HEALTH_URL=https://example.com/healthz atmos workflow poll-health -f http
 
 The response is available to later steps as `{{ .steps.<name>.value }}` (body) and
 `{{ .steps.<name>.metadata.status_code }}`.
+
+## Related Documentation
+
+- [Run workflows](https://atmos.tools/cli/commands/workflow)
+- [HTTP steps](https://atmos.tools/steps/type/http)

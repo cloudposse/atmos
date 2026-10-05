@@ -64,3 +64,8 @@ atmos secret delete DB_PASSWORD --stack dev --component api --force
 # Stop the emulator
 atmos emulator down onepassword-connect --stack dev
 ```
+
+## Related Documentation
+
+- [Secret commands](https://atmos.tools/cli/commands/secret/usage)
+- [Secret configuration](https://atmos.tools/cli/configuration/secrets)

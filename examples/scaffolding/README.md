@@ -64,4 +64,8 @@ Scaffold templates use Go templates with access to:
 - Sprig functions for string manipulation
 - Gomplate functions for advanced templating
 
-See the [Scaffold Templates Guide](https://atmos.tools/core-concepts/scaffold-templates) for more details.
+See the [Scaffold Templates Guide](https://atmos.tools/cli/commands/scaffold/generate) for more details.
+
+## Related Documentation
+
+- [Initialize a project](https://atmos.tools/cli/commands/init)

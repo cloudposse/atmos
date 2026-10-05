@@ -132,3 +132,8 @@ atmos terraform state list multi-state-source -s test   # empty
 atmos terraform state list multi-state-target -s test   # random_pet.shared
 atmos terraform plan multi-state-source -s test          # no changes
 ```
+
+## Related Documentation
+
+- [Terraform state migrations](https://atmos.tools/cli/commands/terraform/migrate)
+- [Lifecycle hook configuration](https://atmos.tools/stacks/hooks)

@@ -45,3 +45,8 @@ atmos ansible playbook hello-world -s prod
 | `stacks/deploy/` | Per-environment stack files (dev, prod) |
 | `stacks/catalog/` | Shared component defaults |
 | `components/ansible/hello-world/` | Ansible playbook and inventory |
+
+## Related Documentation
+
+- [Ansible commands](https://atmos.tools/cli/commands/ansible/usage)
+- [Ansible component configuration](https://atmos.tools/stacks/components/ansible)

@@ -22,3 +22,7 @@ then fails with "max attempts (3) exceeded".
 ## Learn More
 
 See [Workflow Retries documentation](https://atmos.tools/workflows/).
+
+## Related Documentation
+
+- [Run workflows](https://atmos.tools/cli/commands/workflow)

@@ -99,3 +99,8 @@ affects the other. Locals never propagate across file boundaries via imports.
 | `stacks/deploy/dev.yaml`            | Dev stack: all locals features             |
 | `stacks/deploy/prod.yaml`           | Prod stack: same patterns, different values |
 | `components/terraform/myapp/main.tf` | Mock Terraform component                   |
+
+## Related Documentation
+
+- [Describe a component](https://atmos.tools/cli/commands/describe/component)
+- [Describe locals](https://atmos.tools/cli/commands/describe/locals)
