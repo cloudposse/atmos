@@ -159,10 +159,15 @@ func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	client := newInstallClient(actx, spec, dryRun)
 	manifest, err := runInstall(ctx, client, actx.settings, spec)
 	if err != nil {
-		// Capture crash-looping pod diagnostics BEFORE the uninstall deletes the
-		// failed first-install resources, then perform the uninstall Atmos now owns.
+		// Only diagnose and uninstall when the install actually reached the cluster
+		// (a release record exists). A pre-mutation failure - a bad chart reference,
+		// a chart-load error, or cancellation before the install action runs - leaves
+		// nothing to inspect or remove, so recovery would be a pointless no-op (and
+		// `uninstall <name>` must not fire for an install that never applied anything).
 		diagnostics := ""
-		if !dryRun {
+		if !dryRun && releaseRecordExists(actx, spec.ReleaseName) {
+			// Capture crash-looping pod diagnostics BEFORE the uninstall deletes the
+			// failed first-install resources, then perform the uninstall Atmos owns.
 			diagnostics = diagnoseReleaseFailure(ctx, actx, spec)
 			if spec.Lifecycle.Policy.OnFailure == failurePolicyUninstall {
 				err = uninstallFailedInstall(actx, spec, err)
@@ -503,10 +508,20 @@ func uninstallFailedInstall(actx *actionContext, spec *chartSpec, installErr err
 	uninstall := action.NewUninstall(actx.cfg)
 	uninstall.WaitStrategy = policy.WaitStrategy
 	uninstall.Timeout = policy.Timeout
+	// Honor the release's chart-hook policy, matching the install.
+	uninstall.DisableHooks = !policy.ChartHooks
 	if _, rbErr := uninstall.Run(spec.ReleaseName); rbErr != nil && !errors.Is(rbErr, driver.ErrReleaseNotFound) {
 		installErr = errors.Join(installErr, fmt.Errorf(releaseErrWrapFormat, errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, rbErr))
 	}
 	return installErr
+}
+
+// releaseRecordExists reports whether a release of the given name has a stored
+// revision, i.e. the operation reached the cluster. Used to skip failure recovery
+// for pre-mutation errors that never created a release.
+func releaseRecordExists(actx *actionContext, name string) bool {
+	_, err := actx.cfg.Releases.Last(name)
+	return err == nil
 }
 
 func configureInstallLifecycle(client *action.Install, policy effectiveReleasePolicy) {

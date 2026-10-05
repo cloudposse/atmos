@@ -28,6 +28,10 @@ const (
 	// The diagnosticsLogTailLines constant is how many log lines to tail from a
 	// failing container when verbose diagnostics are enabled.
 	diagnosticsLogTailLines = 20
+	// The diagnosticsLogMaxBytes constant caps the log tail size so a container
+	// emitting very long lines cannot amplify diagnostics memory or output; it is
+	// applied server-side (LimitBytes) and again client-side as a fallback.
+	diagnosticsLogMaxBytes = 4096
 	// The diagnosticsMaxMessageLen constant truncates long container and event
 	// messages so one noisy message cannot dominate the error.
 	diagnosticsMaxMessageLen = 200
@@ -210,17 +214,21 @@ func isFailureReason(reason string) bool {
 // holds the crash output; otherwise it reads the current instance.
 func podLogTail(ctx context.Context, clientset kubernetes.Interface, pod *corev1.Pod, status *corev1.ContainerStatus) string {
 	tail := int64(diagnosticsLogTailLines)
+	limit := int64(diagnosticsLogMaxBytes)
 	opts := &corev1.PodLogOptions{
-		Container: status.Name,
-		TailLines: &tail,
-		Previous:  status.RestartCount > 0,
+		Container:  status.Name,
+		TailLines:  &tail,
+		LimitBytes: &limit,
+		Previous:   status.RestartCount > 0,
 	}
 	raw, err := clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, opts).DoRaw(ctx)
 	if err != nil {
 		log.Debug("helm: could not read pod log for failure diagnostics", "pod", pod.Name, "container", status.Name, "error", err)
 		return ""
 	}
-	return strings.TrimRight(string(raw), diagNewline)
+	// LimitBytes bounds the server-side read; truncate again as a fallback for
+	// backends that ignore it.
+	return truncate(strings.TrimRight(string(raw), diagNewline), diagnosticsLogMaxBytes)
 }
 
 // podEventLines returns up to diagnosticsMaxEvents of the pod's most recent

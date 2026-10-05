@@ -450,3 +450,14 @@ func TestLastSuccessfulRevision_NoRelease(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok)
 }
+
+// TestReleaseRecordExists confirms the signal used to gate install failure
+// recovery: true only when a release revision is stored (the op reached the
+// cluster), false for a never-created release (cloudposse/atmos#3273 review).
+func TestReleaseRecordExists(t *testing.T) {
+	actx := memoryActionContext(t)
+	assert.False(t, releaseRecordExists(actx, "none"))
+
+	require.NoError(t, actx.cfg.Releases.Create(release.Mock(&release.MockReleaseOptions{Name: "rel", Namespace: "ns"})))
+	assert.True(t, releaseRecordExists(actx, "rel"))
+}

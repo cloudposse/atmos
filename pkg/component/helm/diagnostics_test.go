@@ -340,6 +340,34 @@ type assertErr string
 
 func (e assertErr) Error() string { return string(e) }
 
+// TestApplyReleaseSkipsRecoveryForPreMutationInstallFailure covers the #3273
+// security-review point: an install that fails before applying anything (bad chart,
+// nothing created) must not query the cluster for diagnostics or run an uninstall.
+func TestApplyReleaseSkipsRecoveryForPreMutationInstallFailure(t *testing.T) {
+	called := false
+	original := newReleaseClientset
+	t.Cleanup(func() { newReleaseClientset = original })
+	newReleaseClientset = func(*actionContext) (kubernetes.Interface, error) {
+		called = true
+		return fake.NewSimpleClientset(), nil
+	}
+
+	actx := memoryActionContext(t)
+	stubActionContext(t, actx)
+
+	spec := testdataChartSpec(t, "premutation")
+	onFailure := string(failurePolicyUninstall)
+	spec.Release.Install.OnFailure = &onFailure
+	spec.Chart = t.TempDir() // empty dir -> chart load fails before the install applies anything.
+
+	_, err := applyRelease(context.Background(), spec, false)
+	require.Error(t, err)
+	assert.False(t, called, "a pre-mutation install failure must not query the cluster for diagnostics")
+
+	// Nothing was created, so no release record exists.
+	assert.False(t, releaseRecordExists(actx, spec.ReleaseName))
+}
+
 // Guard that the diagnostics text would compose cleanly into an error explanation.
 func TestDiagnosticsComposeIntoError(t *testing.T) {
 	stubReleaseClientset(t, fake.NewSimpleClientset(crashLoopPod("p", "ns", "r")), nil)
