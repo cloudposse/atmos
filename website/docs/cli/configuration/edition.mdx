@@ -53,7 +53,7 @@ A pinned project resolves defaults as a rollback overlay:
 
 - **Defaults that changed after the pinned date keep their pre-change values.** For example, the built-in pager default changed from on to off on `2025-10-16`, so a project pinned to `edition: "2025-09"` keeps the pager on.
 - **Explicit configuration always wins.** A value you set in `atmos.yaml` (or via environment variables or flags) beats the pin, exactly as it beats the latest defaults.
-- **New features are unaffected.** Only *changes* to previously shipped defaults are journaled — never new keys. A feature introduced after your pinned date still works, with its initial defaults.
+- **New features are unaffected.** Only *changes* to previously shipped behavior are journaled. A new key that replaces implicit behavior, such as `vendor.max_concurrency` replacing sequential vendoring, is a default change. A feature introduced after your pinned date still works, with its initial defaults.
 - **No pin means latest defaults.** Projects without an `edition` key behave exactly as before.
 
 ### End-of-Period Rounding
@@ -68,7 +68,7 @@ Partial dates round to the **end** of the period they name — "the 2026 edition
 
 ## Example
 
-The journal currently records ten default changes, reaching back to February 2025:
+The journal records default changes, reaching back to February 2025:
 
 | Date         | Key                             | Old           | New           | Description |
 | ------------ | ------------------------------- | ------------- | ------------- | ----------- |
@@ -82,6 +82,7 @@ The journal currently records ten default changes, reaching back to February 202
 | `2026-07-13` | `list.error_mode`               | `strict`      | `warn`        | List commands substitute `(computed)` for unresolved YAML function values and continue |
 | `2026-07-17` | `describe.component.filter`     | `full`        | `schema`      | Component descriptions show only the sections a stack manifest can define |
 | `2026-07-16` | `describe.provenance`           | `false`       | `true`        | Component descriptions include provenance annotations (which stack file set each value) |
+| `2026-09-15` | `vendor.max_concurrency` | `1` | `4` | Download preparation and upstream checks use four workers; earlier pins preserve sequential execution |
 
 A project pinned to September 2025 predates eight of these changes (everything from the pager change onward), so it keeps the pager enabled, the Helmfile EKS integration on, metadata inheritance off, unfiltered help, strict error modes, the full component-description filter, and provenance off:
 

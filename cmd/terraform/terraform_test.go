@@ -10,6 +10,8 @@ import (
 // reimplemented as integration tests or using a different pattern.
 
 func TestTerraformHeatmapFlag(t *testing.T) {
+	t.Parallel()
+
 	// Test that --heatmap flag is properly detected and enables tracking.
 	// Terraform pass-through flags are separated during preprocessing in Execute()
 	// via the command registry's CompatibilityFlagTranslator.

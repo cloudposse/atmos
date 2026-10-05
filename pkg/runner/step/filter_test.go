@@ -14,11 +14,14 @@ import (
 
 //nolint:dupl // Similar test patterns for different handler methods.
 func TestFilterHandler_ResolveOptions(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("filter")
 	require.True(t, ok)
 	filterHandler := handler.(*FilterHandler)
 
 	t.Run("static options", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Options: []string{"option1", "option2", "option3"},
@@ -31,6 +34,7 @@ func TestFilterHandler_ResolveOptions(t *testing.T) {
 	})
 
 	t.Run("template options", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Options: []string{"{{ .steps.env.value }}", "staging", "development"},
@@ -44,6 +48,7 @@ func TestFilterHandler_ResolveOptions(t *testing.T) {
 	})
 
 	t.Run("empty options", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Options: []string{},
@@ -56,6 +61,7 @@ func TestFilterHandler_ResolveOptions(t *testing.T) {
 	})
 
 	t.Run("invalid template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Options: []string{"valid", "{{ .steps.invalid.value"},
@@ -69,11 +75,14 @@ func TestFilterHandler_ResolveOptions(t *testing.T) {
 }
 
 func TestFilterHandler_CreateFilterKeyMap(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("filter")
 	require.True(t, ok)
 	filterHandler := handler.(*FilterHandler)
 
 	t.Run("creates keymap", func(t *testing.T) {
+		t.Parallel()
 		keyMap := filterHandler.createFilterKeyMap()
 		assert.NotNil(t, keyMap)
 		assert.NotNil(t, keyMap.Quit)

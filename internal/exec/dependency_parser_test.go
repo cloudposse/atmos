@@ -5,11 +5,27 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 )
 
+func TestDependencyParser_ParseComponentDependenciesRejectsMalformedDependenciesSection(t *testing.T) {
+	t.Parallel()
+
+	parser := NewDependencyParser(dependency.NewBuilder(), map[string]string{})
+
+	err := parser.ParseComponentDependencies("dev", "app", map[string]any{
+		cfg.DependenciesSectionName: []any{},
+	})
+
+	assert.ErrorIs(t, err, errUtils.ErrInvalidDependenciesSection)
+	assert.NotErrorIs(t, err, errUtils.ErrUnsupportedDependencyType)
+}
+
 func TestNewDependencyParser(t *testing.T) {
+	t.Parallel()
+
 	builder := dependency.NewBuilder()
 	nodeMap := map[string]string{
 		"vpc-dev": "vpc-dev",
@@ -24,6 +40,8 @@ func TestNewDependencyParser(t *testing.T) {
 }
 
 func TestDependencyParser_ShouldSkipComponent(t *testing.T) {
+	t.Parallel()
+
 	parser := &DependencyParser{}
 
 	tests := []struct {
@@ -78,6 +96,7 @@ func TestDependencyParser_ShouldSkipComponent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := parser.shouldSkipComponent(tt.component)
 			assert.Equal(t, tt.shouldSkip, result)
 		})
@@ -85,6 +104,8 @@ func TestDependencyParser_ShouldSkipComponent(t *testing.T) {
 }
 
 func TestDependencyParser_ParseComponentDependencies(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		stackName     string
@@ -253,6 +274,7 @@ func TestDependencyParser_ParseComponentDependencies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			builder := dependency.NewBuilder()
 
 			// Add nodes to builder.
@@ -286,6 +308,8 @@ func TestDependencyParser_ParseComponentDependencies(t *testing.T) {
 }
 
 func TestDependencyParser_ParseSingleDependency(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		dep         any
@@ -333,6 +357,7 @@ func TestDependencyParser_ParseSingleDependency(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			nodeMap := map[string]string{
 				"vpc-dev": "vpc-dev",
 				"app-dev": "app-dev",
@@ -363,6 +388,8 @@ func TestDependencyParser_ParseSingleDependency(t *testing.T) {
 }
 
 func TestDependencyParser_ParseDependencyMapEntry(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		depMap       map[string]any
@@ -434,6 +461,7 @@ func TestDependencyParser_ParseDependencyMapEntry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			builder := dependency.NewBuilder()
 
 			// Add source node.
@@ -467,6 +495,8 @@ func TestDependencyParser_ParseDependencyMapEntry(t *testing.T) {
 }
 
 func TestDependencyParser_AddDependencyIfExists(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		fromID      string
@@ -506,6 +536,7 @@ func TestDependencyParser_AddDependencyIfExists(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			builder := dependency.NewBuilder()
 
 			// Add nodes to builder.
@@ -535,6 +566,8 @@ func TestDependencyParser_AddDependencyIfExists(t *testing.T) {
 }
 
 func TestParseDependencyMap(t *testing.T) {
+	t.Parallel()
+
 	nodeMap := map[string]string{
 		"vpc-dev":  "vpc-dev",
 		"rds-dev":  "rds-dev",
@@ -543,6 +576,7 @@ func TestParseDependencyMap(t *testing.T) {
 	}
 
 	t.Run("map string any format", func(t *testing.T) {
+		t.Parallel()
 		builder := dependency.NewBuilder()
 		for nodeID := range nodeMap {
 			_ = builder.AddNode(&dependency.Node{ID: nodeID})
@@ -561,6 +595,7 @@ func TestParseDependencyMap(t *testing.T) {
 	})
 
 	t.Run("map any any format", func(t *testing.T) {
+		t.Parallel()
 		builder := dependency.NewBuilder()
 		for nodeID := range nodeMap {
 			_ = builder.AddNode(&dependency.Node{ID: nodeID})
@@ -579,6 +614,7 @@ func TestParseDependencyMap(t *testing.T) {
 	})
 
 	t.Run("map any any with cross-stack dependency", func(t *testing.T) {
+		t.Parallel()
 		builder := dependency.NewBuilder()
 		for nodeID := range nodeMap {
 			_ = builder.AddNode(&dependency.Node{ID: nodeID})
@@ -597,6 +633,7 @@ func TestParseDependencyMap(t *testing.T) {
 	})
 
 	t.Run("map with invalid dependency logs warning", func(t *testing.T) {
+		t.Parallel()
 		builder := dependency.NewBuilder()
 		for nodeID := range nodeMap {
 			_ = builder.AddNode(&dependency.Node{ID: nodeID})

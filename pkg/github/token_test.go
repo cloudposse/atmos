@@ -2,9 +2,11 @@ package github
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +20,11 @@ import (
 func TestHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
+	}
+	if os.Getenv("HELPER_WAIT_FOR_STDIN") == "1" {
+		_, _ = io.Copy(io.Discard, os.Stdin)
+		// Closing stdin must not let the helper exit without process cancellation.
+		time.Sleep(time.Minute)
 	}
 	fmt.Fprint(os.Stdout, os.Getenv("HELPER_STDOUT"))
 	if os.Getenv("HELPER_EXIT_CODE") == "1" {

@@ -32,6 +32,10 @@ type ColorScheme struct {
 	Gold      string // Special indicators (typically yellow or brightYellow)
 	Spinner   string // Loading/progress indicators (typically cyan)
 
+	// Progress gradient endpoints, independent of status and spinner colors.
+	ProgressStart string
+	ProgressEnd   string
+
 	// Table specific
 	HeaderText string // Table header text (typically brightCyan or green)
 	RowText    string // Table row text (typically white)
@@ -71,6 +75,14 @@ func GenerateColorScheme(t *Theme) ColorScheme {
 		textSecondary = t.BrightBlack
 	}
 
+	progressStart, progressEnd := t.ProgressStart, t.ProgressEnd
+	if progressStart == "" {
+		progressStart = t.Cyan
+	}
+	if progressEnd == "" {
+		progressEnd = t.Green
+	}
+
 	return ColorScheme{
 		// Core semantic colors - map ANSI colors to purposes
 		Primary:   t.Blue,    // Blue for primary actions (commands, headings)
@@ -98,6 +110,9 @@ func GenerateColorScheme(t *Theme) ColorScheme {
 		Highlight: t.BrightMagenta, // Bright magenta for highlights
 		Gold:      t.BrightYellow,  // Bright yellow for special indicators
 		Spinner:   t.Cyan,          // Cyan for loading/progress (calming, indicates activity)
+
+		ProgressStart: progressStart,
+		ProgressEnd:   progressEnd,
 
 		// Table specific
 		HeaderText: t.Green,       // Green for headers

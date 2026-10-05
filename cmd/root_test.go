@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -13,9 +14,73 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestReconcileMaskingForCommandHonorsShadowingFlag(t *testing.T) {
+	t.Cleanup(func() {
+		iolib.Reset()
+		viper.Reset()
+	})
+
+	boolPtr := func(value bool) *bool { return &value }
+	tests := []struct {
+		name       string
+		configured bool
+		root       *bool
+		group      *bool
+		leaf       *bool
+		want       bool
+	}{
+		{
+			name:       "changed leaf wins over changed group",
+			configured: true,
+			group:      boolPtr(false),
+			leaf:       boolPtr(true),
+			want:       true,
+		},
+		{
+			name:       "changed root wins without child override",
+			configured: false,
+			root:       boolPtr(true),
+			want:       true,
+		},
+		{
+			name:       "no local override preserves reconciled viper state",
+			configured: false,
+			want:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			iolib.Reset()
+			viper.Reset()
+			viper.Set("mask", tt.configured)
+			require.NoError(t, iolib.Initialize())
+
+			root := &cobra.Command{Use: "root"}
+			root.PersistentFlags().Bool("mask", true, "")
+			group := &cobra.Command{Use: "group"}
+			group.PersistentFlags().Bool("mask", true, "")
+			leaf := &cobra.Command{Use: "leaf"}
+			leaf.PersistentFlags().Bool("mask", true, "")
+			root.AddCommand(group)
+			group.AddCommand(leaf)
+
+			for command, value := range map[*cobra.Command]*bool{root: tt.root, group: tt.group, leaf: tt.leaf} {
+				if value != nil {
+					require.NoError(t, command.PersistentFlags().Set("mask", strconv.FormatBool(*value)))
+				}
+			}
+
+			reconcileMaskingForCommand(leaf)
+			assert.Equal(t, tt.want, iolib.MaskingEnabled())
+		})
+	}
+}
 
 func TestNoColorLog(t *testing.T) {
 	// Skip in CI environments without TTY.
@@ -260,10 +325,13 @@ func newBootstrapCloneCmd(t *testing.T, rawArgs []string) (*cobra.Command, []str
 // saveRestoreAtmosConfig snapshots the package-level atmosConfig (which
 // applyCIGitCloneBootstrap writes to) and restores it after the test, since
 // it is shared global state across this package's tests.
+// Kept as a named alias for readability at its call sites: NewTestKit now
+// snapshots and restores the package-level atmosConfig for every test that
+// uses it, so saveRestoreAtmosConfig delegates rather than maintaining a
+// second, narrower mechanism.
 func saveRestoreAtmosConfig(t *testing.T) {
 	t.Helper()
-	original := atmosConfig
-	t.Cleanup(func() { atmosConfig = original })
+	_ = NewTestKit(t)
 }
 
 func TestApplyCIGitCloneBootstrap_AllowsBootstrap(t *testing.T) {
@@ -1123,6 +1191,26 @@ func TestSetupColorProfileFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// setupColorProfileFromEnvWithArgs has real, permanent side effects
+			// when force-color is detected: it calls the raw os.Setenv (not
+			// t.Setenv) to set CLICOLOR_FORCE=1 for Boa's help renderer, and
+			// lipgloss.SetColorProfile(TrueColor) globally. NewTestKit restores
+			// the color profile; CLICOLOR_FORCE needs its own explicit
+			// save/restore since the test doesn't own that Setenv call itself.
+			// Left leaking, this silently defeats NO_COLOR for every later test
+			// in the binary that renders through the logger/Boa color path
+			// (confirmed root cause of TestTerraformGenerateVarfileCmdNoColor's
+			// intermittent -shuffle=on failures).
+			_ = NewTestKit(t)
+			originalCliColorForce, hadCliColorForce := os.LookupEnv("CLICOLOR_FORCE")
+			t.Cleanup(func() {
+				if hadCliColorForce {
+					_ = os.Setenv("CLICOLOR_FORCE", originalCliColorForce)
+				} else {
+					_ = os.Unsetenv("CLICOLOR_FORCE")
+				}
+			})
+
 			if tt.envVar != "" {
 				t.Setenv(tt.envVar, tt.envValue)
 			}

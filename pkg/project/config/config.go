@@ -56,15 +56,23 @@ const filePermissions = 0o644
 
 const fieldNameErrorFormat = "%w: %q"
 
+// fieldTypeComputed is the FieldDefinition.Type value for a field that is
+// never prompted for or --set, only ever derived from other answers via its
+// Value expression. See ComputeFields.
+const fieldTypeComputed = "computed"
+
 var (
-	errInvalidBooleanFieldValue = errors.New("invalid boolean field value")
-	errFieldMustBeText          = errors.New("field must be text")
-	errFieldMustBeStringOption  = errors.New("field must be a string option")
-	errFieldUnsupportedOption   = errors.New("field has unsupported option")
-	errFieldMustBeStringOptions = errors.New("field must be a list of string options")
-	errFieldMustBeBoolean       = errors.New("field must be true or false")
-	errFieldValidationFailed    = errors.New("field validation failed")
-	errInvalidFieldPattern      = errors.New("invalid field validation pattern")
+	errInvalidBooleanFieldValue   = errors.New("invalid boolean field value")
+	errFieldMustBeText            = errors.New("field must be text")
+	errFieldMustBeStringOption    = errors.New("field must be a string option")
+	errFieldUnsupportedOption     = errors.New("field has unsupported option")
+	errFieldMustBeStringOptions   = errors.New("field must be a list of string options")
+	errFieldMustBeBoolean         = errors.New("field must be true or false")
+	errFieldValidationFailed      = errors.New("field validation failed")
+	errInvalidFieldPattern        = errors.New("invalid field validation pattern")
+	errFieldOptionsSourceInvalid  = errors.New("field options source is invalid")
+	errFieldOptionsSourceNotFound = errors.New("field options source not found in answers")
+	errFieldOptionsSourceNotList  = errors.New("field options source did not resolve to a list")
 )
 
 // ScaffoldConfigDir is the directory name for user scaffold configuration.
@@ -95,8 +103,22 @@ type ScaffoldSpec struct {
 	// project records; ignored in template manifests.
 	Source string `yaml:"source,omitempty" json:"source,omitempty" jsonschema:"description=Where the template came from (written to project records)"`
 	// BaseRef records the git ref used as the three-way merge base when the
-	// project was generated. Written to project records.
-	BaseRef string `yaml:"baseRef,omitempty" json:"baseRef,omitempty" jsonschema:"description=Git ref used as the three-way merge base"`
+	// project was generated under --update-strategy=tracked. Written to
+	// project records. Mutually exclusive with RenderedRef in practice: a
+	// given record should carry at most one of the two, whichever update
+	// strategy last generated it -- see RenderedRef's own comment.
+	BaseRef string `yaml:"baseRef,omitempty" json:"baseRef,omitempty" jsonschema:"description=Git ref used as the three-way merge base (tracked strategy)"`
+	// RenderedRef records the resolved, immutable ref of the template source
+	// fetched for --update-strategy=rendered -- a commit SHA for a git::
+	// source, a manifest digest for an oci:// source (never the user's --ref
+	// string, which may name a mutable branch or tag; the actual resolved
+	// ref is what makes a later re-render of "the before state"
+	// reproducible). Written only by rendered-mode generations/updates.
+	// A record with RenderedRef set but BaseRef empty means the project was
+	// last managed with rendered; the reverse means tracked -- callers use
+	// this to detect a strategy switch and fail loudly instead of silently
+	// misinterpreting the other strategy's provenance field.
+	RenderedRef string `yaml:"renderedRef,omitempty" json:"renderedRef,omitempty" jsonschema:"description=Resolved immutable ref of the template source: a commit SHA for git, a manifest digest for OCI (rendered strategy)"`
 	// Delimiters optionally overrides the Go template delimiters used when
 	// rendering template files (exactly two entries: left and right).
 	Delimiters []string `yaml:"delimiters,omitempty" json:"delimiters,omitempty" jsonschema:"description=Template delimiters as a two-element list,minItems=2,maxItems=2"`
@@ -158,7 +180,20 @@ func DecodeHooks(raw map[string]any) (map[string]hooks.Hook, error) {
 type FileSpec struct {
 	// Path is the file's path as discovered in the template's file tree
 	// (matched against the file's original, pre-template-rendering path).
-	Path string `yaml:"path" json:"path" jsonschema:"description=File path as discovered in the template's file tree"`
+	// May be a literal path or a glob pattern (doublestar syntax: *, ?,
+	// [...], ** for any depth including zero, {a,b} -- see
+	// pkg/utils.PathMatch), letting one entry gate or multiply an entire
+	// directory at once, e.g. "docs/legacy/**" or "components/**". A
+	// backslash in the pattern is always treated as a directory-separator
+	// alias for forward slash (see pkg/utils.NormalizeGlobPattern),
+	// regardless of the OS that authored the pattern or the OS evaluating
+	// it, since discovered paths are always forward-slash-normalized.
+	// When more than one spec.files[]
+	// entry's path matches the same discovered file, the *last* matching
+	// entry in declaration order wins -- the same precedence convention as
+	// .gitignore/CODEOWNERS: write broad patterns first, specific overrides
+	// after. A wrong-order override is a silent no-op, not an error.
+	Path string `yaml:"path" json:"path" jsonschema:"description=File path as discovered in the template's file tree; may be a glob pattern (*, ?, [...], **, {a,b}) matching many files at once; when multiple entries match the same file, the last one declared wins"`
 	// When gates generation of this file. Evaluated against the collected
 	// answers (as the `answers` CEL variable) and, when Matrix is set, once
 	// per resolved combination (as the `matrix` CEL variable) to prune
@@ -167,7 +202,12 @@ type FileSpec struct {
 	// to a predicate/CEL string or a list (implicit all) -- the {all:/any:/not:}
 	// map form is deliberately excluded here (see the comment on
 	// FieldDefinition.When for why) even though pkg/condition itself parses
-	// it; use CEL's &&/||/! instead.
+	// it; use CEL's &&/||/! instead. When Path is a glob, When is evaluated
+	// identically for every matched file (or combination) -- it has no
+	// per-file variable to filter by which specific matched file it's
+	// currently gating; exclude one specific file from a glob's own When by
+	// declaring a second, more specific entry after the broad one instead
+	// (see Path's last-wins precedence above).
 	When condition.Condition `yaml:"when,omitempty" json:"when,omitempty" jsonschema:"description=Condition (predicate/CEL string or a list treated as 'all'; use CEL &&/||/! instead of the all/any/not map form) gating whether this file (or with matrix a specific combination) is generated,oneof_type=string;array"`
 	// Matrix declares axes to expand this file into one generated file per
 	// resolved combination -- the Cartesian product of every axis's values,
@@ -178,13 +218,31 @@ type FileSpec struct {
 	// list from nested/structured answer data (e.g.
 	// '{{ collectKeys answers.environments }}'). Requires Target, since
 	// Path alone can't serve as the output path for more than one file.
+	// When Path is a glob matching several files, every matched file gets
+	// one output per resolved combination, so Target must reference
+	// .file.Path or .file.RelPath to differentiate them -- checked
+	// deterministically before any file in the run is written
+	// (ErrScaffoldMatrixTargetMissingFileContext), not merely by a
+	// duplicate-output-path guard that would otherwise only fire once a
+	// second matched file's write collides with the first's (by which point
+	// the first has already been written to disk). Matrix itself is
+	// resolved once per Path, not once per matched file, so every file the
+	// same glob entry matches sees the identical resolved combination(s)
+	// even if an axis expression uses a non-deterministic template
+	// function.
 	Matrix MatrixAxes `yaml:"matrix,omitempty" json:"matrix,omitempty" jsonschema:"description=Axes to expand this file into one output per resolved combination; each axis's value is a literal list of strings; a dot-path string into answers.*; or a Go-template expression computing the list"`
 	// Target overrides the rendered output path for this file. Without
 	// Matrix it's optional, rendered once like Path -- letting authors keep
 	// Path a plain on-disk name while controlling dynamic naming from a
 	// normal YAML string. With Matrix it's required and rendered once per
 	// resolved combination, available as .matrix.<axis> in both Target and
-	// the file's own content.
+	// the file's own content. The currently matched file's own discovered
+	// path is also always available (regardless of Matrix, and whether
+	// Path is a glob or a literal) as .file.Path, and as .file.RelPath with
+	// Path's own glob literal-prefix stripped (equal to .file.Path when
+	// Path has no glob metacharacter) -- e.g.
+	// target: "environments/{{ .matrix.env }}/{{ .file.RelPath }}" for a
+	// directory-level matrix entry with path: "components/**".
 	Target string `yaml:"target,omitempty" json:"target,omitempty" jsonschema:"description=Output path template overriding Path; required when matrix is set; optional otherwise"`
 }
 
@@ -231,6 +289,16 @@ func (MatrixAxes) JSONSchemaExtend(schema *invopop.Schema) {
 	}
 }
 
+// FieldOption is one static choice for a select or multiselect field's
+// Options, pairing a display Label with the underlying Value that actually
+// flows into answers/templates/When -- mirrors huh.NewOption(label, value)
+// exactly. Value is required; Label defaults to Value when omitted, so a
+// plain string list (no labels) keeps working unchanged.
+type FieldOption struct {
+	Label string `yaml:"label,omitempty" json:"label,omitempty" jsonschema:"description=Display text shown in the prompt (defaults to value)"`
+	Value string `yaml:"value" json:"value" jsonschema:"description=Underlying value stored in answers and passed to templates"`
+}
+
 // FieldValidation constrains the allowed values for a FieldDefinition.
 type FieldValidation struct {
 	// Pattern is a regular expression the value must match (for input fields).
@@ -243,21 +311,47 @@ type FieldValidation struct {
 // type, presentation, validation, and default value.
 type FieldDefinition struct {
 	Name        string           `yaml:"name" json:"name" jsonschema:"description=Field name used as the template variable"`
-	Type        string           `yaml:"type,omitempty" json:"type,omitempty" jsonschema:"description=Prompt type,enum=input,enum=text,enum=string,enum=select,enum=multiselect,enum=confirm,enum=bool,enum=boolean"`
+	Type        string           `yaml:"type,omitempty" json:"type,omitempty" jsonschema:"description=Prompt type,enum=input,enum=text,enum=string,enum=select,enum=multiselect,enum=confirm,enum=bool,enum=boolean,enum=computed"`
 	Label       string           `yaml:"label,omitempty" json:"label,omitempty" jsonschema:"description=Short prompt label"`
 	Description string           `yaml:"description,omitempty" json:"description,omitempty" jsonschema:"description=Longer help text shown with the prompt"`
-	Required    bool             `yaml:"required,omitempty" json:"required,omitempty" jsonschema:"description=Whether a value must be provided"`
+	Required    bool             `yaml:"required,omitempty" json:"required,omitempty" jsonschema:"description=Whether a value must be provided (not valid on a computed field)"`
 	Default     any              `yaml:"default,omitempty" json:"default,omitempty" jsonschema:"description=Default value"`
-	Options     []string         `yaml:"options,omitempty" json:"options,omitempty" jsonschema:"description=Choices for select and multiselect fields"`
+	Options     any              `yaml:"options,omitempty" json:"options,omitempty" jsonschema:"description=Static list of choices (plain strings or {label: value} objects); a dot-path string into answers.* (e.g. answers.environments); or a Go-template expression computing the list,oneof_type=string;array"`
 	Placeholder string           `yaml:"placeholder,omitempty" json:"placeholder,omitempty" jsonschema:"description=Placeholder text for input fields"`
 	Validation  *FieldValidation `yaml:"validation,omitempty" json:"validation,omitempty" jsonschema:"description=Optional validation constraints for this field"`
+	// Value computes a computed field's value. Either a Go-template
+	// expression string (the same `answers` binding When and dynamic
+	// Options use), rendered via engine.Processor.RenderAnswersExpression,
+	// or a literal of any other type (map, list, scalar, bool) taken
+	// as-is -- e.g. a hand-authored literal, or one produced by a YAML
+	// function such as !include that resolves before this field is ever
+	// unmarshaled. ComputeFields branches on the resolved Go type: a string
+	// always goes through the expression renderer (a bare literal string
+	// with no template delimiters still errors, exactly as before this
+	// field accepted non-string values); anything else is stored directly,
+	// skipping the renderer entirely. Only valid when Type is "computed";
+	// every other field type is user-supplied (prompted or --set) and
+	// ignores Value. See ComputeFields, which evaluates every computed
+	// field once, in Fields declaration order, after every regular field's
+	// answer is already final -- so a computed field may reference any
+	// regular field regardless of declaration order, but may only
+	// reference an earlier-declared computed field. Referencing itself or a
+	// later-declared computed field is rejected at load time
+	// (validateComputedFieldOrdering, string values only -- a literal has
+	// no expression to scan), rather than silently resolving to no value at
+	// render time. Because ComputeFields runs after the interactive form
+	// completes, a regular field's own When can never depend on a computed
+	// field's result -- only the reverse.
+	Value any `yaml:"value,omitempty" json:"value,omitempty" jsonschema:"description=A Go-template expression computing this field's value from answers.* -- or a literal value of any type (only valid when type: computed)"`
 	// When gates whether this field is prompted for, evaluated against
 	// answers collected from fields declared earlier in Fields (as the
-	// `answers` CEL variable). Empty always prompts. Schema-restricted to a
-	// predicate/CEL string or a list (implicit all): invopop reflects
-	// Condition's oneOf branches alongside a sibling additionalProperties:
-	// false (Condition has no exported fields), so including "object" here
-	// would make the {all:/any:/not:} map form fail schema validation even
+	// `answers` CEL variable). Empty always prompts. Never sees a computed
+	// field's result, even one declared earlier -- see Value's doc comment.
+	// Schema-restricted to a predicate/CEL string or a list (implicit all):
+	// invopop reflects Condition's oneOf branches alongside a sibling
+	// additionalProperties: false (Condition has no exported fields), so
+	// including "object" here would make the {all:/any:/not:} map form fail
+	// schema validation even
 	// though pkg/condition parses it -- confirmed empirically, not assumed.
 	// Use CEL's &&/||/! for compound conditions instead.
 	When condition.Condition `yaml:"when,omitempty" json:"when,omitempty" jsonschema:"description=Condition (predicate/CEL string or a list treated as 'all'; use CEL &&/||/! instead of the all/any/not map form) gating whether this field is prompted for,oneof_type=string;array"`

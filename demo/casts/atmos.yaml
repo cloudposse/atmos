@@ -15,9 +15,19 @@ commands:
       GOBIN: '{{ env "PWD" }}/../../.context/bin'
     steps:
       - type: workdir
+        name: concurrent-vendoring-fixture
+        source: fixtures/concurrent-vendoring
+        path: "../../.context/cast-fixtures/concurrent-vendoring"
+        reset: true
+      - type: workdir
         name: native-terraform-fixture
         source: fixtures/native-terraform
         path: "../../.context/cast-fixtures/native-terraform"
+        reset: true
+      - type: workdir
+        name: streaming-ui-fixture
+        source: fixtures/streaming-ui
+        path: "../../.context/cast-fixtures/streaming-ui"
         reset: true
       - type: workdir
         name: demo-vendoring-fixture
@@ -261,7 +271,7 @@ commands:
         reset: true
       - type: workdir
         name: hooks-infracost-fixture
-        source: "../../examples/hooks-infracost"
+        source: "fixtures/hooks-infracost"
         path: "../../.context/cast-fixtures/hooks-infracost"
         reset: true
       - type: workdir

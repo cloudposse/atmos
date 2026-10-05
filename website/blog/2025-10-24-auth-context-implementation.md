@@ -81,6 +81,8 @@ This is an **internal architecture improvement** with minimal user-facing impact
 - #1695 - Auth context implementation
 - See `docs/prd/auth-context-multi-identity.md` for complete technical design
 
+For usage and configuration, see [atmos auth](/cli/commands/auth/usage).
+
 ## Get Involved
 
 This refactoring sets the foundation for future authentication improvements. If you're working on auth-related features, ensure you:

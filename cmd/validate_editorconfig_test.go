@@ -13,6 +13,7 @@ import (
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/outputformat"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -576,5 +577,11 @@ func TestEditorConfigCmdCIFlagRegisteredThroughStandardParser(t *testing.T) {
 	assert.Equal(t, "false", flag.DefValue)
 
 	t.Setenv("ATMOS_CI", "true")
+	// Re-bind defensively: init() runs this exactly once, but other tests in
+	// this package call viper.Reset(), which discards it -- leaving this
+	// assertion dependent on no such test having run first under -shuffle=on.
+	// BindFlagsToViper is safe to call again (idempotent); see docs/fixes for
+	// the incident.
+	require.NoError(t, ciFlagsParser.BindFlagsToViper(editorConfigCmd, viper.GetViper()))
 	assert.True(t, ci.ModeEnabled(&cobra.Command{}), "expected ATMOS_CI env var to resolve through Viper via the standard parser binding")
 }

@@ -15,12 +15,15 @@ import (
 )
 
 func TestDeriveStackFileName(t *testing.T) {
+	t.Parallel()
+
 	// Use t.TempDir() for OS-neutral paths.
 	tempDir := t.TempDir()
 	stacksBase := filepath.Join(tempDir, "stacks")
 	otherDir := filepath.Join(tempDir, "other", "location")
 
 	t.Run("simple file path", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &mockAtmosConfig{stacksBaseAbsolutePath: stacksBase}
 		filePath := filepath.Join(stacksBase, "dev.yaml")
 		result := deriveStackFileName(atmosConfig.toSchema(), filePath)
@@ -28,6 +31,7 @@ func TestDeriveStackFileName(t *testing.T) {
 	})
 
 	t.Run("nested file path", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &mockAtmosConfig{stacksBaseAbsolutePath: stacksBase}
 		filePath := filepath.Join(stacksBase, "deploy", "dev.yaml")
 		result := deriveStackFileName(atmosConfig.toSchema(), filePath)
@@ -35,6 +39,7 @@ func TestDeriveStackFileName(t *testing.T) {
 	})
 
 	t.Run("deeply nested file path", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &mockAtmosConfig{stacksBaseAbsolutePath: stacksBase}
 		filePath := filepath.Join(stacksBase, "org", "team", "deploy", "dev.yaml")
 		result := deriveStackFileName(atmosConfig.toSchema(), filePath)
@@ -42,6 +47,7 @@ func TestDeriveStackFileName(t *testing.T) {
 	})
 
 	t.Run("empty base path falls back to filename", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &mockAtmosConfig{stacksBaseAbsolutePath: ""}
 		filePath := filepath.Join(stacksBase, "deploy", "dev.yaml")
 		result := deriveStackFileName(atmosConfig.toSchema(), filePath)
@@ -49,6 +55,7 @@ func TestDeriveStackFileName(t *testing.T) {
 	})
 
 	t.Run("yml extension", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &mockAtmosConfig{stacksBaseAbsolutePath: stacksBase}
 		filePath := filepath.Join(stacksBase, "prod.yml")
 		result := deriveStackFileName(atmosConfig.toSchema(), filePath)
@@ -56,6 +63,7 @@ func TestDeriveStackFileName(t *testing.T) {
 	})
 
 	t.Run("file path not under base path returns relative path", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &mockAtmosConfig{stacksBaseAbsolutePath: stacksBase}
 		filePath := filepath.Join(otherDir, "dev.yaml")
 		result := deriveStackFileName(atmosConfig.toSchema(), filePath)
@@ -66,6 +74,8 @@ func TestDeriveStackFileName(t *testing.T) {
 }
 
 func TestDeriveStackName(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		stackFileName   string
@@ -102,6 +112,7 @@ func TestDeriveStackName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &mockAtmosConfig{}
 
 			result := deriveStackName(atmosConfig.toSchema(), tt.stackFileName, tt.varsSection, tt.stackSectionMap)
@@ -128,6 +139,8 @@ func (m *mockAtmosConfig) toSchema() *schema.AtmosConfiguration {
 }
 
 func TestBuildStackLocalsFromContext(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		localsCtx  *LocalsContext
@@ -205,6 +218,7 @@ func TestBuildStackLocalsFromContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := buildStackLocalsFromContext(tt.localsCtx)
 			assert.Len(t, result, len(tt.expectKeys))
 			for _, key := range tt.expectKeys {
@@ -215,6 +229,8 @@ func TestBuildStackLocalsFromContext(t *testing.T) {
 }
 
 func TestProcessStackFileForLocals(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory for test files.
 	tempDir := t.TempDir()
 
@@ -246,6 +262,7 @@ vars:
 	}
 
 	t.Run("valid file with locals", func(t *testing.T) {
+		t.Parallel()
 		result, err := processStackFileForLocals(atmosConfig, validFile, "")
 		require.NoError(t, err)
 		assert.Equal(t, "valid", result.StackName)
@@ -255,6 +272,7 @@ vars:
 	})
 
 	t.Run("file not found", func(t *testing.T) {
+		t.Parallel()
 		missingFile := filepath.Join(tempDir, "does-not-exist.yaml")
 		_, err := processStackFileForLocals(atmosConfig, missingFile, "")
 		assert.Error(t, err)
@@ -263,6 +281,7 @@ vars:
 	})
 
 	t.Run("invalid YAML returns empty result", func(t *testing.T) {
+		t.Parallel()
 		result, err := processStackFileForLocals(atmosConfig, invalidFile, "")
 		require.NoError(t, err)
 		assert.Empty(t, result.StackName)
@@ -271,6 +290,7 @@ vars:
 	})
 
 	t.Run("empty file returns empty result", func(t *testing.T) {
+		t.Parallel()
 		result, err := processStackFileForLocals(atmosConfig, emptyFile, "")
 		require.NoError(t, err)
 		assert.Empty(t, result.StackName)
@@ -279,6 +299,7 @@ vars:
 	})
 
 	t.Run("filter by stack name matches", func(t *testing.T) {
+		t.Parallel()
 		result, err := processStackFileForLocals(atmosConfig, validFile, "valid")
 		require.NoError(t, err)
 		assert.Equal(t, "valid", result.StackName)
@@ -287,6 +308,7 @@ vars:
 	})
 
 	t.Run("filter by stack name does not match", func(t *testing.T) {
+		t.Parallel()
 		result, err := processStackFileForLocals(atmosConfig, validFile, "other-stack")
 		require.NoError(t, err)
 		assert.Empty(t, result.StackName)
@@ -295,6 +317,7 @@ vars:
 	})
 
 	t.Run("filter matching invalid YAML returns error", func(t *testing.T) {
+		t.Parallel()
 		// When filtering by a stack that has YAML errors, return error instead of silently skipping.
 		_, err := processStackFileForLocals(atmosConfig, invalidFile, "invalid")
 		assert.Error(t, err)
@@ -304,6 +327,8 @@ vars:
 }
 
 func TestExecuteDescribeLocals(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory for test files.
 	tempDir := t.TempDir()
 
@@ -332,6 +357,7 @@ locals:
 	}
 
 	t.Run("returns locals for dev stack in direct format", func(t *testing.T) {
+		t.Parallel()
 		result, err := ExecuteDescribeLocals(atmosConfig, "dev")
 		require.NoError(t, err)
 		// Result should be direct format: locals: {...}
@@ -343,6 +369,7 @@ locals:
 	})
 
 	t.Run("returns locals for prod stack in direct format", func(t *testing.T) {
+		t.Parallel()
 		result, err := ExecuteDescribeLocals(atmosConfig, "prod")
 		require.NoError(t, err)
 		// Result should be direct format: locals: {...}
@@ -354,6 +381,7 @@ locals:
 	})
 
 	t.Run("returns error for nonexistent stack", func(t *testing.T) {
+		t.Parallel()
 		_, err := ExecuteDescribeLocals(atmosConfig, "nonexistent")
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
@@ -361,6 +389,8 @@ locals:
 }
 
 func TestDeriveStackNameWithTemplate(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		stackFileName   string
@@ -398,6 +428,7 @@ func TestDeriveStackNameWithTemplate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				Stacks: schema.Stacks{
 					NameTemplate: tt.nameTemplate,
@@ -410,6 +441,8 @@ func TestDeriveStackNameWithTemplate(t *testing.T) {
 }
 
 func TestDeriveStackNameWithNamePattern(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		stackFileName   string
@@ -454,6 +487,7 @@ func TestDeriveStackNameWithNamePattern(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				Stacks: schema.Stacks{
 					NamePattern: tt.namePattern,
@@ -466,11 +500,15 @@ func TestDeriveStackNameWithNamePattern(t *testing.T) {
 }
 
 func TestNewDescribeLocalsExec(t *testing.T) {
+	t.Parallel()
+
 	exec := NewDescribeLocalsExec()
 	assert.NotNil(t, exec)
 }
 
 func TestGetLocalsForComponentType(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		stackLocals   map[string]any
@@ -579,6 +617,7 @@ func TestGetLocalsForComponentType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getLocalsForComponentType(tt.stackLocals, tt.componentType)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -586,7 +625,10 @@ func TestGetLocalsForComponentType(t *testing.T) {
 }
 
 func TestExecuteForComponent(t *testing.T) {
+	t.Parallel()
+
 	t.Run("requires stack", func(t *testing.T) {
+		t.Parallel()
 		exec := &describeLocalsExec{}
 
 		args := &DescribeLocalsArgs{
@@ -600,6 +642,7 @@ func TestExecuteForComponent(t *testing.T) {
 	})
 
 	t.Run("returns error when component not found", func(t *testing.T) {
+		t.Parallel()
 		expectedErr := errors.New("component not found")
 
 		exec := &describeLocalsExec{
@@ -619,6 +662,7 @@ func TestExecuteForComponent(t *testing.T) {
 	})
 
 	t.Run("returns error when stack has no locals", func(t *testing.T) {
+		t.Parallel()
 		exec := &describeLocalsExec{
 			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
 				return map[string]any{
@@ -642,6 +686,7 @@ func TestExecuteForComponent(t *testing.T) {
 	})
 
 	t.Run("returns error when stack not found", func(t *testing.T) {
+		t.Parallel()
 		exec := &describeLocalsExec{
 			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
 				return map[string]any{
@@ -665,6 +710,7 @@ func TestExecuteForComponent(t *testing.T) {
 	})
 
 	t.Run("returns locals for terraform component", func(t *testing.T) {
+		t.Parallel()
 		exec := &describeLocalsExec{
 			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
 				assert.Equal(t, "vpc", params.Component)
@@ -712,6 +758,7 @@ func TestExecuteForComponent(t *testing.T) {
 	})
 
 	t.Run("returns locals for helmfile component", func(t *testing.T) {
+		t.Parallel()
 		exec := &describeLocalsExec{
 			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
 				return map[string]any{
@@ -754,6 +801,7 @@ func TestExecuteForComponent(t *testing.T) {
 	})
 
 	t.Run("defaults to terraform when component_type not set", func(t *testing.T) {
+		t.Parallel()
 		exec := &describeLocalsExec{
 			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
 				// Return without component_type.
@@ -787,7 +835,10 @@ func TestExecuteForComponent(t *testing.T) {
 
 // TestExecuteForComponentOutputStructure verifies that component queries return the correct structure.
 func TestExecuteForComponentOutputStructure(t *testing.T) {
+	t.Parallel()
+
 	t.Run("component output has expected structure", func(t *testing.T) {
+		t.Parallel()
 		exec := &describeLocalsExec{
 			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
 				return map[string]any{
@@ -837,6 +888,7 @@ func TestExecuteForComponentOutputStructure(t *testing.T) {
 	})
 
 	t.Run("component output works with direct format", func(t *testing.T) {
+		t.Parallel()
 		exec := &describeLocalsExec{
 			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
 				// Filter should be "deploy/prod" (file path).
@@ -874,7 +926,10 @@ func TestExecuteForComponentOutputStructure(t *testing.T) {
 }
 
 func TestDescribeLocalsExecExecute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("execute requires stack", func(t *testing.T) {
+		t.Parallel()
 		exec := &describeLocalsExec{}
 
 		args := &DescribeLocalsArgs{
@@ -888,6 +943,7 @@ func TestDescribeLocalsExecExecute(t *testing.T) {
 	})
 
 	t.Run("execute with stack", func(t *testing.T) {
+		t.Parallel()
 		// Create a temporary directory for test files.
 		tempDir := t.TempDir()
 
@@ -923,6 +979,7 @@ locals:
 	})
 
 	t.Run("execute with query", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 
 		devYAML := `
@@ -958,6 +1015,7 @@ locals:
 	})
 
 	t.Run("execute with file output", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 
 		devYAML := `
@@ -994,6 +1052,7 @@ locals:
 	})
 
 	t.Run("execute returns error from executeDescribeLocals", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		expectedErr := errors.New("execute error")
 
@@ -1017,6 +1076,7 @@ locals:
 	})
 
 	t.Run("execute with component argument", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		var capturedData any
 
@@ -1069,6 +1129,7 @@ locals:
 	})
 
 	t.Run("execute with component but missing stack returns error", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 
 		exec := &describeLocalsExec{
@@ -1091,6 +1152,8 @@ locals:
 }
 
 func TestGetComponentType(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		componentSection map[string]any
@@ -1135,6 +1198,7 @@ func TestGetComponentType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getComponentType(tt.componentSection)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -1142,6 +1206,8 @@ func TestGetComponentType(t *testing.T) {
 }
 
 func TestExtractComponentLocals(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		componentSection map[string]any
@@ -1181,6 +1247,7 @@ func TestExtractComponentLocals(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := extractComponentLocals(tt.componentSection)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -1188,6 +1255,8 @@ func TestExtractComponentLocals(t *testing.T) {
 }
 
 func TestBuildComponentSchemaOutput(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		component     string
@@ -1216,6 +1285,7 @@ func TestBuildComponentSchemaOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := buildComponentSchemaOutput(tt.component, tt.componentType, tt.locals)
 
 			// Verify structure: components -> componentType -> component -> locals.
@@ -1231,6 +1301,8 @@ func TestBuildComponentSchemaOutput(t *testing.T) {
 }
 
 func TestMergeLocals(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		base     map[string]any
@@ -1283,6 +1355,7 @@ func TestMergeLocals(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := mergeLocals(tt.base, tt.override)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -1290,9 +1363,12 @@ func TestMergeLocals(t *testing.T) {
 }
 
 func TestParseStackFileYAML(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	t.Run("parses valid YAML", func(t *testing.T) {
+		t.Parallel()
 		validYAML := `
 locals:
   key: value
@@ -1308,6 +1384,7 @@ locals:
 	})
 
 	t.Run("returns error for file not found", func(t *testing.T) {
+		t.Parallel()
 		missingFile := filepath.Join(tempDir, "does-not-exist.yaml")
 		_, err := parseStackFileYAML(missingFile, false)
 		assert.Error(t, err)
@@ -1315,6 +1392,7 @@ locals:
 	})
 
 	t.Run("returns nil for invalid YAML when not filtering", func(t *testing.T) {
+		t.Parallel()
 		invalidYAML := `invalid: yaml: [broken`
 		invalidFile := filepath.Join(tempDir, "invalid.yaml")
 		err := os.WriteFile(invalidFile, []byte(invalidYAML), 0o644)
@@ -1326,6 +1404,7 @@ locals:
 	})
 
 	t.Run("returns error for invalid YAML when filtering", func(t *testing.T) {
+		t.Parallel()
 		invalidYAML := `invalid: yaml: [broken`
 		invalidFile := filepath.Join(tempDir, "invalid_filter.yaml")
 		err := os.WriteFile(invalidFile, []byte(invalidYAML), 0o644)
@@ -1337,6 +1416,7 @@ locals:
 	})
 
 	t.Run("returns nil for empty file", func(t *testing.T) {
+		t.Parallel()
 		emptyFile := filepath.Join(tempDir, "empty.yaml")
 		err := os.WriteFile(emptyFile, []byte(""), 0o644)
 		require.NoError(t, err)
@@ -1348,6 +1428,8 @@ locals:
 }
 
 func TestStackMatchesFilter(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		filterByStack string
@@ -1380,6 +1462,7 @@ func TestStackMatchesFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := stackMatchesFilter(tt.filterByStack, tt.stackFileName, tt.stackName)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -1387,6 +1470,8 @@ func TestStackMatchesFilter(t *testing.T) {
 }
 
 func TestGetSectionOnlyLocals(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		sectionLocals map[string]any
@@ -1433,6 +1518,7 @@ func TestGetSectionOnlyLocals(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getSectionOnlyLocals(tt.sectionLocals, tt.globalLocals)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -1440,6 +1526,8 @@ func TestGetSectionOnlyLocals(t *testing.T) {
 }
 
 func TestValuesEqual(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		a        any
@@ -1510,6 +1598,7 @@ func TestValuesEqual(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := valuesEqual(tt.a, tt.b)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -1517,6 +1606,8 @@ func TestValuesEqual(t *testing.T) {
 }
 
 func TestGetExplicitStackName(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		stackSectionMap map[string]any
@@ -1551,6 +1642,7 @@ func TestGetExplicitStackName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getExplicitStackName(tt.stackSectionMap)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -1558,7 +1650,10 @@ func TestGetExplicitStackName(t *testing.T) {
 }
 
 func TestBuildComponentLocalsResult(t *testing.T) {
+	t.Parallel()
+
 	t.Run("direct format with locals succeeds", func(t *testing.T) {
+		t.Parallel()
 		args := &DescribeLocalsArgs{
 			Component:     "vpc",
 			FilterByStack: "dev",
@@ -1574,6 +1669,7 @@ func TestBuildComponentLocalsResult(t *testing.T) {
 	})
 
 	t.Run("direct format with section-specific locals", func(t *testing.T) {
+		t.Parallel()
 		args := &DescribeLocalsArgs{
 			Component:     "vpc",
 			FilterByStack: "deploy/prod",
@@ -1604,6 +1700,7 @@ func TestBuildComponentLocalsResult(t *testing.T) {
 	})
 
 	t.Run("uses component locals when stack has no locals", func(t *testing.T) {
+		t.Parallel()
 		args := &DescribeLocalsArgs{
 			Component:     "vpc",
 			FilterByStack: "dev",
@@ -1625,6 +1722,7 @@ func TestBuildComponentLocalsResult(t *testing.T) {
 	})
 
 	t.Run("returns error when no locals available", func(t *testing.T) {
+		t.Parallel()
 		args := &DescribeLocalsArgs{
 			Component:     "vpc",
 			FilterByStack: "dev",
@@ -1637,6 +1735,8 @@ func TestBuildComponentLocalsResult(t *testing.T) {
 }
 
 func TestExecuteDescribeLocalsWindowsPathNormalization(t *testing.T) {
+	t.Parallel()
+
 	// Test that Windows-style paths are normalized.
 	tempDir := t.TempDir()
 

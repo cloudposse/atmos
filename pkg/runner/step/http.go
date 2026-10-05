@@ -21,7 +21,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -219,7 +218,7 @@ func (h *HTTPHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 	}
 
 	if lastResult != nil {
-		ui.Infof(
+		vars.UI().Infof(
 			"Webhook %q sent %s request to %s and received HTTP %v",
 			step.Name,
 			req.method,

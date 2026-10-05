@@ -473,6 +473,22 @@ func installPullImageShim(t *testing.T, shim *pullImageShim) {
 	original := remoteGet
 	remoteGet = shim.get
 	t.Cleanup(func() { remoteGet = original })
+
+	originalRetryConfig := ociManifestRetryConfig
+	ociManifestRetryConfig = testOCIManifestRetryConfig()
+	t.Cleanup(func() { ociManifestRetryConfig = originalRetryConfig })
+}
+
+// testOCIManifestRetryConfig mirrors testOCILayerRetryConfig: same bounded
+// attempt count as production, zero delay so retry-exercising tests run fast.
+func testOCIManifestRetryConfig() *schema.RetryConfig {
+	maxAttempts := ociManifestRetryMaxAttempts
+	initialDelay := time.Duration(0)
+	return &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+	}
 }
 
 // ghcrConfigWithCreds returns a config that causes GHCRAuth to resolve a
@@ -577,8 +593,15 @@ func TestPullImage_NoFallback_500(t *testing.T) {
 }
 
 func TestPullImage_NoFallback_NetOpError(t *testing.T) {
+	// A persistent (not just transiently flaky) connection failure: retried
+	// ociManifestRetryMaxAttempts times on the *same* auth, then reported --
+	// never switches to the separate anonymous-auth fallback path, which only
+	// triggers on registry-level auth rejections (401/403/DENIED), not
+	// connection-level failures.
 	shim := &pullImageShim{
 		results: []pullImageResult{
+			{err: &net.OpError{Op: "dial", Err: errors.New("no such host")}},
+			{err: &net.OpError{Op: "dial", Err: errors.New("no such host")}},
 			{err: &net.OpError{Op: "dial", Err: errors.New("no such host")}},
 		},
 	}
@@ -587,8 +610,29 @@ func TestPullImage_NoFallback_NetOpError(t *testing.T) {
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
 	_, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.Error(t, err)
-	assert.Equal(t, 1, shim.calls, "DNS-style errors must not trigger anonymous retry")
+	assert.Equal(t, ociManifestRetryMaxAttempts, shim.calls, "DNS-style errors must retry on the same auth, not trigger anonymous fallback")
 	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
+}
+
+// TestPullImage_RetriesTransientConnectError_EventuallySucceeds is the
+// regression test for the production incident this retry was added for:
+// Harden-Runner block-mode Windows runners can lose a race between their own
+// egress-firewall rule propagation and the registry connection attempt,
+// producing one transient dial failure that clears on retry.
+func TestPullImage_RetriesTransientConnectError_EventuallySucceeds(t *testing.T) {
+	shim := &pullImageShim{
+		results: []pullImageResult{
+			{err: &net.OpError{Op: "dial", Err: errors.New("connectex: forbidden by its access permissions")}},
+			{descriptor: &remote.Descriptor{}},
+		},
+	}
+	installPullImageShim(t, shim)
+
+	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
+	desc, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
+	require.NoError(t, err)
+	assert.NotNil(t, desc)
+	assert.Equal(t, 2, shim.calls, "expected one failed attempt followed by one successful retry on the same auth")
 }
 
 func TestPullImage_NoRetry_WhenAlreadyAnonymous(t *testing.T) {
@@ -692,6 +736,55 @@ func TestResolveImage_PullError(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, resolved)
 	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
+}
+
+// TestPinDigest_Success asserts a tagged reference is re-expressed with the
+// tag discarded and the digest bound on as an explicit "@sha256:..." pin.
+func TestPinDigest_Success(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("a", 64)
+
+	pinned, err := PinDigest("registry.example.com/org/repo:v1", digest)
+
+	require.NoError(t, err)
+	assert.Equal(t, "registry.example.com/org/repo@"+digest, pinned)
+}
+
+// TestPinDigest_InvalidReference asserts a malformed image reference is
+// rejected before any reference manipulation, wrapped in
+// ErrInvalidImageReference -- mirroring TestResolveImage_InvalidReference,
+// since both parse imageName the same way.
+func TestPinDigest_InvalidReference(t *testing.T) {
+	pinned, err := PinDigest("invalid::image//name", "sha256:"+strings.Repeat("a", 64))
+
+	require.Error(t, err)
+	assert.Empty(t, pinned)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidImageReference))
+}
+
+// TestPinDigest_MalformedDigest asserts a syntactically invalid digest (too
+// short, wrong algorithm prefix, missing "sha256:" entirely, etc.) is
+// rejected here rather than silently accepted and only failing later --
+// PinDigest is exported, so a public caller (or a corrupted persisted
+// rendered record reaching it) can pass an unvalidated digest string.
+func TestPinDigest_MalformedDigest(t *testing.T) {
+	tests := []struct {
+		name   string
+		digest string
+	}{
+		{name: "missing algorithm prefix", digest: strings.Repeat("a", 64)},
+		{name: "too short", digest: "sha256:abc"},
+		{name: "empty", digest: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pinned, err := PinDigest("registry.example.com/org/repo:v1", tt.digest)
+
+			require.Error(t, err)
+			assert.Empty(t, pinned)
+			assert.True(t, errors.Is(err, errUtils.ErrInvalidImageReference))
+		})
+	}
 }
 
 // TestProcessImageWithFS_Success exercises the full pull->extract success

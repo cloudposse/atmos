@@ -1,0 +1,60 @@
+---
+slug: ci-startup-status
+title: "See CI and Atmos Pro Status at a Glance"
+authors: [osterman]
+tags: [feature, dx]
+date: 2026-08-27T12:00:00.000Z
+---
+
+GitHub Actions is the most popular way teams run Atmos in CI, and a lot of those pipelines are
+still calling into the original `cloudposse/github-action-atmos-*` actions. Those actions were the
+recommendation for years. They're no longer where investment goes — [Native CI](/ci) replaced them
+with a more capable, end-to-end-tested integration. Plenty of teams don't know it exists, let alone
+that the actions they're on are effectively on life support.
+
+Even teams already on Native CI run into a quieter version of the same problem: a setting that
+doesn't take effect looks exactly like one that does. Maybe `ci.enabled` is set on one profile but
+not another, or an Atmos Pro workspace never got configured in the first place — nothing errors
+either way. The pipeline finishes green, and the first symptom is a status check or an upload
+that isn't there, discovered days later.
+
+<!--truncate-->
+
+## The Problem
+
+Confirming any of it meant checking for side effects after the fact: did the expected status check
+show up, did the drift upload happen, is this pipeline still wired to a marketplace action. None of
+that was visible from the CI run itself, so a misconfigured pipeline was only ever discovered
+because something else broke first.
+
+## The Fix
+
+Atmos now prints a short status banner the moment it detects it's running inside a CI provider:
+the version, whether Native CI mode is on or off, and whether Atmos Pro is configured. If it's
+invoked from one of the older marketplace actions, it also warns directly in the run log and
+points at migrating to Native CI — which has more features, gets tested end-to-end as part of the
+Atmos core test suite, and is where all future investment is going. Teams still on the legacy
+actions should treat this as a prompt to move now, not eventually.
+
+```text
+▶ Atmos version 1.228.0 linux/amd64
+✓ Atmos CI is enabled; learn more at https://atmos.tools/ci
+✗ Atmos Pro is disabled; learn more at https://atmos.tools/pro
+```
+
+```text
+⚠ Detected legacy action cloudposse/github-action-atmos-terraform-plan; migrate to Native CI for better performance — learn more at https://atmos.tools/ci
+```
+
+## How to Use It
+
+There's nothing to configure — the banner appears automatically at the start of every `atmos`
+command you run inside a detected CI provider, and it's a complete no-op on a local machine. It
+reads the same [`ci`](/cli/configuration/ci) and [`settings.pro`](/cli/configuration/settings/pro)
+configuration you already have, so what it reports always matches your actual setup.
+
+## Get Involved
+
+Atmos is open source and we'd love your feedback. Join the conversation in the
+[Cloud Posse community](https://cloudposse.com/slack) or open an issue on
+[GitHub](https://github.com/cloudposse/atmos).

@@ -106,8 +106,8 @@ Usually means an invalid or revoked API key, or insufficient credits. Test the k
 ### "Unsupported AI provider"
 
 Valid provider names:
-- **API providers:** `anthropic`, `openai`, `gemini`, `grok`, `ollama`, `bedrock`, `azureopenai`
-- **CLI providers:** `claude-code`, `codex-cli`, `gemini-cli`
+- **API providers:** `anthropic`, `openai`, `gemini`, `github`, `grok`, `openrouter`, `deepseek`, `zai`, `ollama`, `bedrock`, `azureopenai`
+- **CLI providers:** `claude-code`, `codex-cli`, `copilot-cli`, `opencode`, `gemini-cli`
 
 ### Rate Limiting (429 Errors)
 
@@ -226,6 +226,18 @@ The CLI tool isn't installed or not on PATH:
     codex login
     ```
   </TabItem>
+  <TabItem value="copilot-cli" label="GitHub Copilot">
+    ```bash
+    npm install -g @github/copilot
+    copilot  # then /login (or set GH_TOKEN)
+    ```
+  </TabItem>
+  <TabItem value="opencode" label="opencode">
+    ```bash
+    npm install -g opencode-ai
+    opencode auth login
+    ```
+  </TabItem>
   <TabItem value="gemini-cli" label="Gemini CLI">
     ```bash
     npm install -g @google/gemini-cli
@@ -257,7 +269,7 @@ Atmos automatically injects `ATMOS_*` env vars into each MCP server's config, bu
 
 Gemini CLI blocks MCP for all personal Google accounts (`oauth-personal` auth) regardless of subscription tier. This is a server-side Google restriction.
 
-**Workaround:** Use `claude-code` or `codex-cli` for MCP workflows. Gemini CLI works for prompt-only queries.
+**Workaround:** Use `claude-code`, `codex-cli`, `copilot-cli`, or `opencode` for MCP workflows. Gemini CLI works for prompt-only queries.
 
 ## Sessions
 
@@ -296,7 +308,7 @@ If you get "Failed to initialize session storage", back up and recreate:
 - Add `sessions.enabled: true` to atmos.yaml
 - Check directory permissions: `chmod 755 .atmos/sessions`
 
-All seven providers support conversation memory.
+All providers support conversation memory.
 
 ### Auto-Compact Not Working
 

@@ -10,7 +10,7 @@ date: 2026-03-23T12:00:00.000Z
 ---
 
 Atmos stack processing is now up to **3.5× faster** for deep-merge operations — the hot path
-executed thousands of times per `atmos describe component`, `atmos terraform plan`, and every
+executed thousands of times per [`atmos describe component`](/cli/commands/describe/component), [`atmos terraform plan`](/cli/commands/terraform/plan), and every
 other command that reads stack configuration.
 
 <!--truncate-->
@@ -99,3 +99,5 @@ still affect atmos.  Follow [#2242](https://github.com/cloudposse/atmos/issues/2
 
 No action required — the improvement is automatic from this release onward.  If you notice
 any difference in merge results, please open an issue.
+
+For usage and configuration, see [Inherit Configurations in Atmos Stacks](/howto/inheritance).

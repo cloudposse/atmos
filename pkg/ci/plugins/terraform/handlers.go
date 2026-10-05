@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -42,6 +43,13 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterPlan")()
 
 	result := p.parseOutputWithError(ctx)
+
+	// Annotations -- warn-only. Inline `::warning` per Terraform warning
+	// diagnostic. Emitted first so it survives the fatal planfile-upload path
+	// below, and any other later failure in this hook.
+	if isAnnotationsEnabled(ctx.Config) {
+		p.emitPlanWarningAnnotations(ctx, result)
+	}
 
 	// Summary -- warn-only.
 	var renderedSummary string
@@ -106,6 +114,13 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 
 	result := p.parseOutputWithError(ctx)
 
+	// Annotations -- warn-only. Inline `::warning` per Terraform warning
+	// diagnostic. Emitted first, ahead of summary/output/check, so it
+	// survives any later failure in this hook.
+	if isAnnotationsEnabled(ctx.Config) {
+		p.emitPlanWarningAnnotations(ctx, result)
+	}
+
 	// Summary -- warn-only.
 	var renderedSummary string
 	if isSummaryEnabled(ctx.Config) {
@@ -154,6 +169,13 @@ func (p *Plugin) onAfterTest(ctx *plugin.HookContext) error {
 
 	result := p.parseOutputWithError(ctx)
 
+	// Annotations -- warn-only. Inline `::error file:line` per failing
+	// assertion. Emitted first, ahead of summary/output/check, so it survives
+	// any later failure in this hook.
+	if isAnnotationsEnabled(ctx.Config) {
+		p.emitTestAnnotations(ctx, result)
+	}
+
 	// Summary -- warn-only.
 	var renderedSummary string
 	if isSummaryEnabled(ctx.Config) {
@@ -170,11 +192,6 @@ func (p *Plugin) onAfterTest(ctx *plugin.HookContext) error {
 			log.Warn("CI output failed", "error", err)
 		}
 		p.writeJUnitReport(ctx, result)
-	}
-
-	// Annotations -- warn-only. Inline `::error file:line` per failing assertion.
-	if isAnnotationsEnabled(ctx.Config) {
-		p.emitTestAnnotations(ctx, result)
 	}
 
 	// Check -- warn-only.
@@ -234,6 +251,13 @@ func (p *Plugin) onAfterDeploy(ctx *plugin.HookContext) error {
 	defer func() { ctx.Command = originalCommand }()
 
 	result := p.parseOutputWithError(ctx)
+
+	// Annotations -- warn-only. Inline `::warning` per Terraform warning
+	// diagnostic. Emitted first, ahead of summary/output/check, so it
+	// survives any later failure in this hook.
+	if isAnnotationsEnabled(ctx.Config) {
+		p.emitPlanWarningAnnotations(ctx, result)
+	}
 
 	// Summary -- warn-only.
 	var renderedSummary string
@@ -629,12 +653,33 @@ func (p *Plugin) downloadPlanfile(ctx *plugin.HookContext) error {
 	return nil
 }
 
+// requireResolvedComponent guards against creating or updating a status for an
+// unresolved target. A status is always about a specific component in a
+// specific stack; a bulk (--affected/--all) invocation's global before-hook
+// fires before components are resolved, and must never advertise a status
+// that nothing can later update.
+func requireResolvedComponent(ctx *plugin.HookContext) error {
+	if ctx.Info == nil || ctx.Info.ComponentFromArg == "" || ctx.Info.Stack == "" {
+		return errUtils.Build(errUtils.ErrCICheckRunMissingComponent).
+			WithContext("command", ctx.Command).
+			Err()
+	}
+	return nil
+}
+
 // createCheckRun creates a commit status with pending state.
 func (p *Plugin) createCheckRun(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.createCheckRun")()
 
+	if err := requireResolvedComponent(ctx); err != nil {
+		return err
+	}
+
 	prefix := getContextPrefix(ctx.Config)
-	name := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+	name, err := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrCICheckRunMissingComponent).WithCause(err).Err()
+	}
 
 	opts := &provider.CreateCheckRunOptions{
 		Name:       name,
@@ -666,8 +711,15 @@ func (p *Plugin) createCheckRun(ctx *plugin.HookContext) error {
 func (p *Plugin) updateCheckRun(ctx *plugin.HookContext, result *plugin.OutputResult) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.updateCheckRun")()
 
+	if err := requireResolvedComponent(ctx); err != nil {
+		return err
+	}
+
 	prefix := getContextPrefix(ctx.Config)
-	name := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+	name, err := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrCICheckRunMissingComponent).WithCause(err).Err()
+	}
 	status, _ := resolveCheckResult(ctx)
 
 	// Update component-level status.
@@ -732,7 +784,11 @@ func (p *Plugin) createPerOperationStatuses(ctx *plugin.HookContext, result *plu
 			continue
 		}
 
-		opName := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg, op.operation)
+		opName, err := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg, op.operation)
+		if err != nil {
+			log.Warn("CI per-operation status context invalid; skipping", "operation", op.operation, "error", err)
+			continue
+		}
 		opts := &provider.CreateCheckRunOptions{
 			Name:       opName,
 			Status:     provider.CheckRunStateSuccess,
@@ -746,7 +802,7 @@ func (p *Plugin) createPerOperationStatuses(ctx *plugin.HookContext, result *plu
 			opts.SHA = ctx.CICtx.SHA
 		}
 
-		_, err := ctx.Provider.CreateCheckRun(context.Background(), opts)
+		_, err = ctx.Provider.CreateCheckRun(context.Background(), opts)
 		if err != nil {
 			log.Warn("CI per-operation status creation skipped", "name", opName, "error", err)
 		} else {
@@ -996,6 +1052,9 @@ func buildTerraformTestStatusDescription(testData *plugin.TerraformTestOutputDat
 	if len(testData.CleanupFailures) > 0 {
 		parts = append(parts, fmt.Sprintf("%d cleanup failed", len(testData.CleanupFailures)))
 	}
+	if testData.BackfillTruncated {
+		parts = append(parts, "parser output incomplete")
+	}
 	return strings.Join(parts, ", ")
 }
 
@@ -1032,25 +1091,35 @@ func formatResourceCount(count int) string {
 }
 
 // getGitHubActionsRunURL constructs the GitHub Actions run URL from environment variables.
+// The presence check on the raw GITHUB_SERVER_URL env var (rather than RepoEndpoints, which
+// always resolves to a default) is what detects "not running in GitHub Actions"; the actual
+// host value comes from RepoEndpoints so a GitHub Enterprise Server host is honored.
 func getGitHubActionsRunURL() string {
-	serverURL := os.Getenv("GITHUB_SERVER_URL")
 	repo := os.Getenv("GITHUB_REPOSITORY")
 	runID := os.Getenv("GITHUB_RUN_ID")
 
-	if serverURL == "" || repo == "" || runID == "" {
+	if os.Getenv("GITHUB_SERVER_URL") == "" || repo == "" || runID == "" {
 		return ""
 	}
 
-	return serverURL + "/" + repo + "/actions/runs/" + runID
+	return ghtoken.RepoEndpoints().ServerURL + "/" + repo + "/actions/runs/" + runID
 }
 
 // logCheckRunError logs check run errors at an appropriate level.
 // Token-related errors (missing GITHUB_TOKEN) are logged at Debug level since
-// they indicate a configuration gap rather than a runtime failure.
+// they indicate a configuration gap rather than a runtime failure. A missing
+// component is expected and routine for bulk (--affected/--all) invocations'
+// global before-hook, which fires before components are resolved — the
+// before-aggregate hook creates the real per-component pending statuses
+// instead, so this is not a warning-worthy condition.
 // Other errors are logged at Warn level.
 func logCheckRunError(msg string, err error) {
 	if errors.Is(err, errUtils.ErrGitHubTokenNotFound) {
 		log.Debug(msg, "reason", "GITHUB_TOKEN not set")
+		return
+	}
+	if errors.Is(err, errUtils.ErrCICheckRunMissingComponent) {
+		log.Debug(msg, "reason", "component not yet resolved")
 		return
 	}
 	log.Warn(msg, "error", err)

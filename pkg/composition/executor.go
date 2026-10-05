@@ -48,6 +48,7 @@ type status struct {
 }
 
 type lifecycleRun struct {
+	ctx         context.Context
 	atmosConfig *schema.AtmosConfiguration
 	info        *schema.ConfigAndStacksInfo
 	verb        string
@@ -153,6 +154,7 @@ func ExecuteLifecycle(ctx context.Context, info *schema.ConfigAndStacksInfo, ver
 	}
 
 	return runLifecycleTargets(lifecycleRun{
+		ctx:         ctx,
 		atmosConfig: &atmosConfig,
 		info:        info,
 		verb:        verb,
@@ -425,6 +427,12 @@ func isReverseVerb(verb string) bool {
 func runLifecycleTargets(run lifecycleRun) error {
 	var errs []error
 	for _, target := range run.targets {
+		if run.ctx != nil {
+			if err := run.ctx.Err(); err != nil {
+				errs = append(errs, err)
+				break
+			}
+		}
 		provider, ok := getComponentProvider(target.ComponentType)
 		if !ok {
 			errs = append(errs, fmt.Errorf("%w: %s", errUtils.ErrComponentProviderNotFound, target.ComponentType))
@@ -446,6 +454,7 @@ func runLifecycleTargets(run lifecycleRun) error {
 		itemInfo.All = false
 
 		err := executeProvider(provider, &component.ExecutionContext{
+			Context:             run.ctx,
 			AtmosConfig:         run.atmosConfig,
 			ComponentType:       target.ComponentType,
 			Component:           target.Component,
@@ -458,6 +467,12 @@ func runLifecycleTargets(run lifecycleRun) error {
 		if err != nil {
 			ui.Errorf("%s/%s.%s: %s failed: %v", target.Stack, target.ComponentType, target.Component, run.verb, err)
 			errs = append(errs, fmt.Errorf("%s/%s.%s: %w", target.Stack, target.ComponentType, target.Component, err))
+		}
+		if run.ctx != nil {
+			if ctxErr := run.ctx.Err(); ctxErr != nil {
+				errs = append(errs, ctxErr)
+				break
+			}
 		}
 	}
 	if len(errs) > 0 {

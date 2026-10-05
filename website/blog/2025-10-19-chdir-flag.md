@@ -11,7 +11,7 @@ date: 2025-10-19T00:00:00.000Z
 release: v1.195.0
 ---
 
-We're excited to announce a new global flag that makes working with Atmos across multiple repositories and directories significantly easier: `--chdir` (or `-C` for short).
+We're excited to announce a new global flag that makes working with Atmos across multiple repositories and directories significantly easier: [`--chdir`](/cli/global-flags#directory-change-examples) (or `-C` for short).
 
 <!--truncate-->
 
@@ -103,7 +103,7 @@ atmos -C /other-infra describe stacks
 
 ## How It Works with --base-path
 
-It's important to understand the difference between `--chdir` and `--base-path`:
+It's important to understand the difference between `--chdir` and [`--base-path`](/cli/global-flags#core-global-flags):
 
 - **`--chdir`**: Changes the **working directory** (like running `cd` first)
 - **`--base-path`**: Overrides the **Atmos project root** (where `atmos.yaml` lives)

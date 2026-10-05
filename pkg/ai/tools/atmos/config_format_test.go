@@ -15,6 +15,8 @@ import (
 )
 
 func TestNewConfigFormatTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewConfigFormatTool(atmosConfig)
 
@@ -23,16 +25,22 @@ func TestNewConfigFormatTool(t *testing.T) {
 }
 
 func TestConfigFormatTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigFormatTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "atmos_config_format", tool.Name())
 }
 
 func TestConfigFormatTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigFormatTool(&schema.AtmosConfiguration{})
 	assert.Contains(t, tool.Description(), "Format the active atmos.yaml")
 }
 
 func TestConfigFormatTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigFormatTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -42,20 +50,27 @@ func TestConfigFormatTool_Parameters(t *testing.T) {
 }
 
 func TestConfigFormatTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigFormatTool(&schema.AtmosConfiguration{})
 	assert.True(t, tool.RequiresPermission())
 }
 
 func TestConfigFormatTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigFormatTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestConfigFormatTool_Execute(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigFormatTool(&schema.AtmosConfiguration{})
 	ctx := context.Background()
 
 	t.Run("formats the file in place", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "settings: {enabled: true}\n")
 
@@ -77,6 +92,7 @@ func TestConfigFormatTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails when the explicit file override does not exist", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"file": filepath.Join(t.TempDir(), "does-not-exist.yaml"),
 		})
@@ -87,6 +103,7 @@ func TestConfigFormatTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with malformed yaml content", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "settings: {enabled: true\n")
 

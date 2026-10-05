@@ -76,7 +76,8 @@ func TestRenderMarkdownInline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := renderMarkdownInline(tt.input)
-			assert.Contains(t, result, tt.contains)
+			// Theme colors may insert ANSI sequences between words in CI.
+			assert.Contains(t, ansi.Strip(result), tt.contains)
 			assert.NotContains(t, result, "\n")
 		})
 	}

@@ -8,6 +8,8 @@ const (
 	OperationTemplate Operation = "template"
 	// OperationDiff previews the changes an apply would make.
 	OperationDiff Operation = "diff"
+	// OperationValues prints the resolved chart values as formatted YAML.
+	OperationValues Operation = "values"
 	// OperationApply installs or upgrades the release (or delivers to a target).
 	OperationApply Operation = "apply"
 	// OperationDelete uninstalls the release.

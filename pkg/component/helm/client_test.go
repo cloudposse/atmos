@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/kube"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -98,6 +100,68 @@ func TestResolveUpgradeChartRef(t *testing.T) {
 	})
 }
 
+func TestConfigureReleaseLifecycleActions(t *testing.T) {
+	policy := effectiveReleasePolicy{
+		OnFailure:        failurePolicyRollback,
+		CleanupOnFailure: true,
+		WaitStrategy:     kube.LegacyStrategy,
+		WaitForJobs:      true,
+		Timeout:          12 * time.Minute,
+		MaxHistory:       7,
+		ChartHooks:       false,
+		CRDs:             crdPolicySkip,
+	}
+
+	install := &action.Install{}
+	installPolicy := policy
+	installPolicy.OnFailure = failurePolicyUninstall
+	configureInstallLifecycle(install, installPolicy)
+	assert.True(t, install.RollbackOnFailure)
+	assert.Equal(t, kube.LegacyStrategy, install.WaitStrategy)
+	assert.True(t, install.WaitForJobs)
+	assert.Equal(t, 12*time.Minute, install.Timeout)
+	assert.True(t, install.DisableHooks)
+	assert.True(t, install.SkipCRDs)
+
+	upgrade := &action.Upgrade{}
+	configureUpgradeLifecycle(upgrade, policy)
+	assert.True(t, upgrade.RollbackOnFailure)
+	assert.Equal(t, kube.LegacyStrategy, upgrade.WaitStrategy)
+	assert.True(t, upgrade.WaitForJobs)
+	assert.Equal(t, 12*time.Minute, upgrade.Timeout)
+	assert.True(t, upgrade.CleanupOnFail)
+	assert.Equal(t, 7, upgrade.MaxHistory)
+	assert.True(t, upgrade.DisableHooks)
+
+	uninstall := &action.Uninstall{}
+	configureUninstallLifecycle(uninstall, policy, true)
+	assert.Equal(t, kube.LegacyStrategy, uninstall.WaitStrategy)
+	assert.Equal(t, 12*time.Minute, uninstall.Timeout)
+	assert.True(t, uninstall.DisableHooks)
+	assert.True(t, uninstall.DryRun)
+}
+
+func TestReleaseOperationErrorIncludesEffectivePolicy(t *testing.T) {
+	cause := context.DeadlineExceeded
+	err := releaseOperationError("upgrade", &chartSpec{
+		ReleaseName: "demo",
+		Namespace:   "apps",
+		Lifecycle: releaseLifecycleResolution{Policy: effectiveReleasePolicy{
+			WaitStrategy: kube.StatusWatcherStrategy,
+			Timeout:      7 * time.Minute,
+		}, TimeoutField: "release.upgrade.timeout"},
+	}, cause)
+
+	require.ErrorIs(t, err, errUtils.ErrHelmReleaseOperation)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.True(t, errUtils.HasContext(err, "operation", "upgrade"))
+	assert.True(t, errUtils.HasContext(err, "release", "demo"))
+	assert.True(t, errUtils.HasContext(err, "namespace", "apps"))
+	assert.True(t, errUtils.HasContext(err, "wait_strategy", "watcher"))
+	assert.True(t, errUtils.HasContext(err, "timeout", "7m0s"))
+	assert.True(t, errUtils.HasContext(err, "timeout_field", "release.upgrade.timeout"))
+}
+
 func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
 	original := newActionContext
 	t.Cleanup(func() { newActionContext = original })
@@ -116,7 +180,7 @@ func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
 	_, err = getDeployedManifest("nginx", "apps")
 	require.ErrorIs(t, err, sentinel)
 
-	err = deleteRelease("nginx", "apps")
+	err = deleteRelease(context.Background(), spec, false)
 	require.ErrorIs(t, err, sentinel)
 }
 
@@ -130,8 +194,10 @@ func TestInstallAndUpgradeReleaseLocateChartErrors(t *testing.T) {
 	_, err := installRelease(context.Background(), actx, spec, true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `failed to locate Helm chart "missing-chart"`)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 
 	_, err = upgradeRelease(context.Background(), actx, spec, true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `failed to locate Helm chart "missing-chart"`)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 }

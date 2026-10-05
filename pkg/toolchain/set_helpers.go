@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // toolSpec holds resolved owner, repo, and key for a tool.
@@ -74,7 +75,7 @@ func createVersionListModel(owner, repo string, items []versionItem, scrollSpeed
 	l.InfiniteScrolling = true
 
 	vp := viewport.New(0, 0)
-	vp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("62"))
+	vp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Primary))
 
 	if scrollSpeed < 1 {
 		scrollSpeed = 3

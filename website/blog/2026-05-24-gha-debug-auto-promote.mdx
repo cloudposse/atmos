@@ -28,7 +28,7 @@ INFO CI provider debug mode detected — using Debug log level for this run prov
 
 When something goes wrong in a workflow, debugging Atmos is usually just as important as debugging the workflow around it. The "Re-run with debug logging" button is meant to be one switch that makes everything in the run verbose — but a tool that ignores it forces you back into a per-tool dance: set this env var, add that flag, edit the workflow YAML, re-trigger the job. Atmos now picks up the signal on its own so the button does what you'd expect.
 
-The auto-detected level intentionally outranks `--logs-level` and `ATMOS_LOGS_LEVEL`. The CI-side debug signal is set at the repo or workflow level by the runner itself, so a per-invocation `--logs-level Warning` in your workflow YAML no longer hides debug information when you're actively debugging the run.
+The auto-detected level intentionally outranks [`--logs-level`](/cli/global-flags#output-flags) and `ATMOS_LOGS_LEVEL`. The CI-side debug signal is set at the repo or workflow level by the runner itself, so a per-invocation `--logs-level Warning` in your workflow YAML no longer hides debug information when you're actively debugging the run.
 
 ## How to Use It
 

@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -51,6 +52,7 @@ var (
 )
 
 type processTargetsParams struct {
+	ctx                  context.Context
 	AtmosConfig          *schema.AtmosConfiguration
 	IndexSource          int
 	Source               *schema.AtmosVendorSource
@@ -72,6 +74,8 @@ type processTargetsParams struct {
 	Lister version.RemoteLister
 }
 type executeVendorOptions struct {
+	ctx                  context.Context
+	collect              *[]install.VendorPackage
 	atmosConfig          *schema.AtmosConfiguration
 	vendorConfigFileName string
 	atmosVendorSpec      schema.AtmosVendorSpec
@@ -84,6 +88,7 @@ type executeVendorOptions struct {
 }
 
 type vendorSourceParams struct {
+	ctx                  context.Context
 	atmosConfig          *schema.AtmosConfiguration
 	sources              []schema.AtmosVendorSource
 	component            string
@@ -273,6 +278,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	}
 
 	sourceParams := &vendorSourceParams{
+		ctx:                  params.ctx,
 		atmosConfig:          params.atmosConfig,
 		sources:              sources,
 		component:            params.component,
@@ -285,11 +291,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	if err != nil {
 		return err
 	}
-	opts := install.InstallOptions{DryRun: params.dryRun, RefreshLock: params.refreshLock, LockEnforcement: params.lockEnforcement}
-	packages, err = install.FilterPending(params.atmosConfig, packages, opts)
-	if err != nil {
-		return err
-	}
+	opts := install.InstallOptions{DryRun: params.dryRun, RefreshLock: params.refreshLock, LockEnforcement: params.lockEnforcement, Collect: params.collect, Context: params.ctx}
 	if len(packages) > 0 {
 		return executeVendorModel(packages, opts, params.atmosConfig)
 	}
@@ -391,6 +393,7 @@ func processAtmosVendorSourceEntry(params *vendorSourceParams, indexSource int) 
 
 	// Process each target within the source.
 	pkgs, err = processTargets(&processTargetsParams{
+		ctx:                  params.ctx,
 		AtmosConfig:          params.atmosConfig,
 		IndexSource:          indexSource,
 		Source:               &params.sources[indexSource],
@@ -429,7 +432,7 @@ type atmosVendorSourceResolution struct {
 // processAtmosVendorSourceEntry needs before it can process each of the source's targets.
 func resolveAtmosVendorSource(params *vendorSourceParams, indexSource int) (*atmosVendorSourceResolution, error) {
 	src := &params.sources[indexSource]
-	resolvedVersion, rawVersion, err := install.ResolveEffectiveVersion(&install.ResolveEffectiveVersionInputs{
+	resolvedVersion, rawVersion, err := install.ResolveEffectiveVersionContext(params.ctx, &install.ResolveEffectiveVersionInputs{
 		AtmosConfig: params.atmosConfig,
 		Name:        src.Component,
 		Source:      src.Source,
@@ -492,7 +495,7 @@ type resolvedTarget struct {
 
 // resolveTargetOverride re-resolves the source URI and classification when a target has a version override.
 func resolveTargetOverride(params *processTargetsParams, indexTarget int, tgt schema.AtmosVendorTarget) (*resolvedTarget, error) {
-	resolvedVersion, rawVersion, err := install.ResolveEffectiveVersion(&install.ResolveEffectiveVersionInputs{
+	resolvedVersion, rawVersion, err := install.ResolveEffectiveVersionContext(params.ctx, &install.ResolveEffectiveVersionInputs{
 		AtmosConfig:   params.AtmosConfig,
 		Name:          params.Source.Component,
 		Source:        params.SourceTemplate,
@@ -657,7 +660,7 @@ func processVendorImports(
 }
 
 func logInitialMessage(vendorConfigFileName string, tags []string) {
-	logMessage := fmt.Sprintf("Vendoring from '%s'", vendorConfigFileName)
+	logMessage := fmt.Sprintf("Vendoring from `%s`", vendorConfigFileName)
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}

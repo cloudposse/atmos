@@ -44,6 +44,18 @@ type MergeResult struct {
 	Content       string
 	HasConflicts  bool
 	ConflictCount int
+	// ConflictPaths names the conflicting locations (e.g. YAML key paths)
+	// when the merger can identify them. TextMerger leaves this nil since
+	// diff3 hunks aren't addressable by path; YAMLMerger populates it.
+	ConflictPaths []string
+	// HasMarkers reports whether Content actually contains inline
+	// <<<<<<</=======/>>>>>>> conflict markers for a caller to point the user
+	// at. TextMerger's conflicts always come with markers, so this mirrors
+	// HasConflicts there. YAMLMerger can record a conflict with no node pair
+	// to splice markers from (e.g. a document-stream-level conflict where the
+	// user's stream dropped a document the template changed), in which case
+	// HasConflicts is true but HasMarkers is false.
+	HasMarkers bool
 }
 
 // Merge performs a 3-way merge using the diff3 algorithm.
@@ -58,6 +70,21 @@ type MergeResult struct {
 // the newline-handling comment on the diff3.Merge call below for why.
 func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	defer perf.Track(nil, "merge.TextMerger.Merge")()
+
+	// base/theirs are frequently sourced from a fresh git clone of the
+	// template (e.g. --update-strategy=rendered, or any initial fetch),
+	// which on a checkout with core.autocrlf=true (the default Git-for-Windows
+	// install option) rewrites committed LF line endings to CRLF. ours is the
+	// user's own file on disk, untouched by that checkout, and keeps whatever
+	// style it already had. Left unnormalized, that mismatch makes every
+	// untouched line look changed, inflating calculateChangePercentage far
+	// past the real edit size -- so normalize all three to LF before diffing,
+	// then restore ours' original style on the result, conflict markers
+	// included.
+	oursHadCRLF := strings.Contains(ours, "\r\n")
+	base = normalizeLineEndings(base)
+	ours = normalizeLineEndings(ours)
+	theirs = normalizeLineEndings(theirs)
 
 	// Perform the 3-way merge using diff3.
 	// Parameter order: (mine/ours, original/base, yours/theirs).
@@ -112,16 +139,34 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 		if changePercentage > m.thresholdPercent {
 			return nil, errUtils.Build(errUtils.ErrMergeThresholdExceeded).
 				WithExplanationf("Too many changes detected (%d%% changes, threshold: %d%%). %d conflicts found", changePercentage, m.thresholdPercent, conflictCount).
-				WithHint("Use --force to overwrite or manually merge").
+				WithHint("Use --force (resolves every conflict to the template's version) or manually merge").
 				Err()
 		}
+	}
+
+	// Restore ours' original CRLF style even when a manual conflict remains:
+	// ours' own unconflicted lines would otherwise silently flatten to LF in
+	// the written-out file. This also expands diff3's own marker lines
+	// ("<<<<<<< Ours", "=======", ">>>>>>> Theirs") to CRLF, so
+	// HasUnresolvedConflictMarkers trims the restored trailing "\r" before
+	// comparing.
+	if oursHadCRLF {
+		mergedContent = strings.ReplaceAll(mergedContent, newlineSeparator, "\r\n")
 	}
 
 	return &MergeResult{
 		Content:       mergedContent,
 		HasConflicts:  hasConflicts,
+		HasMarkers:    hasConflicts,
 		ConflictCount: conflictCount,
 	}, nil
+}
+
+// normalizeLineEndings collapses CRLF to LF. This lets content from a git
+// checkout be compared against a file written directly to disk without
+// line-ending noise.
+func normalizeLineEndings(s string) string {
+	return strings.ReplaceAll(s, "\r\n", newlineSeparator)
 }
 
 // applyConflictStrategy auto-resolves every conflict block to the chosen
@@ -253,4 +298,48 @@ func HasConflictMarkers(content string) bool {
 	return strings.Contains(content, "<<<<<<<") ||
 		strings.Contains(content, "=======") ||
 		strings.Contains(content, ">>>>>>>")
+}
+
+// HasUnresolvedConflictMarkers reports whether content still contains a full
+// <<<<<<< Ours / ======= / >>>>>>> Theirs block -- the exact triplet both
+// TextMerger and YAMLMerger write under the manual (default) conflict
+// strategy (see engine.Processor.mergeFile and YAMLMerger's
+// spliceConflictMarkers). Unlike HasConflictMarkers, which flags any single
+// bare marker line and can false-positive on unrelated content (a markdown
+// rule, a line that happens to be "======="), this requires the specific
+// "Ours"/"Theirs"-labeled sequence in order, which in practice is only ever
+// produced by this exact code path -- so engine.Processor.mergeFile can use
+// it to fail fast with a specific "resolve this first" error instead of
+// re-attempting a merge against already-corrupted "ours" content and
+// surfacing whatever opaque failure that produces (a YAML parse error for
+// YAMLMerger, or a silently garbled result for TextMerger, which doesn't
+// require its "ours" input to be any particular syntax and so wouldn't
+// error at all).
+func HasUnresolvedConflictMarkers(content string) bool {
+	defer perf.Track(nil, "merge.HasUnresolvedConflictMarkers")()
+
+	sawOurs, sawSeparator := false, false
+	for _, line := range strings.Split(content, newlineSeparator) {
+		// TrimRight the "\r" too: TextMerger's CRLF-restoration path expands
+		// every line (including the bare marker lines) to CRLF, so a line
+		// split on "\n" alone leaves a trailing "\r" here.
+		trimmed := strings.TrimRight(strings.TrimLeft(line, " "), "\r")
+		switch {
+		case !sawOurs:
+			// Exact match: both TextMerger (via diff3's "<<<<<<< %s" label
+			// format) and YAMLMerger always emit this opening marker verbatim,
+			// with no trailing suffix -- unlike the closing marker below, which
+			// YAMLMerger can append the original line's suffix to. A prefix
+			// match here would false-positive on unrelated content that merely
+			// starts with this marker (e.g. a line of literal text).
+			sawOurs = trimmed == "<<<<<<< Ours"
+		case !sawSeparator:
+			sawSeparator = trimmed == "======="
+		default:
+			if strings.HasPrefix(trimmed, ">>>>>>> Theirs") {
+				return true
+			}
+		}
+	}
+	return false
 }

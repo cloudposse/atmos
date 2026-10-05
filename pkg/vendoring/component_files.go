@@ -182,6 +182,10 @@ const ComponentManifestVersionPath = "spec.source.version"
 // comments, anchors, and templates, via the same generic format-preserving primitive vendor.yaml
 // editing uses.
 func SetComponentManifestVersion(file, ver string) error {
+	return withVersionFileLock(file, func() error { return setComponentManifestVersionUnlocked(file, ver) })
+}
+
+func setComponentManifestVersionUnlocked(file, ver string) error {
 	defer perf.Track(nil, "vendoring.SetComponentManifestVersion")()
 
 	_, err := atmosyaml.SetFileWithType(file, ComponentManifestVersionPath, ver, atmosyaml.TypeString)

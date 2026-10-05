@@ -15,13 +15,13 @@ commands:
     arguments:
       - name: component
         description: "Component name"
-        type: component
+        provides: component
         required: true
     flags:
       - name: stack
         shorthand: s
         description: "Stack name"
-        semantic_type: stack
+        provides: stack
         required: true
     component:
       type: script

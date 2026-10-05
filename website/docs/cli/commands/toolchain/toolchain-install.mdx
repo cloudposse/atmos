@@ -96,6 +96,27 @@ Concurrency is resolved in this order: `--max-concurrency`,
 `ATMOS_TOOLCHAIN_MAX_CONCURRENCY`, `toolchain.max_concurrency`, then the
 default of `4`.
 
+## Frozen Installs
+
+Enable frozen mode in CI and security-sensitive environments. Prepare, review, and commit the
+lockfile for the required tools and platforms first. Set `toolchain.frozen_lock_file: true` in
+`atmos.yaml`, or enable it for a CI command:
+
+```shell
+ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE=true atmos toolchain install
+```
+
+Every requested version must have a URL and checksum for the current platform in the existing
+lockfile, including tools whose binaries are already cached. Missing entries and checksum
+mismatches fail. Frozen installation leaves `.tool-versions` and the artifact lockfile unchanged.
+
+Ordinary installs record missing lock entries after successful extraction and preserve existing
+matching entries. Automatic installs triggered by commands, dependencies, proxies, or Atmos
+version switching do not change `.tool-versions`.
+
+See [toolchain lockfile configuration](/cli/configuration/toolchain#automatic-installation-and-lockfiles)
+for paths, lock generation, and frozen-mode limitations.
+
 ## How Tools Are Installed on Disk
 
 Atmos installs each tool under a version-specific directory

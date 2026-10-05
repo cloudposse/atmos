@@ -59,22 +59,22 @@ func (m *ChatModel) buildMessageHeader(msg ChatMessage) string {
 	switch msg.Role {
 	case roleUser:
 		style = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorGreen)).
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).
 			Bold(true)
 		prefix = "You:"
 	case roleAssistant:
 		style = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorCyan))
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link))
 		prefix = m.buildAssistantPrefix(msg)
 	case roleSystem:
 		style = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorRed)).
+			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error)).
 			Italic(true)
 		prefix = "System:"
 	}
 
 	timestamp := msg.Time.Format("15:04")
-	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 	return fmt.Sprintf("%s %s", style.Render(prefix), timeStyle.Render(timestamp))
 }
 
@@ -233,12 +233,12 @@ func (m *ChatModel) renderTable(lines []string) string {
 	// Create lipgloss table.
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("240"))).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == 0 {
 				// Header style.
 				return lipgloss.NewStyle().
-					Foreground(lipgloss.Color(theme.ColorCyan)).
+					Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 					Bold(true).
 					Padding(0, 1)
 			}
@@ -380,7 +380,7 @@ func (m *ChatModel) renderTurnSteps(usageStr, cancelHint string) string {
 	var lines []string
 	if len(m.turnSteps) > maxDisplayedTurnSteps {
 		start = len(m.turnSteps) - maxDisplayedTurnSteps
-		mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
+		mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).Italic(true)
 		lines = append(lines, mutedStyle.Render(fmt.Sprintf("… %d earlier step(s) omitted", start)))
 	}
 	for i := start; i < len(m.turnSteps); i++ {
@@ -412,5 +412,5 @@ func mutedElapsed(d time.Duration) string {
 	if d < time.Second {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(fmt.Sprintf("(%.1fs)", d.Seconds()))
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).Render(fmt.Sprintf("(%.1fs)", d.Seconds()))
 }

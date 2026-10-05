@@ -302,7 +302,7 @@ func ExecuteTerraformGenerateBackends(
 				// unresolved function string (or a placeholder) would silently lose the function's
 				// contribution here, the same #2888 data-loss bug the main describe/plan path fixes
 				// via this same call (see internal/exec/utils.go).
-				if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, nil); err != nil {
+				if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, nil, nil); err != nil {
 					return err
 				}
 				componentSection = configAndStacksInfo.ComponentSection

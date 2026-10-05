@@ -29,6 +29,12 @@ func TestDescribeDependentsExec_Execute_ForwardsAuthDisabled(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// No t.Parallel(): ex.Execute() below writes JSON output through the
+			// package-level data.Writeln() singleton (pkg/data), which is a single
+			// shared, non-thread-safe writer for the whole test binary. Running
+			// these two subtests concurrently races on that shared writer under
+			// `go test -race`; the sibling Execute() tests in
+			// describe_dependents_test.go are sequential for the same reason.
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 

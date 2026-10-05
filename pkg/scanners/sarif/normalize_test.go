@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -71,9 +70,17 @@ func TestNormalizeArtifactURIsRewritesNestedSARIFLocations(t *testing.T) {
 	require.NoError(t, os.MkdirAll(sourceRoot, 0o755))
 	require.NoError(t, os.WriteFile(sourceFile, []byte("# target\n"), 0o600))
 
-	previousWorkspace := viper.GetString(githubWorkspaceViperKey)
-	viper.Set(githubWorkspaceViperKey, workspace)
-	t.Cleanup(func() { viper.Set(githubWorkspaceViperKey, previousWorkspace) })
+	// t.Setenv (not viper.Set): githubWorkspace() resolves this key by binding
+	// it to the GITHUB_WORKSPACE env var and reading it live on every call, so
+	// t.Setenv's automatic restore is both correct and sufficient. viper.Set
+	// installs a literal override that outranks the env binding in viper's
+	// precedence and is never cleared by t.Setenv -- a prior version of this
+	// test used exactly that pattern and permanently pinned this key for the
+	// rest of the process (to whatever value GITHUB_WORKSPACE happened to
+	// have when this test first ran), silently breaking any later test in
+	// the same binary that expects t.Setenv("GITHUB_WORKSPACE", ...) to
+	// control this key -- see docs/fixes for the incident.
+	t.Setenv("GITHUB_WORKSPACE", workspace)
 
 	ctx := &scanners.Context{
 		AtmosConfig: &schema.AtmosConfiguration{

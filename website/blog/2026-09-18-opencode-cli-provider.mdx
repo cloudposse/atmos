@@ -1,0 +1,63 @@
+---
+slug: opencode-cli-provider
+title: "Use opencode as your Atmos AI provider"
+authors: [aknysh]
+tags: [feature]
+---
+If you already drive your infrastructure work through a terminal coding agent, paying for a
+separate AI API key just to ask Atmos a question is redundant. You've authenticated the agent
+once, picked your model provider there, and you'd rather Atmos reuse that setup than make you
+manage a second set of credentials.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos AI could reuse a locally installed coding-agent CLI - Claude Code, OpenAI Codex, GitHub
+Copilot - instead of an API key, but the popular open-source [opencode](https://opencode.ai)
+agent wasn't one of them. opencode users had to fall back to configuring a raw API provider,
+which meant a second credential to manage and gave up opencode's own model selection and MCP
+setup.
+
+## The Fix
+
+Atmos AI adds **opencode** as a CLI provider. Point Atmos at it and every `atmos ai` command runs
+through your existing opencode installation and whichever model provider you've authenticated
+there - no API key in `atmos.yaml`:
+
+- Reuses your opencode auth and model configuration (`opencode auth login`).
+- **Full MCP pass-through**: MCP servers you declare in `atmos.yaml` are handed to opencode
+  automatically, with auth-requiring servers wrapped in `atmos auth exec` and the Atmos toolchain
+  on `PATH`. Atmos writes a temporary config and points opencode at it via `OPENCODE_CONFIG`, so
+  your own `opencode.json` is never touched.
+- Participates in auto-detection: with `ai.enabled: true` and no `default_provider`, Atmos finds
+  the `opencode` binary on your `PATH` and uses it.
+
+## How to Use It
+
+Select it as the default provider (or let auto-detection find it):
+
+```yaml
+ai:
+  enabled: true
+  default_provider: opencode
+  providers:
+    opencode:
+      # optional - opencode's provider/model slug; defaults to opencode's own default
+      model: "anthropic/claude-sonnet-4-5"
+```
+
+Then ask away - opencode handles the model call and any MCP tools:
+
+```shell
+atmos ai ask "Which components changed in the dev stack?"
+```
+
+See the [AI providers configuration page](/cli/configuration/ai/providers) for the full CLI-provider
+reference, including the MCP pass-through behavior.
+
+## Get Involved
+
+opencode joins Claude Code, OpenAI Codex, and GitHub Copilot as bring-your-own-subscription CLI
+providers. If there's another local coding agent you'd like Atmos to drive, open an issue or a pull
+request on [cloudposse/atmos](https://github.com/cloudposse/atmos).

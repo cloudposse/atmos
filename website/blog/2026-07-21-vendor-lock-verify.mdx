@@ -17,7 +17,7 @@ broken `terraform plan` weeks later — not the moment the drift happened.
 
 ## The Problem
 
-The `atmos vendor pull` command always re-fetches everything, every time, whether or not anything
+The [`atmos vendor pull`](/cli/commands/vendor/pull) command always re-fetches everything, every time, whether or not anything
 actually changed. That makes it slow to lean on as a drift check, so most teams just don't run it that
 way — they trust the checkout and find out otherwise the hard way. There was also no way to answer
 "does what's on disk still match what was vendored" without a network round trip, and no way to
@@ -27,7 +27,7 @@ choose how loudly a stale checkout should complain before Atmos quietly re-fetch
 
 Every `atmos vendor pull` now records a `vendor.lock.yaml` receipt for each vendored source: its
 declared origin, a resolved identity, and a checksum for every file it wrote. That receipt is what
-`atmos vendor verify` checks against, with zero network access:
+[`atmos vendor verify`](/cli/commands/vendor/vendor-verify) checks against, with zero network access:
 
 ```shell
 atmos vendor verify
@@ -83,7 +83,7 @@ sources:
 
 The first `atmos vendor pull` resolves that range to a concrete tag and locks it there — every
 later pull reuses the locked version with no network call at all, until an explicit
-`atmos vendor update` or `--refresh-lock` re-resolves it. An exact pin like `version: v1.5.0`
+[`atmos vendor update`](/cli/commands/vendor/vendor-update) or `--refresh-lock` re-resolves it. An exact pin like `version: v1.5.0`
 behaves exactly as it always has: the manifest itself remains the single source of truth for what
 gets fetched.
 

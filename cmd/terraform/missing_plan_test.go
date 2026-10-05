@@ -27,9 +27,12 @@ func missingPlanConfig(verify schema.PlanfileVerifyMode, required *bool) *schema
 func boolPtr(b bool) *bool { return &b }
 
 func TestHandleMissingStoredPlan(t *testing.T) {
+	t.Parallel()
+
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "mycomponent", Stack: "prod"}
 
 	t.Run("required errors with ErrStoredPlanfileMissing", func(t *testing.T) {
+		t.Parallel()
 		err := handleMissingStoredPlan(missingPlanConfig(schema.PlanfileVerifyFail, boolPtr(true)), info)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrStoredPlanfileMissing)
@@ -38,17 +41,20 @@ func TestHandleMissingStoredPlan(t *testing.T) {
 	})
 
 	t.Run("not required proceeds without error", func(t *testing.T) {
+		t.Parallel()
 		assert.NoError(t, handleMissingStoredPlan(missingPlanConfig(schema.PlanfileVerifyFail, boolPtr(false)), info))
 	})
 
 	// verify=off short-circuits to not-required even when required:true is set.
 	t.Run("verify off proceeds despite required true", func(t *testing.T) {
+		t.Parallel()
 		assert.NoError(t, handleMissingStoredPlan(missingPlanConfig(schema.PlanfileVerifyOff, boolPtr(true)), info))
 	})
 
 	// Negative path: a config with no planfile storage and no CLI override must
 	// never block the deploy, even though ci.IsCI() may report true in CI.
 	t.Run("no storage never fails", func(t *testing.T) {
+		t.Parallel()
 		assert.NoError(t, handleMissingStoredPlan(&schema.AtmosConfiguration{}, info))
 	})
 }

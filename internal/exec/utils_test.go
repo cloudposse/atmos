@@ -204,6 +204,42 @@ func TestPostProcessTemplatesAndYamlFunctions_RetrySection(t *testing.T) {
 	})
 }
 
+// TestPostProcessTemplatesAndYamlFunctions_FlagsSection covers the terraform `flags:`
+// decode path added to postProcessTemplatesAndYamlFunctions, mirroring
+// TestPostProcessTemplatesAndYamlFunctions_RetrySection's style for the analogous
+// retry section: a decode error is logged but must not overwrite the prior value.
+func TestPostProcessTemplatesAndYamlFunctions_FlagsSection(t *testing.T) {
+	t.Run("flags-section-present-populates", func(t *testing.T) {
+		input := schema.ConfigAndStacksInfo{
+			ComponentSection: map[string]any{
+				cfg.FlagsSectionName: map[string]any{
+					"lock_timeout": "5m",
+					"parallelism":  10,
+				},
+			},
+		}
+		postProcessTemplatesAndYamlFunctions(&input)
+		assert.Equal(t, "5m", input.Flags.LockTimeout)
+		require.NotNil(t, input.Flags.Parallelism)
+		assert.Equal(t, 10, *input.Flags.Parallelism)
+	})
+
+	t.Run("flags-section-invalid-keeps-prior", func(t *testing.T) {
+		// A decode error here is logged but must not overwrite the prior value (the
+		// initial extraction stage is the authoritative validator).
+		lockTimeout := "5m"
+		stalePrior := schema.TerraformFlags{LockTimeout: lockTimeout}
+		input := schema.ConfigAndStacksInfo{
+			Flags: stalePrior,
+			ComponentSection: map[string]any{
+				cfg.FlagsSectionName: "not-a-map", // triggers ErrInvalidTerraformFlagsConfig.
+			},
+		}
+		postProcessTemplatesAndYamlFunctions(&input)
+		assert.Equal(t, stalePrior, input.Flags, "decode error must not overwrite prior flags config")
+	})
+}
+
 func TestGenerateComponentProviderOverrides(t *testing.T) {
 	tests := []struct {
 		name              string

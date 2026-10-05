@@ -84,3 +84,5 @@ This small change eliminates a common frustration: having to remember where you 
 - Work more naturally within your repository
 
 Just like Git changed your mental model from "I must be at the root" to "I can work anywhere," Atmos now does the same for infrastructure orchestration.
+
+For usage and configuration, see [CLI Configuration](/cli/configuration).

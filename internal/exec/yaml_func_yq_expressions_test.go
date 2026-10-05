@@ -12,6 +12,8 @@ import (
 
 // TestYQExpressionPatterns tests various YQ expression patterns for YAML functions.
 func TestYQExpressionPatterns(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		expression string
@@ -76,6 +78,7 @@ func TestYQExpressionPatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			t.Logf("Testing: %s - %s", tt.expression, tt.desc)
 			// Verify the expression is formatted correctly.
 			assert.True(t, tt.valid, "Expression should be valid")
@@ -86,6 +89,8 @@ func TestYQExpressionPatterns(t *testing.T) {
 
 // TestYQExpressionEdgeCases tests edge case patterns in YQ expressions.
 func TestYQExpressionEdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		expression string
@@ -126,6 +131,7 @@ func TestYQExpressionEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			t.Logf("Testing edge case: %s - %s", tt.expression, tt.desc)
 			// These are format validation tests - documenting expected behavior.
 			if tt.isError {
@@ -139,6 +145,8 @@ func TestYQExpressionEdgeCases(t *testing.T) {
 
 // TestBracketNotationVariants tests various bracket notation patterns.
 func TestBracketNotationVariants(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		yqExpr  string
@@ -209,6 +217,7 @@ func TestBracketNotationVariants(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			t.Logf("Testing YQ expression: %s - %s", tt.yqExpr, tt.desc)
 			// These are format validation tests.
 			// The YQ expressions should be parseable.
@@ -219,6 +228,8 @@ func TestBracketNotationVariants(t *testing.T) {
 
 // TestTerraformFunctionTagParsing tests the tag parsing logic.
 func TestTerraformFunctionTagParsing(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    string
@@ -259,6 +270,7 @@ func TestTerraformFunctionTagParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Test that the input starts with expected tag.
 			assert.True(t, len(tt.input) > len(tt.wantTag), "Input should be longer than tag")
 			actualTag := tt.input[:len(tt.wantTag)]
@@ -269,6 +281,8 @@ func TestTerraformFunctionTagParsing(t *testing.T) {
 
 // TestYQDefaultValueExpressions tests YQ default value syntax.
 func TestYQDefaultValueExpressions(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		expression string
@@ -323,6 +337,7 @@ func TestYQDefaultValueExpressions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			t.Logf("Testing YQ default expression: %s - %s", tt.expression, tt.desc)
 			// Verify the expression contains the default operator.
 			assert.Contains(t, tt.expression, "//", "Should contain YQ default operator")
@@ -332,6 +347,8 @@ func TestYQDefaultValueExpressions(t *testing.T) {
 
 // TestYQPipeExpressions tests YQ pipe operator syntax.
 func TestYQPipeExpressions(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		expression string
@@ -371,6 +388,7 @@ func TestYQPipeExpressions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			t.Logf("Testing YQ pipe expression: %s - %s", tt.expression, tt.desc)
 			// Verify the expression contains the pipe operator.
 			assert.Contains(t, tt.expression, "|", "Should contain YQ pipe operator")
@@ -380,6 +398,8 @@ func TestYQPipeExpressions(t *testing.T) {
 
 // TestProcessTagTerraformOutputErrors tests error handling in processTagTerraformOutput.
 func TestProcessTagTerraformOutputErrors(t *testing.T) {
+	t.Parallel()
+
 	// Create minimal config for testing.
 	info := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(info, false)
@@ -410,6 +430,7 @@ func TestProcessTagTerraformOutputErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := processTagTerraformOutput(&atmosConfig, tt.expression, tt.stack, nil)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.errContains)
@@ -419,6 +440,8 @@ func TestProcessTagTerraformOutputErrors(t *testing.T) {
 
 // TestProcessTagTerraformStateErrors tests error handling in processTagTerraformState.
 func TestProcessTagTerraformStateErrors(t *testing.T) {
+	t.Parallel()
+
 	// Create minimal config for testing.
 	info := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(info, false)
@@ -449,6 +472,7 @@ func TestProcessTagTerraformStateErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := processTagTerraformState(&atmosConfig, tt.expression, tt.stack, nil)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.errContains)

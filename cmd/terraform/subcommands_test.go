@@ -246,7 +246,7 @@ func TestSubcommandRunEFlagBinding(t *testing.T) {
 			require.NoError(t, err, "%sParser.BindFlagsToViper should succeed", tc.name)
 
 			// Parse options (simulating what RunE does).
-			opts, err := ParseTerraformRunOptions(v)
+			opts, err := ParseTerraformRunOptions(v, testCmd)
 			require.NoError(t, err)
 
 			// Verify the options were parsed correctly.
@@ -279,7 +279,7 @@ func TestSubcommandRunEWithDryRun(t *testing.T) {
 			require.NoError(t, err)
 
 			// Parse options.
-			opts, err := ParseTerraformRunOptions(v)
+			opts, err := ParseTerraformRunOptions(v, testCmd)
 			require.NoError(t, err)
 
 			// Verify the flag binding and parsing worked correctly.
@@ -460,6 +460,115 @@ func TestTerraformPassthroughLeafBindsMultiComponentFlags(t *testing.T) {
 	opts, err := ParseTerraformRunOptions(v)
 	require.NoError(t, err)
 	assert.True(t, opts.All, "the passthrough leaf must preserve --all")
+}
+
+// TestWorkspacePassthroughLeafPropagatesUIFlag verifies that the workspace
+// passthrough leaf (e.g. "workspace select") passes its own *cobra.Command into
+// ParseTerraformRunOptions, so --ui is correctly detected as explicitly set.
+// Regression test for a bug where this call site omitted the leaf command,
+// leaving UIFlagSet false even when the user passed --ui=false.
+func TestWorkspacePassthroughLeafPropagatesUIFlag(t *testing.T) {
+	var selectCmd *cobra.Command
+	for _, cmd := range workspaceCmd.Commands() {
+		if cmd.Name() == "select" {
+			selectCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, selectCmd, "workspace select subcommand must be registered")
+
+	ui := selectCmd.InheritedFlags().Lookup("ui")
+	require.NotNil(t, ui, "workspace select must inherit the --ui flag")
+	originalValue := ui.Value.String()
+	originalChanged := ui.Changed
+	t.Cleanup(func() {
+		require.NoError(t, ui.Value.Set(originalValue))
+		ui.Changed = originalChanged
+	})
+
+	tests := []struct {
+		name            string
+		setUI           bool
+		uiValue         string
+		expectFlagSet   bool
+		expectUIEnabled bool
+	}{
+		{name: "unset", setUI: false, expectFlagSet: false},
+		{name: "--ui=true", setUI: true, uiValue: "true", expectFlagSet: true, expectUIEnabled: true},
+		{name: "--ui=false", setUI: true, uiValue: "false", expectFlagSet: true, expectUIEnabled: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, ui.Value.Set("false"))
+			ui.Changed = false
+			if tc.setUI {
+				require.NoError(t, ui.Value.Set(tc.uiValue))
+				ui.Changed = true
+			}
+
+			v := viper.New()
+			require.NoError(t, terraformParser.BindFlagsToViper(selectCmd, v))
+			require.NoError(t, workspaceParser.BindFlagsToViper(selectCmd, v))
+			opts, err := ParseTerraformRunOptions(v, selectCmd)
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.expectFlagSet, opts.UIFlagSet, "UIFlagSet")
+			if tc.expectFlagSet {
+				assert.Equal(t, tc.expectUIEnabled, opts.UI, "UI")
+			}
+		})
+	}
+}
+
+// TestDestroyCommandPropagatesUIFlag verifies that the top-level destroy command passes
+// its own *cobra.Command into ParseTerraformRunOptions, so --ui is correctly detected as
+// explicitly set. Regression test for a bug where this call site omitted cmd entirely,
+// leaving UIFlagSet false even when the user passed --ui, silently falling back to the
+// plain (non-streaming) execution path with no warning.
+func TestDestroyCommandPropagatesUIFlag(t *testing.T) {
+	ui := destroyCmd.InheritedFlags().Lookup("ui")
+	require.NotNil(t, ui, "destroy must inherit the --ui flag")
+	originalValue := ui.Value.String()
+	originalChanged := ui.Changed
+	t.Cleanup(func() {
+		require.NoError(t, ui.Value.Set(originalValue))
+		ui.Changed = originalChanged
+	})
+
+	tests := []struct {
+		name            string
+		setUI           bool
+		uiValue         string
+		expectFlagSet   bool
+		expectUIEnabled bool
+	}{
+		{name: "unset", setUI: false, expectFlagSet: false},
+		{name: "--ui=true", setUI: true, uiValue: "true", expectFlagSet: true, expectUIEnabled: true},
+		{name: "--ui=false", setUI: true, uiValue: "false", expectFlagSet: true, expectUIEnabled: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, ui.Value.Set("false"))
+			ui.Changed = false
+			if tc.setUI {
+				require.NoError(t, ui.Value.Set(tc.uiValue))
+				ui.Changed = true
+			}
+
+			v := viper.New()
+			require.NoError(t, terraformParser.BindFlagsToViper(destroyCmd, v))
+			require.NoError(t, destroyParser.BindFlagsToViper(destroyCmd, v))
+			opts, err := ParseTerraformRunOptions(v, destroyCmd)
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.expectFlagSet, opts.UIFlagSet, "UIFlagSet")
+			if tc.expectFlagSet {
+				assert.Equal(t, tc.expectUIEnabled, opts.UI, "UI")
+			}
+		})
+	}
 }
 
 // TestNewWorkspacePassthroughSubcommand tests the workspace-specific helper function

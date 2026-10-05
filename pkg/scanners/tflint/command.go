@@ -163,7 +163,6 @@ type Runtime struct {
 
 var (
 	initCLIConfig        = cfg.InitCliConfig
-	buildTerraformGraph  = scheduleradapters.BuildTerraformGraph
 	runTarget            = executeTarget
 	checkTFLintAvailable = checkTFLintAvailableImpl
 )
@@ -233,12 +232,7 @@ func execute(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacks
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
-
-	graph, err := buildTerraformGraph(stacks)
-	if err != nil {
-		return fmt.Errorf(terraformLintWrappedErrorFormat, errUtils.ErrBuildTerraformLintTargets, err)
-	}
-	targets := targetsFor(graph, nil)
+	targets := targetsFor(nil, scheduleradapters.TerraformTargets(stacks))
 	if len(targets) == 0 {
 		ui.Success("No Terraform components matched")
 		return nil

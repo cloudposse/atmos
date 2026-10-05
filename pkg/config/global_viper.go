@@ -5,9 +5,12 @@ import (
 	"sync"
 
 	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
-// SafeViper wraps the process-wide global Viper singleton with a mutex.
+// SafeViper wraps the process-wide global Viper singleton, delegating every
+// method to pkg/viperguard's mutex-guarded functions.
 //
 // LoadConfig bridges several config-derived values back into the global Viper
 // singleton (e.g. profiles.base_path, vendor.update.*, vendor.ci.*) so other
@@ -19,36 +22,27 @@ import (
 // one per graph node -- under --max-concurrency > 1, so every access to the
 // singleton must go through GlobalViper() to avoid "concurrent map writes" panics.
 //
-// This applies even to reads/writes of unrelated keys: viper.Set/Get traverse
-// and mutate ONE shared underlying map (Viper.override) via deepSearch, and Go
-// maps are not safe for any concurrent read/write access, regardless of which
-// key each goroutine touches -- a write to "vendor.update.execution.mode" can
-// still race with a concurrent read of an unrelated key like "mask".
-//
-// Deliberately does not cache *viper.Viper in a field: tests (and
-// viper.Reset()-calling production paths) replace viper's default instance at
-// runtime, so every method re-resolves viper.GetViper() under the lock rather
-// than risk diverging from whatever instance is currently "the" global one.
-type SafeViper struct {
-	mu sync.RWMutex
-}
+// Delegating to pkg/viperguard (rather than guarding with a mutex declared
+// here) matters beyond code reuse: pkg/http and pkg/ui/theme also call global
+// viper accessors directly (they sit below pkg/config in the dependency
+// graph, so they cannot import this package to reach SafeViper without an
+// import cycle) and route through pkg/viperguard for the same reason. A
+// second, independent mutex declared in this package would not exclude
+// pkg/viperguard's callers from those two packages -- two separate locks
+// guarding the same underlying viper singleton do not exclude each other --
+// leaving exactly the cross-package data race this type exists to prevent.
+type SafeViper struct{}
 
 func (s *SafeViper) Set(key string, value any) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	viper.GetViper().Set(key, value)
+	viperguard.Set(key, value)
 }
 
 func (s *SafeViper) GetString(key string) string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return viper.GetViper().GetString(key)
+	return viperguard.GetString(key)
 }
 
 func (s *SafeViper) GetBool(key string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return viper.GetViper().GetBool(key)
+	return viperguard.GetBool(key)
 }
 
 // GetStringSlice returns a clone of the requested key's string slice: viper's
@@ -56,15 +50,11 @@ func (s *SafeViper) GetBool(key string) bool {
 // than a copy, and handing that out under the lock would let a caller mutate
 // shared Viper state after the lock is released.
 func (s *SafeViper) GetStringSlice(key string) []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return slices.Clone(viper.GetViper().GetStringSlice(key))
+	return viperguard.GetStringSlice(key)
 }
 
 func (s *SafeViper) IsSet(key string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return viper.GetViper().IsSet(key)
+	return viperguard.IsSet(key)
 }
 
 // ViperReader exposes only *viper.Viper's read methods. SafeViper.View passes
@@ -73,41 +63,7 @@ func (s *SafeViper) IsSet(key string) bool {
 // against another concurrent View call's reads, or against SafeViper.Set's
 // write lock, defeating the whole point of View. Extend with more read
 // methods as callers need them; never add a mutator here.
-type ViperReader interface {
-	// IsSet reports whether key has an explicit value from any source (flag,
-	// env, config, override) -- unlike a plain Get, it does not count a
-	// registered default as "set".
-	IsSet(key string) bool
-	// GetBool returns key's value coerced to bool. Returns false if unset.
-	GetBool(key string) bool
-	// GetString returns key's value coerced to string. Returns "" if unset.
-	GetString(key string) string
-	// GetStringSlice returns key's value coerced to []string, cloned so the
-	// caller cannot mutate Viper's own backing array. Returns nil if unset.
-	GetStringSlice(key string) []string
-}
-
-// viperReaderAdapter wraps *viper.Viper to satisfy ViperReader without
-// exposing the concrete *viper.Viper type to View callbacks. Passing
-// *viper.Viper itself through the ViperReader interface would only hide Set
-// behind a narrower static type -- Go interfaces retain their dynamic type,
-// so a callback could still type-assert the value back to *viper.Viper and
-// call Set while holding only View's read lock. Because viperReaderAdapter is
-// unexported, code outside this package cannot name it to assert against it,
-// so it cannot recover the underlying *viper.Viper this way.
-type viperReaderAdapter struct {
-	v *viper.Viper
-}
-
-func (a viperReaderAdapter) IsSet(key string) bool { return a.v.IsSet(key) }
-
-func (a viperReaderAdapter) GetBool(key string) bool { return a.v.GetBool(key) }
-
-func (a viperReaderAdapter) GetString(key string) string { return a.v.GetString(key) }
-
-func (a viperReaderAdapter) GetStringSlice(key string) []string {
-	return slices.Clone(a.v.GetStringSlice(key))
-}
+type ViperReader = viperguard.ViperReader
 
 // View executes fn with a read lock held on the global Viper singleton,
 // giving fn a consistent snapshot for the whole call. Use this instead of
@@ -117,9 +73,7 @@ func (a viperReaderAdapter) GetStringSlice(key string) []string {
 // concurrent Set() between two separate calls could let the decision combine
 // one snapshot's presence result with a different snapshot's value.
 func (s *SafeViper) View(fn func(v ViperReader)) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	fn(viperReaderAdapter{v: viper.GetViper()})
+	viperguard.View(fn)
 }
 
 var globalViper = &SafeViper{}

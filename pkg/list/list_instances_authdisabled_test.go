@@ -118,6 +118,7 @@ func TestExecuteDescribeStacksForInstances_AuthDisabledDispatchesToAuthDisabledM
 		true, // authDisabled — the bit under test.
 		nil,  // tagsFilter
 		nil,  // labelsFilter
+		nil,  // evalSections
 	)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -149,6 +150,7 @@ func TestExecuteDescribeStacksForInstances_AuthDisabledFalseUsesRegularPath(t *t
 		false, // authDisabled=false — regular path expected.
 		nil,   // tagsFilter
 		nil,   // labelsFilter
+		nil,   // evalSections
 	)
 	require.NoError(t, err)
 	assert.True(t, fake.executeDescribeStacksCalled,
@@ -175,6 +177,7 @@ func TestExecuteDescribeStacksForInstances_FallsBackWhenInterfaceNotImplemented(
 		true,  // authDisabled=true but processor doesn't implement the optional interface.
 		nil,   // tagsFilter
 		nil,   // labelsFilter
+		nil,   // evalSections
 	)
 	require.NoError(t, err)
 	assert.True(t, fake.called,
@@ -200,6 +203,7 @@ func TestExecuteDescribeStacksForInstances_ScopedFiltersFallBackWhenUnsupported(
 		true,                             // authDisabled
 		[]string{"production"},           // tagsFilter
 		map[string]string{"env": "prod"}, // labelsFilter
+		nil,                              // evalSections
 	)
 	require.NoError(t, err)
 	assert.True(t, fake.executeDescribeStacksAuthDisabled,
@@ -241,6 +245,7 @@ func TestProcessInstancesWithDeps_AuthDisabledPropagatesAuthDisabledFlag(t *test
 		true,  // authDisabled
 		nil,   // tagsFilter
 		nil,   // labelsFilter
+		nil,   // evalSections
 	)
 	require.NoError(t, err)
 	require.Len(t, instances, 1)
@@ -286,6 +291,7 @@ func TestProcessInstances_AuthDisabledConstructsDefaultProcessor(t *testing.T) {
 		true,  // authDisabled
 		nil,   // tagsFilter
 		nil,   // labelsFilter
+		nil,   // evalSections
 	)
 	// With no stacks configured, ExecuteDescribeStacksWithAuthDisabled returns
 	// an empty map; the upstream collector then returns an empty slice. The

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"go.yaml.in/yaml/v3"
@@ -15,6 +16,13 @@ import (
 )
 
 type AtmosSectionMapType = map[string]any
+
+// DeferredEvaluationContext holds invocation-local evaluated values, independently
+// of the authentication implementation. The resolver identifies the invocation.
+type DeferredEvaluationContext struct {
+	Manager any
+	Values  sync.Map
+}
 
 // DescribeSettings contains settings for the describe command output.
 type DescribeSettings struct {
@@ -100,6 +108,13 @@ type ConfigMetadata struct {
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
+	// AuthManager carries the same invocation-local manager passed by the caller.
+	// Like ConfigAndStacksInfo.AuthManager, any avoids the auth/schema import cycle.
+	AuthManager any `yaml:"-" json:"-" mapstructure:"-"`
+	// DeferredEvaluation is owned by pkg/stack/deferred, not the authentication resolver.
+	DeferredEvaluation *DeferredEvaluationContext `yaml:"-" json:"-" mapstructure:"-"`
+	// ListEvaluationPaths carries the fields consumed by this list invocation.
+	ListEvaluationPaths           [][]string         `yaml:"-" json:"-" mapstructure:"-"`
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"`                                       // "runtime" if from env var/CLI/provider, "" if from config file.
 	Edition                       string             `yaml:"edition,omitempty" json:"edition,omitempty" mapstructure:"edition"` // Date anchor ("YYYY", "YYYY-MM", or "YYYY-MM-DD") that pins defaults to how they stood on that date.
@@ -400,6 +415,7 @@ type Toolchain struct {
 	LockFile        string                    `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
 	UseToolVersions bool                      `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
 	UseLockFile     bool                      `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
+	FrozenLockFile  bool                      `yaml:"frozen_lock_file" json:"frozen_lock_file" mapstructure:"frozen_lock_file"`
 	Verification    *ToolchainVerification    `yaml:"verification,omitempty" json:"verification,omitempty" mapstructure:"verification"`
 	Registries      []ToolchainRegistry       `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
 	Aliases         map[string]string         `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
@@ -517,7 +533,7 @@ type AtmosSettings struct {
 	Terminal          Terminal          `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
 	YAML              AtmosYAMLSettings `yaml:"yaml,omitempty" json:"yaml,omitempty" mapstructure:"yaml"`
 	// Experimental controls how experimental features are handled.
-	// Values: "silence" (no output), "disable" (disabled), "warn" (default), "error" (exit).
+	// Values: "silence" (no output), "disable" (disabled), "warn", "warn-daily" (default, once per feature every 24 hours), "error" (exit).
 	Experimental string `yaml:"experimental" json:"experimental" mapstructure:"experimental"`
 	// Deprecated: this was moved to top-level Atmos config
 	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs" jsonschema_extras:"deprecated=true,x-atmos-replacement=docs"`
@@ -540,6 +556,8 @@ type AtmosSettings struct {
 	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
 	// Provision contains global defaults for provisioning.
 	Provision ProvisionSettings `yaml:"provision,omitempty" json:"provision,omitempty" mapstructure:"provision"`
+	// Metrics controls local command-execution resource-usage display.
+	Metrics MetricsSettings `yaml:"metrics,omitempty" json:"metrics,omitempty" mapstructure:"metrics"`
 }
 
 // TelemetrySettings contains configuration for telemetry collection.
@@ -551,8 +569,12 @@ type TelemetrySettings struct {
 }
 
 // ProvisionSettings contains global defaults for provisioning.
+//
+// A global default for workdir provisioning is NOT configured here. It belongs in the stack
+// configuration under the toolchain section (`terraform.provision`, `helmfile.provision`, etc.),
+// consistent with global `vars`, `metadata`, and `secrets`. Component-level `provision` values
+// override that stack-level default. See #3197.
 type ProvisionSettings struct {
-	Workdir ProvisionWorkdirSettings `yaml:"workdir,omitempty" json:"workdir,omitempty" mapstructure:"workdir"`
 	// Default is the name of the target used by apply/deploy when no --target is given.
 	Default string `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 	// Targets maps target names to delivery destinations for rendered artifacts.
@@ -594,15 +616,6 @@ type ProvisionTargetCommit struct {
 type ProvisionTargetPullRequest struct {
 	// Enabled requests pull-request publishing (not yet supported by the cli provider).
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-}
-
-// ProvisionWorkdirSettings contains default settings for workdir provisioning.
-type ProvisionWorkdirSettings struct {
-	// Enabled sets the default enabled state for workdir provisioning.
-	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	// TTL is the default time-to-live for workdirs (e.g., "7d", "24h", "weekly").
-	// Workdirs not accessed within this duration can be cleaned up.
-	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
 }
 
 type Docs struct {
@@ -668,7 +681,10 @@ type Terraform struct {
 	Command           string        `yaml:"command" json:"command" mapstructure:"command"`
 	Shell             ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
 	Init              TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
-	Plan              TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
+	// Mocks configures how `--use-mocks` resolves Terraform state/output lookups against a
+	// component's literal `mocks` map.
+	Mocks TerraformMocks `yaml:"mocks,omitempty" json:"mocks,omitempty" mapstructure:"mocks"`
+	Plan  TerraformPlan  `yaml:"plan" json:"plan" mapstructure:"plan"`
 	// Lint configures the built-in `atmos terraform lint` command.
 	// A configured config path is used when a component does not provide its own
 	// .tflint.hcl file.
@@ -680,7 +696,8 @@ type Terraform struct {
 	PluginCache bool `yaml:"plugin_cache" json:"plugin_cache" mapstructure:"plugin_cache"`
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
-	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	PluginCacheDir string      `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	UI             TerraformUI `yaml:"ui" json:"ui" mapstructure:"ui"`
 	// AutoProvisionWorkdirForOutputs controls whether Atmos automatically provisions
 	// JIT working directories before running terraform output.
 	// When true (default), output fetching transparently provisions the workdir
@@ -705,6 +722,62 @@ type Terraform struct {
 	// `providers lock` that keeps .terraform.lock.hcl complete across platforms.
 	// Empty defaults to the current host platform.
 	Platforms []string `yaml:"platforms,omitempty" json:"platforms,omitempty" mapstructure:"platforms"`
+	// Flags holds fleet-wide default values for terraform CLI execution flags
+	// (e.g. -lock-timeout, -parallelism). Overridable per stack via the
+	// root-level `terraform: flags:` block, and per component via a
+	// component's own `flags:` block. An explicit CLI-typed compat flag
+	// (e.g. `-lock-timeout=5m` typed on the command line) always wins.
+	Flags TerraformFlags `yaml:"flags,omitempty" json:"flags,omitempty" mapstructure:"flags"`
+}
+
+// TerraformFlags holds default values for terraform CLI execution flags
+// (lock/concurrency/output tuning). Settable globally under
+// components.terraform.flags in atmos.yaml, per stack under a root-level
+// terraform.flags block, and per component under a component's flags block
+// (field-level override, highest-precedence layer below an explicit
+// CLI-typed compat flag).
+//
+// Lock and Refresh are *bool (not bool) because terraform's own default for
+// both is true — a plain bool can't distinguish "not configured" from
+// "explicitly set to false" and would silently inject -lock=false /
+// -refresh=false for everyone who never touched the setting. Parallelism is
+// *int for the same reason (terraform's default is 10, not 0).
+// CompactWarnings' terraform default is already false, so a plain bool is
+// unambiguous.
+type TerraformFlags struct {
+	// LockTimeout is the default value for terraform's -lock-timeout flag
+	// (e.g. "30s", "5m"). Empty means unset — terraform's own 0s default
+	// applies. Validated with time.ParseDuration at injection time.
+	LockTimeout string `yaml:"lock_timeout,omitempty" json:"lock_timeout,omitempty" mapstructure:"lock_timeout"`
+	// Lock is the default value for terraform's -lock flag. nil means unset.
+	Lock *bool `yaml:"lock,omitempty" json:"lock,omitempty" mapstructure:"lock"`
+	// Parallelism is the default value for terraform's -parallelism flag. nil means unset.
+	Parallelism *int `yaml:"parallelism,omitempty" json:"parallelism,omitempty" mapstructure:"parallelism"`
+	// Refresh is the default value for terraform's -refresh flag. nil means unset.
+	// Not applied to `apply <planfile>` — terraform rejects -refresh when
+	// applying a saved plan.
+	Refresh *bool `yaml:"refresh,omitempty" json:"refresh,omitempty" mapstructure:"refresh"`
+	// CompactWarnings is the default value for terraform's -compact-warnings flag.
+	CompactWarnings bool `yaml:"compact_warnings,omitempty" json:"compact_warnings,omitempty" mapstructure:"compact_warnings"`
+}
+
+// TerraformUI contains streaming UI configuration.
+type TerraformUI struct {
+	// Enabled enables the streaming TUI mode for plan/apply/destroy/init/refresh commands.
+	// When enabled, terraform output is streamed in real-time with a progress display.
+	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+
+	// Compact controls line padding between resource branches.
+	// true (default) = no blank lines, false = add blank lines for readability.
+	Compact *bool `yaml:"compact" json:"compact" mapstructure:"compact"`
+
+	// ShowAttributeBar controls the vertical "quote" line for attribute content.
+	// true = show ┃ bar alongside attributes, false (default) = clean indentation only.
+	ShowAttributeBar *bool `yaml:"show_attribute_bar" json:"show_attribute_bar" mapstructure:"show_attribute_bar"`
+
+	// MaxLines controls collapsing large JSON values in attribute rendering.
+	// 0 (default) = show all lines like Terraform, >0 = collapse after N lines.
+	MaxLines int `yaml:"max_lines" json:"max_lines" mapstructure:"max_lines" jsonschema:"minimum=0"`
 }
 
 // TerraformLint configures TFLint for Terraform components. Config may be an
@@ -793,8 +866,196 @@ type TerraformCI struct {
 	ExitCodes map[int]bool `yaml:"exit_codes,omitempty" json:"exit_codes,omitempty" mapstructure:"exit_codes"`
 }
 
+// TerraformInit configures the `terraform init` that Atmos runs before other
+// terraform subcommands (and while resolving !terraform.output).
 type TerraformInit struct {
 	PassVars bool `yaml:"pass_vars" json:"pass_vars" mapstructure:"pass_vars"`
+	// Mode controls whether Atmos runs `terraform init` before a subcommand:
+	// `auto` (default since 2026-09-12; a project pinned to an earlier edition gets `always`
+	// restored) skips it when the init fingerprint recorded after the last successful init is
+	// unchanged, `always` runs it on every invocation, and `never` never runs it (the same as
+	// `--skip-init`).
+	Mode TerraformInitMode `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	// Reconfigure controls when `-reconfigure` is added to `terraform init`:
+	// `auto` (default) adds it only when the backend configuration changed since
+	// the last init, `always` adds it on every init, and `never` never adds it.
+	// Takes precedence over the deprecated `init_run_reconfigure`. Unlike Mode/Upgrade, this
+	// default is NOT edition-pin-protected (see EffectiveInitReconfigure's doc comment): its
+	// legacy-boolean fallback makes the standard journal mechanism unsafe to apply here.
+	Reconfigure TerraformInitReconfigure `yaml:"reconfigure,omitempty" json:"reconfigure,omitempty" mapstructure:"reconfigure"`
+	// Upgrade controls when `-upgrade` is added to `terraform init`: `auto` (default since
+	// 2026-09-12; a project pinned to an earlier edition gets `never` restored) adds it only
+	// when terraform/tofu reports that an upgrade is required, `always` adds it on every init,
+	// and `never` never adds it.
+	Upgrade TerraformInitUpgrade `yaml:"upgrade,omitempty" json:"upgrade,omitempty" mapstructure:"upgrade"`
+}
+
+// TerraformMocks configures component mock resolution for `--use-mocks`.
+type TerraformMocks struct {
+	// Mode controls how `--use-mocks` resolves a lookup: `fallback` (default since 2026-10-01;
+	// a project pinned to an earlier edition gets `always` restored) uses the real value when
+	// it exists and the component mock only when the state is not provisioned or the output is
+	// missing, and `always` resolves every lookup from the mocks without reading real state.
+	Mode TerraformMocksMode `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode" jsonschema:"enum=,enum=fallback,enum=always"`
+}
+
+// TerraformMocksMode controls how component mocks are resolved when `--use-mocks` is set.
+type TerraformMocksMode string
+
+const (
+	// TerraformMocksModeFallback uses real state when it exists and mocks only on a recoverable miss.
+	TerraformMocksModeFallback TerraformMocksMode = "fallback"
+	// TerraformMocksModeAlways resolves every lookup from mocks and never reads real state.
+	TerraformMocksModeAlways TerraformMocksMode = "always"
+)
+
+// IsValid reports whether the mode is empty (unset) or one of the known values.
+func (m TerraformMocksMode) IsValid() bool {
+	switch m {
+	case "", TerraformMocksModeFallback, TerraformMocksModeAlways:
+		return true
+	default:
+		return false
+	}
+}
+
+// EffectiveMocksMode returns the configured mocks mode, defaulting to fallback when unset.
+//
+// For any config loaded through LoadConfig, "unset" is resolved by Viper's defaults layer
+// (pkg/config/load.go's setDefaultConfiguration sets "fallback") before this method ever sees
+// it, with a project pinned to an edition before 2026-10-01 getting "always" restored instead
+// (see pkg/edition/journal.go). The literal "fallback" below only matters for a Terraform
+// struct built directly in Go, bypassing config loading entirely.
+func (t *Terraform) EffectiveMocksMode() TerraformMocksMode {
+	if t.Mocks.Mode == "" {
+		return TerraformMocksModeFallback
+	}
+	return t.Mocks.Mode
+}
+
+// TerraformInitMode controls whether Atmos runs `terraform init` before a subcommand.
+type TerraformInitMode string
+
+const (
+	// TerraformInitModeAuto runs init only when the recorded init fingerprint is stale or missing.
+	TerraformInitModeAuto TerraformInitMode = "auto"
+	// TerraformInitModeAlways runs init before every subcommand.
+	TerraformInitModeAlways TerraformInitMode = "always"
+	// TerraformInitModeNever never runs init implicitly.
+	TerraformInitModeNever TerraformInitMode = "never"
+)
+
+// IsValid reports whether the mode is empty (unset) or one of the known values.
+func (m TerraformInitMode) IsValid() bool {
+	switch m {
+	case "", TerraformInitModeAuto, TerraformInitModeAlways, TerraformInitModeNever:
+		return true
+	default:
+		return false
+	}
+}
+
+// TerraformInitReconfigure controls when `-reconfigure` is passed to `terraform init`.
+type TerraformInitReconfigure string
+
+const (
+	// TerraformInitReconfigureAuto adds -reconfigure only when the backend configuration changed.
+	TerraformInitReconfigureAuto TerraformInitReconfigure = "auto"
+	// TerraformInitReconfigureAlways adds -reconfigure to every init.
+	TerraformInitReconfigureAlways TerraformInitReconfigure = "always"
+	// TerraformInitReconfigureNever never adds -reconfigure.
+	TerraformInitReconfigureNever TerraformInitReconfigure = "never"
+)
+
+// IsValid reports whether the value is empty (unset) or one of the known values.
+func (r TerraformInitReconfigure) IsValid() bool {
+	switch r {
+	case "", TerraformInitReconfigureAuto, TerraformInitReconfigureAlways, TerraformInitReconfigureNever:
+		return true
+	default:
+		return false
+	}
+}
+
+// TerraformInitUpgrade controls when `-upgrade` is passed to `terraform init`.
+type TerraformInitUpgrade string
+
+const (
+	// TerraformInitUpgradeAuto adds -upgrade only when terraform/tofu reports it is required.
+	TerraformInitUpgradeAuto TerraformInitUpgrade = "auto"
+	// TerraformInitUpgradeAlways adds -upgrade to every init.
+	TerraformInitUpgradeAlways TerraformInitUpgrade = "always"
+	// TerraformInitUpgradeNever never adds -upgrade.
+	TerraformInitUpgradeNever TerraformInitUpgrade = "never"
+)
+
+// IsValid reports whether the value is empty (unset) or one of the known values.
+func (u TerraformInitUpgrade) IsValid() bool {
+	switch u {
+	case "", TerraformInitUpgradeAuto, TerraformInitUpgradeAlways, TerraformInitUpgradeNever:
+		return true
+	default:
+		return false
+	}
+}
+
+// EffectiveInitMode returns the configured init mode, defaulting to auto when unset.
+//
+// For any config loaded through LoadConfig, "unset" is resolved by Viper's defaults layer
+// (pkg/config/load.go's setDefaultConfiguration sets "auto") before this method ever sees it,
+// with a project pinned to an edition before 2026-09-12 getting "always" restored instead --
+// byte-for-byte the unconditional-init behavior Atmos always had before this key existed (see
+// pkg/edition/journal.go and docs/prd/editions.md's Roadmap). The literal "auto" fallback below
+// only matters for a Terraform struct built directly in Go, bypassing config loading entirely.
+func (t *Terraform) EffectiveInitMode() TerraformInitMode {
+	if t.Init.Mode == "" {
+		return TerraformInitModeAuto
+	}
+	return t.Init.Mode
+}
+
+// EffectiveInitReconfigure resolves the reconfigure policy: an explicit
+// `init.reconfigure` wins; otherwise the deprecated `init_run_reconfigure: false`
+// maps to never, and anything else (including the legacy default true) maps to auto.
+//
+// Unlike EffectiveInitMode/EffectiveInitUpgrade, this default is deliberately NOT given a Viper
+// SetDefault in pkg/config/load.go, nor a literal default in pkg/config/default.go's
+// defaultCliConfig (used only when no atmos.yaml is found at all), so it stays
+// edition-pin-unaware: t.Init.Reconfigure must remain genuinely empty ("") when the user hasn't
+// set it explicitly, or this method's legacy fallback below (deprecated init_run_reconfigure)
+// would never run, silently breaking init_run_reconfigure: false's "never" mapping for any
+// project that set it. The
+// init_run_reconfigure: true -> auto reinterpretation this creates for anyone who never
+// migrates is a real, undocumented-by-editions default-behavior change -- it's the
+// KindBehavior gap tracked in docs/prd/editions.md's Roadmap (reinterpreting what an existing
+// stored value means, not changing a default the journal can overlay), not something this
+// method can route around given the legacy field it must keep honoring.
+func (t *Terraform) EffectiveInitReconfigure() TerraformInitReconfigure {
+	if t.Init.Reconfigure != "" {
+		return t.Init.Reconfigure
+	}
+	if !t.InitRunReconfigure {
+		return TerraformInitReconfigureNever
+	}
+	return TerraformInitReconfigureAuto
+}
+
+// EffectiveInitUpgrade returns the configured upgrade policy, defaulting to auto when unset.
+//
+// For any config loaded through LoadConfig, "unset" is resolved by Viper's defaults layer
+// (pkg/config/load.go's setDefaultConfiguration sets "auto") before this method ever sees it,
+// with a project pinned to an edition before 2026-09-12 getting "never" restored instead (see
+// pkg/edition/journal.go and docs/prd/editions.md's Roadmap for why this key -- unlike
+// init.mode/init.reconfigure, which only make an already-unconditional prior behavior conditional
+// -- needed a journal entry despite being a brand-new key: Atmos never passed -upgrade
+// automatically before this setting existed, so an unpinned/pre-release project must not inherit
+// the new automatic behavior without having agreed to it). The literal "auto" fallback below only
+// matters for a Terraform struct built directly in Go, bypassing config loading entirely.
+func (t *Terraform) EffectiveInitUpgrade() TerraformInitUpgrade {
+	if t.Init.Upgrade == "" {
+		return TerraformInitUpgradeAuto
+	}
+	return t.Init.Upgrade
 }
 
 type TerraformPlan struct {
@@ -862,6 +1123,29 @@ type TerraformPlanCIResultHandler interface {
 	HandleTerraformPlanCIResults(TerraformPlanCIResultSet) error
 }
 
+// TerraformPlanCIBeforeHandler receives the resolved, filtered node list for
+// one graph-backed Terraform run before the scheduler starts, so CI can
+// create one real pending check-run per component up front — the before-side
+// counterpart to TerraformPlanCIResultHandler.
+type TerraformPlanCIBeforeHandler interface {
+	HandleTerraformPlanCIBefore(TerraformPlanCIPendingSet) error
+}
+
+// TerraformPlanCIPendingSet contains the resolved node list for one
+// graph-backed Terraform run before execution starts.
+type TerraformPlanCIPendingSet struct {
+	Command string
+	Nodes   []TerraformPlanCIPendingNode
+}
+
+// TerraformPlanCIPendingNode identifies one component about to run.
+// Deliberately carries no result data since nothing has executed yet.
+type TerraformPlanCIPendingNode struct {
+	NodeID    string
+	Stack     string
+	Component string
+}
+
 // ComponentNodeHooks fires per-component lifecycle hooks (user-defined
 // hooks.RunAll and CI hooks.RunCIHooks, before and after) around one
 // component's execution during a multi-component/bulk run — Terraform
@@ -926,6 +1210,29 @@ type TerraformPlanCIResult struct {
 	ExitCode   int
 	Output     string
 	LogFiles   map[string]string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	DurationMS int64
+	Error      string
+}
+
+// HelmCIResultSet contains deterministic per-node Helm results for one
+// graph-backed plan or apply run.
+type HelmCIResultSet struct {
+	Command string
+	Results []HelmCIResult
+}
+
+// HelmCIResult contains the execution outcome and structured Helm summary for
+// one component in a graph-backed run.
+type HelmCIResult struct {
+	NodeID     string
+	Stack      string
+	Component  string
+	Status     string
+	Processed  bool
+	ExitCode   int
+	Summary    map[string]any
 	StartedAt  time.Time
 	FinishedAt time.Time
 	DurationMS int64
@@ -1404,27 +1711,34 @@ type DocsGenerate struct {
 }
 
 type ArgsAndFlagsInfo struct {
-	AdditionalArgsAndFlags    []string
-	SubCommand                string
-	SubCommand2               string
-	ComponentFromArg          string
-	GlobalOptions             []string
-	TerraformCommand          string
-	TerraformDir              string
-	HelmfileCommand           string
-	HelmfileDir               string
-	PackerCommand             string
-	PackerDir                 string
-	AnsibleCommand            string
-	AnsibleDir                string
-	ConfigDir                 string
-	StacksDir                 string
-	WorkflowsDir              string
-	BasePath                  string
-	VendorBasePath            string
-	DeployRunInit             string
-	InitRunReconfigure        string
-	InitPassVars              string
+	AdditionalArgsAndFlags []string
+	SubCommand             string
+	SubCommand2            string
+	ComponentFromArg       string
+	GlobalOptions          []string
+	TerraformCommand       string
+	TerraformDir           string
+	HelmfileCommand        string
+	HelmfileDir            string
+	PackerCommand          string
+	PackerDir              string
+	AnsibleCommand         string
+	AnsibleDir             string
+	ConfigDir              string
+	StacksDir              string
+	WorkflowsDir           string
+	BasePath               string
+	VendorBasePath         string
+	DeployRunInit          string
+	InitRunReconfigure     string
+	InitPassVars           string
+	// InitMode overrides components.terraform.init.mode from atmos.yaml (auto, always, never).
+	InitMode string
+	// InitReconfigure overrides components.terraform.init.reconfigure from atmos.yaml
+	// (auto, always, never); supersedes the deprecated InitRunReconfigure.
+	InitReconfigure string
+	// InitUpgrade overrides components.terraform.init.upgrade from atmos.yaml (auto, always, never).
+	InitUpgrade               string
 	PlanSkipPlanfile          string
 	AutoGenerateBackendFile   string
 	AppendUserAgent           string
@@ -1573,12 +1887,17 @@ type GCPAuthContext struct {
 }
 
 type ConfigAndStacksInfo struct {
-	StackFromArg                  string
-	Stack                         string
-	StackFile                     string
-	StackManifestName             string // Stack-level 'name' override from manifest (highest precedence).
-	ComponentType                 string
-	ComponentFromArg              string
+	StackFromArg      string
+	Stack             string
+	StackFile         string
+	StackManifestName string // Stack-level 'name' override from manifest (highest precedence).
+	ComponentType     string
+	ComponentFromArg  string
+	// ComponentPrompted records whether ComponentFromArg was filled in via an
+	// interactive prompt rather than supplied on the command line.
+	ComponentPrompted bool
+	// StackPrompted is the Stack equivalent of ComponentPrompted.
+	StackPrompted                 bool
 	Component                     string
 	ComponentFolderPrefix         string
 	ComponentFolderPrefixReplaced string
@@ -1631,6 +1950,8 @@ type ConfigAndStacksInfo struct {
 	//   - Type assertions are used at usage sites to recover type safety
 	AuthManager  any
 	AuthDisabled bool
+	// EvaluationPaths limits list value evaluation; nil evaluates every field.
+	EvaluationPaths [][]string
 	// DeferredMergeContexts holds the per-section deferred-merge contexts recovered from the
 	// FindStacksMap cache for this component, keyed by section name (vars, settings, env, auth,
 	// providers, required_providers, hooks, test, generate). A later, per-invocation stage
@@ -1648,33 +1969,46 @@ type ConfigAndStacksInfo struct {
 	// producing commands (secret get/pull/push, terraform plan/apply/output) leave this false.
 	SecretsMaskOnly      bool
 	ComponentBackendType string
+	// Flags holds the fully resolved terraform CLI execution flags for this
+	// component (merged: atmos.yaml global default < stack-level
+	// `terraform: flags:` < component's own `flags:` block). An explicit
+	// CLI-typed compat flag in AdditionalArgsAndFlags still wins over this
+	// at injection time.
+	Flags TerraformFlags
 	// RequiredVersion is the Terraform version constraint (e.g., ">= 1.10.1").
 	// This is extracted from terraform.required_version or components.terraform.<name>.required_version.
 	RequiredVersion string
 	// RequiredProviders maps provider names to their configuration.
 	// Example: {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}}.
 	// This is extracted from terraform.required_providers or components.terraform.<name>.required_providers.
-	RequiredProviders       map[string]map[string]any
-	AdditionalArgsAndFlags  []string
-	GlobalOptions           []string
-	BasePath                string
-	VendorBasePathFlag      string
-	TerraformCommand        string
-	TerraformDir            string
-	HelmfileCommand         string
-	HelmfileDir             string
-	PackerCommand           string
-	PackerDir               string
-	AnsibleCommand          string
-	AnsibleDir              string
-	ConfigDir               string
-	StacksDir               string
-	WorkflowsDir            string
-	Context                 Context
-	ContextPrefix           string
-	DeployRunInit           string
-	InitRunReconfigure      string
-	InitPassVars            string
+	RequiredProviders      map[string]map[string]any
+	AdditionalArgsAndFlags []string
+	GlobalOptions          []string
+	BasePath               string
+	VendorBasePathFlag     string
+	TerraformCommand       string
+	TerraformDir           string
+	HelmfileCommand        string
+	HelmfileDir            string
+	PackerCommand          string
+	PackerDir              string
+	AnsibleCommand         string
+	AnsibleDir             string
+	ConfigDir              string
+	StacksDir              string
+	WorkflowsDir           string
+	Context                Context
+	ContextPrefix          string
+	DeployRunInit          string
+	InitRunReconfigure     string
+	InitPassVars           string
+	// InitMode overrides components.terraform.init.mode from atmos.yaml (auto, always, never).
+	InitMode string
+	// InitReconfigure overrides components.terraform.init.reconfigure from atmos.yaml
+	// (auto, always, never); supersedes the deprecated InitRunReconfigure.
+	InitReconfigure string
+	// InitUpgrade overrides components.terraform.init.upgrade from atmos.yaml (auto, always, never).
+	InitUpgrade             string
 	PlanSkipPlanfile        string
 	AutoGenerateBackendFile string
 	UseTerraformPlan        bool
@@ -1714,7 +2048,10 @@ type ConfigAndStacksInfo struct {
 	ProcessFunctions          bool
 	// UseMocks resolves Terraform state/output YAML functions from the referenced
 	// component's literal `mocks` map instead of remote Terraform state.
-	UseMocks   bool
+	UseMocks bool
+	// MocksMode overrides components.terraform.mocks.mode from atmos.yaml (fallback, always)
+	// for this run; set by `--use-mocks=fallback|always`.
+	MocksMode  string
 	Skip       []string
 	CliArgs    []string
 	Affected   bool
@@ -1742,6 +2079,8 @@ type ConfigAndStacksInfo struct {
 	Identity                   string
 	ClusterName                string // EKS cluster name from --cluster-name flag.
 	NeedsPathResolution        bool   // True if ComponentFromArg is a path that needs resolution.
+	UIEnabled                  bool   // Enable streaming UI mode for terraform commands.
+	UIFlagExplicitlySet        bool   // Whether --ui flag was explicitly set (vs. config/default).
 
 	// NodeHooks fires per-component lifecycle hooks (user hooks + CI hooks,
 	// before and after) for each component in a multi-component/bulk
@@ -1757,6 +2096,13 @@ type ConfigAndStacksInfo struct {
 	// centralizes CI output writes for concurrent execution so GitHub
 	// summary/output files are not written by worker goroutines.
 	TerraformPlanCIResultHandler TerraformPlanCIResultHandler
+
+	// TerraformPlanCIBeforeHandler is called once, right before the scheduler
+	// starts a graph-backed multi-component Terraform plan/apply/destroy run,
+	// with the resolved and filtered node list — the before-side counterpart
+	// to TerraformPlanCIResultHandler, letting CI create real per-component
+	// pending statuses up front instead of one component-less status.
+	TerraformPlanCIBeforeHandler TerraformPlanCIBeforeHandler
 
 	// RCCleanup, when non-nil, removes the temporary Terraform CLI config file
 	// (TF_CLI_CONFIG_FILE) generated for this run. It is registered during env
@@ -1776,6 +2122,50 @@ type ConfigAndStacksInfo struct {
 	// pre-set TerraformCache and does not start, verify, or close its own. Used by
 	// `atmos terraform cache mirror` to share one proxy across components.
 	TerraformCacheExternal bool `yaml:"-" json:"-" mapstructure:"-"`
+
+	// ExecMetadataDetailedExitCodeAdded is set by buildPlanSubcommandArgs when
+	// -detailed-exitcode was added to a `plan` invocation specifically because
+	// exec-metadata capture required it (FR-006e), not because the user
+	// explicitly passed --upload-status. executeMainTerraformCommand consults
+	// this to decide whether to locally neutralize a resulting exit code 2
+	// ("changes detected") for Atmos's own returned status, without touching
+	// atmosConfig.CI.Enabled or mapCIExitCode's own gate (research.md Decision
+	// 36). Transient runtime state — not serialized.
+	ExecMetadataDetailedExitCodeAdded bool `yaml:"-" json:"-" mapstructure:"-"`
+
+	// ExecMetadataRawExitCode is the terraform/tofu subprocess's own exit code
+	// for the main plan/apply/deploy invocation, captured by
+	// executeMainTerraformCommand before CI-mode's mapCIExitCode remapping (and
+	// before this feature's own local exit-2 neutralization) is applied.
+	// Threaded up to captureExecMetadataSync so TerraformExecData.exit_code
+	// (FR-006e) reports the real, unmasked subprocess outcome even when
+	// Atmos's own returned error is remapped/neutralized. Transient runtime
+	// state — not serialized.
+	ExecMetadataRawExitCode int `yaml:"-" json:"-" mapstructure:"-"`
+
+	// ExecMetadataRawOutput is the main plan/apply/deploy subprocess's own
+	// combined stdout+stderr, captured by executeCommandPipeline scoped to
+	// only that invocation — not the combined init+workspace-select+main
+	// buffer other consumers (e.g. CI job-summary hooks) use. Threaded up to
+	// captureExecMetadataSync so the exec-metadata parser sees only the real
+	// plan/apply's own output (FR-006f, research.md Decision 32). Transient
+	// runtime state — not serialized.
+	ExecMetadataRawOutput string `yaml:"-" json:"-" mapstructure:"-"`
+
+	// ExecMetadataRawMetrics holds a *process.ProcessMetrics (pkg/metrics/process)
+	// combining the main plan/apply/deploy subprocess tree's resource usage with
+	// atmos's own self-usage, captured by executeMainTerraformCommand. Typed as
+	// `any` rather than *process.ProcessMetrics to avoid an import cycle
+	// (pkg/metrics/process imports pkg/schema for the settings gate on its own
+	// display helpers); callers type-assert back to *process.ProcessMetrics.
+	// Threaded up to captureExecMetadataSync so TerraformExecData.metrics
+	// reflects the subprocess tree, not just atmos's own usage. Transient
+	// runtime state — not serialized.
+	ExecMetadataRawMetrics any `yaml:"-" json:"-" mapstructure:"-"`
+
+	// InitSkipped records that the implicit terraform init was skipped this
+	// invocation because the init fingerprint was up to date.
+	InitSkipped bool `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // GetComponentEnvSection returns the component's env section map.
@@ -1923,6 +2313,9 @@ type BaseComponentConfig struct {
 	BaseComponentRemoteStateBackendSection AtmosSectionMapType
 	BaseComponentSourceSection             AtmosSectionMapType
 	BaseComponentProvisionSection          AtmosSectionMapType
+	// BaseComponentFlags holds the terraform CLI execution flag defaults inherited
+	// from base components (metadata.inherits / top-level `component`).
+	BaseComponentFlags AtmosSectionMapType
 	// BaseComponentRetry holds the raw retry configuration inherited from base components.
 	// It is deep-merged with the child component's retry block by mergeComponentConfigurations.
 	BaseComponentRetry        AtmosSectionMapType
@@ -2062,6 +2455,8 @@ type ComponentManifest struct {
 }
 
 type Vendor struct {
+	// MaxConcurrency bounds concurrent preparation and update checks; earlier editions restore one worker.
+	MaxConcurrency int `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty" mapstructure:"max_concurrency" jsonschema:"minimum=1"`
 	// Path to vendor configuration file or directory containing vendor files.
 	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order.
 	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`

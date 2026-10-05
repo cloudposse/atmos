@@ -16,7 +16,12 @@ import (
 
 // ConfigInitializer abstracts configuration and auth initialization for testability.
 type ConfigInitializer interface {
-	InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfiguration, *schema.AuthContext, error)
+	// InitConfigAndAuth initializes Atmos configuration and optional authentication.
+	// The componentPrompted and stackPrompted parameters record whether component/stack
+	// were resolved via an interactive prompt (rather than supplied on the command line,
+	// via config, or via an environment variable) so a profile-fallback re-exec can
+	// re-inject prompted values into the child's argv without duplicating CLI-supplied ones.
+	InitConfigAndAuth(component, stack, identity string, componentPrompted, stackPrompted bool) (*schema.AtmosConfiguration, *schema.AuthContext, error)
 }
 
 // CreateBackendParams contains parameters for CreateBackend operation.
@@ -38,6 +43,16 @@ type DeleteBackendParams struct {
 	AuthContext  *schema.AuthContext
 }
 
+// promptedFlags records which of a backend command's component and stack values were
+// resolved via an interactive prompt (see flags.StandardOptions.ComponentPrompted /
+// StackPrompted), rather than supplied via CLI flag, positional argument, environment
+// variable, or config file. Bundled into a struct (instead of two bool parameters) so the
+// execute*CommandWithValues helpers below stay within the linter's function argument limit.
+type promptedFlags struct {
+	Component bool
+	Stack     bool
+}
+
 // Provisioner abstracts provisioning operations for testability.
 type Provisioner interface {
 	CreateBackend(params *CreateBackendParams) error
@@ -49,8 +64,8 @@ type Provisioner interface {
 // defaultConfigInitializer implements ConfigInitializer using production code.
 type defaultConfigInitializer struct{}
 
-func (d *defaultConfigInitializer) InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
-	return InitConfigAndAuth(component, stack, identity)
+func (d *defaultConfigInitializer) InitConfigAndAuth(component, stack, identity string, componentPrompted, stackPrompted bool) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
+	return InitConfigAndAuth(component, stack, identity, componentPrompted, stackPrompted)
 }
 
 // defaultProvisioner implements Provisioner using production code.
@@ -122,7 +137,11 @@ func ResetDependencies() {
 // Returns atmosConfig, authContext, and error.
 // It loads component configuration, merges component-level auth with global auth,
 // and creates an AuthContext that respects component's default identity settings.
-func InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
+// The componentPrompted and stackPrompted parameters record whether component/stack
+// were resolved via an interactive prompt; they flow into auth.ReExecContext so a
+// profile-fallback re-exec re-injects prompted values into the child's argv instead
+// of losing them (or re-prompting for them) after the re-exec.
+func InitConfigAndAuth(component, stack, identity string, componentPrompted, stackPrompted bool) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
 	// Load atmos configuration.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
 		ComponentFromArg: component,
@@ -157,7 +176,12 @@ func InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfigur
 	// live endpoint (e.g. the emulator container started for this specific stack) into
 	// AuthContext.AWS. Without the stack, that resolution silently no-ops and callers fall back
 	// to the standard AWS SDK credential chain instead of the emulator/local sandbox.
-	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfigForStack(identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, &atmosConfig, stack)
+	authManager, err := auth.CreateAndAuthenticateManagerWithReExecContext(identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, &atmosConfig, auth.ReExecContext{
+		Component:         component,
+		ComponentPrompted: componentPrompted,
+		Stack:             stack,
+		StackPrompted:     stackPrompted,
+	})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -189,8 +213,9 @@ func CreateDescribeComponentFunc(authManager auth.AuthManager) func(string, stri
 }
 
 // executeProvisionCommandWithValues is the internal implementation that accepts already-parsed values.
-// Used by commands that use StandardParser's prompting infrastructure.
-func executeProvisionCommandWithValues(component, stack, identity string) error {
+// Used by commands that use StandardParser's prompting infrastructure. See promptedFlags for
+// what prompted records and why it's threaded through to InitConfigAndAuth.
+func executeProvisionCommandWithValues(component, stack, identity string, prompted promptedFlags) error {
 	// Validate required values.
 	if stack == "" {
 		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
@@ -200,7 +225,7 @@ func executeProvisionCommandWithValues(component, stack, identity string) error 
 	}
 
 	// Initialize config and auth using injected dependency.
-	atmosConfig, authContext, err := configInit.InitConfigAndAuth(component, stack, identity)
+	atmosConfig, authContext, err := configInit.InitConfigAndAuth(component, stack, identity, prompted.Component, prompted.Stack)
 	if err != nil {
 		return err
 	}
@@ -230,8 +255,9 @@ func executeProvisionCommandWithValues(component, stack, identity string) error 
 }
 
 // executeDeleteCommandWithValues is the internal implementation for the delete command.
-// Used by commands that use StandardParser's prompting infrastructure.
-func executeDeleteCommandWithValues(component, stack, identity string, force bool) error {
+// Used by commands that use StandardParser's prompting infrastructure. See promptedFlags for
+// what prompted records and why it's threaded through to InitConfigAndAuth.
+func executeDeleteCommandWithValues(component, stack, identity string, force bool, prompted promptedFlags) error {
 	// Validate required values.
 	if stack == "" {
 		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
@@ -241,7 +267,7 @@ func executeDeleteCommandWithValues(component, stack, identity string, force boo
 	}
 
 	// Initialize config and auth using injected dependency.
-	atmosConfig, authContext, err := configInit.InitConfigAndAuth(component, stack, identity)
+	atmosConfig, authContext, err := configInit.InitConfigAndAuth(component, stack, identity, prompted.Component, prompted.Stack)
 	if err != nil {
 		return err
 	}
@@ -261,8 +287,9 @@ func executeDeleteCommandWithValues(component, stack, identity string, force boo
 }
 
 // executeDescribeCommandWithValues is the internal implementation for the describe command.
-// Used by commands that use StandardParser's prompting infrastructure.
-func executeDescribeCommandWithValues(component, stack, identity, format string) error {
+// Used by commands that use StandardParser's prompting infrastructure. See promptedFlags for
+// what prompted records and why it's threaded through to InitConfigAndAuth.
+func executeDescribeCommandWithValues(component, stack, identity, format string, prompted promptedFlags) error {
 	// Validate required values.
 	if stack == "" {
 		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
@@ -272,7 +299,7 @@ func executeDescribeCommandWithValues(component, stack, identity, format string)
 	}
 
 	// Initialize config using injected dependency.
-	atmosConfig, _, err := configInit.InitConfigAndAuth(component, stack, identity)
+	atmosConfig, _, err := configInit.InitConfigAndAuth(component, stack, identity, prompted.Component, prompted.Stack)
 	if err != nil {
 		return err
 	}
@@ -282,8 +309,12 @@ func executeDescribeCommandWithValues(component, stack, identity, format string)
 }
 
 // executeListCommandWithValues is the internal implementation for the list command.
-// Used by commands that use StandardParser's prompting infrastructure.
-func executeListCommandWithValues(stack, identity, format string) error {
+// Used by commands that use StandardParser's prompting infrastructure. The stackPrompted
+// parameter records whether stack was filled in via an interactive prompt (see
+// flags.StandardOptions.StackPrompted), so it can be threaded into auth.ReExecContext for
+// profile-fallback re-exec. There's no component parameter here (list operates across all
+// components in the stack), so componentPrompted is always false when calling InitConfigAndAuth.
+func executeListCommandWithValues(stack, identity, format string, stackPrompted bool) error {
 	// Validate required values.
 	if stack == "" {
 		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
@@ -293,7 +324,7 @@ func executeListCommandWithValues(stack, identity, format string) error {
 	}
 
 	// Initialize config using injected dependency (no component needed for list).
-	atmosConfig, _, err := configInit.InitConfigAndAuth("", stack, identity)
+	atmosConfig, _, err := configInit.InitConfigAndAuth("", stack, identity, false, stackPrompted)
 	if err != nil {
 		return err
 	}

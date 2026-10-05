@@ -34,12 +34,11 @@ Component provisioning is split into two focused capabilities you can enable ind
 
 ## Configuration Scope
 
-The `provision` block can appear at three levels and is deep-merged across them. Lower levels override higher levels, so a component can opt out of any default by setting `enabled: false`.
+The `provision` block can appear at two levels and is deep-merged across them. Lower levels override higher levels, so a component can opt out of any default by setting `enabled: false`. A stack-wide default belongs in the toolchain section of a shared stack manifest, alongside global `vars`, `metadata`, and `secrets` - not in `atmos.yaml` settings.
 
 | Level | Path | Applies To |
 |---|---|---|
-| Global | `settings.provision` in `atmos.yaml` | Every component, every stack (workdir only today) |
-| Toolchain | `terraform.provision`, `helmfile.provision`, `packer.provision`, `ansible.provision` | Every component of that toolchain |
+| Toolchain (global default) | `terraform.provision`, `helmfile.provision`, `packer.provision`, `ansible.provision` | Every component of that toolchain in the stacks that import it |
 | Component | `components.<type>.<name>.provision` | A single component instance |
 
 ## Schema Summary
@@ -63,6 +62,5 @@ components:
 ## Related
 
 - [Terraform Backend Configuration](/stacks/components/terraform/backend) — The separate `backend:` block that describes *where* state is stored.
-- [Settings: Provision Defaults](/cli/configuration/settings/provision) — Global workdir defaults in `atmos.yaml`.
 - [`atmos terraform workdir`](/cli/commands/terraform/workdir) — CLI commands for managing workdirs.
 - [`atmos terraform backend`](/cli/commands/terraform/terraform-backend) — CLI commands for backend management.

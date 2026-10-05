@@ -10,6 +10,8 @@ import (
 )
 
 func TestAPIError_Error(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		statusCode int
@@ -48,6 +50,7 @@ func TestAPIError_Error(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := &APIError{StatusCode: tt.statusCode, Operation: tt.operation, Err: tt.inner}
 			assert.Equal(t, tt.want, err.Error())
 		})
@@ -55,12 +58,16 @@ func TestAPIError_Error(t *testing.T) {
 }
 
 func TestAPIError_Unwrap(t *testing.T) {
+	t.Parallel()
+
 	inner := fmt.Errorf("inner error")
 	err := &APIError{StatusCode: 401, Operation: "Upload", Err: inner}
 	assert.Equal(t, inner, err.Unwrap())
 }
 
 func TestAPIError_ErrorsAs(t *testing.T) {
+	t.Parallel()
+
 	inner := fmt.Errorf("inner")
 	apiErr := &APIError{StatusCode: 503, Operation: "Upload", Err: inner}
 	wrapped := fmt.Errorf("wrapping: %w", apiErr)
@@ -72,12 +79,16 @@ func TestAPIError_ErrorsAs(t *testing.T) {
 }
 
 func TestAPIError_ErrorsIs(t *testing.T) {
+	t.Parallel()
+
 	sentinel := errors.New("sentinel")
 	apiErr := &APIError{StatusCode: 500, Operation: "Op", Err: sentinel}
 	assert.True(t, errors.Is(apiErr, sentinel))
 }
 
 func TestAPIError_IsRetryable(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		statusCode int
@@ -94,6 +105,7 @@ func TestAPIError_IsRetryable(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := &APIError{StatusCode: tt.statusCode, Operation: "Op", Err: fmt.Errorf("err")}
 			assert.Equal(t, tt.want, err.IsRetryable())
 		})
@@ -101,6 +113,8 @@ func TestAPIError_IsRetryable(t *testing.T) {
 }
 
 func TestAPIError_IsAuthError(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		statusCode int
@@ -112,6 +126,7 @@ func TestAPIError_IsAuthError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := &APIError{StatusCode: tt.statusCode, Operation: "Op", Err: fmt.Errorf("err")}
 			assert.Equal(t, tt.want, err.IsAuthError())
 		})

@@ -14,7 +14,7 @@ own binary for its schema.
 
 ## The Fix
 
-A new command, `atmos stack schema`, prints the JSON Schema Atmos uses to validate stack
+A new command, [`atmos stack schema`](/cli/commands/stack/stack-schema), prints the JSON Schema Atmos uses to validate stack
 manifests — the exact one built into the binary you're running, not a version fetched from the
 internet. Pass a path and it writes the schema to a file instead of stdout.
 
@@ -36,5 +36,7 @@ atmos stack schema
 atmos stack schema ./atmos-manifest.json
 ```
 
-It lives under the existing `atmos stack` command group, alongside the other stack-manifest
+It lives under the existing [`atmos stack`](/cli/commands/stack/usage) command group, alongside the other stack-manifest
 commands (`get`, `set`, `delete`, `format`, `config`).
+
+For usage and configuration, see [atmos stack schema](/cli/commands/stack/stack-schema).

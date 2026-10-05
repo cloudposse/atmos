@@ -113,6 +113,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | ansible playbook execution, variable passing, inventory management, configuration management                          | `atmos-ansible`         | `agent-skills/skills/atmos-ansible/SKILL.md`         |
 | Terminal asciicast demos for community-facing docs, examples, and training materials                                  | `atmos-asciicast`       | `agent-skills/skills/atmos-asciicast/SKILL.md`       |
 | Shared step DSL: step types, env, output, working_directory, retry, script, workdir, cast, hook `with:` payloads     | `atmos-steps`           | `agent-skills/skills/atmos-steps/SKILL.md`           |
+| Smoke tests and integration tests: test groups, HTTP assertions, script/interpreter, parallel, matrix, post-deployment checks | `atmos-tests` | `agent-skills/skills/atmos-tests/SKILL.md` |
 | Multi-step workflows, native step types, `when:` CEL conditions, `require`/`assert` preconditions, background steps, output/UI steps, cross-component orchestration | `atmos-workflows`       | `agent-skills/skills/atmos-workflows/SKILL.md`       |
 | Cast recording/rendering: cast play/render, format inference, `--cast` flag, `type: cast`/`type: simulate` steps       | `atmos-cast`            | `agent-skills/skills/atmos-cast/SKILL.md`            |
 | Custom CLI commands in atmos.yaml, arguments, flags, native steps, `when:` conditions, custom component types, env vars, subcommands | `atmos-custom-commands` | `agent-skills/skills/atmos-custom-commands/SKILL.md` |
@@ -141,7 +142,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | AWS ECR: registry login, ECR auth integrations, Docker credential writes                                          | `atmos-aws-ecr`         | `agent-skills/skills/atmos-aws-ecr/SKILL.md`         |
 | AWS compliance: Security Hub standards, compliance reports, CIS AWS, PCI DSS, SOC2, HIPAA, NIST                   | `atmos-aws-compliance`  | `agent-skills/skills/atmos-aws-compliance/SKILL.md`  |
 | AWS security: analyze findings, map to components/stacks, structured remediation                                  | `atmos-aws-security`    | `agent-skills/skills/atmos-aws-security/SKILL.md`    |
-| Migrating to Atmos from native Terraform/OpenTofu or Terraform Workspaces: layout, workspace mapping, remote-state bridge | `atmos-migration`       | `agent-skills/skills/atmos-migration/SKILL.md`       |
+| Migrating to Atmos from Terraform, Terraform Workspaces, Terramate, or a task runner (Make, Just, or Task): layout, workspace mapping, remote-state bridge, task-to-command mapping, generate_hcl/script decomposition, or migrating CLI tool-version management from mise or Aqua CLI to the Atmos toolchain | `atmos-migration`       | `agent-skills/skills/atmos-migration/SKILL.md`       |
 | Atmos Modernization: replace deprecated patterns with current Atmos naming, CI, Pro, auth, secrets, and dependencies | `atmos-modernization`   | `agent-skills/skills/atmos-modernization/SKILL.md`   |
 
 ## Common Patterns

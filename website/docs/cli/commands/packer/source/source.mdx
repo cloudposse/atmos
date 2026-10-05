@@ -153,6 +153,8 @@ source:
   ```
 
   All fields are optional. Recommended: `max_attempts`, `initial_delay`, `max_delay`, `backoff_strategy` (`exponential`, `linear`, `constant`). Additional options: `multiplier`, `random_jitter`, `max_elapsed_time`.
+
+  When `retry` is omitted, git downloads still retry transient transport failures — a DNS lookup that fails, a connection refused or reset, a timeout, or a TLS handshake error — up to 3 attempts in total, with exponential backoff (1s initial delay, 8s maximum, multiplier 2.0, 20% random jitter — each overridable through the matching `retry` field). Missing refs are never retried. Authentication failures fail fast, except when Atmos brokered the credential itself (for example a GitHub App installation token), where a short post-issue retry window applies. Set `max_attempts: 1` to disable retrying entirely.
   </dd>
 </dl>
 

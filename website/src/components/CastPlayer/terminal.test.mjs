@@ -89,6 +89,17 @@ test('replayTerminal clears completed Huh form rows with ESC[J', () => {
   assert.doesNotMatch(result, /Which environments|dev|staging|prod|controls/);
 });
 
+test('replayTerminal ESC[J drops the rows below the cursor instead of leaving blank scrollback', () => {
+  // A streaming-UI progress block (header + blank + 3 rows), then the model's
+  // completion frame: bubbletea moves to the top of the old frame, the model
+  // erases to end of screen and draws the summary in its place.
+  const block = 'header\n\nrow1\nrow2\nrow3\n';
+  const done = '\x1b[5A\r\x1b[J\u2713 Apply completed\n';
+  const result = replayTerminal(block + done);
+  assert.equal(result, '\u2713 Apply completed\n');
+  assert.doesNotMatch(result, /\n\n$/, 'no trailing blank rows may remain after erase-display');
+});
+
 test('replayTerminal cursor-down preserves an existing row it lands on', () => {
   const frame1 = 'line0\nline1\nline2\n';
   // Up 3 (back to line0), down 1 (lands on the existing "line1"), overwrite.
@@ -211,3 +222,19 @@ test('regression: the recorded interactive-menu cast is not blank at the reporte
 function stripAnsi(input) {
   return input.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
 }
+
+// Keep the original recording as a regression even when demo casts are regenerated.
+test('Terraform completion erases resource rows before drawing the final prompt', () => {
+  const content = readFileSync(
+    path.join(dirname, 'fixtures/terraform-ui-ending.cast'),
+    'utf8',
+  );
+  const { events } = parseCast(content);
+  const result = replayTerminal(
+    events.map((event) => event[2].replace(/\r\n/g, '\n')).join(''),
+  );
+  const plain = result.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+  assert.match(plain, /Destroy dev\/vpc completed/);
+  assert.doesNotMatch(plain, /Destroyed null_resource|Destroyed time_sleep/);
+  assert.match(plain, /> \uE000$/u);
+});

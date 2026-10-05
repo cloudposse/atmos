@@ -29,6 +29,73 @@ func TestRender_YAMLStructure(t *testing.T) {
 	assert.Contains(t, out, "component: vpc")
 }
 
+func TestRender_MarksOptionalDependency(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"observability": {},
+			"app": {
+				"dependencies": map[string]any{
+					"components": []any{map[string]any{"name": "observability", "required": false}},
+				},
+			},
+		},
+	})
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	for _, test := range []struct {
+		name      string
+		direction Direction
+		component string
+	}{
+		{name: "forward", direction: DirectionForward, component: "app"},
+		{name: "reverse", direction: DirectionReverse, component: "observability"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			out, err := Render(graph, Options{
+				Format:    "json",
+				Direction: test.direction,
+				Component: test.component,
+				Stack:     "dev",
+			})
+			require.NoError(t, err)
+			assert.Contains(t, out, `"optional": true`)
+		})
+	}
+}
+
+func TestRenderSkipsOptionalUnavailableDependencies(t *testing.T) {
+	tests := []struct {
+		name   string
+		target map[string]any
+	}{
+		{name: "missing", target: nil},
+		{name: "disabled", target: map[string]any{"metadata": map[string]any{"enabled": false}}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stack := map[string]map[string]map[string]any{
+				"dev": {
+					"app": {
+						"dependencies": map[string]any{
+							"components": []any{map[string]any{"name": "optional", "required": false}},
+						},
+					},
+				},
+			}
+			if test.target != nil {
+				stack["dev"]["optional"] = test.target
+			}
+			graph, err := BuildGraph(terraformStacks(stack))
+			require.NoError(t, err)
+			out, err := Render(graph, Options{Format: "json", Direction: DirectionForward, Component: "app", Stack: "dev"})
+			require.NoError(t, err)
+			assert.NotContains(t, out, `"component": "optional"`)
+		})
+	}
+}
+
 func TestRender_ForwardOnlyOmitsRequiredBy(t *testing.T) {
 	stacks := terraformStacks(map[string]map[string]map[string]any{
 		"dev": {

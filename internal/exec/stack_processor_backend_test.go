@@ -15,6 +15,8 @@ import (
 var _ = schema.WorkspaceConfig{PrefixSeparator: "-"}
 
 func TestProcessTerraformBackend(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                        string
 		component                   string
@@ -354,6 +356,7 @@ func TestProcessTerraformBackend(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{}
 
 			// Initialize metadata to empty map if nil.
@@ -402,6 +405,8 @@ func TestProcessTerraformBackend(t *testing.T) {
 }
 
 func TestProcessTerraformRemoteStateBackend(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                                   string
 		component                              string
@@ -488,6 +493,7 @@ func TestProcessTerraformRemoteStateBackend(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{}
 
 			remoteStateBackendType, remoteStateBackendConfig, err := processTerraformRemoteStateBackend(
@@ -520,6 +526,8 @@ func TestProcessTerraformRemoteStateBackend(t *testing.T) {
 // ============================================================================
 
 func TestGetWorkspacePrefixSeparator(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		config   *schema.AtmosConfiguration
@@ -561,12 +569,15 @@ func TestGetWorkspacePrefixSeparator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, getWorkspacePrefixSeparator(tt.config))
 		})
 	}
 }
 
 func TestApplyPrefixSeparator(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		input     string
@@ -613,12 +624,15 @@ func TestApplyPrefixSeparator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, applyPrefixSeparator(tt.input, tt.separator))
 		})
 	}
 }
 
 func TestSetS3BackendDefaults_PrefixSeparator(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		component         string
@@ -681,6 +695,7 @@ func TestSetS3BackendDefaults_PrefixSeparator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			backend := map[string]any{}
 			if tt.existingPrefix != "" {
 				backend["workspace_key_prefix"] = tt.existingPrefix
@@ -701,6 +716,8 @@ func TestSetS3BackendDefaults_PrefixSeparator(t *testing.T) {
 }
 
 func TestSetGCSBackendDefaults_PrefixSeparator(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		component      string
@@ -731,6 +748,7 @@ func TestSetGCSBackendDefaults_PrefixSeparator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			backend := map[string]any{}
 			if tt.existingPrefix != "" {
 				backend["prefix"] = tt.existingPrefix
@@ -746,6 +764,8 @@ func TestSetGCSBackendDefaults_PrefixSeparator(t *testing.T) {
 }
 
 func TestSetAzureBackendKey_PrefixSeparator(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		component string
@@ -768,6 +788,7 @@ func TestSetAzureBackendKey_PrefixSeparator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			backend := map[string]any{}
 			componentBackend := map[string]any{}
 			globalBackend := map[string]any{}
@@ -783,8 +804,11 @@ func TestSetAzureBackendKey_PrefixSeparator(t *testing.T) {
 }
 
 func TestProcessTerraformBackend_WithPrefixSeparator(t *testing.T) {
+	t.Parallel()
+
 	// End-to-end test: verify the separator flows through processTerraformBackend.
 	t.Run("slash separator produces hierarchical S3 prefix", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{
 			Components: schema.Components{
 				Terraform: schema.Terraform{
@@ -816,6 +840,7 @@ func TestProcessTerraformBackend_WithPrefixSeparator(t *testing.T) {
 	})
 
 	t.Run("default separator produces flattened S3 prefix", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 
 		cfg := &terraformBackendConfig{
@@ -844,7 +869,10 @@ func TestProcessTerraformBackend_WithPrefixSeparator(t *testing.T) {
 // The success and missing-key paths are exercised by TestProcessTerraform*
 // indirectly, but the type-mismatch error path needs its own assertion.
 func TestExtractBackendTypeMap(t *testing.T) {
+	t.Parallel()
+
 	t.Run("returns empty map for nil section", func(t *testing.T) {
+		t.Parallel()
 		out, err := extractBackendTypeMap(nil, "s3", "vpc")
 		require.NoError(t, err)
 		assert.NotNil(t, out)
@@ -852,6 +880,7 @@ func TestExtractBackendTypeMap(t *testing.T) {
 	})
 
 	t.Run("returns empty map for missing key", func(t *testing.T) {
+		t.Parallel()
 		section := map[string]any{"gcs": map[string]any{"bucket": "x"}}
 		out, err := extractBackendTypeMap(section, "s3", "vpc")
 		require.NoError(t, err)
@@ -860,6 +889,7 @@ func TestExtractBackendTypeMap(t *testing.T) {
 	})
 
 	t.Run("returns the inner map when key exists", func(t *testing.T) {
+		t.Parallel()
 		section := map[string]any{"s3": map[string]any{"bucket": "my-bucket", "key": "tfstate"}}
 		out, err := extractBackendTypeMap(section, "s3", "vpc")
 		require.NoError(t, err)
@@ -868,6 +898,7 @@ func TestExtractBackendTypeMap(t *testing.T) {
 	})
 
 	t.Run("returns error when value at key is not a map", func(t *testing.T) {
+		t.Parallel()
 		section := map[string]any{"s3": "not-a-map"}
 		out, err := extractBackendTypeMap(section, "s3", "vpc")
 		require.Error(t, err)
@@ -881,6 +912,8 @@ func TestExtractBackendTypeMap(t *testing.T) {
 // but is not a map (e.g., a string mistakenly written in YAML), the function
 // must return an ErrInvalidTerraformBackend rather than panicking.
 func TestProcessTerraformBackend_TypeMismatchSurfacesError(t *testing.T) {
+	t.Parallel()
+
 	cfg := &terraformBackendConfig{
 		atmosConfig:       &schema.AtmosConfiguration{},
 		component:         "broken",
@@ -903,6 +936,8 @@ func TestProcessTerraformBackend_TypeMismatchSurfacesError(t *testing.T) {
 // of the four input sections with a non-map value at the resolved backend
 // type, then verifies the error surfaces.
 func TestProcessTerraformRemoteStateBackend_PropagatesExtractError(t *testing.T) {
+	t.Parallel()
+
 	const component = "rs-broken"
 	const backendType = "s3"
 	validSection := map[string]any{"s3": map[string]any{"bucket": "ok"}}
@@ -931,6 +966,7 @@ func TestProcessTerraformRemoteStateBackend_PropagatesExtractError(t *testing.T)
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := &remoteStateBackendConfig{
 				atmosConfig:                            &schema.AtmosConfiguration{},
 				component:                              component,
@@ -956,7 +992,10 @@ func TestProcessTerraformRemoteStateBackend_PropagatesExtractError(t *testing.T)
 // of erroring. Reproduces both the mismatch case and the still-legitimate "backend not configured
 // at all" case (an empty backend section is not a mismatch -- it just means no defaults apply yet).
 func TestProcessTerraformBackend_TypeKeyMismatch(t *testing.T) {
+	t.Parallel()
+
 	t.Run("mismatch errors", func(t *testing.T) {
+		t.Parallel()
 		cfg := &terraformBackendConfig{
 			atmosConfig:       &schema.AtmosConfiguration{},
 			component:         "vpc",
@@ -982,6 +1021,7 @@ func TestProcessTerraformBackend_TypeKeyMismatch(t *testing.T) {
 	// which the CLI's default (non---verbose) error renderer drops entirely -- the printed
 	// error gave no way to find which of potentially hundreds of components was at fault.
 	t.Run("mismatch names the offending component and stack directly in the hint", func(t *testing.T) {
+		t.Parallel()
 		cfg := &terraformBackendConfig{
 			atmosConfig:       &schema.AtmosConfiguration{},
 			component:         "vpc-no-provider",
@@ -1001,6 +1041,7 @@ func TestProcessTerraformBackend_TypeKeyMismatch(t *testing.T) {
 	})
 
 	t.Run("no backend section configured at all is not a mismatch", func(t *testing.T) {
+		t.Parallel()
 		cfg := &terraformBackendConfig{
 			atmosConfig:       &schema.AtmosConfiguration{},
 			component:         "vpc",
@@ -1013,6 +1054,7 @@ func TestProcessTerraformBackend_TypeKeyMismatch(t *testing.T) {
 	})
 
 	t.Run("matching key across layers is not a mismatch", func(t *testing.T) {
+		t.Parallel()
 		cfg := &terraformBackendConfig{
 			atmosConfig:       &schema.AtmosConfiguration{},
 			component:         "vpc",
@@ -1031,7 +1073,10 @@ func TestProcessTerraformBackend_TypeKeyMismatch(t *testing.T) {
 // TestProcessTerraformBackend_TypeKeyMismatch for remote_state_backend_type /
 // remote_state_backend.
 func TestProcessTerraformRemoteStateBackend_TypeKeyMismatch(t *testing.T) {
+	t.Parallel()
+
 	t.Run("mismatch errors", func(t *testing.T) {
+		t.Parallel()
 		cfg := &remoteStateBackendConfig{
 			atmosConfig:                  &schema.AtmosConfiguration{},
 			component:                    "vpc",
@@ -1052,6 +1097,7 @@ func TestProcessTerraformRemoteStateBackend_TypeKeyMismatch(t *testing.T) {
 	})
 
 	t.Run("no remote_state_backend section configured is not a mismatch", func(t *testing.T) {
+		t.Parallel()
 		cfg := &remoteStateBackendConfig{
 			atmosConfig:                  &schema.AtmosConfiguration{},
 			component:                    "vpc",
@@ -1068,6 +1114,7 @@ func TestProcessTerraformRemoteStateBackend_TypeKeyMismatch(t *testing.T) {
 	// the hint text is the only thing the CLI prints by default, so it must name the
 	// offending component/stack directly rather than relying on hidden verbose-only context.
 	t.Run("mismatch names the offending component and stack directly in the hint", func(t *testing.T) {
+		t.Parallel()
 		cfg := &remoteStateBackendConfig{
 			atmosConfig:                  &schema.AtmosConfiguration{},
 			component:                    "vpc-no-provider",
@@ -1102,6 +1149,8 @@ func TestProcessTerraformRemoteStateBackend_TypeKeyMismatch(t *testing.T) {
 // misconfiguration class this check was added to catch) -- this test guards it staying an
 // error, and that the error names the component/stack.
 func TestProcessTerraformRemoteStateBackend_InheritedLocalTypeMismatch(t *testing.T) {
+	t.Parallel()
+
 	backendCfg := &terraformBackendConfig{
 		atmosConfig: &schema.AtmosConfiguration{},
 		component:   "vpc-no-provider",
@@ -1146,6 +1195,8 @@ func TestProcessTerraformRemoteStateBackend_InheritedLocalTypeMismatch(t *testin
 // global key in azurerm (true), global key matches authored (false, treat
 // global as prefix), global key differs from authored (true, preserve).
 func TestShouldPreserveAuthoredKey(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name     string
 		final    map[string]any
@@ -1191,6 +1242,7 @@ func TestShouldPreserveAuthoredKey(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got := shouldPreserveAuthoredKey(tc.final, tc.global)
 			assert.Equal(t, tc.expected, got)
 		})

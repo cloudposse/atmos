@@ -1,6 +1,8 @@
 [
   {
     "name": "atmos",
+    "progressStart": "#5A56E0",
+    "progressEnd": "#EE6FF8",
     "black": "#000000",
     "red": "#F56565",
     "green": "#48BB78",

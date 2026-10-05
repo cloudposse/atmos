@@ -1,0 +1,73 @@
+---
+slug: more-ai-providers
+title: "Bring your own model: OpenRouter, DeepSeek, and Z.AI for Atmos AI"
+authors: [aknysh]
+tags: [feature]
+---
+The AI model landscape moves faster than any single vendor's roadmap. A model that was the obvious
+choice last quarter is often outclassed - or undercut on price by an order of magnitude - by one you
+hadn't heard of this quarter. Locking your infrastructure assistant to one vendor's API means you
+either overpay or miss out, and for teams outside the US, a US-only provider list can be a
+non-starter entirely.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos AI let you talk to your infrastructure through a fixed set of API providers. If you wanted to
+try a cheaper or non-US model - route through an aggregator, run DeepSeek directly, or use a GLM
+model from Z.AI - you were out of luck unless you were willing to point the generic OpenAI provider
+at a hand-copied base URL and hope the defaults lined up. There was no first-class way to say "use
+OpenRouter" and get a sensible model, API-key variable, and endpoint out of the box.
+
+## The Fix
+
+Atmos AI adds three OpenAI-compatible API providers you can select by name:
+
+- **OpenRouter** (`openrouter`) - a router that fronts hundreds of models behind one API key. Switch
+  models by changing the `model` slug (`anthropic/claude-sonnet-4-5`, `openai/gpt-4o`,
+  `deepseek/deepseek-chat`, ...) without touching anything else.
+- **DeepSeek** (`deepseek`) - the DeepSeek API directly, including `deepseek-reasoner` for the
+  reasoning model. Low cost for a lot of everyday infrastructure questions.
+- **Z.AI** (`zai`) - Zhipu's GLM models over their OpenAI-compatible endpoint.
+
+Each one behaves like every other Atmos AI provider: set an API key with the `!env` function, and
+optionally override the model, `base_url`, or token limits. Because they are OpenAI-compatible, they
+work everywhere the existing providers do - `atmos ai ask`, `atmos ai chat`, and the `--ai` flag.
+
+## How to Use It
+
+Add the provider under `ai.providers` in `atmos.yaml` and select it as the default:
+
+```yaml
+ai:
+  enabled: true
+  default_provider: openrouter
+  providers:
+    openrouter:
+      model: "deepseek/deepseek-chat"   # any provider-prefixed slug
+      api_key: !env "OPENROUTER_API_KEY"
+
+    deepseek:
+      model: "deepseek-chat"            # or "deepseek-reasoner"
+      api_key: !env "DEEPSEEK_API_KEY"
+
+    zai:
+      model: "glm-5.3"
+      api_key: !env "ZAI_API_KEY"
+```
+
+Then ask away:
+
+```shell
+export OPENROUTER_API_KEY=sk-or-...
+atmos ai ask "What stacks and components do we have?"
+```
+
+See the full list of options on the [AI providers configuration page](/cli/configuration/ai/providers).
+
+## Get Involved
+
+The provider list will keep growing as the model landscape shifts. If there's an OpenAI-compatible
+provider you want to see as a first-class name in Atmos, open an issue or a pull request on
+[cloudposse/atmos](https://github.com/cloudposse/atmos) - adding one is a small, well-templated change.

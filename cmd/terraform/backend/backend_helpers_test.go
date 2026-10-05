@@ -39,7 +39,7 @@ func TestInitConfigAndAuth_FailsFastWithoutRealConfig(t *testing.T) {
 	// InitCliConfig -> ExecuteDescribeComponent wiring (rather than mocking it away).
 	t.Chdir(t.TempDir())
 
-	atmosConfig, authContext, err := InitConfigAndAuth("nonexistent-component", "nonexistent-stack", "")
+	atmosConfig, authContext, err := InitConfigAndAuth("nonexistent-component", "nonexistent-stack", "", false, false)
 
 	assert.Error(t, err)
 	assert.Nil(t, atmosConfig)
@@ -50,7 +50,7 @@ func TestDefaultConfigInitializer_InitConfigAndAuth(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	ci := &defaultConfigInitializer{}
-	atmosConfig, authContext, err := ci.InitConfigAndAuth("nonexistent-component", "nonexistent-stack", "")
+	atmosConfig, authContext, err := ci.InitConfigAndAuth("nonexistent-component", "nonexistent-stack", "", false, false)
 
 	assert.Error(t, err)
 	assert.Nil(t, atmosConfig)
@@ -66,7 +66,29 @@ func TestInitConfigAndAuth_SucceedsWithNoAuthConfigured(t *testing.T) {
 	t.Chdir(filepath.Join("..", "..", "..", "tests", "fixtures", "scenarios", "atmos-overrides-section"))
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	atmosConfig, authContext, err := InitConfigAndAuth("c1", "dev", "")
+	atmosConfig, authContext, err := InitConfigAndAuth("c1", "dev", "", false, false)
+
+	require.NoError(t, err)
+	require.NotNil(t, atmosConfig)
+	assert.Nil(t, authContext)
+}
+
+// TestInitConfigAndAuth_SucceedsWithNoAuthConfigured_PromptedValues is the regression test
+// CodeRabbit's review requested: it proves componentPrompted/stackPrompted=true flow all the
+// way through the real (unmocked) InitConfigAndAuth body -- InitCliConfig ->
+// ExecuteDescribeComponent -> MergeComponentAuthFromConfig -> the ReExecContext-aware auth
+// call -- without changing behavior (same fixture, same no-identities-configured outcome as
+// TestInitConfigAndAuth_SucceedsWithNoAuthConfigured above).
+// The auth.CreateAndAuthenticateManagerWithReExecContext call is a black box from here
+// (pkg/auth is out of scope for this change), so this test can't directly inspect the
+// ReExecContext it builds. See TestExecuteCommandWithValues_ThreadsPromptedFlagsToConfigInitializer
+// in backend_commands_test.go for a mock-based assertion that the boolean values themselves
+// are threaded through correctly.
+func TestInitConfigAndAuth_SucceedsWithNoAuthConfigured_PromptedValues(t *testing.T) {
+	t.Chdir(filepath.Join("..", "..", "..", "tests", "fixtures", "scenarios", "atmos-overrides-section"))
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, authContext, err := InitConfigAndAuth("c1", "dev", "", true, true)
 
 	require.NoError(t, err)
 	require.NotNil(t, atmosConfig)
@@ -92,7 +114,7 @@ auth:
 	require.NoError(t, os.WriteFile("atmos.yaml", config, 0o600))
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	atmosConfig, authContext, err := InitConfigAndAuth("c1", "dev", "nonexistent-identity")
+	atmosConfig, authContext, err := InitConfigAndAuth("c1", "dev", "nonexistent-identity", false, false)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrIdentityNotFound)

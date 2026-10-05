@@ -48,7 +48,7 @@ atmos deploy vpc -s plat-ue2-prod
 
 <dl>
   <dt>`name`</dt>
-  <dd>Required. The command name as typed after `atmos` (for example, `deploy`). For nested commands, this is the subcommand name. Names appear in `atmos help`.</dd>
+  <dd>Required. The command name as typed after `atmos` (for example, `deploy`). For nested commands, this is the subcommand name. Names appear in `atmos help`, unless the command is marked `internal`.</dd>
 
   <dt>`description`</dt>
   <dd>Required. Help text shown in `atmos help` and `atmos <command> --help`. Supports multi-line YAML for usage examples.</dd>
@@ -90,7 +90,7 @@ atmos deploy vpc -s plat-ue2-prod
   <dd>Alternative names this command is also invocable under, registered natively and in-process (the same underlying command object, just with extra names) — distinct from the top-level [`aliases`](/cli/configuration/aliases) config, which redirects to a possibly-unrelated command via a subprocess. See [Aliases](#aliases).</dd>
 
   <dt>`internal`</dt>
-  <dd>Set to `true` to hide this command from `atmos help` and `atmos list` output while leaving it fully invocable — useful for a command meant to be called only as a [dependency](/cli/configuration/commands/dependencies) of another command, not run directly. Defaults to `false`.</dd>
+  <dd>Set to `true` to exclude the command from `atmos --help` listings and completion suggestions while keeping it directly runnable (`atmos <name> ...`) and its own `--help` output intact — useful for a command meant to be called only as a [dependency](/cli/configuration/commands/dependencies) of another command, not run directly. Defaults to `false`. List a parent's internal subcommands with `atmos <parent> --help=hidden`.</dd>
 </dl>
 
 ## Aliases

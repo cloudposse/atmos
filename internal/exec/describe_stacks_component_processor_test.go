@@ -1147,7 +1147,7 @@ func TestProcessComponentSectionTemplates_ConvertToYAMLError(t *testing.T) {
 		"key": yamlMarshalError{},
 	}
 
-	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{}, nil)
 	require.Error(t, err)
 }
 
@@ -1167,7 +1167,7 @@ func TestProcessComponentSectionTemplates_MapstructureDecodeError(t *testing.T) 
 		},
 	}
 
-	_, err := processComponentSectionTemplates(ac, info, componentSection, settingsSection)
+	_, err := processComponentSectionTemplates(ac, info, componentSection, settingsSection, nil)
 	require.Error(t, err)
 }
 
@@ -1192,7 +1192,7 @@ func TestProcessComponentSectionTemplates_ProcessTmplError(t *testing.T) {
 		},
 	}
 
-	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{}, nil)
 	require.Error(t, err)
 }
 
@@ -1223,7 +1223,7 @@ func TestProcessComponentSectionTemplates_UnmarshalYAMLError(t *testing.T) {
 		`{{ "\n- list_item" }}`: "value",
 	}
 
-	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{}, nil)
 	require.Error(t, err)
 }
 
@@ -1245,7 +1245,7 @@ func TestProcessComponentSectionTemplates_AddTemplateContextError(t *testing.T) 
 		},
 	}
 
-	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{}, nil)
 	require.Error(t, err)
 }
 
@@ -1341,7 +1341,7 @@ func TestProcessComponentSectionYAMLFunctions_Error(t *testing.T) {
 		},
 	}
 
-	_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil, nil, false)
+	_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil, nil, false, nil)
 	require.Error(t, err)
 }
 
@@ -1351,6 +1351,7 @@ func TestProcessComponentEntry_SecretResolutionMode(t *testing.T) {
 	tests := []struct {
 		name           string
 		resolveSecrets bool
+		secretName     string
 		storeValue     any
 		storeErr       error
 		expectError    error
@@ -1359,17 +1360,26 @@ func TestProcessComponentEntry_SecretResolutionMode(t *testing.T) {
 		{
 			name:           "inspection masks without retrieving",
 			resolveSecrets: false,
+			secretName:     "API_KEY",
 			expectValue:    iolib.GetContext().Masker().Replacement(),
+		},
+		{
+			name:           "inspection rejects undeclared without retrieving",
+			resolveSecrets: false,
+			secretName:     "UNDECLARED_KEY",
+			expectError:    secrets.ErrSecretNotDeclared,
 		},
 		{
 			name:           "execution fails for a missing required secret",
 			resolveSecrets: true,
+			secretName:     "API_KEY",
 			storeErr:       errors.New("secret not found"),
 			expectError:    secrets.ErrSecretMissing,
 		},
 		{
 			name:           "execution resolves and registers the secret for masking",
 			resolveSecrets: true,
+			secretName:     "API_KEY",
 			storeValue:     "api-secret-value",
 			expectValue:    "api-secret-value",
 		},
@@ -1398,7 +1408,7 @@ func TestProcessComponentEntry_SecretResolutionMode(t *testing.T) {
 						"API_KEY": map[string]any{"store": "app-secrets", "required": true},
 					},
 				},
-				"vars": map[string]any{"api_key": "!secret API_KEY"},
+				"vars": map[string]any{"api_key": "!secret " + tt.secretName},
 			}
 			processor := newDescribeStacksProcessor(
 				atmosConfig,
@@ -1531,7 +1541,7 @@ func TestProcessComponentSectionTemplates_TemplatesDisabledSuccess(t *testing.T)
 		},
 	}
 
-	result, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	result, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	vars, ok := result["vars"].(map[string]any)
@@ -1744,7 +1754,7 @@ func TestProcessComponentSectionYAMLFunctions_Lenient_Warn(t *testing.T) {
 	var warnings []DegradationWarning
 	result, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil, func(w DegradationWarning) {
 		warnings = append(warnings, w)
-	}, false)
+	}, false, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -1779,7 +1789,7 @@ func TestProcessComponentEntry_WithDegradation_RecoverableError_Warns(t *testing
 	ac := &schema.AtmosConfiguration{}
 	recoverableErr := fmt.Errorf("%w for component `vpc` in stack `test-stack`", errUtils.ErrTerraformStateNotProvisioned)
 	mockStateGetter.EXPECT().
-		GetState(ac, gomock.Any(), "test-stack", "vpc", "bucket_name", false, gomock.Any(), gomock.Any()).
+		GetState(ac, gomock.Any(), "test-stack", "vpc", "bucket_name", false, gomock.Any(), gomock.Any(), TerraformLookupOptions{SecretsMaskOnly: true}).
 		Return(nil, recoverableErr).
 		Times(1)
 

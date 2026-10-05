@@ -42,7 +42,9 @@ runs:
     - name: Wait before retry
       if: steps.attempt_1.outcome == 'failure'
       shell: bash
-      run: sleep "${{ inputs.backoff-seconds }}"
+      env:
+        BACKOFF_SECONDS: ${{ inputs.backoff-seconds }}
+      run: sleep "$BACKOFF_SECONDS"
 
     - name: Download artifact (attempt 2/3)
       id: attempt_2
@@ -58,7 +60,9 @@ runs:
     - name: Wait before final retry
       if: steps.attempt_1.outcome == 'failure' && steps.attempt_2.outcome == 'failure'
       shell: bash
-      run: sleep "${{ inputs.backoff-seconds }}"
+      env:
+        BACKOFF_SECONDS: ${{ inputs.backoff-seconds }}
+      run: sleep "$BACKOFF_SECONDS"
 
     - name: Download artifact (attempt 3/3)
       if: steps.attempt_1.outcome == 'failure' && steps.attempt_2.outcome == 'failure'

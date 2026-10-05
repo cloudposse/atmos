@@ -18,6 +18,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 const (
@@ -257,17 +258,40 @@ func normalizeHost(host string) string {
 // It is also used as the fallback when GitHubAuthenticatedTransport.hostMatcher is nil.
 //
 // Precedence: WithGitHubHostMatcher (explicit custom predicate) takes full precedence over
-// this default allowlist, including the GITHUB_API_URL lookup.  If you need GHES support
-// together with a custom matcher, include the GHES host in your custom predicate.
+// this default allowlist, including the GITHUB_API_URL/GITHUB_SERVER_URL lookup.  If you need
+// GHES support together with a custom matcher, include the GHES host in your custom predicate.
+//
+// Note: this package cannot import pkg/github's Endpoints resolver (pkg/github already
+// imports pkg/http for token resolution, so the reverse import would cycle), hence the
+// env vars are read directly here rather than through the shared resolver. Both places
+// read the same variables with the same github.com defaults, so behavior stays consistent.
 func isGitHubHost(host string) bool {
 	host = normalizeHost(host)
 
-	// Respect GITHUB_API_URL for GitHub Enterprise Server (GHES) and similar deployments.
-	// When set, the hostname of GITHUB_API_URL is treated as an allowed GitHub API host.
-	//nolint:forbidigo // Direct env lookup required for GHES configuration.
-	if apiURL := os.Getenv("GITHUB_API_URL"); apiURL != "" {
-		parsed, err := url.ParseRequestURI(apiURL)
-		if err == nil && normalizeHost(parsed.Hostname()) == host {
+	// Respect GITHUB_API_URL and GITHUB_SERVER_URL for GitHub Enterprise Server (GHES) and
+	// similar deployments. On real GHES these resolve to the same host, but tests (and some
+	// proxy setups) may configure them independently, so both are checked.
+	//
+	// Only a non-default host extends the allowlist. GitHub Actions exports
+	// GITHUB_SERVER_URL=https://github.com on every github.com runner, and honoring that would
+	// make bare github.com receive tokens in CI but not on a developer machine. Sending the token
+	// to github.com/<owner>/<repo>/releases/download/... is a deliberate, per-client decision
+	// (see the host matcher in pkg/toolchain/installer/download.go), not an ambient one.
+	for _, envVar := range [...]string{"GITHUB_API_URL", "GITHUB_SERVER_URL"} {
+		//nolint:forbidigo // Direct env lookup required for GHES configuration.
+		rawURL := os.Getenv(envVar)
+		if rawURL == "" {
+			continue
+		}
+		parsed, err := url.ParseRequestURI(rawURL)
+		if err != nil {
+			continue
+		}
+		envHost := normalizeHost(parsed.Hostname())
+		if envHost == "github.com" {
+			continue
+		}
+		if envHost == host {
 			return true
 		}
 	}
@@ -341,13 +365,18 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 func GetGitHubTokenFromEnv(v ...*viper.Viper) string {
 	defer perf.Track(nil, "http.GetGitHubTokenFromEnv")()
 
-	viperInst := viper.GetViper()
+	// First try viper (for toolchain commands with --github-token flag). A
+	// caller-supplied instance isn't shared, so it's read directly; the
+	// global singleton has no locking of its own and this runs from
+	// concurrent callers (e.g. the toolchain's concurrent batch installer),
+	// so that path goes through pkg/viperguard instead.
+	var token string
 	if len(v) > 0 && v[0] != nil {
-		viperInst = v[0]
+		token = v[0].GetString("github-token")
+	} else {
+		token = viperguard.GetString("github-token")
 	}
-
-	// First try viper (for toolchain commands with --github-token flag).
-	if token := viperInst.GetString("github-token"); token != "" {
+	if token != "" {
 		return token
 	}
 

@@ -2,7 +2,6 @@ package initcmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	gen "github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
@@ -65,12 +65,68 @@ If no target directory is specified, you will be prompted for one.`,
 			return err
 		}
 
+		// Reject an invalid --update-strategy/--merge-driver/--merge-strategy value
+		// before doing any work; BindFlagsToViper alone doesn't enforce the
+		// WithValidValues constraints registered below (that only happens inside
+		// Parse()), so this command validates explicitly.
+		if err := initParser.ValidateFlagValues(cmd); err != nil {
+			return err
+		}
+
 		// Get flag values with proper precedence: flag > env > config > default.
 		force := v.GetBool("force")
 		update := v.GetBool("update")
 		baseRef := v.GetString("base-ref")
-		if update {
-			baseRef = defaultBaseRef(baseRef)
+		updateStrategy := v.GetString("update-strategy")
+		// --base-ref only means anything for the default tracked strategy
+		// (the target's own git history); rendered's base ref instead comes
+		// from the target's own recorded scaffold.yaml, so an explicit
+		// --base-ref alongside --update-strategy=rendered is a contradiction
+		// rather than a value to silently ignore.
+		if baseRef != "" && updateStrategy == "rendered" {
+			return errUtils.Build(errUtils.ErrMutuallyExclusiveFlags).
+				WithExplanation("`--base-ref` and `--update-strategy=rendered` conflict").
+				WithHint("`--update-strategy=rendered`'s base ref comes from the target's own recorded scaffold.yaml, not `--base-ref`").
+				WithHint("Drop `--base-ref`, or use `--update-strategy=tracked` (the default) instead").
+				WithExitCode(2).
+				Err()
+		}
+		maxChanges := v.GetInt("max-changes")
+		if maxChanges < 0 {
+			return errUtils.Build(errUtils.ErrInvalidFlagValue).
+				WithExplanationf("`--max-changes` must be non-negative, got: %d", maxChanges).
+				WithHint("`0` disables the threshold check entirely (guaranteed to never fail); any positive value is compared against a computed change percentage that has no upper bound, so no positive value is a guaranteed bypass the way `0` is").
+				WithContext("flag", "max-changes").
+				WithContext("value", fmt.Sprintf("%d", maxChanges)).
+				WithExitCode(2).
+				Err()
+		}
+		// Only pre-resolve here when target is already the real, final
+		// target directory (i.e. it was given positionally). When target is
+		// "" the interactive flow still has to prompt for one -- see
+		// resolveInteractiveInitBaseRef, which resolves the base ref itself
+		// once the actual directory is known. Resolving against "" here
+		// would read .atmos/init/metadata.yaml from the wrong (empty/cwd)
+		// path and permanently overwrite baseRef with "HEAD", discarding any
+		// pin at the directory the user goes on to pick.
+		//
+		// Skipped entirely under rendered: this resolution (and its "HEAD"
+		// fallback) is tracked-mode-specific bookkeeping for the target's
+		// own git history. Its result flows through to SaveProjectRecord's
+		// spec.baseRef -- the same project-record field ResolveRenderedBase
+		// uses (spec.renderedRef) to tell whether a project was last
+		// managed with tracked or rendered. Running this under rendered
+		// would populate spec.baseRef with a value meaningless for that
+		// strategy, corrupting that distinction.
+		if update && target != "" && updateStrategy != "rendered" {
+			if err := source.CheckNotSwitchedFromRendered(target); err != nil {
+				return err
+			}
+			resolvedBaseRef, err := defaultBaseRef(baseRef, target)
+			if err != nil {
+				return err
+			}
+			baseRef = resolvedBaseRef
 		}
 		sourceOverride := v.GetString("source-override")
 		ref := v.GetString("ref")
@@ -110,6 +166,8 @@ If no target directory is specified, you will be prompted for one.`,
 			git:            gitEnabled,
 			mergeStrategy:  mergeStrategy,
 			mergeDriver:    mergeDriver,
+			updateStrategy: updateStrategy,
+			maxChanges:     maxChanges,
 			skipHooks:      skipHooks,
 		})
 	},
@@ -131,8 +189,12 @@ func init() {
 		flags.WithBoolFlag("no-git", "", false, "Do not initialize a git repository"),
 		flags.WithStringFlag("merge-driver", "", "auto", "Merge driver for --update: auto (YAML-aware for .yaml/.yml, text otherwise, default), text (force line-oriented text merge for every file)"),
 		flags.WithValidValues("merge-driver", "auto", "text"),
-		flags.WithStringFlag("merge-strategy", "", "manual", "Conflict resolution strategy for --update: manual (surface conflicts, default), ours (keep your version), theirs (use the template's version)"),
+		flags.WithStringFlag("merge-strategy", "", "", "Conflict resolution strategy for --update: manual (surface conflicts, default; theirs if --force is set), ours (keep your version), theirs (use the template's version)"),
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
+		flags.WithStringFlag("update-strategy", "", "tracked", "Where --update's 3-way merge base comes from: tracked (the target's own git history at --base-ref, default), rendered (a pristine re-render of the template at the ref that produced what's currently on disk, using its recorded answers; requires a prior generation's scaffold.yaml record, no git dependency)"),
+		flags.WithValidValues("update-strategy", "tracked", "rendered"),
+		flags.WithIntFlag("max-changes", "", engine.DefaultMergeThreshold, "Maximum percentage of changed lines allowed in a 3-way merge during --update before failing; 0 disables this check entirely, no upper bound"),
+		flags.WithEnvVars("max-changes", "ATMOS_INIT_MAX_CHANGES"),
 		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
 		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
 		// hooks for this invocation; --skip-hooks=name1,name2 skips only the
@@ -150,6 +212,7 @@ func init() {
 		flags.WithEnvVars("no-git", "ATMOS_INIT_NO_GIT"),
 		flags.WithEnvVars("merge-driver", "ATMOS_INIT_MERGE_DRIVER"),
 		flags.WithEnvVars("merge-strategy", "ATMOS_INIT_MERGE_STRATEGY"),
+		flags.WithEnvVars("update-strategy", "ATMOS_INIT_UPDATE_STRATEGY"),
 		flags.WithEnvVars("skip-hooks", "ATMOS_INIT_SKIP_HOOKS"),
 	)
 
@@ -241,6 +304,8 @@ type initOptions struct {
 	git            bool
 	mergeStrategy  string
 	mergeDriver    string
+	updateStrategy string
+	maxChanges     int
 	skipHooks      func(string) bool
 }
 
@@ -256,35 +321,17 @@ func executeInit(_ context.Context, opts *initOptions) error {
 		return err
 	}
 
-	conflictStrategy, err := merge.ParseConflictStrategy(opts.mergeStrategy)
+	renderedBaseCleanup, err := configureInitMergeSettings(initUI, opts)
+	if renderedBaseCleanup != nil {
+		defer renderedBaseCleanup()
+	}
 	if err != nil {
 		return err
 	}
-	initUI.SetConflictStrategy(conflictStrategy)
 
-	mergeDriver, err := merge.ParseDriver(opts.mergeDriver)
+	configs, err := loadInitTemplateConfigs(opts.sourceOverride)
 	if err != nil {
 		return err
-	}
-	initUI.SetMergeDriver(mergeDriver)
-	initUI.SetSkipHooks(opts.skipHooks)
-
-	// Get available template configurations.
-	configs, err := templates.GetAvailableConfigurations()
-	if err != nil {
-		return fmt.Errorf("%w: failed to get available configurations: %w", errUtils.ErrInitialization, err)
-	}
-
-	// Merge distributable catalog templates (e.g. aws/landing-zone).
-	// They are advertised as stubs and fetched from their source on selection.
-	if stubs, stubErr := templates.CatalogStubs(opts.sourceOverride); stubErr == nil {
-		for name := range stubs {
-			if _, exists := configs[name]; !exists {
-				configs[name] = stubs[name]
-			}
-		}
-	} else {
-		log.Debug("Failed to load scaffold catalog", "error", stubErr)
 	}
 
 	// Select the template.
@@ -308,16 +355,101 @@ func executeInit(_ context.Context, opts *initOptions) error {
 	return maybeInitGeneratedProjectGit(finalTargetDir, &selectedConfig, opts)
 }
 
+// loadInitTemplateConfigs returns the available built-in template
+// configurations merged with distributable catalog templates (e.g.
+// aws/landing-zone), which are advertised as stubs and fetched from their
+// source lazily on selection. A catalog load failure is non-fatal (logged
+// and skipped) since built-in templates alone are still usable.
+func loadInitTemplateConfigs(sourceOverride string) (map[string]templates.Configuration, error) {
+	configs, err := templates.GetAvailableConfigurations()
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to get available configurations: %w", errUtils.ErrInitialization, err)
+	}
+
+	stubs, stubErr := templates.CatalogStubs(sourceOverride)
+	if stubErr != nil {
+		log.Debug("Failed to load scaffold catalog", "error", stubErr)
+		return configs, nil
+	}
+	for name := range stubs {
+		if _, exists := configs[name]; !exists {
+			configs[name] = stubs[name]
+		}
+	}
+	return configs, nil
+}
+
+// configureInitMergeSettings wires opts' merge-related settings onto initUI
+// before template selection/generation runs, mirroring cmd/scaffold's
+// configureScaffoldMergeSettings. SetMaxChanges is called first because
+// engine.Processor.SetMaxChanges replaces the processor's merger wholesale,
+// which would silently discard SetConflictStrategy/SetMergeDriver if called
+// after them (see InitUI.SetMaxChanges's doc comment).
+//
+// Returns a cleanup func for the update-strategy=rendered old-ref source
+// fetch (see source.ResolveRenderedBase), non-nil only when one was made --
+// callers must nil-check before deferring it, and must still check it even
+// when err is non-nil, since the resolution itself can fail after making
+// the fetch.
+func configureInitMergeSettings(initUI InitUI, opts *initOptions) (cleanup func(), err error) {
+	initUI.SetMaxChanges(opts.maxChanges)
+
+	conflictStrategy, err := merge.ResolveConflictStrategy(opts.mergeStrategy, opts.force, opts.update)
+	if err != nil {
+		return nil, err
+	}
+	initUI.SetConflictStrategy(conflictStrategy)
+
+	mergeDriver, err := merge.ParseDriver(opts.mergeDriver)
+	if err != nil {
+		return nil, err
+	}
+	initUI.SetMergeDriver(mergeDriver)
+	initUI.SetSkipHooks(opts.skipHooks)
+
+	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if err != nil {
+		return nil, err
+	}
+	initUI.SetUpdateStrategy(updateStrategy)
+
+	// Only resolve here when target is already the real, final target
+	// directory (positional). The no-target interactive flow resolves this
+	// itself once the real directory is known -- see
+	// resolveInteractiveInitBaseRef, mirroring --base-ref's own split
+	// resolution above.
+	if opts.update && updateStrategy == engine.UpdateStrategyRendered && opts.targetDir != "" {
+		renderedBase, err := source.ResolveRenderedBase(opts.targetDir, opts.sourceOverride)
+		if err != nil {
+			return nil, err
+		}
+		initUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
+		return renderedBase.Cleanup, nil
+	}
+
+	return nil, nil
+}
+
 func maybeInitGeneratedProjectGit(targetDir string, selectedConfig *templates.Configuration, opts *initOptions) error {
 	if !opts.git || targetDir == "" {
 		return nil
 	}
-	_, _, err := gen.InitGitRepository(gen.InitGitOptions{
+	_, headSHA, err := gen.InitGitRepository(gen.InitGitOptions{
 		TargetPath:      targetDir,
 		TemplateName:    selectedConfig.Name,
 		TemplateVersion: selectedConfig.Version,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// No-op when headSHA is empty (targetDir was already a git repo; see
+	// gen.PinInitialBaseRefForInit).
+	return gen.PinInitialBaseRefForInit(
+		targetDir, headSHA,
+		gen.WithTemplateName(selectedConfig.Name),
+		gen.WithTemplateVersion(selectedConfig.Version),
+		gen.WithSource(selectedConfig.Source),
+	)
 }
 
 // resolveTargetDir converts a target directory to an absolute path if provided.
@@ -344,7 +476,7 @@ func createInitUI() (*ui.InitUI, error) {
 }
 
 // selectTemplate handles template selection, either from argument or interactively.
-func selectTemplate(templateName string, interactive bool, initUI *ui.InitUI, configs map[string]templates.Configuration, ref string) (templates.Configuration, error) {
+func selectTemplate(templateName string, interactive bool, initUI InitUI, configs map[string]templates.Configuration, ref string) (templates.Configuration, error) {
 	// If template name is provided, use it directly.
 	if templateName != "" {
 		config, exists := configs[templateName]
@@ -371,69 +503,4 @@ func selectTemplate(templateName string, interactive bool, initUI *ui.InitUI, co
 		return templates.Configuration{}, fmt.Errorf("%w: failed to prompt for template: %w", errUtils.ErrInitialization, err)
 	}
 	return configs[selectedName], nil
-}
-
-// runInitExecution executes the init with the selected template and target directory.
-func runInitExecution(initUI *ui.InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
-	// If target directory is empty, use interactive flow; otherwise use normal Execute.
-	if opts.targetDir == "" {
-		return runInitInteractiveFlow(initUI, selectedConfig, opts)
-	}
-	return runInitTargetedFlow(initUI, selectedConfig, opts)
-}
-
-// runInitInteractiveFlow handles init when no target directory was provided,
-// prompting the user for one (and optionally offering a 3-way-merge update
-// instead of failing when it already exists and is non-empty).
-func runInitInteractiveFlow(initUI *ui.InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
-	if !opts.interactive {
-		return "", fmt.Errorf("%w: target directory is required in non-interactive mode", errUtils.ErrInitialization)
-	}
-	targetDir, err := initUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, "", opts.force, opts.update, !opts.interactive, opts.baseRef, opts.templateVars)
-	if offer, retryBaseRef := shouldOfferUpdate(err, opts); offer {
-		if confirmed, cErr := initUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {
-			return initUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, targetDir, opts.force, true, !opts.interactive, retryBaseRef, opts.templateVars)
-		}
-	}
-	return targetDir, err
-}
-
-// runInitTargetedFlow handles init when a target directory was provided
-// (offering the same 3-way-merge update fallback as the interactive flow).
-func runInitTargetedFlow(initUI *ui.InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
-	err := initUI.ExecuteWithBaseRef(selectedConfig, opts.targetDir, opts.force, opts.update, !opts.interactive, opts.baseRef, opts.templateVars)
-	if offer, retryBaseRef := shouldOfferUpdate(err, opts); offer {
-		if confirmed, cErr := initUI.ConfirmUpdateInstead(opts.targetDir); cErr == nil && confirmed {
-			return opts.targetDir, initUI.ExecuteWithBaseRef(selectedConfig, opts.targetDir, opts.force, true, !opts.interactive, retryBaseRef, opts.templateVars)
-		}
-	}
-	return opts.targetDir, err
-}
-
-// shouldOfferUpdate decides whether to offer a 3-way-merge update instead of
-// failing outright on a non-empty target directory: only when the failure is
-// exactly that, the caller isn't already using --force/--update, and a real
-// terminal is available to prompt on. Returns the base ref to retry with
-// (the caller's --base-ref, defaulting to HEAD) alongside the decision.
-func shouldOfferUpdate(err error, opts *initOptions) (bool, string) {
-	if err == nil || opts.force || opts.update || !opts.interactive {
-		return false, ""
-	}
-	if !errors.Is(err, errUtils.ErrTargetDirectoryNotEmpty) {
-		return false, ""
-	}
-	return true, defaultBaseRef(opts.baseRef)
-}
-
-// defaultBaseRef fills in HEAD as the 3-way-merge base ref when the caller
-// didn't supply one. Without this, --update silently sets up no git storage
-// at all (ExecuteWithDelimiters only calls SetupGitStorage when baseRef is
-// non-empty) and every file fails with an opaque "three-way merge failed" --
-// HEAD is the obvious default since `atmos init --git` always creates an
-// initial commit.
-func defaultBaseRef(baseRef string) string {
-	if baseRef == "" {
-		return "HEAD"
-	}
-	return baseRef
 }

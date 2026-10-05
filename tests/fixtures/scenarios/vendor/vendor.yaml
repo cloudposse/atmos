@@ -15,6 +15,7 @@ spec:
         - demo
         - github
         - https
+        - git
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
       included_paths:

@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/batch"
 	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
 
@@ -74,6 +75,8 @@ func (r *UpdateReport) UpdatedCount() int {
 
 // UpdateParams configures an update run.
 type UpdateParams struct {
+	MaxConcurrency int
+	OnEvent        batch.Observer
 	// VendorFiles are the physical manifest files to process (a vendor.yaml plus
 	// any imported files). Edits are applied to the file that declares each source.
 	VendorFiles []string
@@ -115,25 +118,31 @@ type UpdateParams struct {
 func Update(atmosConfig *schema.AtmosConfiguration, params *UpdateParams) (*UpdateReport, error) {
 	defer perf.Track(atmosConfig, "vendoring.Update")()
 
-	lister := params.Lister
-	if lister == nil {
-		lister = version.DefaultLister
-	}
+	return UpdateContext(context.Background(), atmosConfig, params)
+}
 
+// UpdateContext checks independent sources concurrently and writes versions in declaration order.
+func UpdateContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, params *UpdateParams) (*UpdateReport, error) {
+	defer perf.Track(atmosConfig, "vendoring.UpdateContext")()
 	fileSources, err := loadVendorFileSources(params.VendorFiles)
 	if err != nil {
 		return nil, err
 	}
-	total := countMatchingSources(fileSources, params.ExtraSources, params)
-
-	walk := &updateWalk{params: params, lister: lister, seen: map[string]bool{}, total: total}
-
-	fileResults, failures := processVendorFileSources(fileSources, walk)
-	extraResults, extraFailures := processExtraUpdateSources(params.ExtraSources, walk)
-	failures = append(failures, extraFailures...)
-
-	report := &UpdateReport{Results: append(fileResults, extraResults...)}
-	return report, errors.Join(failures...)
+	var sources []*ResolvedSource
+	seen := map[string]bool{}
+	for _, fs := range fileSources {
+		for i := range fs.sources {
+			src := &fs.sources[i]
+			seen[src.Component] = true
+			sources = append(sources, &ResolvedSource{File: fs.file, Source: src})
+		}
+	}
+	for _, ex := range params.ExtraSources {
+		if !seen[ex.Source.Component] {
+			sources = append(sources, ex)
+		}
+	}
+	return UpdateSourcesContext(ctx, atmosConfig, sources, params)
 }
 
 // updateWalk bundles the state shared across a single Update run's two source-checking passes
@@ -256,21 +265,7 @@ func reportProgress(params *UpdateParams, src *schema.AtmosVendorSource, index *
 func UpdateResolved(resolved *ResolvedSource, params *UpdateParams) (*UpdateReport, error) {
 	defer perf.Track(nil, "vendoring.UpdateResolved")()
 
-	lister := params.Lister
-	if lister == nil {
-		lister = version.DefaultLister
-	}
-
-	if params.OnProgress != nil {
-		params.OnProgress(resolved.Source.Component, 1, 1)
-	}
-
-	res, err := updateResolvedSource(resolved, params, lister)
-	report := &UpdateReport{}
-	if res != nil {
-		report.Results = append(report.Results, *res)
-	}
-	return report, err
+	return UpdateSourcesContext(context.Background(), nil, []*ResolvedSource{resolved}, params)
 }
 
 // updateResolvedSource applies a component-manifest-flavored VersionSetter default (unless the
@@ -288,6 +283,19 @@ func updateResolvedSource(resolved *ResolvedSource, params *UpdateParams, lister
 // SourceUpdateResult.ComponentType's doc comment) and otherwise has no bearing on the check itself.
 // Returns nil when the source is filtered out.
 func checkAndUpdateSource(file string, src *schema.AtmosVendorSource, componentType string, params *UpdateParams, lister version.RemoteLister) (*SourceUpdateResult, error) {
+	return checkAndUpdateSourceContext(context.Background(), &sourceCheck{file: file, src: src, componentType: componentType, params: params, lister: lister})
+}
+
+type sourceCheck struct {
+	file          string
+	src           *schema.AtmosVendorSource
+	componentType string
+	params        *UpdateParams
+	lister        version.RemoteLister
+}
+
+func checkAndUpdateSourceContext(ctx context.Context, check *sourceCheck) (*SourceUpdateResult, error) {
+	file, src, componentType, params, lister := check.file, check.src, check.componentType, check.params, check.lister
 	if !sourceMatchesFilter(src, params.Component, params.Tags, params.Type) {
 		return nil, nil
 	}
@@ -302,9 +310,9 @@ func checkAndUpdateSource(file string, src *schema.AtmosVendorSource, componentT
 	// Archived-ness is orthogonal to the version-check outcome below (a component can be both
 	// up to date and archived upstream), so it's computed once here and applies to every branch,
 	// including the StatusFailed early return.
-	res.Archived = checkArchived(src, params.ArchivedChecker)
+	res.Archived = checkArchivedContext(ctx, src, params.ArchivedChecker)
 
-	latest, err := resolveLatest(src, lister)
+	latest, err := resolveLatestContext(ctx, src, lister)
 	if err != nil {
 		res.Status, res.Reason = StatusFailed, err.Error()
 		return res, vendorUpdateError(src.Component, err)
@@ -348,9 +356,9 @@ func skipReason(src *schema.AtmosVendorSource) string {
 	}
 }
 
-// resolveLatest lists remote tags and applies the source's constraints.
-func resolveLatest(src *schema.AtmosVendorSource, lister version.RemoteLister) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), listTagsTimeout)
+// resolveLatestContext lists remote tags and applies the source constraints.
+func resolveLatestContext(parent context.Context, src *schema.AtmosVendorSource, lister version.RemoteLister) (string, error) {
+	ctx, cancel := context.WithTimeout(parent, listTagsTimeout)
 	defer cancel()
 
 	gitURI := version.ExtractGitURI(src.Source)

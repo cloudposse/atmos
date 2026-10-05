@@ -13,7 +13,10 @@ import (
 // exercise: a failing scalar decode inside a mapping and inside a sequence, and an
 // alias node falling through to the default case.
 func TestDecodeNodeWithYamlFunctionsBranches(t *testing.T) {
+	t.Parallel()
+
 	t.Run("mapping with undecodable scalar returns error", func(t *testing.T) {
+		t.Parallel()
 		var node yaml.Node
 		// "!!int notanint" is a standard (non-Atmos) tag, so it takes the plain
 		// decode path and fails, propagating the error up through the mapping loop.
@@ -25,6 +28,7 @@ func TestDecodeNodeWithYamlFunctionsBranches(t *testing.T) {
 	})
 
 	t.Run("sequence with undecodable scalar returns error", func(t *testing.T) {
+		t.Parallel()
 		var node yaml.Node
 		require.NoError(t, yaml.Unmarshal([]byte("- !!int notanint\n"), &node))
 
@@ -34,6 +38,7 @@ func TestDecodeNodeWithYamlFunctionsBranches(t *testing.T) {
 	})
 
 	t.Run("alias node falls through to default decode", func(t *testing.T) {
+		t.Parallel()
 		var node yaml.Node
 		// The value of "ref" is an alias node (yaml.AliasNode), which is not one of
 		// the explicitly handled kinds and so exercises the default branch.

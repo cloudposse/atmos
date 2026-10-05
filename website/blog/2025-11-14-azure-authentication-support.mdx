@@ -9,7 +9,7 @@ tags:
 release: v1.199.0
 ---
 
-We're thrilled to announce native Azure authentication support in Atmos! You can now authenticate to Azure using `atmos auth login` with device code flow, OIDC, and service principals - working identically to `az login` with full Terraform provider compatibility.
+We're thrilled to announce native Azure authentication support in Atmos! You can now authenticate to Azure using [`atmos auth login`](/cli/commands/auth/login) with device code flow, OIDC, and service principals - working identically to `az login` with full Terraform provider compatibility.
 
 <!--truncate-->
 
@@ -379,7 +379,7 @@ Both write to the same files, so your Terraform code needs zero changes.
 - Azure tokens typically expire after 1 hour
 - Atmos automatically caches valid tokens and reuses them
 - Re-authenticate when expired: `atmos auth login`
-- Check status anytime: `atmos auth whoami`
+- Check status anytime: [`atmos auth whoami`](/cli/commands/auth/whoami)
 
 ### Least Privilege Access
 

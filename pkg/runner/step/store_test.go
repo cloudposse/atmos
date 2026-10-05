@@ -15,6 +15,8 @@ import (
 )
 
 func TestStoreHandlerIsRegistered(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get(storeStepType)
 	require.True(t, ok)
 	assert.Equal(t, storeStepType, handler.GetName())
@@ -22,6 +24,8 @@ func TestStoreHandlerIsRegistered(t *testing.T) {
 }
 
 func TestStoreHandlerValidate(t *testing.T) {
+	t.Parallel()
+
 	h := &StoreHandler{BaseHandler: NewBaseHandler(storeStepType, CategoryCommand, false)}
 
 	tests := []struct {
@@ -57,6 +61,7 @@ func TestStoreHandlerValidate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := h.Validate(tt.step)
 			if tt.wantErr != nil {
 				require.Error(t, err)
@@ -69,6 +74,8 @@ func TestStoreHandlerValidate(t *testing.T) {
 }
 
 func TestStoreHandlerExecuteWritesValue(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	mockStore := pstore.NewMockStore(ctrl)
 	mockStore.EXPECT().Set("dev", "vpc", "image_tag", "sha256:abc123").Return(nil)
@@ -102,6 +109,8 @@ func TestStoreHandlerExecuteWritesValue(t *testing.T) {
 }
 
 func TestStoreHandlerExecuteAllowsSecretStore(t *testing.T) {
+	t.Parallel()
+
 	// Writing generated values (e.g. a generated password) to a `secret: true` store is a
 	// legitimate use case; unlike the read-side !store/!store.get functions, the write step does
 	// not refuse secret-marked stores.
@@ -131,6 +140,8 @@ func TestStoreHandlerExecuteAllowsSecretStore(t *testing.T) {
 }
 
 func TestStoreHandlerExecuteStoreNotConfigured(t *testing.T) {
+	t.Parallel()
+
 	vars := NewVariables()
 	vars.SetAtmosConfig(&schema.AtmosConfiguration{Stores: pstore.StoreRegistry{}})
 
@@ -150,6 +161,8 @@ func TestStoreHandlerExecuteStoreNotConfigured(t *testing.T) {
 }
 
 func TestStoreHandlerExecuteWriteFailure(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	mockStore := pstore.NewMockStore(ctrl)
 	writeErr := errors.New("boom")
@@ -177,6 +190,8 @@ func TestStoreHandlerExecuteWriteFailure(t *testing.T) {
 }
 
 func TestStoreHandlerExecuteStackComponentFallback(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	mockStore := pstore.NewMockStore(ctrl)
 	mockStore.EXPECT().Set("prod", "ecs-service", "k", "v").Return(nil)
@@ -214,6 +229,8 @@ const invalidStoreTemplate = "{{ range .steps }}{{ . }}"
 // branch in StoreHandler.Execute (store.go:85-104): store, key, value, stack,
 // and component each get their own wrapped "failed to resolve <field>" error.
 func TestStoreHandlerExecuteResolveErrors(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		step    *schema.WorkflowStep
@@ -290,6 +307,7 @@ func TestStoreHandlerExecuteResolveErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			vars := NewVariables()
 			vars.SetAtmosConfig(&schema.AtmosConfiguration{
 				Stores: pstore.StoreRegistry{},
@@ -307,6 +325,8 @@ func TestStoreHandlerExecuteResolveErrors(t *testing.T) {
 // TestStoreConfigNilStep covers the nil-step guard at store.go:129: storeConfig
 // must return a zero-value storeStepConfig rather than panic on a nil step.
 func TestStoreConfigNilStep(t *testing.T) {
+	t.Parallel()
+
 	cfg := storeConfig(nil)
 	assert.Equal(t, storeStepConfig{}, cfg)
 }
@@ -315,6 +335,8 @@ func TestStoreConfigNilStep(t *testing.T) {
 // the top of Execute (store.go:79-81): Execute must return Validate's error
 // directly without attempting to resolve or write anything.
 func TestStoreHandlerExecuteValidateError(t *testing.T) {
+	t.Parallel()
+
 	vars := NewVariables()
 	vars.SetAtmosConfig(&schema.AtmosConfiguration{Stores: pstore.StoreRegistry{}})
 
@@ -350,6 +372,8 @@ func (failingYAMLMarshaler) MarshalYAML() (interface{}, error) {
 // decodeStoreWith (store.go:146-149): the function must log and return a
 // zero-value storeStepConfig instead of propagating the error.
 func TestDecodeStoreWithMarshalError(t *testing.T) {
+	t.Parallel()
+
 	cfg := decodeStoreWith(map[string]any{"store": failingYAMLMarshaler{}})
 	assert.Equal(t, storeStepConfig{}, cfg)
 }
@@ -360,6 +384,8 @@ func TestDecodeStoreWithMarshalError(t *testing.T) {
 // function must log and return a zero-value storeStepConfig instead of
 // propagating the error.
 func TestDecodeStoreWithUnmarshalError(t *testing.T) {
+	t.Parallel()
+
 	cfg := decodeStoreWith(map[string]any{"store": map[string]any{"nested": "x"}})
 	assert.Equal(t, storeStepConfig{}, cfg)
 }
@@ -367,6 +393,8 @@ func TestDecodeStoreWithUnmarshalError(t *testing.T) {
 // TestDecodeStoreWithEmpty covers the len(with) == 0 short-circuit at
 // store.go:143-145 for both a nil and an empty (non-nil) with: map.
 func TestDecodeStoreWithEmpty(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(t, storeStepConfig{}, decodeStoreWith(nil))
 	assert.Equal(t, storeStepConfig{}, decodeStoreWith(map[string]any{}))
 }

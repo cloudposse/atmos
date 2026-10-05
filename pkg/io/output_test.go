@@ -59,6 +59,13 @@ func TestNewOutputWritesTerminalFileAndCaptureSinks(t *testing.T) {
 }
 
 func TestNewOutputMasksAllSinks(t *testing.T) {
+	// Under -shuffle=on, another test in this package may have left the
+	// shared viper "mask" key or globalContext in a non-default state (e.g.
+	// TestNewContextWithMaskingDisabled sets mask=false); reset both so this
+	// test's masking behavior doesn't depend on run order.
+	resetGlobals()
+	t.Cleanup(resetGlobals)
+
 	require.NoError(t, Initialize())
 	RegisterSecret("secret-value")
 

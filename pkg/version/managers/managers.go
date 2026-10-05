@@ -168,13 +168,15 @@ func Plan(ctx context.Context, opts *RunOptions) ([]PlannedChange, error) {
 	refs := manager.VersionRefs(entries, lock.Tracks[track])
 
 	var planned []PlannedChange
+	var errs []error
 	for _, rule := range fileRules(opts.Config) {
 		if len(opts.Only) > 0 && !containsString(opts.Only, rule.Manager) {
 			continue
 		}
 		fileManager, ok := Get(rule.Manager)
 		if !ok {
-			return nil, fmt.Errorf("%w: %s", ErrUnknownManager, rule.Manager)
+			errs = append(errs, fmt.Errorf("%w: %s", ErrUnknownManager, rule.Manager))
+			continue
 		}
 		input := &Input{
 			Config:  opts.Config,
@@ -188,19 +190,50 @@ func Plan(ctx context.Context, opts *RunOptions) ([]PlannedChange, error) {
 		}
 		changes, err := fileManager.Plan(ctx, input)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", rule.Manager, err)
+			// Keep evaluating the remaining rules instead of stopping at the
+			// first failure: a broken rule (e.g. one malformed managed file)
+			// should not hide every other rule's planned changes from view.
+			// The joined error below still blocks the caller from applying
+			// anything, so this only widens visibility, not risk.
+			errs = append(errs, fmt.Errorf("%s: %w", rule.Manager, err))
+			continue
 		}
 		for i := range changes {
 			planned = append(planned, PlannedChange{Manager: rule.Manager, FileChange: changes[i]})
 		}
 	}
+	if len(errs) > 0 {
+		return nil, withheldChangesError(errs, planned)
+	}
 	return planned, nil
 }
 
+// withheldChangesError joins the rules that failed to plan (preserving each
+// one's hints -- see errUtils.JoinPreservingHints) and, when other rules
+// planned real changes, attaches a hint naming them. Apply is atomic across
+// every configured rule: a single broken rule withholds every other rule's
+// otherwise-valid changes too, so a user needs to see that explicitly rather
+// than just the one error that blocked the whole run.
+func withheldChangesError(errs []error, withheld []PlannedChange) error {
+	joined := errUtils.JoinPreservingHints(errs...)
+	if len(withheld) == 0 {
+		return joined
+	}
+	paths := make([]string, len(withheld))
+	for i := range withheld {
+		paths[i] = fmt.Sprintf("%s (%s)", withheld[i].Path, withheld[i].Manager)
+	}
+	return errUtils.Build(joined).
+		WithHintf("%d other planned change(s) were withheld because of the error(s) above: %s", len(withheld), strings.Join(paths, ", ")).
+		Err()
+}
+
 // fileRules returns the configured version.files rules, or one default rule
-// per registered manager that declares default paths.
+// per registered manager that declares default paths. A nil Version.Files
+// means the key was omitted (fall back to manager defaults); a non-nil empty
+// slice means the user explicitly configured zero managed files.
 func fileRules(atmosConfig *schema.AtmosConfiguration) []schema.VersionFileRule {
-	if atmosConfig != nil && len(atmosConfig.Version.Files) > 0 {
+	if atmosConfig != nil && atmosConfig.Version.Files != nil {
 		return atmosConfig.Version.Files
 	}
 	var rules []schema.VersionFileRule

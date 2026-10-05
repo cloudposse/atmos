@@ -82,7 +82,7 @@ func TestExecuteDeleteCommandWithValues(t *testing.T) {
 			force:     true,
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
+					InitConfigAndAuth("vpc", "dev", "", false, false).
 					Return(&schema.AtmosConfiguration{}, nil, nil)
 				mp.EXPECT().
 					DeleteBackend(gomock.Any()).
@@ -98,7 +98,7 @@ func TestExecuteDeleteCommandWithValues(t *testing.T) {
 			force:     false,
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
+					InitConfigAndAuth("vpc", "dev", "", false, false).
 					Return(&schema.AtmosConfiguration{}, nil, nil)
 				mp.EXPECT().
 					DeleteBackend(gomock.Any()).
@@ -124,7 +124,7 @@ func TestExecuteDeleteCommandWithValues(t *testing.T) {
 			force:     true,
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
+					InitConfigAndAuth("vpc", "dev", "", false, false).
 					Return(nil, nil, errors.New("config init failed"))
 			},
 			expectError: true,
@@ -137,7 +137,7 @@ func TestExecuteDeleteCommandWithValues(t *testing.T) {
 			force:     true,
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
+					InitConfigAndAuth("vpc", "dev", "", false, false).
 					Return(&schema.AtmosConfiguration{}, nil, nil)
 				mp.EXPECT().
 					DeleteBackend(gomock.Any()).
@@ -152,7 +152,7 @@ func TestExecuteDeleteCommandWithValues(t *testing.T) {
 			mockConfigInit, mockProv := setupTestWithMocks(t)
 			tt.setupMocks(mockConfigInit, mockProv)
 
-			err := executeDeleteCommandWithValues(tt.component, tt.stack, tt.identity, tt.force)
+			err := executeDeleteCommandWithValues(tt.component, tt.stack, tt.identity, tt.force, promptedFlags{})
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -187,7 +187,7 @@ func TestExecuteDescribeCommandWithValues(t *testing.T) {
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
+					InitConfigAndAuth("vpc", "dev", "", false, false).
 					Return(atmosConfig, nil, nil)
 				mp.EXPECT().
 					DescribeBackend(atmosConfig, "vpc", map[string]string{"format": "yaml"}).
@@ -204,7 +204,7 @@ func TestExecuteDescribeCommandWithValues(t *testing.T) {
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
+					InitConfigAndAuth("vpc", "dev", "", false, false).
 					Return(atmosConfig, nil, nil)
 				mp.EXPECT().
 					DescribeBackend(atmosConfig, "vpc", map[string]string{"format": "json"}).
@@ -230,7 +230,7 @@ func TestExecuteDescribeCommandWithValues(t *testing.T) {
 			format:    "yaml",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
+					InitConfigAndAuth("vpc", "dev", "", false, false).
 					Return(nil, nil, errors.New("config init failed"))
 			},
 			expectError: true,
@@ -244,7 +244,7 @@ func TestExecuteDescribeCommandWithValues(t *testing.T) {
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
+					InitConfigAndAuth("vpc", "dev", "", false, false).
 					Return(atmosConfig, nil, nil)
 				mp.EXPECT().
 					DescribeBackend(atmosConfig, "vpc", map[string]string{"format": "yaml"}).
@@ -259,7 +259,7 @@ func TestExecuteDescribeCommandWithValues(t *testing.T) {
 			mockConfigInit, mockProv := setupTestWithMocks(t)
 			tt.setupMocks(mockConfigInit, mockProv)
 
-			err := executeDescribeCommandWithValues(tt.component, tt.stack, tt.identity, tt.format)
+			err := executeDescribeCommandWithValues(tt.component, tt.stack, tt.identity, tt.format, promptedFlags{})
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -292,7 +292,7 @@ func TestExecuteListCommandWithValues(t *testing.T) {
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
-					InitConfigAndAuth("", "dev", "").
+					InitConfigAndAuth("", "dev", "", false, false).
 					Return(atmosConfig, nil, nil)
 				mp.EXPECT().
 					ListBackends(atmosConfig, map[string]string{"format": "table"}).
@@ -308,7 +308,7 @@ func TestExecuteListCommandWithValues(t *testing.T) {
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
-					InitConfigAndAuth("", "dev", "").
+					InitConfigAndAuth("", "dev", "", false, false).
 					Return(atmosConfig, nil, nil)
 				mp.EXPECT().
 					ListBackends(atmosConfig, map[string]string{"format": "json"}).
@@ -332,7 +332,7 @@ func TestExecuteListCommandWithValues(t *testing.T) {
 			format:   "table",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
-					InitConfigAndAuth("", "dev", "").
+					InitConfigAndAuth("", "dev", "", false, false).
 					Return(nil, nil, errors.New("config init failed"))
 			},
 			expectError: true,
@@ -345,7 +345,7 @@ func TestExecuteListCommandWithValues(t *testing.T) {
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
-					InitConfigAndAuth("", "dev", "").
+					InitConfigAndAuth("", "dev", "", false, false).
 					Return(atmosConfig, nil, nil)
 				mp.EXPECT().
 					ListBackends(atmosConfig, map[string]string{"format": "table"}).
@@ -360,7 +360,7 @@ func TestExecuteListCommandWithValues(t *testing.T) {
 			mockConfigInit, mockProv := setupTestWithMocks(t)
 			tt.setupMocks(mockConfigInit, mockProv)
 
-			err := executeListCommandWithValues(tt.stack, tt.identity, tt.format)
+			err := executeListCommandWithValues(tt.stack, tt.identity, tt.format, false)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -456,7 +456,7 @@ func TestExecuteProvisionCommandWithValues(t *testing.T) {
 			identity:  "",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
+					InitConfigAndAuth("vpc", "dev", "", false, false).
 					Return(&schema.AtmosConfiguration{}, nil, nil)
 				mp.EXPECT().
 					CreateBackend(gomock.Any()).
@@ -485,7 +485,7 @@ func TestExecuteProvisionCommandWithValues(t *testing.T) {
 			identity:  "",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
+					InitConfigAndAuth("vpc", "dev", "", false, false).
 					Return(nil, nil, errors.New("config init failed"))
 			},
 			expectError: true,
@@ -497,7 +497,7 @@ func TestExecuteProvisionCommandWithValues(t *testing.T) {
 			identity:  "",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
-					InitConfigAndAuth("vpc", "dev", "").
+					InitConfigAndAuth("vpc", "dev", "", false, false).
 					Return(&schema.AtmosConfiguration{}, nil, nil)
 				mp.EXPECT().
 					CreateBackend(gomock.Any()).
@@ -512,7 +512,7 @@ func TestExecuteProvisionCommandWithValues(t *testing.T) {
 			identity:  "aws-prod",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
-					InitConfigAndAuth("vpc", "prod", "aws-prod").
+					InitConfigAndAuth("vpc", "prod", "aws-prod", false, false).
 					Return(&schema.AtmosConfiguration{}, &schema.AuthContext{AWS: &schema.AWSAuthContext{}}, nil)
 				mp.EXPECT().
 					CreateBackend(gomock.Any()).
@@ -532,7 +532,7 @@ func TestExecuteProvisionCommandWithValues(t *testing.T) {
 			mockConfigInit, mockProv := setupTestWithMocks(t)
 			tt.setupMocks(mockConfigInit, mockProv)
 
-			err := executeProvisionCommandWithValues(tt.component, tt.stack, tt.identity)
+			err := executeProvisionCommandWithValues(tt.component, tt.stack, tt.identity, promptedFlags{})
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -542,6 +542,95 @@ func TestExecuteProvisionCommandWithValues(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+// TestExecuteCommandWithValues_ThreadsPromptedFlagsToConfigInitializer is the regression test
+// CodeRabbit's review requested: it proves that when a backend subcommand's component/stack
+// were resolved via an interactive prompt (StandardOptions.ComponentPrompted /
+// StackPrompted), the executeXCommandWithValues helpers pass those booleans through to
+// ConfigInitializer.InitConfigAndAuth unchanged, rather than silently defaulting to false (which
+// would make profile-fallback re-exec drop the prompted value and force a second prompt, or
+// fail outright, in the re-exec'd child -- see auth.ReExecContext).
+func TestExecuteCommandWithValues_ThreadsPromptedFlagsToConfigInitializer(t *testing.T) {
+	tests := []struct {
+		name              string
+		componentPrompted bool
+		stackPrompted     bool
+		invoke            func(mci *MockConfigInitializer, mp *MockProvisioner) error
+	}{
+		{
+			name:              "provision: both prompted",
+			componentPrompted: true,
+			stackPrompted:     true,
+			invoke: func(mci *MockConfigInitializer, mp *MockProvisioner) error {
+				mci.EXPECT().
+					InitConfigAndAuth("vpc", "dev", "", true, true).
+					Return(&schema.AtmosConfiguration{}, nil, nil)
+				mp.EXPECT().CreateBackend(gomock.Any()).Return(nil)
+				return executeProvisionCommandWithValues("vpc", "dev", "", promptedFlags{Component: true, Stack: true})
+			},
+		},
+		{
+			name:              "provision: only stack prompted",
+			componentPrompted: false,
+			stackPrompted:     true,
+			invoke: func(mci *MockConfigInitializer, mp *MockProvisioner) error {
+				mci.EXPECT().
+					InitConfigAndAuth("vpc", "dev", "", false, true).
+					Return(&schema.AtmosConfiguration{}, nil, nil)
+				mp.EXPECT().CreateBackend(gomock.Any()).Return(nil)
+				return executeProvisionCommandWithValues("vpc", "dev", "", promptedFlags{Component: false, Stack: true})
+			},
+		},
+		{
+			name:              "delete: both prompted",
+			componentPrompted: true,
+			stackPrompted:     true,
+			invoke: func(mci *MockConfigInitializer, mp *MockProvisioner) error {
+				mci.EXPECT().
+					InitConfigAndAuth("vpc", "dev", "", true, true).
+					Return(&schema.AtmosConfiguration{}, nil, nil)
+				mp.EXPECT().DeleteBackend(gomock.Any()).Return(nil)
+				return executeDeleteCommandWithValues("vpc", "dev", "", true, promptedFlags{Component: true, Stack: true})
+			},
+		},
+		{
+			name:              "describe: both prompted",
+			componentPrompted: true,
+			stackPrompted:     true,
+			invoke: func(mci *MockConfigInitializer, mp *MockProvisioner) error {
+				atmosConfig := &schema.AtmosConfiguration{}
+				mci.EXPECT().
+					InitConfigAndAuth("vpc", "dev", "", true, true).
+					Return(atmosConfig, nil, nil)
+				mp.EXPECT().DescribeBackend(atmosConfig, "vpc", map[string]string{"format": "yaml"}).Return(nil)
+				return executeDescribeCommandWithValues("vpc", "dev", "", "yaml", promptedFlags{Component: true, Stack: true})
+			},
+		},
+		{
+			name:              "list: stack prompted, no component parameter",
+			componentPrompted: false,
+			stackPrompted:     true,
+			invoke: func(mci *MockConfigInitializer, mp *MockProvisioner) error {
+				atmosConfig := &schema.AtmosConfiguration{}
+				mci.EXPECT().
+					InitConfigAndAuth("", "dev", "", false, true).
+					Return(atmosConfig, nil, nil)
+				mp.EXPECT().ListBackends(atmosConfig, map[string]string{"format": "table"}).Return(nil)
+				return executeListCommandWithValues("dev", "", "table", true)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockConfigInit, mockProv := setupTestWithMocks(t)
+
+			err := tt.invoke(mockConfigInit, mockProv)
+
+			assert.NoError(t, err)
 		})
 	}
 }
@@ -596,7 +685,7 @@ func TestBackendSubcommands_BindStackFlagFromCommand(t *testing.T) {
 
 			expectedErr := errors.New("stop after stack parse")
 			mockConfigInit.EXPECT().
-				InitConfigAndAuth(tt.component, "dev", "").
+				InitConfigAndAuth(tt.component, "dev", "", false, false).
 				Return(nil, nil, expectedErr)
 
 			require.NoError(t, tt.cmd.Flags().Set("stack", "dev"))
@@ -675,7 +764,7 @@ func TestBackendSubcommands_StackFromViperWhenNotSetOnCLI(t *testing.T) {
 
 			expectedErr := errors.New("stop after stack parse")
 			mockConfigInit.EXPECT().
-				InitConfigAndAuth(tt.component, "dev", "").
+				InitConfigAndAuth(tt.component, "dev", "", false, false).
 				Return(nil, nil, expectedErr)
 
 			err := tt.cmd.RunE(tt.cmd, tt.args)

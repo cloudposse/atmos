@@ -185,6 +185,11 @@ type TerraformTestOutputData struct {
 
 	// CleanupFailures contains resources Terraform could not destroy after tests.
 	CleanupFailures []TerraformTestCleanupFailure
+
+	// BackfillTruncated indicates a test_summary count for some status exceeded the parser's
+	// synthetic-placeholder-row cap, so the backfilled Runs (and therefore Total/JUnit/the
+	// results table) are known to be incomplete for that status.
+	BackfillTruncated bool
 }
 
 // TerraformTestFile represents the result of a single `.tftest.hcl` file.

@@ -2568,3 +2568,16 @@ func TestFormatInline_FallbackBehavior(t *testing.T) {
 		}
 	})
 }
+
+func TestFormatter_PlainMarkdownMargins(t *testing.T) {
+	f := NewFormatter(createTestIOContext(), createMockTerminal(terminal.ColorNone))
+	for _, render := range []func(string) (string, error){f.Markdown, f.MarkdownNoWrap} {
+		got, err := render("# Heading\n\n**Details**\n\n```\ncommand\n```")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := "# Heading\n\n**Details**\n\n command"; strings.Trim(got, "\n") != want {
+			t.Errorf("plain markdown margins changed: got %q, want %q", got, want)
+		}
+	}
+}

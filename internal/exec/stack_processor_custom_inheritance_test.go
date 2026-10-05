@@ -16,6 +16,8 @@ func inheritanceTestConfig() *schema.AtmosConfiguration {
 }
 
 func TestResolveCustomComponentInheritance_DeepMergesBase(t *testing.T) {
+	t.Parallel()
+
 	all := map[string]any{
 		"web/defaults": map[string]any{
 			"metadata": map[string]any{"type": "abstract"},
@@ -52,6 +54,8 @@ func TestResolveCustomComponentInheritance_DeepMergesBase(t *testing.T) {
 // `metadata.inherits` that is present but not a list is reported as a config
 // error rather than silently ignored.
 func TestResolveCustomComponentInheritance_MalformedInheritsErrors(t *testing.T) {
+	t.Parallel()
+
 	all := map[string]any{
 		"api": map[string]any{
 			// inherits is a bare string, not a list.
@@ -68,6 +72,8 @@ func TestResolveCustomComponentInheritance_MalformedInheritsErrors(t *testing.T)
 // A `metadata.inherits` list containing a non-string item is reported as a config
 // error rather than silently dropping the malformed entry.
 func TestResolveCustomComponentInheritance_NonStringInheritsItemErrors(t *testing.T) {
+	t.Parallel()
+
 	all := map[string]any{
 		"api": map[string]any{
 			// inherits is a list, but one item is not a string.
@@ -85,6 +91,8 @@ func TestResolveCustomComponentInheritance_NonStringInheritsItemErrors(t *testin
 // a component without `metadata.inherits` must resolve unchanged and never trip
 // the malformed-inherits error.
 func TestResolveCustomComponentInheritance_NoInherits(t *testing.T) {
+	t.Parallel()
+
 	component := map[string]any{
 		"image": "nginx:alpine",
 		"run":   map[string]any{"ports": []any{map[string]any{"host": 80, "container": 80}}},
@@ -97,6 +105,8 @@ func TestResolveCustomComponentInheritance_NoInherits(t *testing.T) {
 }
 
 func TestResolveCustomComponentInheritance_AbstractDoesNotPoison(t *testing.T) {
+	t.Parallel()
+
 	all := map[string]any{
 		"base": map[string]any{
 			"metadata": map[string]any{"type": "abstract"},
@@ -119,6 +129,8 @@ func TestResolveCustomComponentInheritance_AbstractDoesNotPoison(t *testing.T) {
 }
 
 func TestResolveCustomComponentInheritance_NoInheritsUnchanged(t *testing.T) {
+	t.Parallel()
+
 	component := map[string]any{"image": "x"}
 	merged, err := resolveCustomComponentInheritance(inheritanceTestConfig(), component, map[string]any{}, map[string]bool{})
 	require.NoError(t, err)
@@ -126,6 +138,8 @@ func TestResolveCustomComponentInheritance_NoInheritsUnchanged(t *testing.T) {
 }
 
 func TestResolveCustomComponentInheritance_CycleGuard(t *testing.T) {
+	t.Parallel()
+
 	all := map[string]any{
 		"a": map[string]any{"metadata": map[string]any{"inherits": []any{"b"}}, "image": "a"},
 		"b": map[string]any{"metadata": map[string]any{"inherits": []any{"a"}}, "image": "b"},
@@ -137,6 +151,8 @@ func TestResolveCustomComponentInheritance_CycleGuard(t *testing.T) {
 }
 
 func TestResolveCustomComponentInheritance_UnknownBaseSkipped(t *testing.T) {
+	t.Parallel()
+
 	all := map[string]any{
 		"api": map[string]any{"metadata": map[string]any{"inherits": []any{"missing"}}, "image": "x"},
 	}

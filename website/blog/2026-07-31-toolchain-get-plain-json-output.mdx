@@ -27,7 +27,7 @@ output goes to stderr, not stdout.
 
 ## The Fix
 
-`atmos toolchain get` now supports a `--format` flag with two script-friendly output modes alongside the
+[`atmos toolchain get`](/cli/commands/toolchain/get) now supports a [`--format`](/cli/commands/toolchain/get#flags) flag with two script-friendly output modes alongside the
 existing human-readable table: `plain` prints just the bare version string, and `json` prints structured
 output including whether that version is installed.
 
@@ -62,7 +62,7 @@ $ atmos toolchain get terraform --format=json
 ```
 
 `--format=plain` only makes sense for a single resolved version, so it's rejected when combined with
-`--all` (which lists every available version) — use `--format=json` there instead, which returns the full
+[`--all`](/cli/commands/toolchain/get#flags) (which lists every available version) — use `--format=json` there instead, which returns the full
 list with each entry's installed and default status.
 
 ## Get Involved

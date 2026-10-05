@@ -9,6 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const matter = require('gray-matter');
+const { getBuildTimestamp } = require('../build-timestamp');
 
 // File names recognized as an item's primary content — the ones treated as
 // its "readme" for description/title/tags extraction and index-page preview.
@@ -136,6 +137,7 @@ const TAGS_MAP = {
   'mcp-with-aws': ['DX', 'Automation'],
   scaffolding: ['Scaffold', 'Init'],
   'scaffolding-matrix': ['Scaffold'],
+  'scaffolding-directory-matrix': ['Scaffold'],
 };
 
 // Display labels for the `metadata.category` slug used by SKILL.md front matter
@@ -254,6 +256,13 @@ const DOCS_MAP = {
   'scaffolding-matrix': [
     { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
     { label: 'Dynamic File Generation (matrix)', url: '/cli/commands/scaffold/generate#dynamic-file-generation' },
+  ],
+  'scaffolding-directory-matrix': [
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
+    {
+      label: 'Glob Paths and Directory-Level Matrix',
+      url: '/cli/commands/scaffold/generate#glob-paths-and-directory-level-matrix',
+    },
   ],
   'stack-names': [
     { label: 'Stack Names', url: '/stacks/name' },
@@ -661,7 +670,7 @@ function scanExamples(sourceDir, options) {
     examples,
     featured,
     tags,
-    generatedAt: new Date().toISOString(),
+    generatedAt: getBuildTimestamp(),
     totalFiles,
     totalExamples: examples.length,
   };

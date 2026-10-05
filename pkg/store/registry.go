@@ -153,27 +153,42 @@ func Reset() {
 // factories registered by the provider packages. Import the provider package
 // (e.g. with a blank import of pkg/store/providers) so the built-in backends are
 // registered before this runs.
+//
+// A store that fails to resolve or construct (unresolvable kind, an incompatible
+// `secret: true`, or a factory error) is skipped and logged as a warning naming the
+// specific store, rather than aborting the whole build: `stores:` config load must not
+// fail globally because one store — possibly one that nothing in the stack even references —
+// is misconfigured. Code that actually looks up a skipped store by name still gets a clear
+// error at the point of use, since it is simply absent from the returned registry.
+// See https://github.com/cloudposse/atmos/issues/2930.
 func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 	registry := make(StoreRegistry)
 	for name, storeConfig := range *config {
 		kind := resolveKind(storeConfig)
 
-		// Fail fast on a misconfiguration: marking a backend that cannot encrypt at rest as
-		// `secret: true` is rejected before the store is ever constructed.
+		// A backend that cannot encrypt at rest must never be marked `secret: true`; skip it
+		// rather than construct a store that would silently write secrets in plaintext.
 		if storeConfig.Secret && isSecretIncapableKind(kind) {
-			return nil, fmt.Errorf("%w: store %q uses backend %q", ErrSecretBackendNotEncrypted, name, kind)
+			log.Warn("Skipping store: cannot mark as secret, backend does not encrypt values at rest",
+				"store", name, "kind", kind,
+				"error", fmt.Errorf("%w: store %q uses backend %q", ErrSecretBackendNotEncrypted, name, kind))
+			continue
 		}
 
 		storeFactoriesMu.RLock()
 		factory, ok := storeFactories[kind]
 		storeFactoriesMu.RUnlock()
 		if !ok {
-			return nil, fmt.Errorf("%w: %s", ErrStoreTypeNotFound, kind)
+			log.Warn("Skipping store: no backend registered for this kind",
+				"store", name, "kind", kind,
+				"error", fmt.Errorf("%w: store %q kind %q", ErrStoreTypeNotFound, name, kind))
+			continue
 		}
 
 		s, err := factory(name, storeConfig)
 		if err != nil {
-			return nil, err
+			log.Warn("Skipping store: failed to initialize", "store", name, "kind", kind, "error", err)
+			continue
 		}
 
 		// A `secret: true` store writes the sensitive at-rest variant when supported.

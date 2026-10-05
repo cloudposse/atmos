@@ -10,6 +10,8 @@ import (
 )
 
 func TestControlStepHandlersValidateAndRejectDirectExecute(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		stepType   string
@@ -29,6 +31,7 @@ func TestControlStepHandlersValidateAndRejectDirectExecute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			handler, ok := Get(tt.stepType)
 			require.True(t, ok)
 			assert.Equal(t, CategoryCommand, handler.GetCategory())

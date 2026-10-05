@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/agent/codexcli"
 	"github.com/cloudposse/atmos/pkg/ai/agent/copilotcli"
 	"github.com/cloudposse/atmos/pkg/ai/agent/geminicli"
+	"github.com/cloudposse/atmos/pkg/ai/agent/opencode"
 	"github.com/cloudposse/atmos/pkg/ai/registry"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -23,6 +24,7 @@ var cliProviderPriority = []struct {
 	{claudecode.ProviderName, claudecode.DefaultBinary},
 	{codexcli.ProviderName, codexcli.DefaultBinary},
 	{copilotcli.ProviderName, copilotcli.DefaultBinary},
+	{opencode.ProviderName, opencode.DefaultBinary},
 	{geminicli.ProviderName, geminicli.DefaultBinary},
 }
 
@@ -85,6 +87,7 @@ var cliProviders = map[string]bool{
 	claudecode.ProviderName: true,
 	codexcli.ProviderName:   true,
 	copilotcli.ProviderName: true,
+	opencode.ProviderName:   true,
 	geminicli.ProviderName:  true,
 }
 

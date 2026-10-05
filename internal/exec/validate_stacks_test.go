@@ -71,6 +71,74 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 	})
 }
 
+// nativeTerraformExampleDir returns the absolute path to examples/native-terraform
+// using runtime.Caller(0) so the path is source-file-relative (CWD-independent).
+func nativeTerraformExampleDir(t *testing.T) string {
+	t.Helper()
+	_, callerFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller(0) must succeed")
+	dir := filepath.Join(filepath.Dir(callerFile), "..", "..", "examples", "native-terraform")
+	absDir, err := filepath.Abs(dir)
+	require.NoError(t, err, "cannot resolve fixture path")
+	return absDir
+}
+
+// TestValidateStacksWithoutNameTemplateOrPattern is a regression test: `atmos
+// validate stacks` used to hard-fail with ErrMissingStackNameTemplateAndPattern
+// whenever `stacks.name_template`/`stacks.name_pattern` was unset, even though
+// `terraform plan`, `list stacks`, and `describe component` all resolve stack
+// names fine via filename/`name:`-based zero-config fallback (#1934) in that
+// case. The createComponentStackMap function's stack-name derivation now
+// mirrors that same precedence (resolveStackName) instead of requiring
+// name_template/name_pattern itself. The examples/native-terraform directory
+// is the real repro: its atmos.yaml sets neither field on purpose (see its
+// own comment) and is the example this repo's atmos-migration skill points
+// users at.
+func TestValidateStacksWithoutNameTemplateOrPattern(t *testing.T) {
+	absPath := nativeTerraformExampleDir(t)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:               absPath,
+		StacksBaseAbsolutePath: filepath.Join(absPath, "stacks"),
+		Stacks: schema.Stacks{
+			BasePath:      "stacks",
+			IncludedPaths: []string{"**/*"},
+			ExcludedPaths: []string{"**/_defaults.yaml"},
+		},
+		Logs: schema.Logs{
+			Level: u.LogLevelDebug,
+		},
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+		},
+	}
+	atmosConfig.TerraformDirAbsolutePath = filepath.Join(absPath, "components", "terraform")
+	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(absPath, "components", "helmfile")
+	atmosConfig.PackerDirAbsolutePath = filepath.Join(absPath, "components", "packer")
+
+	// Populate StackConfigFilesAbsolutePaths the same way cfg.InitCliConfig does for a
+	// real CLI run -- without it, FindStacksMap has no files to process and
+	// createComponentStackMap's loop body (where the bug lives) never runs, letting
+	// the test pass vacuously regardless of the fix.
+	includeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, atmosConfig.Stacks.IncludedPaths)
+	require.NoError(t, err)
+	stackConfigFilesAbsolutePaths, _, err := cfg.FindAllStackConfigsInPaths(atmosConfig, includeStackAbsPaths, atmosConfig.Stacks.ExcludedPaths)
+	require.NoError(t, err)
+	require.NotEmpty(t, stackConfigFilesAbsolutePaths, "fixture must have discoverable stack manifests for this test to exercise the bug")
+	atmosConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
+
+	require.Empty(t, atmosConfig.Stacks.NameTemplate, "fixture must exercise the no-name_template case")
+	require.Empty(t, atmosConfig.Stacks.NamePattern, "fixture must exercise the no-name_pattern case")
+
+	err = ValidateStacks(atmosConfig)
+	assert.NoError(t, err, "validate stacks must succeed via filename/name:-based stack naming, same as terraform plan/list stacks/describe component")
+}
+
 func TestMergeContextInProcessYAMLConfigFile(t *testing.T) {
 	// Test that ProcessYAMLConfigFileWithContext properly tracks import chain
 	absPath := validateStacksTestDataDir(t)

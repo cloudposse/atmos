@@ -34,7 +34,7 @@ func TestMarshal(t *testing.T) {
 		result, err := Marshal(entries)
 		require.NoError(t, err)
 
-		var output Output
+		var output Output[Entry]
 		err = json.Unmarshal(result, &output)
 		require.NoError(t, err)
 		require.Len(t, output.Include, 1)
@@ -52,7 +52,7 @@ func TestMarshal(t *testing.T) {
 		result, err := Marshal(entries)
 		require.NoError(t, err)
 
-		var output Output
+		var output Output[Entry]
 		err = json.Unmarshal(result, &output)
 		require.NoError(t, err)
 		require.Len(t, output.Include, 2)
@@ -85,7 +85,7 @@ func TestWriteOutput_File(t *testing.T) {
 
 		// Verify JSON is valid.
 		matrixJSON := strings.TrimPrefix(lines[0], "matrix=")
-		var output Output
+		var output Output[Entry]
 		err = json.Unmarshal([]byte(matrixJSON), &output)
 		require.NoError(t, err)
 		require.Len(t, output.Include, 1)
@@ -127,7 +127,7 @@ func TestWriteOutput_Stdout(t *testing.T) {
 }
 
 func TestMarshal_NilEntries(t *testing.T) {
-	result, err := Marshal(nil)
+	result, err := Marshal[Entry](nil)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"include":[]}`, string(result))
 }

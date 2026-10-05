@@ -70,6 +70,13 @@ func setupTest() {
 
 func teardownTest() {
 	viper.Reset()
+	// Restore TestMain's "github-token" env binding: Reset() discards it, and
+	// leaving it unbound would silently break every test that runs after this
+	// one in the same process (-shuffle=on means this is not always the last
+	// test) and expects GITHUB_TOKEN/ATMOS_GITHUB_TOKEN to reach viper --
+	// e.g. this package's registry tests falling back to unauthenticated
+	// GitHub API calls. BindEnv is safe to call again (idempotent).
+	viper.BindEnv("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
 }
 
 // Tests for versionListModel.
@@ -994,6 +1001,147 @@ func TestFetchGitHubVersionsNetworkEdgeCases(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestMakeGitHubRequestOmitsTokenOverHTTP pins that makeGitHubRequest never sends the
+// "github-token" as a Bearer credential to a plain-http apiURL: ATMOS_TOOLCHAIN_GITHUB_API_URL
+// can resolve to a non-https scheme, and doing so would leak the token in cleartext.
+func TestMakeGitHubRequestOmitsTokenOverHTTP(t *testing.T) {
+	// Isolate the global viper instance like this package's other tests do: Reset before, and
+	// Reset plus re-bind after, so no override of "github-token" leaks into sibling tests that
+	// expect the env binding (TestGitHubTokenEnvBinding) -- order is randomized under -shuffle.
+	setupTest()
+	t.Cleanup(teardownTest)
+	viper.Set("github-token", "test-token")
+
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer server.Close()
+
+	resp, err := makeGitHubRequest(server.URL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Empty(t, gotAuth, "expected no Authorization header sent to a plain-http endpoint")
+}
+
+// TestMakeGitHubRequestSendsTokenWhenAPIHostMatchesDespiteServerHostMismatch pins CodeRabbit
+// thread PRRT_kwDOEW4XoM6h7p3Z: makeGitHubRequest must no longer prefilter the token against
+// ToolchainEndpoints().Host (the toolchain *server* host) before ever building the request --
+// requestAllowsToken (checked per-request, including every redirect hop) is the single gate,
+// and it also accepts a match against RepoEndpoints' *API* host. So when the toolchain server
+// URL differs from the repo's own server host, but the toolchain API URL happens to resolve to
+// the same host as the approved repo API host, the token must still be sent. Uses an
+// httptest.NewTLSServer (rather than the usual plain httptest.NewServer) because
+// requestAllowsToken also requires https; makeGitHubRequest's http.Client has no custom
+// Transport, so swapping out http.DefaultTransport for the test server's own (which trusts its
+// self-signed certificate) is what lets the request complete over TLS, matching the pattern in
+// TestDownloadPRArtifact_ApprovedHTTPSHostSendsToken.
+func TestMakeGitHubRequestSendsTokenWhenAPIHostMatchesDespiteServerHostMismatch(t *testing.T) {
+	setupTest()
+	t.Cleanup(teardownTest)
+	viper.Set("github-token", "test-token")
+
+	var gotAuth string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer server.Close()
+
+	origTransport := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = origTransport })
+
+	clearGitHubEndpointEnvToolchain(t)
+	// The repo's own server host differs from the toolchain server host below -- a
+	// server-host-only prefilter would incorrectly withhold the token.
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+	// The repo's API host matches the httptest TLS server -- the actual destination of this
+	// request -- so requestAllowsToken's IsAPIHost check must allow the token through.
+	t.Setenv("GITHUB_API_URL", server.URL)
+	// The toolchain server URL is deliberately different from GITHUB_SERVER_URL above.
+	t.Setenv("ATMOS_TOOLCHAIN_GITHUB_URL", "https://ghes-toolchain.example.com")
+
+	resp, err := makeGitHubRequest(server.URL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, "Bearer test-token", gotAuth,
+		"expected the token to be sent because the request's host matches RepoEndpoints' API host, even though the toolchain server host differs")
+}
+
+// TestStripAuthOnUnapprovedRedirect pins the CheckRedirect callback installed on
+// makeGitHubRequest's http.Client: net/http's default redirect policy preserves the
+// Authorization header across same-host redirects even when the scheme downgrades from
+// https to http, and never considers host at all, which would leak the token in cleartext or
+// to an unrelated host. The callback must strip it whenever the (redirect target) request is
+// not https, or its host does not match RepoEndpoints (the host the token is scoped to), and
+// leave it alone otherwise.
+func TestStripAuthOnUnapprovedRedirect(t *testing.T) {
+	t.Run("removes Authorization when redirect target is not https", func(t *testing.T) {
+		clearGitHubEndpointEnvToolchain(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+		req, err := http.NewRequest(http.MethodGet, "http://ghes.example.com/api/v3/repos/owner/repo/releases", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer leaked-token")
+
+		err = stripAuthOnUnapprovedRedirect(req, nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, req.Header.Get("Authorization"))
+	})
+
+	t.Run("preserves Authorization when redirect target is https and matches RepoEndpoints", func(t *testing.T) {
+		clearGitHubEndpointEnvToolchain(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+		req, err := http.NewRequest(http.MethodGet, "https://ghes.example.com/api/v3/repos/owner/repo/releases", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer valid-token")
+
+		err = stripAuthOnUnapprovedRedirect(req, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "Bearer valid-token", req.Header.Get("Authorization"))
+	})
+
+	t.Run("removes Authorization when redirect target is https but a different host", func(t *testing.T) {
+		clearGitHubEndpointEnvToolchain(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+		req, err := http.NewRequest(http.MethodGet, "https://attacker.example.com/repos/owner/repo/releases", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer leaked-token")
+
+		err = stripAuthOnUnapprovedRedirect(req, nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, req.Header.Get("Authorization"))
+	})
+}
+
+// clearGitHubEndpointEnvToolchain unsets every environment variable RepoEndpoints/
+// ToolchainEndpoints read, so a test starts from a known (unset) baseline regardless of the
+// ambient environment (e.g. a real GITHUB_ACTIONS runner exports GITHUB_SERVER_URL/
+// GITHUB_API_URL).
+func clearGitHubEndpointEnvToolchain(t *testing.T) {
+	t.Helper()
+
+	for _, envVar := range []string{
+		"GITHUB_SERVER_URL",
+		"GITHUB_API_URL",
+		"ATMOS_TOOLCHAIN_GITHUB_URL",
+		"ATMOS_TOOLCHAIN_GITHUB_API_URL",
+	} {
+		t.Setenv(envVar, "")
+	}
 }
 
 // TestMakeGitHubRequestRetry covers the retry behavior added to recover from
@@ -1941,10 +2089,14 @@ func TestSetToolVersion_WithValidVersion(t *testing.T) {
 	err = SetToolVersion("terraform", "1.11.4", 3)
 	assert.NoError(t, err)
 
-	// Verify the file was updated
+	// Verify the file was updated. Written under the raw "terraform" key (what the
+	// caller passed), not the resolved canonical "hashicorp/terraform" form --
+	// matching AddToolVersion's (add.go) established contract, see
+	// TestAddCommand_ValidTool.
 	content, err := os.ReadFile(tmpFile.Name())
 	require.NoError(t, err)
-	assert.Contains(t, string(content), "hashicorp/terraform")
+	assert.Contains(t, string(content), "terraform")
+	assert.NotContains(t, string(content), "hashicorp/terraform")
 	assert.Contains(t, string(content), "1.11.4")
 }
 
@@ -1984,6 +2136,49 @@ func TestSetToolVersion_ReplacesExistingDefault(t *testing.T) {
 	// second entry. Checking versions[0] alone (as this test previously did) passes even
 	// when the old version is silently retained -- assert the full, exact shape instead.
 	assert.Equal(t, []string{"1.11.4"}, versions, "set on a single-version tool must not leave the old default (1.5.7) pinned as a stale second entry")
+}
+
+// TestSetToolVersion_UpdatesExistingAliasKeyInPlace tests that SetToolVersion updates
+// the existing entry when the file already tracks the tool under a configured short
+// alias (e.g. "jq" for "jqlang/jq", as in the atmos-migration skill's from-mise.md
+// recipe), instead of writing a second, disconnected entry under the resolved
+// owner/repo form. Regression coverage for SetToolVersion writing spec.key (always
+// the canonical form) instead of toolName (the string the user/on-disk file actually
+// uses), which AddToolVersion (add.go) already gets right.
+func TestSetToolVersion_UpdatesExistingAliasKeyInPlace(t *testing.T) {
+	setupTestIO(t)
+
+	tmpFile, err := os.CreateTemp("", "tool-versions-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+	require.NoError(t, tmpFile.Close())
+
+	// Seed the file with an existing default version under the short alias key,
+	// matching what a real .tool-versions file looks like per the migration recipe.
+	toolVersions := &ToolVersions{Tools: make(map[string][]string)}
+	AddVersionToTool(toolVersions, "jq", "1.7.1", false)
+	require.NoError(t, SaveToolVersions(tmpFile.Name(), toolVersions))
+
+	oldConfig := atmosConfig
+	defer func() { atmosConfig = oldConfig }()
+	atmosConfig = &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: tmpFile.Name(),
+			Aliases:      map[string]string{"jq": "jqlang/jq"},
+		},
+	}
+
+	err = SetToolVersion("jq", "1.9.0", 3)
+	assert.NoError(t, err)
+
+	loaded, err := LoadToolVersions(tmpFile.Name())
+	require.NoError(t, err)
+	require.Len(t, loaded.Tools, 1, "should update the existing 'jq' entry, not add a second entry under the canonical form")
+	// set replaces (not merges into) the default, matching TestSetToolVersion_ReplacesExistingDefault --
+	// the old 1.7.1 must not survive as a stale second entry under "jq".
+	assert.Equal(t, []string{"1.9.0"}, loaded.Tools["jq"], "set should replace the existing alias-keyed entry, not append to it")
+	_, hasCanonicalKey := loaded.Tools["jqlang/jq"]
+	assert.False(t, hasCanonicalKey, "must not create a second entry under the resolved owner/repo form")
 }
 
 // TestSetToolVersion_RejectsRangeSyntax reproduces a gap where SetToolVersion could write
@@ -2089,4 +2284,49 @@ func TestSetToolVersion_NonGitHubReleaseWithoutVersion(t *testing.T) {
 	err = SetToolVersion("terraform", "", 3)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "interactive version selection is only available for GitHub release type tools")
+}
+
+func TestRequestAllowsTokenSchemeAwarePorts(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		serverURL  string
+		apiURL     string
+		requestURL string
+		allowed    bool
+	}{
+		{name: "server default port", requestURL: "https://ghes.example.com/releases", allowed: true},
+		{name: "server explicit TLS port", requestURL: "https://ghes.example.com:443/releases", allowed: true},
+		{name: "server TLS on HTTP port", requestURL: "https://ghes.example.com:80/releases"},
+		{name: "API default port", requestURL: "https://api.ghes.example.com/releases", allowed: true},
+		{name: "API explicit TLS port", requestURL: "https://api.ghes.example.com:443/releases", allowed: true},
+		{name: "API TLS on HTTP port", requestURL: "https://api.ghes.example.com:80/releases"},
+		{name: "HTTP downgrade", requestURL: "http://ghes.example.com/releases"},
+		{name: "configured server port", serverURL: "https://ghes.example.com:8443", requestURL: "https://ghes.example.com:8443/releases", allowed: true},
+		{name: "configured API port", apiURL: "https://api.ghes.example.com:8443", requestURL: "https://api.ghes.example.com:8443/releases", allowed: true},
+		{name: "wrong configured port", serverURL: "https://ghes.example.com:8443", requestURL: "https://ghes.example.com/releases"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearGitHubEndpointEnvToolchain(t)
+			serverURL := tc.serverURL
+			if serverURL == "" {
+				serverURL = "https://ghes.example.com"
+			}
+			apiURL := tc.apiURL
+			if apiURL == "" {
+				apiURL = "https://api.ghes.example.com"
+			}
+			t.Setenv("GITHUB_SERVER_URL", serverURL)
+			t.Setenv("GITHUB_API_URL", apiURL)
+			req, err := http.NewRequest(http.MethodGet, tc.requestURL, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tc.allowed, requestAllowsToken(req))
+			req.Header.Set("Authorization", "Bearer test-token")
+			require.NoError(t, stripAuthOnUnapprovedRedirect(req, nil))
+			if tc.allowed {
+				assert.Equal(t, "Bearer test-token", req.Header.Get("Authorization"))
+			} else {
+				assert.Empty(t, req.Header.Get("Authorization"))
+			}
+		})
+	}
 }

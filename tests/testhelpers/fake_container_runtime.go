@@ -122,7 +122,28 @@ func recordArgs(args []string) {
 		return
 	}
 	defer f.Close()
-	_, _ = fmt.Fprintln(f, strings.Join(args, "\t"))
+	// One line per invocation, tab-separated. An argument may itself contain a
+	// newline or a tab (a forwarded -e KEY=VALUE for a multi-line environment
+	// variable, which GitHub Actions jobs legitimately have), so those are
+	// escaped inside the field rather than allowed to break the record.
+	//
+	// Backslash is deliberately NOT escaped here, even though that makes a
+	// literal "\n"/"\t" in an argument ambiguous with an escaped newline/tab:
+	// every consumer of this log (pkg/runner/step, cmd/custom_command_*_test.go,
+	// pkg/container, pkg/workflow) reads it with a plain strings.Split on tabs
+	// and compares fields directly against real filesystem paths -- none of
+	// them decode escapes back out. On Windows every path argument contains
+	// literal backslashes, so escaping them here doubles every path separator
+	// and breaks that comparison for every consumer at once. Confirmed by
+	// reverting a same-PR attempt to escape backslash: it broke
+	// TestCustomCommandContainerBuildPassesWithBlockToDocker deterministically
+	// on the Windows acceptance shard. The ambiguity is real but purely
+	// theoretical today -- no caller has ever needed to decode this format.
+	escaped := make([]string, len(args))
+	for i, arg := range args {
+		escaped[i] = strings.NewReplacer("\n", "\\n", "\t", "\\t").Replace(arg)
+	}
+	_, _ = fmt.Fprintln(f, strings.Join(escaped, "\t"))
 }
 
 func requiresForwardedEnv(command string) bool {

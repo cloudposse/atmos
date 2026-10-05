@@ -54,16 +54,16 @@ func TestResolveLockTargets(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, targets, 3)
 		// Sorted by owner, then repo, then version.
-		assert.Equal(t, toolInfo{"1.11.4", "hashicorp", "terraform"}, targets[0])
-		assert.Equal(t, toolInfo{"1.9.8", "hashicorp", "terraform"}, targets[1])
-		assert.Equal(t, toolInfo{"jq-1.7.1", "jqlang", "jq"}, targets[2])
+		assert.Equal(t, toolInfo{name: "hashicorp/terraform", version: "1.11.4", owner: "hashicorp", repo: "terraform"}, targets[0])
+		assert.Equal(t, toolInfo{name: "hashicorp/terraform", version: "1.9.8", owner: "hashicorp", repo: "terraform"}, targets[1])
+		assert.Equal(t, toolInfo{name: "jqlang/jq", version: "jq-1.7.1", owner: "jqlang", repo: "jq"}, targets[2])
 	})
 
 	t.Run("explicit name resolves to default (first) version", func(t *testing.T) {
 		targets, err := resolveLockTargets(toolVersions, []string{"hashicorp/terraform"})
 		require.NoError(t, err)
 		require.Len(t, targets, 1)
-		assert.Equal(t, toolInfo{"1.11.4", "hashicorp", "terraform"}, targets[0])
+		assert.Equal(t, toolInfo{name: "hashicorp/terraform", version: "1.11.4", owner: "hashicorp", repo: "terraform"}, targets[0])
 	})
 
 	t.Run("unknown tool errors", func(t *testing.T) {

@@ -16,6 +16,7 @@ import (
 func TestNewContext(t *testing.T) {
 	// Reset viper state
 	viper.Reset()
+	t.Cleanup(viper.Reset)
 
 	ctx, err := NewContext()
 	if err != nil {
@@ -42,6 +43,7 @@ func TestNewContext(t *testing.T) {
 func TestBuildConfig(t *testing.T) {
 	// Reset viper state before test
 	viper.Reset()
+	t.Cleanup(viper.Reset)
 
 	// Test with minimal viper configuration
 	viper.Set("redirect-stderr", "")
@@ -244,6 +246,7 @@ func TestMaskConfiguration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset viper state
 			viper.Reset()
+			t.Cleanup(viper.Reset)
 
 			// Set environment variable if specified
 			if tt.maskEnv != "" {
@@ -390,6 +393,7 @@ func TestContextWrite_Success(t *testing.T) {
 func TestNewContextRegistersCommonSecrets(t *testing.T) {
 	// Reset viper state.
 	viper.Reset()
+	t.Cleanup(viper.Reset)
 	viper.SetDefault("mask", true)
 
 	ctx, err := NewContext()
@@ -486,6 +490,7 @@ func TestNewContextRegistersCommonSecrets(t *testing.T) {
 func TestNewContextWithMaskingDisabled(t *testing.T) {
 	// Reset viper state.
 	viper.Reset()
+	t.Cleanup(viper.Reset)
 	viper.Set("mask", false)
 
 	ctx, err := NewContext()

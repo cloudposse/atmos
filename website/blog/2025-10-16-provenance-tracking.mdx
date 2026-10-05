@@ -12,7 +12,7 @@ release: v1.195.0
 
 import Terminal from '@site/src/components/Terminal'
 
-We've shipped a feature that developers working with complex infrastructure configurations have been asking for: **provenance tracking**. With the new `--provenance` flag in `atmos describe component`, you can now see exactly where every configuration value originated—down to the file, line number, and column.
+We've shipped a feature that developers working with complex infrastructure configurations have been asking for: **[provenance tracking](/cli/commands/describe/component#flags)**. With the new [`--provenance`](/cli/commands/describe/component#flags) flag in `atmos describe component`, you can now see exactly where every configuration value originated—down to the file, line number, and column.
 
 <!--truncate-->
 
@@ -129,7 +129,7 @@ $ atmos describe component vpc -s prod-ue2 --provenance | yq '.vars.cidr'
 Comments are preserved for human review while the data remains machine-parseable.
 
 :::note
-The `--query` flag is not supported with `--provenance`. To filter provenance output, pipe it through tools like `grep`, `yq`, or `jq`.
+The [`--query`](/cli/commands/describe/component#flags) flag is not supported with `--provenance`. To filter provenance output, pipe it through tools like `grep`, `yq`, or `jq`.
 :::
 
 ## Terminal vs Non-Terminal Output

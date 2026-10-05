@@ -1,0 +1,17 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1.25rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.badgeLevel {
+  composes: badge from './Badge.module.css';
+  --badge-color: var(--ifm-color-success-darkest);
+}
+
+.badgeLevel.in_progress {
+  --badge-color: var(--ifm-color-warning-darkest);
+}

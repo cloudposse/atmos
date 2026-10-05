@@ -4,14 +4,17 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
 
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/secrets"
+	secretdeferred "github.com/cloudposse/atmos/pkg/secrets/deferred"
+	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 )
@@ -131,7 +134,7 @@ func processNodesWithContext(
 		case string:
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 			if err != nil {
-				if onWarning != nil && isRecoverableInWarnMode(err) {
+				if onWarning != nil && canDegradeValue(atmosConfig, err) {
 					function := ""
 					if fields := strings.Fields(v); len(fields) > 0 {
 						function = fields[0]
@@ -319,16 +322,24 @@ func processSimpleTags(
 		return res, true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncSecret, skip) {
-		res, err := secrets.Resolve(atmosConfig, input, currentStack, stackInfo)
+		res, err := secretdeferred.NewValue(atmosConfig, input, currentStack, stackInfo).Resolve()
 		if err != nil {
 			return nil, true, err
 		}
 		return res, true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncStoreGet, skip) {
+		if authdeferred.IsDeferred(atmosConfig.AuthManager) {
+			value, err := storedeferred.ReadStore(atmosConfig, input, currentStack, stackInfo)
+			return value, true, err
+		}
 		return processTagStoreGet(atmosConfig, input, currentStack), true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncStore, skip) {
+		if authdeferred.IsDeferred(atmosConfig.AuthManager) {
+			value, err := storedeferred.ReadStore(atmosConfig, input, currentStack, stackInfo)
+			return value, true, err
+		}
 		return processTagStore(atmosConfig, input, currentStack), true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncEnv, skip) {
@@ -399,28 +410,33 @@ func processSimpleTags(
 		return input, true, nil
 	}
 	if input == u.AtmosYamlFuncAwsAccountID && !skipFunc(skip, u.AtmosYamlFuncAwsAccountID) {
-		return processTagAwsAccountID(atmosConfig, input, stackInfo), true, nil
+		value, err := processTagAwsAccountID(atmosConfig, input, stackInfo)
+		return value, true, err
 	}
 	if exactTagSkipped(input, u.AtmosYamlFuncAwsCallerIdentityArn, skip) {
 		return input, true, nil
 	}
 	if input == u.AtmosYamlFuncAwsCallerIdentityArn && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityArn) {
-		return processTagAwsCallerIdentityArn(atmosConfig, input, stackInfo), true, nil
+		value, err := processTagAwsCallerIdentityArn(atmosConfig, input, stackInfo)
+		return value, true, err
 	}
 	if exactTagSkipped(input, u.AtmosYamlFuncAwsCallerIdentityUserID, skip) {
 		return input, true, nil
 	}
 	if input == u.AtmosYamlFuncAwsCallerIdentityUserID && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityUserID) {
-		return processTagAwsCallerIdentityUserID(atmosConfig, input, stackInfo), true, nil
+		value, err := processTagAwsCallerIdentityUserID(atmosConfig, input, stackInfo)
+		return value, true, err
 	}
 	if exactTagSkipped(input, u.AtmosYamlFuncAwsRegion, skip) {
 		return input, true, nil
 	}
 	if input == u.AtmosYamlFuncAwsRegion && !skipFunc(skip, u.AtmosYamlFuncAwsRegion) {
-		return processTagAwsRegion(atmosConfig, input, stackInfo), true, nil
+		value, err := processTagAwsRegion(atmosConfig, input, stackInfo)
+		return value, true, err
 	}
 	if input == u.AtmosYamlFuncAwsOrganizationID && !skipFunc(skip, u.AtmosYamlFuncAwsOrganizationID) {
-		return processTagAwsOrganizationID(atmosConfig, input, stackInfo), true, nil
+		value, err := processTagAwsOrganizationID(atmosConfig, input, stackInfo)
+		return value, true, err
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncEmulator, skip) {
 		args, err := getStringAfterTag(input, u.AtmosYamlFuncEmulator)
@@ -444,8 +460,7 @@ func processSimpleTags(
 		}
 		return res, true, nil
 	}
-	// !tags/!labels family - no arguments; check the longer .keys/.values
-	// suffixes before the bare !labels match.
+	// Check .keys/.values before !labels, which accepts an optional key and default.
 	if exactTagSkipped(input, u.AtmosYamlFuncTags, skip) {
 		return input, true, nil
 	}
@@ -464,11 +479,13 @@ func processSimpleTags(
 	if input == u.AtmosYamlFuncLabelsValues && !skipFunc(skip, u.AtmosYamlFuncLabelsValues) {
 		return processTagLabelsValues(atmosConfig, input, stackInfo), true, nil
 	}
-	if exactTagSkipped(input, u.AtmosYamlFuncLabels, skip) {
-		return input, true, nil
-	}
-	if input == u.AtmosYamlFuncLabels && !skipFunc(skip, u.AtmosYamlFuncLabels) {
-		return processTagLabels(atmosConfig, input, stackInfo), true, nil
+	labelArgs, isLabels := strings.CutPrefix(input, u.AtmosYamlFuncLabels)
+	if isLabels && (labelArgs == "" || strings.TrimLeftFunc(labelArgs, unicode.IsSpace) != labelArgs) {
+		if skipFunc(skip, u.AtmosYamlFuncLabels) {
+			return input, true, nil
+		}
+		result, err := processTagLabels(atmosConfig, input, stackInfo)
+		return result, true, err
 	}
 	return nil, false, nil
 }
@@ -481,6 +498,9 @@ func processCustomTagsWithContext(
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, error) {
+	if err := prepareDeferredYAMLAuth(atmosConfig, input, skip, stackInfo); err != nil {
+		return nil, err
+	}
 	// Try context-aware tags first.
 	if result, handled, err := processContextAwareTags(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo); handled {
 		return result, err

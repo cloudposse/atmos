@@ -6,7 +6,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // AlertHandler plays a terminal bell sound.
@@ -34,7 +33,9 @@ func (h *AlertHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 
 	// Play bell using terminal's Alert method (respects settings.terminal.alerts).
 	term := terminal.New()
-	term.Alert()
+	if !OutputSuppressed(ctx) {
+		term.Alert()
+	}
 
 	// Optionally display a message.
 	if step.Content != "" {
@@ -42,7 +43,7 @@ func (h *AlertHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		if err != nil {
 			return nil, err
 		}
-		ui.Writeln(content)
+		vars.UI().Writeln(content)
 		return NewStepResult(content), nil
 	}
 

@@ -14,6 +14,8 @@ import (
 )
 
 func TestUIHandlersRegistration(t *testing.T) {
+	t.Parallel()
+
 	// Verify all UI handlers are registered.
 	tests := []struct {
 		name     string
@@ -31,6 +33,7 @@ func TestUIHandlersRegistration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			handler, ok := Get(tt.name)
 			require.True(t, ok, "handler %s should be registered", tt.name)
 			assert.Equal(t, tt.name, handler.GetName())
@@ -41,6 +44,8 @@ func TestUIHandlersRegistration(t *testing.T) {
 }
 
 func TestUIHandlersValidation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		stepType  string
@@ -129,6 +134,7 @@ func TestUIHandlersValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			handler, ok := Get(tt.stepType)
 			require.True(t, ok, "handler %s should be registered", tt.stepType)
 
@@ -149,6 +155,8 @@ func TestUIHandlersValidation(t *testing.T) {
 }
 
 func TestEnvHandlerValidation(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("env")
 	require.True(t, ok, "env handler should be registered")
 
@@ -181,6 +189,7 @@ func TestEnvHandlerValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			step := &schema.WorkflowStep{
 				Name: "test_step",
 				Type: "env",
@@ -198,6 +207,8 @@ func TestEnvHandlerValidation(t *testing.T) {
 }
 
 func TestEnvHandlerExecution(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("env")
 	require.True(t, ok, "env handler should be registered")
 
@@ -226,6 +237,8 @@ func TestEnvHandlerExecution(t *testing.T) {
 }
 
 func TestUIHandlersTemplateResolution(t *testing.T) {
+	t.Parallel()
+
 	vars := NewVariables()
 	vars.Set("select_env", NewStepResult("production"))
 	vars.Set("select_component", NewStepResult("vpc"))
@@ -281,6 +294,7 @@ func TestUIHandlersTemplateResolution(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			handler, ok := Get(tt.stepType)
 			require.True(t, ok, "handler %s should be registered", tt.stepType)
 
@@ -307,6 +321,8 @@ func TestUIHandlersTemplateResolution(t *testing.T) {
 }
 
 func TestVariablesResolve(t *testing.T) {
+	t.Parallel()
+
 	vars := NewVariables()
 	vars.Set("env", NewStepResult("production"))
 	vars.Set("component", NewStepResult("vpc"))
@@ -351,6 +367,7 @@ func TestVariablesResolve(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := vars.Resolve(tt.input)
 			if tt.hasError {
 				assert.Error(t, err)
@@ -363,6 +380,8 @@ func TestVariablesResolve(t *testing.T) {
 }
 
 func TestVariablesResolveEnvMap(t *testing.T) {
+	t.Parallel()
+
 	vars := NewVariables()
 	vars.Set("env", NewStepResult("staging"))
 	vars.Set("version", NewStepResult("1.0.0"))
@@ -382,7 +401,10 @@ func TestVariablesResolveEnvMap(t *testing.T) {
 }
 
 func TestStepResult(t *testing.T) {
+	t.Parallel()
+
 	t.Run("basic result", func(t *testing.T) {
+		t.Parallel()
 		result := NewStepResult("test-value")
 		assert.Equal(t, "test-value", result.Value)
 		assert.Empty(t, result.Values)
@@ -392,27 +414,33 @@ func TestStepResult(t *testing.T) {
 	})
 
 	t.Run("with values", func(t *testing.T) {
+		t.Parallel()
 		result := NewStepResult("").WithValues([]string{"a", "b", "c"})
 		assert.Equal(t, []string{"a", "b", "c"}, result.Values)
 	})
 
 	t.Run("with metadata", func(t *testing.T) {
+		t.Parallel()
 		result := NewStepResult("").WithMetadata("key", "value")
 		assert.Equal(t, "value", result.Metadata["key"])
 	})
 
 	t.Run("with skipped", func(t *testing.T) {
+		t.Parallel()
 		result := NewStepResult("").WithSkipped()
 		assert.True(t, result.Skipped)
 	})
 
 	t.Run("with error", func(t *testing.T) {
+		t.Parallel()
 		result := NewStepResult("").WithError("something went wrong")
 		assert.Equal(t, "something went wrong", result.Error)
 	})
 }
 
 func TestToastHandlerExecution(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("toast")
 	require.True(t, ok)
 
@@ -431,6 +459,7 @@ func TestToastHandlerExecution(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			step := &schema.WorkflowStep{
 				Name:    "test_toast",
 				Type:    "toast",
@@ -452,10 +481,13 @@ func TestToastHandlerExecution(t *testing.T) {
 }
 
 func TestAlertHandlerExecution(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("alert")
 	require.True(t, ok)
 
 	t.Run("alert without content", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test_alert",
 			Type: "alert",
@@ -469,6 +501,7 @@ func TestAlertHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("alert with content", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_alert",
 			Type:    "alert",
@@ -487,6 +520,7 @@ func TestAlertHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("alert with template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_alert",
 			Type:    "alert",
@@ -507,10 +541,13 @@ func TestAlertHandlerExecution(t *testing.T) {
 }
 
 func TestTitleHandlerExecution(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("title")
 	require.True(t, ok)
 
 	t.Run("set title", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_title",
 			Type:    "title",
@@ -524,6 +561,7 @@ func TestTitleHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("restore title (empty content)", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test_title",
 			Type: "title",
@@ -536,6 +574,7 @@ func TestTitleHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("title with template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_title",
 			Type:    "title",
@@ -551,10 +590,13 @@ func TestTitleHandlerExecution(t *testing.T) {
 }
 
 func TestLinebreakHandlerExecution(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("linebreak")
 	require.True(t, ok)
 
 	t.Run("default count (1)", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test_linebreak",
 			Type: "linebreak",
@@ -572,6 +614,7 @@ func TestLinebreakHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("explicit count", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:  "test_linebreak",
 			Type:  "linebreak",
@@ -590,6 +633,7 @@ func TestLinebreakHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("zero count defaults to 1", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:  "test_linebreak",
 			Type:  "linebreak",
@@ -609,6 +653,8 @@ func TestLinebreakHandlerExecution(t *testing.T) {
 }
 
 func TestClearHandlerExecution(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("clear")
 	require.True(t, ok)
 
@@ -629,10 +675,13 @@ func TestClearHandlerExecution(t *testing.T) {
 }
 
 func TestSleepHandlerExecution(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("sleep")
 	require.True(t, ok)
 
 	t.Run("custom short duration", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_sleep",
 			Type:    "sleep",
@@ -651,6 +700,7 @@ func TestSleepHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_sleep",
 			Type:    "sleep",
@@ -668,6 +718,7 @@ func TestSleepHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("invalid duration", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_sleep",
 			Type:    "sleep",
@@ -680,6 +731,7 @@ func TestSleepHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("duration with template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_sleep",
 			Type:    "sleep",
@@ -699,24 +751,30 @@ func TestSleepHandlerExecution(t *testing.T) {
 }
 
 func TestRegistryOperations(t *testing.T) {
+	t.Parallel()
+
 	t.Run("list returns all handlers", func(t *testing.T) {
+		t.Parallel()
 		handlers := List()
 		// At minimum, we should have the 2 UI handlers (toast, markdown).
 		assert.GreaterOrEqual(t, len(handlers), 2)
 	})
 
 	t.Run("list by category", func(t *testing.T) {
+		t.Parallel()
 		byCategory := ListByCategory()
 		uiHandlers := byCategory[CategoryUI]
 		assert.GreaterOrEqual(t, len(uiHandlers), 2, "should have at least 2 UI handlers")
 	})
 
 	t.Run("count returns handler count", func(t *testing.T) {
+		t.Parallel()
 		count := Count()
 		assert.GreaterOrEqual(t, count, 2)
 	})
 
 	t.Run("get non-existent handler", func(t *testing.T) {
+		t.Parallel()
 		handler, ok := Get("non-existent")
 		assert.False(t, ok)
 		assert.Nil(t, handler)
@@ -724,10 +782,13 @@ func TestRegistryOperations(t *testing.T) {
 }
 
 func TestExitHandlerExecution(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("exit")
 	require.True(t, ok)
 
 	t.Run("exit with default code", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test_exit",
 			Type: "exit",
@@ -743,6 +804,7 @@ func TestExitHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("exit with custom code", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test_exit",
 			Type: "exit",
@@ -758,6 +820,7 @@ func TestExitHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("exit with content message", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_exit",
 			Type:    "exit",
@@ -775,6 +838,7 @@ func TestExitHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("exit with template content", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_exit",
 			Type:    "exit",
@@ -790,6 +854,7 @@ func TestExitHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("exit with invalid template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_exit",
 			Type:    "exit",

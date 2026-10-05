@@ -78,6 +78,21 @@ To check the version of Terraform, Helmfile, or other tools, use their native co
     <dd>Specify the output format: `yaml` or `json`.</dd>
 </dl>
 
+```shell
+atmos version --format=json
+```
+
+```json
+{
+  "version": "1.226.1",
+  "os": "darwin",
+  "arch": "arm64",
+  "fips": true
+}
+```
+
+The `fips` field reports whether this process is currently running in FIPS 140-3 mode. `GOFIPS140=latest` at build time (linking Go's FIPS 140-3 crypto module) sets the default — every official release binary defaults to `true` — but `GODEBUG=fips140` can override that default at invocation in either direction: `=on` activates it even on a binary that wasn't built with `GOFIPS140`, and `=off` deactivates it on one that was. This describes FIPS 140-3 build/runtime *mode*, not module validation: `GOFIPS140=latest` links Go's current, unvalidated FIPS module source, not a CMVP-certified one (Go reserves `GOFIPS140=certified` for that). See [this announcement](/changelog/fips-140-mode) for what that does and doesn't cover.
+
 :::tip
 To find the latest version of Atmos, go to the [releases](https://github.com/cloudposse/atmos/releases) page on GitHub.
 For help with installing the latest version of Atmos, check out our [installation](/install) page.

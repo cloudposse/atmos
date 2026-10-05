@@ -84,7 +84,7 @@ hook's `on_failure` policy. A hook-level `retry` retries the whole ordered list.
 For Terraform tests, Atmos still owns the normal component preparation. It
 generates the tested component varfile from the selected stack and can pass a
 second generated test varfile from `test.vars`. Because `test.vars` resolves
-after `before.terraform.test` hooks run, it can use `!terraform.state` to pass
+after `before.terraform.test` hooks run, it can use [`!terraform.state`](/functions/yaml/terraform.state) to pass
 fixture outputs into Terraform test without scripts.
 
 ## Learn More

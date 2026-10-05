@@ -11,24 +11,31 @@ import (
 )
 
 func TestExecHandlerValidate(t *testing.T) {
+	t.Parallel()
+
 	handler := &ExecHandler{}
 
 	t.Run("missing command is an error", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{Name: "replace"}
 		err := handler.Validate(step)
 		require.Error(t, err)
 	})
 
 	t.Run("present command passes", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{Name: "replace", Command: "atmos version"}
 		require.NoError(t, handler.Validate(step))
 	})
 }
 
 func TestExecHandlerExecEnv(t *testing.T) {
+	t.Parallel()
+
 	handler := &ExecHandler{}
 
 	t.Run("no step env returns vars env unchanged", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		vars.SetEnv("EXISTING", "value")
 		step := &schema.WorkflowStep{Name: "replace"}
@@ -39,6 +46,7 @@ func TestExecHandlerExecEnv(t *testing.T) {
 	})
 
 	t.Run("templated step env resolves and merges", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		vars.SetEnv("BASE", "base-value")
 		step := &schema.WorkflowStep{
@@ -53,6 +61,7 @@ func TestExecHandlerExecEnv(t *testing.T) {
 	})
 
 	t.Run("bad template in step env returns wrapped error", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		step := &schema.WorkflowStep{
 			Name: "replace",
@@ -66,9 +75,12 @@ func TestExecHandlerExecEnv(t *testing.T) {
 }
 
 func TestExecHandlerExecuteResolutionErrors(t *testing.T) {
+	t.Parallel()
+
 	handler := &ExecHandler{}
 
 	t.Run("bad template in command", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		step := &schema.WorkflowStep{Name: "replace", Command: "{{ .missing"}
 
@@ -77,6 +89,7 @@ func TestExecHandlerExecuteResolutionErrors(t *testing.T) {
 	})
 
 	t.Run("bad template in working_directory", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		step := &schema.WorkflowStep{
 			Name:             "replace",
@@ -89,6 +102,7 @@ func TestExecHandlerExecuteResolutionErrors(t *testing.T) {
 	})
 
 	t.Run("bad template in env", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		step := &schema.WorkflowStep{
 			Name:    "replace",

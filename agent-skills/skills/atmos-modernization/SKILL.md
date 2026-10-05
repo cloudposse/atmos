@@ -18,6 +18,7 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 |---|---|
 | `name_pattern` | `name_template` or explicit stack `name` |
 | `settings.depends_on` | `dependencies.components` |
+| Custom command `type: component`/`type: stack` on arguments, or `semantic_type: component`/`semantic_type: stack` on flags | `provides: component`/`provides: stack` on both arguments and flags |
 | `cloudposse/github-action-atmos*` wrapper actions | Native CI with direct `atmos` commands |
 | `cloudposse/github-action-atmos-component-updater` | `atmos vendor update --pull-request` with native GitHub PR publishing |
 | `cloudposse/github-action-setup-atmos` as default | GitHub Actions container `ghcr.io/cloudposse/atmos:<version>` |

@@ -10,7 +10,7 @@ Atmos Terraform bulk commands now run through a dependency graph, with optional 
 <!--truncate-->
 
 ## What Changed
-- Routed Terraform `--all`, `--components`, and `--query` through the scheduler-backed Terraform adapter.
+- Routed Terraform [`--all`](/cli/commands/terraform/plan#plan-all-components), [`--components`](/cli/commands/terraform/plan#plan-specific-components), and [`--query`](/cli/commands/terraform/plan#plan-components-by-query) through the scheduler-backed Terraform adapter.
 - Built Terraform dependency graphs from [`dependencies.components`](/stacks/dependencies/components) first, with legacy `settings.depends_on` as a fallback.
 - Preserved auth setup, store resolver behavior, YAML function processing, CI hook capture, and per-component output handling on the graph-backed path.
 - Reversed Terraform `destroy` graph execution so dependents are destroyed before dependencies.

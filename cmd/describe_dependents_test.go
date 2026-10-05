@@ -11,6 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -108,8 +109,7 @@ func TestDescribeDependentsSetsAuthDisabled(t *testing.T) {
 			assert.Equal(t, tc.wantAuthDisabled, captured.AuthDisabled,
 				"AuthDisabled should reflect the normalized identity flag value")
 			if tc.wantAuthDisabled {
-				assert.Nil(t, captured.AuthManager,
-					"AuthManager must be nil when authentication is explicitly disabled")
+				assert.True(t, authdeferred.AuthDisabled(captured.AuthManager), "the manager owns the explicit disable policy")
 			}
 		})
 	}
@@ -133,7 +133,13 @@ func TestDescribeDependentsRunnable_InvalidErrorMode(t *testing.T) {
 	t.Setenv("ATMOS_IDENTITY", "")
 	t.Setenv("IDENTITY", "")
 
-	errorModeFlag := describeDependentsCmd.Flags().Lookup("error-mode")
+	// PersistentFlags(), not Flags(): a persistent flag only appears in Flags()
+	// after cobra's mergePersistentFlags runs, which happens the first time this
+	// command is actually Execute()'d/ParseFlags()'d -- something that depends on
+	// which other test happens to run first under -shuffle=on. PersistentFlags()
+	// is this flag's own FlagSet, populated directly at init() time, so it's
+	// reliable regardless of execution order.
+	errorModeFlag := describeDependentsCmd.PersistentFlags().Lookup("error-mode")
 	require.NotNil(t, errorModeFlag, "error-mode flag must be registered on describeDependentsCmd")
 	origValue := errorModeFlag.Value.String()
 	origChanged := errorModeFlag.Changed

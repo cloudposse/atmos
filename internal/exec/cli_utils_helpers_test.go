@@ -12,6 +12,8 @@ import (
 
 // TestParseFlagValue tests the parseFlagValue helper function.
 func TestParseFlagValue(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		flag      string
@@ -87,6 +89,7 @@ func TestParseFlagValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			value, found, err := parseFlagValue(tt.flag, tt.arg, tt.args, tt.index)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -101,6 +104,8 @@ func TestParseFlagValue(t *testing.T) {
 
 // TestParseIdentityFlag tests the parseIdentityFlag helper function directly.
 func TestParseIdentityFlag(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		arg              string
@@ -212,6 +217,7 @@ func TestParseIdentityFlag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var info schema.ArgsAndFlagsInfo
 			parseIdentityFlag(&info, tt.arg, tt.args, tt.index)
 			assert.Equal(t, tt.expectedIdentity, info.Identity)
@@ -221,6 +227,8 @@ func TestParseIdentityFlag(t *testing.T) {
 
 // TestParseFromPlanFlag tests the parseFromPlanFlag helper function directly.
 func TestParseFromPlanFlag(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		arg          string
@@ -281,6 +289,7 @@ func TestParseFromPlanFlag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var info schema.ArgsAndFlagsInfo
 			parseFromPlanFlag(&info, tt.arg, tt.args, tt.index)
 			assert.Equal(t, tt.wantUsePlan, info.UseTerraformPlan)
@@ -292,6 +301,8 @@ func TestParseFromPlanFlag(t *testing.T) {
 // TestProcessArgsAndFlags_AllStringFlagsDefs tests that every stringFlagDef entry correctly
 // sets the corresponding ArgsAndFlagsInfo field using both space-separated and equals-separated forms.
 func TestProcessArgsAndFlags_AllStringFlagsDefs(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		componentType     string
@@ -452,6 +463,7 @@ func TestProcessArgsAndFlags_AllStringFlagsDefs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
@@ -461,6 +473,8 @@ func TestProcessArgsAndFlags_AllStringFlagsDefs(t *testing.T) {
 
 // TestProcessArgsAndFlags_BooleanFlags tests that boolean CLI flags are correctly parsed.
 func TestProcessArgsAndFlags_BooleanFlags(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		componentType     string
@@ -525,6 +539,7 @@ func TestProcessArgsAndFlags_BooleanFlags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
 			require.NoError(t, err)
 			tt.checkFn(t, got)
@@ -540,6 +555,8 @@ func TestProcessArgsAndFlags_BooleanFlags(t *testing.T) {
 // commonFlags entries, silently dropping unrelated Terraform flags like --refresh=false
 // when they appeared immediately after an Atmos boolean flag.
 func TestProcessArgsAndFlags_BooleanFlagsDoNotStripNextArg(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                    string
 		inputArgsAndFlags       []string
@@ -579,6 +596,7 @@ func TestProcessArgsAndFlags_BooleanFlagsDoNotStripNextArg(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := processArgsAndFlags("terraform", tt.inputArgsAndFlags)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantAdditionalArgsFlags, got.AdditionalArgsAndFlags)
@@ -588,6 +606,8 @@ func TestProcessArgsAndFlags_BooleanFlagsDoNotStripNextArg(t *testing.T) {
 
 // TestProcessArgsAndFlags_GlobalOptions tests global options flag handling including second-pass collection.
 func TestProcessArgsAndFlags_GlobalOptions(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		componentType     string
@@ -610,6 +630,7 @@ func TestProcessArgsAndFlags_GlobalOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantGlobalOptions, got.GlobalOptions)
@@ -619,6 +640,8 @@ func TestProcessArgsAndFlags_GlobalOptions(t *testing.T) {
 
 // TestProcessArgsAndFlags_NeedHelp tests the NeedHelp flag handling and subcommand extraction.
 func TestProcessArgsAndFlags_NeedHelp(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		inputArgsAndFlags []string
@@ -667,6 +690,7 @@ func TestProcessArgsAndFlags_NeedHelp(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := processArgsAndFlags("terraform", tt.inputArgsAndFlags)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantNeedHelp, got.NeedHelp)
@@ -678,6 +702,8 @@ func TestProcessArgsAndFlags_NeedHelp(t *testing.T) {
 // TestProcessArgsAndFlags_EmptyAfterFlagRemoval tests that when all args are flags
 // (removed during processing), additionalArgsAndFlags is empty and info is returned correctly.
 func TestProcessArgsAndFlags_EmptyAfterFlagRemoval(t *testing.T) {
+	t.Parallel()
+
 	// All these args are atmos flags that get stripped.
 	// After removal, additionalArgsAndFlags is empty, so info is returned as-is.
 	inputArgsAndFlags := []string{"--logs-level", "Debug", "--logs-file", "/tmp/atmos.log"}
@@ -692,6 +718,8 @@ func TestProcessArgsAndFlags_EmptyAfterFlagRemoval(t *testing.T) {
 
 // TestProcessArgsAndFlags_FromPlan tests all forms of the --from-plan flag.
 func TestProcessArgsAndFlags_FromPlan(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		inputArgsAndFlags []string
@@ -724,6 +752,7 @@ func TestProcessArgsAndFlags_FromPlan(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := processArgsAndFlags("terraform", tt.inputArgsAndFlags)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantUsePlan, got.UseTerraformPlan)
@@ -736,6 +765,8 @@ func TestProcessArgsAndFlags_FromPlan(t *testing.T) {
 // TestProcessArgsAndFlags_IdentityWithEqualsInValue tests that --identity=key=value is handled
 // correctly (with SplitN fix — values containing '=' no longer cause an error).
 func TestProcessArgsAndFlags_IdentityWithEqualsInValue(t *testing.T) {
+	t.Parallel()
+
 	// Previously this would have returned an error. Now it should succeed.
 	got, err := processArgsAndFlags("terraform", []string{"plan", "vpc", "--identity=user=admin"})
 	require.NoError(t, err)
@@ -744,6 +775,8 @@ func TestProcessArgsAndFlags_IdentityWithEqualsInValue(t *testing.T) {
 
 // TestProcessArgsAndFlags_SingleCommandError tests that processSingleCommand error propagates.
 func TestProcessArgsAndFlags_SingleCommandError(t *testing.T) {
+	t.Parallel()
+
 	// "--" is a valid flag prefix trigger but invalid as a flag (only "--" with no name).
 	// This causes processSingleCommand to return an error.
 	_, err := processArgsAndFlags("terraform", []string{"plan", "--"})
@@ -756,6 +789,8 @@ func TestProcessArgsAndFlags_SingleCommandError(t *testing.T) {
 // guard exists to protect against potential future callers that bypass that contract — and this
 // test exercises it directly so that the guard line is covered and can never silently regress.
 func TestParseQuotedCompoundSubcommand_DefensiveCheck(t *testing.T) {
+	t.Parallel()
+
 	// Calling the function directly with a no-space string triggers the defensive guard.
 	// SplitN("plan", " ", 2) returns []string{"plan"} (len 1), so the guard fires and nil is returned.
 	result := parseQuotedCompoundSubcommand("plan")
@@ -765,6 +800,8 @@ func TestParseQuotedCompoundSubcommand_DefensiveCheck(t *testing.T) {
 // TestParseFlagValue_EqualsInValue verifies that flag values containing '=' are parsed correctly
 // after the strings.SplitN fix. Previously, --query=.tags[?env==prod] would have errored.
 func TestParseFlagValue_EqualsInValue(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		flag      string
@@ -793,6 +830,7 @@ func TestParseFlagValue_EqualsInValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			value, found, err := parseFlagValue(tt.flag, tt.arg, []string{tt.arg}, 0)
 			require.NoError(t, err)
 			assert.True(t, found)
@@ -805,6 +843,8 @@ func TestParseFlagValue_EqualsInValue(t *testing.T) {
 // stripped from AdditionalArgsAndFlags (the pass-through args sent to Terraform/Helmfile).
 // This covers the M1-M3 gaps identified in the CodeRabbit audit.
 func TestProcessArgsAndFlags_FlagStripping(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                    string
 		componentType           string
@@ -879,6 +919,7 @@ func TestProcessArgsAndFlags_FlagStripping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantAdditionalArgsFlags, got.AdditionalArgsAndFlags)
@@ -890,6 +931,8 @@ func TestProcessArgsAndFlags_FlagStripping(t *testing.T) {
 // (--from-plan, --identity) in space form must not cause the NEXT arg to be stripped when that
 // arg is actually a different flag (e.g., a Terraform flag like --refresh=false).
 func TestProcessArgsAndFlags_OptionalValueFlagStripping(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                    string
 		inputArgsAndFlags       []string
@@ -922,6 +965,7 @@ func TestProcessArgsAndFlags_OptionalValueFlagStripping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := processArgsAndFlags("terraform", tt.inputArgsAndFlags)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantAdditionalArgsFlags, got.AdditionalArgsAndFlags)
@@ -938,6 +982,8 @@ func TestProcessArgsAndFlags_OptionalValueFlagStripping(t *testing.T) {
 // TestProcessArgsAndFlags_AllStringFlagsSpaceForm verifies that the missing M4 flags all correctly
 // parse in the space-separated form AND strip both the flag and value from AdditionalArgsAndFlags.
 func TestProcessArgsAndFlags_AllStringFlagsSpaceForm(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		componentType     string
@@ -1005,6 +1051,7 @@ func TestProcessArgsAndFlags_AllStringFlagsSpaceForm(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantFieldValue, tt.checkField(got))
@@ -1018,6 +1065,8 @@ func TestProcessArgsAndFlags_AllStringFlagsSpaceForm(t *testing.T) {
 // stringFlagDefs, valueTakingCommonFlags) are in sync. A flag missing from one list
 // causes silent misbehavior: parsed but not stripped, or stripped incorrectly.
 func TestFlagListConsistency(t *testing.T) {
+	t.Parallel()
+
 	// Build a set from commonFlags for fast lookup.
 	commonFlagsSet := make(map[string]bool, len(commonFlags))
 	for _, f := range commonFlags {
@@ -1025,6 +1074,7 @@ func TestFlagListConsistency(t *testing.T) {
 	}
 
 	t.Run("every stringFlagDefs entry is in commonFlags", func(t *testing.T) {
+		t.Parallel()
 		for _, def := range stringFlagDefs {
 			assert.True(t, commonFlagsSet[def.flag],
 				"stringFlagDefs flag %q is missing from commonFlags — it will be parsed but not stripped", def.flag)
@@ -1032,6 +1082,7 @@ func TestFlagListConsistency(t *testing.T) {
 	})
 
 	t.Run("every stringFlagDefs entry is in valueTakingCommonFlags", func(t *testing.T) {
+		t.Parallel()
 		for _, def := range stringFlagDefs {
 			assert.True(t, valueTakingCommonFlags[def.flag],
 				"stringFlagDefs flag %q is missing from valueTakingCommonFlags — stripping will not remove its value", def.flag)
@@ -1039,6 +1090,7 @@ func TestFlagListConsistency(t *testing.T) {
 	})
 
 	t.Run("every valueTakingCommonFlags entry is in commonFlags", func(t *testing.T) {
+		t.Parallel()
 		for f := range valueTakingCommonFlags {
 			assert.True(t, commonFlagsSet[f],
 				"valueTakingCommonFlags entry %q is missing from commonFlags — it will never be stripped", f)
@@ -1058,6 +1110,8 @@ func TestFlagListConsistency(t *testing.T) {
 // The HasPrefix(arg, f+"=") pattern prevents false matches because the "=" after the flag
 // name acts as a delimiter. These tests prove that safety.
 func TestProcessArgsAndFlags_PrefixCollisionSafety(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                    string
 		inputArgsAndFlags       []string
@@ -1104,6 +1158,7 @@ func TestProcessArgsAndFlags_PrefixCollisionSafety(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := processArgsAndFlags("terraform", tt.inputArgsAndFlags)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantAdditionalArgsFlags, got.AdditionalArgsAndFlags)
@@ -1118,6 +1173,8 @@ func TestProcessArgsAndFlags_PrefixCollisionSafety(t *testing.T) {
 // equals form (e.g., --process-templates=false) are stripped from pass-through args
 // without affecting adjacent args.
 func TestProcessArgsAndFlags_BooleanFlagEqualsFormStripping(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                    string
 		inputArgsAndFlags       []string
@@ -1147,6 +1204,7 @@ func TestProcessArgsAndFlags_BooleanFlagEqualsFormStripping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := processArgsAndFlags("terraform", tt.inputArgsAndFlags)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantAdditionalArgsFlags, got.AdditionalArgsAndFlags)
@@ -1158,6 +1216,8 @@ func TestProcessArgsAndFlags_BooleanFlagEqualsFormStripping(t *testing.T) {
 // value are stripped from AdditionalArgsAndFlags (pass-through args) in both space and
 // equals forms.
 func TestProcessArgsAndFlags_GlobalOptionsStripping(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                    string
 		inputArgsAndFlags       []string
@@ -1180,6 +1240,7 @@ func TestProcessArgsAndFlags_GlobalOptionsStripping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := processArgsAndFlags("helmfile", tt.inputArgsAndFlags)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantAdditionalArgsFlags, got.AdditionalArgsAndFlags,

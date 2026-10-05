@@ -5,6 +5,18 @@
 
 # Stack: orgs/cp/tenant1/dev/us-east-2
 
+backend:                                          # ○ [2] catalog/terraform/vpc.yaml:9
+  acl: bucket-owner-full-control
+  bucket: cp-ue2-root-tfstate
+  dynamodb_table: cp-ue2-root-tfstate-lock
+  encrypt: true
+  key: terraform.tfstate
+  profile: cp-gbl-root-tfstate
+  region: us-east-2
+  role_arn: null
+  workspace_key_prefix: top-level-component1
+component: top-level-component1                   # ○ [2] catalog/terraform/test-component-override-2.yaml:29
+env: {}                                           # ○ [2] catalog/terraform/test-component-override-2.yaml:34
 import:                                           # ○ [3] orgs/cp/tenant1/_defaults.yaml:4
   - catalog/helmfile/echo-server                  # ○ [3] orgs/cp/tenant1/_defaults.yaml:4
   - catalog/helmfile/infra-server                 # ○ [2] orgs/cp/tenant1/dev/_defaults.yaml:5
@@ -43,6 +55,10 @@ import:                                           # ○ [3] orgs/cp/tenant1/_def
   - orgs/cp/_defaults                             # ○ [3] orgs/cp/tenant1/_defaults.yaml:4
   - orgs/cp/tenant1/_defaults                     # ○ [2] orgs/cp/tenant1/dev/_defaults.yaml:5
   - orgs/cp/tenant1/dev/_defaults                 # ● [1] orgs/cp/tenant1/dev/us-east-2.yaml:5
+metadata: {}                                      # ○ [2] catalog/terraform/vpc.yaml:7
+overrides:                                        # ○ [2] catalog/terraform/vpc.yaml
+  providers:                                      # ○ [2] catalog/terraform/vpc.yaml
+    context: {}                                   # ○ [2] catalog/terraform/vpc.yaml
 providers:                                        # ○ [2] catalog/terraform/vpc.yaml:52
   context:                                        # ● [1] orgs/cp/tenant1/dev/us-east-2.yaml
     delimiter: '-'                                # ○ [4] orgs/cp/_defaults.yaml:64

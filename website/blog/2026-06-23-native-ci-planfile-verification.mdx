@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature]
 ---
 
-Atmos native CI now supports the full plan-then-deploy workflow with planfiles: `atmos terraform plan --ci` uploads the planfile to durable storage, and `atmos terraform deploy --ci` automatically downloads it, generates a **fresh** plan, reconciles it against the reviewed plan, and applies the fresh plan — only if they match, failing on drift by default.
+Atmos native CI now supports the full plan-then-deploy workflow with planfiles: [`atmos terraform plan --ci`](/cli/commands/terraform/plan) uploads the planfile to durable storage, and `atmos terraform deploy --ci` automatically downloads it, generates a **fresh** plan, reconciles it against the reviewed plan, and applies the fresh plan — only if they match, failing on drift by default.
 
 <!--truncate-->
 

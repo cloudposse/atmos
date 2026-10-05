@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/hashicorp/go-getter"
 
@@ -14,9 +13,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-// detectorsMutex guards modifications to getter.Detectors.
-var detectorsMutex sync.Mutex
 
 type goGetterClient struct {
 	client   *getter.Client
@@ -40,6 +36,8 @@ func (c *goGetterClient) Metadata() FetchMetadata {
 
 type goGetterClientFactory struct {
 	atmosConfig *schema.AtmosConfiguration
+	progress    getter.ProgressTracker
+	onRetry     func(int)
 	retryConfig *schema.RetryConfig
 	httpClient  *http.Client // Optional custom HTTP client for testing.
 }
@@ -63,7 +61,6 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 	// fail fast.
 	retryAuthErrors := remote && broker.HasBrokeredCredentials()
 
-	registerCustomDetectors(f.atmosConfig, src)
 	switch mode {
 	case ClientModeAny:
 		clientMode = getter.ClientModeAny
@@ -92,7 +89,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		cloned.Transport = capture
 		httpGetter.Client = &cloned
 	default:
-		if token := github.GetGitHubToken(); token != "" {
+		if token := github.GetGitHubTokenContext(ctx); token != "" {
 			// Shallow-copy to preserve CheckRedirect (and any other fields set by
 			// NewGitHubAuthenticatedHTTPClient) while wrapping its transport, so header capture
 			// still observes the final response.
@@ -111,14 +108,16 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 	}
 
 	client := &getter.Client{
-		Ctx:             ctx,
-		Src:             src,
-		Dst:             dest,
-		Mode:            clientMode,
-		DisableSymlinks: false,
+		Ctx:              ctx,
+		Detectors:        customDetectors(ctx, f.atmosConfig, src),
+		ProgressListener: f.progress,
+		Src:              src,
+		Dst:              dest,
+		Mode:             clientMode,
+		DisableSymlinks:  false,
 		Getters: map[string]getter.Getter{
 			// Overriding 'git'.
-			"git":   &CustomGitGetter{RetryConfig: f.retryConfig, RetryAuthErrors: retryAuthErrors},
+			"git":   &CustomGitGetter{RetryConfig: f.retryConfig, RetryAuthErrors: retryAuthErrors, OnRetry: f.onRetry},
 			"file":  &getter.FileGetter{},
 			"hg":    &getter.HgGetter{},
 			"http":  httpGetter,
@@ -131,18 +130,14 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 	return &goGetterClient{client: client, metadata: capture}, nil
 }
 
-// registerCustomDetectors prepends the custom detector so it runs before
-// the built-in ones. Any code that calls go-getter should invoke this.
-func registerCustomDetectors(atmosConfig *schema.AtmosConfiguration, src string) {
-	detectorsMutex.Lock()
-	defer detectorsMutex.Unlock()
+// customDetectors creates a private detector list for each client. Global detectors are never mutated.
+func customDetectors(ctx context.Context, atmosConfig *schema.AtmosConfiguration, src string) []getter.Detector {
+	return append([]getter.Detector{&CustomGitDetector{ctx: ctx, atmosConfig: atmosConfig, source: src}}, getter.Detectors...)
+}
 
-	getter.Detectors = append(
-		[]getter.Detector{
-			&CustomGitDetector{atmosConfig: atmosConfig, source: src},
-		},
-		getter.Detectors...,
-	)
+// WithProgress reports downloaded bytes without writing to the terminal.
+func WithProgress(progress getter.ProgressTracker) GoGetterOption {
+	return func(f *goGetterClientFactory) { f.progress = progress }
 }
 
 // isRemoteSource reports whether a go-getter source refers to a remote location (so that
@@ -169,7 +164,11 @@ func isRemoteSource(src string) bool {
 	if idx := strings.IndexByte(host, ':'); idx >= 0 {
 		host = host[:idx]
 	}
-	return isSupportedHost(strings.ToLower(host))
+	// Scheme-less shorthand carries no port of its own (a trailing ":port" would already have
+	// been consumed by the SCP-style check above), so the same portless host is used for both
+	// isSupportedHost parameters here.
+	lowerHost := strings.ToLower(host)
+	return isSupportedHost(lowerHost, lowerHost)
 }
 
 // GoGetterOption configures the go-getter downloader.
@@ -201,4 +200,9 @@ func NewGoGetterDownloader(atmosConfig *schema.AtmosConfiguration, opts ...GoGet
 		opt(factory)
 	}
 	return NewFileDownloader(factory)
+}
+
+// WithRetryObserver reports actual git retries without owning terminal output.
+func WithRetryObserver(fn func(int)) GoGetterOption {
+	return func(f *goGetterClientFactory) { f.onRetry = fn }
 }

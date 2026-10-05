@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -115,16 +116,25 @@ func TestScaffoldGenerateCmd_FlagDefinitions(t *testing.T) {
 			defaultValue: "false",
 		},
 		{
-			name:         "merge-strategy flag",
-			flagName:     "merge-strategy",
-			shorthand:    "",
-			defaultValue: "manual",
+			// Registered default is "" (see ResolveConflictStrategy: an unset
+			// value defaults to "manual", or "theirs" when --force is also set
+			// with --update), so no defaultValue check here -- same pattern as
+			// base-ref flag above.
+			name:      "merge-strategy flag",
+			flagName:  "merge-strategy",
+			shorthand: "",
 		},
 		{
 			name:         "merge-driver flag",
 			flagName:     "merge-driver",
 			shorthand:    "",
 			defaultValue: "auto",
+		},
+		{
+			name:         "max-changes flag",
+			flagName:     "max-changes",
+			shorthand:    "",
+			defaultValue: "50",
 		},
 	}
 
@@ -523,7 +533,7 @@ func TestConvertScaffoldTemplateToConfiguration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config, err := convertScaffoldTemplateToConfiguration(tt.templateName, tt.templateData)
+			config, err := convertScaffoldTemplateToConfiguration(tt.templateName, tt.templateData, "")
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -542,7 +552,22 @@ func TestScaffoldGenerateParser_Creation(t *testing.T) {
 	assert.IsType(t, &flags.StandardParser{}, scaffoldGenerateParser)
 }
 
+// resetHelpFlag restores cmd's "help" flag to unset after a test sets it via
+// --help. Cobra checks the flag's current value on every Execute() call, not
+// just whether --help was in that invocation's own args, so leaving it "true"
+// leaks into any later test that calls the same *cobra.Command's Execute():
+// it returns nil having printed help instead of ever calling RunE, regardless
+// of that later test's own args. -shuffle=on can put a --help test before any
+// of those; see docs/fixes for the incident.
+func resetHelpFlag(t *testing.T, cmd *cobra.Command) {
+	t.Helper()
+	t.Cleanup(func() {
+		_ = cmd.Flags().Set("help", "false")
+	})
+}
+
 func TestScaffoldCmd_Integration_Help(t *testing.T) {
+	resetHelpFlag(t, scaffoldCmd)
 	// Test help output for main command
 	scaffoldCmd.SetArgs([]string{"--help"})
 	err := scaffoldCmd.Execute()
@@ -550,6 +575,7 @@ func TestScaffoldCmd_Integration_Help(t *testing.T) {
 }
 
 func TestScaffoldGenerateCmd_Integration_Help(t *testing.T) {
+	resetHelpFlag(t, scaffoldGenerateCmd)
 	// Test help output for generate subcommand
 	scaffoldGenerateCmd.SetArgs([]string{"--help"})
 	err := scaffoldGenerateCmd.Execute()
@@ -557,6 +583,7 @@ func TestScaffoldGenerateCmd_Integration_Help(t *testing.T) {
 }
 
 func TestScaffoldListCmd_Integration_Help(t *testing.T) {
+	resetHelpFlag(t, scaffoldListCmd)
 	// Test help output for list subcommand
 	scaffoldListCmd.SetArgs([]string{"--help"})
 	err := scaffoldListCmd.Execute()
@@ -564,6 +591,7 @@ func TestScaffoldListCmd_Integration_Help(t *testing.T) {
 }
 
 func TestScaffoldValidateCmd_Integration_Help(t *testing.T) {
+	resetHelpFlag(t, scaffoldValidateCmd)
 	// Test help output for validate subcommand
 	scaffoldValidateCmd.SetArgs([]string{"--help"})
 	err := scaffoldValidateCmd.Execute()
@@ -812,8 +840,9 @@ func TestMergeConfiguredTemplates_NoTemplatesKey(t *testing.T) {
 	}
 
 	// No atmos.yaml → no templates section → should not error.
-	err := mergeConfiguredTemplates(configs, origins)
+	failed, err := mergeConfiguredTemplates(configs, origins, "")
 	assert.NoError(t, err)
+	assert.Empty(t, failed)
 	assert.Len(t, configs, 1) // Original template still there.
 }
 
@@ -830,7 +859,7 @@ func TestMergeConfiguredTemplates_InvalidTemplatesFormat(t *testing.T) {
 	configs := map[string]templates.Configuration{}
 	origins := map[string]string{}
 
-	err := mergeConfiguredTemplates(configs, origins)
+	_, err := mergeConfiguredTemplates(configs, origins, "")
 	// Scalar templates value is rejected with ErrInvalidScaffoldConfig.
 	require.Error(t, err)
 	assert.NotNil(t, configs) // Configs map is untouched on error.
@@ -842,7 +871,7 @@ func TestSelectTemplateByName_NotFound(t *testing.T) {
 		"stack":     {Name: "stack", Description: "Stack template"},
 	}
 
-	_, err := selectTemplateByName("nonexistent", configs)
+	_, err := selectTemplateByName("nonexistent", configs, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "scaffold template")
 	assert.Contains(t, err.Error(), "not found")
@@ -854,10 +883,29 @@ func TestSelectTemplateByName_Found(t *testing.T) {
 		"stack":     {Name: "stack", Description: "Stack template"},
 	}
 
-	result, err := selectTemplateByName("component", configs)
+	result, err := selectTemplateByName("component", configs, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "component", result.Name)
 	assert.Equal(t, "Component template", result.Description)
+}
+
+// TestSelectTemplateByName_SurfacesFailedTemplateLoadError proves the fix for a template
+// configured in atmos.yaml that failed to load (e.g. an invalid scaffold.yaml): the caller must
+// see the real, specific load error, not a generic "not found" that sends them checking spelling
+// or `scaffold list` instead of the actual problem.
+func TestSelectTemplateByName_SurfacesFailedTemplateLoadError(t *testing.T) {
+	configs := map[string]templates.Configuration{
+		"component": {Name: "component", Description: "Component template"},
+	}
+	loadErr := errUtils.Build(errUtils.ErrScaffoldComputedFieldInvalid).
+		WithExplanation("Field \"derived\" has type: computed but no value: expression").
+		Err()
+	failedTemplates := map[string]error{"broken": loadErr}
+
+	_, err := selectTemplateByName("broken", configs, failedTemplates)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldComputedFieldInvalid)
+	assert.NotContains(t, err.Error(), "not found")
 }
 
 func TestValidateAllScaffoldFiles_WithErrors(t *testing.T) {
@@ -1031,7 +1079,7 @@ func TestMergeConfiguredTemplates_AllBranches(t *testing.T) {
 				origins[name] = "embedded"
 			}
 
-			err := mergeConfiguredTemplates(configs, origins)
+			_, err := mergeConfiguredTemplates(configs, origins, "")
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -1059,7 +1107,7 @@ func TestResolveTargetDirectory_ErrorPath(t *testing.T) {
 
 func TestLoadScaffoldTemplates_Coverage(t *testing.T) {
 	// Test the function executes without errors
-	configs, origins, ui, err := loadScaffoldTemplates("")
+	configs, origins, _, ui, err := loadScaffoldTemplates("", "")
 	require.NoError(t, err)
 	assert.NotNil(t, configs)
 	assert.NotNil(t, origins)

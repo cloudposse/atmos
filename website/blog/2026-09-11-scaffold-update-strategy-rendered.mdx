@@ -1,0 +1,70 @@
+---
+slug: scaffold-update-strategy-rendered
+title: "Update generated projects without a Git history to lean on"
+date: 2026-09-11T12:00:00.000Z
+authors: [jorrite]
+tags: [feature]
+---
+
+Bringing a generated project or component forward when its template changes means computing a
+three-way merge: what changed in the template since you last generated, layered onto whatever
+you've customized locally. That merge needs a *base* — a snapshot of what the template looked like
+at the point you started from — and the obvious place to find one is the project's own commit
+history. But not every generated project has intact history to read: it might not be a Git
+repository at all, its history might have been squashed or rewritten by a different tool, or it
+might simply be old enough that the base commit no longer exists on any reachable branch. Any of
+those and `--update` had nothing to work with.
+
+<!--truncate-->
+
+## The Problem
+
+[`atmos init --update`](/cli/commands/init) and
+[`atmos scaffold generate --update`](/cli/commands/scaffold/generate) read the merge base directly
+from the target directory's own Git history, at whichever ref was pinned when the project was
+first generated. That works well when the target is a Git repository with intact history — but it
+also means `--update` fails outright the moment it isn't: no Git repo, a rewritten or squashed
+history, or a base commit that's since been garbage-collected all leave the merge with no base to
+compare against.
+
+It has a second, quieter cost even when history *is* intact: because the pinned base ref never
+advances, the gap between "what the template looked like at that pin" and "what it looks like now"
+only grows with every successive update — so does the conflict surface.
+
+## The Fix
+
+[`--update-strategy`](/cli/commands/scaffold/generate) chooses where that merge base comes from,
+independently of `--merge-strategy` (how a conflict resolves) and `--merge-driver` (which merge
+algorithm runs):
+
+- **`tracked`** (default, unchanged) — the merge base is read from the target's own Git history,
+  exactly as before.
+- **`rendered`** — the merge base is a fresh, pristine re-render of the template itself, at the ref
+  that produced what's currently on disk, using that generation's own recorded answers. There's no
+  Git read involved at all, so it works whether or not the target is (or still is) a Git
+  repository — and because it re-renders from the last update rather than the original pin, the
+  base never drifts further than one update cycle behind.
+
+`rendered` needs a `scaffold.yaml`-driven template, since it relies on the answers Atmos already
+records in `.atmos/scaffold.yaml` from the prior generation to reproduce that render faithfully. A
+plain `--set`-only template has no such record to replay, so `rendered` isn't available for those
+yet — use `tracked` there.
+
+## How to Use It
+
+```shell
+# Everyday updates: tracked (the default) keeps reading from Git history.
+atmos scaffold generate my-template ./my-project --update
+
+# No Git history to lean on, or you just want the merge base to stay current
+# with the last update instead of the original pin.
+atmos scaffold generate my-template ./my-project --update --update-strategy=rendered
+atmos init --update --update-strategy=rendered
+```
+
+## Get Involved
+
+See the [`atmos scaffold generate`](/cli/commands/scaffold/generate) and
+[`atmos init`](/cli/commands/init) docs for the full flag reference. Have feedback on this
+feature? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the conversation in
+the [Cloud Posse community Slack](https://cloudposse.com/slack).

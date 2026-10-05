@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/cobra"
 	xterm "golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -24,6 +25,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -51,6 +53,133 @@ type shellCommandConfig struct {
 	// When set, ExecuteShellCommand uses this instead of re-reading os.Environ().
 	// This is used when auth has already sanitized the environment (e.g., removed IRSA vars).
 	processEnv []string
+	// invokingCmd is the Cobra command the user actually invoked (e.g. the
+	// terraform plan subcommand). Threaded through so ExecuteTerraform can
+	// report the real Flags actually passed (FR-003b) to the exec-metadata
+	// sync capture, instead of a pass-through-args collection that cannot
+	// contain atmos-recognized flags (research.md Decision 14).
+	invokingCmd *cobra.Command
+	// execMetadataParser, when set, is called once by captureExecMetadataSync
+	// (sync-allowlisted commands only) to obtain command-specific structured
+	// data (FR-006) for the execution record. cmd/terraform supplies this —
+	// it can safely call pkg/ci/plugins/terraform's output parser, unlike
+	// internal/exec, which cannot import it without reintroducing a confirmed
+	// import cycle (research.md Decision 18). The output parameter is the
+	// scoped exec-metadata output text executeCommandPipeline captured for
+	// just the main plan/apply/deploy subprocess (FR-006f).
+	execMetadataParser func(subCommand string, exitCode int, output string) any
+
+	// execMetadataStdoutCapture/execMetadataStderrCapture, when set, additionally
+	// tee this specific ExecuteShellCommand call's stdout/stderr into these
+	// writers, alongside (not instead of) stdoutCapture/stderrCapture. Used
+	// internally by executeCommandPipeline (via withExecMetadataOutputCapture) to
+	// scope the exec-metadata parser's input to only the final plan/apply/deploy
+	// subprocess invocation, while stdoutCapture/stderrCapture's buffers keep
+	// accumulating the whole pipeline's output for other consumers (e.g. CI
+	// job-summary hooks) that legitimately need it (FR-006f, research.md
+	// Decision 32).
+	execMetadataStdoutCapture io.Writer
+	execMetadataStderrCapture io.Writer
+
+	// metricsCallback, when set, is invoked once after the subprocess exits
+	// with the subprocess tree's collected resource-usage metrics (nil-safe:
+	// only called when a non-nil result was collected). Lets a caller (e.g.
+	// executeMainTerraformCommand) capture this specific shell command's
+	// subprocess-tree metrics for combining with atmos's own self-usage, for
+	// both the local per-command display and the exec-metadata sync upload.
+	metricsCallback func(*metricsprocess.ProcessMetrics)
+}
+
+// WithInvokingCommand provides the Cobra command the user actually invoked,
+// so ExecuteTerraform's exec-metadata sync capture can derive Flags from the
+// command's own record of explicitly-set flags (proexec.FlagsFromCommand)
+// rather than info.AdditionalArgsAndFlags.
+func WithInvokingCommand(cmd *cobra.Command) ShellCommandOption {
+	defer perf.Track(nil, "exec.WithInvokingCommand")()
+
+	return func(c *shellCommandConfig) {
+		c.invokingCmd = cmd
+	}
+}
+
+// invokingCommandFromOpts extracts the invoking *cobra.Command (if any) set
+// via WithInvokingCommand among opts.
+func invokingCommandFromOpts(opts ...ShellCommandOption) *cobra.Command {
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg.invokingCmd
+}
+
+// WithExecMetadataParser provides a closure that, given the invoking
+// subcommand name and the command's own exit code, returns command-specific
+// structured data (FR-006) for the execution record — or nil if there is
+// none to report. The exitCode parameter is the terraform/tofu subprocess's
+// own exit code (research.md Decision 27), supplied by
+// captureExecMetadataSync at call time since it isn't known when this
+// closure is created. Cmd/terraform
+// supplies this closure so ExecuteTerraform's exec-metadata sync capture can
+// obtain parsed terraform plan/apply/deploy output without internal/exec
+// itself importing the CI plugin's parser (research.md Decision 18).
+func WithExecMetadataParser(fn func(subCommand string, exitCode int, output string) any) ShellCommandOption {
+	defer perf.Track(nil, "exec.WithExecMetadataParser")()
+
+	return func(c *shellCommandConfig) {
+		c.execMetadataParser = fn
+	}
+}
+
+// execMetadataParserFromOpts extracts the parser closure (if any) set via
+// WithExecMetadataParser among opts.
+func execMetadataParserFromOpts(opts ...ShellCommandOption) func(subCommand string, exitCode int, output string) any {
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg.execMetadataParser
+}
+
+// WithMetricsCallback provides a closure that ExecuteShellCommand invokes
+// once, after the subprocess exits, with the subprocess tree's collected
+// resource-usage metrics. Used by executeMainTerraformCommand to capture the
+// main plan/apply/deploy subprocess's own metrics for combining with atmos's
+// self-usage — both for local display and the exec-metadata sync upload.
+func WithMetricsCallback(fn func(*metricsprocess.ProcessMetrics)) ShellCommandOption {
+	defer perf.Track(nil, "exec.WithMetricsCallback")()
+
+	return func(c *shellCommandConfig) {
+		c.metricsCallback = fn
+	}
+}
+
+// withExecMetadataOutputCapture tees this specific ExecuteShellCommand call's
+// stdout/stderr into stdoutW/stderrW, in addition to whatever
+// WithStdoutCapture/WithStderrCapture already capture. Used internally by
+// executeCommandPipeline to scope the exec-metadata parser's input to only the
+// final plan/apply/deploy subprocess invocation (FR-006f), without disturbing
+// the broader stdout/stderr buffers other consumers (e.g. cmd/terraform's
+// capturedPlanOutput, used by CI job-summary hooks) rely on for the whole
+// init+workspace-select+main pipeline. Unexported — an internal
+// executeCommandPipeline concern, not part of the ShellCommandOption surface
+// cmd/terraform uses.
+func withExecMetadataOutputCapture(stdoutW, stderrW io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.execMetadataStdoutCapture = stdoutW
+		c.execMetadataStderrCapture = stderrW
+	}
+}
+
+// execMetadataOutputCaptureFromOpts extracts the exec-metadata stdout/stderr
+// tee writers (if any) set via withExecMetadataOutputCapture among opts, so
+// callers that retry the underlying invocation (executeShellCommandWithRetry)
+// can reset them between attempts.
+func execMetadataOutputCaptureFromOpts(opts ...ShellCommandOption) (io.Writer, io.Writer) {
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg.execMetadataStdoutCapture, cfg.execMetadataStderrCapture
 }
 
 // WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.
@@ -233,6 +362,9 @@ func ExecuteShellCommand(
 	if cfg.stdoutCapture != nil {
 		stdoutWriters = append(stdoutWriters, cfg.stdoutCapture)
 	}
+	if cfg.execMetadataStdoutCapture != nil {
+		stdoutWriters = append(stdoutWriters, cfg.execMetadataStdoutCapture)
+	}
 	stdout := io.MultiWriter(stdoutWriters...)
 
 	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
@@ -253,11 +385,24 @@ func ExecuteShellCommand(
 		if cfg.stderrCapture != nil {
 			stderrWriters = append(stderrWriters, cfg.stderrCapture)
 		}
+		if cfg.execMetadataStderrCapture != nil {
+			stderrWriters = append(stderrWriters, cfg.execMetadataStderrCapture)
+		}
 		stderr = io.MultiWriter(stderrWriters...)
 	} else if redirectStdError == "/dev/stdout" {
 		maskedStderr := ioLayer.MaskWriter(stdout)
+		extraStderrWriters := []io.Writer{maskedStderr}
 		if cfg.stderrCapture != nil {
-			stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+			extraStderrWriters = append(extraStderrWriters, cfg.stderrCapture)
+		}
+		// Note: cfg.execMetadataStderrCapture is intentionally NOT appended here.
+		// stdout already includes cfg.execMetadataStdoutCapture (see above), and
+		// maskedStderr writes through stdout, so also appending
+		// execMetadataStderrCapture would duplicate this stderr content into
+		// combineExecMetadataOutput's stderr buffer alongside the copy already
+		// captured via stdout.
+		if len(extraStderrWriters) > 1 {
+			stderr = io.MultiWriter(extraStderrWriters...)
 		} else {
 			stderr = maskedStderr
 		}
@@ -270,6 +415,9 @@ func ExecuteShellCommand(
 		}
 		if cfg.stderrCapture != nil {
 			stderrWriters = append(stderrWriters, cfg.stderrCapture)
+		}
+		if cfg.execMetadataStderrCapture != nil {
+			stderrWriters = append(stderrWriters, cfg.execMetadataStderrCapture)
 		}
 		stderr = io.MultiWriter(stderrWriters...)
 	} else {
@@ -335,6 +483,9 @@ func ExecuteShellCommand(
 		},
 	})
 	emitProcessEndDiagnostics(diagConfig, diagID, diagStartedAt, &result)
+	if cfg.metricsCallback != nil && result.Metrics != nil {
+		cfg.metricsCallback(result.Metrics)
+	}
 	if closeErr := closePacedWriters(pacedClosers); closeErr != nil && result.Err == nil {
 		return closeErr
 	}
@@ -772,17 +923,17 @@ func ExecAuthShellCommand(
 // printShellEnterMessage prints a user-facing message when entering an Atmos-managed shell.
 func printShellEnterMessage(identityName, providerName string) {
 	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGreen)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).
 		Bold(true)
 
 	identityStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorCyan))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link))
 
 	providerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	// Build identity display with provider name in parentheses.
 	identityDisplay := identityName
@@ -801,10 +952,10 @@ func printShellEnterMessage(identityName, providerName string) {
 // printShellExitMessage prints a user-facing message when exiting an Atmos-managed shell.
 func printShellExitMessage(identityName, providerName string) {
 	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	identityStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	// Build identity display with provider name in parentheses.
 	identityDisplay := identityName

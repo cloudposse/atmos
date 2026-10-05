@@ -72,7 +72,9 @@ atmos describe component station/2 --stack dev  # ✓ Explicit and unambiguous
 :::
 
 :::info YAML Functions and Authentication
-By default, `atmos describe component` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during component processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
+Default identity authentication occurs when an evaluated YAML function or Go template needs credentials. In `--error-mode=warn`, unavailable implicit authentication, including a stopped emulator, produces `(computed)` for affected values while preserving resolvable siblings. `silent` omits the summary and `strict` fails. Queries with dynamic dependencies may require evaluation of the entire component.
+
+Explicit `--identity` or `ATMOS_IDENTITY` selection authenticates before processing and remains fail-fast. `--identity=false` disables Atmos authentication. Malformed configuration, invalid expressions, and dependency cycles remain fatal. You can disable function/template processing with `--process-functions=false` or `--process-templates=false`.
 :::
 
 :::tip
@@ -171,6 +173,28 @@ atmos describe component . --stack dev --provenance
 ## Flags
 
 <dl>
+    <dt>`--use-mocks` <em>(optional)</em></dt>
+    <dd>
+    Use the producer's literal [component mocks](/stacks/components/mocks) for
+    `!terraform.state` and `!terraform.output` lookups. Accepts these values:
+
+    - Absent, empty, or a false boolean (`false`, `0`, `f`): mocks are off.
+    - Bare `--use-mocks` or a true boolean (`true`, `1`, `t`): mocks are on, using
+      [`components.terraform.mocks.mode`](/cli/configuration/components/terraform) (`fallback` by default).
+      In `fallback` mode the real state or output wins and the mock is used only when the component is
+      not provisioned or the output is missing.
+    - `--use-mocks=fallback` or `--use-mocks=always`: mocks are on, overriding the configured mode for this run.
+      The `always` value resolves from mocks only and never initializes Terraform, authenticates, or reads a backend for those lookups.
+
+    Matching is case-insensitive, and any other value is an error. Attach the mode with `=`: a bare
+    `--use-mocks` takes no value, so `--use-mocks always` leaves `always` as a positional argument and
+    Atmos reports an error with a hint. This command ignores the `ATMOS_USE_MOCKS` environment variable;
+    pass the flag instead.
+
+    Default: off. Requires YAML function processing to remain enabled.
+    Also accepted by `atmos terraform plan`.
+    </dd>
+
   <dt>`--stack` / `-s` <em>(required)</em></dt>
   <dd>Atmos stack.</dd>
 

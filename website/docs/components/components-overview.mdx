@@ -10,14 +10,14 @@ import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-Components are the building blocks of your infrastructure. They are opinionated, reusable units of infrastructure-as-code that solve specific problems—Terraform root modules, Helmfiles, Packer templates, or Ansible playbooks.
+Components are the building blocks of your infrastructure. They are opinionated, reusable units of infrastructure-as-code that solve specific problems—Terraform or OpenTofu root modules, Helm releases, Helmfiles, Kubernetes manifests, Packer templates, Ansible playbooks, containers, or emulators. You can also define [custom component types](/components/custom).
 </Intro>
 
 ## What are Components?
 
 In Atmos, a **component** consists of two parts:
 
-1. **Implementation** — The infrastructure code itself (a Terraform root module, Helmfile, Packer template, or Ansible playbook)
+1. **Implementation** — The infrastructure or application definition, such as a root module, chart, manifest, image, or playbook
 2. **Configuration** — The settings that customize how the component is deployed in each environment
 
 This separation of concerns is fundamental to Atmos. You write the implementation once, then configure it differently for each environment through [stacks](/stacks).

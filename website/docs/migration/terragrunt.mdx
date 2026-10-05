@@ -210,6 +210,50 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
   </TabItem>
 </Tabs>
 
+### mock_outputs → Component Mocks
+
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    Terragrunt lets a `dependency` block declare `mock_outputs` so `plan` and `validate` still work before the dependency has been applied. `mock_outputs_allowed_terraform_commands` restricts which commands are allowed to use the mock values, so a real `apply` never runs against fake data by accident.
+
+    <File title="eks/terragrunt.hcl">
+    ```hcl
+    dependency "vpc" {
+      config_path = "../vpc"
+      mock_outputs = {
+        vpc_id             = "vpc-mock1234"
+        private_subnet_ids = ["subnet-a", "subnet-b"]
+      }
+      mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos has a close equivalent: a component declares literal output values under `mocks`, and `atmos terraform plan` and `atmos describe component` use them when you explicitly pass `--use-mocks`. Like Terragrunt's `mock_outputs`, the mocks are fallbacks: `!terraform.state` and `!terraform.output` return the real value when the dependency has been applied, and the `mocks` value only when the dependency has no state or the requested output is missing. Credential, network, and backend errors still fail rather than being replaced by mock values.
+
+    <File title="stacks/prod.yaml">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          mocks:
+            vpc_id: vpc-mock1234
+            private_subnet_ids: [subnet-a, subnet-b]
+    ```
+    </File>
+
+    ```shell
+    atmos terraform plan eks -s prod --use-mocks
+    atmos describe component eks -s prod --use-mocks
+    ```
+
+    Only `atmos terraform plan` and `atmos describe component` accept `--use-mocks`. It is rejected on `apply`, `deploy`, and `destroy` before stack resolution even happens, so a mock value can never reach a mutating Terraform operation — a stronger guarantee than opting individual commands in through `mock_outputs_allowed_terraform_commands`.
+
+    If you want the previous hermetic behavior, where lookups resolve from `mocks` only and never read state, use `--use-mocks=always` or set `components.terraform.mocks.mode: always`. In `always` mode an undeclared `mocks` entry is a hard error unless the expression supplies a YQ `//` default. In the default `fallback` mode the order is real value, then mock, then YQ `//` default, then the original error. See the provider-free `examples/terraform-component-mocks` example in the Atmos repository for a complete walkthrough.
+  </TabItem>
+</Tabs>
+
 ### Inputs → Vars
 
 <Tabs>
@@ -746,8 +790,8 @@ Terragrunt exposes HCL functions for path discovery, environment lookup, command
 
 | Terragrunt Function | Atmos Equivalent | Notes |
 |---------------------|------------------|-------|
-| `mark_as_read()` | `dependencies.components` with `kind: file` | Declare explicit file dependencies so `describe affected` can track changes. |
-| `mark_glob_as_read()` | `dependencies.components` with `kind: folder` | Declare folder dependencies instead of imperatively marking glob reads. |
+| `mark_as_read()` | `dependencies.files` | Declare explicit file dependencies so `describe affected`/`list affected` can track changes. |
+| `mark_glob_as_read()` | `dependencies.folders` | Declare folder dependencies instead of imperatively marking glob reads. |
 | `constraint_check()` | Sprig `semverCompare` or tool dependency constraints | Use `semverCompare` in templates for conditional config, or Atmos toolchain dependency constraints for tool versions. |
 
 :::tip YAML Functions vs Templates
@@ -812,8 +856,8 @@ See [YAML Functions](/functions/yaml) for the complete reference.
     **GitOps-native:** Atmos goes beyond simple "run all" with intelligent change detection:
 
     ```bash
-    # See what changed between commits (compares current branch to main)
-    atmos describe affected
+    # See what changed between commits (table output for humans)
+    atmos list affected --ref main
 
     # Plan ONLY components affected by changes in current branch
     atmos terraform plan --affected
@@ -822,14 +866,17 @@ See [YAML Functions](/functions/yaml) for the complete reference.
     atmos terraform apply --affected
 
     # Compare against a specific branch or commit
-    atmos describe affected --ref refs/heads/feature-branch
-    atmos describe affected --sha abc123def
+    atmos list affected --ref refs/heads/feature-branch
+    atmos list affected --sha abc123def
 
     # Include dependent components (if vpc changed, also plan eks that depends on it)
-    atmos describe affected --include-dependents=true
+    atmos list affected --include-dependents=true
+
+    # Same comparison as JSON/YAML, for scripting and CI
+    atmos describe affected --base main
     ```
 
-    This is purpose-built for CI/CD: instead of planning everything on every PR, Atmos analyzes Git changes to determine exactly which components and stacks are affected—including changes to stack configs, component code, and even local Terraform modules.
+    This is purpose-built for CI/CD: instead of planning everything on every PR, Atmos analyzes Git changes to determine exactly which components and stacks are affected—including changes to stack configs, component code, and even local Terraform modules. `list affected` and `describe affected` both diff **committed** trees, not the working tree—commit a change before comparing.
   </TabItem>
 </Tabs>
 
@@ -979,6 +1026,7 @@ In Atmos terminology, root modules are called **components**. Each component is 
 - [ ] Convert `terragrunt.hcl` files to stack YAML
 - [ ] Extract common config to `_defaults/`
 - [ ] Convert `dependency` blocks to remote state
+- [ ] Convert `mock_outputs` to component `mocks` and `--use-mocks`
 - [ ] Update backend configuration
 - [ ] Test with `atmos terraform plan`
 - [ ] Update CI/CD pipelines

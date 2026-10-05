@@ -67,6 +67,31 @@ func IsInteractive() bool {
 	return isInteractive()
 }
 
+// runForm executes a Huh form's interactive prompt. A package-level var (rather
+// than calling form.Run() directly) so tests -- including in other packages via
+// SetFormRunnerForTest -- can substitute a fake runner (e.g. accessible mode
+// reading from a string reader, or a canned error) without needing a live TTY.
+// Mirrors the per-package runForm seam pattern used by cmd/secret/prompt_test.go
+// and cmd/store/prompt_test.go; this one is exported because PromptForValue is
+// shared by callers in other packages (e.g. cmd/describe_component.go's
+// resolveDescribeComponentStack) whose own tests need to drive this exact path.
+var runForm = func(f *huh.Form) error {
+	return f.Run()
+}
+
+// SetFormRunnerForTest overrides the Huh form runner used by PromptForValue and
+// returns a restore function. Test-only seam: production code always uses the
+// default (f.Run()); tests substitute this to either drive the real prompt body
+// via Huh's accessible mode (no live TTY required) or inject a canned error to
+// exercise a caller's error-wrapping path.
+func SetFormRunnerForTest(fn func(*huh.Form) error) (restore func()) {
+	defer perf.Track(nil, "flags.SetFormRunnerForTest")()
+
+	orig := runForm
+	runForm = fn
+	return func() { runForm = orig }
+}
+
 // PromptForValue shows an interactive Huh selector with the given options.
 // Returns the selected value or an error.
 //
@@ -107,7 +132,7 @@ func PromptForValue(name, title string, options []string) (string, error) {
 	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
 
 	// Run form.
-	if err := form.Run(); err != nil {
+	if err := runForm(form); err != nil {
 		// Check if user aborted (Ctrl+C, ESC, etc.).
 		if errors.Is(err, huh.ErrUserAborted) {
 			ui.Warning("Selection cancelled")

@@ -15,6 +15,8 @@ import (
 )
 
 func TestNewWriteStackFileTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewWriteStackFileTool(atmosConfig)
 
@@ -23,16 +25,22 @@ func TestNewWriteStackFileTool(t *testing.T) {
 }
 
 func TestWriteStackFileTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewWriteStackFileTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "write_stack_file", tool.Name())
 }
 
 func TestWriteStackFileTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewWriteStackFileTool(&schema.AtmosConfiguration{})
 	assert.Contains(t, tool.Description(), "Write or modify a file in the stacks directory")
 }
 
 func TestWriteStackFileTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewWriteStackFileTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -44,23 +52,30 @@ func TestWriteStackFileTool_Parameters(t *testing.T) {
 }
 
 func TestWriteStackFileTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewWriteStackFileTool(&schema.AtmosConfiguration{})
 	assert.True(t, tool.RequiresPermission())
 }
 
 func TestWriteStackFileTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewWriteStackFileTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestWriteStackFileTool_Execute(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, tmpDir, cleanup := setupTestStackEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	tool := NewWriteStackFileTool(atmosConfig)
 	ctx := context.Background()
 
 	t.Run("successfully writes stack file", func(t *testing.T) {
+		t.Parallel()
 		stackContent := `components:
   terraform:
     vpc:
@@ -94,6 +109,7 @@ func TestWriteStackFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("successfully creates parent directories", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "orgs/acme/dev/networking.yaml",
 			"content":   "# new stack",
@@ -111,6 +127,7 @@ func TestWriteStackFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("successfully overwrites existing file", func(t *testing.T) {
+		t.Parallel()
 		// First write.
 		params1 := map[string]interface{}{
 			"file_path": "catalog/vpc.yaml",
@@ -139,6 +156,7 @@ func TestWriteStackFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing file_path", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"content": "test",
 		}
@@ -151,6 +169,7 @@ func TestWriteStackFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with empty file_path", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "",
 			"content":   "test",
@@ -164,6 +183,7 @@ func TestWriteStackFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing content", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "catalog/test.yaml",
 		}
@@ -176,6 +196,7 @@ func TestWriteStackFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with path traversal attempt", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "../../etc/passwd",
 			"content":   "malicious",
@@ -194,6 +215,7 @@ func TestWriteStackFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("handles empty content", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "catalog/empty.yaml",
 			"content":   "",

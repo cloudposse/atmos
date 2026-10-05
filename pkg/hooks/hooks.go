@@ -1017,7 +1017,7 @@ const ciExperimentalFeature = "ci"
 func checkExperimental(atmosConfig *schema.AtmosConfiguration) error {
 	mode := atmosConfig.Settings.Experimental
 	if mode == "" {
-		mode = "warn" // Default matches command-level behavior.
+		mode = "warn-daily" // Default matches command-level behavior.
 	}
 
 	switch mode {
@@ -1032,6 +1032,11 @@ func checkExperimental(atmosConfig *schema.AtmosConfiguration) error {
 			Err()
 	case "warn":
 		ui.Experimental(ciExperimentalFeature)
+		return nil
+	case "warn-daily":
+		if cfg.ClaimExperimentalWarning(ciExperimentalFeature) {
+			ui.Experimental(ciExperimentalFeature)
+		}
 		return nil
 	case "error":
 		ui.Experimental(ciExperimentalFeature)

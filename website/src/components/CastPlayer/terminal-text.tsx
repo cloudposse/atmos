@@ -1,0 +1,73 @@
+import React from "react";
+import { brailleDots } from "./braille.mjs";
+import styles from "./styles.module.css";
+
+// Draw terminal rails within their cells so font fallback and line spacing
+// cannot shift their joints or extend them into neighboring rows.
+const BOX_PATHS: Record<string, string> = {
+  "─": "M0 1H2",
+  "│": "M1 0V2",
+  "┌": "M1 2V1H2",
+  "┐": "M0 1H1V2",
+  "└": "M1 0V1H2",
+  "┘": "M0 1H1V0",
+  "├": "M1 0V2M1 1H2",
+  "┤": "M1 0V2M0 1H1",
+  "┬": "M0 1H2M1 1V2",
+  "┴": "M0 1H2M1 0V1",
+  "┼": "M0 1H2M1 0V2",
+  "╭": "M1 2V1.5Q1 1 1.5 1H2",
+  "╮": "M0 1H0.5Q1 1 1 1.5V2",
+  "╰": "M1 0V0.5Q1 1 1.5 1H2",
+  "╯": "M0 1H0.5Q1 1 1 0.5V0",
+};
+
+/** Draws terminal glyphs within fixed cells while preserving selectable text and inherited colors. */
+export default function renderTerminalText(text: string) {
+  return text
+    .split(/([─│┌┐└┘├┤┬┴┼╭╮╰╯█●○\u2800-\u28ff])/u)
+    .map((part, index) => {
+      const path = Object.hasOwn(BOX_PATHS, part) ? BOX_PATHS[part] : undefined;
+      const dots = brailleDots(part);
+      const block = part === "█";
+      const graphic = path || block || dots !== null;
+      if (!graphic && !/^[●○\u2800-\u28ff]$/u.test(part)) return part;
+      return (
+        <span
+          key={index}
+          className={`${styles.terminalCell}${block ? ` ${styles.terminalBlock}` : ""}`}
+        >
+          <span className={graphic ? styles.drawnGlyph : undefined}>
+            {part}
+          </span>
+          {graphic && !block && (
+            <svg
+              viewBox={dots !== null ? "0 0 2 4" : "0 0 2 2"}
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              {dots !== null ? (
+                dots.map(([cx, cy], bit) => (
+                  <circle
+                    key={bit}
+                    cx={cx}
+                    cy={cy}
+                    r="0.3"
+                    fill="currentColor"
+                  />
+                ))
+              ) : (
+                <path
+                  d={path}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
+            </svg>
+          )}
+        </span>
+      );
+    });
+}

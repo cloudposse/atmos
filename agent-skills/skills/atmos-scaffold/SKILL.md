@@ -61,8 +61,11 @@ Mark a file as a Go template (rendered with the collected answers) either by:
   `<!-- atmos:template -->` (HTML/XML/Markdown)
 
 Template sources: embedded (built into the Atmos binary), custom (declared under
-`scaffold.templates` in `atmos.yaml`), or catalog/remote (git/https/s3 — advertised
-as stubs, fetched on selection).
+`scaffold.templates` in `atmos.yaml`), or catalog/remote (git/https/s3/oci — advertised
+as stubs, fetched on selection). An OCI source (`oci://ghcr.io/org/template:v1`) is pulled
+via the same `pkg/oci` client `atmos vendor pull` reuses (load `atmos-vendoring` for the
+URL syntax and auth precedence). `--ref` only applies to git sources; OCI/S3/local sources
+address a version through the source string itself.
 
 ## Form Fields
 
@@ -79,6 +82,43 @@ Common field keys: `name` (required, used as the template variable — access vi
 `{{ .Config.<name> }}`), `label`, `description`, `required`, `default`,
 `options` (select/multiselect), `placeholder` (input), `validation.pattern`/`message`
 (regex, input fields only).
+
+### Dynamic and label/value `options:` (select/multiselect)
+
+`options:` accepts a plain string list, a list of `{label, value}` objects, a dot-path into an
+earlier answer, or a Go-template expression:
+
+```yaml
+spec:
+  fields:
+    - name: envs
+      type: multiselect
+      options:                       # {label, value} objects — value is required, label optional
+        - label: Development
+          value: dev
+        - label: Production
+          value: prod
+    - name: default_env
+      type: select
+      options: answers.envs          # dot-path: only the environments actually picked above
+    - name: csv_owners
+      type: input
+      default: "platform-team,security-team"
+    - name: primary_owner
+      type: select
+      options: '{{ splitList "," answers.csv_owners }}'   # Go-template expression
+```
+
+The dot-path and template-expression forms resolve correctly once the referenced earlier field
+has been answered — interactively (fields prompt one at a time, so a later field is only ever
+shown after the ones before it) or headlessly against `--set`/`--defaults` — the same
+`answers.`-prefix convention `spec.files[].matrix` axes use. A dot-path may also point at a `spec.values` preset or
+a `--set`-supplied value never declared as a field at all; there's no field-declaration-order
+check at load time, so a forward/self/typo'd reference degrades gracefully at runtime instead of
+failing to load. When a dot-path (not a template expression) sources from a field using
+`{label, value}` pairs, those labels are recovered for the filtered subset of values present in
+the answer — only values ever flow into `answers`/templates, never labels. Full details:
+[references/scaffold-yaml-schema.md](references/scaffold-yaml-schema.md).
 
 ### Conditional prompts (`when:`)
 
@@ -126,6 +166,24 @@ already created — one file stays one file. For generating a variable number of
 (one per selected value, or one per resolved combination of several axes), see
 `spec.files[].matrix` below.
 
+`path:` can also be a glob (doublestar syntax: `*`, `?`, `[...]`, `**` for any depth,
+`{a,b}`), matching every discovered file under it, so one entry gates or skips an
+entire directory recursively instead of listing every file it contains:
+
+```yaml
+spec:
+  files:
+    - path: "docs/legacy/**"
+      when: "answers.include_legacy_docs == true"   # gates the whole directory at once
+```
+
+Always use forward slashes in the pattern — a backslash is normalized to `/`
+regardless of authoring OS. A malformed pattern (unclosed `[`/`{`) fails scaffold
+load and `atmos scaffold validate` immediately, not silently at generation time.
+When more than one entry's `path:` matches the same file, the **last** declared
+entry wins (`.gitignore`/`CODEOWNERS` precedence — write broad patterns first,
+specific overrides after).
+
 This is distinct from the older path-templating trick: if a file's *path itself* is a
 Go template that renders to `""`, `"false"`, `"null"`, or `"<no value>"`, the engine
 skips it too (`ShouldSkipFile`). Prefer declarative `when:` for new templates — it's
@@ -156,6 +214,27 @@ nested/structured or free-text answer data (e.g. `'{{ collectKeys answers.enviro
 }}'` for a free-text one — see `atmos-templates` for `collectKeys`). The resolved
 combination is available as `.matrix.<axis>` in `target:`, in `when:` (pruning
 combinations that don't apply), and in the file's own rendered content.
+
+**Directory-level matrix**: a glob `path:` (see above) plus `matrix:` duplicates
+every file it matches once per combination, not just one file:
+
+```yaml
+spec:
+  files:
+    - path: "components/**"
+      target: "environments/{{ .matrix.env }}/{{ .file.RelPath }}"
+      matrix:
+        env: [dev, staging, production]
+```
+
+`.file.Path` (the matched file's own discovered path) and `.file.RelPath` (that path
+with the glob's literal prefix stripped, e.g. `vpc/main.tf` for `components/**`
+matching `components/vpc/main.tf`) are available in `target:` and content alongside
+`.matrix.<axis>` — required here since every matched file otherwise shares the same
+`.matrix.<axis>` values and would render to the same path. A `target:` that omits
+`.file.Path`/`.file.RelPath` when its `path:` matches more than one file fails before
+any file is written, not mid-run. `.file.*` is Go-template-only — it is not exposed to
+CEL `when:`.
 
 Full schema: [references/scaffold-yaml-schema.md](references/scaffold-yaml-schema.md#specfilesmatrix--dynamic-file-generation).
 
@@ -228,6 +307,7 @@ the JSON Schema.
 | Every registered step type and aliases usable in a hook's `with:` | `atmos-steps` |
 | Go-template/Gomplate/Sprig functions available in file content | `atmos-templates` |
 | Project bootstrap from the built-in template catalog | `atmos-init` |
+| OCI registry URL syntax, auth precedence, full source-type reference | `atmos-vendoring` |
 | Generated JSON Schema for IDE validation | `atmos-schemas` |
 | `when:`/CEL syntax reference | `atmos-workflows` |
 

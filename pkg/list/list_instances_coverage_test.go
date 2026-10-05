@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	stdio "io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -13,11 +16,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -216,6 +223,161 @@ func TestExecuteListInstancesCmd_UploadPath(t *testing.T) {
 
 	// Error is expected (config load will fail).
 	assert.Error(t, err)
+}
+
+// TestExecuteListInstancesCmd_ProGateWithoutUpload is the regression test for
+// spec.md's 2026-08-22 Clarifications session, which superseded FR-006c's
+// original --upload-only gating: a plain `atmos list instances` (no
+// --upload) run with Atmos Pro integration active (CI detected AND Pro
+// credentials configured, i.e. proexec.GateOpen true) must still attach the
+// instance list to the invocation's exec-metadata Data via
+// proexec.SetPendingAsyncData, without ever calling POST /api/v1/instances.
+func TestExecuteListInstancesCmd_ProGateWithoutUpload(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	preserved := telemetry.PreserveCIEnvVars()
+	t.Cleanup(func() { telemetry.RestoreCIEnvVars(preserved) })
+	t.Setenv("CI", "true")
+	t.Setenv("ATMOS_PRO_TOKEN", "test-token")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "table", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{BasePath: fixturePath}
+
+	require.NoError(t, ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:   info,
+		Cmd:    cmd,
+		Args:   []string{},
+		Format: "table",
+		Upload: false,
+	}))
+
+	// Drain the pending data through the real exec-metadata consumer to prove
+	// it was actually set, mirroring TestUploadInstancesWithDeps_SetsPendingAsyncDataForExecMetadata.
+	var received []dtos.ExecUploadRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/atmos/exec") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var req dtos.ExecUploadRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		received = append(received, req)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer server.Close()
+
+	proExecConfig := &schema.AtmosConfiguration{}
+	proExecConfig.Settings.Pro.BaseURL = server.URL
+	proExecConfig.Settings.Pro.Token = "test-token"
+	proexec.SetAtmosConfig(proExecConfig)
+	t.Cleanup(func() { proexec.SetAtmosConfig(nil) })
+
+	proexec.CaptureAsync(&cobra.Command{Use: "list-instances"}, nil)
+
+	require.Len(t, received, 1)
+	require.NotNil(t, received[0].Data)
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(received[0].Data, &decoded))
+	assert.InEpsilon(t, float64(1), decoded["version"], 0)
+	instancesVal, ok := decoded["instances"].([]any)
+	require.True(t, ok, "data.instances must be an array")
+	assert.NotEmpty(t, instancesVal)
+}
+
+// TestExecuteListInstancesCmd_NoUploadNoProGate_NoPendingData proves the
+// negative half of the 2026-08-22 gating: when NEITHER --upload NOR Atmos
+// Pro integration (proexec.GateOpen) is active, no instance list is
+// computed and no data is handed to the exec-metadata consumer.
+func TestExecuteListInstancesCmd_NoUploadNoProGate_NoPendingData(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	preserved := telemetry.PreserveCIEnvVars()
+	t.Cleanup(func() { telemetry.RestoreCIEnvVars(preserved) })
+	os.Unsetenv("CI")
+
+	origProToken, hadProToken := os.LookupEnv("ATMOS_PRO_TOKEN")
+	t.Cleanup(func() {
+		if hadProToken {
+			os.Setenv("ATMOS_PRO_TOKEN", origProToken)
+		} else {
+			os.Unsetenv("ATMOS_PRO_TOKEN")
+		}
+	})
+	os.Unsetenv("ATMOS_PRO_TOKEN")
+
+	// proexec.pendingAsyncData is package-level global state, read-and-cleared
+	// only by CaptureAsync itself (see proexec/async.go). Another test in this
+	// binary that exercises uploadInstancesWithDeps's success path (e.g.
+	// TestUploadInstancesWithDeps_Success) sets it as a side effect and never
+	// calls CaptureAsync to consume it -- that's fine in production, where
+	// cmd/root.go's post-run hook always calls CaptureAsync once per process,
+	// but leaves it dangling for whichever test happens to call CaptureAsync
+	// next. Reset explicitly so this test's own assertion doesn't depend on
+	// what ran before it in the same test binary.
+	proexec.SetPendingAsyncData(nil)
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "table", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{BasePath: fixturePath}
+
+	require.NoError(t, ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:   info,
+		Cmd:    cmd,
+		Args:   []string{},
+		Format: "table",
+		Upload: false,
+	}))
+
+	var received []dtos.ExecUploadRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/atmos/exec") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var req dtos.ExecUploadRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		received = append(received, req)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer server.Close()
+
+	// Enable CI+Pro only for this send step, so CaptureAsync itself fires and
+	// we can observe whether ExecuteListInstancesCmd left any pending data
+	// behind — independent of whether CaptureAsync's own gate would have
+	// fired during the (CI/Pro-less) ExecuteListInstancesCmd call above.
+	t.Setenv("CI", "true")
+	t.Setenv("ATMOS_PRO_TOKEN", "test-token")
+	proExecConfig := &schema.AtmosConfiguration{}
+	proExecConfig.Settings.Pro.BaseURL = server.URL
+	proExecConfig.Settings.Pro.Token = "test-token"
+	proexec.SetAtmosConfig(proExecConfig)
+	t.Cleanup(func() { proexec.SetAtmosConfig(nil) })
+
+	proexec.CaptureAsync(&cobra.Command{Use: "list-instances"}, nil)
+
+	require.Len(t, received, 1)
+	assert.Nil(t, received[0].Data)
 }
 
 // TestParseColumnsFlag tests parsing column specifications from CLI flags.
@@ -451,6 +613,97 @@ func TestGetInstanceColumns(t *testing.T) {
 	}
 }
 
+// TestResolveInstancesEvalSections verifies the evaluation-scope filter derived from the resolved
+// column set: `metadata` is always folded in (extract.Metadata and createInstance's abstract-type
+// filtering always read it, regardless of which columns are shown), `settings` is folded in
+// whenever this invocation may upload instances (opts.Upload or Atmos Pro's GateOpen), and
+// --filter/--query force a nil (full eager evaluation) fallback since their YQ expressions cannot
+// be statically analyzed the way column.Value Go-template refs can.
+func TestResolveInstancesEvalSections(t *testing.T) {
+	proConfigured := &schema.AtmosConfiguration{Settings: schema.AtmosSettings{Pro: schema.ProSettings{Token: "test-token"}}}
+
+	tests := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		columns     []column.Config
+		opts        *InstancesCommandOptions
+		forceCI     bool
+		expectNil   bool
+		expectExact []string
+	}{
+		{
+			name:        "default columns require only metadata",
+			atmosConfig: &schema.AtmosConfiguration{},
+			columns:     defaultInstanceColumns,
+			opts:        &InstancesCommandOptions{},
+			expectExact: []string{"metadata"},
+		},
+		{
+			name:        "columns referencing vars require vars and metadata",
+			atmosConfig: &schema.AtmosConfiguration{},
+			columns:     []column.Config{{Name: "Component", Value: "{{ .component }}"}, {Name: "Region", Value: "{{ .vars.region }}"}},
+			opts:        &InstancesCommandOptions{},
+			expectExact: []string{"metadata", "vars"},
+		},
+		{
+			name:        "unresolvable column (raw) falls back to nil",
+			atmosConfig: &schema.AtmosConfiguration{},
+			columns:     []column.Config{{Name: "Raw", Value: "{{ .raw }}"}},
+			opts:        &InstancesCommandOptions{},
+			expectNil:   true,
+		},
+		{
+			name:        "--filter set forces nil (YQ expression, not statically analyzable)",
+			atmosConfig: &schema.AtmosConfiguration{},
+			columns:     defaultInstanceColumns,
+			opts:        &InstancesCommandOptions{FilterSpec: ".enabled == true"},
+			expectNil:   true,
+		},
+		{
+			name:        "--query set forces nil (YQ expression, not statically analyzable)",
+			atmosConfig: &schema.AtmosConfiguration{},
+			columns:     defaultInstanceColumns,
+			opts:        &InstancesCommandOptions{Query: ".component"},
+			expectNil:   true,
+		},
+		{
+			name:        "--upload folds settings in alongside metadata",
+			atmosConfig: &schema.AtmosConfiguration{},
+			columns:     defaultInstanceColumns,
+			opts:        &InstancesCommandOptions{Upload: true},
+			expectExact: []string{"metadata", "settings"},
+		},
+		{
+			name:        "Atmos Pro GateOpen folds settings in even without --upload",
+			atmosConfig: proConfigured,
+			columns:     defaultInstanceColumns,
+			opts:        &InstancesCommandOptions{},
+			forceCI:     true,
+			expectExact: []string{"metadata", "settings"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.forceCI {
+				// GateOpen requires telemetry.IsCI() in addition to Pro credentials; force it
+				// deterministically rather than depending on whether this test happens to run
+				// inside real CI.
+				preserved := telemetry.PreserveCIEnvVars()
+				t.Cleanup(func() { telemetry.RestoreCIEnvVars(preserved) })
+				t.Setenv("CI", "true")
+			}
+			result := resolveInstancesEvalSections(tt.atmosConfig, tt.columns, tt.opts)
+			if tt.expectNil {
+				assert.Nil(t, result)
+				return
+			}
+			require.NotNil(t, result)
+			assert.ElementsMatch(t, tt.expectExact, result)
+		})
+	}
+}
+
 // TestBuildInstanceSorters tests sorter configuration.
 func TestBuildInstanceSorters(t *testing.T) {
 	tests := []struct {
@@ -676,7 +929,7 @@ func TestExecuteListInstancesCmd_ClosurePreview(t *testing.T) {
 		Tags:                []string{"istio"},
 		IncludeDependencies: -1,
 		ProcessTemplates:    true,
-		AuthDisabled:        true,
+		AuthManager:         authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true}),
 	})
 
 	require.NoError(t, err, "a closure preview over a healthy fixture should render cleanly")
@@ -738,9 +991,10 @@ func TestExecuteListInstancesCmd_ClosurePreviewPropagatesError(t *testing.T) {
 		Args:                []string{},
 		Format:              "json",
 		Tags:                []string{"broken-tag"},
+		ColumnsFlag:         []string{"Value={{ .vars.upstream_value }}"},
 		IncludeDependencies: -1,
 		ProcessTemplates:    true,
-		AuthDisabled:        true,
+		AuthManager:         authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true}),
 	})
 
 	require.Error(t, err)

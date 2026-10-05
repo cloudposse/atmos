@@ -12,6 +12,8 @@ import (
 )
 
 func TestTerraformFlags(t *testing.T) {
+	t.Parallel()
+
 	registry := TerraformFlags()
 
 	// Should have common flags (stack, dry-run) + Terraform-specific flags including identity.
@@ -49,14 +51,20 @@ func TestTerraformFlags(t *testing.T) {
 }
 
 func TestBackendExecutionFlags(t *testing.T) {
+	t.Parallel()
+
 	registry := BackendExecutionFlags()
 
-	// Should have 2 backend execution flags.
-	assert.Equal(t, 2, registry.Count())
+	// Should have 5 backend execution flags: auto-generate-backend-file, init-run-reconfigure,
+	// plus the tri-state init-mode/init-reconfigure/init-upgrade overrides.
+	assert.Equal(t, 5, registry.Count())
 
 	// Should include backend execution flags.
 	assert.True(t, registry.Has("auto-generate-backend-file"), "auto-generate-backend-file should be in BackendExecutionFlags")
 	assert.True(t, registry.Has("init-run-reconfigure"), "init-run-reconfigure should be in BackendExecutionFlags")
+	assert.True(t, registry.Has("init-mode"), "init-mode should be in BackendExecutionFlags")
+	assert.True(t, registry.Has("init-reconfigure"), "init-reconfigure should be in BackendExecutionFlags")
+	assert.True(t, registry.Has("init-upgrade"), "init-upgrade should be in BackendExecutionFlags")
 
 	// Check auto-generate-backend-file flag.
 	autoGenFlag := registry.Get("auto-generate-backend-file")
@@ -73,9 +81,33 @@ func TestBackendExecutionFlags(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "", strFlag.Default)
 	assert.Equal(t, []string{"ATMOS_INIT_RUN_RECONFIGURE"}, strFlag.EnvVars)
+
+	// Check the three tri-state init override flags.
+	initModeFlag := registry.Get("init-mode")
+	require.NotNil(t, initModeFlag)
+	strFlag, ok = initModeFlag.(*flags.StringFlag)
+	require.True(t, ok)
+	assert.Equal(t, "", strFlag.Default)
+	assert.Equal(t, []string{"ATMOS_INIT_MODE"}, strFlag.EnvVars)
+
+	initReconfigureFlag := registry.Get("init-reconfigure")
+	require.NotNil(t, initReconfigureFlag)
+	strFlag, ok = initReconfigureFlag.(*flags.StringFlag)
+	require.True(t, ok)
+	assert.Equal(t, "", strFlag.Default)
+	assert.Equal(t, []string{"ATMOS_INIT_RECONFIGURE"}, strFlag.EnvVars)
+
+	initUpgradeFlag := registry.Get("init-upgrade")
+	require.NotNil(t, initUpgradeFlag)
+	strFlag, ok = initUpgradeFlag.(*flags.StringFlag)
+	require.True(t, ok)
+	assert.Equal(t, "", strFlag.Default)
+	assert.Equal(t, []string{"ATMOS_INIT_UPGRADE"}, strFlag.EnvVars)
 }
 
 func TestTerraformAffectedFlags(t *testing.T) {
+	t.Parallel()
+
 	registry := TerraformAffectedFlags()
 
 	// Should have 8 flags: 7 affected flags + the include-dependencies closure flag.
@@ -112,6 +144,8 @@ func TestTerraformAffectedFlags(t *testing.T) {
 }
 
 func TestWithTerraformFlags(t *testing.T) {
+	t.Parallel()
+
 	// Create a standard parser with terraform flags.
 	parser := flags.NewStandardParser(
 		WithTerraformFlags(),
@@ -127,6 +161,8 @@ func TestWithTerraformFlags(t *testing.T) {
 }
 
 func TestWithBackendExecutionFlags(t *testing.T) {
+	t.Parallel()
+
 	// Create a standard parser with backend execution flags.
 	parser := flags.NewStandardParser(
 		WithBackendExecutionFlags(),
@@ -134,13 +170,19 @@ func TestWithBackendExecutionFlags(t *testing.T) {
 
 	registry := parser.Registry()
 
-	// Should have backend execution flags.
-	assert.Equal(t, 2, registry.Count())
+	// Should have backend execution flags: auto-generate-backend-file, init-run-reconfigure,
+	// plus the tri-state init-mode/init-reconfigure/init-upgrade overrides.
+	assert.Equal(t, 5, registry.Count())
 	assert.True(t, registry.Has("auto-generate-backend-file"))
 	assert.True(t, registry.Has("init-run-reconfigure"))
+	assert.True(t, registry.Has("init-mode"))
+	assert.True(t, registry.Has("init-reconfigure"))
+	assert.True(t, registry.Has("init-upgrade"))
 }
 
 func TestWithTerraformAffectedFlags(t *testing.T) {
+	t.Parallel()
+
 	// Create a standard parser with affected flags.
 	parser := flags.NewStandardParser(
 		WithTerraformAffectedFlags(),
@@ -157,6 +199,8 @@ func TestWithTerraformAffectedFlags(t *testing.T) {
 }
 
 func TestCombinedTerraformFlags(t *testing.T) {
+	t.Parallel()
+
 	// Create a standard parser with terraform, affected, and backend execution flags.
 	parser := flags.NewStandardParser(
 		WithTerraformFlags(),
@@ -187,6 +231,8 @@ func TestCombinedTerraformFlags(t *testing.T) {
 // TestExecutionFlagsProperties verifies that shared execution flags have correct properties.
 // These flags are in TerraformFlags() and shared across all terraform commands.
 func TestExecutionFlagsProperties(t *testing.T) {
+	t.Parallel()
+
 	registry := TerraformFlags()
 
 	tests := []struct {
@@ -228,6 +274,7 @@ func TestExecutionFlagsProperties(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			flag := registry.Get(tc.flagName)
 			require.NotNil(t, flag, "%s flag should be registered", tc.flagName)
 
@@ -252,7 +299,10 @@ func TestExecutionFlagsProperties(t *testing.T) {
 // TestFlagsCobraRegistration verifies that flags are properly registered on Cobra commands.
 // This test ensures the full pipeline from flag definition to CLI availability works.
 func TestFlagsCobraRegistration(t *testing.T) {
+	t.Parallel()
+
 	t.Run("shared terraform flags are visible on cobra command", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		parser := flags.NewStandardParser(WithTerraformFlags())
 		parser.RegisterFlags(cmd)
@@ -272,6 +322,7 @@ func TestFlagsCobraRegistration(t *testing.T) {
 	})
 
 	t.Run("backend execution flags are visible on cobra command", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		parser := flags.NewStandardParser(WithBackendExecutionFlags())
 		parser.RegisterFlags(cmd)
@@ -289,6 +340,7 @@ func TestFlagsCobraRegistration(t *testing.T) {
 	})
 
 	t.Run("affected flags are visible on cobra command", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		parser := flags.NewStandardParser(WithTerraformAffectedFlags())
 		parser.RegisterFlags(cmd)
@@ -313,7 +365,10 @@ func TestFlagsCobraRegistration(t *testing.T) {
 
 // TestFlagsViperBinding verifies that flags are properly bound to Viper for value retrieval.
 func TestFlagsViperBinding(t *testing.T) {
+	t.Parallel()
+
 	t.Run("shared terraform flags bind to viper", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		v := viper.New()
 		parser := flags.NewStandardParser(WithTerraformFlags())
@@ -330,6 +385,7 @@ func TestFlagsViperBinding(t *testing.T) {
 	})
 
 	t.Run("backend execution flags bind to viper", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		v := viper.New()
 		parser := flags.NewStandardParser(WithBackendExecutionFlags())
@@ -346,6 +402,7 @@ func TestFlagsViperBinding(t *testing.T) {
 	})
 
 	t.Run("affected flags bind to viper", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		v := viper.New()
 		parser := flags.NewStandardParser(WithTerraformAffectedFlags())
@@ -378,7 +435,10 @@ func getEnvVarsFromFlag(flag flags.Flag) []string {
 
 // TestFlagsEnvironmentVariables verifies that environment variables are properly configured.
 func TestFlagsEnvironmentVariables(t *testing.T) {
+	t.Parallel()
+
 	t.Run("shared terraform flags have correct env var bindings", func(t *testing.T) {
+		t.Parallel()
 		registry := TerraformFlags()
 
 		envVarTests := []struct {
@@ -402,6 +462,7 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 	})
 
 	t.Run("backend execution flags have correct env var bindings", func(t *testing.T) {
+		t.Parallel()
 		registry := BackendExecutionFlags()
 
 		envVarTests := []struct {
@@ -423,6 +484,7 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 	})
 
 	t.Run("affected flags have correct env var bindings", func(t *testing.T) {
+		t.Parallel()
 		registry := TerraformAffectedFlags()
 
 		envVarTests := []struct {
@@ -451,6 +513,8 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 
 // TestIdentityFlagConfiguration verifies the identity flag has correct NoOptDefVal for interactive selection.
 func TestIdentityFlagConfiguration(t *testing.T) {
+	t.Parallel()
+
 	registry := TerraformFlags()
 	flag := registry.Get("identity")
 	require.NotNil(t, flag)
@@ -462,4 +526,45 @@ func TestIdentityFlagConfiguration(t *testing.T) {
 	assert.Equal(t, "__SELECT__", strFlag.NoOptDefVal, "identity NoOptDefVal should be __SELECT__ for interactive selection")
 	assert.Equal(t, "i", strFlag.Shorthand, "identity should have -i shorthand")
 	assert.Contains(t, strFlag.EnvVars, "ATMOS_IDENTITY")
+}
+
+// TestUseMocksFlagRegistration verifies --use-mocks is a string flag whose bare form means "true"
+// and that a following positional argument is never consumed as its value.
+func TestUseMocksFlagRegistration(t *testing.T) {
+	t.Parallel()
+
+	flag, ok := TerraformFlags().Get("use-mocks").(*flags.StringFlag)
+	require.True(t, ok, "use-mocks should be a string flag")
+	assert.Equal(t, "true", flag.NoOptDefVal)
+	assert.True(t, flag.NoOptDefValNoSpaceValue, "a positional argument after --use-mocks must stay positional")
+	assert.False(t, flag.GetNoOptDefValConsumesNextArg())
+	assert.Contains(t, flag.EnvVars, "ATMOS_USE_MOCKS")
+
+	tests := []struct {
+		name     string
+		args     []string
+		wantFlag string
+		wantArgs []string
+	}{
+		{name: "absent", args: []string{"app"}, wantFlag: "", wantArgs: []string{"app"}},
+		{name: "bare flag then positional", args: []string{"--use-mocks", "app"}, wantFlag: "true", wantArgs: []string{"app"}},
+		{name: "positional then bare flag", args: []string{"app", "--use-mocks"}, wantFlag: "true", wantArgs: []string{"app"}},
+		{name: "explicit true", args: []string{"--use-mocks=true", "app"}, wantFlag: "true", wantArgs: []string{"app"}},
+		{name: "explicit false", args: []string{"--use-mocks=false", "app"}, wantFlag: "false", wantArgs: []string{"app"}},
+		{name: "fallback", args: []string{"--use-mocks=fallback", "app"}, wantFlag: "fallback", wantArgs: []string{"app"}},
+		{name: "always", args: []string{"--use-mocks=always", "app"}, wantFlag: "always", wantArgs: []string{"app"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cmd := &cobra.Command{Use: "plan", RunE: func(*cobra.Command, []string) error { return nil }}
+			flags.NewStandardParser(WithTerraformFlags()).RegisterFlags(cmd)
+			require.NoError(t, cmd.ParseFlags(tt.args))
+
+			got, err := cmd.Flags().GetString("use-mocks")
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantFlag, got)
+			assert.Equal(t, tt.wantArgs, cmd.Flags().Args())
+		})
+	}
 }

@@ -6,11 +6,13 @@ slug: /cli/configuration/commands/steps
 ---
 
 import Intro from '@site/src/components/Intro'
-import StepTypes from '@site/docs/workflows/_partials/_step-types.mdx'
+import StepTypes from '@site/docs/steps/_partials/_step-types.mdx'
 
 <Intro>
 The `steps` field is the work a custom command performs. Custom commands run steps through the **same engine as [workflows](/workflows)** and support the **same step types** — from plain shell and Atmos commands to interactive prompts, spinners, tables, and container operations.
 </Intro>
+
+Browse the shared [Steps reference](/steps) and [step type catalog](/steps/type) for the building blocks available in workflows, custom commands, and lifecycle hooks.
 
 ## Simple and structured steps
 
@@ -43,7 +45,7 @@ commands:
 ```
 
 A structured step is the same object documented for workflows. See the
-[step reference](/workflows/steps) for the common step fields (`name`, `type`, `command`,
+[step reference](/steps) for the common step fields (`name`, `type`, `command`,
 `output`, and more).
 
 ## Conditional steps
@@ -125,19 +127,36 @@ Step predicates are:
 </dl>
 
 CEL expressions can read `ci`, `status`, `stack`, `component`, `workflow`,
-`step`, and `env`. For workflow and custom command steps, `status` is the
-current command status: `success` before any step fails and `failure` after an
-earlier step failed. Also available: `os`/`arch`/`platform` (for example
-`when: "os == 'darwin'"`) and the freshness facts `checksum`, `timestamp`,
-`preconditions`, `sources`, `artifacts` — see [`inputs`](/workflows/steps/inputs),
-[`artifacts`](/workflows/steps/artifacts), and
-[`preconditions`](/workflows/steps/preconditions).
+`step`, `env`, `flags`, and `arguments`. For workflow and custom command steps,
+`status` is the current command status: `success` before any step fails and
+`failure` after an earlier step failed. `flags` and `arguments` mirror the
+command's own declared `--flag`/positional values — the same data available to
+steps as `{{ .Flags.name }}`/`{{ .Arguments.name }}` in templates — so a step
+can gate on how the command was invoked:
+
+```yaml
+commands:
+  - name: deploy
+    flags:
+      - name: dry-run
+        type: bool
+    steps:
+      - type: shell
+        command: terraform apply
+        when: !cel '!flags["dry-run"]'
+```
+
+Also available: `os`/`arch`/`platform` (for example `when: "os == 'darwin'"`)
+and the freshness facts `checksum`, `timestamp`, `preconditions`, `sources`,
+`artifacts` — see [`inputs`](/steps/inputs),
+[`artifacts`](/steps/artifacts), and
+[`preconditions`](/steps/preconditions).
 
 ## Continue on error
 
 Set `continue: always` on a step to forgive its own failure — later steps still
 run and the command's overall exit status is unaffected, the same semantics as
-GitHub Actions' `continue-on-error`. See [`continue`](/workflows/steps/continue)
+GitHub Actions' `continue-on-error`. See [`continue`](/steps/continue)
 for the full field reference.
 
 ```yaml
@@ -157,7 +176,7 @@ commands:
 Set `inputs.sources`/`artifacts.paths` on a step to skip it when nothing has
 changed since it last ran successfully — without an explicit `when`, declaring
 `inputs`/`artifacts` implicitly means `when: checksum.changed`. See
-[`inputs`](/workflows/steps/inputs) and [`artifacts`](/workflows/steps/artifacts)
+[`inputs`](/steps/inputs) and [`artifacts`](/steps/artifacts)
 for the full field reference.
 
 ```yaml
@@ -177,7 +196,7 @@ Declare `preconditions.tools` instead when a step's freshness only depends on
 whether a tool is already on `PATH` — without an explicit `when`, declaring
 `preconditions` alone implicitly means `when: "!preconditions.success"` (run only
 when the tool is *not* already there). See
-[`preconditions`](/workflows/steps/preconditions) for the full field reference.
+[`preconditions`](/steps/preconditions) for the full field reference.
 
 ```yaml
 commands:
@@ -193,8 +212,8 @@ commands:
 ## Step types
 
 Custom commands and workflows share one step-type registry, so every step type works the same in
-both. The full reference lives with the workflow docs — see the
-[step type reference](/workflows/steps/type) for each type's fields, examples, and behavior.
+both. See the shared
+[step type reference](/steps/type) for each type's fields, examples, and behavior.
 
 <StepTypes />
 
@@ -332,7 +351,7 @@ commands:
 
 Locally this prompts; in CI it reads `STACK_ACCOUNT` (falling back to `dev`) and passes the value to
 the shell step. The same behavior applies to
-[workflow steps](/workflows/steps#interactive-steps-in-ci-non-tty).
+[workflow steps](/steps#interactive-steps-in-ci-non-tty).
 
 ### Example: Interactive Deployment Command
 
@@ -447,3 +466,25 @@ commands:
           Title: {{ .steps.title.value }}
           Priority: {{ .steps.priority.value }}
 ```
+
+## Output viewport
+
+Use `output: viewport` on a shell step to follow build logs in a small live window:
+
+```yaml
+commands:
+  - name: build
+    steps:
+      - name: compile
+        type: shell
+        command: go build -v ./...
+        output: viewport
+        viewport:
+          height: 4
+          padding: 2
+```
+
+The four-line window contains up to three recent stdout/stderr lines and a status
+row. It follows new output automatically, collapses on success, and expands to
+show the full captured output on failure. CI and redirected output stream normally.
+See [live viewport](/workflows/output#live-viewport) for sizing and terminal behavior.

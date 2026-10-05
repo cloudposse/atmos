@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/internal/exec"
@@ -104,8 +105,14 @@ func TestDescribeStacksRunnable_InvalidErrorMode(t *testing.T) {
 	t.Setenv("ATMOS_IDENTITY", "")
 	t.Setenv("IDENTITY", "")
 
-	errorModeFlag := describeStacksCmd.Flags().Lookup("error-mode")
-	assert.NotNil(t, errorModeFlag, "error-mode flag must be registered on describeStacksCmd")
+	// PersistentFlags(), not Flags(): a persistent flag only appears in Flags()
+	// after cobra's mergePersistentFlags runs, which happens the first time this
+	// command is actually Execute()'d/ParseFlags()'d -- something that depends on
+	// which other test happens to run first under -shuffle=on. PersistentFlags()
+	// is this flag's own FlagSet, populated directly at init() time, so it's
+	// reliable regardless of execution order.
+	errorModeFlag := describeStacksCmd.PersistentFlags().Lookup("error-mode")
+	require.NotNil(t, errorModeFlag, "error-mode flag must be registered on describeStacksCmd")
 	origValue := errorModeFlag.Value.String()
 	origChanged := errorModeFlag.Changed
 	t.Cleanup(func() {

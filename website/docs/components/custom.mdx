@@ -1,7 +1,7 @@
 ---
 title: Using Custom Component Types
 sidebar_position: 7
-sidebar_label: Custom
+sidebar_label: Custom Components
 id: custom
 description: Bring any tool—AWS CDK, CloudFormation, Pulumi, Bicep, database migrations, and more—under the same stack-based configuration used for Terraform, Helmfile, and Packer.
 ---
@@ -25,12 +25,12 @@ commands:
     description: "Run script components"
     arguments:
       - name: component
-        type: component          # Provides the component name
+        provides: component      # Provides the component name
         required: true
     flags:
       - name: stack
         shorthand: s
-        semantic_type: stack     # Provides the stack name
+        provides: stack           # Provides the stack name
         required: true
     component:
       type: script               # Your custom component type

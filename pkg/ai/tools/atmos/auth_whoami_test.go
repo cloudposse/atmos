@@ -31,6 +31,8 @@ func mockAuthConfig(identityDefault bool) schema.AuthConfig {
 }
 
 func TestAuthWhoamiTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	tool := NewAuthWhoamiTool(&schema.AtmosConfiguration{})
 
 	assert.Equal(t, "atmos_auth_whoami", tool.Name())
@@ -45,6 +47,8 @@ func TestAuthWhoamiTool_Interface(t *testing.T) {
 }
 
 func TestAuthWhoamiTool_NewAuthWhoamiTool(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	tool := NewAuthWhoamiTool(config)
 
@@ -53,6 +57,8 @@ func TestAuthWhoamiTool_NewAuthWhoamiTool(t *testing.T) {
 }
 
 func TestAuthWhoamiTool_Execute_NilConfig(t *testing.T) {
+	t.Parallel()
+
 	tool := NewAuthWhoamiTool(nil)
 
 	result, err := tool.Execute(context.Background(), map[string]interface{}{})
@@ -64,6 +70,8 @@ func TestAuthWhoamiTool_Execute_NilConfig(t *testing.T) {
 }
 
 func TestAuthWhoamiTool_Execute_NoIdentitiesConfigured(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth:          schema.AuthConfig{Keyring: schema.KeyringConfig{Type: "memory"}},
 		CliConfigPath: t.TempDir(),
@@ -78,6 +86,8 @@ func TestAuthWhoamiTool_Execute_NoIdentitiesConfigured(t *testing.T) {
 }
 
 func TestAuthWhoamiTool_Execute_UnknownIdentity(t *testing.T) {
+	t.Parallel()
+
 	authConfig := mockAuthConfig(true)
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth:          authConfig,
@@ -95,6 +105,8 @@ func TestAuthWhoamiTool_Execute_UnknownIdentity(t *testing.T) {
 }
 
 func TestAuthWhoamiTool_Execute_DefaultMockIdentity(t *testing.T) {
+	t.Parallel()
+
 	authConfig := mockAuthConfig(true)
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth:          authConfig,
@@ -115,6 +127,8 @@ func TestAuthWhoamiTool_Execute_DefaultMockIdentity(t *testing.T) {
 }
 
 func TestAuthWhoamiTool_Execute_ExplicitIdentity(t *testing.T) {
+	t.Parallel()
+
 	authConfig := mockAuthConfig(false)
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth:          authConfig,
@@ -134,5 +148,7 @@ func TestAuthWhoamiTool_Execute_ExplicitIdentity(t *testing.T) {
 }
 
 func TestWhoamiCredentialsValid_NilInputs(t *testing.T) {
+	t.Parallel()
+
 	assert.False(t, whoamiCredentialsValid(nil))
 }

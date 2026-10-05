@@ -4,9 +4,11 @@ title: "Declarative File Generation for Terraform Components"
 date: 2026-01-05T12:00:00.000Z
 authors: [osterman]
 tags: [feature]
+cast: "/casts/examples/generate-files/component-files.cast"
+castTitle: "atmos generate files"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Atmos now supports declarative file generation for Terraform components via the new `generate` section in stack configuration.
 
@@ -14,7 +16,7 @@ Atmos now supports declarative file generation for Terraform components via the 
 
 See it in action:
 
-<CastPlayer src="/casts/examples/generate-files/component-files.cast" title="atmos generate files" chrome controls scrubber />
+<CastEmbed src="/casts/examples/generate-files/component-files.cast" title="atmos generate files" chrome controls scrubber />
 
 [View the full example](/examples/generate-files)
 
@@ -66,12 +68,12 @@ terraform:
 - **5-level inheritance**: The `generate` section follows Atmos's standard inheritance model with merge from lowest to highest priority:
   1. **Global level** (`generate:` at stack root)
   2. **Component type level** (`terraform.generate:`)
-  3. **Base component level** (via `metadata.inherits`)
+  3. **Base component level** (via [`metadata.inherits`](/stacks/components/component-metadata#inherits))
   4. **Component level** (`components.terraform.vpc.generate`)
   5. **Overrides level** (`terraform.overrides.generate:`) - file-scoped, highest priority
-- **CLI integration**: New `atmos terraform generate files` command with `--all`, `--dry-run`, and `--clean` flags
+- **CLI integration**: New [`atmos terraform generate files`](/cli/commands/terraform/generate/files) command with `--all`, `--dry-run`, and `--clean` flags
 - **Auto-generation**: Enable `auto_generate_files: true` in `atmos.yaml` to automatically generate files during terraform commands
-- **Clean integration**: Generated files are automatically cleaned up by `atmos terraform clean`
+- **Clean integration**: Generated files are automatically cleaned up by [`atmos terraform clean`](/cli/commands/terraform/clean)
 
 ## Why This Matters
 

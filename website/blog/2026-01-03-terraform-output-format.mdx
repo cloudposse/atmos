@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature]
 ---
 
-The `atmos terraform output` command now supports a `--format` flag, making it easy to export Terraform outputs in various formats for use in CI/CD workflows, scripts, and configuration files.
+The [`atmos terraform output`](/cli/commands/terraform/output) command now supports a [`--format`](/cli/commands/terraform/output#flags) flag, making it easy to export Terraform outputs in various formats for use in CI/CD workflows, scripts, and configuration files.
 
 <!--truncate-->
 
@@ -88,7 +88,7 @@ echo "VPC ID: $VPC_ID"
 
 ### Flatten Nested Outputs
 
-Use `--flatten` to expand nested maps and arrays into individual key/value pairs:
+Use [`--flatten`](/cli/commands/terraform/output#flags) to expand nested maps and arrays into individual key/value pairs:
 
 ```bash
 # Without --flatten: {"config": {"host": "localhost", "port": 3000}}

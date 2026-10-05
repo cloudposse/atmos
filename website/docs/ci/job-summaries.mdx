@@ -124,6 +124,21 @@ comments, or artifacts. The summary includes component, stack, command status, a
 command, and Helm metadata such as release name, namespace, chart, target, object counts, object
 kinds, and rendered manifest size when available.
 
+When `plan` or `apply` selects multiple components with `--all` or `--affected`, Atmos writes one
+deterministic aggregate summary after the dependency-graph run completes instead of writing a
+separate summary from every component. The aggregate includes result counts and a stable
+per-component table with stack, component, chart, release, namespace, target, status, and duration.
+Plan summaries distinguish changed and unchanged components and include collapsible diffs; failed
+components include their error details. The same aggregate behavior applies to the `diff` and
+`deploy` aliases and composes with tag and label filters.
+
+For a single cluster-backed apply/deploy/delete operation, the component summary also includes an
+operation-specific `release` block with the effective wait strategy, timeout, chart-hook state,
+and applicable recovery, Job-wait, CRD, cleanup, and history values. For external delivery,
+apply/deploy reports `applied: false` while delete reports `deleted: false`; both include the
+selected target kind and `reason: external_target` instead of presenting stored release policy as
+active.
+
 ## Helmfile Summaries
 
 Helmfile components write summaries for these operations when `ci.enabled: true` and CI mode is

@@ -65,16 +65,21 @@ export function replayTerminal(input) {
       setCurrentLine(CURSOR_MARKER);
     }
   };
-  // Huh clears a completed form with CSI K followed by CSI J. K has already
-  // erased the active row's suffix, so the line-level model only needs to
-  // blank rows below the cursor for default erase-display (CSI J / CSI 0J).
-  // Keeping the active row lets the following CR + CSI 2K redraw replace it
-  // normally, while removing stale menu rows from the previous form frame.
+  // Erase-display (CSI J / CSI 0J) erases everything below the cursor. Huh
+  // uses it (after CSI K) to clear a completed form, and Atmos's streaming
+  // terraform UI uses it to clear its progress block before drawing the
+  // completion summary. K has already erased the active row's suffix, so
+  // the line-level model keeps the active row (the following CR + CSI 2K
+  // redraw replaces it normally) and *drops* the rows below it.
+  //
+  // Dropping, not blanking: a real terminal has no scrollback below the
+  // cursor, so the erased rows simply cease to exist and the next output
+  // lands directly under the cursor. Blanking them instead left a tail of
+  // empty rows in the replay, and the player's scroll-to-bottom then showed
+  // nothing but that tail once a recording ended on an erase-display.
   const clearDisplayAfterCursor = () => {
     removeCursor();
-    for (let index = row + 1; index < lines.length; index += 1) {
-      lines[index] = "";
-    }
+    lines.length = row + 1;
     syncCursor();
   };
   // Move the cursor `delta` rows (positive = down, negative = up). A row

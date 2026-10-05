@@ -251,10 +251,7 @@ func downloadOCISource(ctx context.Context, atmosConfig *schema.AtmosConfigurati
 
 // downloadGoGetterSource fetches a non-OCI source via the go-getter downloader.
 func downloadGoGetterSource(atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
-	downloadOpts := []downloader.GoGetterOption{}
-	if sourceSpec.Retry != nil {
-		downloadOpts = append(downloadOpts, downloader.WithRetryConfig(sourceSpec.Retry))
-	}
+	downloadOpts := []downloader.GoGetterOption{downloader.WithRetryConfig(effectiveRetryConfig(sourceSpec))}
 	dl := downloader.NewGoGetterDownloader(atmosConfig, downloadOpts...)
 	if err := dl.Fetch(uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout); err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
@@ -265,6 +262,48 @@ func downloadGoGetterSource(atmosConfig *schema.AtmosConfiguration, sourceSpec *
 			Err()
 	}
 	return nil
+}
+
+// Bounded default retry policy for source downloads that do not configure
+// their own `retry:`. A `terraform plan` that provisions its component source
+// just in time shouldn't fail on a single dropped DNS query or reset
+// connection -- the same blip a hosted CI runner hits a few times a day --
+// so git operations get three attempts with short exponential backoff.
+// Only transient transport failures are retried (see the git getter's
+// retry predicate); authentication and "not found" errors still fail fast.
+const (
+	defaultSourceRetryAttempts     = 3
+	defaultSourceRetryInitialDelay = 1 * time.Second
+	defaultSourceRetryMaxDelay     = 8 * time.Second
+	defaultSourceRetryMultiplier   = 2.0
+	defaultSourceRetryJitter       = 0.2
+)
+
+// defaultSourceRetryConfig returns the policy described above.
+func defaultSourceRetryConfig() *schema.RetryConfig {
+	attempts := defaultSourceRetryAttempts
+	initialDelay := defaultSourceRetryInitialDelay
+	maxDelay := defaultSourceRetryMaxDelay
+	multiplier := defaultSourceRetryMultiplier
+	jitter := defaultSourceRetryJitter
+	return &schema.RetryConfig{
+		MaxAttempts:     &attempts,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+		Multiplier:      &multiplier,
+		RandomJitter:    &jitter,
+		BackoffStrategy: schema.BackoffExponential,
+	}
+}
+
+// effectiveRetryConfig returns the source's own `retry:` when it configured
+// one, otherwise the bounded default. An explicit `max_attempts: 1` is how a
+// source opts out of retrying entirely.
+func effectiveRetryConfig(sourceSpec *schema.VendorComponentSource) *schema.RetryConfig {
+	if sourceSpec != nil && sourceSpec.Retry != nil {
+		return sourceSpec.Retry
+	}
+	return defaultSourceRetryConfig()
 }
 
 func localDirectorySource(uri string) (string, bool, error) {

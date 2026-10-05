@@ -34,16 +34,16 @@ import {
 } from 'react-icons/ri'
 
 <Intro>
-Atmos streamlines Terraform orchestration, environment, and configuration management, offering developers and DevOps a framework and a set of powerful tools to tackle deployment challenges.
+Atmos brings infrastructure, applications, and operational tools into one stack-based configuration system. Manage Terraform and OpenTofu, Kubernetes, Helm, containers, and more with shared configuration, authentication, and automation.
 </Intro>
 
-Designed to be cloud agnostic, Atmos enables you to operate consistently across various cloud platforms. Click any feature below to learn more about how it can help your team.
+Designed to be cloud agnostic, Atmos enables you to operate consistently across various cloud platforms. Expand a feature to see what it does and open its reference documentation. Features marked experimental in their reference pages follow the [experimental feature settings](/cli/configuration/settings/experimental).
 
 <KeyPoints title="Why Teams Choose Atmos">
-- **Reduce Configuration by 80%** — Eliminate copy-paste with inheritance and imports
-- **Deploy Any Environment with One Command** — Consistent workflows from dev to production
+- **Reuse Configuration Across Environments** — Share defaults through inheritance, imports, and catalogs
+- **Run Infrastructure and Applications Together** — Use components and workflows from local development to production
 - **Built-in Compliance Validation** — OPA policies and schema validation catch issues early
-- **Scale to Hundreds of Environments** — Same patterns work for 5 or 500 environments
+- **Keep Local Development and CI Consistent** — Share tool versions, identities, and deployment commands
 - **[Proven Design Patterns](/design-patterns)** — Battle-tested approaches for common infrastructure challenges
 </KeyPoints>
 
@@ -56,7 +56,7 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
     tagline="Navigate your infrastructure at a glance"
     description="An intuitive terminal interface that lets you visually browse, search, and select stacks and components. Use arrow keys to navigate, see configuration previews, and execute deployments without memorizing complex commands."
     benefits={[
-      "New team members become productive in hours, not weeks",
+      "Discover stacks and components interactively",
       "No more typos in stack names or component paths",
       "See your entire infrastructure organized logically"
     ]}
@@ -65,12 +65,12 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
 
   <FeatureCard
     icon={<RiCodeSSlashLine />}
-    title="Native Terraform Support"
+    title="Terraform & OpenTofu Support"
     tagline="Your existing code, supercharged"
-    description="Atmos works with vanilla Terraform root modules without modification. It handles backend configuration, variable file generation, and workspace management while keeping your Terraform code portable and standard."
+    description="Atmos orchestrates Terraform and OpenTofu root modules, handling backend configuration, variable files, provider generation, and workspaces. Use the same stack configuration with either engine."
     benefits={[
       "Zero vendor lock-in — your code works with or without Atmos",
-      "No code generation — configuration stays in YAML, HCL stays clean",
+      "Generate backend, provider, and variable files from stack configuration",
       "Full ecosystem compatibility with all providers and modules"
     ]}
     docLink="/cli/commands/terraform/usage"
@@ -82,7 +82,7 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
     tagline="Your infrastructure blueprint in plain YAML"
     description="Define environment configurations in simple YAML files that compose your components. Use inheritance and imports to keep configurations DRY, making dev/staging/prod just variations of a single source of truth."
     benefits={[
-      "80% less configuration through inheritance",
+      "Reuse shared configuration through inheritance",
       "Single source of truth — changes propagate consistently",
       "Human-readable — anyone can review and understand"
     ]}
@@ -93,9 +93,9 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
     icon={<RiBox3Line />}
     title="Components"
     tagline="Build once, deploy everywhere"
-    description="Components are opinionated, reusable infrastructure building blocks (Terraform root modules) that solve specific problems. Build a VPC component once, then deploy it across all your environments with different configurations."
+    description="Components are reusable units of infrastructure or applications: root modules, charts, manifests, images, playbooks, and services. Define their implementation once, then configure instances through stacks."
     benefits={[
-      "Reuse 80% of components across projects",
+      "Reuse component implementations across environments",
       "Consistent, proven architecture everywhere",
       "Smaller blast radius with loosely coupled components"
     ]}
@@ -106,7 +106,7 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
     icon={<RiLockUnlockLine />}
     title="Atmos Auth"
     tagline="One login, every cloud"
-    description="Single authentication interface for AWS IAM Identity Center, Azure, GCP, and custom OIDC providers. Authenticate once and access all your cloud resources without browser plugins or credential sprawl."
+    description="Use a shared authentication configuration for AWS, Azure, and GCP, including supported SSO, SAML, and workload identity providers. Select identities for components, workflows, and commands, with credential caching and role assumption."
     benefits={[
       "Eliminate credential management headaches",
       "Works across shells, workflows, and deployments",
@@ -117,15 +117,28 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
 
   <FeatureCard
     icon={<RiGitBranchLine />}
-    title="Native GitOps"
+    title="Native CI & GitOps"
     tagline="Deploy only what changed"
-    description="Run plan, apply, and drift detection directly in GitHub Actions with native CI integration. Affected stacks detection analyzes Git changes to identify exactly which components need deployment, saving CI time and reducing risk."
+    description="Run Atmos directly in GitHub Actions to publish job summaries, status checks, output variables, and pull-request plan comments. Store and verify planfiles for later apply, and use affected detection to scope deployments."
     benefits={[
-      "Professional-grade workflows out of the box",
-      "Smart change detection between any Git refs",
-      "Full PR integration with plan outputs"
+      "Configure CI reporting in atmos.yaml",
+      "Store planfiles and verify them before apply",
+      "Publish plan comments with the required repository permissions"
     ]}
     docLink="/ci"
+  />
+
+  <FeatureCard
+    icon={<RiGitBranchLine />}
+    title="Affected Detection"
+    tagline="Understand the impact of a change"
+    description="Compare Git revisions to find affected component instances, including changes to shared configuration and declared file or folder dependencies. Use the result to select work for CI and multi-component runs."
+    benefits={[
+      "Inspect which instances changed and why",
+      "Account for shared configuration and dependency changes",
+      "Export affected instances for automation"
+    ]}
+    docLink="/cli/commands/describe/affected"
   />
 </FeatureGrid>
 
@@ -168,7 +181,7 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
       "Real-time IDE feedback as you edit",
       "Automated CI guardrails in pull requests"
     ]}
-    docLink="/validation"
+    docLink="/validation/json-schema"
   />
 
   <FeatureCard
@@ -179,7 +192,7 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
     benefits={[
       "Standardized infrastructure across all teams",
       "Self-service at scale without waiting for approval",
-      "Governance built-in — only approved configurations available"
+      "Share reviewed defaults through version-controlled catalogs"
     ]}
     docLink="/howto/catalogs"
   />
@@ -188,11 +201,11 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
     icon={<RiFunctionLine />}
     title="Template Functions"
     tagline="An escape hatch for every situation"
-    description="Go templates plus Gomplate with 100+ functions. Reference other components, fetch remote data, compute values dynamically. When YAML isn't enough, templates provide unlimited flexibility."
+    description="Go templates, Gomplate, and Atmos functions let you compose values, reference components, and fetch external data. Use locals for intermediate values that stay separate from component inputs."
     benefits={[
       "Dynamic configuration without custom code",
       "Access component outputs and external data",
-      "Full programming power when you need it"
+      "Compose reusable values with templates and locals"
     ]}
     docLink="/templates"
   />
@@ -205,9 +218,74 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
     benefits={[
       "Reference Terraform outputs across stacks",
       "Read secrets from SSM, Vault, and more",
-      "10-100x faster than terraform output commands"
+      "Read state values without invoking terraform output"
     ]}
     docLink="/functions/yaml"
+  />
+
+  <FeatureCard
+    icon={<RiLockUnlockLine />}
+    title="Secrets Management"
+    tagline="Declare secrets without committing their values"
+    description="Declare secrets in stack configuration, provision values with atmos secret, and resolve them at runtime with !secret. Use cloud secret backends or SOPS-encrypted files."
+    benefits={[
+      "Keep secret declarations in Git",
+      "Resolve secret values for component environments",
+      "Manage secrets through a consistent CLI"
+    ]}
+    docLink="/cli/configuration/secrets"
+  />
+
+  <FeatureCard
+    icon={<RiDatabase2Line />}
+    title="Stores & Shared Outputs"
+    tagline="Connect components through external data"
+    description="Configure external key-value stores to share outputs between components and systems. Write values with the store CLI or lifecycle hooks, and read them from stack configuration with !store."
+    benefits={[
+      "Share outputs without coupling Terraform states",
+      "Use named stores across stacks",
+      "Publish values automatically from hooks"
+    ]}
+    docLink="/cli/configuration/stores"
+  />
+
+  <FeatureCard
+    icon={<RiCodeSSlashLine />}
+    title="File & Provider Generation"
+    tagline="Render configuration from your stacks"
+    description="Generate files from stack values and templates, including Terraform provider configuration. Share generation rules through imports and inheritance."
+    benefits={[
+      "Keep generated configuration tied to stack inputs",
+      "Reuse generation rules across components",
+      "Generate files before supported component operations"
+    ]}
+    docLink="/stacks/generate"
+  />
+
+  <FeatureCard
+    icon={<RiSettings3Line />}
+    title="Configuration Profiles"
+    tagline="Switch settings for the environment you work in"
+    description="Layer named CLI configuration profiles over atmos.yaml. Keep local, CI, and team-specific settings in reusable profiles selected explicitly for each invocation."
+    benefits={[
+      "Share profiles with your team",
+      "Select different settings for local work and CI",
+      "Compose configuration without editing the base file"
+    ]}
+    docLink="/cli/configuration/profiles"
+  />
+
+  <FeatureCard
+    icon={<RiStackLine />}
+    title="Configuration Inspection & Provenance"
+    tagline="See where a resolved value came from"
+    description="Inspect a component after imports, inheritance, and templates resolve. Provenance annotations trace values back to their source files, making layered stack configuration easier to debug."
+    benefits={[
+      "Inspect the effective component configuration",
+      "Trace inherited values to their source",
+      "Export configuration for other tools"
+    ]}
+    docLink="/cli/commands/describe/component"
   />
 </FeatureGrid>
 
@@ -217,11 +295,11 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
   <FeatureCard
     icon={<RiFlashlightLine />}
     title="Workflow Orchestration"
-    tagline="Complex deployments made simple"
-    description="Workflows let you define multi-step deployment sequences with retry logic, failure handling, and the ability to resume from any step. Bring up entire environments with a single command."
+    tagline="Typed steps for repeatable operations"
+    description="Build workflows from typed steps for commands, scripts, HTTP requests, containers, and more. Pass outputs between steps, use conditions and matrix execution, configure retries, and start from a selected step."
     benefits={[
-      "Dependencies handled automatically",
-      "Built-in retry and recovery mechanisms",
+      "Pass structured inputs and outputs between steps",
+      "Configure conditions, retries, and failure handling",
       "Pick up where failures occurred without re-running"
     ]}
     docLink="/workflows"
@@ -231,13 +309,13 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
     icon={<RiDownloadCloudLine />}
     title="Vendoring"
     tagline="Say goodbye to 'works on my machine'"
-    description="Automatically pull and pin dependencies from Git, S3, OCI registries, or HTTP endpoints. Every build uses identical artifacts, ensuring reproducible deployments every time."
+    description="Pull component sources from Git, S3, OCI registries, or HTTP endpoints. Pin versions, select files, and apply overlays to maintain reusable component libraries across repositories."
     benefits={[
       "Reproducible builds across dev, CI, and production",
       "Version-lock components and upgrade deliberately",
       "Enterprise sharing via centralized component libraries"
     ]}
-    docLink="/vendoring"
+    docLink="/cli/configuration/vendor"
   />
 
   <FeatureCard
@@ -250,7 +328,7 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
       "Self-documenting via atmos help",
       "Commands access component and stack configuration"
     ]}
-    docLink="/custom-commands"
+    docLink="/cli/configuration/commands"
   />
 
   <FeatureCard
@@ -269,27 +347,79 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
   <FeatureCard
     icon={<RiLoopLeftLine />}
     title="Lifecycle Hooks"
-    tagline="Automate after every apply"
-    description="Take action after terraform apply completes. Automatically store outputs to remote stores like AWS SSM Parameter Store, making values available to other components and systems."
+    tagline="Run checks and actions at lifecycle events"
+    description="Run actions before and after supported Terraform, Kubernetes, Helm, and Helmfile operations. Built-in hooks integrate cost estimation, security scanning, linting, stores, and CI; typed steps let you add custom automation."
     benefits={[
-      "Store outputs to SSM after apply",
-      "Share values across components automatically",
-      "Configure at global, terraform, or component level"
+      "Run Infracost, Trivy, and TFLint at lifecycle events",
+      "Publish outputs to stores after apply",
+      "Share hook configuration through stack inheritance"
     ]}
     docLink="/stacks/hooks"
   />
 
   <FeatureCard
     icon={<RiServerLine />}
-    title="Backend Generation"
+    title="Backend Generation & Provisioning"
     tagline="Terraform backends, fully automated"
-    description="Auto-generate backend configurations per component and stack. Define backend patterns once, and Atmos generates the correct backend.tf for every deployment—no more copy-paste errors."
+    description="Generate Terraform backend configuration from stack context. Enable automatic provisioning to create supported S3 or Azure state backends before the first component run."
     benefits={[
-      "Consistent state management everywhere",
+      "Bootstrap supported state backends automatically",
       "Dynamic backends based on stack context",
       "Supports S3, GCS, Azure, and more"
     ]}
-    docLink="/cli/commands/terraform/generate/backend"
+    docLink="/stacks/components/provision/backend"
+  />
+
+  <FeatureCard
+    icon={<RiGitMergeLine />}
+    title="Dependency-Aware Execution"
+    tagline="Run components in the right order"
+    description="Declare dependencies between components and use ordered multi-component runs. Atmos builds a dependency graph so prerequisites run before dependents, with concurrency for independent work."
+    benefits={[
+      "Express dependencies in stack configuration",
+      "Run independent components concurrently",
+      "Use dependency order with all or affected selections"
+    ]}
+    docLink="/stacks/dependencies/components"
+  />
+
+  <FeatureCard
+    icon={<RiBox3Line />}
+    title="Compositions"
+    tagline="Operate related services together"
+    description="Declare a composition and fulfill its members with stack-scoped components. Validate membership and operate supported member lifecycles together, including native containers and emulators."
+    benefits={[
+      "Name a group of related component instances",
+      "Validate that a stack fulfills its composition",
+      "Start, inspect, and stop supported members together"
+    ]}
+    docLink="/cli/commands/composition/usage"
+  />
+
+  <FeatureCard
+    icon={<RiDownloadCloudLine />}
+    title="Just-in-Time Component Sources"
+    tagline="Fetch the right component version on demand"
+    description="Declare a Terraform component source and version directly in its stack configuration. Atmos downloads the source on first use, so environments can adopt component versions independently."
+    benefits={[
+      "Pin component sources per environment",
+      "Download source automatically before execution",
+      "Inspect and refresh sources from the CLI"
+    ]}
+    docLink="/cli/commands/terraform/source"
+  />
+
+  <FeatureCard
+    icon={<RiDatabase2Line />}
+    title="Terraform Registry Cache"
+    tagline="Reuse provider and module downloads"
+    description="Cache Terraform and OpenTofu registry artifacts across repeated runs. Inspect cache usage, prune entries, or pre-seed a mirror for the platforms your developers and CI runners use."
+    benefits={[
+      "Avoid repeated provider and module downloads",
+      "Manage cached artifacts from the CLI",
+      "Prepare multi-platform mirrors"
+    ]}
+    docLink="/cli/commands/terraform/cache"
   />
 </FeatureGrid>
 
@@ -298,13 +428,13 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
 <FeatureGrid>
   <FeatureCard
     icon={<RiCodeSSlashLine />}
-    title="Terraform Components"
+    title="Terraform / OpenTofu Components"
     tagline="Infrastructure as code, orchestrated"
-    description="Native Terraform root module support with automatic backend configuration, varfile generation, and workspace management. Your existing Terraform code works unchanged."
+    description="Use Terraform or OpenTofu root modules with automatic backend configuration, variable generation, and workspace management. Keep infrastructure definitions in standard HCL."
     benefits={[
       "Zero lock-in — vanilla Terraform modules",
       "Automatic variable injection from stacks",
-      "Full terraform CLI passthrough"
+      "Run Terraform or OpenTofu through the same commands"
     ]}
     docLink="/components/terraform"
   />
@@ -313,7 +443,7 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
     icon={<RiShipLine />}
     title="Helmfile Components"
     tagline="Kubernetes in your stack"
-    description="Manage Kubernetes deployments alongside infrastructure using Helmfile. Same stack configurations, same inheritance patterns, same workflows for both Terraform and Helm."
+    description="Orchestrate Helmfile release definitions alongside your infrastructure. Generate values from Atmos stacks and use shared inheritance, hooks, and workflows for Helmfile operations."
     benefits={[
       "Unified infrastructure and app deployment",
       "DRY Helm configurations via inheritance",
@@ -346,6 +476,167 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
       "Manage infrastructure provisioning and configuration together"
     ]}
     docLink="/components/ansible"
+  />
+
+  <FeatureCard
+    icon={<RiStackLine />}
+    title="Kubernetes Components"
+    tagline="Plain manifests and Kustomize, managed natively"
+    description="Render, diff, validate, and apply Kubernetes resources with native Atmos components. Use plain YAML or Kustomize overlays with stack variables, inheritance, authentication, and dependencies."
+    benefits={[
+      "Manage Kubernetes resources alongside infrastructure",
+      "Preview changes before deployment",
+      "Share configuration across clusters and environments"
+    ]}
+    docLink="/stacks/components/kubernetes"
+  />
+
+  <FeatureCard
+    icon={<RiShipLine />}
+    title="Native Helm Components"
+    tagline="Deploy charts directly from your stacks"
+    description="Manage Helm releases from local charts, chart repositories, or OCI registries. Declare chart versions and values in stack configuration, with native render, diff, apply, and delete operations."
+    benefits={[
+      "Deploy charts without a Helmfile definition",
+      "Inherit release values across environments",
+      "Use hooks, authentication, and dependency ordering"
+    ]}
+    docLink="/stacks/components/helm"
+  />
+
+  <FeatureCard
+    icon={<RiBox3Line />}
+    title="Container Components"
+    tagline="Build images and run persistent services"
+    description="Build, push, and pull container images, and manage persistent stack-scoped services. Declare image, build, and run configuration directly in Atmos; lifecycle commands discover containers by component labels."
+    benefits={[
+      "Manage images and services as native components",
+      "Inspect logs and execute commands in running services",
+      "Reuse stack inheritance for build and runtime settings"
+    ]}
+    docLink="/components/container"
+  />
+
+  <FeatureCard
+    icon={<RiServerLine />}
+    title="Emulator Components"
+    tagline="Develop against local cloud and service APIs"
+    description="Run stack-scoped emulators for cloud APIs, Kubernetes, and backing services. Resolve their endpoints from stack configuration and manage health checks, persistence, and lifecycle through Atmos."
+    benefits={[
+      "Test supported APIs without a cloud account",
+      "Share emulator configuration across development and CI",
+      "Start, inspect, reset, and stop local services"
+    ]}
+    docLink="/components/emulator"
+  />
+
+  <FeatureCard
+    icon={<RiTerminalLine />}
+    title="Custom Component Types"
+    tagline="Bring your own infrastructure tool"
+    description="Define custom component types through custom commands. Supply the execution steps for tools such as Pulumi, CDK, or database migrations while Atmos resolves their stack configuration."
+    benefits={[
+      "Reuse imports and inheritance with your own tools",
+      "Expose resolved configuration to command steps",
+      "Pass component environment variables to your commands"
+    ]}
+    docLink="/components/custom"
+  />
+</FeatureGrid>
+
+## Developer Tools & AI
+
+<FeatureGrid>
+
+  <FeatureCard
+    icon={<RiDownloadCloudLine />}
+    title="Toolchain Management"
+    tagline="Use the same CLI versions everywhere"
+    description="Install and execute project tools from configured registries. Pin versions, lock dependencies, and declare component tool requirements so local development and CI use consistent binaries."
+    benefits={[
+      "Manage Terraform, Helm, and other CLI tools together",
+      "Select tools from project configuration",
+      "Verify downloads with configured integrity policies"
+    ]}
+    docLink="/cli/commands/toolchain/usage"
+  />
+
+  <FeatureCard
+    icon={<RiRefreshLine />}
+    title="Version Tracker"
+    tagline="Promote software versions deliberately"
+    description="Track software versions independently for environments such as dev and production. Resolve policies into versions.lock.yaml, apply locked versions to managed files, and verify freshness in CI."
+    benefits={[
+      "Maintain independent version tracks",
+      "Track container images and workflow dependencies as well as tools",
+      "Review eligible updates before advancing a track"
+    ]}
+    docLink="/cli/commands/version/track"
+  />
+
+  <FeatureCard
+    icon={<RiBox3Line />}
+    title="Devcontainers"
+    tagline="Share a consistent development environment"
+    description="Define and manage development containers through Atmos. Start a project environment, open a shell, or execute commands inside it with shared configuration for your team."
+    benefits={[
+      "Keep development tools in a repeatable environment",
+      "Manage container startup and cleanup from the CLI",
+      "Use the same environment for interactive and scripted work"
+    ]}
+    docLink="/cli/commands/devcontainer"
+  />
+
+  <FeatureCard
+    icon={<RiFolderSharedLine />}
+    title="Scaffolding"
+    tagline="Generate projects from governed templates"
+    description="Generate components and projects from templates with validated inputs and conditional files. Run finishing steps and merge upstream template improvements into an existing project."
+    benefits={[
+      "Offer reusable templates for common patterns",
+      "Validate inputs in interactive and automated runs",
+      "Update generated projects as templates evolve"
+    ]}
+    docLink="/cli/commands/scaffold/usage"
+  />
+
+  <FeatureCard
+    icon={<RiTerminalBoxLine />}
+    title="AI Assistant & Command Analysis"
+    tagline="Ask questions with infrastructure context"
+    description="Chat with an assistant that can inspect your Atmos configuration, run scripted AI tasks, or analyze command output with --ai. Choose API providers or supported locally authenticated agent CLIs."
+    benefits={[
+      "Ask about stacks and components from the terminal",
+      "Reuse supported agent CLI subscriptions",
+      "Analyze command output in its infrastructure context"
+    ]}
+    docLink="/ai"
+  />
+
+  <FeatureCard
+    icon={<RiFunctionLine />}
+    title="MCP Integration"
+    tagline="Connect your infrastructure to AI tools"
+    description="Use Atmos as an MCP client and server. Define external servers once, install their configuration into supported coding assistants, and expose Atmos tools to those assistants."
+    benefits={[
+      "Share MCP server configuration across your team",
+      "Let assistants inspect and validate Atmos configuration",
+      "Use external MCP tools from Atmos AI"
+    ]}
+    docLink="/mcp"
+  />
+
+  <FeatureCard
+    icon={<RiFolderSharedLine />}
+    title="Agent Skills"
+    tagline="Give assistants reusable Atmos knowledge"
+    description="Discover and install Atmos skills for compatible AI assistants. Share task-specific guidance for infrastructure operations through the same skills catalog used by Atmos AI."
+    benefits={[
+      "Browse skills by category and task",
+      "Install bundled skills from the CLI",
+      "Share operational guidance across assistants"
+    ]}
+    docLink="/ai/skills"
   />
 </FeatureGrid>
 

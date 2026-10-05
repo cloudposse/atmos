@@ -17,7 +17,7 @@ skill all point here instead of restating these rules. Don't re-duplicate them e
 Only non-draft PRs targeting `main`, labeled `minor` or `major`, need one — see the `pull-request` skill's
 label decision tree. CI enforces this via `.github/workflows/changelog-check.yml`, which checks for a new
 `website/blog/*.md` or `*.mdx` file (draft PRs, and PRs targeting a branch other than `main`, are exempt
-entirely). Write posts as `.mdx` regardless — Rule 3 below embeds `<CastPlayer>` as real JSX, which only
+entirely). Write posts as `.mdx` regardless — Rule 3 below embeds `<CastEmbed>` as real JSX, which only
 `.mdx` renders; CI accepts `.md` but that's not this repo's convention.
 If a change is genuinely internal-only with zero user-visible effect, it doesn't get a post at all — that
 invariant belongs to the `roadmap` skill ("no changelog post for internal-only refactors"); don't work around
@@ -84,6 +84,28 @@ problem or technique first, the way someone outside the project would recognize 
 
 Structure the body `## The Problem` / `## The Fix` / `## How to Use It` / `## Get Involved`.
 
+### Rule 1a — Open on the real reason, at the scope it actually applies to
+
+Find the actual motivating reason for the change (PR description, linked issue, commit messages) before
+writing the intro, and open on *that* — not a plausible-sounding scenario constructed to fit it, and not
+narrowed to the one path you happened to notice it through when the real gap is broader. Both are the same
+mistake: substituting a specific, contrived framing for the real, general one.
+
+- **Correct** — `2026-07-13-atmos-stack-schema-command.mdx`: "Editors, CI pipelines, and offline
+  environments that want to validate stack manifests locally have had one option: fetch the JSON Schema
+  from `atmos.tools`... and hope it matches." A real, checkable limitation, not an anecdote.
+- **Violation (invented)** — `2026-08-06-toolchain-lockfile-default.mdx` opened with a fabricated "a
+  teammate's laptop and CI don't quite match" vignette, when the real reason (stated correctly two
+  paragraphs later) was simpler: the fix already existed but was undocumented, so nobody enabled it.
+- **Violation (over-narrowed)** — `2026-08-05-taskfile-convergence.mdx` opens "If you've ever tried to move
+  a `Taskfile.yml` over to Atmos, you've hit the gap..." — framing a general task-runner deficiency (no
+  dependency ordering, no incremental builds — table-stakes features nearly every task runner has) as if it
+  only matters to people migrating from one specific competitor. The real problem, stated correctly under
+  `## The Problem`, is category-general: Atmos was missing it as a task runner, full stop.
+
+If you can't find the real reason, ask rather than invent one — and state it at the scope it actually
+applies to.
+
 ## Rule 2 — Never open prose with a backtick
 
 Prose (a sentence, paragraph, or the post intro) must start with a word, not an inline code span or fence.
@@ -104,14 +126,18 @@ block a post. When a recorded demo exists (or is worth recording) under `example
 per the `atmos-asciicast` skill, embed it near the top of the post, after the intro/truncate:
 
 ```mdx
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
-<CastPlayer src="/casts/examples/demo-component-versions/vendor-versions.cast" title="atmos component version vendoring" chrome controls scrubber />
+<CastEmbed src="/casts/examples/demo-component-versions/vendor-versions.cast" title="atmos component version vendoring" chrome controls scrubber />
 ```
 
 - `src` points under `website/static/casts/{examples,demo}/...`.
 - Always carry the `chrome controls scrubber` flags.
-- Multiple `<CastPlayer>` tags are fine in one post if there are multiple relevant recordings.
+- Multiple `<CastEmbed>` tags are fine in one post if there are multiple relevant recordings.
+- `CastEmbed` wraps `CastPlayer` and adds Download (rendered GIF/MP4/SVG/WEBM via Atmos Pro) and Share controls,
+  on by default against `cloudposse/atmos` at the site build's Git commit (`GITHUB_SHA` in CI,
+  `main` for local builds). This lets PR previews download recordings introduced by the same PR.
+  Use `gitRef` to override the source revision explicitly; do not hide controls just because a cast is unmerged.
 - Follow it with a plain link to the full example when one exists: `[View the full example](/examples/<name>)`.
 - Don't use `EmbedExample` in blog posts — that component's README/file-listing duplicates content the post's
   own prose already covers; it's for docs pages that need the "browse the full example" callout instead.
@@ -127,12 +153,24 @@ implementation structure — describe behavior only in CLI/config/output terms.
 - **Correct** — `2026-06-29-ci-log-groups.mdx` and `2026-06-28-list-dependencies.mdx` describe mechanisms only
   in terms of commands, flags, and observable output — never Go internals.
 
+## Rule 5 — Link features to usage documentation
+
+Link the first useful prose mention of a feature, command, flag, configuration field, or YAML
+function to the specific usage page or section. A changelog announcement should lead the reader
+to instructions they can follow. Keep code blocks copyable and avoid linking every repetition.
+Verify the actual route and heading anchor; filenames are not always public URLs. When supported
+functionality has no usage documentation, add it to the appropriate reference page before linking.
+For retired functionality, link applicable migration or deprecation guidance without rewriting history.
+
 ## Pre-publish checklist
 
 - [ ] Intro opens on the problem, not the feature, and doesn't open with a backtick
+- [ ] The opening problem is the real, specific reason this change happened (checked against the PR
+      description/issue/commits) — not a generic scenario invented to justify it
 - [ ] Body follows Problem → Fix → How to Use It → Get Involved (no `## What Changed` opener)
 - [ ] Tag(s) exist in `website/blog/tags.yml`
 - [ ] Author exists in `website/blog/authors.yml` (added in this PR if new)
+- [ ] Feature terms link to verified usage documentation, including relevant section anchors
 - [ ] No Go package paths / internal file layout mentioned
 - [ ] Cast embedded if a relevant recording exists (optional otherwise)
 - [ ] `cd website && npm run build` succeeds

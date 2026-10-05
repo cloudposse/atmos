@@ -14,6 +14,8 @@ import (
 )
 
 func TestExchangeOIDCTokenForAtmosToken_Success(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request method and path
 		assert.Equal(t, "POST", r.Method)
@@ -43,6 +45,8 @@ func TestExchangeOIDCTokenForAtmosToken_Success(t *testing.T) {
 }
 
 func TestExchangeOIDCTokenForAtmosToken_HTTPErrors(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name           string
 		serverResponse func(w http.ResponseWriter, r *http.Request)
@@ -87,6 +91,7 @@ func TestExchangeOIDCTokenForAtmosToken_HTTPErrors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			server := httptest.NewServer(http.HandlerFunc(tc.serverResponse))
 			defer server.Close()
 
@@ -99,6 +104,8 @@ func TestExchangeOIDCTokenForAtmosToken_HTTPErrors(t *testing.T) {
 }
 
 func TestExchangeOIDCTokenForAtmosToken_NetworkError(t *testing.T) {
+	t.Parallel()
+
 	// Use an invalid URL to simulate network error
 	token, err := exchangeOIDCTokenForAtmosToken("http://invalid-host-that-does-not-exist:12345", "api", "oidc-token", "workspace-id")
 	assert.Error(t, err)
@@ -107,6 +114,8 @@ func TestExchangeOIDCTokenForAtmosToken_NetworkError(t *testing.T) {
 }
 
 func TestExchangeOIDCTokenForAtmosToken_RequestCreationError(t *testing.T) {
+	t.Parallel()
+
 	// Test with malformed URL that will cause http.NewRequest to fail
 	token, err := exchangeOIDCTokenForAtmosToken("://invalid-url", "api", "oidc-token", "workspace-id")
 	assert.Error(t, err)
@@ -117,6 +126,8 @@ func TestExchangeOIDCTokenForAtmosToken_RequestCreationError(t *testing.T) {
 // TestExchangeOIDCTokenForAtmosToken_ErrorStatusNonJSON verifies that an error status with
 // a non-JSON body returns an enriched error with troubleshooting hints.
 func TestExchangeOIDCTokenForAtmosToken_ErrorStatusNonJSON(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 		w.Write([]byte(`<html>Bad Gateway</html>`))
@@ -136,6 +147,8 @@ func TestExchangeOIDCTokenForAtmosToken_ErrorStatusNonJSON(t *testing.T) {
 }
 
 func TestExchangeOIDCTokenForAtmosToken_MarshalError(t *testing.T) {
+	t.Parallel()
+
 	// This is harder to test without modifying the function, but we can test with extreme values
 	// that might cause issues. In practice, JSON marshaling rarely fails with normal string inputs.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

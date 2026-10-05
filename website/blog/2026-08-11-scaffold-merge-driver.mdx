@@ -18,7 +18,7 @@ whitespace as a convention rather than noise, `atmos scaffold generate --update`
 
 ## The Problem
 
-`--update` re-runs a template against an existing project and 3-way merges the result. Scaffold
+[`--update`](/cli/commands/scaffold/generate) re-runs a template against an existing project and 3-way merges the result. Scaffold
 picks its merge algorithm by file extension: YAML-aware for `.yaml`/`.yml`, line-oriented text for
 everything else. The YAML-aware path is what makes the complex merges possible in the first
 place—but re-encoding the whole document through a YAML parser and serializer means anything the
@@ -28,7 +28,7 @@ definitions use blank lines to visually separate jobs, stages, and other top-lev
 
 ## The Fix
 
-`--merge-driver` lets you override which merge algorithm runs, named after git's own merge driver
+[`--merge-driver`](/cli/commands/scaffold/generate) lets you override which merge algorithm runs, named after git's own merge driver
 concept:
 
 - **`auto`** (default, unchanged) — YAML-aware for `.yaml`/`.yml`, text otherwise.
@@ -43,7 +43,7 @@ template's formatting-sensitive changes (a CI pipeline overhaul, say) and pull t
 deliberate `--merge-driver=text` run, rather than running every future update through the coarser
 text merger just to protect that one file.
 
-This is a different axis from `--merge-strategy`, which decides how a genuine conflict resolves
+This is a different axis from [`--merge-strategy`](/cli/commands/scaffold/generate), which decides how a genuine conflict resolves
 (manual, ours, or theirs) once a merge algorithm has already run. `--merge-driver` decides which
 algorithm runs in the first place.
 

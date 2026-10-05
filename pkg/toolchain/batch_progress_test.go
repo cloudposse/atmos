@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // ansiEscapeRE matches SGR escape codes, the same pattern used elsewhere in the repo (see
@@ -77,7 +76,6 @@ func TestRunConcurrentBatchWithLiveProgress_RunsEveryItem(t *testing.T) {
 // state transitions -- not just that no method panics.
 func TestLiveBatchRenderer_StartTickCompleteRenderAndClear(t *testing.T) {
 	renderer := newLiveBatchRenderer(2)
-	require.NotNil(t, renderer.spinner.Spinner.Frames, "newLiveBatchRenderer must configure a real spinner")
 
 	output := captureUITestOutput(t, func() {
 		renderer.start("tool-a")
@@ -86,15 +84,14 @@ func TestLiveBatchRenderer_StartTickCompleteRenderAndClear(t *testing.T) {
 	assert.Contains(t, output, "tool-a")
 	assert.Contains(t, output, "tool-b")
 	assert.Equal(t, []string{"tool-a", "tool-b"}, renderer.active)
-	// One spinner line per active item plus one overall progress-bar line.
-	assert.Equal(t, 3, renderer.renderedLines, "render must emit a line per active item plus a progress line")
+	assert.Contains(t, stripANSI(output), "0/2 complete, 2 running")
 
-	// clear() with renderedLines > 1 must walk and reset every rendered line, not just the
-	// last one.
-	captureUITestOutput(t, renderer.clear)
-	assert.Equal(t, 0, renderer.renderedLines)
+	// Clearing the shared live region removes both rows and its footer.
+	clearOutput := captureUITestOutput(t, renderer.clear)
+	assert.Contains(t, clearOutput, "\x1b[3A")
+	assert.Contains(t, clearOutput, "\x1b[J")
 
-	// clear() called again immediately (renderedLines == 0) must be a no-op early return, not
+	// clear() called again immediately must be a no-op early return, not
 	// emit stray escape codes.
 	earlyReturnOutput := captureUITestOutput(t, renderer.clear)
 	assert.Empty(t, earlyReturnOutput)
@@ -105,6 +102,7 @@ func TestLiveBatchRenderer_StartTickCompleteRenderAndClear(t *testing.T) {
 		renderer.complete("tool-a", "tool-a done", batchLineSuccess)
 	})
 	assert.Contains(t, stripANSI(completeOutput), "tool-a done")
+	assert.Contains(t, stripANSI(completeOutput), "1/2 complete, 1 running")
 	assert.Equal(t, []string{"tool-b"}, renderer.active, "completing tool-a must remove only tool-a from active")
 	assert.Equal(t, 1, renderer.completed)
 
@@ -124,7 +122,6 @@ func TestLiveBatchRenderer_RenderOmitsProgressLineWhenNothingActive(t *testing.T
 	output := captureUITestOutput(t, renderer.render)
 
 	assert.Empty(t, output)
-	assert.Equal(t, 0, renderer.renderedLines)
 }
 
 // TestLiveBatchDisplay_WithRenderer_DelegatesEveryMethod constructs a liveBatchDisplay with a
@@ -148,5 +145,4 @@ func TestLiveBatchDisplay_WithRenderer_DelegatesEveryMethod(t *testing.T) {
 	assert.Contains(t, stripANSI(output), "tool done")
 	assert.Equal(t, 1, renderer.completed)
 	assert.Empty(t, renderer.active)
-	assert.Equal(t, 0, renderer.renderedLines)
 }

@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -30,7 +31,7 @@ func stubPackerAuthSeams(t *testing.T, manager auth.AuthManager) {
 	defaultMergedAuthConfigGetter = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
 		return &schema.AuthConfig{}, nil
 	}
-	defaultAuthManagerCreator = func(identity string, authConfig *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration, stack string) (auth.AuthManager, error) {
+	defaultAuthManagerCreator = func(identity string, authConfig *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration, reExecCtx auth.ReExecContext) (auth.AuthManager, error) {
 		return manager, nil
 	}
 }
@@ -119,6 +120,8 @@ func TestExecutePacker_InjectsAuthCredentialsIntoSubprocessEnv(t *testing.T) {
 	origShell := executePackerShellCommand
 	t.Cleanup(func() { executePackerShellCommand = origShell })
 
+	var capturedArgs []string
+	var capturedDir string
 	var capturedEnv []string
 	var shellCalled bool
 	executePackerShellCommand = func(
@@ -131,6 +134,8 @@ func TestExecutePacker_InjectsAuthCredentialsIntoSubprocessEnv(t *testing.T) {
 		redirectStdError string,
 		opts ...ShellCommandOption,
 	) error {
+		capturedArgs = append([]string(nil), args...)
+		capturedDir = dir
 		capturedEnv = env
 		shellCalled = true
 		return nil
@@ -149,6 +154,12 @@ func TestExecutePacker_InjectsAuthCredentialsIntoSubprocessEnv(t *testing.T) {
 	err := ExecutePacker(info, &PackerFlags{})
 	require.NoError(t, err)
 	require.True(t, shellCalled, "packer shell command should have been invoked")
+	require.GreaterOrEqual(t, len(capturedArgs), 3)
+	require.Equal(t, "-var-file", capturedArgs[1])
+	require.True(t, filepath.IsAbs(capturedArgs[2]),
+		"Packer must receive an absolute variable-file path")
+	require.Equal(t, filepath.Clean(capturedDir), filepath.Dir(filepath.Clean(capturedArgs[2])),
+		"Packer variable file must be located in its working directory")
 	require.Contains(t, strings.Join(capturedEnv, "\n"), sentinel,
 		"Atmos Auth credentials must be injected into the packer subprocess environment")
 }

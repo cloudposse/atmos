@@ -61,6 +61,8 @@ func versionTrackFakeConfig(t *testing.T) *schema.AtmosConfiguration {
 }
 
 func TestNewVersionTrackStatusTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewVersionTrackStatusTool(atmosConfig)
 
@@ -69,16 +71,22 @@ func TestNewVersionTrackStatusTool(t *testing.T) {
 }
 
 func TestVersionTrackStatusTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewVersionTrackStatusTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "atmos_version_track_status", tool.Name())
 }
 
 func TestVersionTrackStatusTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewVersionTrackStatusTool(&schema.AtmosConfiguration{})
 	assert.NotEmpty(t, tool.Description())
 }
 
 func TestVersionTrackStatusTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewVersionTrackStatusTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -88,16 +96,22 @@ func TestVersionTrackStatusTool_Parameters(t *testing.T) {
 }
 
 func TestVersionTrackStatusTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewVersionTrackStatusTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.RequiresPermission())
 }
 
 func TestVersionTrackStatusTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewVersionTrackStatusTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestVersionTrackStatusTool_Execute(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := versionTrackFakeConfig(t)
 	tool := NewVersionTrackStatusTool(atmosConfig)
 

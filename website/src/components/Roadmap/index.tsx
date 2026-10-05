@@ -18,6 +18,7 @@ const initiativePriority: Record<string, number> = {
   'ci-cd': 4,
 };
 
+/** Compose the timeline, curated highlights, and initiatives with shared expansion controls. */
 export default function Roadmap(): JSX.Element {
   const [expandAllMilestones, setExpandAllMilestones] = useState(false);
 
@@ -82,11 +83,10 @@ export default function Roadmap(): JSX.Element {
             </button>
           </p>
           <div className={styles.initiativesGrid}>
-            {sortedInitiatives.map((initiative, index) => (
+            {sortedInitiatives.map((initiative) => (
               <InitiativeCard
                 key={initiative.id}
                 initiative={initiative}
-                index={index}
                 expandAllMilestones={expandAllMilestones}
               />
             ))}

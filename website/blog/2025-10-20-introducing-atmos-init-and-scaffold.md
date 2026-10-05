@@ -5,7 +5,7 @@ authors: [atmos]
 tags: [feature, dx]
 ---
 
-We're excited to announce two new commands that dramatically simplify getting started with Atmos: `atmos init` and `atmos scaffold`. These commands eliminate the manual setup process and help you bootstrap new Atmos projects or generate infrastructure code in seconds.
+We're excited to announce two new commands that dramatically simplify getting started with Atmos: [`atmos init`](/cli/commands/init) and [`atmos scaffold`](/cli/commands/scaffold/usage). These commands eliminate the manual setup process and help you bootstrap new Atmos projects or generate infrastructure code in seconds.
 
 <!--truncate-->
 

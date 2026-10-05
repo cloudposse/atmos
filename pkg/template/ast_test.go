@@ -343,6 +343,63 @@ func TestHasTemplateActions(t *testing.T) {
 	}
 }
 
+func TestHasDynamicScope(t *testing.T) {
+	tests := []struct {
+		template string
+		expected bool
+	}{
+		{"{{ .foo }}", false},
+		{"{{ if .x }}y{{ end }}", false},
+		{"{{ .vars.region }}", false},
+		{"plain text", false},
+		{"", false},
+		{"{{ range .items }}{{ . }}{{ end }}", true},
+		{"{{ with .config }}{{ .value }}{{ end }}", true},
+		{"{{ if .x }}{{ range .items }}{{ . }}{{ end }}{{ end }}", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.template, func(t *testing.T) {
+			result, err := HasDynamicScope(tt.template)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestHasDynamicScope_InvalidTemplate(t *testing.T) {
+	_, err := HasDynamicScope("{{ .foo }")
+	assert.Error(t, err)
+}
+
+func TestHasRootReference(t *testing.T) {
+	tests := []struct {
+		template string
+		expected bool
+	}{
+		{"{{ .foo }}", false},
+		{"{{ .vars.region }}", false},
+		{"plain text", false},
+		{"", false},
+		{"{{ . }}", true},
+		{`{{ printf "%v" . }}`, true},
+		{"{{ if .x }}{{ . }}{{ end }}", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.template, func(t *testing.T) {
+			result, err := HasRootReference(tt.template)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestHasRootReference_InvalidTemplate(t *testing.T) {
+	_, err := HasRootReference("{{ . }")
+	assert.Error(t, err)
+}
+
 func TestFieldRefString(t *testing.T) {
 	tests := []struct {
 		path     []string

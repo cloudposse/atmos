@@ -65,6 +65,13 @@ func TestSave_And_Load(t *testing.T) {
 	assert.Contains(t, string(content), "1.13.4")
 	assert.Contains(t, string(content), "sha256:abc123def456")
 
+	// Verify the repo's 2-space YAML indent standard, not yaml.v3's bare-Marshal 4-space
+	// default: "tools:" -> "  hashicorp/terraform:" -> "    versions:" is 2-space-per-level.
+	assert.Contains(t, string(content), "\n  hashicorp/terraform:\n")
+	assert.Contains(t, string(content), "\n    versions:\n")
+	assert.NotContains(t, string(content), "\n    hashicorp/terraform:\n")
+	assert.NotContains(t, string(content), "\n        versions:\n")
+
 	// Load back
 	loaded, err := Load(tmpFile)
 	require.NoError(t, err)

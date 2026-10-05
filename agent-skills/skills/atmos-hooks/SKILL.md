@@ -21,8 +21,10 @@ toolchain-aware automation around Terraform, Helm, Kubernetes, and other compone
 |---|---|
 | Store output hooks | [atmos-stores](../atmos-stores/SKILL.md) |
 | Shared step fields and `kind: step` payloads | [atmos-steps](../atmos-steps/SKILL.md) |
+| Post-deployment smoke tests and integration checks | [atmos-tests](../atmos-tests/SKILL.md) |
 | Git hooks and GitOps repositories | [atmos-git](../atmos-git/SKILL.md) |
 | Tool installation for hook commands | [atmos-toolchain](../atmos-toolchain/SKILL.md) |
+| TFLint hooks, standalone linting, and rule configuration | [atmos-lint](../atmos-lint/SKILL.md) |
 | CI summaries and Atmos Pro upload | [atmos-ci](../atmos-ci/SKILL.md) and [atmos-pro](../atmos-pro/SKILL.md) |
 
 ## Hook Shape
@@ -102,7 +104,7 @@ See [atmos-workflows](../atmos-workflows/SKILL.md#conditional-execution-with-whe
 
 ## Hook Kinds
 
-Stack lifecycle hooks support `command`, `store`, `git`, `infracost`, `trivy`, `checkov`,
+Stack lifecycle hooks support `command`, `store`, `git`, `tflint`, `infracost`, `trivy`, `checkov`,
 `kics`, and the step bridge. The legacy `ci.*` hook kinds still parse but are deprecated no-ops;
 use the current CI provider bindings instead. Use a named kind when Atmos has one; use `command`
 for a project-specific binary. The legacy `command:` discriminator and hyphenated events remain
@@ -123,7 +125,8 @@ recordings use, instead of one of the named kinds above:
   configure it with `with:`, exactly like a workflow step.
 - `kind: steps` runs an ordered list of registered step types, provided as a YAML list under `with:`.
 
-Both run strictly in order -- there is no concurrent execution within a step-backed hook.
+Hook step lists run in order. A `type: test` group can contain `parallel` or
+`matrix` checks; see [atmos-tests](../atmos-tests/SKILL.md).
 
 The hook envelope owns `events`, `when`, `env`, `retry`, and `on_failure`; `with:` is
 decoded and validated as the step's own configuration. `kind: step` supplies the one
@@ -177,6 +180,16 @@ An explicit `working_directory:` value resolves differently depending on its sha
 
 A plain relative value (`foo`) behaves like the unset default -- component-relative. A `./`- or
 `../`-prefixed value is an explicit signal to anchor to the directory Atmos was run from instead.
+
+Scaffold hooks (`before.scaffold.generate`/`after.scaffold.generate`) follow the same shape, but
+anchor to the scaffold's target/output directory (`atmos scaffold generate <template> <target>`'s
+`target`) instead of a component's working directory -- there is no component in a scaffold run.
+An unset or bare-relative `working_directory:` defaults to/anchors under `target`; the target
+directory is also exposed to hook templates as `{{ .TargetPath }}`. Use `working_directory: "."`
+to opt back into running the hook in the directory Atmos was launched from. This default excludes
+`type: atmos` steps: a nested `atmos` invocation must keep resolving its own atmos.yaml/stacks
+against the directory Atmos was launched from, so it keeps the ambient cwd unless
+`working_directory:` is set explicitly.
 
 ## Operational Guidance
 

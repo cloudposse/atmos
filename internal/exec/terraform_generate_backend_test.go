@@ -15,6 +15,8 @@ import (
 )
 
 func TestValidateBackendConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		info        *schema.ConfigAndStacksInfo
@@ -56,6 +58,7 @@ func TestValidateBackendConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := validateBackendConfig(tt.info)
 			if tt.expectedErr != nil {
 				assert.ErrorIs(t, err, tt.expectedErr)
@@ -67,6 +70,8 @@ func TestValidateBackendConfig(t *testing.T) {
 }
 
 func TestValidateBackendTypeRequirements(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		info        *schema.ConfigAndStacksInfo
@@ -128,6 +133,7 @@ func TestValidateBackendTypeRequirements(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := validateBackendTypeRequirements(tt.info)
 			if tt.expectedErr != nil {
 				assert.ErrorIs(t, err, tt.expectedErr)
@@ -140,6 +146,8 @@ func TestValidateBackendTypeRequirements(t *testing.T) {
 
 // TestExecuteTerraformGenerateBackendCmd_Deprecated tests the deprecated command returns an error.
 func TestExecuteTerraformGenerateBackendCmd_Deprecated(t *testing.T) {
+	t.Parallel()
+
 	err := ExecuteTerraformGenerateBackendCmd(nil, nil)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrDeprecatedCmdNotCallable)
@@ -147,6 +155,8 @@ func TestExecuteTerraformGenerateBackendCmd_Deprecated(t *testing.T) {
 
 // TestWriteBackendConfigFile tests the writeBackendConfigFile function across dry-run, normal write, and workdir cases.
 func TestWriteBackendConfigFile(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
 	workDir := filepath.Join(tempDir, "workdir", "vpc")
@@ -194,6 +204,7 @@ func TestWriteBackendConfigFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := writeBackendConfigFile(atmosConfig, tt.info, tt.config)
 			assert.NoError(t, err)
 
@@ -212,6 +223,8 @@ func TestWriteBackendConfigFile(t *testing.T) {
 // TestExecuteGenerateBackend_ProcessStacksFails tests that ExecuteGenerateBackend returns an error
 // when ProcessStacks fails due to missing stack config files.
 func TestExecuteGenerateBackend_ProcessStacksFails(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -233,6 +246,8 @@ func TestExecuteGenerateBackend_ProcessStacksFails(t *testing.T) {
 }
 
 func TestValidateBackendTypeRequirementsTypeAssertions(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		info        *schema.ConfigAndStacksInfo
@@ -272,6 +287,7 @@ func TestValidateBackendTypeRequirementsTypeAssertions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := validateBackendTypeRequirements(tt.info)
 			if tt.expectedErr != nil {
 				assert.ErrorIs(t, err, tt.expectedErr)

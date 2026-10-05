@@ -9,12 +9,14 @@ const (
 	helpTopicUsage   helpTopic = "usage"
 	helpTopicFlags   helpTopic = "flags"
 	helpTopicAll     helpTopic = "all"
+	helpTopicHidden  helpTopic = "hidden"
 )
 
 var supportedHelpTopics = []helpTopic{
 	helpTopicUsage,
 	helpTopicFlags,
 	helpTopicAll,
+	helpTopicHidden,
 }
 
 type helpTopicRequest struct {

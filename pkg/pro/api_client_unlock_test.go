@@ -16,6 +16,8 @@ import (
 )
 
 func TestUnlockStack_Success(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request method and path
 		assert.Equal(t, "DELETE", r.Method)
@@ -55,6 +57,8 @@ func TestUnlockStack_Success(t *testing.T) {
 }
 
 func TestUnlockStack_HTTPErrors(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name          string
 		statusCode    int
@@ -89,6 +93,7 @@ func TestUnlockStack_HTTPErrors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				w.Write([]byte(tc.responseBody))
@@ -115,6 +120,8 @@ func TestUnlockStack_HTTPErrors(t *testing.T) {
 }
 
 func TestUnlockStack_NetworkError(t *testing.T) {
+	t.Parallel()
+
 	client := &AtmosProAPIClient{
 		BaseURL:         "http://invalid-host-that-does-not-exist:12345",
 		BaseAPIEndpoint: "api",
@@ -133,6 +140,8 @@ func TestUnlockStack_NetworkError(t *testing.T) {
 }
 
 func TestUnlockStack_InvalidJSONResponse(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`invalid json response`))
@@ -157,6 +166,8 @@ func TestUnlockStack_InvalidJSONResponse(t *testing.T) {
 }
 
 func TestUnlockStack_ReadBodyError(t *testing.T) {
+	t.Parallel()
+
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 
@@ -187,6 +198,8 @@ func TestUnlockStack_ReadBodyError(t *testing.T) {
 }
 
 func TestUnlockStack_RequestCreationError(t *testing.T) {
+	t.Parallel()
+
 	// Use an invalid URL that would cause http.NewRequest to fail
 	client := &AtmosProAPIClient{
 		BaseURL:         "://invalid-url", // Malformed URL
@@ -206,6 +219,8 @@ func TestUnlockStack_RequestCreationError(t *testing.T) {
 }
 
 func TestUnlockStack_SuccessFalseWithContext(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{

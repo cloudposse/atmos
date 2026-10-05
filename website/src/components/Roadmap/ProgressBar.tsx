@@ -9,11 +9,12 @@ interface ProgressBarProps {
   animated?: boolean;
 }
 
+/** Render a clamped completion percentage, with optional animation and a numeric label. */
 export default function ProgressBar({
   progress,
   showLabel = true,
   size = 'medium',
-  animated = true,
+  animated = false,
 }: ProgressBarProps): JSX.Element {
   const clampedProgress = Math.min(100, Math.max(0, progress));
 

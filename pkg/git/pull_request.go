@@ -11,8 +11,17 @@ import (
 
 // PullRequestOptions is forge-neutral data used to create or reconcile a pull request.
 // Head is the branch name without an owner qualifier.
+//
+// Owner is the single top-level account every forge has (GitHub owner, GitLab top-level
+// namespace, Bitbucket workspace, Azure DevOps organization). Namespace carries any additional
+// path segments a forge requires between Owner and Repository -- nil/empty for two-segment
+// forges like GitHub, a single project name (len == 1) for Azure DevOps' three-segment
+// organization/project/repository addressing, or an arbitrary depth of subgroups for GitLab.
+// Providers that don't need it should reject a non-empty Namespace rather than silently
+// ignoring it, so misconfiguration surfaces instead of resolving to the wrong repository.
 type PullRequestOptions struct {
 	Owner      string
+	Namespace  []string
 	Repository string
 	Base       string
 	Head       string
@@ -35,6 +44,17 @@ type PullRequestResult struct {
 // contract. GitLab and Bitbucket implementations can register independently.
 type PullRequestPublisher interface {
 	Reconcile(ctx context.Context, options *PullRequestOptions) (*PullRequestResult, error)
+}
+
+// PullRequestBodyBadger is an optional interface a PullRequestPublisher can implement to supply
+// its own branding for the default `vendor.ci.pull_request.body` template (see
+// updater.RenderPRTemplates). It's optional, not part of PullRequestPublisher itself, because a
+// forge's pull request markdown has its own quirks and capabilities -- raw HTML support, external
+// image hosting requirements, light/dark switching, and so on -- that only the provider that
+// speaks to it can know; a publisher that doesn't implement this gets a static, dependency-free
+// default instead of being forced to declare one.
+type PullRequestBodyBadger interface {
+	PullRequestBodyBadge() string
 }
 
 // PullRequestPublisherFactory creates a pull request publisher.

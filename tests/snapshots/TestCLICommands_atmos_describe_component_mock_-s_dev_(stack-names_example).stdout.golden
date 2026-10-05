@@ -15,7 +15,12 @@
           "prompt": ""
         },
         "init": {
-          "pass_vars": false
+          "pass_vars": false,
+          "mode": "auto",
+          "upgrade": "auto"
+        },
+        "mocks": {
+          "mode": "fallback"
         },
         "plan": {
           "skip_planfile": false
@@ -25,9 +30,16 @@
           "default": ""
         },
         "plugin_cache": true,
+        "ui": {
+          "enabled": false,
+          "compact": null,
+          "show_attribute_bar": null,
+          "max_lines": 0
+        },
         "auto_provision_workdir_for_outputs": true,
         "ci": {},
-        "workspace": {}
+        "workspace": {},
+        "flags": {}
       },
       "helmfile": {
         "base_path": "",

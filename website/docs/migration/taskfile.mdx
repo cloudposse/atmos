@@ -1,0 +1,350 @@
+---
+title: Migrating Tasks from Taskfile.yml
+sidebar_position: 6
+sidebar_label: From Taskfile (go-task)
+description: Adopt Atmos as a task runner for existing Taskfile.yml automation, including builds, tests, scripts, and releases.
+id: taskfile
+---
+import FAQItem from '@site/src/components/FAQItem'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import TaskList from '@site/src/components/TaskList'
+import Terminal from '@site/src/components/Terminal'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Use Atmos as a task runner for the build, test, lint, release, and maintenance tasks your team
+currently runs with Task (go-task). This guide maps Taskfile tasks, dependencies, variables,
+and freshness checks to Atmos custom commands and workflows.
+</Intro>
+
+:::tip Using an AI Coding Assistant?
+Install the `atmos-migration` skill so Claude Code, Cursor, GitHub Copilot, and other AI coding
+assistants can apply this guide directly to your repository:
+
+```shell
+atmos ai skill install atmos-migration
+```
+
+See [AI Agent Skills](/ai/skills) for details.
+:::
+
+
+## Start with Your Existing Tasks
+
+Task-runner adoption starts with an `atmos.yaml` file in your project. Stacks, components,
+Terraform, and cloud credentials are optional; none are required for the tasks in this guide.
+The examples use a Go application, but the same mapping works for other languages, documentation
+builds, release scripts, and local development tools.
+
+You can migrate one task at a time. To start, expose an existing task through Atmos:
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: build
+    description: Build the application
+    steps:
+      - type: shell
+        command: task build
+```
+</File>
+
+Run `atmos build` from the project directory. When you are ready, replace `task build` with
+the task's own commands. The examples below show that next step. They assume your existing
+application, scripts, and required tools are available.
+
+## Key Concepts at a Glance
+
+| Taskfile.yml concept                          | Atmos equivalent                                             |
+|--------------------------------------------------|------------------------------------------------------------------|
+| `desc:`                                           | Command `description:`                                            |
+| `cmds:` (list of shell commands)                  | `steps:` (`type: shell`, or `type: atmos` for any atmos command)  |
+| `deps:` (runs at the same time by default)        | Command [`dependencies.commands`](/cli/configuration/commands/dependencies#named-command-and-workflow-dependencies), concurrent by default |
+| `vars:` / `env:`                                  | Command `flags:` (with `default:`) / `env:` map                   |
+| `sources:` / `generates:` (freshness check)       | Step [`inputs.sources`](/steps/inputs) / [`artifacts.paths`](/steps/artifacts) |
+| `includes:` (multi-file composition)              | Auto-discovered `atmos.d/*.yaml`, or separate workflow files       |
+| `internal: true` task                             | Command `internal: true` (weaker guarantee -- see below)             |
+
+## `deps:` Becomes `dependencies.commands`
+
+Task runs `deps:` at the same time by default. Atmos custom-command and workflow steps, in
+contrast, run one after another by default — so a `deps:` entry is not a step and never becomes
+one. It maps to the command-level
+[`dependencies.commands`](/cli/configuration/commands/dependencies#named-command-and-workflow-dependencies)
+field, which resolves through the same DAG scheduler as
+[`parallel`](/steps/type/parallel)/[`matrix`](/steps/type/matrix) `needs:` and
+runs concurrently by default — matching Task's `deps:` behavior directly, not working around it:
+
+<Tabs>
+  <TabItem value="before" label="Before (Taskfile.yml)">
+    ```yaml
+    tasks:
+      deploy:
+        desc: Deploy the application to the selected environment
+        vars:
+          ENV: '{{.ENV | default "dev"}}'
+        deps: [test, lint]
+        cmds:
+          - ./scripts/deploy.sh "{{.ENV}}"
+    ```
+  </TabItem>
+  <TabItem value="after" label="After (atmos.yaml)">
+    ```yaml
+    commands:
+      - name: deploy
+        description: Deploy the application to the selected environment
+        flags:
+          - name: env
+            default: "dev"
+        dependencies:
+          commands: [test, lint]
+        steps:
+          - type: shell
+            command: ./scripts/deploy.sh "{{ .Flags.env }}"
+    ```
+  </TabItem>
+</Tabs>
+
+The Task `ENV` variable becomes the Atmos `--env` flag. `atmos deploy` passes the default
+`dev` to your script; `atmos deploy --env staging` passes `staging`. The matching Task commands
+are `task deploy` and `task deploy ENV=staging`.
+
+`dependencies.commands` also matches a behavior Task itself has that a hand-rolled `parallel`
+step does not: if two commands both depend on the same one — for example both `test` and `lint`
+depending on `build` — Atmos runs `build` exactly once and dedups it, the same as Task's own
+`deps:` graph. A `parallel` step calling `atmos build` from two different places would run it
+twice. If one dependency itself depends on another (`lint` depends on `build`, and `deploy`
+depends on `test` and `lint`), declare that directly on `lint`'s own `dependencies.commands` — the
+scheduler resolves the whole transitive graph itself, still deduping `build` to a single run.
+
+Reach for a `parallel` step instead of `dependencies.commands` only for concurrency inside a
+single command's own steps, not between named commands — for example, running several shell
+commands side by side that were never their own Task tasks to begin with.
+
+## `sources:`/`generates:` Becomes `inputs`/`artifacts`
+
+Task skips a task's `cmds:` when its `sources:` files match its `generates:` outputs, checked by
+default with a content hash (Task also supports `method: timestamp` for an mtime-based check).
+The step-level [`inputs.sources`](/steps/inputs) and
+[`artifacts.paths`](/steps/artifacts) fields are the direct match, with the same
+checksum-by-default/timestamp-as-an-option choice:
+
+```yaml
+commands:
+  - name: build
+    description: Compile the deployable artifact
+    steps:
+      - type: shell
+        command: go build -o bin/handler ./cmd/handler
+        inputs:
+          sources: ["cmd/**/*.go"]
+        artifacts:
+          paths: ["bin/handler"]
+```
+
+With no explicit `when:`, declaring `inputs`/`artifacts` on a step is enough — it implicitly means
+`when: checksum.changed`, and the step is skipped when the hash of the matched source files
+matches the hash recorded after the last successful run. Run the same command twice in a row and
+the second run skips the build step; edit a matched source file and the next run executes it
+again. See [inputs](/steps/inputs) for the full field reference, including the
+`timestamp.changed` fact for an mtime-based check matching Task's `method: timestamp` mode.
+[`require`/`assert`](/steps/type/require) is a different, older step type — it only
+checks that a file, tool, or directory exists, not whether it is fresh, so it does not replace
+`inputs`/`artifacts`.
+
+The scope is different, too: Task's `sources:`/`generates:` gates the task's *entire* `cmds:`
+list, but `inputs`/`artifacts` are declared per step — skipping one step does not stop later
+steps in the same command from running. If a task has more than one `cmds:` entry and the
+freshness decision must gate all of them together, combine them into a single `shell`/`script`
+step rather than spreading `inputs`/`artifacts` across several migrated steps.
+
+## `internal: true` Tasks
+
+Set `internal: true` on the custom command. The command still runs (`atmos <name> ...`, or as a
+`default:` target, or from another command's steps), but it's excluded from `atmos --help`
+listings and completion suggestions — matching how an `internal: true` task disappears from
+`task --list`.
+
+**This is not the same guarantee Task gives you.** In Task, `internal: true` also blocks direct
+invocation — running an internal task by name from the CLI fails with an error; it is only
+reachable from another task's `deps:`/`cmds:`. Atmos's `internal: true` maps to Cobra's `Hidden`
+field: it removes the command from help output and shell completion, but the command still
+executes if invoked directly (`atmos <name> ...`). If the user has a Task helper that must
+genuinely be unreachable on its own — not just hidden from discovery — migrating it straight to
+`internal: true` does not reproduce that constraint. Review any such helpers and,
+if direct invocation must be blocked, add a guard inside the command (for example a
+precondition or an early check on an expected caller-only flag/env var) rather than relying on
+`internal: true` alone. Reserve inlining the logic into a caller's step for a helper that's
+genuinely single-caller and has no reason to be invoked on its own.
+
+## Before and After
+
+<Tabs>
+  <TabItem value="before" label="Before (Taskfile.yml)">
+    ```yaml
+    version: '3'
+
+    tasks:
+      build:
+        desc: Compile the deployable artifact
+        cmds:
+          - go build -o bin/handler ./cmd/handler
+        sources:
+          - cmd/**/*.go
+        generates:
+          - bin/handler
+
+      test:
+        desc: Run unit tests
+        deps: [build]
+        cmds:
+          - go test ./...
+
+      lint:
+        desc: Run static analysis
+        cmds:
+          - go vet ./...
+    ```
+  </TabItem>
+  <TabItem value="after" label="After (atmos.yaml)">
+    ```yaml
+    commands:
+      - name: build
+        description: Compile the deployable artifact
+        steps:
+          - type: shell
+            command: go build -o bin/handler ./cmd/handler
+            inputs:
+              sources: ["cmd/**/*.go"]
+            artifacts:
+              paths: ["bin/handler"]
+
+      - name: test
+        description: Run unit tests
+        dependencies:
+          commands: [build]
+        steps:
+          - type: shell
+            command: go test ./...
+
+      - name: lint
+        description: Run static analysis
+        steps:
+          - type: shell
+            command: go vet ./...
+    ```
+  </TabItem>
+</Tabs>
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: deploy
+    description: Deploy the application to the selected environment (default dev)
+    flags:
+      - name: env
+        default: "dev"
+    dependencies:
+      commands: [test, lint]
+    steps:
+      - type: shell
+        command: ./scripts/deploy.sh "{{ .Flags.env }}"
+```
+</File>
+
+<Terminal>
+```bash
+# Use the default environment (dev)
+atmos deploy
+
+# Override the environment
+atmos deploy --env staging
+```
+</Terminal>
+
+## `includes:` Splits into Commands and Workflows
+
+Task's `includes:` field joins several Taskfiles into one. Atmos has two matching methods.
+Choose the one that fits what you are splitting:
+
+- To split command definitions across files, put them in files such as `atmos.d/commands.yaml` or
+  `.atmos.d/commands.yaml`. Atmos auto-discovers `atmos.d/`/`.atmos.d/` in the config directory
+  (and, as a lower-priority fallback, at the git/worktree root) -- no `import:` entry is needed
+  for this specific location. Use `import:` only when splitting across a directory Atmos does not
+  auto-discover. See [Imports](/cli/configuration/imports).
+- To split multi-step chains, use separate workflow files. Atmos workflows already live one file
+  per purpose, under `workflows.base_path`. Unlike `atmos.d`/`.atmos.d`, there is no default for
+  `workflows.base_path` -- add it explicitly (for example `workflows.base_path:
+  "stacks/workflows"`) the first time your migration reaches a workflow, or `atmos workflow
+  <name>` fails with `'workflows.base_path' must be configured in 'atmos.yaml'`.
+
+## What You Gain
+
+- **Discoverable commands.** Add descriptions, typed flags, defaults, and per-command help for
+  your team's tasks with `atmos --help` and `atmos <command> --help`.
+- **Typed steps.** Combine shell commands with HTTP requests, containers, parallel execution,
+  matrices, and other [step types](/steps/type).
+- **Interactive workflows.** Add prompts, confirmations, and structured output where your
+  tasks need them.
+- **Tool dependencies.** Declare required CLI versions with `dependencies.tools` so Atmos
+  installs them before running the command. See [Toolchain Configuration](/cli/configuration/toolchain).
+
+## Migration Checklist
+
+<TaskList>
+- [ ] List every task. Mark each one as independent, or part of a `deps:` chain
+- [ ] Turn `desc:`/`cmds:` into command `description:`/`steps:`
+- [ ] Turn any `deps:` chain into `dependencies.commands`, to keep Task's concurrent-by-default behavior
+- [ ] Turn `vars:`/`env:` into command `flags:` (with defaults) and `env:` maps
+- [ ] Turn `sources:`/`generates:` into step `inputs.sources`/`artifacts.paths` -- combine multiple `cmds:` entries into one step if the freshness decision must gate all of them together
+- [ ] Split `includes:` into auto-discovered `atmos.d/*.yaml` files, separate workflow files, or both
+- [ ] Mark `internal: true` tasks as `internal: true` custom commands
+</TaskList>
+
+## Common Questions
+
+<FAQItem question="Do these tasks require Terraform or Atmos stacks?">
+No. Custom commands can run application builds, tests, scripts, and other tools from
+`atmos.yaml` alone. If you later choose to adopt Atmos's Terraform orchestration, follow
+[Migrating from Native Terraform](/migration/native-terraform) for that separate change.
+</FAQItem>
+
+
+<FAQItem question="Will my sources:/generates: caching still work?">
+Yes, once you migrate it. Turn `sources:`/`generates:` into step `inputs.sources`/`artifacts.paths`
+— with no explicit `when:`, that implicitly skips the step when nothing has changed since its last
+successful run. Unlike Task's own check, the scope is per step, not per task — if the task has
+more than one `cmds:` entry, combine them into a single step so the freshness decision still gates
+all of them together. It does not carry over automatically; you add it to the migrated step
+yourself. See
+[sources:/generates: Becomes inputs/artifacts](#sourcesgenerates-becomes-inputsartifacts).
+</FAQItem>
+
+<FAQItem question="What replaces deps: concurrency?">
+Command-level `dependencies.commands`. It resolves through the same DAG scheduler as `parallel`/
+`matrix` `needs:` and runs concurrently by default, matching Task's `deps:` behavior directly —
+including deduping a dependency shared by more than one command to a single run. Reach for a
+`parallel` step only for concurrency inside one command's own steps, not between named commands.
+</FAQItem>
+
+<FAQItem question="Can one custom command call another?">
+Yes, through either step type: `type: atmos` with `command: <other-command-name>`, or
+`type: shell` with `command: atmos <other-command-name>`. Prefer `type: atmos` — it auto-applies
+`-s <stack>` and gets Atmos's structured step output, which `type: shell` does not.
+</FAQItem>
+
+<FAQItem question="What replaces internal: true tasks?">
+Set `internal: true` on the custom command. It stays fully runnable, including as a `default:`
+target or from another command's steps, but disappears from `atmos --help` listings and
+completion suggestions. Unlike Task, where an internal task cannot be invoked directly at all,
+Atmos's `internal: true` only hides the command from discovery — running it directly by name
+still works. If a Task helper must genuinely be unreachable on its own, add a guard inside the
+migrated command rather than relying on `internal: true` for that guarantee.
+</FAQItem>
+
+<FAQItem question="What if I use Make or Just instead of Task?">
+See [Migrating from Makefiles](/migration/makefile) or
+[Migrating from Justfiles](/migration/justfile).
+</FAQItem>

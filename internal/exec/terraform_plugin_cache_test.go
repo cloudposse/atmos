@@ -1,10 +1,12 @@
 package exec
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -113,6 +115,16 @@ func TestConfigurePluginCache(t *testing.T) {
 			// Set up temp XDG cache for tests that need it.
 			tmpDir := t.TempDir()
 			t.Setenv("XDG_CACHE_HOME", tmpDir)
+			// Start without a process override so each case controls precedence.
+			originalPluginCacheDir, hadPluginCacheDir := os.LookupEnv("TF_PLUGIN_CACHE_DIR")
+			require.NoError(t, os.Unsetenv("TF_PLUGIN_CACHE_DIR"))
+			t.Cleanup(func() {
+				if hadPluginCacheDir {
+					require.NoError(t, os.Setenv("TF_PLUGIN_CACHE_DIR", originalPluginCacheDir))
+					return
+				}
+				require.NoError(t, os.Unsetenv("TF_PLUGIN_CACHE_DIR"))
+			})
 
 			// Set up OS environment variable.
 			if tt.osEnvVar == "SET_BUT_EMPTY" {

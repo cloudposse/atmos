@@ -359,6 +359,14 @@ func TestInternStringsInMap_CommonAtmosKeys(t *testing.T) {
 
 // TestClearInternPool tests that clearing the pool works correctly.
 func TestClearInternPool(t *testing.T) {
+	// The intern pool and its stats are package-level state shared by every
+	// test in this package, so start from a known-empty pool rather than
+	// assuming this test runs before any other test interns a string
+	// (-shuffle=on runs tests in random order, so that assumption doesn't
+	// hold in CI's race job).
+	ClearInternPool()
+	t.Cleanup(ClearInternPool)
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Intern some strings.

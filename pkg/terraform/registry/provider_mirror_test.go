@@ -24,11 +24,9 @@ import (
 // fakeRegistry serves the provider registry protocol for one provider, rewriting
 // service-discovery and download URLs to point at itself.
 type fakeRegistry struct {
-	server  *httptest.Server
-	zip     []byte
-	zipSum  string
-	dlHits  int
-	verHits int
+	server *httptest.Server
+	zip    []byte
+	zipSum string
 }
 
 func newFakeRegistry(t *testing.T) *fakeRegistry {
@@ -42,11 +40,9 @@ func newFakeRegistry(t *testing.T) *fakeRegistry {
 		_, _ = w.Write([]byte(`{"providers.v1":"/v1/providers/","modules.v1":"/v1/modules/"}`))
 	})
 	mux.HandleFunc("/v1/providers/hashicorp/aws/versions", func(w http.ResponseWriter, r *http.Request) {
-		fr.verHits++
 		_, _ = w.Write([]byte(`{"versions":[{"version":"5.95.0","platforms":[{"os":"linux","arch":"amd64"},{"os":"darwin","arch":"arm64"}]}]}`))
 	})
 	mux.HandleFunc("/v1/providers/hashicorp/aws/5.95.0/download/", func(w http.ResponseWriter, r *http.Request) {
-		fr.dlHits++
 		// .../download/<os>/<arch>.
 		seg := strings.Split(strings.TrimPrefix(r.URL.Path, "/v1/providers/hashicorp/aws/5.95.0/download/"), "/")
 		osName, arch := seg[0], seg[1]

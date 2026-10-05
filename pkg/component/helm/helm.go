@@ -105,6 +105,8 @@ func (p *ComponentProvider) Execute(ctx *component.ExecutionContext) error {
 		return executeOperation(ctx, OperationTemplate)
 	case "diff", "plan":
 		return executeOperation(ctx, OperationDiff)
+	case "values":
+		return executeOperation(ctx, OperationValues)
 	case "apply", "deploy":
 		return executeOperation(ctx, OperationApply)
 	case "delete", "destroy":
@@ -123,5 +125,5 @@ func (p *ComponentProvider) GenerateArtifacts(_ *component.ExecutionContext) err
 // GetAvailableCommands returns the subcommands Helm components support.
 func (p *ComponentProvider) GetAvailableCommands() []string {
 	defer perf.Track(nil, "helm.GetAvailableCommands")()
-	return []string{"template", "diff", "plan", "apply", "deploy", "delete"}
+	return []string{"template", "diff", "plan", "values", "apply", "deploy", "delete"}
 }

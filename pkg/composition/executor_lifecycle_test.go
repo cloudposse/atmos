@@ -196,3 +196,127 @@ func TestRunLifecycleTargetsContinuesAndAggregatesFailures(t *testing.T) {
 	assert.ErrorIs(t, err, assert.AnError)
 	assert.Equal(t, []string{"frontend", "api"}, calls)
 }
+
+func TestRunLifecycleTargetsStopsDispatchingAfterCancellation(t *testing.T) {
+	provider := testCompositionProvider{componentType: cfg.ContainerComponentType, commands: []string{"up"}}
+	origGet, origExec := getComponentProvider, executeProvider
+	t.Cleanup(func() {
+		getComponentProvider, executeProvider = origGet, origExec
+	})
+	getComponentProvider = func(string) (component.ComponentProvider, bool) {
+		return provider, true
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var calls []string
+	executeProvider = func(_ component.ComponentProvider, execCtx *component.ExecutionContext) error {
+		calls = append(calls, execCtx.Component)
+		cancel()
+		return nil
+	}
+
+	err := runLifecycleTargets(lifecycleRun{
+		ctx:         ctx,
+		atmosConfig: &schema.AtmosConfiguration{},
+		info:        &schema.ConfigAndStacksInfo{},
+		verb:        "up",
+		targets: []member{
+			{Stack: "local", Composition: "storefront", ComponentType: cfg.ContainerComponentType, Component: "frontend"},
+			{Stack: "local", Composition: "storefront", ComponentType: cfg.ContainerComponentType, Component: "api"},
+		},
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, []string{"frontend"}, calls)
+}
+
+func TestRunLifecycleTargetsDoesNotDispatchWhenAlreadyCanceled(t *testing.T) {
+	provider := testCompositionProvider{componentType: cfg.ContainerComponentType, commands: []string{"up"}}
+	origGet, origExec := getComponentProvider, executeProvider
+	t.Cleanup(func() {
+		getComponentProvider, executeProvider = origGet, origExec
+	})
+	getComponentProvider = func(string) (component.ComponentProvider, bool) {
+		return provider, true
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	dispatched := false
+	executeProvider = func(_ component.ComponentProvider, _ *component.ExecutionContext) error {
+		dispatched = true
+		return nil
+	}
+
+	err := runLifecycleTargets(lifecycleRun{
+		ctx:         ctx,
+		atmosConfig: &schema.AtmosConfiguration{},
+		info:        &schema.ConfigAndStacksInfo{},
+		verb:        "up",
+		targets: []member{
+			{Stack: "local", Composition: "storefront", ComponentType: cfg.ContainerComponentType, Component: "frontend"},
+		},
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.False(t, dispatched)
+}
+
+func TestRunLifecycleTargetsPreservesContextValues(t *testing.T) {
+	type contextKey struct{}
+	provider := testCompositionProvider{componentType: cfg.ContainerComponentType, commands: []string{"up"}}
+	origGet, origExec := getComponentProvider, executeProvider
+	t.Cleanup(func() {
+		getComponentProvider, executeProvider = origGet, origExec
+	})
+	getComponentProvider = func(string) (component.ComponentProvider, bool) {
+		return provider, true
+	}
+
+	ctx := context.WithValue(context.Background(), contextKey{}, "lifecycle")
+	executeProvider = func(_ component.ComponentProvider, execCtx *component.ExecutionContext) error {
+		assert.Equal(t, "lifecycle", execCtx.GoContext().Value(contextKey{}))
+		return nil
+	}
+
+	err := runLifecycleTargets(lifecycleRun{
+		ctx:         ctx,
+		atmosConfig: &schema.AtmosConfiguration{},
+		info:        &schema.ConfigAndStacksInfo{},
+		verb:        "up",
+		targets: []member{
+			{Stack: "local", Composition: "storefront", ComponentType: cfg.ContainerComponentType, Component: "frontend"},
+		},
+	})
+
+	require.NoError(t, err)
+}
+
+func TestRunLifecycleTargetsReportsCancellationAfterSuccessfulFinalDispatch(t *testing.T) {
+	provider := testCompositionProvider{componentType: cfg.ContainerComponentType, commands: []string{"up"}}
+	origGet, origExec := getComponentProvider, executeProvider
+	t.Cleanup(func() {
+		getComponentProvider, executeProvider = origGet, origExec
+	})
+	getComponentProvider = func(string) (component.ComponentProvider, bool) {
+		return provider, true
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	executeProvider = func(_ component.ComponentProvider, _ *component.ExecutionContext) error {
+		cancel()
+		return nil
+	}
+
+	err := runLifecycleTargets(lifecycleRun{
+		ctx:         ctx,
+		atmosConfig: &schema.AtmosConfiguration{},
+		info:        &schema.ConfigAndStacksInfo{},
+		verb:        "up",
+		targets: []member{
+			{Stack: "local", Composition: "storefront", ComponentType: cfg.ContainerComponentType, Component: "frontend"},
+		},
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+}

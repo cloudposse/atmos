@@ -11,6 +11,8 @@ import (
 )
 
 func TestBackgroundActionHandlers_Validate(t *testing.T) {
+	t.Parallel()
+
 	wait := &WaitHandler{}
 	cancel := &CancelHandler{}
 	waitAll := &WaitAllHandler{}
@@ -27,6 +29,7 @@ func TestBackgroundActionHandlers_Validate(t *testing.T) {
 		{"cancel without for", cancel.Validate(&schema.WorkflowStep{Name: "drop"})},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			require.Error(t, tc.err)
 			assert.ErrorIs(t, tc.err, schema.ErrWorkflowControlStepInvalid)
 			assert.Contains(t, tc.err.Error(), "requires `for:`")
@@ -41,6 +44,8 @@ func TestBackgroundActionHandlers_Validate(t *testing.T) {
 // TestBackgroundActionHandlers_Execute verifies the handlers refuse to run outside
 // the workflow executor (which owns the run-scoped background registry).
 func TestBackgroundActionHandlers_Execute(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	step := &schema.WorkflowStep{Name: "gate", For: []string{"svc"}}
 
@@ -53,6 +58,7 @@ func TestBackgroundActionHandlers_Execute(t *testing.T) {
 		{"cancel", func() (*StepResult, error) { return (&CancelHandler{}).Execute(ctx, step, nil) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			res, err := tc.run()
 			assert.Nil(t, res)
 			require.Error(t, err)
@@ -65,6 +71,8 @@ func TestBackgroundActionHandlers_Execute(t *testing.T) {
 // TestBackgroundActionHandlers_Registered confirms the action step types resolve
 // through the step registry (populated by init).
 func TestBackgroundActionHandlers_Registered(t *testing.T) {
+	t.Parallel()
+
 	for _, name := range []string{schema.TaskTypeWait, schema.TaskTypeWaitAll, schema.TaskTypeCancel} {
 		h, ok := Get(name)
 		require.True(t, ok, "step type %q must be registered", name)

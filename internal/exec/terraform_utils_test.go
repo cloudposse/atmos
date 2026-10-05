@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/agiledragon/gomonkey/v2"
@@ -16,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/generator/required_providers"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
@@ -28,9 +28,7 @@ func boolPtr(b bool) *bool {
 
 func skipGomonkeyOnDarwinARM64(t testing.TB) {
 	t.Helper()
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
-	}
+	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.ApplyFunc to mock terraform util functions")
 }
 
 func TestIsWorkspacesEnabled(t *testing.T) {
@@ -226,6 +224,7 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 		useMocks bool,
 		tagsFilter []string,
 		labelsFilter map[string]string,
+		errOptions DescribeStacksErrorOptions,
 	) (map[string]any, error) {
 		described = true
 		require.NotNil(t, atmosConfig)
@@ -391,13 +390,41 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 	skipGomonkeyOnDarwinARM64(t)
 
+	var describedStacks map[string]any
+	var describeErr error
+	var initErr error
+	var schedulerErr error
+	describePatches := gomonkey.NewPatches()
+	defer describePatches.Reset()
+	describePatches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, initErr
+	})
+	describePatches.ApplyFunc(ExecuteDescribeStacksWithMocks, func(
+		*schema.AtmosConfiguration,
+		string,
+		[]string,
+		[]string,
+		[]string,
+		bool,
+		bool,
+		bool,
+		bool,
+		[]string,
+		auth.AuthManager,
+		bool,
+		[]string,
+		map[string]string,
+		DescribeStacksErrorOptions,
+	) (map[string]any, error) {
+		return describedStacks, describeErr
+	})
+	describePatches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(context.Context, scheduleradapters.TerraformOptions) error {
+		return schedulerErr
+	})
+
 	t.Run("config init", func(t *testing.T) {
 		expectedErr := errors.New("config failed")
-		patches := gomonkey.NewPatches()
-		defer patches.Reset()
-		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
-			return schema.AtmosConfiguration{}, expectedErr
-		})
+		initErr = expectedErr
 
 		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
@@ -405,6 +432,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 
 	t.Run("auth manager", func(t *testing.T) {
 		expectedErr := errors.New("auth failed")
+		initErr = nil
 		ctrl := gomock.NewController(t)
 		mockFactory := NewMockAuthManagerQueryFactory(ctrl)
 		mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, expectedErr)
@@ -414,18 +442,15 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 			authManagerFactory = oldAuthManagerFactory
 		}()
 
-		patches := gomonkey.NewPatches()
-		defer patches.Reset()
-		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
-			return schema.AtmosConfiguration{}, nil
-		})
-
 		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("describe stacks", func(t *testing.T) {
 		expectedErr := errors.New("describe failed")
+		initErr = nil
+		describedStacks = nil
+		describeErr = expectedErr
 		ctrl := gomock.NewController(t)
 		mockFactory := NewMockAuthManagerQueryFactory(ctrl)
 		mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
@@ -434,37 +459,16 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 		defer func() {
 			authManagerFactory = oldAuthManagerFactory
 		}()
-
-		patches := gomonkey.NewPatches()
-		defer patches.Reset()
-		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
-			return schema.AtmosConfiguration{}, nil
-		})
-		patches.ApplyFunc(ExecuteDescribeStacksWithMocks, func(
-			*schema.AtmosConfiguration,
-			string,
-			[]string,
-			[]string,
-			[]string,
-			bool,
-			bool,
-			bool,
-			bool,
-			[]string,
-			auth.AuthManager,
-			bool,
-			[]string,
-			map[string]string,
-		) (map[string]any, error) {
-			return nil, expectedErr
-		})
-
 		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("scheduler", func(t *testing.T) {
 		expectedErr := errors.New("scheduler failed")
+		initErr = nil
+		describedStacks = map[string]any{}
+		describeErr = nil
+		schedulerErr = expectedErr
 		ctrl := gomock.NewController(t)
 		mockFactory := NewMockAuthManagerQueryFactory(ctrl)
 		mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
@@ -473,34 +477,6 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 		defer func() {
 			authManagerFactory = oldAuthManagerFactory
 		}()
-
-		patches := gomonkey.NewPatches()
-		defer patches.Reset()
-		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
-			return schema.AtmosConfiguration{}, nil
-		})
-		patches.ApplyFunc(ExecuteDescribeStacksWithMocks, func(
-			*schema.AtmosConfiguration,
-			string,
-			[]string,
-			[]string,
-			[]string,
-			bool,
-			bool,
-			bool,
-			bool,
-			[]string,
-			auth.AuthManager,
-			bool,
-			[]string,
-			map[string]string,
-		) (map[string]any, error) {
-			return map[string]any{}, nil
-		})
-		patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(context.Context, scheduleradapters.TerraformOptions) error {
-			return expectedErr
-		})
-
 		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
 	})
@@ -954,6 +930,7 @@ func TestGenerateBackendConfig(t *testing.T) {
 	}
 }
 
+// TestGenerateProviderOverrides tests the generateProviderOverrides function.
 func TestGenerateProviderOverrides(t *testing.T) {
 	// Create a temporary directory for testing.
 	tempDir := t.TempDir()
@@ -1035,6 +1012,100 @@ func TestGenerateProviderOverrides(t *testing.T) {
 
 			// Clean up any created files for next test.
 			os.Remove(providerFilePath)
+		})
+	}
+}
+
+// TestGenerateProviderOverrides_RemovesStaleFile tests that a stale file is removed when the `providers` section is gone.
+func TestGenerateProviderOverrides_RemovesStaleFile(t *testing.T) {
+	staleContent := []byte(`{"provider":{"aws":{"region":"us-east-1"}}}`)
+
+	tests := []struct {
+		name               string
+		info               *schema.ConfigAndStacksInfo
+		expectedFileExists bool
+	}{
+		{
+			name: "empty providers section removes stale file",
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: map[string]any{},
+			},
+			expectedFileExists: false,
+		},
+		{
+			name: "nil providers section removes stale file",
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: nil,
+			},
+			expectedFileExists: false,
+		},
+		{
+			name: "dry run leaves stale file untouched",
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: nil,
+				DryRun:                    true,
+			},
+			expectedFileExists: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			providerFilePath := filepath.Join(tempDir, "providers_override.tf.json")
+			require.NoError(t, os.WriteFile(providerFilePath, staleContent, 0o600))
+
+			err := generateProviderOverrides(&schema.AtmosConfiguration{}, tt.info, tempDir)
+			assert.NoError(t, err)
+
+			_, fileErr := os.Stat(providerFilePath)
+			if tt.expectedFileExists {
+				assert.NoError(t, fileErr, "Expected stale providers_override.tf.json to be preserved")
+			} else {
+				assert.True(t, os.IsNotExist(fileErr), "Expected stale providers_override.tf.json to be removed")
+			}
+		})
+	}
+}
+
+// TestGenerateRequiredProviders_RemovesStaleFile tests that a stale file is removed when the version pins are gone.
+func TestGenerateRequiredProviders_RemovesStaleFile(t *testing.T) {
+	staleContent := []byte(`{"terraform":{"required_version":"1.5.0"}}`)
+
+	tests := []struct {
+		name               string
+		info               *schema.ConfigAndStacksInfo
+		expectedFileExists bool
+	}{
+		{
+			name:               "no required_version or required_providers removes stale file",
+			info:               &schema.ConfigAndStacksInfo{},
+			expectedFileExists: false,
+		},
+		{
+			name: "dry run leaves stale file untouched",
+			info: &schema.ConfigAndStacksInfo{
+				DryRun: true,
+			},
+			expectedFileExists: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			requiredProvidersPath := filepath.Join(tempDir, required_providers.DefaultFilenameConst)
+			require.NoError(t, os.WriteFile(requiredProvidersPath, staleContent, 0o600))
+
+			err := generateRequiredProviders(&schema.AtmosConfiguration{}, tt.info, tempDir)
+			assert.NoError(t, err)
+
+			_, fileErr := os.Stat(requiredProvidersPath)
+			if tt.expectedFileExists {
+				assert.NoError(t, fileErr, "Expected stale terraform_override.tf.json to be preserved")
+			} else {
+				assert.True(t, os.IsNotExist(fileErr), "Expected stale terraform_override.tf.json to be removed")
+			}
 		})
 	}
 }

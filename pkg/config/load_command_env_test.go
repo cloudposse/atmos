@@ -10,6 +10,8 @@ import (
 )
 
 func TestRestoreCommandEnvCase(t *testing.T) {
+	t.Parallel()
+
 	caseMaps := casemap.New()
 	caseMaps.Set(envKey, casemap.CaseMap{
 		"path":  "PATH",

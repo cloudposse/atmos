@@ -10,6 +10,8 @@ import (
 
 // TestDefaultLoader_InitCliConfig verifies that DefaultLoader correctly delegates to InitCliConfig.
 func TestDefaultLoader_InitCliConfig(t *testing.T) {
+	t.Parallel()
+
 	loader := &DefaultLoader{}
 
 	// Create minimal ConfigAndStacksInfo.

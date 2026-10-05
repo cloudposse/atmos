@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/duration"
+	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -429,6 +431,42 @@ func isZeroTTL(ttl string) bool {
 	return duration.IsZeroTTL(ttl)
 }
 
+// scpStyleHostPattern extracts an optional user and the host from an SCP-style Git URI, e.g.
+// "git@ghe.example.com:org/repo.git", the userless "ghe.example.com:org/repo.git" for a dotted
+// GHES host, or, for a single-label GHES host, "git@ghe:org/repo.git" (still requiring
+// "user@" -- see isSCPStyleGHESRemote). Matches pkg/vendor's scpURLPattern and
+// CustomGitDetector.rewriteSCPURL's SCP detection in pkg/downloader/.
+var scpStyleHostPattern = regexp.MustCompile(`^(?:([\w.-]+)@)?([\w.-]+):`)
+
+// isConfiguredGHESHost reports whether host matches the GitHub Enterprise Server host
+// configured via RepoEndpoints (GITHUB_SERVER_URL). SCP-style Git URIs carry no port of their
+// own -- the colon already separates host from path -- so this compares against the portless
+// hostname (Endpoints.Hostname()) rather than IsHost, which would otherwise reject a match
+// against a GHES host configured with a non-default port (RepoEndpoints().Host keeps that
+// port; see its doc comment).
+func isConfiguredGHESHost(host string) bool {
+	return strings.EqualFold(host, github.RepoEndpoints().Hostname())
+}
+
+// isSCPStyleGHESRemote reports whether uri is an SCP-style Git URI ("[user@]host:path") naming
+// the configured GitHub Enterprise Server host. A dotted host (e.g.
+// "ghe.example.com:org/repo.git") is recognized as remote even without a "user@" prefix,
+// matching pkg/vendor's scpURLPattern and rewriteSCPURL. A single-label host is genuinely
+// ambiguous with a local relative path plus a colon-separated suffix (e.g. "dir:file"), so it
+// still requires the "user@" prefix to be treated as remote -- the pattern this replaces already
+// required it unconditionally, so this only loosens the dotted-host case.
+func isSCPStyleGHESRemote(uri string) bool {
+	m := scpStyleHostPattern.FindStringSubmatch(uri)
+	if m == nil {
+		return false
+	}
+	user, host := m[1], m[2]
+	if user == "" && !strings.Contains(host, ".") {
+		return false
+	}
+	return isConfiguredGHESHost(host)
+}
+
 // isLocalSource determines if a source URI refers to a local path.
 // Local sources start with ".", absolute paths (OS-specific), or are relative paths without remote indicators.
 func isLocalSource(uri string) bool {
@@ -444,7 +482,16 @@ func isLocalSource(uri string) bool {
 	if strings.HasPrefix(uri, "file://") {
 		return true
 	}
-	// Remote indicators - if any of these are present, it's remote.
+	// SCP-style Git URI ([user@]host:org/repo.git) naming the configured GitHub Enterprise
+	// Server host. Checked before the remoteIndicators loop below because SCP syntax has no
+	// "://" separator, and the GHES host itself isn't in that literal list.
+	if isSCPStyleGHESRemote(uri) {
+		return false
+	}
+	// Remote indicators - if any of these are present, it's remote. Deliberately
+	// github.com-only (see the equivalent knownHosts comment in pkg/stack/imports/uri.go): a
+	// bare hostname can't guess a GitHub Enterprise Server host, and any URI naming one already
+	// matches the "://" scheme indicator above.
 	remoteIndicators := []string{
 		"://",        // Any URL scheme (https://, git://, s3://, etc.).
 		"github.com", // GitHub.

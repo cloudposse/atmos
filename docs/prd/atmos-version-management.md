@@ -29,10 +29,11 @@ These decisions were made during implementation and supersede earlier drafts:
 
 4. **`update` ≠ `lock`.** `lock` resolves desired expressions as-is (bootstrap/repair). `update` advances from the locked state within policy: strategy caps (`major`/`minor`/`patch`; `pin`/`digest` never advance and only refresh digests), cooldown windows against `released_at` (`14d`, `2w`, Go durations), `include`/`exclude` rules, and `prerelease` policy. Every held-back candidate produces a structured reason. Status is policy-aware: `update-available` means an update the policy would take; a newer version held back reports `newer-available (blocked)` with the reason and passes `verify`.
 
-5. **File managers (three tiers).** `pkg/version/managers` is a registry of pure-`Plan()` file rewriters driven by shared `Apply`/`Check` drivers, configured via `version.files` rules (`{manager, paths, options}`):
+5. **File managers (four tiers).** `pkg/version/managers` is a registry of pure-`Plan()` file rewriters driven by shared `Apply`/`Check` drivers, configured via `version.files` rules (`{manager, paths, options}`):
     - `github-actions` (native): scans workflow `uses:` lines and rewrites refs from the lock by owner/repo package (subdirectory actions and reusable workflows included; `./local` and `docker://` refs never match). Line-based rewriting preserves formatting.
     - `marker` (annotation): `<comment> atmos:version <name> [match=<regex>]` marks a line (trailing comment) or the next line (standalone comment) for in-place rewriting; comment delimiters are detected across languages (`#`, `//`, `;`, `--`, `<!--`, `/*`); pinned entries replace digest tokens. This is the Renovate regex-manager equivalent and solves round-tripping for rendered files without templates.
-    - `template`: `*.tmpl` sources render to a sibling file with the `.version` context; covers comment-hostile formats (JSON).
+    - `json`: `options.set: [{path, from}]` writes locked values into JSON files at sjson/gjson dot-paths; patches only the targeted field and leaves the rest of the document's formatting, key order, and whitespace untouched — the targeted option for JSON manifests (`package.json`, plugin/marketplace listings) that `template` previously had to cover via a rendered sibling file.
+    - `template`: `*.tmpl` sources render to a sibling file with the `.version` context; used when templating logic beyond simple value substitution is needed.
 
     `atmos version track apply` (alias `sync`) rewrites everything in one command; `--check` fails listing stale paths; `verify` also fails when managed files drift.
 

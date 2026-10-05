@@ -1,0 +1,26 @@
+---
+title: Select Components (Deprecated)
+sidebar_position: 35
+sidebar_label: Select Components
+description: Legacy GitHub Action for filtering Atmos components by a jq query
+---
+import Intro from '@site/src/components/Intro'
+
+:::warning Deprecated
+`cloudposse/github-action-atmos-terraform-select-components` is deprecated. Use [`atmos describe affected --format=matrix`](/cli/commands/describe/affected) to select components changed in a PR, or [`atmos list components --query`](/cli/commands/list/components) to filter the full component list by an arbitrary query, directly in your workflow.
+:::
+
+<Intro>
+The [Atmos Select Components GitHub Action](https://github.com/cloudposse/github-action-atmos-terraform-select-components) output a list of Atmos components filtered by a `jq` query against component settings — for example, components with `settings.github.actions_enabled: true`.
+</Intro>
+
+## Native CI Equivalent
+
+```yaml
+- name: Select components
+  run: atmos list components --query 'select(.settings.github.actions_enabled == true)' --format json
+```
+
+For PR-scoped selection, [`atmos describe affected --format=matrix`](/ci#deploy-affected) already writes directly to `$GITHUB_OUTPUT` when `ci.enabled: true` — no separate select step needed.
+
+Discover more details, including the full list of `inputs` and `outputs`, in the [GitHub Action repository](https://github.com/cloudposse/github-action-atmos-terraform-select-components) on GitHub.

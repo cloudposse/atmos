@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,10 +15,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errTerraformInitRetryBudgetExhausted is returned instead of starting another terraform init once
+// the retry budget's deadline has passed, rather than launching one with a near-zero context
+// timeout that's certain to fail immediately anyway.
+var errTerraformInitRetryBudgetExhausted = errors.New("terraform init retry budget exhausted")
+
 const (
 	terraformInitTimeout       = 4 * time.Minute
 	terraformCacheTrustTimeout = 1 * time.Minute
 	terraformCleanTimeout      = 1 * time.Minute
+	// TerraformInitRetryBudget bounds retries of a failed terraform init: it resolves provider
+	// versions against registry.terraform.io, which occasionally has a transient DNS/TLS blip on
+	// CI runners (see docs/fixes/2026-09-08-terraform-plugin-cache-windows-registry-flake.md).
+	// Real failures (bad config, missing provider) fail identically on every attempt and still
+	// fail the test once the budget is spent; this only absorbs one-off network hiccups.
+	// RunTerraformInitWithEnv caps each attempt's own context to the time remaining in this
+	// budget, so each attempt uses the remaining budget instead of the full terraformInitTimeout.
+	terraformInitRetryBudget = 90 * time.Second
 )
 
 // TestTerraformPluginCache verifies that Terraform provider caching works correctly.
@@ -125,7 +139,7 @@ func TestTerraformRegistryCache(t *testing.T) {
 
 	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
 		t.Logf("Generating registry cache certificate on %s...", runtime.GOOS)
-		stdout, stderr, err := runTerraformInitCommandWithEnv(t, "component-a", envVars)
+		stdout, stderr, err := runTerraformInitCommandWithEnv(t, "component-a", envVars, terraformInitTimeout)
 		if err != nil {
 			t.Logf("Initial %s cache-enabled init failed as expected before trust: %v", runtime.GOOS, err)
 			assert.Contains(t, stdout+stderr, "terraform cache trust")
@@ -305,18 +319,35 @@ func TestTerraformPluginCacheUserOverride(t *testing.T) {
 }
 
 // runTerraformInitWithEnv runs terraform init for a component with custom env vars.
-// Uses the "test" stack from the plugin-cache fixture.
+// Uses the "test" stack from the plugin-cache fixture. Retries within terraformInitRetryBudget to
+// absorb a transient registry.terraform.io connectivity blip rather than failing the whole
+// acceptance suite on a one-off network hiccup.
 func runTerraformInitWithEnv(t *testing.T, component string, envVars map[string]string) {
 	t.Helper()
-	_, _, err := runTerraformInitCommandWithEnv(t, component, envVars)
+
+	// pollUntil only checks its deadline between attempts, so each attempt must itself be bounded
+	// by the time remaining in the overall budget — otherwise a single blocked attempt could run
+	// for the full terraformInitTimeout (4m), well past terraformInitRetryBudget (90s), and a late
+	// attempt could still succeed after the budget was meant to be spent.
+	deadline := time.Now().Add(terraformInitRetryBudget)
+	var stdout, stderr string
+	err := pollUntil(terraformInitRetryBudget, func() error {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return errTerraformInitRetryBudgetExhausted
+		}
+		var initErr error
+		stdout, stderr, initErr = runTerraformInitCommandWithEnv(t, component, envVars, remaining)
+		return initErr
+	})
 	if err != nil {
-		t.Fatalf("Failed to run terraform init %s -s test: %v", component, err)
+		t.Fatalf("Failed to run terraform init %s -s test: %v\nstdout:\n%s\nstderr:\n%s", component, err, stdout, stderr)
 	}
 }
 
-func runTerraformInitCommandWithEnv(t *testing.T, component string, envVars map[string]string) (string, string, error) {
+func runTerraformInitCommandWithEnv(t *testing.T, component string, envVars map[string]string, timeout time.Duration) (string, string, error) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), terraformInitTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := atmosRunner.CommandContext(ctx, "terraform", "init", component, "-s", "test")
 
@@ -340,7 +371,7 @@ func runTerraformInitCommandWithEnv(t *testing.T, component string, envVars map[
 	t.Logf("Terraform init stdout:\n%s", stdout.String())
 	t.Logf("Terraform init stderr:\n%s", stderr.String())
 	if ctx.Err() != nil {
-		t.Logf("Terraform init timed out after %s", terraformInitTimeout)
+		t.Logf("Terraform init timed out after %s", timeout)
 	}
 	return stdout.String(), stderr.String(), err
 }

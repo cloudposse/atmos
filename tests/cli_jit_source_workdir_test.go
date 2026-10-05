@@ -10,17 +10,22 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd"
+	"github.com/cloudposse/atmos/tests/testhelpers/gitmirror"
 )
 
-// setupJITSourceWorkdirFixture gives each test its own writable fixture.
+// setupJITSourceWorkdirFixture gives each test its own writable fixture whose
+// component sources clone from a local git repository instead of GitHub, so
+// the JIT provisioning path under test never depends on the network.
 func setupJITSourceWorkdirFixture(t *testing.T) {
 	t.Helper()
+	RequireExecutable(t, "git", "JIT source provisioning clones a git repository")
 
 	fixture, err := filepath.Abs(filepath.Join("fixtures", "scenarios", "source-provisioner-workdir"))
 	require.NoError(t, err)
 
 	sandbox := t.TempDir()
 	require.NoError(t, os.CopyFS(sandbox, os.DirFS(fixture)))
+	gitmirror.RewriteJITSourceURIs(t, sandbox, gitmirror.InitJITSourceRepo(t))
 	t.Chdir(sandbox)
 }
 

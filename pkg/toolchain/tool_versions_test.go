@@ -315,6 +315,55 @@ func TestAddToolToVersionsAsDefault(t *testing.T) {
 		assert.ErrorIs(t, err, ErrInvalidToolSpec)
 	})
 
+	t.Run("Sets an already-tracked version as the sole default under the same key", func(t *testing.T) {
+		// Regression test: "atmos toolchain set jq 1.7.1" must make 1.7.1 the sole
+		// entry when .tool-versions already contains "jq 1.9.0 1.7.1" -- both
+		// versions tracked under the same "jq" key. AddVersionToTool's asDefault
+		// path always fully replaces (see its doc comment): the stale 1.9.0 must
+		// not survive as a second entry.
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+
+		err := AddToolToVersions(filePath, "jq", "1.9.0")
+		require.NoError(t, err)
+		err = AddToolToVersions(filePath, "jq", "1.7.1")
+		require.NoError(t, err)
+
+		err = AddToolToVersionsAsDefault(filePath, "jq", "1.7.1")
+		require.NoError(t, err)
+
+		toolVersions, err := LoadToolVersions(filePath)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"1.7.1"}, toolVersions.Tools["jq"])
+	})
+
+	t.Run("Promotes an already-tracked version under a different (alias/canonical) key", func(t *testing.T) {
+		// Regression test: when the version is already tracked under a different
+		// key form than the one the caller passed (e.g. the file stores the
+		// canonical "opentofu/opentofu" entry but the caller asks to promote a
+		// version by the "opentofu" alias), findDuplicateKey finds the conflict.
+		// Setting asDefault=true must still promote the version within its
+		// existing key instead of silently doing nothing -- and, per
+		// AddVersionToTool's asDefault contract, fully replace the list there
+		// rather than leaving the old version pinned alongside it.
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+
+		err := AddToolToVersions(filePath, "opentofu/opentofu", "1.10.3")
+		require.NoError(t, err)
+		err = AddToolToVersions(filePath, "opentofu/opentofu", "1.10.2")
+		require.NoError(t, err)
+
+		// Promote 1.10.2 to default using the alias form of the tool name.
+		err = AddToolToVersionsAsDefault(filePath, "opentofu", "1.10.2")
+		require.NoError(t, err)
+
+		toolVersions, err := LoadToolVersions(filePath)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"1.10.2"}, toolVersions.Tools["opentofu/opentofu"])
+		assert.NotContains(t, toolVersions.Tools, "opentofu", "should not create a second, disconnected alias entry")
+	})
+
 	// TestAddToolToVersionsAsDefault/Single-version_tool_ends_up_with_exactly_one_version
 	// reproduces the most common real-world case (a tool pinned to a single version, e.g. from
 	// `add`, then bumped via `set`, `add --default`, or `update`). set's and update's own docs

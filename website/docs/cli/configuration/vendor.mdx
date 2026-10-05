@@ -22,6 +22,9 @@ vendor:
   # Path to vendor manifest file or directory
   base_path: vendor.yaml
 
+  # Concurrent downloads and update checks (edition-aware default)
+  max_concurrency: 4
+
   # Configure output format for vendor list command
   list:
     format: table
@@ -131,6 +134,11 @@ vendor:
     How `atmos vendor pull` reacts when a package's on-disk state no longer matches its
     `vendor.lock.yaml` receipt.
 
+    When the receipt matches the declaration and all its recorded files are absent, Atmos
+    treats the package as uninstalled and reinstalls it without a drift warning, including
+    under `strict`. This supports `vendor clean` followed by `vendor pull`. Partially missing
+    or modified files and changed declarations still use the enforcement policy below.
+
     **Valid values:**
     - `warn` — re-fetch the drifted package and print one warning per package naming why it drifted.
     - `silent` — re-fetch the drifted package with no reporting.
@@ -143,6 +151,51 @@ vendor:
     or `atmos vendor update --pull`.
   </dd>
 </dl>
+
+## Concurrency
+
+`vendor.max_concurrency` sets the maximum number of simultaneous downloads and
+preparation jobs for [`vendor pull`](/cli/commands/vendor/pull), and upstream checks
+for [`vendor update`](/cli/commands/vendor/vendor-update). The pull phase of
+`vendor update --pull` uses the same value.
+
+Precedence is **explicit `--max-concurrency` flag → `ATMOS_VENDOR_MAX_CONCURRENCY`
+environment variable → merged configuration → edition-aware default**. Values
+must be positive integers; explicit zero, negative, and malformed values fail
+before vendoring begins.
+
+| Edition pin | Default workers |
+| :-- | --: |
+| Unpinned | 4 |
+| Before `2026-09-15` | 1 |
+| On or after `2026-09-15` | 4 |
+
+An explicit value overrides the edition pin. Partial dates follow the existing
+[edition rules](/cli/configuration/edition): `"2026-08"` ends on August 31 and keeps
+one worker; `"2026-09"` includes the September change and uses four.
+
+```shell
+atmos vendor pull --max-concurrency 8
+ATMOS_VENDOR_MAX_CONCURRENCY=2 atmos vendor update --check
+atmos vendor update --pull --max-concurrency 4
+```
+
+Downloads and preparation overlap. Destination copying and lock receipt updates
+follow declaration order, including component sources before their mixins. Local
+sources are staged after preceding writes, so they observe those files. At most
+twice the worker count may be downloading or waiting to be installed. One worker
+preserves serial execution.
+
+All editions receive the progress display. Active rows show the current phase,
+with byte counts when the download backend provides them. A **ready** package is
+waiting for its turn to install; success appears only after files and receipts
+are written. Completed results remain visible. CI and redirected output use plain
+result lines on stderr, leaving structured update output on stdout intact.
+
+Concurrent vendoring operations coordinate destination writes and receipts with
+advisory locks. A failed package does not undo packages already installed. On
+interruption, Atmos cancels pending work, cleans temporary downloads, and lets an
+already-started materialization finish before releasing its locks.
 
 ## Component Updater Configuration
 
@@ -195,7 +248,7 @@ vendor:
     lists against component paths; exclusions win.
   </dd>
   <dt>`ci.pull_request.provider`</dt>
-  <dd>Pull request provider. **Valid values:** `github`. **Default:** `github`.</dd>
+  <dd>Pull request provider. **Valid values:** `github`, `azuredevops`. **Default:** `github`.</dd>
   <dt>`ci.pull_request.base_branch`</dt>
   <dd>Base branch for the pull request. **Default:** the remote's advertised default branch.</dd>
   <dt>`ci.pull_request.branch_prefix`</dt>
@@ -208,9 +261,22 @@ vendor:
     `{{ .updates | markdownTable }}` — not just the bare table on its own.
   </dd>
   <dt>`ci.pull_request.labels` / `.reviewers` / `.assignees`</dt>
-  <dd>Atmos applies these additively on every reconciliation. **Default label:** `[component-update]`.</dd>
+  <dd>
+    Atmos applies these additively on every reconciliation. **Default label:** `[component-update]`.
+    Azure DevOps pull requests have no assignee concept — setting `assignees` with
+    `provider: azuredevops` fails with an error instead of silently dropping it; use `reviewers`
+    there instead. With `provider: azuredevops`, each `reviewers` entry is a display name, account
+    name, or email — Atmos resolves it to the individual it identifies. Only individuals are
+    supported today, not groups.
+  </dd>
   <dt>`ci.pull_request.draft`</dt>
   <dd>Create the pull request as a draft. **Default:** `false`.</dd>
+  <dt>`ci.pull_request.organization` / `.project` / `.repository`</dt>
+  <dd>
+    Required when `provider: azuredevops`. Azure DevOps addresses a repository with three
+    segments — organization, project, and repository — instead of GitHub's owner/repository pair
+    derived from the Git remote.
+  </dd>
   <dt>`ci.summary.enabled`</dt>
   <dd>Whether to write a GitHub Actions step summary. **Default:** `true`.</dd>
 </dl>
@@ -220,6 +286,22 @@ A default `GITHUB_TOKEN` won't trigger downstream `on: pull_request`/`on: push` 
 Pair the Component Updater with the [`github/sts`](/cli/configuration/auth#github-sts-atmos-pro)
 auth integration to get a token that does. See
 <a href="/cli/commands/vendor/vendor-update">`atmos vendor update`</a>'s token precedence notes for details.
+:::
+
+:::note
+The `azuredevops` provider authenticates with a personal access token in the
+`AZURE_DEVOPS_EXT_PAT` environment variable, used as HTTP Basic auth with an empty username. The
+token needs Code (Read & Write) permission on the target project.
+
+```yaml
+vendor:
+  ci:
+    pull_request:
+      provider: azuredevops
+      organization: my-org
+      project: my-project
+      repository: my-repo
+```
 :::
 
 ## Vendor Manifest Structure

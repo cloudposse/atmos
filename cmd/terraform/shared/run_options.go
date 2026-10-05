@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -26,7 +27,10 @@ type RunOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	UseMocks         bool
-	Skip             []string
+	// MocksMode overrides components.terraform.mocks.mode (fallback, always) when
+	// --use-mocks carries an explicit mode; empty means use the configured mode.
+	MocksMode string
+	Skip      []string
 
 	// Execution flags.
 	DryRun       bool
@@ -36,6 +40,12 @@ type RunOptions struct {
 	// Backend execution flags.
 	AutoGenerateBackendFile string
 	InitRunReconfigure      string
+	// InitMode/InitReconfigure/InitUpgrade override components.terraform.init.mode/
+	// reconfigure/upgrade from atmos.yaml (auto, always, never). InitReconfigure here
+	// supersedes the legacy InitRunReconfigure above when set.
+	InitMode        string
+	InitReconfigure string
+	InitUpgrade     string
 
 	// Plan/Apply/Deploy specific flags.
 	// NOTE: --verify-plan is deliberately NOT parsed here. Viper cannot
@@ -69,6 +79,10 @@ type RunOptions struct {
 	// Status upload flag.
 	UploadStatus bool
 
+	// UI flags.
+	UI        bool // Enable streaming UI mode.
+	UIFlagSet bool // Whether --ui flag was explicitly set.
+
 	// AppendArgs are extra terraform pass-through flags injected by the caller
 	// (e.g. `-json` for `terraform test` in CI). They are appended to
 	// info.AdditionalArgsAndFlags so they reach the terraform command directly,
@@ -83,13 +97,15 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 	opts := &RunOptions{
 		ProcessTemplates:        v.GetBool("process-templates"),
 		ProcessFunctions:        v.GetBool("process-functions"),
-		UseMocks:                v.GetBool("use-mocks"),
 		Skip:                    v.GetStringSlice("skip"),
 		DryRun:                  v.GetBool("dry-run"),
 		SkipInit:                v.GetBool("skip-init"),
 		InitPassVars:            v.GetBool("init-pass-vars"),
 		AutoGenerateBackendFile: v.GetString("auto-generate-backend-file"),
 		InitRunReconfigure:      v.GetString("init-run-reconfigure"),
+		InitMode:                v.GetString("init-mode"),
+		InitReconfigure:         v.GetString("init-reconfigure"),
+		InitUpgrade:             v.GetString("init-upgrade"),
 		PlanFile:                v.GetString("planfile"),
 		PlanSkipPlanfile:        v.GetBool("skip-planfile"),
 		DeployRunInit:           v.GetBool("deploy-run-init"),
@@ -105,6 +121,7 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		PlanHideNoChanges:       TerraformPlanHideContains(v.GetStringSlice("hide"), "no-changes"),
 		PlanSummaryFile:         v.GetString("execution-summary-file"),
 		UploadStatus:            v.GetBool("upload-status"),
+		UI:                      v.GetBool("ui"),
 	}
 
 	labels, err := tags.ParseLabelsFlag(v.GetString("labels"))
@@ -112,6 +129,10 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		return nil, err
 	}
 	opts.Labels = labels
+
+	if opts.UseMocks, opts.MocksMode, err = cfg.ParseUseMocksValue(v.GetString("use-mocks"), cfg.UseMocksFlagAndEnvSource); err != nil {
+		return nil, err
+	}
 
 	if opts.IncludeDependencies, err = flags.ParseClosureDepth("include-dependencies", v.GetString("include-dependencies")); err != nil {
 		return nil, err
@@ -167,6 +188,7 @@ func ApplyRunOptions(info *schema.ConfigAndStacksInfo, opts *RunOptions) {
 	info.ProcessTemplates = opts.ProcessTemplates
 	info.ProcessFunctions = opts.ProcessFunctions
 	info.UseMocks = opts.UseMocks
+	info.MocksMode = opts.MocksMode
 	info.Skip = opts.Skip
 	info.Components = opts.Components
 	info.Tags = opts.Tags
@@ -201,6 +223,15 @@ func ApplyRunOptions(info *schema.ConfigAndStacksInfo, opts *RunOptions) {
 	}
 	if opts.InitPassVars {
 		info.InitPassVars = "true"
+	}
+	if opts.InitMode != "" {
+		info.InitMode = opts.InitMode
+	}
+	if opts.InitReconfigure != "" {
+		info.InitReconfigure = opts.InitReconfigure
+	}
+	if opts.InitUpgrade != "" {
+		info.InitUpgrade = opts.InitUpgrade
 	}
 
 	if opts.PlanFile != "" {

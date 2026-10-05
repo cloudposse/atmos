@@ -15,10 +15,13 @@ import (
 // This file tests the Execute method.
 
 func TestSleepHandler_Validate(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("sleep")
 	require.True(t, ok)
 
 	t.Run("validates with no timeout", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Type: "sleep",
@@ -28,6 +31,7 @@ func TestSleepHandler_Validate(t *testing.T) {
 	})
 
 	t.Run("validates with timeout", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "sleep",
@@ -39,10 +43,13 @@ func TestSleepHandler_Validate(t *testing.T) {
 }
 
 func TestSleepHandler_Execute(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("sleep")
 	require.True(t, ok)
 
 	t.Run("sleeps for default duration", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Type: "sleep",
@@ -62,6 +69,7 @@ func TestSleepHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("sleeps for specified duration", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "sleep",
@@ -83,6 +91,7 @@ func TestSleepHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("respects context cancellation", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "sleep",
@@ -108,6 +117,7 @@ func TestSleepHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("respects context deadline", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "sleep",
@@ -128,6 +138,7 @@ func TestSleepHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("handles template in timeout", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "sleep",
@@ -149,6 +160,7 @@ func TestSleepHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "sleep",
@@ -162,6 +174,7 @@ func TestSleepHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid duration", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "sleep",

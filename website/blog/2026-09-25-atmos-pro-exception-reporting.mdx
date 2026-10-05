@@ -1,0 +1,77 @@
+---
+slug: atmos-pro-exception-reporting
+title: "Automatic CLI Exception Reporting to Atmos Pro"
+authors: [osterman]
+tags: [feature, atmos-pro]
+---
+Finding the stack, component, and team behind a failed infrastructure command can
+require piecing together several CI logs. Atmos can now report CLI failures to
+Atmos Pro with execution context and your existing metadata tags and labels.
+
+<!--truncate-->
+
+## The Problem
+
+Exception capture previously depended on configuring a separate Sentry destination.
+Enabling Atmos Pro for a stack did not automatically send CLI exceptions to Pro,
+leaving failures disconnected from the execution records already uploaded there.
+
+## The Fix
+
+The [automatic Pro exception reporter](/cli/configuration/settings/pro#automatic-exception-reporting)
+sends failures from GitHub Actions when the effective `settings.pro.enabled` is
+`true`, using fresh GitHub OIDC credentials and the configured Pro base URL.
+Separately configured Sentry destinations continue to receive events with the same
+IDs and fingerprints.
+
+Resolved [component metadata](/stacks/components/component-metadata), including
+inherited stack defaults, becomes unprefixed Sentry tags. A `production` presence
+tag becomes `production: "true"`; a `team: platform` label becomes
+`team: "platform"`. Events also include stack/component identity and the execution
+ID used by Pro uploads, with Atmos's existing masking applied.
+
+## How to Use It
+
+Enable Pro in `atmos.yaml` for invocation-wide reporting, or use the existing
+stack/component Pro setting:
+
+```yaml title="atmos.yaml"
+settings:
+  pro:
+    enabled: true
+```
+
+Grant the GitHub Actions workflow `id-token: write` permission:
+
+```yaml
+permissions:
+  contents: read
+  id-token: write
+```
+
+**Upgrade behavior:** existing stacks with `settings.pro.enabled: true` now send
+CLI exceptions automatically in eligible GitHub Actions runs. To retain the
+previous behavior while keeping other Pro features, explicitly opt out:
+
+```yaml
+settings:
+  pro:
+    enabled: true
+    errors:
+      enabled: false
+```
+
+The `ATMOS_PRO_ERRORS_ENABLED=false` environment override also disables reporting
+and takes precedence over component settings. Edition pins do not suppress this
+new behavior. Reporting failures preserve the command's exit code, with a
+two-second delivery timeout and a shared two-second shutdown flush.
+
+The CLI contract covers successful ingestion and authentication rejection; Pro's
+provider verification and persisted-tag assertions are tracked in
+[issue #3219](https://github.com/cloudposse/atmos/issues/3219).
+
+## Get Involved
+
+See the [reporting configuration and tag precedence](/cli/configuration/settings/pro#automatic-exception-reporting)
+for details, and [open an issue](https://github.com/cloudposse/atmos/issues) with
+feedback about exception reporting.

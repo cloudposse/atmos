@@ -55,9 +55,11 @@ defaults, persisted `spec.values`, and repeated `--set key=value` flags, so auto
 same rules as an interactive run.
 
 Supported field types are `input`, `text`, `string`, `select`, `multiselect`, `confirm`, `bool`,
-and `boolean`. Required fields reject missing or blank text and empty multiselect values; `false`
-is a valid boolean answer. Select values must come from `options`, and text fields can use
-`validation.pattern` with an optional `validation.message`.
+`boolean`, and `computed`. Required fields reject missing or blank text and empty multiselect
+values; `false` is a valid boolean answer. Select values must come from `options`, and text fields
+can use `validation.pattern` with an optional `validation.message`. A `computed` field is never
+prompted for — see [Computed Fields](/cli/commands/scaffold/generate#computed-fields) in the
+`generate` reference.
 
 ## Conditions and Files
 
@@ -110,10 +112,18 @@ spec:
           command: terraform validate
 ```
 
-For `kind: step`, `type:` selects one registered [step type](/workflows/steps/type) and `with:`
+For `kind: step`, `type:` selects one registered [step type](/steps/type) and `with:`
 is its configuration. For `kind: steps`, `with:` is an ordered step list. The envelope owns
 `events`, `when`, `env`, `retry`, and `on_failure`; answer values are available in conditions as
 `answers` and in step templates as `{{ .Answers.<field> }}`. Hooks run in stable name order.
+
+A step's `working_directory:` defaults to (or, if bare-relative, resolves under) the scaffold's
+target directory, also exposed as `{{ .TargetPath }}`, so the `format`/`verify` hooks above run
+against the generated project. Set `working_directory: "."` to run a step in the directory
+`atmos` was launched from instead. A `type: atmos` step is exempt from this default -- it keeps
+running in the directory `atmos` was launched from when `working_directory:` is unset, since the
+nested `atmos` invocation must resolve its own config there, but an explicit `working_directory:`
+on that step is still honored.
 
 Use `--skip-hooks` or `--skip-hooks=name1,name2` when inspecting an untrusted template or
 diagnosing generation. See [lifecycle hooks](/stacks/hooks) for the broader stack-hook kinds and
@@ -125,11 +135,26 @@ the shared step bridge.
 atmos scaffold generate terraform-component ./components/terraform/vpc
 atmos scaffold generate terraform-component ./components/terraform/vpc --update
 atmos scaffold generate terraform-component ./components/terraform/vpc --update --merge-strategy=theirs
+atmos scaffold generate terraform-component ./components/terraform/vpc --update --update-strategy=rendered
 ```
 
 `--update` uses the recorded base revision to perform an optimistic three-way merge. The default
 `manual` strategy surfaces real conflicts; `ours` keeps local changes and `theirs` applies the
 template side of a conflict.
+
+`--update-strategy` controls where the merge's *base* comes from, independently of `--merge-strategy`.
+`tracked` (the default) reads it from the target's own Git history. `rendered` instead re-renders
+the template at the ref that produced what's currently on disk, using that generation's recorded
+answers, with no Git history dependency at all. This needs two separate things, not one: the
+template itself must define a `scaffold.yaml` manifest (so the old ref's fields can be resolved
+when re-rendering), and the target must already carry a prior generation's `.atmos/scaffold.yaml`
+record (a different file, at a different path — it stores that generation's recorded answers, not
+the template's field definitions).
+
+`--max-changes` (default `50`) caps the percentage of changed lines a three-way merge is allowed
+to touch before `--update` fails outright instead of applying it. `0` disables this check
+entirely (guaranteed to never fail); any other value is compared against a computed percentage
+with no upper bound, so raising it only makes a hard failure less likely, never impossible.
 
 ## Project Initialization
 
@@ -144,5 +169,5 @@ golden path.
 
 - [Generate from a scaffold](/cli/commands/scaffold/generate)
 - [Validate a scaffold](/cli/commands/scaffold/validate)
-- [Workflow and hook step types](/workflows/steps/type)
+- [Workflow and hook step types](/steps/type)
 - [Manage lifecycle events with hooks](/stacks/hooks)

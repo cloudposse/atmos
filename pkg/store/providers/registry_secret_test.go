@@ -18,8 +18,11 @@ var (
 )
 
 // TestNewStoreRegistry_SecretOnIncapableBackendErrors verifies that marking a backend that
-// cannot encrypt at rest (Redis, Artifactory) as `secret: true` is a hard error at load,
-// regardless of whether the backend is selected via the legacy `type` or the new `kind`.
+// cannot encrypt at rest (Redis, Artifactory) as `secret: true` is skipped (logged as a
+// warning) rather than constructed, regardless of whether the backend is selected via the
+// legacy `type` or the new `kind`. It no longer fails the whole registry build — see
+// https://github.com/cloudposse/atmos/issues/2930: one misconfigured store must not take down
+// every other store's config load.
 func TestNewStoreRegistry_SecretOnIncapableBackendErrors(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -34,9 +37,8 @@ func TestNewStoreRegistry_SecretOnIncapableBackendErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := store.StoresConfig{"store": tt.config}
 			registry, err := store.NewStoreRegistry(&cfg)
-			require.Error(t, err)
-			assert.ErrorIs(t, err, store.ErrSecretBackendNotEncrypted)
-			assert.Nil(t, registry)
+			require.NoError(t, err)
+			assert.NotContains(t, registry, "store")
 		})
 	}
 }

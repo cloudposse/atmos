@@ -45,7 +45,7 @@ func getStatusIndicatorWithTTY(enabled, locked, isTTY bool) string {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetSuccessColor())).Render(statusDot)
 	default:
 		// Gray for disabled - use theme muted color.
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray)).Render(statusDot)
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).Render(statusDot)
 	}
 }
 

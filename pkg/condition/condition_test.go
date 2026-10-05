@@ -188,6 +188,36 @@ func TestConditionUnmarshalYAML(t *testing.T) {
 			ctx:  Context{Status: PredicateSuccess, Matrix: nil},
 			want: true,
 		},
+		{
+			name: "cel flags bool value",
+			yaml: "when: \"flags.dry_run == true\"\n",
+			ctx:  Context{Status: PredicateSuccess, Flags: map[string]any{"dry_run": true}},
+			want: true,
+		},
+		{
+			name: "cel flags string value false",
+			yaml: "when: \"flags['env'] == 'prod'\"\n",
+			ctx:  Context{Status: PredicateSuccess, Flags: map[string]any{"env": "staging"}},
+			want: false,
+		},
+		{
+			name: "cel flags nil map defaults to empty",
+			yaml: "when: \"size(flags) == 0\"\n",
+			ctx:  Context{Status: PredicateSuccess, Flags: nil},
+			want: true,
+		},
+		{
+			name: "cel arguments map lookup",
+			yaml: "when: \"arguments.environment == 'prod'\"\n",
+			ctx:  Context{Status: PredicateSuccess, Arguments: map[string]string{"environment": "prod"}},
+			want: true,
+		},
+		{
+			name: "cel arguments nil map defaults to empty",
+			yaml: "when: \"size(arguments) == 0\"\n",
+			ctx:  Context{Status: PredicateSuccess, Arguments: nil},
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -397,6 +427,45 @@ func TestConditionMentionsCELIdentifier(t *testing.T) {
 	assert.False(t, Condition{}.MentionsCELIdentifier("checksum"), "a zero-value condition mentions nothing")
 }
 
+// TestConditionMentionsCELIdentifier_BracketForm proves a CEL bracket/index
+// access (answers["derived"]) is recognized the same way as the dotted form
+// (answers.derived) -- the token scan alone never sees "answers" and
+// "derived" joined into one token for the bracket form, since `[` and the
+// quote character both split them into separate tokens.
+func TestConditionMentionsCELIdentifier_BracketForm(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+		want bool
+	}{
+		{name: "double-quoted bracket access", expr: `answers["derived"] == "yes"`, want: true},
+		{name: "single-quoted bracket access", expr: `answers['derived'] == "yes"`, want: true},
+		{name: "whitespace inside brackets", expr: `answers[ "derived" ] == "yes"`, want: true},
+		{name: "dotted form still matches", expr: `answers.derived == "yes"`, want: true},
+		{name: "different member name does not match", expr: `answers["other"] == "yes"`, want: false},
+		{name: "no reference at all", expr: `ci == true`, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cond, err := New(tt.expr)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, cond.MentionsCELIdentifier("answers.derived"))
+		})
+	}
+}
+
+// TestCelMentionsBracketAccess_RootBoundary proves root must be a standalone
+// identifier token, not a substring of a longer one -- tested directly since
+// no real CEL variable name in this package's env contains "answers" as a
+// substring of a longer declared identifier, so this can't be exercised
+// through a real compiled CEL expression the way the other cases above are.
+func TestCelMentionsBracketAccess_RootBoundary(t *testing.T) {
+	assert.False(t, celMentionsBracketAccess(`myanswers["derived"]`, "answers", "derived"))
+	assert.True(t, celMentionsBracketAccess(`answers["derived"]`, "answers", "derived"))
+	assert.True(t, celMentionsBracketAccess(`ci && answers["derived"] == "yes"`, "answers", "derived"))
+}
+
 func TestConditionMentionsCELIdentifier_RecursesThroughCompoundChildren(t *testing.T) {
 	// A single bare CEL condition never exercises mentionsCELIdentifier's recursive branch --
 	// only a compound (all/any/not) condition wrapping a CEL child does, since only those Kinds
@@ -602,6 +671,70 @@ func TestConditionJSONEmptyRoundTrip(t *testing.T) {
 	var decoded Condition
 	require.NoError(t, json.Unmarshal(data, &decoded))
 	assert.True(t, decoded.IsZero())
+}
+
+// TestConditionYAMLMarshalRoundTrip verifies a Condition survives being
+// marshaled to YAML and decoded back, evaluating identically to the
+// original. The marshaled shape mirrors Condition.MarshalJSON's node.value()
+// reconstruction (a bare CEL string always canonicalizes to the
+// "!cel <expr>" form) -- the same normalization cloneCommand
+// (cmd/cmd_utils.go) relies on when it JSON round-trips a custom command's
+// Task.When on every invocation.
+func TestConditionYAMLMarshalRoundTrip(t *testing.T) {
+	tests := []struct {
+		name     string
+		original Condition
+		want     any
+	}{
+		{"predicate", Must("ci"), "ci"},
+		{"cel", Must("answers.topology == 'multi'"), "!cel answers.topology == 'multi'"},
+		{"all", Must([]any{"ci", "success"}), map[string]any{"all": []any{"ci", "success"}}},
+		{
+			"any/not",
+			Must(map[string]any{"any": []any{"ci", map[string]any{"not": "failure"}}}),
+			map[string]any{"any": []any{"ci", map[string]any{"not": "failure"}}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := yaml.Marshal(conditionConfig{When: tt.original})
+			require.NoError(t, err)
+
+			var generic struct {
+				When any `yaml:"when"`
+			}
+			require.NoError(t, yaml.Unmarshal(data, &generic))
+			assert.Equal(t, tt.want, generic.When)
+
+			var decoded conditionConfig
+			require.NoError(t, yaml.Unmarshal(data, &decoded))
+
+			// The decoded condition must evaluate identically to the original
+			// across representative facts, proving the round trip is lossless.
+			for _, ctx := range []Context{
+				{CI: true, Status: PredicateSuccess, Answers: map[string]any{"topology": "multi"}},
+				{CI: false, Status: PredicateFailure, Answers: map[string]any{"topology": "single"}},
+			} {
+				assert.Equal(t, tt.original.Evaluate(ctx), decoded.When.Evaluate(ctx))
+			}
+		})
+	}
+}
+
+func TestConditionYAMLEmptyMarshalRoundTrip(t *testing.T) {
+	data, err := yaml.Marshal(conditionConfig{})
+	require.NoError(t, err)
+
+	var generic struct {
+		When any `yaml:"when"`
+	}
+	require.NoError(t, yaml.Unmarshal(data, &generic))
+	assert.Nil(t, generic.When)
+
+	var decoded conditionConfig
+	require.NoError(t, yaml.Unmarshal(data, &decoded))
+	assert.True(t, decoded.When.IsZero())
 }
 
 func TestConditionJSONRejectsMalformedInput(t *testing.T) {

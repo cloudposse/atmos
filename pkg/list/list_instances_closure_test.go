@@ -196,7 +196,7 @@ func TestExecuteDescribeStacksForInstances_ScopedDispatch(t *testing.T) {
 		fake := &scopedFakeProcessor{}
 		_, err := executeDescribeStacksForInstances(
 			&schema.AtmosConfiguration{}, fake, nil, true, true, nil, false,
-			[]string{"app"}, nil,
+			[]string{"app"}, nil, nil,
 		)
 		require.NoError(t, err)
 		assert.True(t, fake.scopedCalled, "a tags filter must dispatch to ExecuteDescribeStacksScoped")
@@ -210,7 +210,7 @@ func TestExecuteDescribeStacksForInstances_ScopedDispatch(t *testing.T) {
 		labels := map[string]string{"env": "dev"}
 		_, err := executeDescribeStacksForInstances(
 			&schema.AtmosConfiguration{}, fake, nil, true, true, nil, false,
-			nil, labels,
+			nil, labels, nil,
 		)
 		require.NoError(t, err)
 		assert.True(t, fake.scopedCalled, "a labels filter must dispatch to ExecuteDescribeStacksScoped")
@@ -223,7 +223,7 @@ func TestExecuteDescribeStacksForInstances_ScopedDispatch(t *testing.T) {
 		fake := &scopedFakeProcessor{}
 		_, err := executeDescribeStacksForInstances(
 			&schema.AtmosConfiguration{}, fake, nil, true, true, nil, false,
-			nil, nil,
+			nil, nil, nil,
 		)
 		require.NoError(t, err)
 		assert.False(t, fake.scopedCalled)
@@ -269,7 +269,6 @@ func (f *scopedFakeProcessor) ExecuteDescribeStacksScoped(
 	includeEmptyStacks bool,
 	skip []string,
 	authManager auth.AuthManager,
-	authDisabled bool,
 	tagsFilter []string,
 	labelsFilter map[string]string,
 ) (map[string]any, error) {

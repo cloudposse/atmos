@@ -1,6 +1,6 @@
 ---
 name: atmos-helmfile
-description: "Helmfile orchestration: sync/apply/destroy/diff, Kubernetes deployments, varfile generation, EKS integration, source management"
+description: "Helmfile orchestration: sync/apply/destroy/diff, Kubernetes deployments, declarative Helm plugins, varfile generation, EKS integration, source management"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -22,7 +22,9 @@ When you run any `atmos helmfile` command, Atmos performs the following sequence
 2. **Generates variable file** -- Writes a varfile containing all `vars` defined for the component in the stack.
 3. **Configures EKS authentication** -- If `use_eks: true`, runs `aws eks update-kubeconfig` to generate
     kubeconfig from the EKS cluster and set up authentication.
-4. **Executes the requested command** -- Runs `helmfile diff`, `apply`, `sync`, `destroy`, etc. with the
+4. **Ensures declared tools and plugins** -- Resolves `dependencies.tools`, installs component `plugins`,
+    and passes the managed `HELM_PLUGINS` directory to Helmfile.
+5. **Executes the requested command** -- Runs `helmfile diff`, `apply`, `sync`, `destroy`, etc. with the
     generated varfile and any additional flags.
 
 This means a single command like `atmos helmfile apply nginx-ingress -s ue2-dev` replaces what would normally
@@ -58,6 +60,7 @@ components:
   inheritance chains.
 - **`settings`** -- Free-form map for integration configuration.
 - **`env`** -- Environment variables set when running Helmfile commands (e.g., `HELM_DEBUG`, `KUBECONFIG`).
+- **`plugins`** -- Helm CLI plugins ensured automatically before Helmfile execution.
 
 ### Component Inheritance
 
@@ -82,6 +85,13 @@ components:
       vars:
         namespace: ingress
 ```
+
+## Helm Plugins
+
+Declare required Helm CLI plugins (such as `diff@v3.15.10`) in the component's `plugins`
+list. Atmos installs them automatically and passes `HELM_PLUGINS` to Helmfile.
+For plugin declarations, shared defaults, CI caching, and installer troubleshooting,
+read [references/helm-plugins.md](references/helm-plugins.md).
 
 ## Core Commands
 

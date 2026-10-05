@@ -1,13 +1,14 @@
 ---
 slug: terraform-component-mocks
 title: "Component Mocks for Terraform YAML Lookups"
+date: 2026-08-06T12:00:00.000Z
 authors: [osterman]
 tags: [feature, dx]
 ---
 
 Cross-component Terraform lookups are useful precisely when an application component needs the outputs of something like a VPC, cluster, or database. They can also make a local plan or configuration review depend on deployed infrastructure, backend access, and cloud credentials that are irrelevant to the change at hand.
 
-Atmos now supports **component mocks**: literal, component-owned Terraform outputs that you enable explicitly with `--use-mocks`.
+Atmos now supports **[component mocks](/stacks/components/mocks)**: literal, component-owned Terraform outputs that you enable explicitly with `--use-mocks`.
 
 <!--truncate-->
 
@@ -64,7 +65,7 @@ The [advanced quick start](/quick-start/advanced/) uses this pattern for its fir
 
 When a Terraform lookup is mocked, Atmos loads the referenced component's merged `mocks` map and evaluates the requested expression against it. It does **not** initialize Terraform, resolve the referenced component's credentials, read a backend, or populate the real-state lookup cache.
 
-That makes mock mode useful for local plans and `describe component` output that should be independent of the remote dependency. It also means `--use-mocks` never silently falls back to real state: a missing mock map or output is an actionable error, not a surprise backend read.
+That makes mock mode useful for local plans and `describe component` output that should be independent of the remote dependency. It also means `--use-mocks` never silently falls back to real state: a missing mock map or output is an actionable error, not a surprise backend read — unless the expression itself supplies a YQ `//` default, which is honored the same way it is for real state, whether or not the referenced component declares `mocks` at all.
 
 Mock values themselves are literal. Atmos does not evaluate templates or YAML functions inside `mocks`, so a mock cannot accidentally call the real dependency it was meant to replace.
 
@@ -74,8 +75,8 @@ Mocks are opt-in. Without `--use-mocks`, existing `!terraform.state` and `!terra
 
 The flag is supported by:
 
-- `atmos terraform plan`
-- `atmos describe component`
+- [`atmos terraform plan`](/cli/commands/terraform/plan)
+- [`atmos describe component`](/cli/commands/describe/component)
 
 Mutating Terraform commands—including `apply`, `deploy`, and `destroy`—and Terraform passthrough commands reject it before stack resolution. `--use-mocks` also requires YAML function processing to remain enabled.
 
@@ -103,3 +104,5 @@ atmos terraform plan app -s dev
 ```
 
 Read more about [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output), or use the example as the smallest starting point for adding mocks to your own stack.
+
+For usage and configuration, see [component output mocks](/stacks/components/mocks).

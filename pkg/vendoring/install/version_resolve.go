@@ -108,7 +108,7 @@ func ResolveDeclaredVersion(ctx context.Context, atmosConfig *schema.AtmosConfig
 		return "", err
 	}
 
-	if err := recordResolvedVersion(atmosConfig, id, params.Name, params.RawVersion, resolved); err != nil {
+	if err := recordResolvedVersionContext(ctx, atmosConfig, id, versionResolutionRecord{name: params.Name, constraint: params.RawVersion, version: resolved}); err != nil {
 		return "", err
 	}
 	return resolved, nil
@@ -142,7 +142,16 @@ type ResolveEffectiveVersionInputs struct {
 // only when in.RawVersion was actually a range, so callers can carry it through to
 // VendorPackage.RawVersion for lockfile provenance on the eventual install receipt.
 func ResolveEffectiveVersion(in *ResolveEffectiveVersionInputs) (resolved, raw string, err error) { //nolint:lintroller // Delegates entirely to the tracked ResolveDeclaredVersion.
-	resolved, err = ResolveDeclaredVersion(context.Background(), in.AtmosConfig, &VersionResolveParams{
+	return ResolveEffectiveVersionContext(context.Background(), in)
+}
+
+// ResolveEffectiveVersionContext resolves versions with the command's cancellation context.
+func ResolveEffectiveVersionContext(ctx context.Context, in *ResolveEffectiveVersionInputs) (resolved, raw string, err error) {
+	defer perf.Track(in.AtmosConfig, "install.ResolveEffectiveVersionContext")()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	resolved, err = ResolveDeclaredVersion(ctx, in.AtmosConfig, &VersionResolveParams{
 		RawVersion:      in.RawVersion,
 		Name:            effectiveVersionName(in.Name, in.Source),
 		Discriminator:   in.Discriminator,
@@ -245,20 +254,22 @@ func lookupResolvedVersion(atmosConfig *schema.AtmosConfiguration, id, rawVersio
 	return artifact.Source.ResolvedVersion, true, nil
 }
 
-// recordResolvedVersion persists a fresh version-range resolution as its own lock artifact (see
+type versionResolutionRecord struct{ name, constraint, version string }
+
+// recordResolvedVersionContext persists a fresh version-range resolution as its own lock artifact (see
 // versionResolveKind's doc comment for why it's a dedicated entry rather than the source's eventual
 // installed-files receipt). Uses lockfile.Replace directly (Order bookkeeping and atomic Save),
 // same as every other lock writer in this package.
-func recordResolvedVersion(atmosConfig *schema.AtmosConfiguration, id, name, rawVersion, resolvedVersion string) error {
+func recordResolvedVersionContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, id string, record versionResolutionRecord) error {
 	artifact := lockfile.Artifact{
-		Name:   name,
+		Name:   record.name,
 		Kind:   versionResolveKind,
 		Target: versionResolveTarget,
 		Source: lockfile.Source{
-			Declared:          rawVersion,
-			VersionConstraint: rawVersion,
-			ResolvedVersion:   resolvedVersion,
+			Declared:          record.constraint,
+			VersionConstraint: record.constraint,
+			ResolvedVersion:   record.version,
 		},
 	}
-	return lockfile.Replace(atmosConfig, id, artifact)
+	return lockfile.ReplaceContext(ctx, atmosConfig, id, artifact)
 }

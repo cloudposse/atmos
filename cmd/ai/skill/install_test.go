@@ -113,16 +113,7 @@ func TestInstallCmd_ArgsValidation(t *testing.T) {
 // for "atmos ai skill install" with no <source>: it must reach
 // InstallAllBundled rather than erroring on a missing argument.
 func TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill(t *testing.T) {
-	resetFlags := func() {
-		forceFlag := installCmd.Flags().Lookup("force")
-		if forceFlag != nil {
-			_ = forceFlag.Value.Set("false")
-		}
-		yesFlag := installCmd.Flags().Lookup("yes")
-		if yesFlag != nil {
-			_ = yesFlag.Value.Set("false")
-		}
-	}
+	resetFlags := func() { resetInstallCmdFlagsForTest(t) }
 	resetFlags()
 	t.Cleanup(resetFlags)
 
@@ -275,12 +266,7 @@ func TestInstallCmd_RunE_PathWithoutDistributionFlagsDoesNotWarn(t *testing.T) {
 // new, 0 updated) must not claim a location or print the chat hint -- there
 // is nothing to report either did.
 func TestInstallCmd_RunE_AlreadyInstalledOmitsLocationWhenNothingInstalled(t *testing.T) {
-	resetFlags := func() {
-		yesFlag := installCmd.Flags().Lookup("yes")
-		if yesFlag != nil {
-			_ = yesFlag.Value.Set("false")
-		}
-	}
+	resetFlags := func() { resetInstallCmdFlagsForTest(t) }
 	resetFlags()
 	t.Cleanup(resetFlags)
 

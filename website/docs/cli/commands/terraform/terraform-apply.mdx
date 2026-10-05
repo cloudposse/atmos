@@ -232,6 +232,33 @@ atmos terraform apply vpc -s dev
         ```
     </dd>
 
+    <dt>`--init-mode` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.mode`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default, skip init when nothing relevant changed), `always`, or `never` (disables the ordinary implicit init, but unlike `--skip-init` does not suppress the forced reconfigure init that `atmos terraform workspace select`/`new` needs).
+
+        ```shell
+        atmos terraform apply vpc -s dev --init-mode=always
+        ```
+    </dd>
+
+    <dt>`--init-reconfigure` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.reconfigure`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never`.
+
+        ```shell
+        atmos terraform apply vpc -s dev --init-reconfigure=always
+        ```
+    </dd>
+
+    <dt>`--init-upgrade` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.upgrade`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never`.
+
+        ```shell
+        atmos terraform apply vpc -s dev --init-upgrade=always
+        ```
+    </dd>
+
     <dt>`--process-templates` <em>(optional)</em></dt>
     <dd>
         Enable/disable Go template processing in Atmos stack manifests.
@@ -241,6 +268,21 @@ atmos terraform apply vpc -s dev
         ```shell
         atmos terraform apply vpc -s dev --process-templates=false
         ```
+    </dd>
+
+    <dt>`--ui` <em>(optional)</em></dt>
+    <dd>
+        Enable streaming UI mode for real-time resource status display. Shows a Docker-build-style progress view with spinners, progress bar, and resource states.
+
+        The UI automatically disables when output is piped, in CI environments, or when running unsupported commands.
+
+        `--ui` errors when combined with `--max-concurrency` greater than `1`, since concurrently-scheduled components can't share one terminal for their full-screen UI sessions. Use `--max-concurrency 1` (the default) with `--ui`, or drop `--ui` to run concurrently.
+
+        ```shell
+        atmos terraform apply vpc -s dev --ui
+        ```
+
+        Use `--ui=false` to explicitly disable when enabled by config.
     </dd>
 
     <dt>`--max-concurrency` <em>(optional)</em></dt>
@@ -369,6 +411,16 @@ Some commonly used native flags include:
         ```
     </dd>
 </dl>
+
+### Default Locking and Concurrency Flags
+
+Instead of retyping flags like `-lock-timeout` on every invocation, declare a default
+in [`components.terraform.flags`](/cli/configuration/components/terraform#flags) — globally
+in `atmos.yaml`, per stack, or per component. When applying a freshly computed plan (not a
+saved planfile), `apply` supports all five flags (`lock_timeout`, `lock`, `parallelism`,
+`refresh`, `compact_warnings`); when applying a saved planfile, Terraform rejects
+`-refresh`, so it is not injected in that case. A native flag typed directly on the
+command line (as shown above) always wins over a declared default.
 
 ## Best Practices
 

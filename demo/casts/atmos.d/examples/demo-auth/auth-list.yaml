@@ -29,6 +29,9 @@ commands:
             name: auth-list
             duration: 450ms
             interval: 750ms
+            env:
+              # Isolate file-based credentials as well as the in-memory keyring.
+              ATMOS_XDG_CONFIG_HOME: '{{ env "PWD" }}/../../.context/cast-fixtures/demo-auth/.config'
             command: *cmd
       - type: shell
         name: validate
@@ -50,5 +53,7 @@ commands:
           for needle in ["atmos auth list", "Authentication Configuration", "idp-acme-saml", "idp-acme-sso", "oidc", "superuser"]:
               if needle not in plain:
                   raise SystemExit(f"demo-auth cast missing {needle!r}")
+          if "Credentials found under realm" in plain:
+              raise SystemExit("demo-auth cast contains credentials from the recording environment")
           assert_no_error_output(text)
           assert_no_local_paths(text)

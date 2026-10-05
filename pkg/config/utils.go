@@ -293,6 +293,30 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
 	}
 
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", foundEnvVarMessage,
+		schema.TerraformInitMode.IsValid, errUtils.ErrInvalidInitMode, &atmosConfig.Components.Terraform.Init.Mode); err != nil {
+		return err
+	}
+
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE", foundEnvVarMessage,
+		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode, &atmosConfig.Components.Terraform.Mocks.Mode); err != nil {
+		return fmt.Errorf("%w (from ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE)", err)
+	}
+
+	if err := normalizeConfiguredMocksMode(atmosConfig); err != nil {
+		return err
+	}
+
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", foundEnvVarMessage,
+		schema.TerraformInitReconfigure.IsValid, errUtils.ErrInvalidInitReconfigure, &atmosConfig.Components.Terraform.Init.Reconfigure); err != nil {
+		return err
+	}
+
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE", foundEnvVarMessage,
+		schema.TerraformInitUpgrade.IsValid, errUtils.ErrInvalidInitUpgrade, &atmosConfig.Components.Terraform.Init.Upgrade); err != nil {
+		return err
+	}
+
 	componentsPlanSkipPlanfile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE")
 	if len(componentsPlanSkipPlanfile) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE", componentsPlanSkipPlanfile)
@@ -311,6 +335,63 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 			return err
 		}
 		atmosConfig.Components.Terraform.AutoGenerateBackendFile = componentsTerraformAutoGenerateBackendFileBool
+	}
+
+	// This function reads 40+ ATMOS_* env vars by direct os.Getenv into atmosConfig fields
+	// (see ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE etc. above) — that established
+	// pattern predates the forbidigo os.Getenv ban and is grandfathered in as existing code.
+	// viper.BindEnv is not an option either: it's restricted to pkg/flags/ and test files
+	// (see .golangci.yml). Follow the same NO_PAGER precedent in config.go for new additions
+	// to this function until it's migrated wholesale to the newer flags infrastructure.
+	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
+	componentsTerraformFlagsLockTimeout := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT")
+	if len(componentsTerraformFlagsLockTimeout) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT", componentsTerraformFlagsLockTimeout)
+		atmosConfig.Components.Terraform.Flags.LockTimeout = componentsTerraformFlagsLockTimeout
+	}
+
+	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
+	componentsTerraformFlagsLock := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK")
+	if len(componentsTerraformFlagsLock) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK", componentsTerraformFlagsLock)
+		componentsTerraformFlagsLockBool, err := strconv.ParseBool(componentsTerraformFlagsLock)
+		if err != nil {
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK: %w", errUtils.ErrInvalidConfig, err)
+		}
+		atmosConfig.Components.Terraform.Flags.Lock = &componentsTerraformFlagsLockBool
+	}
+
+	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
+	componentsTerraformFlagsParallelism := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM")
+	if len(componentsTerraformFlagsParallelism) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM", componentsTerraformFlagsParallelism)
+		componentsTerraformFlagsParallelismInt, err := strconv.Atoi(componentsTerraformFlagsParallelism)
+		if err != nil {
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM: %w", errUtils.ErrInvalidConfig, err)
+		}
+		atmosConfig.Components.Terraform.Flags.Parallelism = &componentsTerraformFlagsParallelismInt
+	}
+
+	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
+	componentsTerraformFlagsRefresh := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH")
+	if len(componentsTerraformFlagsRefresh) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH", componentsTerraformFlagsRefresh)
+		componentsTerraformFlagsRefreshBool, err := strconv.ParseBool(componentsTerraformFlagsRefresh)
+		if err != nil {
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH: %w", errUtils.ErrInvalidConfig, err)
+		}
+		atmosConfig.Components.Terraform.Flags.Refresh = &componentsTerraformFlagsRefreshBool
+	}
+
+	//nolint:forbidigo // matches the established os.Getenv pattern used throughout this function; see comment above.
+	componentsTerraformFlagsCompactWarnings := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS")
+	if len(componentsTerraformFlagsCompactWarnings) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS", componentsTerraformFlagsCompactWarnings)
+		componentsTerraformFlagsCompactWarningsBool, err := strconv.ParseBool(componentsTerraformFlagsCompactWarnings)
+		if err != nil {
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS: %w", errUtils.ErrInvalidConfig, err)
+		}
+		atmosConfig.Components.Terraform.Flags.CompactWarnings = componentsTerraformFlagsCompactWarningsBool
 	}
 
 	componentsHelmfileCommand := os.Getenv("ATMOS_COMPONENTS_HELMFILE_COMMAND")
@@ -441,6 +522,46 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	return nil
+}
+
+// setInitEnumEnvVar reads envVar, normalizes it (trim + lowercase), validates it with isValid,
+// and stores it in dest. Shared by the init.mode/init.reconfigure/init.upgrade ENV variables so
+// each one stays a single call in processEnvVars instead of a repeated read/validate/assign block.
+func setInitEnumEnvVar[T ~string](envVar, foundEnvVarMessage string, isValid func(T) bool, sentinel error, dest *T) error {
+	value := os.Getenv(envVar) //nolint:forbidigo // matches the established os.Getenv pattern used throughout processEnvVars; see comment above ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT.
+	if len(value) == 0 {
+		return nil
+	}
+	log.Debug(foundEnvVarMessage, envVar, value)
+	normalized, err := normalizeInitEnumValue(value, isValid, sentinel)
+	if err != nil {
+		return err
+	}
+	*dest = normalized
+	return nil
+}
+
+// normalizeConfiguredMocksMode lower-cases and validates components.terraform.mocks.mode as loaded
+// from atmos.yaml, so a typo fails at config load (as an invalid ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE
+// does) instead of being accepted silently until a --use-mocks lookup runs.
+func normalizeConfiguredMocksMode(atmosConfig *schema.AtmosConfiguration) error {
+	mode, err := normalizeInitEnumValue(string(atmosConfig.Components.Terraform.Mocks.Mode),
+		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode)
+	if err != nil {
+		return fmt.Errorf("%w (from components.terraform.mocks.mode in atmos.yaml)", err)
+	}
+	atmosConfig.Components.Terraform.Mocks.Mode = mode
+	return nil
+}
+
+// normalizeInitEnumValue trims and lower-cases value, then validates it with isValid, returning
+// a wrapped sentinel error (with the original, un-normalized value for readability) when invalid.
+func normalizeInitEnumValue[T ~string](value string, isValid func(T) bool, sentinel error) (T, error) {
+	normalized := T(strings.ToLower(strings.TrimSpace(value)))
+	if !isValid(normalized) {
+		return "", fmt.Errorf("%w: %q", sentinel, value)
+	}
+	return normalized, nil
 }
 
 func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) error {
@@ -718,6 +839,22 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
 		log.Debug(cmdLineArg, InitPassVars, configAndStacksInfo.InitPassVars)
 	}
+	if err := applyInitEnumFlag(configAndStacksInfo.InitMode, InitModeFlag,
+		schema.TerraformInitMode.IsValid, errUtils.ErrInvalidInitMode, &atmosConfig.Components.Terraform.Init.Mode); err != nil {
+		return err
+	}
+	if err := applyInitEnumFlag(configAndStacksInfo.InitReconfigure, InitReconfigureFlag,
+		schema.TerraformInitReconfigure.IsValid, errUtils.ErrInvalidInitReconfigure, &atmosConfig.Components.Terraform.Init.Reconfigure); err != nil {
+		return err
+	}
+	if err := applyInitEnumFlag(configAndStacksInfo.InitUpgrade, InitUpgradeFlag,
+		schema.TerraformInitUpgrade.IsValid, errUtils.ErrInvalidInitUpgrade, &atmosConfig.Components.Terraform.Init.Upgrade); err != nil {
+		return err
+	}
+	if err := applyInitEnumFlag(configAndStacksInfo.MocksMode, UseMocksFlag,
+		schema.TerraformMocksMode.IsValid, errUtils.ErrInvalidMocksMode, &atmosConfig.Components.Terraform.Mocks.Mode); err != nil {
+		return err
+	}
 	if len(configAndStacksInfo.PlanSkipPlanfile) > 0 {
 		planSkipPlanfileBool, err := strconv.ParseBool(configAndStacksInfo.PlanSkipPlanfile)
 		if err != nil {
@@ -726,6 +863,22 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		atmosConfig.Components.Terraform.Plan.SkipPlanfile = planSkipPlanfileBool
 		log.Debug(cmdLineArg, PlanSkipPlanfile, configAndStacksInfo.PlanSkipPlanfile)
 	}
+	return nil
+}
+
+// applyInitEnumFlag normalizes and validates a CLI-flag override (raw, possibly empty) for one of
+// the init.mode/init.reconfigure/init.upgrade tri-state settings, storing the result in dest when
+// raw is non-empty. Shared by setFeatureFlags so each of the three flags stays a single call.
+func applyInitEnumFlag[T ~string](raw, flagName string, isValid func(T) bool, sentinel error, dest *T) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	normalized, err := normalizeInitEnumValue(raw, isValid, sentinel)
+	if err != nil {
+		return err
+	}
+	*dest = normalized
+	log.Debug(cmdLineArg, flagName, raw)
 	return nil
 }
 
@@ -788,7 +941,9 @@ func setSettingsConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksIn
 	return nil
 }
 
-// processStoreConfig creates a store registry from the provided stores config and assigns it to the atmosConfig.
+// processStoreConfig creates a store registry from the provided stores config and assigns it to
+// the atmosConfig. A misconfigured individual store no longer fails this (and thus the whole
+// config load); store.NewStoreRegistry logs it as a warning and omits it from the registry.
 func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
 	if len(atmosConfig.StoresConfig) > 0 {
 		log.Debug("processStoreConfig", "atmosConfig.StoresConfig", fmt.Sprintf("%v", atmosConfig.StoresConfig))

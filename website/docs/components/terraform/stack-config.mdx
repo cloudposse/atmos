@@ -109,6 +109,28 @@ components:
     AWS_PROFILE: production
   ```
   </dd>
+
+  <dt id="mocks">`mocks` (optional)</dt>
+  <dd>
+  A free-form map of literal Terraform output values this component provides for other components to
+  consume when the real value is unavailable. Mock values are used only when a consuming component
+  reads them via [`!terraform.state`](/functions/yaml/terraform.state)
+  or [`!terraform.output`](/functions/yaml/terraform.output) and the reader is run with `--use-mocks`
+  (supported by `atmos terraform plan` and `atmos describe component`). By default
+  (`components.terraform.mocks.mode: fallback`) the real value is used when it exists and the mock only when the
+  component is not provisioned or the output is missing; with `--use-mocks=always` lookups resolve from `mocks`
+  alone, without `terraform init`, a real backend, or cloud credentials. Values are always literal — Atmos
+  never evaluates templates or YAML functions inside `mocks`. See
+  [Component Output Mocks](/stacks/components/mocks) and
+  [Component Mocks for Terraform YAML Lookups](/changelog/terraform-component-mocks).
+
+  **Example:**
+  ```yaml
+  mocks:
+    vpc_id: vpc-mock1234
+    private_subnet_ids: [subnet-a, subnet-b]
+  ```
+  </dd>
 </dl>
 
 ## Context Variables

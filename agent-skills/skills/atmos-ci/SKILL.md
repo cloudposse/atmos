@@ -34,6 +34,7 @@ Atmos commands directly.
 | OIDC providers, identities, trust policies, cloud auth conventions | [atmos-auth](../atmos-auth/SKILL.md) |
 | Profile mechanics for `ATMOS_PROFILE` and `--profile` | [atmos-profiles](../atmos-profiles/SKILL.md) |
 | Provenance SBOM formats, evidence coverage, NTIA validation, and `--include-files` | [atmos-sbom](../atmos-sbom/SKILL.md) |
+| Migrating an existing non-Atmos GitHub Actions Terraform pipeline (setup-terraform, configure-aws-credentials, dflook, tfcmt) to Native CI | [atmos-migration/references/to-native-ci.md](../atmos-migration/references/to-native-ci.md) |
 
 ## Native CI First
 
@@ -143,7 +144,6 @@ jobs:
       contents: read
       id-token: write
       statuses: write
-      checks: write
       pull-requests: write
     env:
       ATMOS_PROFILE: github
@@ -280,14 +280,21 @@ details.
   `atmos terraform cache` for the Terraform registry cache. Do not confuse either with
   Terraform's plugin cache.
 - **Statuses, checks, comments, and summaries**: configure `ci.summary`, `ci.output`, `ci.checks`,
-  and `ci.comments` in `atmos.yaml`; grant only the permissions needed, such as `statuses: write`,
-  `checks: write`, or `pull-requests: write`, based on the chosen reporting mode.
+  and `ci.comments` in `atmos.yaml`. The current GitHub provider needs `statuses: write` for
+  `ci.checks` and `pull-requests: write` for comments; `checks: write` is for retained integrations
+  using the separate Checks API. Follow [the permission mapping](references/native-ci.md#minimal-permissions)
+  for scanner uploads, token wiring, and fork PR restrictions.
 - **Step and job outputs**: let Native CI write to `$GITHUB_OUTPUT`, then pass values with step
   `id`, job `outputs`, and `needs.<job>.outputs.*`.
 - **Atmos CI creation**: add the `ci` section, configure toolchain aliases and `dependencies.tools`,
   then create containerized workflows that run direct Atmos commands.
 
 ## Concurrency Warning
+
+Advise against GitHub Actions `concurrency` groups for serializing Terraform runs or as a deploy
+queue. To make concurrent runs wait for a held state lock instead of failing on Terraform's `0s`
+default, set `components.terraform.flags.lock_timeout` (e.g. `"5m"`) in `atmos.yaml`; see
+[atmos-terraform](../atmos-terraform/SKILL.md) for stack and component overrides.
 
 By default (`queue: single`), a GitHub Actions `concurrency` group holds one in-progress and one
 pending run; a third trigger evicts the pending run regardless of `cancel-in-progress`.

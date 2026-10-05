@@ -142,15 +142,14 @@ func TestComponentVendorInstaller_IsMaterialized_MixinIgnoresComponentPatterns(t
 }
 
 // TestComponentVendorInstaller_InstallMixin_RecordVendorLockErrorSurfaced proves a vendor-lock
-// recording failure after a successful copy is surfaced as an install.Result error naming the
-// mixin (rather than reporting success despite no receipt ever having been written).
+// preparation failure is surfaced as an install.Result error naming the mixin before
+// any target files are written.
 func TestComponentVendorInstaller_InstallMixin_RecordVendorLockErrorSurfaced(t *testing.T) {
 	sourceFile := filepath.Join(t.TempDir(), "context.tf")
 	require.NoError(t, os.WriteFile(sourceFile, []byte("# mixin\n"), 0o644))
 
-	// componentPath deliberately lives outside atmosConfig.BasePath's tree, so lockfile.Record's
-	// lockfile.Replace can't relate it back to the project root, even though the preceding copy
-	// to componentPath itself succeeds.
+	// componentPath deliberately lives outside the project tree. Receipt preparation must
+	// reject it before materialization can copy files into the invalid destination.
 	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	componentPath := t.TempDir()
 
@@ -168,21 +167,19 @@ func TestComponentVendorInstaller_InstallMixin_RecordVendorLockErrorSurfaced(t *
 	require.NoError(t, err)
 	require.Error(t, result.Err)
 	assert.Contains(t, result.Err.Error(), "record mixin vendor lock")
-	// The copy itself must have succeeded before the lock recording failed.
-	assert.FileExists(t, filepath.Join(componentPath, "context.tf"))
+	// Invalid receipts must leave the destination untouched.
+	assert.NoFileExists(t, filepath.Join(componentPath, "context.tf"))
 }
 
 // TestComponentVendorInstaller_InstallComponent_RecordVendorLockErrorSurfaced proves a
-// vendor-lock recording failure after a successful component copy is surfaced as an
-// install.Result error naming the component (rather than reporting success despite no receipt
-// ever having been written).
+// vendor-lock preparation failure is surfaced as an install.Result error naming the component
+// before any target files are written.
 func TestComponentVendorInstaller_InstallComponent_RecordVendorLockErrorSurfaced(t *testing.T) {
 	sourceDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
 
-	// componentPath deliberately lives outside atmosConfig.BasePath's tree, so lockfile.Record's
-	// lockfile.Replace can't relate it back to the project root, even though the preceding copy
-	// to componentPath itself succeeds.
+	// componentPath deliberately lives outside the project tree. Receipt preparation must
+	// reject it before materialization can copy files into the invalid destination.
 	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	componentPath := t.TempDir()
 
@@ -199,6 +196,6 @@ func TestComponentVendorInstaller_InstallComponent_RecordVendorLockErrorSurfaced
 	require.NoError(t, err)
 	require.Error(t, result.Err)
 	assert.Contains(t, result.Err.Error(), "record component vendor lock")
-	// The copy itself must have succeeded before the lock recording failed.
-	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
+	// Invalid receipts must leave the destination untouched.
+	assert.NoFileExists(t, filepath.Join(componentPath, "main.tf"))
 }

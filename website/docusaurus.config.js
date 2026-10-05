@@ -11,6 +11,7 @@ const lightCodeTheme = require('prism-react-renderer').themes.oneLight;
 const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
 const latestReleasePlugin = require('./plugins/fetch-latest-release');
 const rehypeDtIds = require('./plugins/rehype-dt-ids');
+const { getBuildDate } = require('./plugins/build-timestamp');
 
 const BASE_URL = '';
 const DEPLOYMENT_HOST = process.env.DEPLOYMENT_HOST || 'atmos.tools';
@@ -404,6 +405,9 @@ const config = {
                 // URLs (still bookmarked/indexed externally) to their current
                 // /changelog/<slug> location.
                 createRedirects(existingPath) {
+                    if (existingPath === '/steps' || existingPath.startsWith('/steps/')) {
+                        return [existingPath.replace(/^\/steps(?=\/|$)/, '/workflows/steps')];
+                    }
                     if (existingPath.startsWith('/changelog/')) {
                         return [existingPath.replace('/changelog/', '/blog/')];
                     }
@@ -437,7 +441,11 @@ const config = {
         [
             'docusaurus-plugin-sentry',
             {
-              DSN: 'https://b022344b0e7cc96f803033fff3b377ee@o56155.ingest.us.sentry.io/4507472203087872',
+              // docusaurus-plugin-sentry v2 interpolates this value verbatim into
+              // https://js.sentry-cdn.com/<value>.min.js, so it must be the Sentry Loader
+              // Script public key (the user-info part of the DSN), NOT the full DSN. Passing
+              // the DSN produced a bogus URL that 404s and is CORS-blocked in the browser.
+              DSN: 'b022344b0e7cc96f803033fff3b377ee',
             },
         ],
         [
@@ -450,7 +458,15 @@ const config = {
             path.resolve(__dirname, 'plugins', 'blog-release-data'), {}
         ],
         [
-            path.resolve(__dirname, 'plugins', 'doc-release-data'), {}
+            path.resolve(__dirname, 'plugins', 'doc-release-data'), {
+                historicalPaths: [{
+                    from: 'website/docs/steps',
+                    to: 'website/docs/workflows/workflows/workflow/steps',
+                }],
+            }
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'fetch-security-posture'), {}
         ],
         [
             path.resolve(__dirname, 'plugins', 'docusaurus-plugin-llms-txt'),
@@ -615,7 +631,7 @@ const config = {
             docs: {
                 sidebar: {
                     hideable: true,
-                    autoCollapseCategories: true,
+                    autoCollapseCategories: false,
                 },
             },
             navbar: {
@@ -667,7 +683,8 @@ const config = {
                     {
                         label: 'Changelog',
                         position: 'right',
-                        to: '/changelog'
+                        to: '/changelog',
+                        activeBaseRegex: '^/(changelog|roadmap)(/|$)',
                     },
                     {
                         to: '/pro',
@@ -731,6 +748,9 @@ const config = {
 
     customFields: {
         latestRelease: 'v0.0.0', // initial placeholder
+        buildYear: getBuildDate().getUTCFullYear(),
+        // Render downloads from the same revision as the deployed site, including PR casts.
+        castGitRef: process.env.GITHUB_SHA || 'main',
         // Optional base URL (no trailing slash) for landing-page demo recordings.
         // The videos are published by `atmos demo publish` to the same docs-origin
         // bucket under /img/demos/, so DemoVideo serves them same-origin from that

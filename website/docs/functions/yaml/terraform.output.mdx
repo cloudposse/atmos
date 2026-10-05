@@ -176,6 +176,18 @@ in the YQ expression using the `//` operator. Atmos will evaluate the default wh
 This allows you to mock outputs when executing `atmos terraform plan` where there are dependencies between components,
 and the dependent components are not provisioned yet.
 
+:::tip Looking for reusable, component-owned mock fixtures?
+A `//` default is a one-off fallback baked into a single expression. If you want a producer
+component to declare its mock outputs once and have every consumer resolve them consistently,
+use the dedicated [`mocks`](/stacks/components/mocks) stack-config section with the
+`--use-mocks` flag instead — see [Component Mocks for Terraform YAML Lookups](/changelog/terraform-component-mocks).
+By default (`components.terraform.mocks.mode: fallback`), `--use-mocks` uses the real output when it exists and the
+component's mock only when the component is not provisioned or the output is missing; credential, network, and
+backend errors still fail. The precedence is real value, then mock, then the caller's `//` default, then the original error.
+With `--use-mocks=always`, lookups resolve from `mocks` only and never touch Terraform or a backend; a missing mock is then an error,
+unless the caller's `//` default supplies a value.
+:::
+
 :::tip Default Value Behavior
 Atmos distinguishes between **recoverable errors** (component not provisioned, output missing) and **non-recoverable errors** (API failures, network timeouts):
 

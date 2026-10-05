@@ -10,6 +10,8 @@ import (
 )
 
 func TestDescribeComponent(t *testing.T) {
+	t.Parallel()
+
 	component := "test/test-component-override-3"
 	stack := "tenant1-ue2-dev"
 
@@ -37,6 +39,8 @@ func TestDescribeComponent(t *testing.T) {
 }
 
 func TestDescribeTemplatedComponent(t *testing.T) {
+	t.Parallel()
+
 	componentSection, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 		Component:            "eks-blue/cluster",
 		Stack:                "tenant1-uw2-test-1",
@@ -61,6 +65,8 @@ func TestDescribeTemplatedComponent(t *testing.T) {
 }
 
 func TestDescribeComponent2(t *testing.T) {
+	t.Parallel()
+
 	component := "derived-component-3"
 	stack := "tenant1-ue2-test-1"
 
@@ -88,6 +94,8 @@ func TestDescribeComponent2(t *testing.T) {
 }
 
 func TestDescribeComponent3(t *testing.T) {
+	t.Parallel()
+
 	component := "service-iam-role/webservices/prod"
 	stack := "tenant2-ue2-prod"
 
@@ -115,6 +123,8 @@ func TestDescribeComponent3(t *testing.T) {
 }
 
 func TestDescribeComponent5(t *testing.T) {
+	t.Parallel()
+
 	component := "test/test-component"
 	stack := "tenant1-uw2-dev"
 
@@ -142,6 +152,8 @@ func TestDescribeComponent5(t *testing.T) {
 }
 
 func TestDescribeComponent6(t *testing.T) {
+	t.Parallel()
+
 	component := "infra/vpc"
 	stack := "tenant1-ue2-dev"
 
@@ -169,6 +181,8 @@ func TestDescribeComponent6(t *testing.T) {
 }
 
 func TestDescribeComponent7(t *testing.T) {
+	t.Parallel()
+
 	component := "infra/vpc"
 	stack := "tenant2-ue2-dev"
 

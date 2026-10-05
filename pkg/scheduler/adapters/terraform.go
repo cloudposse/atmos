@@ -28,12 +28,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/tags"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	tfui "github.com/cloudposse/atmos/pkg/terraform/ui"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
 	terraformDefaultCommand    = "terraform"
+	terraformLogFieldComponent = "component"
+	terraformLogFieldStack     = "stack"
 	terraformNodeIDFormat      = "%s-%s"
 	terraformSubCommandPlan    = "plan"
 	terraformSubCommandApply   = "apply"
@@ -150,14 +153,16 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return fmt.Errorf("%w: terraform executor is nil", errUtils.ErrInvalidConfig)
 	}
 
-	graph, err := BuildTerraformGraph(opts.Stacks)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrBuildDepGraph, err)
-	}
-
+	leftDelim, _ := tags.TemplateDelims(opts.AtmosConfig.Templates.Settings.Delimiters)
+	graph := discoverTerraformGraph(opts.Stacks, leftDelim)
+	var err error
 	graph, err = FilterTerraformGraph(opts.AtmosConfig, graph, opts.Info, opts.Selection)
 	if err != nil {
 		return err
+	}
+	graph, err = buildScopedTerraformGraph(opts.Stacks, leftDelim, terraformGraphNodeIDs(graph))
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrBuildDepGraph, err)
 	}
 
 	if graph.Size() == 0 {
@@ -208,6 +213,8 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		disablePluginCache:      disableTerraformPluginCacheForConcurrentRun(opts.Info),
 		queryAppliedAtSelection: terraformClosureRequested(opts.Info, opts.Selection),
 	}
+	startTerraformCIBefore(opts.Info, graph)
+
 	timings := newTerraformNodeTimings()
 	result := scheduler.New(
 		graph,
@@ -217,10 +224,14 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		scheduler.WithNodeStartHook(timings.Start),
 		scheduler.WithNodeCompleteHook(timings.Complete),
 	).Run(ctx)
+	// Deferred (not a plain call after writeTerraformSummary) so that anything
+	// startTerraformCIBefore created up front is always resolved, even if a
+	// later step in this function errors and returns early. A status must
+	// never be left pending with nothing left to update it.
+	defer finalizeTerraformCIResults(opts.Info, result, timings)
 	if err := writeTerraformSummary(opts.Info, result, timings); err != nil {
 		return err
 	}
-	finalizeTerraformCIResults(opts.Info, result, timings)
 	if result.Err != nil {
 		if skipped := skippedResultCount(result); skipped > 0 {
 			ui.Warningf("%d component(s) skipped after an earlier failure", skipped)
@@ -269,19 +280,71 @@ func skippedResultCount(result *scheduler.AggregateResult) int {
 }
 
 // BuildTerraformGraph builds a Terraform component graph from described stacks.
-func BuildTerraformGraph(stacks map[string]any) (*dependency.Graph, error) {
+func BuildTerraformGraph(stacks map[string]any, leftDelims ...string) (*dependency.Graph, error) {
 	defer perf.Track(nil, "scheduler.adapters.BuildTerraformGraph")()
 
-	builder := dependency.NewBuilder()
-	nodeIDs := make(map[string]struct{})
+	leftDelim := ""
+	if len(leftDelims) > 0 {
+		leftDelim = leftDelims[0]
+	}
+	return buildTerraformGraph(stacks, leftDelim, nil)
+}
 
-	if err := walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+// TerraformTargets returns enabled, concrete Terraform components from described stacks
+// without resolving their dependency graph.
+func TerraformTargets(stacks map[string]any) []*dependency.Node {
+	defer perf.Track(nil, "scheduler.adapters.TerraformTargets")()
+
+	targets := make([]*dependency.Node, 0)
+	_ = walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
 		if shouldSkipComponent(componentSection) {
 			return nil
 		}
+		targets = append(targets, &dependency.Node{
+			ID:        terraformNodeID(componentName, stackName),
+			Component: componentName,
+			Stack:     stackName,
+			Type:      cfg.TerraformComponentType,
+			Metadata:  componentSection,
+		})
+		return nil
+	})
+	return targets
+}
 
+// buildTerraformGraph constructs a strict graph and validates required targets
+// declared by validationSources. A nil source set validates every component.
+func buildTerraformGraph(stacks map[string]any, leftDelim string, validationSources map[string]bool) (*dependency.Graph, error) {
+	return buildTerraformGraphForNodes(stacks, leftDelim, nil, validationSources)
+}
+
+// buildScopedTerraformGraph strictly validates and schedules only selected nodes.
+func buildScopedTerraformGraph(stacks map[string]any, leftDelim string, selectedNodeIDs map[string]bool) (*dependency.Graph, error) {
+	return buildTerraformGraphForNodes(stacks, leftDelim, selectedNodeIDs, selectedNodeIDs)
+}
+
+// buildTerraformGraphForNodes constructs a strict graph for every node when selectedNodeIDs
+// is nil, or for the selected node set otherwise. Dependency target states always cover every
+// described Terraform component so required dependencies retain their target availability contract.
+func buildTerraformGraphForNodes(
+	stacks map[string]any,
+	leftDelim string,
+	selectedNodeIDs map[string]bool,
+	validationSources map[string]bool,
+) (*dependency.Graph, error) {
+	builder := dependency.NewBuilder()
+	targets := make(map[string]terraformTargetState)
+
+	if err := walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
 		nodeID := terraformNodeID(componentName, stackName)
-		nodeIDs[nodeID] = struct{}{}
+		targets[nodeID] = terraformTargetStateFor(componentSection)
+		if shouldSkipComponent(componentSection) {
+			return nil
+		}
+		if selectedNodeIDs != nil && !selectedNodeIDs[nodeID] {
+			return nil
+		}
+
 		return builder.AddNode(&dependency.Node{
 			ID:        nodeID,
 			Component: componentName,
@@ -297,7 +360,11 @@ func BuildTerraformGraph(stacks map[string]any) (*dependency.Graph, error) {
 		if shouldSkipComponent(componentSection) {
 			return nil
 		}
-		return addTerraformDependencies(builder, nodeIDs, stackName, componentName, componentSection)
+		fromID := terraformNodeID(componentName, stackName)
+		if selectedNodeIDs != nil && !selectedNodeIDs[fromID] {
+			return nil
+		}
+		return addTerraformDependencies(builder, targets, validationSources, selectedNodeIDs, leftDelim, stackName, componentName, componentSection)
 	}); err != nil {
 		return nil, fmt.Errorf("adding dependencies: %w", err)
 	}
@@ -308,6 +375,47 @@ func BuildTerraformGraph(stacks map[string]any) (*dependency.Graph, error) {
 	}
 	log.Debug("Terraform dependency graph built", "nodes", graph.Size(), "roots", len(graph.Roots))
 	return graph, nil
+}
+
+// discoverTerraformGraph builds a filterable approximation of the Terraform graph.
+// It deliberately ignores invalid declarations on individual sources so selection can
+// exclude them before strict validation constructs the scheduling graph.
+func discoverTerraformGraph(stacks map[string]any, leftDelim string) *dependency.Graph {
+	graph := dependency.NewGraph()
+	targets := make(map[string]terraformTargetState)
+	validationSources := map[string]bool{}
+
+	if err := walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+		nodeID := terraformNodeID(componentName, stackName)
+		targets[nodeID] = terraformTargetStateFor(componentSection)
+		if shouldSkipComponent(componentSection) {
+			return nil
+		}
+		return graph.AddNode(&dependency.Node{
+			ID:        nodeID,
+			Component: componentName,
+			Stack:     stackName,
+			Type:      cfg.TerraformComponentType,
+			Metadata:  componentSection,
+		})
+	}); err != nil {
+		log.Debug("Terraform dependency discovery could not add nodes", "error", err)
+		return graph
+	}
+
+	if err := walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+		if shouldSkipComponent(componentSection) {
+			return nil
+		}
+		if err := addTerraformDependencies(graph, targets, validationSources, nil, leftDelim, stackName, componentName, componentSection); err != nil {
+			log.Debug("Terraform dependency discovery skipped invalid declaration", "error", err, "component", componentName, "stack", stackName)
+		}
+		return nil
+	}); err != nil {
+		log.Debug("Terraform dependency discovery could not inspect dependencies", "error", err)
+	}
+	graph.IdentifyRoots()
+	return graph
 }
 
 // FilterTerraformGraph narrows graph nodes to the user-selected bulk operation
@@ -557,6 +665,25 @@ func validateTerraformConcurrentExecution(atmosConfig *schema.AtmosConfiguration
 	}
 	if requiresTerraformAutoApprove(info) && !hasTerraformAutoApprove(atmosConfig, info) {
 		return fmt.Errorf("%w: concurrent Terraform %s requires -auto-approve", errUtils.ErrInvalidConfig, info.SubCommand)
+	}
+	wouldAttemptStreamingUI := tfui.WouldAttemptStreamingUI(info.UIFlagExplicitlySet, info.UIEnabled, atmosConfig.Components.Terraform.UI.Enabled)
+	return validateTerraformUIConcurrency(wouldAttemptStreamingUI)
+}
+
+// validateTerraformUIConcurrency rejects --ui combined with concurrent multi-component
+// execution: every concurrently-scheduled component would launch its own full-screen
+// streaming TUI session against the same real terminal (the streaming executor has no
+// output-writer redirection, unlike the plain-output concurrent path, which suppresses
+// spinners and redirects workdir output for exactly this reason). Reject the combination
+// outright rather than letting it silently corrupt terminal output.
+//
+// The wouldAttemptStreamingUI value is passed in (rather than computed here from
+// atmosConfig/info) so this decision is testable without a real TTY -- tfui.
+// WouldAttemptStreamingUI itself always returns false under go test's non-interactive
+// stdout, the same TTY-gating limitation documented in terraform_streaming_ui_test.go.
+func validateTerraformUIConcurrency(wouldAttemptStreamingUI bool) error {
+	if wouldAttemptStreamingUI {
+		return fmt.Errorf("%w: streaming UI is not supported with --max-concurrency > 1", errUtils.ErrInvalidConfig)
 	}
 	return nil
 }
@@ -875,28 +1002,59 @@ func evaluateTerraformQuery(atmosConfig *schema.AtmosConfiguration, metadata map
 	return ok && queryPassed, nil
 }
 
+type terraformTargetState struct {
+	available bool
+	reason    string
+}
+
+func terraformTargetStateFor(componentSection map[string]any) terraformTargetState {
+	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return terraformTargetState{available: true}
+	}
+	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
+		return terraformTargetState{reason: "target_missing"}
+	}
+	if enabled, ok := metadataSection["enabled"].(bool); ok && !enabled {
+		return terraformTargetState{reason: "target_disabled"}
+	}
+	return terraformTargetState{available: true}
+}
+
+type terraformDependencyGraph interface {
+	AddDependencyWithOptional(fromID, toID string, optional bool) error
+}
+
 // addTerraformDependencies adds component dependency edges for one graph node.
 func addTerraformDependencies(
-	builder *dependency.GraphBuilder,
-	nodeIDs map[string]struct{},
+	graph terraformDependencyGraph,
+	targets map[string]terraformTargetState,
+	validationSources map[string]bool,
+	allowedNodeIDs map[string]bool,
+	leftDelim string,
 	stackName string,
 	componentName string,
 	componentSection map[string]any,
 ) error {
 	fromID := terraformNodeID(componentName, stackName)
-	dependencies, err := terraformDependencies(componentSection)
+	dependencies, modern, err := terraformDependenciesWithSource(componentSection, stackName, leftDelim)
 	if err != nil {
 		return fmt.Errorf("parsing dependencies for %q in stack %q: %w", componentName, stackName, err)
 	}
 	for dependencyIndex := range dependencies {
 		dep := &dependencies[dependencyIndex]
-		if !dep.IsComponentDependency() {
+		if !dep.IsComponentDependency() || dep.Component == "" {
 			continue
 		}
 		if dep.Kind != "" && dep.Kind != cfg.TerraformComponentType {
 			continue
 		}
-		if dep.Component == "" {
+		if modern && (tags.SelectorUnresolved(dep.Component, leftDelim) || tags.SelectorUnresolved(dep.Stack, leftDelim)) {
+			err := fmt.Errorf("%w: from=%s component=%s stack=%s", errUtils.ErrDependencyResolution, fromID, dep.Component, dep.Stack)
+			if shouldValidateTerraformDependencyTarget(fromID, validationSources) {
+				return err
+			}
+			log.Debug("Terraform dependency discovery skipped unresolved declaration", "error", err, terraformLogFieldComponent, componentName, terraformLogFieldStack, stackName)
 			continue
 		}
 		depStack := dep.Stack
@@ -904,47 +1062,90 @@ func addTerraformDependencies(
 			depStack = stackName
 		}
 		toID := terraformNodeID(dep.Component, depStack)
-		if _, ok := nodeIDs[toID]; !ok {
-			log.Warn("Dependency target not found", "from", fromID, "to", toID)
+		target, exists := targets[toID]
+		if !exists {
+			target.reason = "target_missing"
+		}
+		//nolint:nestif // Required, optional, legacy, and disabled states have distinct contracts.
+		if !target.available {
+			if !modern {
+				log.Warn("Dependency target not found", "from", fromID, "to", toID)
+				continue
+			}
+			if dep.IsRequired() && shouldValidateTerraformDependencyTarget(fromID, validationSources) {
+				targetErr := errUtils.ErrDependencyTargetNotFound
+				if target.reason != "target_missing" {
+					targetErr = errUtils.ErrDependencyTargetUnavailable
+				}
+				return fmt.Errorf("%w: component=%s stack=%s target_component=%s target_stack=%s reason=%s", targetErr, componentName, stackName, dep.Component, depStack, target.reason)
+			}
+			log.Info("optional dependency skipped", "event", "optional_dependency_skipped",
+				"from", fromID, "to", toID, "from_component", componentName, "from_stack", stackName,
+				"to_component", dep.Component, "to_stack", depStack, "kind", dep.Kind, "reason", target.reason)
 			continue
 		}
-		if err := builder.AddDependency(fromID, toID); err != nil {
+		if allowedNodeIDs != nil && !allowedNodeIDs[toID] {
+			continue
+		}
+		if err := graph.AddDependencyWithOptional(fromID, toID, modern && !dep.IsRequired()); err != nil {
 			return err
+		}
+		if modern && !dep.IsRequired() {
+			log.Debug("optional dependency included", "event", "optional_dependency_included",
+				"from", fromID, "to", toID, "from_component", componentName, "from_stack", stackName,
+				"to_component", dep.Component, "to_stack", depStack, "kind", dep.Kind)
 		}
 	}
 	return nil
 }
 
-// terraformDependencies extracts modern or legacy dependency declarations from a component.
-func terraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {
-	dependencies, found, err := modernTerraformDependencies(componentSection)
-	if err != nil || found {
-		return dependencies, err
-	}
-
-	return legacyTerraformDependencies(componentSection)
+func shouldValidateTerraformDependencyTarget(sourceID string, validationSources map[string]bool) bool {
+	return validationSources == nil || validationSources[sourceID]
 }
 
-func modernTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, bool, error) {
-	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
-	if !ok {
+func terraformGraphNodeIDs(graph *dependency.Graph) map[string]bool {
+	nodeIDs := make(map[string]bool, graph.Size())
+	for nodeID := range graph.Nodes {
+		nodeIDs[nodeID] = true
+	}
+	return nodeIDs
+}
+
+// terraformDependencies extracts modern or legacy dependency declarations from a component.
+func terraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {
+	deps, _, err := terraformDependenciesWithSource(componentSection, "", "")
+	return deps, err
+}
+
+func terraformDependenciesWithSource(componentSection map[string]any, stackName, leftDelim string) ([]schema.ComponentDependency, bool, error) {
+	dependencies, found, err := modernTerraformDependencies(componentSection, stackName, leftDelim)
+	if err != nil || found {
+		return dependencies, found, err
+	}
+
+	legacy, err := legacyTerraformDependencies(componentSection)
+	return legacy, false, err
+}
+
+func modernTerraformDependencies(componentSection map[string]any, stackName, leftDelim string) ([]schema.ComponentDependency, bool, error) {
+	dependenciesValue, exists := componentSection[cfg.DependenciesSectionName]
+	if !exists {
 		return nil, false, nil
+	}
+	depsSection, ok := dependenciesValue.(map[string]any)
+	if !ok {
+		return nil, true, fmt.Errorf("%w: %s must be a map", errUtils.ErrInvalidDependenciesSection, cfg.DependenciesSectionName)
 	}
 	if _, hasComponents := depsSection["components"]; !hasComponents {
 		return nil, false, nil
 	}
 
-	var deps schema.Dependencies
-	if err := mapstructure.Decode(depsSection, &deps); err != nil {
-		return nil, false, err
+	depsSection = schema.DeferUnresolvedRequired(depsSection, leftDelim)
+	deps, err := schema.ParseComponentDependencies(depsSection, cfg.TerraformComponentType, stackName)
+	if err != nil {
+		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
 	}
-	if len(deps.Components) == 0 {
-		return nil, false, nil
-	}
-	if err := deps.Normalize(); err != nil {
-		return nil, true, err
-	}
-	return deps.Components, true, nil
+	return deps, true, nil
 }
 
 func legacyTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {
@@ -1526,6 +1727,54 @@ func terraformPlanChanged(result *scheduler.AggregateResult) bool {
 		}
 	}
 	return false
+}
+
+// startTerraformCIBefore fires the before-aggregate CI hook once the graph has
+// been resolved and filtered to the real component selection, creating one
+// real pending check-run per component before the scheduler starts. Mirrors
+// finalizeTerraformCIResults's guard shape on the after side.
+func startTerraformCIBefore(info *schema.ConfigAndStacksInfo, graph *dependency.Graph) {
+	if info == nil || !supportsTerraformConcurrency(info.SubCommand) || info.TerraformPlanCIBeforeHandler == nil || graph == nil {
+		return
+	}
+
+	nodes := resolvedTerraformCIPendingNodes(graph)
+	if len(nodes) == 0 {
+		return
+	}
+
+	pending := schema.TerraformPlanCIPendingSet{Command: info.SubCommand, Nodes: nodes}
+	if err := info.TerraformPlanCIBeforeHandler.HandleTerraformPlanCIBefore(pending); err != nil {
+		log.Warn("Terraform CI aggregate before-hook failed", "command", info.SubCommand, "error", err)
+	}
+}
+
+// resolvedTerraformCIPendingNodes extracts every fully-resolved (real
+// component and stack) node from graph, in deterministic order. A node
+// missing either is never advertised as pending — a status is always about a
+// specific, known target.
+func resolvedTerraformCIPendingNodes(graph *dependency.Graph) []schema.TerraformPlanCIPendingNode {
+	nodes := make([]schema.TerraformPlanCIPendingNode, 0, len(graph.Nodes))
+	for id, node := range graph.Nodes {
+		if node == nil || node.Component == "" || node.Stack == "" {
+			continue
+		}
+		nodes = append(nodes, schema.TerraformPlanCIPendingNode{
+			NodeID:    id,
+			Stack:     node.Stack,
+			Component: node.Component,
+		})
+	}
+	sort.SliceStable(nodes, func(i, j int) bool {
+		if nodes[i].Stack != nodes[j].Stack {
+			return nodes[i].Stack < nodes[j].Stack
+		}
+		if nodes[i].Component != nodes[j].Component {
+			return nodes[i].Component < nodes[j].Component
+		}
+		return nodes[i].NodeID < nodes[j].NodeID
+	})
+	return nodes
 }
 
 // finalizeTerraformCIResults converts scheduler outcomes into aggregate CI results.

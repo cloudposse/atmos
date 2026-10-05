@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"strconv"
 	"testing"
 )
 
@@ -128,17 +130,19 @@ func TestDefaultRunOptions(t *testing.T) {
 	t.Setenv("CMD_TEST_BIN", "")
 	t.Setenv("TESTS_TEST_BIN", "")
 	t.Setenv("INTERNAL_EXEC_TEST_BIN", "")
+	t.Setenv(testParallelEnv, "")
 
 	shard := Shard{Index: 2, Count: 10}
 	options := DefaultRunOptions("/repo", ModeCoverage, TargetLinux, shard)
 	want := RunOptions{
-		RepoRoot:      "/repo",
-		Mode:          ModeCoverage,
-		Target:        TargetLinux,
-		Shard:         shard,
-		BuildDir:      ".",
-		CoverageRoot:  "coverage",
-		GoTestTimeout: defaultTestTimeout,
+		RepoRoot:       "/repo",
+		Mode:           ModeCoverage,
+		Target:         TargetLinux,
+		Shard:          shard,
+		BuildDir:       ".",
+		CoverageRoot:   "coverage",
+		GoTestTimeout:  defaultTestTimeout,
+		GoTestParallel: defaultTestParallel(),
 	}
 	if options != want {
 		t.Fatalf("DefaultRunOptions() with unset env = %#v, want %#v", options, want)
@@ -150,6 +154,7 @@ func TestDefaultRunOptions(t *testing.T) {
 	t.Setenv("CMD_TEST_BIN", "cmd.test")
 	t.Setenv("TESTS_TEST_BIN", "tests.test")
 	t.Setenv("INTERNAL_EXEC_TEST_BIN", "exec.test")
+	t.Setenv(testParallelEnv, "2")
 
 	overridden := DefaultRunOptions("/repo", ModeTest, TargetWindows, shard)
 	wantOverridden := RunOptions{
@@ -160,12 +165,26 @@ func TestDefaultRunOptions(t *testing.T) {
 		BuildDir:       "build-out",
 		CoverageRoot:   "cov-out",
 		GoTestTimeout:  "20m",
+		GoTestParallel: "2",
 		CmdTestBinary:  "cmd.test",
 		TestsBinary:    "tests.test",
 		ExecTestBinary: "exec.test",
 	}
 	if overridden != wantOverridden {
 		t.Fatalf("DefaultRunOptions() with env overrides = %#v, want %#v", overridden, wantOverridden)
+	}
+}
+
+func TestTestParallel(t *testing.T) {
+	want := strconv.Itoa(max(1, runtime.NumCPU()/2))
+	if got := defaultTestParallel(); got != want {
+		t.Fatalf("defaultTestParallel() = %q, want half the cores (%q)", got, want)
+	}
+	if got := (&RunOptions{}).testParallel(); got != want {
+		t.Fatalf("testParallel() with no override = %q, want %q", got, want)
+	}
+	if got := (&RunOptions{GoTestParallel: "3"}).testParallel(); got != "3" {
+		t.Fatalf("testParallel() with override = %q, want %q", got, "3")
 	}
 }
 

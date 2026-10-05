@@ -1,0 +1,39 @@
+.navigation {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.5rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-300);
+}
+
+.switch {
+  display: inline-flex;
+  gap: 1.5rem;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0.5rem 0.25rem;
+  border-bottom: 3px solid transparent;
+  color: var(--ifm-color-emphasis-700);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link:hover {
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+}
+
+.link[aria-current='page'] {
+  border-bottom-color: var(--ifm-color-primary);
+  color: var(--ifm-font-color-base);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
+  border-radius: 2px;
+}

@@ -32,7 +32,11 @@ This collection of GitHub Actions was designed to work specifically with Atmos i
 | Affected stacks matrix | `cloudposse/github-action-atmos-affected-stacks` | `atmos describe affected --format=matrix` |
 | Drift detection | `cloudposse/github-action-atmos-terraform-drift-detection` | Scheduled workflow running `atmos terraform plan` |
 | Drift remediation | `cloudposse/github-action-atmos-terraform-drift-remediation` | `atmos terraform deploy` triggered from an issue |
-| Planfile storage | S3 + DynamoDB managed by the action | Built-in [planfile storage](/ci/planfile-storage) (S3, GitHub Artifacts, or local) |
+| Update vendored components | `cloudposse/github-action-atmos-component-updater` | [`atmos vendor update --pull-request`](/cli/commands/vendor/vendor-update) |
+| Planfile storage | `cloudposse/github-action-terraform-plan-storage` (S3/Azure Blob + DynamoDB/CosmosDB) | Built-in [planfile storage](/ci/planfile-storage) (S3, GitHub Artifacts, or local) |
+| Read a setting | `cloudposse/github-action-atmos-get-setting` | `atmos list settings --query` / `atmos describe component --query` |
+| Select components by query | `cloudposse/github-action-atmos-terraform-select-components` | `atmos describe affected --format=matrix` / `atmos list components --query` |
+| Trigger Spacelift stacks | `cloudposse/github-action-atmos-affected-trigger-spacelift` | Native CI (the [Spacelift integration](/deprecated/spacelift) itself is deprecated) |
 
 ## Deprecated Actions
 

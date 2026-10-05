@@ -32,7 +32,7 @@ components:
         stage: "{{ .locals.environment }}"
 ```
 
-Running `atmos describe component` showed raw template strings instead of resolved values:
+Running [`atmos describe component`](/cli/commands/describe/component) showed raw template strings instead of resolved values:
 
 ```yaml
 # Before fix - templates not resolved
@@ -121,7 +121,7 @@ terraform:
 - **locals** - Global locals defined at root level of the stack file
 - **terraform/helmfile/packer** - Section-specific locals nested under `{ locals: }` (only shown if defined)
 
-The output is in direct stack manifest format - it can be redirected to a file and used as valid YAML (e.g., `atmos describe locals -s dev --file locals.yaml`).
+The output is in direct stack manifest format - it can be redirected to a file and used as valid YAML (e.g., [`atmos describe locals -s dev --file locals.yaml`](/cli/commands/describe/locals)).
 
 ### Section-Specific Locals
 
@@ -238,7 +238,7 @@ components:
 
 ### Component-Level Locals Inheritance
 
-Component-level locals support inheritance from base components via `metadata.inherits` or `component` attribute, similar to how `vars` work:
+Component-level locals support inheritance from base components via [`metadata.inherits`](/stacks/components/component-metadata#inherits) or `component` attribute, similar to how `vars` work:
 
 ```yaml
 components:

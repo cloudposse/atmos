@@ -70,10 +70,13 @@ runs:
           # never came up there (usernet SSH-forwarding failure, see
           # docs/fixes/2026-07-01-macos-k3s-runner-research.md), so it was a
           # dead rung that only added minutes to the failure path. vz only,
-          # two bounded attempts.
+          # two bounded attempts. Colima provisions Docker and restarts the VM
+          # during startup. A successful hosted run took 7m37s, so the former
+          # 8-minute cap could kill a healthy second boot on a slower runner.
+          # Allow 12 minutes for both boots and provisioning.
           for attempt in 1 2; do
             echo "::group::Start Colima (vz) attempt ${attempt}"
-            if run_with_timeout 480 colima start --runtime docker --vm-type vz --cpu 2 --memory 4 --disk 20 \
+            if run_with_timeout 720 colima start --runtime docker --vm-type vz --cpu 2 --memory 4 --disk 20 \
               && run_with_timeout 120 docker info; then
               echo "::endgroup::"
               return 0

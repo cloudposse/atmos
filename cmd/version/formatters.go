@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -32,12 +33,9 @@ const (
 	indicatorColumnWidth = 3 // 1-char indicator + 1 char padding each side; keeps the dot column from being stretched by lipgloss/table's auto-expand.
 )
 
-var (
-	// Table styling.
-	currentVersionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Green.
-	headerStyle         = lipgloss.NewStyle().Bold(true)
-	dateStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray.
-)
+// Table styling.
+
+var headerStyle = lipgloss.NewStyle().Bold(true)
 
 // extractFirstHeading extracts the first meaningful heading from markdown text.
 // It looks for <summary> tags first, then H1/H2 headings.
@@ -180,15 +178,22 @@ func filterAssetsByPlatform(assets []*github.ReleaseAsset) []*github.ReleaseAsse
 
 // renderMarkdownInline renders inline markdown with proper ANSI colors preserved.
 func renderMarkdownInline(text string) string {
-	// Use Glamour to render markdown inline with colors.
+	// Use the active theme and configured profile, including piped recordings.
+	style, err := theme.GetCurrentGlamourStyle()
+	if err != nil {
+		return strings.ReplaceAll(text, "`", "")
+	}
 	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStylesFromJSONBytes(style),
+		glamour.WithColorProfile(ui.GetColorProfile()),
 		glamour.WithWordWrap(0),
 	)
 	if err != nil {
 		// Fallback: just remove backticks if rendering fails.
 		return strings.ReplaceAll(text, "`", "")
 	}
+
+	defer renderer.Close()
 
 	rendered, err := renderer.Render(text)
 	if err != nil {
@@ -222,14 +227,14 @@ func createVersionTable(rows [][]string) (*table.Table, error) {
 	return table.New().
 		Headers("", "VERSION", "DATE", "TITLE").
 		Rows(rows...).
-		BorderHeader(true).                                               // Show border under header.
-		BorderTop(false).                                                 // No top border.
-		BorderBottom(false).                                              // No bottom border.
-		BorderLeft(false).                                                // No left border.
-		BorderRight(false).                                               // No right border.
-		BorderRow(false).                                                 // No row separators.
-		BorderColumn(false).                                              // No column separators.
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))). // Gray border.
+		BorderHeader(true).                                                                                   // Show border under header.
+		BorderTop(false).                                                                                     // No top border.
+		BorderBottom(false).                                                                                  // No bottom border.
+		BorderLeft(false).                                                                                    // No left border.
+		BorderRight(false).                                                                                   // No right border.
+		BorderRow(false).                                                                                     // No row separators.
+		BorderColumn(false).                                                                                  // No column separators.
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))). // Gray border.
 		StyleFunc(func(row, col int) lipgloss.Style {
 			switch {
 			case col == 0: // Indicator column: pin the width so lipgloss/table's expand step doesn't stretch this 1-char column.
@@ -237,7 +242,7 @@ func createVersionTable(rows [][]string) (*table.Table, error) {
 			case row == table.HeaderRow:
 				return headerStyle.Padding(0, 1)
 			case col == 2: // Date column.
-				return dateStyle.Padding(0, 1)
+				return theme.GetCurrentStyles().Muted.Padding(0, 1)
 			default:
 				return lipgloss.NewStyle().Padding(0, 1)
 			}
@@ -268,7 +273,7 @@ func formatReleaseListText(releases []*github.RepositoryRelease) error {
 		// Add indicator for current version.
 		indicator := emptyIndicator
 		if isCurrentVersion(tag) {
-			indicator = currentVersionStyle.Render("●")
+			indicator = theme.GetCurrentStyles().Success.Render("●")
 		}
 
 		// Add prerelease indicator.
@@ -367,7 +372,7 @@ func formatReleaseDetailText(release *github.RepositoryRelease) error {
 	}
 
 	if isCurrentVersion(release.GetTagName()) {
-		ui.Writeln(currentVersionStyle.Render("Current: ● Yes (installed)"))
+		ui.Writeln(theme.GetCurrentStyles().Success.Render("Current: ● Yes (installed)"))
 	}
 
 	ui.Writef("URL: %s\n", release.GetHTMLURL())
@@ -392,10 +397,10 @@ func formatReleaseDetailText(release *github.RepositoryRelease) error {
 			filename := asset.GetName()
 			sizeText := fmt.Sprintf("(%.2f MB)", sizeMB)
 
-			ui.Writef("  %s %s\n", filename, lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(sizeText))
+			ui.Writef("  %s %s\n", filename, lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).Render(sizeText))
 
 			// Render the URL as a link.
-			linkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(true)
+			linkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).Underline(true)
 			ui.Writef("  %s\n", linkStyle.Render(asset.GetBrowserDownloadURL()))
 		}
 	} else if len(release.Assets) > 0 {

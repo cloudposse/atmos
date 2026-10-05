@@ -1,12 +1,14 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -84,6 +86,34 @@ func Test_setFeatureFlags(t *testing.T) {
 			expectError:  true,
 			errorMessage: "strconv.ParseBool: parsing \"not-a-boolean\": invalid syntax",
 		},
+		{
+			name: "test init mode/reconfigure/upgrade flags",
+			configAndStacks: schema.ConfigAndStacksInfo{
+				InitMode:        "never",
+				InitReconfigure: "always",
+				InitUpgrade:     "always",
+			},
+			expectedConfig: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						Init: schema.TerraformInit{
+							Mode:        schema.TerraformInitModeNever,
+							Reconfigure: schema.TerraformInitReconfigureAlways,
+							Upgrade:     schema.TerraformInitUpgradeAlways,
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "test invalid init.mode flag",
+			configAndStacks: schema.ConfigAndStacksInfo{
+				InitMode: "sometimes",
+			},
+			expectError:  true,
+			errorMessage: errUtils.ErrInvalidInitMode.Error(),
+		},
 	}
 
 	for _, tt := range tests {
@@ -121,6 +151,9 @@ func Test_setFeatureFlags(t *testing.T) {
 				assert.Equal(t, tt.expectedConfig.Components.Terraform.AutoGenerateBackendFile, config.Components.Terraform.AutoGenerateBackendFile)
 				assert.Equal(t, tt.expectedConfig.Components.Terraform.InitRunReconfigure, config.Components.Terraform.InitRunReconfigure)
 				assert.Equal(t, tt.expectedConfig.Components.Terraform.Init.PassVars, config.Components.Terraform.Init.PassVars)
+				assert.Equal(t, tt.expectedConfig.Components.Terraform.Init.Mode, config.Components.Terraform.Init.Mode)
+				assert.Equal(t, tt.expectedConfig.Components.Terraform.Init.Reconfigure, config.Components.Terraform.Init.Reconfigure)
+				assert.Equal(t, tt.expectedConfig.Components.Terraform.Init.Upgrade, config.Components.Terraform.Init.Upgrade)
 				assert.Equal(t, tt.expectedConfig.Components.Terraform.Plan.SkipPlanfile, config.Components.Terraform.Plan.SkipPlanfile)
 				assert.Equal(t, tt.expectedConfig.Workflows.BasePath, config.Workflows.BasePath)
 			}
@@ -487,6 +520,204 @@ func TestProcessEnvVars_CICommentsEnabled(t *testing.T) {
 		require.NotNil(t, config.CI.Comments.Enabled)
 		assert.False(t, *config.CI.Comments.Enabled)
 	})
+}
+
+// TestProcessEnvVars_TerraformFlags covers the 5 ATMOS_COMPONENTS_TERRAFORM_FLAGS_*
+// env vars, including pointer-vs-nil semantics for Lock/Parallelism/Refresh (an unset
+// env var must leave the field nil, not default it to false/0).
+func TestProcessEnvVars_TerraformFlags(t *testing.T) {
+	t.Run("all five env vars set", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT", "5m")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK", "false")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM", "4")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH", "false")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS", "true")
+
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.NoError(t, err)
+
+		assert.Equal(t, "5m", config.Components.Terraform.Flags.LockTimeout)
+		require.NotNil(t, config.Components.Terraform.Flags.Lock)
+		assert.False(t, *config.Components.Terraform.Flags.Lock)
+		require.NotNil(t, config.Components.Terraform.Flags.Parallelism)
+		assert.Equal(t, 4, *config.Components.Terraform.Flags.Parallelism)
+		require.NotNil(t, config.Components.Terraform.Flags.Refresh)
+		assert.False(t, *config.Components.Terraform.Flags.Refresh)
+		assert.True(t, config.Components.Terraform.Flags.CompactWarnings)
+	})
+
+	t.Run("unset env vars leave pointer fields nil, not false/zero", func(t *testing.T) {
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.NoError(t, err)
+
+		assert.Empty(t, config.Components.Terraform.Flags.LockTimeout)
+		assert.Nil(t, config.Components.Terraform.Flags.Lock)
+		assert.Nil(t, config.Components.Terraform.Flags.Parallelism)
+		assert.Nil(t, config.Components.Terraform.Flags.Refresh)
+		assert.False(t, config.Components.Terraform.Flags.CompactWarnings)
+	})
+
+	t.Run("invalid parallelism value errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM", "not-a-number")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+	})
+
+	t.Run("invalid lock value errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK", "not-a-boolean")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+	})
+
+	t.Run("invalid refresh value errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH", "not-a-boolean")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+	})
+
+	t.Run("invalid compact_warnings value errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS", "not-a-boolean")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+	})
+
+	t.Run("env vars override preconfigured values", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT", "10m")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK", "true")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM", "8")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH", "true")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS", "false")
+
+		preconfiguredParallelism := 2
+		preconfiguredLock := false
+		preconfiguredRefresh := false
+		config := &schema.AtmosConfiguration{
+			Schemas: make(map[string]interface{}),
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					Flags: schema.TerraformFlags{
+						LockTimeout:     "1m",
+						Lock:            &preconfiguredLock,
+						Parallelism:     &preconfiguredParallelism,
+						Refresh:         &preconfiguredRefresh,
+						CompactWarnings: true,
+					},
+				},
+			},
+		}
+
+		err := processEnvVars(config)
+		require.NoError(t, err)
+
+		assert.Equal(t, "10m", config.Components.Terraform.Flags.LockTimeout)
+		require.NotNil(t, config.Components.Terraform.Flags.Lock)
+		assert.True(t, *config.Components.Terraform.Flags.Lock)
+		require.NotNil(t, config.Components.Terraform.Flags.Parallelism)
+		assert.Equal(t, 8, *config.Components.Terraform.Flags.Parallelism)
+		require.NotNil(t, config.Components.Terraform.Flags.Refresh)
+		assert.True(t, *config.Components.Terraform.Flags.Refresh)
+		// The env var must override the preconfigured CompactWarnings=true with false.
+		assert.False(t, config.Components.Terraform.Flags.CompactWarnings)
+	})
+}
+
+// TestProcessEnvVars_TerraformInit covers the 3 ATMOS_COMPONENTS_TERRAFORM_INIT_{MODE,
+// RECONFIGURE,UPGRADE} env vars: valid values, case-insensitive normalization, and
+// invalid values wrapping the matching sentinel error (errors.Is-checked per CLAUDE.md).
+func TestProcessEnvVars_TerraformInit(t *testing.T) {
+	// Isolate from the parent environment: clear all three init env vars before any subtest
+	// sets its own value, so a stray ATMOS_COMPONENTS_TERRAFORM_INIT_* var in the ambient
+	// environment (e.g. a developer's shell) can't leak into subtests that expect them unset.
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", "")
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", "")
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE", "")
+
+	t.Run("valid values are applied", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", "never")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", "always")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE", "always")
+
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.NoError(t, err)
+
+		assert.Equal(t, schema.TerraformInitModeNever, config.Components.Terraform.Init.Mode)
+		assert.Equal(t, schema.TerraformInitReconfigureAlways, config.Components.Terraform.Init.Reconfigure)
+		assert.Equal(t, schema.TerraformInitUpgradeAlways, config.Components.Terraform.Init.Upgrade)
+	})
+
+	t.Run("values are normalized (trimmed and lower-cased)", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", "  ALWAYS  ")
+
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.NoError(t, err)
+
+		assert.Equal(t, schema.TerraformInitModeAlways, config.Components.Terraform.Init.Mode)
+	})
+
+	t.Run("unset env vars leave the field unset", func(t *testing.T) {
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.NoError(t, err)
+
+		assert.Empty(t, config.Components.Terraform.Init.Mode)
+		assert.Empty(t, config.Components.Terraform.Init.Reconfigure)
+		assert.Empty(t, config.Components.Terraform.Init.Upgrade)
+	})
+
+	t.Run("invalid ATMOS_COMPONENTS_TERRAFORM_INIT_MODE errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", "sometimes")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrInvalidInitMode))
+	})
+
+	t.Run("invalid ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", "sometimes")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrInvalidInitReconfigure))
+	})
+
+	t.Run("invalid ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE", "sometimes")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrInvalidInitUpgrade))
+	})
+}
+
+// TestSetFeatureFlags_InvalidInitEnumValues covers the CLI-flag-override validation path
+// (setFeatureFlags) for the three tri-state init flags, using errors.Is per CLAUDE.md.
+func TestSetFeatureFlags_InvalidInitEnumValues(t *testing.T) {
+	tests := []struct {
+		name string
+		info schema.ConfigAndStacksInfo
+		want error
+	}{
+		{name: "invalid init-mode", info: schema.ConfigAndStacksInfo{InitMode: "sometimes"}, want: errUtils.ErrInvalidInitMode},
+		{name: "invalid init-reconfigure", info: schema.ConfigAndStacksInfo{InitReconfigure: "sometimes"}, want: errUtils.ErrInvalidInitReconfigure},
+		{name: "invalid init-upgrade", info: schema.ConfigAndStacksInfo{InitUpgrade: "sometimes"}, want: errUtils.ErrInvalidInitUpgrade},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{}
+			err := setFeatureFlags(config, &tt.info)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, tt.want))
+		})
+	}
 }
 
 func TestFindAllStackConfigsInPathsForStack(t *testing.T) {

@@ -29,7 +29,8 @@ commands:
             name: plan
             duration: 550ms
             interval: 750ms
-            command: KICS_QUERIES_PATH="${KICS_QUERIES_PATH:-/opt/homebrew/opt/kics/share/kics/assets/queries}" atmos terraform plan bucket -s test
+            # Keep Terraform's generated provider directory outside the scanned component.
+            command: TF_DATA_DIR="$PWD/.terraform-data" KICS_QUERIES_PATH="${KICS_QUERIES_PATH:-/opt/homebrew/opt/kics/share/kics/assets/queries}" atmos terraform plan bucket -s test
       - type: script
         name: sanitize
         interpreter: python3
@@ -69,7 +70,7 @@ commands:
           plain = strip_ansi(text).lower()
           assert_no_experimental(text)
           assert_body_color(text)
-          for needle in ["atmos terraform plan bucket -s test", "plan: 1 to add", "## kics", "1 high", "s3 bucket without versioning"]:
+          for needle in ["atmos terraform plan bucket -s test", "plan: 1 to add", "## kics", "high: 1", "s3 bucket without versioning"]:
               if needle not in plain:
                   raise SystemExit(f"hooks-kics cast missing {needle!r}")
           assert_no_error_output(text)

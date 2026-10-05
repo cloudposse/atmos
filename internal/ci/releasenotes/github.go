@@ -1,0 +1,154 @@
+package releasenotes
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// errGitHubRequestFailed wraps any non-2xx response from the releases API,
+// carrying the status and body as %w-wrapped context rather than a dynamic
+// error string.
+var errGitHubRequestFailed = errors.New("releasenotes: GitHub API request failed")
+
+// ReleaseRef identifies one GitHub release to read or update: Repo in
+// "owner/name" form, ID the release's numeric ID (as returned by the
+// releases API) formatted as a string.
+type ReleaseRef struct {
+	Repo string
+	ID   string
+}
+
+// ReleaseContent holds the release notes and the tag that must survive a notes update.
+type ReleaseContent struct {
+	Body    string `json:"body"`
+	TagName string `json:"tag_name"`
+}
+
+// GetRelease fetches ref's current release body and tag via the REST API.
+func GetRelease(ctx context.Context, client HTTPClient, token string, ref ReleaseRef) (ReleaseContent, error) {
+	defer perf.Track(nil, "releasenotes.GetRelease")()
+
+	req, err := newGitHubRequest(ctx, http.MethodGet, token, ref, nil)
+	if err != nil {
+		return ReleaseContent{}, err
+	}
+	var release ReleaseContent
+	err = fetchGitHubJSON(client, req, "release "+ref.ID, &release)
+	return release, err
+}
+
+// GetPullRequestBody fetches one pull request's description via the REST
+// API. A release body is capped at 125,000 characters and cannot even be
+// written past that, but a pull request's own description is always
+// readable in full - which is why summarization draws on this, not on the
+// drafted release.
+func GetPullRequestBody(ctx context.Context, client HTTPClient, token, repo string, number int) (string, error) {
+	defer perf.Track(nil, "releasenotes.GetPullRequestBody")()
+
+	url := fmt.Sprintf("%s/repos/%s/pulls/%d", ghtoken.RepoEndpoints().APIURL, repo, number)
+	req, err := newGitHubAPIRequest(ctx, http.MethodGet, token, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("releasenotes: build request for PR #%d: %w", number, err)
+	}
+	var pr struct {
+		Body string `json:"body"`
+	}
+	err = fetchGitHubJSON(client, req, fmt.Sprintf("PR #%d", number), &pr)
+	return pr.Body, err
+}
+
+// fetchGitHubJSON performs a GET and decodes the response; what names the resource in errors.
+func fetchGitHubJSON(client HTTPClient, req *http.Request, what string, result any) error {
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("releasenotes: get %s: %w", what, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("releasenotes: read %s response: %w", what, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%w: get %s returned %s: %s", errGitHubRequestFailed, what, resp.Status, string(body))
+	}
+
+	if err := json.Unmarshal(body, result); err != nil {
+		return fmt.Errorf("releasenotes: decode %s: %w", what, err)
+	}
+	return nil
+}
+
+// UpdateReleaseBody sets ref's release body and explicitly preserves its fetched
+// tag_name: omitting it can reset a draft's tag to GitHub's untagged placeholder.
+// The response must confirm the tag survived. Other metadata is omitted.
+func UpdateReleaseBody(ctx context.Context, client HTTPClient, token string, ref ReleaseRef, release ReleaseContent) error {
+	defer perf.Track(nil, "releasenotes.UpdateReleaseBody")()
+
+	if strings.TrimSpace(release.TagName) == "" {
+		return fmt.Errorf("%w: release %s", errUtils.ErrReleaseTagMissing, ref.ID)
+	}
+	payload, err := json.Marshal(release)
+	if err != nil {
+		return fmt.Errorf("releasenotes: encode release %s update: %w", ref.ID, err)
+	}
+
+	req, err := newGitHubRequest(ctx, http.MethodPatch, token, ref, strings.NewReader(string(payload)))
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("releasenotes: update release %s: %w", ref.ID, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("%w: update release %s returned %s: %s", errGitHubRequestFailed, ref.ID, resp.Status, string(respBody))
+	}
+	var updated ReleaseContent
+	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		return fmt.Errorf("releasenotes: decode release %s update: %w", ref.ID, err)
+	}
+	if updated.TagName != release.TagName {
+		return fmt.Errorf("%w: release %s expected %q, got %q", errUtils.ErrReleaseTagMismatch, ref.ID, release.TagName, updated.TagName)
+	}
+	return nil
+}
+
+func newGitHubRequest(ctx context.Context, method, token string, ref ReleaseRef, body io.Reader) (*http.Request, error) {
+	url := fmt.Sprintf("%s/repos/%s/releases/%s", ghtoken.RepoEndpoints().APIURL, ref.Repo, ref.ID)
+	req, err := newGitHubAPIRequest(ctx, method, token, url, body)
+	if err != nil {
+		return nil, fmt.Errorf("releasenotes: build %s request for release %s: %w", method, ref.ID, err)
+	}
+	return req, nil
+}
+
+func newGitHubAPIRequest(ctx context.Context, method, token, url string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	// Never send the token over a non-https endpoint (ResolveEndpointURL accepts http:// so
+	// tests can point RepoEndpoints at a local httptest server) -- doing so would put it on
+	// the wire in cleartext.
+	if authToken := ghtoken.TokenForEndpoints(ghtoken.RepoEndpoints(), token); authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return req, nil
+}

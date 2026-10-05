@@ -1039,11 +1039,23 @@ func TestCustomCommandIntegration_ShellStepCancelledByContext(t *testing.T) {
 		defer recoverExit()
 		customCmd.Run(customCmd, []string{})
 	}()
+	// Keep the exit stub installed until the command goroutine has stopped, even
+	// when a require below aborts the test. Windows process startup can be slow
+	// under the fully sharded CI workload; restoring the process-global stub
+	// while this goroutine is still running can make the following test panic.
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(15 * time.Second):
+			t.Error("custom command did not stop during test cleanup")
+		}
+	})
 
 	require.Eventually(t, func() bool {
 		_, statErr := os.Stat(startedPath)
 		return statErr == nil
-	}, 5*time.Second, 10*time.Millisecond, "helper subprocess never started")
+	}, 15*time.Second, 10*time.Millisecond, "helper subprocess never started")
 
 	cancel()
 
@@ -1103,11 +1115,22 @@ func TestCustomCommandIntegration_AtmosStepCancelledByContext(t *testing.T) {
 		defer recoverExit()
 		customCmd.Run(customCmd, []string{})
 	}()
+	// This cleanup is registered after cancellationOsExitStub's cleanup, so it
+	// runs first and prevents a late goroutine from observing another test's
+	// replacement for the process-global exit hook.
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(15 * time.Second):
+			t.Error("custom command did not stop during test cleanup")
+		}
+	})
 
 	require.Eventually(t, func() bool {
 		_, statErr := os.Stat(startedPath)
 		return statErr == nil
-	}, 5*time.Second, 10*time.Millisecond, "helper subprocess never started")
+	}, 15*time.Second, 10*time.Millisecond, "helper subprocess never started")
 
 	cancel()
 
@@ -1560,10 +1583,10 @@ func TestCustomCommandIntegration_ComponentEnvExported(t *testing.T) {
 		Name:        "test-component-env",
 		Description: "Dump the environment of a custom component step",
 		Arguments: []schema.CommandArgument{
-			{Name: "component", Type: "component", Required: true},
+			{Name: "component", Provides: "component", Required: true},
 		},
 		Flags: []schema.CommandFlag{
-			{Name: "stack", Shorthand: "s", SemanticType: "stack", Required: true},
+			{Name: "stack", Shorthand: "s", Provides: "stack", Required: true},
 		},
 		Component: &schema.CommandComponent{Type: "script"},
 		Env:       []schema.CommandEnv{{Key: "_ATMOS_TEST_DUMP_ENV", Value: envOutputFile}},

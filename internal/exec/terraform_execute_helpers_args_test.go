@@ -20,9 +20,39 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
+
+// withExecMetadataGateEnv isolates CI-detection env vars for the duration of a
+// test, using telemetry's own preserve/restore helpers (mirroring
+// pkg/proexec/gate_test.go's withCIEnv) so proexec.GateOpen's CI-detection is
+// deterministic regardless of the environment the test suite itself runs in.
+// Jenkins detection requires both JENKINS_URL and BUILD_ID; neither is
+// covered by PreserveCIEnvVars' existence/equals maps.
+func withExecMetadataGateEnv(t *testing.T, ci bool) {
+	t.Helper()
+	preserved := telemetry.PreserveCIEnvVars()
+	jenkinsURL, hadJenkinsURL := os.LookupEnv("JENKINS_URL")
+	buildID, hadBuildID := os.LookupEnv("BUILD_ID")
+	os.Unsetenv("JENKINS_URL")
+	os.Unsetenv("BUILD_ID")
+	t.Cleanup(func() {
+		telemetry.RestoreCIEnvVars(preserved)
+		if hadJenkinsURL {
+			os.Setenv("JENKINS_URL", jenkinsURL)
+		}
+		if hadBuildID {
+			os.Setenv("BUILD_ID", buildID)
+		}
+	})
+	if ci {
+		t.Setenv("CI", "true")
+	}
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // buildTerraformCommandArgs
@@ -317,8 +347,9 @@ func TestBuildPlanSubcommandArgs_BasicPlan(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
 
-	args := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
+	args, err := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
 
+	require.NoError(t, err)
 	assert.Contains(t, args, varFileFlag)
 	assert.Contains(t, args, "vars.json")
 	assert.Contains(t, args, outFlag)
@@ -330,8 +361,9 @@ func TestBuildPlanSubcommandArgs_SkipPlanfile(t *testing.T) {
 	atmosConfig.Components.Terraform.Plan.SkipPlanfile = true
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
 
-	args := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
+	args, err := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
 
+	require.NoError(t, err)
 	assert.NotContains(t, args, outFlag)
 }
 
@@ -342,11 +374,70 @@ func TestBuildPlanSubcommandArgs_UploadStatusFlag(t *testing.T) {
 		AdditionalArgsAndFlags: []string{"--upload-status"},
 	}
 
-	args := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", true)
+	args, err := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", true)
 
+	require.NoError(t, err)
 	assert.Contains(t, args, detailedExitCodeFlag)
 	// Upload status flag should be removed from additional args.
 	assert.NotContains(t, info.AdditionalArgsAndFlags, "--upload-status")
+	// --upload-status is the reason the flag was added, not exec-metadata capture —
+	// the local exit-2 neutralization in executeMainTerraformCommand must not apply
+	// (research.md Decision 36's own pre-existing --upload-status behavior).
+	assert.False(t, info.ExecMetadataDetailedExitCodeAdded)
+}
+
+// TestBuildPlanSubcommandArgs_ExecMetadataActive_AddsDetailedExitCode is the
+// reproduce-first regression test for FR-006e: -detailed-exitcode must be
+// added to `plan` whenever exec-metadata capture is active (CI-detected +
+// Atmos Pro configured), independent of the legacy --upload-status flag, so
+// TerraformExecData.exit_code can report the real subprocess outcome instead
+// of always 0.
+func TestBuildPlanSubcommandArgs_ExecMetadataActive_AddsDetailedExitCode(t *testing.T) {
+	withExecMetadataGateEnv(t, true)
+
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Settings.Pro.Token = "test-token"
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+
+	args, err := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
+
+	require.NoError(t, err)
+	assert.Contains(t, args, detailedExitCodeFlag)
+	assert.True(t, info.ExecMetadataDetailedExitCodeAdded,
+		"executeMainTerraformCommand needs this signal to know the flag was added for exec-metadata, not --upload-status")
+}
+
+// TestBuildPlanSubcommandArgs_ExecMetadataInactive_NoDetailedExitCode verifies
+// the flag is NOT added when exec-metadata capture's gate is closed (no CI,
+// or CI without Atmos Pro configured) and --upload-status wasn't passed —
+// unaffected users see no behavior change.
+func TestBuildPlanSubcommandArgs_ExecMetadataInactive_NoDetailedExitCode(t *testing.T) {
+	withExecMetadataGateEnv(t, false)
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+
+	args, err := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
+
+	require.NoError(t, err)
+	assert.NotContains(t, args, detailedExitCodeFlag)
+	assert.False(t, info.ExecMetadataDetailedExitCodeAdded)
+}
+
+// TestBuildPlanSubcommandArgs_ApplyNeverGetsDetailedExitCode confirms
+// buildApplySubcommandArgs (used by both `apply` and `deploy`'s internal
+// `apply` invocation) never adds -detailed-exitcode under any combination of
+// exec-metadata-active/--upload-status, per FR-006e's plan-only scoping
+// (research.md Decision 35 — version-support risk on older pinned
+// terraform/tofu binaries; apply/deploy keep plain 0/1 exit-code semantics).
+func TestBuildPlanSubcommandArgs_ApplyNeverGetsDetailedExitCode(t *testing.T) {
+	withExecMetadataGateEnv(t, true)
+
+	info := schema.ConfigAndStacksInfo{SubCommand: "apply"}
+	args, err := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
+
+	require.NoError(t, err)
+	assert.NotContains(t, args, detailedExitCodeFlag)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -356,8 +447,9 @@ func TestBuildPlanSubcommandArgs_UploadStatusFlag(t *testing.T) {
 func TestBuildApplySubcommandArgs_WithoutPlan(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{UseTerraformPlan: false}
 
-	args := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
+	args, err := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
 
+	require.NoError(t, err)
 	assert.Contains(t, args, varFileFlag)
 	assert.Contains(t, args, "vars.json")
 }
@@ -365,9 +457,289 @@ func TestBuildApplySubcommandArgs_WithoutPlan(t *testing.T) {
 func TestBuildApplySubcommandArgs_WithPlan(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{UseTerraformPlan: true}
 
-	args := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
+	args, err := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
 
+	require.NoError(t, err)
 	assert.NotContains(t, args, varFileFlag)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// terraform CLI execution flags (lock_timeout, lock, parallelism, refresh, compact_warnings)
+// ──────────────────────────────────────────────────────────────────────────────
+
+func fullTerraformFlags() schema.TerraformFlags {
+	return schema.TerraformFlags{
+		LockTimeout:     "5m",
+		Lock:            boolPtr(false),
+		Parallelism:     intPtr(4),
+		Refresh:         boolPtr(false),
+		CompactWarnings: true,
+	}
+}
+
+func TestBuildTerraformCommandArgs_Flags_Plan_AllSupported(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan", Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Contains(t, args, lockTimeoutFlag)
+	assert.Contains(t, args, "5m")
+	assert.Contains(t, args, "-lock=false")
+	assert.Contains(t, args, parallelismFlag)
+	assert.Contains(t, args, "4")
+	assert.Contains(t, args, "-refresh=false")
+	assert.Contains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_ApplyWithoutPlan_AllSupported(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "apply", UseTerraformPlan: false, Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Contains(t, args, "-refresh=false")
+}
+
+func TestBuildTerraformCommandArgs_Flags_ApplyWithPlan_ExcludesRefresh(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "apply", UseTerraformPlan: true, Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "auto.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	// terraform rejects -refresh when applying a saved plan.
+	assert.NotContains(t, args, "-refresh=false")
+	assert.NotContains(t, args, "-refresh=true")
+	// But lock-timeout/lock/parallelism/compact-warnings are still valid there.
+	assert.Contains(t, args, lockTimeoutFlag)
+	assert.Contains(t, args, "-lock=false")
+	assert.Contains(t, args, parallelismFlag)
+	assert.Contains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_Destroy_AllSupported(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "destroy", Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Contains(t, args, lockTimeoutFlag)
+	assert.Contains(t, args, "-lock=false")
+	assert.Contains(t, args, parallelismFlag)
+	assert.Contains(t, args, "-refresh=false")
+	assert.Contains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_Refresh_ExcludesRefreshFlag(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "refresh", Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	// terraform refresh has no -refresh flag (refresh IS what it does).
+	assert.NotContains(t, args, "-refresh=false")
+	assert.NotContains(t, args, "-refresh=true")
+	assert.Contains(t, args, lockTimeoutFlag)
+	assert.Contains(t, args, "-lock=false")
+	assert.Contains(t, args, parallelismFlag)
+	assert.Contains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_Import_OnlyLockAndLockTimeout(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "import", Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Contains(t, args, lockTimeoutFlag)
+	assert.Contains(t, args, "-lock=false")
+	// import does not support parallelism, refresh, or compact-warnings.
+	assert.NotContains(t, args, parallelismFlag)
+	assert.NotContains(t, args, "-refresh=false")
+	assert.NotContains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_Test_NoneInjected(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "test", Flags: fullTerraformFlags()}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test", varFileFlag, "vars.json"}, args)
+}
+
+func TestBuildTerraformCommandArgs_Flags_Unset_NothingInjected(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.NotContains(t, args, lockTimeoutFlag)
+	assert.NotContains(t, args, lockFlag+"=true")
+	assert.NotContains(t, args, lockFlag+"=false")
+	assert.NotContains(t, args, parallelismFlag)
+	assert.NotContains(t, args, refreshFlag+"=true")
+	assert.NotContains(t, args, refreshFlag+"=false")
+	assert.NotContains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_CLITypedFlagWins_NoDuplicate(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "plan",
+		Flags:                  fullTerraformFlags(),
+		AdditionalArgsAndFlags: []string{lockTimeoutFlag, "30s", lockFlag + "=true"},
+	}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	// Only the user-typed value should appear, not the declarative default.
+	lockTimeoutCount := 0
+	for _, a := range args {
+		if a == lockTimeoutFlag {
+			lockTimeoutCount++
+		}
+	}
+	assert.Equal(t, 1, lockTimeoutCount, "should not inject a duplicate -lock-timeout")
+	assert.Contains(t, args, "30s")
+	assert.NotContains(t, args, "5m")
+	assert.Contains(t, args, lockFlag+"=true")
+	assert.NotContains(t, args, lockFlag+"=false")
+	// parallelism/refresh/compact-warnings weren't typed on the CLI, so the
+	// declarative defaults still apply for those.
+	assert.Contains(t, args, parallelismFlag)
+	assert.Contains(t, args, "-refresh=false")
+	assert.Contains(t, args, compactWarningsFlag)
+}
+
+func TestBuildTerraformCommandArgs_Flags_InvalidLockTimeout_Errors(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "plan",
+		Flags:      schema.TerraformFlags{LockTimeout: "not-a-duration"},
+	}
+	componentPath := "/tmp/my-component"
+
+	_, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponentFlags)
+}
+
+// TestBuildTerraformCommandArgs_Flags_UnknownKey_Errors verifies a typo'd flags key (e.g.
+// `lock_timout`) errors loudly at argv-build time instead of silently no-op'ing. Decoding
+// itself ignores unknown keys (see schema.DecodeTerraformFlags' own tests) because it's
+// also used by internal/exec's tolerant stack-name-candidate search, which would otherwise
+// swallow this error into a confusing "component not found" message — so this check reads
+// the raw ComponentSection map directly rather than the already-decoded info.Flags, which
+// by construction never contains the typo'd key. Discovered via field-testing PR #2992.
+func TestBuildTerraformCommandArgs_Flags_UnknownKey_Errors(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "plan",
+		ComponentSection: schema.AtmosSectionMapType{
+			cfg.FlagsSectionName: map[string]any{
+				"lock_timeout": "5m",
+				"lock_timout":  "77m",
+			},
+		},
+	}
+	componentPath := "/tmp/my-component"
+
+	_, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponentFlags)
+	assert.Contains(t, err.Error(), "lock_timout")
+}
+
+// TestBuildTerraformCommandArgs_Flags_UnknownKey_Errors_PerSubcommand exercises the same
+// unknown-key validation as TestBuildTerraformCommandArgs_Flags_UnknownKey_Errors but for
+// apply/destroy/refresh/import — each subcommand builder calls validateFlagsKeys
+// independently (buildApplySubcommandArgs, buildDestroySubcommandArgs,
+// buildRefreshSubcommandArgs, buildImportSubcommandArgs), so each has its own error-return
+// branch that must be exercised on its own.
+func TestBuildTerraformCommandArgs_Flags_UnknownKey_Errors_PerSubcommand(t *testing.T) {
+	tests := []struct {
+		subCommand string
+	}{
+		{subCommand: subcommandApply},
+		{subCommand: "destroy"},
+		{subCommand: "refresh"},
+		{subCommand: "import"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.subCommand, func(t *testing.T) {
+			atmosConfig := schema.AtmosConfiguration{}
+			info := schema.ConfigAndStacksInfo{
+				SubCommand: tt.subCommand,
+				ComponentSection: schema.AtmosSectionMapType{
+					cfg.FlagsSectionName: map[string]any{
+						"lock_timeout": "5m",
+						"lock_timout":  "77m",
+					},
+				},
+			}
+			componentPath := "/tmp/my-component"
+
+			_, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidComponentFlags)
+			assert.Contains(t, err.Error(), "lock_timout")
+		})
+	}
+}
+
+// TestBuildTerraformCommandArgs_Flags_InvalidLockTimeout_Errors_PerSubcommand exercises the
+// same invalid-duration validation as TestBuildTerraformCommandArgs_Flags_InvalidLockTimeout_Errors
+// but for apply/destroy/refresh/import — each subcommand builder calls appendLockTimeoutFlag
+// independently and wraps its error separately, so each call site's error-return branch must
+// be exercised on its own.
+func TestBuildTerraformCommandArgs_Flags_InvalidLockTimeout_Errors_PerSubcommand(t *testing.T) {
+	tests := []struct {
+		subCommand string
+	}{
+		{subCommand: subcommandApply},
+		{subCommand: "destroy"},
+		{subCommand: "refresh"},
+		{subCommand: "import"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.subCommand, func(t *testing.T) {
+			atmosConfig := schema.AtmosConfiguration{}
+			info := schema.ConfigAndStacksInfo{
+				SubCommand: tt.subCommand,
+				Flags:      schema.TerraformFlags{LockTimeout: "not-a-duration"},
+			}
+			componentPath := "/tmp/my-component"
+
+			_, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidComponentFlags)
+		})
+	}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

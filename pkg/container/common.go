@@ -13,7 +13,13 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/safenum"
 )
+
+// maxBakeEnvCapHint bounds the make() capacity hint for a baked build's
+// subprocess environment: a generous upper bound for combined OS env vars
+// plus configured bake vars, well beyond any realistic process environment.
+const maxBakeEnvCapHint = 1 << 20 // ~1M entries.
 
 // extractContainerID returns the last non-empty line of `create` output.
 // Both `docker create` and `podman create` print image-pull progress before the
@@ -593,7 +599,7 @@ func bakeCommandEnv(base []string, config *BuildConfig) []string {
 	if len(source) == 0 {
 		source = os.Environ()
 	}
-	env := make([]string, 0, len(source)+len(config.Bake.Vars))
+	env := make([]string, 0, safenum.Cap(len(source), len(config.Bake.Vars), maxBakeEnvCapHint))
 	env = append(env, source...)
 	env = append(env, bakeVarEnv(config.Bake.Vars)...)
 	return env

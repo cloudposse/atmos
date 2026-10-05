@@ -50,8 +50,9 @@ type PackerFlags struct {
 func ExecutePacker(
 	info *schema.ConfigAndStacksInfo,
 	packerFlags *PackerFlags,
-) error {
+) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecutePacker")()
+	defer attachComponentReporting(&resultErr, info, "packer", info.SubCommand)
 
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -226,8 +227,11 @@ func ExecutePacker(
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
 
 	// Write variables to a file.
-	varFile := constructPackerComponentVarfileName(info)
 	varFilePath := constructPackerComponentVarfilePath(&atmosConfig, info)
+	varFilePath, err = filepath.Abs(varFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve Packer variable file path: %w", err)
+	}
 
 	log.Debug("Writing the variables to file", "file", varFilePath)
 
@@ -269,7 +273,7 @@ func ExecutePacker(
 	// Prepare arguments and flags.
 	allArgsAndFlags := []string{}
 	allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
-	allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
+	allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFilePath}...)
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 	allArgsAndFlags = append(allArgsAndFlags, template)
 
@@ -301,14 +305,42 @@ func ExecutePacker(
 	// "executable file not found in $PATH", because exec.Command resolves the
 	// binary via the process's real PATH at call time, not via the PATH=...
 	// entry later added to envVars.
-	return executePackerShellCommand(
+	return executePackerCommandWithRetry(&atmosConfig, info, tenv, retryExecParams{
+		allArgsAndFlags: allArgsAndFlags,
+		componentPath:   componentPath,
+		envVars:         envVars,
+	})
+}
+
+// executePackerCommandWithRetry runs the resolved packer subcommand through
+// ExecuteShellCommandWithRetry. Extracted from ExecutePacker so the retry wiring can
+// be unit-tested directly with a fake invoke, without standing up ExecutePacker's full
+// stack-processing/toolchain preamble or requiring a real packer binary. The inner call
+// goes through the executePackerShellCommand seam (not ExecuteShellCommand directly) so
+// auth-credential-injection tests that swap that seam still intercept the real subprocess
+// invocation, retry or not.
+func executePackerCommandWithRetry(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	tenv *dependencies.ToolchainEnvironment,
+	params retryExecParams,
+) error {
+	return ExecuteShellCommandWithRetry(
 		atmosConfig,
-		tenv.Resolve(info.Command),
-		allArgsAndFlags,
-		componentPath,
-		envVars,
-		info.DryRun,
-		info.RedirectStdErr,
+		info,
+		info.SubCommand,
+		func(o ...ShellCommandOption) error {
+			return executePackerShellCommand(
+				*atmosConfig,
+				tenv.Resolve(info.Command),
+				params.allArgsAndFlags,
+				params.componentPath,
+				params.envVars,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
 		WithEnvironment(info.SanitizedEnv),
 	)
 }

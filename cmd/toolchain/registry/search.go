@@ -404,7 +404,7 @@ func renderSearchTable(rows []searchRow, widths searchColumnWidths) string {
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorBorder)).
+		BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
 		BorderBottom(true).
 		Bold(true)
 	s.Cell = s.Cell.PaddingLeft(1).PaddingRight(1)

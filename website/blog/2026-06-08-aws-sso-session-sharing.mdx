@@ -6,7 +6,7 @@ tags: [feature, dx]
 date: 2026-06-08T12:00:00.000Z
 ---
 
-`atmos auth login` now performs **one** browser interaction per AWS SSO portal, no matter how many
+[`atmos auth login`](/cli/commands/auth/login) now performs **one** browser interaction per AWS SSO portal, no matter how many
 `aws/iam-identity-center` providers in your `atmos.yaml` point at it. Cached tokens also refresh silently for the
 full ~8-hour portal session window — no more re-prompt every hour.
 
@@ -55,15 +55,15 @@ The new `Authenticate()` flow is a four-stage pipeline:
 3. **Refresh-token exchange** — silent network call when the cached access token expired but the refresh token
    is still valid. No browser.
 4. **Device-authorization flow** — full browser interaction. Only runs when all three fast paths miss. Single-flighted
-   per session, so parallel `atmos terraform` invocations don't race into duplicate browser prompts.
+   per session, so parallel [`atmos terraform`](/cli/commands/terraform/usage) invocations don't race into duplicate browser prompts.
 
-Per-session mutexes coalesce concurrent callers: if you fire `atmos terraform plan` against three components backed
+Per-session mutexes coalesce concurrent callers: if you fire [`atmos terraform plan`](/cli/commands/terraform/plan) against three components backed
 by the same SSO portal, only one device-auth flow runs and the other two wait on its result.
 
 ## Migration
 
 None required. Existing `atmos.yaml` files keep working. Old per-provider cache files can become orphans on first
-login post-upgrade, and they are not deleted automatically. `atmos auth logout` evicts the in-memory portal session
+login post-upgrade, and they are not deleted automatically. [`atmos auth logout`](/cli/commands/auth/logout) evicts the in-memory portal session
 and removes the new session-keyed cache file; clearing any leftover legacy per-provider files is a manual step.
 
 If you previously relied on atmos's cache being disjoint from the `aws` CLI's cache, that separation is unchanged

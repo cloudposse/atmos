@@ -8,12 +8,18 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/manifest"
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
 func TestNewInitCommandProvider(t *testing.T) {
@@ -106,6 +112,12 @@ func TestInitCmd_FlagDefinitions(t *testing.T) {
 			flagName:     "merge-driver",
 			shorthand:    "",
 			defaultValue: "auto",
+		},
+		{
+			name:         "max-changes flag",
+			flagName:     "max-changes",
+			shorthand:    "",
+			defaultValue: "50",
 		},
 	}
 
@@ -413,6 +425,17 @@ func TestExecuteInit_TemplateValuesConversion(t *testing.T) {
 }
 
 func TestInitCmd_Integration_Help(t *testing.T) {
+	// cobra checks the "help" flag's current value on every Execute() call, not
+	// just whether --help was in this invocation's args -- so leaving it "true"
+	// leaks into every later test that calls initCmd.Execute() for the rest of
+	// this package's test binary: Execute() returns nil having printed help
+	// instead of ever calling RunE, regardless of that later test's own args.
+	// -shuffle=on can put this test before any of those, so it must restore the
+	// flag itself; see docs/fixes for the incident.
+	t.Cleanup(func() {
+		_ = initCmd.Flags().Set("help", "false")
+	})
+
 	// Test help output.
 	initCmd.SetArgs([]string{"--help"})
 	err := initCmd.Execute()
@@ -472,6 +495,24 @@ func TestExecuteInit_InvalidMergeDriver(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrUnknownMergeDriver)
+}
+
+// TestExecuteInit_HydrateFailurePropagatesError covers executeInit's
+// source.Hydrate error branch: a template name that resolves as a direct
+// local-path source (rather than a catalog/embedded template key) but points
+// at a nonexistent directory must fail loudly, wrapped in
+// errUtils.ErrInitialization, instead of proceeding to generation with a
+// half-hydrated configuration.
+func TestExecuteInit_HydrateFailurePropagatesError(t *testing.T) {
+	err := executeInit(context.Background(), &initOptions{
+		templateName: "./this-template-path-does-not-exist-xyz",
+		targetDir:    t.TempDir(),
+		interactive:  false,
+		templateVars: map[string]interface{}{},
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInitialization)
 }
 
 func TestMaybeInitGeneratedProjectGit_GitEnabled(t *testing.T) {
@@ -557,21 +598,513 @@ func TestShouldOfferUpdate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			offer, baseRef := shouldOfferUpdate(tt.err, tt.opts)
+			// A fresh, never-written directory: shouldOfferUpdate must resolve
+			// against the *actual* target passed in, not any stale
+			// opts.targetDir (see TestShouldOfferUpdate_UsesActualTargetDir for
+			// the regression this guards against).
+			offer, baseRef, err := shouldOfferUpdate(tt.err, tt.opts, t.TempDir())
+			require.NoError(t, err)
 			assert.Equal(t, tt.wantOffer, offer)
 			assert.Equal(t, tt.wantBaseRef, baseRef)
 		})
 	}
 }
 
-// TestDefaultBaseRef pins the fix for a real bug: `atmos init aws/app <dir>
-// --update` with no --base-ref silently set up no git storage at all
-// (ExecuteWithDelimiters only calls SetupGitStorage when baseRef is
-// non-empty), so every file failed with an opaque "three-way merge failed"
-// even on a completely unmodified, freshly re-run directory.
+// TestShouldOfferUpdate_UsesActualTargetDir reproduces the interactive
+// retry-offer half of defaultBaseRef's bug: opts.targetDir is the raw
+// positional CLI arg, which is "" when the user ran `atmos init --update`
+// with no target and the interactive flow picked the real directory itself.
+// It must resolve the retry base ref against the caller-supplied targetDir
+// parameter (the real, resolved directory), not opts.targetDir.
+func TestShouldOfferUpdate_UsesActualTargetDir(t *testing.T) {
+	dir := t.TempDir()
+	metadata := storage.NewInitMetadata("demo", "1.0.0", "embedded", "pinned-at-real-dir", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
+
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	// opts.targetDir left empty on purpose: it mirrors the raw positional arg
+	// in the no-target interactive scenario, and must be ignored in favor of
+	// the targetDir parameter below.
+	opts := &initOptions{interactive: true}
+
+	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, dir)
+
+	require.NoError(t, err)
+	assert.True(t, offer)
+	assert.Equal(t, "pinned-at-real-dir", baseRef)
+}
+
+// TestShouldOfferUpdate_RenderedStrategySkipsBaseRefResolution reproduces the
+// finding: under --update-strategy=rendered, shouldOfferUpdate used to
+// resolve a retry base ref via tracked-only defaultBaseRef regardless of
+// strategy. That non-empty value flowed unchanged into the retry's
+// executeWithSetup call, which sets spec.baseRef from whatever it's given
+// regardless of strategy too -- reintroducing the exact project-record
+// pollution CheckNotSwitchedFromRendered exists to guard against, just
+// reached through this offer-a-retry path instead of an explicit --update.
+// A real pinned metadata file proves the empty result is a deliberate skip,
+// not a coincidence of nothing being pinned.
+func TestShouldOfferUpdate_RenderedStrategySkipsBaseRefResolution(t *testing.T) {
+	dir := t.TempDir()
+	metadata := storage.NewInitMetadata("demo", "1.0.0", "embedded", "pinned-at-real-dir", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
+
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	opts := &initOptions{interactive: true, updateStrategy: "rendered"}
+
+	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, dir)
+
+	require.NoError(t, err)
+	assert.True(t, offer)
+	assert.Empty(t, baseRef, "rendered mode must never resolve a retry base ref, even when one is pinned")
+}
+
+// TestShouldOfferUpdate_PropagatesMetadataLoadError verifies a
+// corrupt/unreadable metadata file surfaces as an error from
+// shouldOfferUpdate rather than silently resolving to "HEAD".
+func TestShouldOfferUpdate_PropagatesMetadataLoadError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.InitMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	opts := &initOptions{interactive: true}
+
+	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, dir)
+
+	require.Error(t, err)
+	assert.False(t, offer)
+	assert.Empty(t, baseRef)
+}
+
+// TestShouldOfferUpdate_InvalidUpdateStrategyPropagatesError covers
+// shouldOfferUpdate's own engine.ParseUpdateStrategy error branch: a bogus
+// --update-strategy value must surface as an error directly rather than
+// silently falling through to a tracked-style defaultBaseRef resolution.
+func TestShouldOfferUpdate_InvalidUpdateStrategyPropagatesError(t *testing.T) {
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	opts := &initOptions{interactive: true, updateStrategy: "bogus"}
+
+	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.False(t, offer)
+	assert.Empty(t, baseRef)
+}
+
+// TestDefaultBaseRef pins two behaviors:
+//   - An explicit --base-ref always wins, regardless of targetDir.
+//   - With no --base-ref and no pinned metadata at targetDir, it still falls
+//     back to "HEAD" -- the original fix for --update with no --base-ref
+//     silently setting up no git storage at all (ExecuteWithDelimiters only
+//     calls SetupGitStorage when baseRef is non-empty), which failed every
+//     file with an opaque "three-way merge failed" even on a completely
+//     unmodified, freshly re-run directory.
 func TestDefaultBaseRef(t *testing.T) {
-	assert.Equal(t, "HEAD", defaultBaseRef(""))
-	assert.Equal(t, "v1.2.3", defaultBaseRef("v1.2.3"))
+	headRef, err := defaultBaseRef("", t.TempDir())
+	require.NoError(t, err)
+	assert.Equal(t, "HEAD", headRef)
+
+	explicitRef, err := defaultBaseRef("v1.2.3", t.TempDir())
+	require.NoError(t, err)
+	assert.Equal(t, "v1.2.3", explicitRef)
+}
+
+// TestDefaultBaseRef_PrefersPinnedMetadata reproduces the fix for the bug
+// where `atmos init --update` with no --base-ref always diffed against live
+// HEAD, so a customization the user committed after generation became
+// indistinguishable from the unmodified base -- the merge then silently let
+// the freshly rendered template win with no conflict, discarding the user's
+// edit. When a pinned base ref exists (written once, at initial `--git`
+// generation -- see gen.PinInitialBaseRefForInit), defaultBaseRef must
+// prefer it over live HEAD.
+func TestDefaultBaseRef_PrefersPinnedMetadata(t *testing.T) {
+	dir := t.TempDir()
+	metadata := storage.NewInitMetadata("demo", "1.0.0", "embedded", "abc123pinned", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
+
+	pinnedRef, err := defaultBaseRef("", dir)
+	require.NoError(t, err)
+	assert.Equal(t, "abc123pinned", pinnedRef)
+
+	// An explicit --base-ref still overrides the pin.
+	explicitRef, err := defaultBaseRef("v9.9.9", dir)
+	require.NoError(t, err)
+	assert.Equal(t, "v9.9.9", explicitRef)
+}
+
+// TestDefaultBaseRef_PropagatesUnreadableMetadataError reproduces the bug
+// where any metadata.Load() error (not just "file doesn't exist") was
+// silently swallowed and defaultBaseRef fell back to "HEAD" regardless --
+// defeating the pin fix, since a corrupt pin file would silently
+// re-introduce the original silent-overwrite bug (diffing against live HEAD)
+// instead of surfacing the problem. The storage.MetadataStorage.Load method
+// returns (nil, nil) only when the file is genuinely absent (os.IsNotExist);
+// any other failure (corrupt YAML here) must propagate as an error.
+func TestDefaultBaseRef_PropagatesUnreadableMetadataError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.InitMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	resolved, err := defaultBaseRef("", dir)
+
+	require.Error(t, err)
+	assert.Empty(t, resolved)
+	assert.NotEqual(t, "HEAD", resolved, "a corrupt metadata file must not silently fall back to HEAD")
+}
+
+// TestMaybeInitGeneratedProjectGit_PinsInitialBaseRef verifies the fix for
+// atmos init --update's silent-data-loss bug: --git must pin the initial
+// commit's SHA at .atmos/init/metadata.yaml, the same way cmd/scaffold's
+// maybeInitGeneratedGitRepository already does, so defaultBaseRef has a real
+// pin to prefer over live HEAD once the user commits a customization.
+func TestMaybeInitGeneratedProjectGit_PinsInitialBaseRef(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello"), 0o600))
+
+	cfg := &templates.Configuration{Name: "demo", Version: "1.0.0", Source: "embedded"}
+	err := maybeInitGeneratedProjectGit(dir, cfg, &initOptions{git: true})
+	require.NoError(t, err)
+
+	metadata, err := storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Load()
+	require.NoError(t, err)
+	require.NotNil(t, metadata)
+	assert.NotEmpty(t, metadata.BaseRef)
+	assert.Equal(t, "demo", metadata.Template.Name)
+
+	resolved, err := defaultBaseRef("", dir)
+	require.NoError(t, err)
+	assert.Equal(t, metadata.BaseRef, resolved, "defaultBaseRef must prefer the pin just written")
+}
+
+// TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin
+// reproduces the RunE fix: with a positional target directory and --update,
+// RunE must pre-resolve --base-ref against that *real* target's own pinned
+// metadata (.atmos/init/metadata.yaml), not an empty path. A pinned base ref
+// that doesn't exist in the target's git history surfaces as
+// errUtils.ErrInvalidBaseRef once ExecuteWithBaseRef's git storage setup
+// tries to validate it -- proving the pin was actually read (the old,
+// unconditional single-target-agnostic resolution would have silently
+// defaulted to "HEAD", which resolves fine and would not fail this way).
+func TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# demo\n"), 0o600))
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+	_, err = worktree.Add("README.md")
+	require.NoError(t, err)
+	_, err = worktree.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{Name: "Test", Email: "test@example.com"},
+	})
+	require.NoError(t, err)
+
+	metadata := storage.NewInitMetadata("simple", "1.0.0", "embedded", "missing-ref", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
+
+	// RunE binds this test's flags to the global viper.GetViper() singleton
+	// (BindFlagsToViper), which outlives the test unless reset. Registering a
+	// fresh *cobra.Command with initCmd's flags (rather than calling
+	// initCmd.SetArgs/Execute on the shared package-level initCmd) also keeps
+	// this test from mutating initCmd's own FlagSet -- see the identical
+	// pattern and rationale in
+	// cmd/scaffold/scaffold_coverage_test.go's
+	// TestScaffoldGenerateRunE_UpdateFlagWithPositionalTarget_ResolvesBaseRef
+	// (cmd.NewTestKit only restores RootCmd state and isn't available to this
+	// package: it would create an import cycle back into cmd).
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("force", "false"))
+	require.NoError(t, cmd.Flags().Set("no-git", "true"))
+	require.NoError(t, cmd.Flags().Set("set", "project_name=demo"))
+
+	err = initCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidBaseRef)
+}
+
+// TestInitCmd_RunE_UpdateWithPositionalTarget_PropagatesMetadataLoadError
+// covers RunE's error branch for the same pre-resolution: a genuinely
+// unreadable pin file (corrupt YAML here) must surface as an error from the
+// command immediately, rather than being swallowed and silently falling back
+// to "HEAD".
+func TestInitCmd_RunE_UpdateWithPositionalTarget_PropagatesMetadataLoadError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.InitMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	// See the comment in
+	// TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin
+	// above for why this uses a fresh *cobra.Command plus a viper.Reset
+	// cleanup instead of calling initCmd.SetArgs/Execute directly.
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("force", "false"))
+	require.NoError(t, cmd.Flags().Set("no-git", "true"))
+
+	err := initCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resolve default --base-ref")
+}
+
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected covers --update-strategy's
+// own validation: a value outside tracked/rendered must fail before any
+// generation work starts. See the isolated-*cobra.Command rationale on
+// TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin
+// above.
+func TestInitCmd_RunE_UpdateStrategyInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "bogus"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	// Rejected by initParser.ValidateFlagValues (the WithValidValues
+	// registration for update-strategy), not by the later
+	// engine.ParseUpdateStrategy call -- proves the framework-standard
+	// validation entry point is actually reachable and firing, rather than
+	// the flag's own separate, redundant string-matching validation being
+	// the only thing catching this.
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MergeDriverInvalidValueRejected covers --merge-driver's own
+// WithValidValues registration: a value outside auto/text must be rejected by
+// initParser.ValidateFlagValues before merge.ParseDriver ever runs, mirroring
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected above.
+func TestInitCmd_RunE_MergeDriverInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("merge-driver", "bogus"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MergeStrategyInvalidValueRejected covers --merge-strategy's
+// own WithValidValues registration: a value outside manual/ours/theirs must be
+// rejected by initParser.ValidateFlagValues before merge.ParseConflictStrategy
+// (via merge.ResolveConflictStrategy) ever runs, mirroring
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected above.
+func TestInitCmd_RunE_MergeStrategyInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("merge-strategy", "bogus"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MaxChangesNegativeRejected covers --max-changes's manual
+// range validation (non-negative only; there is no upper bound because the
+// underlying computed change percentage isn't capped at 100 either -- see
+// engine.Processor.SetMaxChanges's doc comment -- checked directly in RunE
+// since pkg/flags has no built-in numeric-range validation option): a
+// negative value must be rejected with errUtils.ErrInvalidFlagValue before
+// any generation work starts, mirroring
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected above.
+func TestInitCmd_RunE_MaxChangesNegativeRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("max-changes", "-1"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+// TestInitCmd_RunE_MaxChangesAboveHundredAccepted covers the flip side of the
+// above: --max-changes has no upper bound, so a value above 100 (previously
+// rejected before this was changed to an unbounded flag) must be accepted,
+// not rejected -- proven here by pairing it with the pre-existing
+// --base-ref/--update-strategy=rendered mutual-exclusion check
+// (TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected): if max-changes were
+// still rejecting values above 100, this would fail with
+// errUtils.ErrInvalidFlagValue instead of reaching that later check.
+func TestInitCmd_RunE_MaxChangesAboveHundredAccepted(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, cmd.Flags().Set("base-ref", "some-ref"))
+	require.NoError(t, cmd.Flags().Set("max-changes", "1000"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+}
+
+// TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected covers the explicit
+// --base-ref + --update-strategy=rendered mutual-exclusion check: rendered's
+// base ref comes from the target's own recorded scaffold.yaml, not
+// --base-ref, so combining them is a contradiction rather than a value to
+// silently ignore.
+func TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, cmd.Flags().Set("base-ref", "some-ref"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+}
+
+// TestInitCmd_RunE_RenderedStrategyRequiresScaffoldConfig covers
+// --update-strategy=rendered against a target with no recorded
+// .atmos/scaffold.yaml project record: unlike tracked (which falls back to
+// literal "HEAD" against the target's own git history), rendered has no
+// fallback -- there is nothing to reconstruct the old ref/answers from.
+func TestInitCmd_RunE_RenderedStrategyRequiresScaffoldConfig(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	dir := t.TempDir()
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("force", "false"))
+	require.NoError(t, cmd.Flags().Set("no-git", "true"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+
+	err := initCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrRenderedStrategyRequiresConfig)
+}
+
+// TestInitCmd_RunE_SwitchedFromRenderedToTrackedRejected covers a target
+// last generated under --update-strategy=rendered (spec.renderedRef set,
+// spec.baseRef empty): a plain --update run (defaulting to tracked) against
+// it must fail loudly via CheckNotSwitchedFromRendered instead of silently
+// resolving a base ref against git history the target was never meant to
+// have.
+func TestInitCmd_RunE_SwitchedFromRenderedToTrackedRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	dir := t.TempDir()
+	sampleConfig := &config.ScaffoldConfig{Metadata: manifest.Metadata{Name: "sample"}}
+	require.NoError(t, config.SaveProjectRecord(dir, sampleConfig,
+		config.ProjectRecordProvenance{Source: "embedded", RenderedRef: "abc123"}, nil))
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+
+	err := initCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUpdateStrategySwitchedToTracked)
+}
+
+// TestPrepareRenderedRetryBase_InvalidUpdateStrategyPropagatesError covers
+// prepareRenderedRetryBase's own defensive re-parse of opts.updateStrategy:
+// a bogus value must surface as an error directly, not reach
+// source.ResolveRenderedBase or initUI at all (nil initUI would panic if it
+// did).
+func TestPrepareRenderedRetryBase_InvalidUpdateStrategyPropagatesError(t *testing.T) {
+	opts := &initOptions{updateStrategy: "bogus"}
+
+	cleanup, err := prepareRenderedRetryBase(nil, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}
+
+// TestPrepareRenderedRetryBase_RenderedResolveFailurePropagatesError covers
+// source.ResolveRenderedBase failing during the retry (no recorded project
+// state at targetDir): the failure must propagate directly rather than
+// reaching initUI.SetRenderedBaseSource (nil initUI would panic if it did).
+func TestPrepareRenderedRetryBase_RenderedResolveFailurePropagatesError(t *testing.T) {
+	opts := &initOptions{updateStrategy: "rendered"}
+
+	cleanup, err := prepareRenderedRetryBase(nil, opts, t.TempDir())
+
+	require.Error(t, err)
+	assert.Nil(t, cleanup)
+}
+
+// TestResolveInteractiveInitBaseRef_NoUpdate_PassesThroughOptsUnchanged
+// covers resolveInteractiveInitBaseRef's non-update path: without --update
+// the base ref is unused (ExecuteWithDelimiters only sets up git storage when
+// update is true), so this is a no-op passthrough that must not touch
+// initUI at all -- exercised here with a nil *ui.InitUI to prove it.
+//
+// The --update branch (which resolves the target directory first via
+// initUI.ResolveTargetPath) always prompts through a real huh form when no
+// target is already known and so cannot be safely unit tested -- the same
+// limitation documented on TestRunInitExecution_WithTargetDir above.
+func TestResolveInteractiveInitBaseRef_NoUpdate_PassesThroughOptsUnchanged(t *testing.T) {
+	tests := []struct {
+		name            string
+		interactive     bool
+		wantUseDefaults bool
+	}{
+		{name: "interactive", interactive: true, wantUseDefaults: false},
+		{name: "non-interactive", interactive: false, wantUseDefaults: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := &initOptions{
+				update:       false,
+				interactive:  tt.interactive,
+				baseRef:      "v1.2.3",
+				templateVars: map[string]interface{}{"key": "value"},
+			}
+
+			resolved, err := resolveInteractiveInitBaseRef(nil, nil, opts)
+
+			require.NoError(t, err)
+			assert.Empty(t, resolved.targetDir)
+			assert.Equal(t, "v1.2.3", resolved.baseRef)
+			assert.Equal(t, opts.templateVars, resolved.templateValues)
+			assert.Equal(t, tt.wantUseDefaults, resolved.useDefaults)
+		})
+	}
 }
 
 // TestRunInitExecution_NonEmptyTargetDir_NonInteractive_ReturnsError covers

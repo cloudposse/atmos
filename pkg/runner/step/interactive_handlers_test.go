@@ -11,6 +11,8 @@ import (
 )
 
 func TestInteractiveHandlersRegistration(t *testing.T) {
+	t.Parallel()
+
 	// Verify all interactive handlers are registered.
 	tests := []struct {
 		name        string
@@ -27,6 +29,7 @@ func TestInteractiveHandlersRegistration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			handler, ok := Get(tt.name)
 			require.True(t, ok, "handler %s should be registered", tt.name)
 			assert.Equal(t, tt.name, handler.GetName())
@@ -37,6 +40,8 @@ func TestInteractiveHandlersRegistration(t *testing.T) {
 }
 
 func TestInputHandlerValidation(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("input")
 	require.True(t, ok)
 
@@ -78,6 +83,7 @@ func TestInputHandlerValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := handler.Validate(tt.step)
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -90,6 +96,8 @@ func TestInputHandlerValidation(t *testing.T) {
 
 //nolint:dupl // Similar test patterns for different handlers.
 func TestConfirmHandlerValidation(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("confirm")
 	require.True(t, ok)
 
@@ -129,6 +137,7 @@ func TestConfirmHandlerValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := handler.Validate(tt.step)
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -140,6 +149,8 @@ func TestConfirmHandlerValidation(t *testing.T) {
 }
 
 func TestChooseHandlerValidation(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("choose")
 	require.True(t, ok)
 
@@ -190,6 +201,7 @@ func TestChooseHandlerValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := handler.Validate(tt.step)
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -202,6 +214,8 @@ func TestChooseHandlerValidation(t *testing.T) {
 
 //nolint:dupl // Similar test patterns for different handlers.
 func TestWriteHandlerValidation(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("write")
 	require.True(t, ok)
 
@@ -241,6 +255,7 @@ func TestWriteHandlerValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := handler.Validate(tt.step)
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -252,6 +267,8 @@ func TestWriteHandlerValidation(t *testing.T) {
 }
 
 func TestFilterHandlerValidation(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("filter")
 	require.True(t, ok)
 
@@ -294,6 +311,7 @@ func TestFilterHandlerValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := handler.Validate(tt.step)
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -305,6 +323,8 @@ func TestFilterHandlerValidation(t *testing.T) {
 }
 
 func TestFileHandlerValidation(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("file")
 	require.True(t, ok)
 
@@ -345,6 +365,7 @@ func TestFileHandlerValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := handler.Validate(tt.step)
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -356,6 +377,8 @@ func TestFileHandlerValidation(t *testing.T) {
 }
 
 func TestInteractiveHandlersByCategory(t *testing.T) {
+	t.Parallel()
+
 	byCategory := ListByCategory()
 	interactiveHandlers := byCategory[CategoryInteractive]
 
@@ -378,11 +401,14 @@ func TestInteractiveHandlersByCategory(t *testing.T) {
 // environment ResolvePrompt rejects the bad template. Either way no form is
 // rendered, so this test never hangs.
 func TestInteractiveHandlersExecuteFailFast(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	names := []string{"input", "confirm", "choose", "write", "filter", "file"}
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			handler, ok := Get(name)
 			require.True(t, ok)
 
