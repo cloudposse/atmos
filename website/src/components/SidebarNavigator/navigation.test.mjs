@@ -74,6 +74,33 @@ test("a category match reveals all descendants without mutating saved expansion 
   assert.deepEqual(tree, before);
 });
 
+test("page titles match when the label is a YAML key", () => {
+  const config = [
+    category("CLI Configuration", "/cli/configuration", [
+      {
+        ...category("commands", "/cli/configuration/commands", [
+          leaf("command", "/cli/configuration/commands/command"),
+          leaf("steps", "/cli/configuration/commands/steps"),
+        ]),
+        customProps: { title: "Custom Commands" },
+      },
+      leaf("workflows", "/cli/configuration/workflows"),
+    ]),
+  ];
+  const result = filterItems(config, "custom co");
+  assert.equal(result[0].label, "CLI Configuration");
+  assert.deepEqual(
+    result[0].items.map((item) => item.label),
+    ["commands"],
+  );
+  assert.equal(result[0].items[0].collapsed, false);
+  assert.deepEqual(
+    result[0].items[0].items.map((item) => item.label),
+    ["command", "steps"],
+  );
+  assert.deepEqual(filterItems(config, "custom workflows"), []);
+});
+
 test("clearing a filter returns the original tree; absent terms return no entries", () => {
   assert.equal(filterItems(tree, "  "), tree);
   assert.deepEqual(filterItems(tree, "nonexistent"), []);

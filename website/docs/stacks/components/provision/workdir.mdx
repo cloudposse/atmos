@@ -27,7 +27,7 @@ import Note from '@site/src/components/Note'
 
     - **Type:** `boolean`
     - **Default:** `false`
-    - **Applies to:** Terraform, Helmfile, Packer, and Ansible components
+    - **Applies to:** Terraform, Helmfile, Packer, Helm, and Kubernetes components
   </dd>
 </dl>
 
@@ -78,7 +78,7 @@ The `.workdir/` directory is created at runtime and should be added to `.gitigno
 
 ## Toolchain-Level Defaults
 
-Apply workdir provisioning to every component of a toolchain:
+Terraform, Helm, and Kubernetes support toolchain-level provisioning defaults. Apply a default to every component of one of these toolchains:
 
 <File title="stacks/orgs/acme/plat/dev/_defaults.yaml">
 ```yaml
@@ -87,10 +87,10 @@ terraform:
     workdir:
       enabled: true   # Every Terraform component in this stack gets an isolated workdir
 
-helmfile:
+helm:
   provision:
     workdir:
-      enabled: true   # Every Helmfile component runs in its own workdir
+      enabled: true   # Every Helm component runs in its own workdir
 ```
 </File>
 
@@ -127,7 +127,7 @@ terraform:
       enabled: true       # Default for every Terraform component that imports this mixin
       ttl: "7d"           # Documents the intended cleanup window for unused workdirs
 
-helmfile:
+helm:
   provision:
     workdir:
       enabled: true

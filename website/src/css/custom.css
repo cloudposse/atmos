@@ -781,8 +781,8 @@ li.menu__list-item.hidden {
     display: none;
 }
 
-/* The experimental-feature sidebar marker (yellow dot + hover tooltip) is rendered
-   by the ExperimentalDot component (src/components/ExperimentalDot), injected into
+/* The feature-status sidebar marker (colored dot + hover tooltip) is rendered
+   by the FeatureStatusDot component (src/components/FeatureStatusDot), injected into
    the item label by the DocSidebarItem swizzle. Styles live in that component. */
 
 .aa-Autocomplete > .aa-DetachedSearchButton {

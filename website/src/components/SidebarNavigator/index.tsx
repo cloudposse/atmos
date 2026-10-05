@@ -4,8 +4,7 @@ import { FiArrowLeft, FiChevronRight, FiSearch, FiX } from "react-icons/fi";
 import OriginalDocSidebarItems from "@theme-original/DocSidebarItems";
 import type { Props } from "@theme/DocSidebarItems";
 import type { PropSidebarItem } from "@docusaurus/plugin-content-docs";
-import ExperimentalDot from "@site/src/components/ExperimentalDot";
-import { isExperimentalRoute } from "@site/src/data/experimentalRoutes";
+import RouteStatusDot from "@site/src/components/FeatureStatusDot/RouteStatusDot";
 import {
   filterItems,
   findSection,
@@ -241,7 +240,7 @@ export default function SidebarNavigator({
               }
             >
               {selected.label}
-              {isExperimentalRoute(selected.href) && <ExperimentalDot />}
+              <RouteStatusDot href={selected.href} />
             </Link>
           ) : (
             selected?.label || `All ${sidebarLabel(sidebarName)}`
@@ -273,7 +272,7 @@ export default function SidebarNavigator({
                   >
                     <span>
                       {item.label}
-                      {isExperimentalRoute(item.href) && <ExperimentalDot />}
+                      <RouteStatusDot href={item.href} />
                     </span>
                     <FiChevronRight
                       className={styles.sectionChevron}
