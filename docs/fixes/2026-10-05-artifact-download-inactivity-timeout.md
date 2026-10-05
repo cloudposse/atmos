@@ -60,6 +60,23 @@ issues, and the changed Go files pass `gofumpt` formatting checks.
 
 No live GitHub artifact download is required by these tests.
 
+### CI follow-up: colored progress assertions
+
+The first CI run failed the progress-output assertion on Linux, macOS, Windows,
+and the shuffled race suite. ANSI styling split `Extracting` from the artifact
+name, so the visible message was correct but the raw string did not contain the
+expected phrase. Reproduced locally with `NO_COLOR= CLICOLOR_FORCE=1`.
+
+Progress assertions now strip ANSI styling before comparing visible text. The
+test explicitly exercises both forced-color and plain output, along with silent
+mode under both settings, so local runs cover CI's color behavior.
+The focused artifact suite passes with forced color, `-race`, and `-shuffle=on`;
+lint reports no new issues.
+
+The missing PR semver label was corrected to `patch`. Seven Windows jobs failed
+before startup because GitHub could not allocate hosted runners; these require
+a new run, not changes to the download implementation or runner configuration.
+
 ## Follow-up
 
 The regular toolchain asset installer uses a separate HTTP client with a

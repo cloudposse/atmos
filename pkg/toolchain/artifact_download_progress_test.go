@@ -11,6 +11,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -78,12 +79,23 @@ func TestArtifactProgressReporter_ThrottlesOutput(t *testing.T) {
 }
 
 func TestDownloadAndInstallArtifactToDir_ProgressAndSilentMode(t *testing.T) {
-	for _, showProgress := range []bool{true, false} {
-		name := "silent"
-		if showProgress {
-			name = "progress"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		showProgress bool
+		color        bool
+	}{
+		{name: "progress/plain", showProgress: true},
+		{name: "progress/color", showProgress: true, color: true},
+		{name: "silent/plain"},
+		{name: "silent/color", color: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("CLICOLOR_FORCE", "1")
+			if tt.color {
+				t.Setenv("NO_COLOR", "")
+			} else {
+				t.Setenv("NO_COLOR", "1")
+			}
 			tempDir := t.TempDir()
 			cleanup := setupTestInstallPath(t, tempDir)
 			defer cleanup()
@@ -102,17 +114,22 @@ func TestDownloadAndInstallArtifactToDir_ProgressAndSilentMode(t *testing.T) {
 			output := captureUITestOutput(t, func() {
 				path, err := downloadAndInstallArtifactToDir(context.Background(), "", "pr-test", &github.PRArtifactInfo{
 					DownloadURL: server.URL, ArtifactName: "build-artifacts-test", SizeInBytes: int64(len(zipData)),
-				}, showProgress)
+				}, tt.showProgress)
 				require.NoError(t, err)
 				binary, err := os.ReadFile(path)
 				require.NoError(t, err)
 				assert.Equal(t, "test binary", string(binary))
 			})
-			if showProgress {
-				assert.Contains(t, output, "Downloading build-artifacts-test")
-				assert.Contains(t, output, "100%")
-				assert.Contains(t, output, "Extracting build-artifacts-test")
-				assert.Contains(t, output, "Installed to")
+			if tt.showProgress {
+				if tt.color {
+					assert.Contains(t, output, "\x1b[", "exercise ANSI output even outside CI")
+				}
+				// Styling can insert escape sequences between words in the message.
+				text := ansi.Strip(output)
+				assert.Contains(t, text, "Downloading build-artifacts-test")
+				assert.Contains(t, text, "100%")
+				assert.Contains(t, text, "Extracting build-artifacts-test")
+				assert.Contains(t, text, "Installed to")
 			} else {
 				assert.Empty(t, output)
 			}
