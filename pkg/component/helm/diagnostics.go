@@ -146,7 +146,7 @@ func allContainerStatuses(pod *corev1.Pod) []corev1.ContainerStatus {
 
 // containerFailureSummary returns a one-line summary and whether the container is
 // in a failing state. A container is failing when it is waiting on a non-transient
-// reason (CrashLoopBackOff, ImagePullBackOff, ...) or has terminated with a
+// reason such as CrashLoopBackOff or ImagePullBackOff, or has terminated with a
 // non-zero exit code. A running or successfully-completed container is not failing.
 func containerFailureSummary(status *corev1.ContainerStatus) (string, bool) {
 	switch {

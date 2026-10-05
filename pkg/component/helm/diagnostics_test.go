@@ -2,6 +2,7 @@ package helm
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -11,8 +12,10 @@ import (
 	kubefake "helm.sh/helm/v4/pkg/kube/fake"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -115,6 +118,31 @@ func TestCollectReleaseFailureDiagnostics_OnlyMatchingRelease(t *testing.T) {
 	out := collectReleaseFailureDiagnostics(context.Background(), &actionContext{}, &chartSpec{ReleaseName: "mine", Namespace: "ns"}, false)
 	assert.Contains(t, out, "pod ours")
 	assert.NotContains(t, out, "pod theirs", "only the release's own pods are reported")
+}
+
+func TestCollectReleaseFailureDiagnostics_PodListError(t *testing.T) {
+	cs := fake.NewSimpleClientset()
+	cs.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("list pods failed")
+	})
+	stubReleaseClientset(t, cs, nil)
+
+	out := collectReleaseFailureDiagnostics(context.Background(), &actionContext{}, &chartSpec{ReleaseName: "r", Namespace: "ns"}, true)
+	assert.Empty(t, out, "a pod-list error must not mask the original failure")
+}
+
+// TestCollectReleaseFailureDiagnostics_EventListErrorStillReportsStatus confirms a
+// failure to list events (verbose mode) does not drop the container-status summary.
+func TestCollectReleaseFailureDiagnostics_EventListErrorStillReportsStatus(t *testing.T) {
+	cs := fake.NewSimpleClientset(crashLoopPod("p", "ns", "r"))
+	cs.PrependReactor("list", "events", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("list events failed")
+	})
+	stubReleaseClientset(t, cs, nil)
+
+	out := collectReleaseFailureDiagnostics(context.Background(), &actionContext{}, &chartSpec{ReleaseName: "r", Namespace: "ns"}, true)
+	assert.Contains(t, out, "CrashLoopBackOff (exit 1, 5 restarts)")
+	assert.NotContains(t, out, "events:", "an event-list error drops only the events section")
 }
 
 func TestContainerFailureSummary(t *testing.T) {
