@@ -154,9 +154,33 @@ func TestInitFromKeepHistoryWithUpstreamRemoteUsesSource(t *testing.T) {
 
 	calls := runner.joinedCalls()
 	require.Len(t, calls, 3)
+	// No configured branch: the cloned default branch is kept, with no checkout.
+	assert.Equal(t, "clone -- https://github.com/acme/old-deploy.git "+workdir, calls[0])
 	// The configured remote claims "upstream", so the source moves to "source".
 	assert.Equal(t, "remote rename origin source", calls[1])
 	assert.Equal(t, "remote add upstream https://github.com/acme/deploy.git", calls[2])
+}
+
+func TestInitFromKeepHistoryCheckoutFailureStopsBeforeRemotes(t *testing.T) {
+	runner := newFakeRunner()
+	runner.on("checkout -B main", atmosgit.RunResult{ExitCode: 128}, exitErr(128))
+	provider := New(WithRunner(runner))
+	workdir := filepath.Join(t.TempDir(), "deploy")
+
+	err := provider.Init(context.Background(), &atmosgit.InitOptions{
+		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main"},
+		URI:         "https://github.com/acme/deploy.git",
+		FromURI:     "https://github.com/acme/old-deploy.git",
+		KeepHistory: true,
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrGitCommandExited))
+
+	// Remotes are left untouched when the branch checkout fails.
+	calls := runner.joinedCalls()
+	require.Len(t, calls, 2)
+	assert.Equal(t, "clone -- https://github.com/acme/old-deploy.git "+workdir, calls[0])
+	assert.Equal(t, "checkout -B main", calls[1])
 }
 
 func TestInitRefusesNonEmptyWorkdir(t *testing.T) {
