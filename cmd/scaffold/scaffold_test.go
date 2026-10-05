@@ -136,6 +136,12 @@ func TestScaffoldGenerateCmd_FlagDefinitions(t *testing.T) {
 			shorthand:    "",
 			defaultValue: "50",
 		},
+		{
+			name:         "recreate-deleted flag",
+			flagName:     "recreate-deleted",
+			shorthand:    "",
+			defaultValue: "false",
+		},
 	}
 
 	for _, tt := range tests {
