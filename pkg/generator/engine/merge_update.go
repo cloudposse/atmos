@@ -48,6 +48,24 @@ func (p *Processor) SetMergeDriver(driver merge.Driver) {
 	p.merger.SetDriver(driver)
 }
 
+// SetRecreateDeleted controls whether --update recreates a file the user
+// deleted but the template still generates. False (the default) leaves the
+// deletion in place (see Processor.deletedByUser). True restores the
+// pre-deletion-handling behavior of always recreating it.
+//
+// This is deliberately independent of --force/--merge-strategy rather than
+// reusing --force: --force combined with --update already means "on
+// conflict, the template's version wins" (ResolveConflictStrategy rejects
+// --force with an explicit non-theirs --merge-strategy as contradictory), so
+// tying recreation to it would make "manual conflict resolution" and
+// "recreate what I deleted" mutually exclusive, even though a user may
+// reasonably want both at once.
+func (p *Processor) SetRecreateDeleted(recreate bool) {
+	defer perf.Track(nil, "engine.Processor.SetRecreateDeleted")()
+
+	p.recreateDeleted = recreate
+}
+
 // SetDryRun toggles dry-run mode. When enabled, ProcessFile still renders
 // templates, loads the git merge base, performs the 3-way merge, and runs
 // conflict/threshold checks — every step that can fail — but skips the final
