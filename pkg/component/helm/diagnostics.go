@@ -14,17 +14,23 @@ import (
 )
 
 const (
-	// releaseInstanceLabel is the standard Helm label applied to every resource in
-	// a release; it is the canonical selector for finding a release's pods.
+	// The releaseInstanceLabel constant is the standard Helm label applied to every
+	// resource in a release; it is the canonical selector for a release's pods.
 	releaseInstanceLabel = "app.kubernetes.io/instance"
-	// diagnosticsMaxPods bounds how many not-ready pods are reported so a wide
-	// failure (e.g. a whole DaemonSet) does not produce an unbounded error.
+	// The diagnosticsMaxPods constant bounds how many not-ready pods are reported so
+	// a wide failure (e.g. a whole DaemonSet) does not produce an unbounded error.
 	diagnosticsMaxPods = 10
-	// diagnosticsMaxEvents bounds the events reported per pod.
+	// The diagnosticsMaxEvents constant bounds the events reported per pod.
 	diagnosticsMaxEvents = 5
-	// diagnosticsLogTailLines is how many log lines to tail from a failing
-	// container when verbose diagnostics are enabled.
+	// The diagnosticsLogTailLines constant is how many log lines to tail from a
+	// failing container when verbose diagnostics are enabled.
 	diagnosticsLogTailLines = 20
+	// The diagnosticsMaxMessageLen constant truncates long container and event
+	// messages so one noisy message cannot dominate the error.
+	diagnosticsMaxMessageLen = 200
+	// The diagNewline constant is the line separator used throughout the formatted
+	// diagnostics output.
+	diagNewline = "\n"
 )
 
 // newReleaseClientset builds a Kubernetes clientset for the release's cluster from
@@ -70,24 +76,25 @@ func collectReleaseFailureDiagnostics(ctx context.Context, actx *actionContext, 
 		if reported >= diagnosticsMaxPods {
 			break
 		}
-		pod := &pods.Items[i]
-		section := describeNotReadyPod(ctx, clientset, pod, verbose)
+		section := describeNotReadyPod(ctx, clientset, &pods.Items[i], verbose)
 		if section == "" {
 			continue
 		}
 		b.WriteString(section)
 		reported++
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return strings.TrimRight(b.String(), diagNewline)
 }
 
 // describeNotReadyPod returns the diagnostic lines for a single pod's not-ready
 // containers, or "" when every container is healthy. Verbose mode adds a log tail
 // per failing container and the pod's recent events.
 func describeNotReadyPod(ctx context.Context, clientset kubernetes.Interface, pod *corev1.Pod, verbose bool) string {
-	var failing []corev1.ContainerStatus
+	statuses := allContainerStatuses(pod)
+	var failing []*corev1.ContainerStatus
 	var lines []string
-	for _, status := range allContainerStatuses(pod) {
+	for i := range statuses {
+		status := &statuses[i]
 		summary, isFailing := containerFailureSummary(status)
 		if !isFailing {
 			continue
@@ -100,23 +107,32 @@ func describeNotReadyPod(ctx context.Context, clientset kubernetes.Interface, po
 	}
 
 	var b strings.Builder
-	b.WriteString(strings.Join(lines, "\n"))
-	b.WriteString("\n")
+	b.WriteString(strings.Join(lines, diagNewline))
+	b.WriteString(diagNewline)
 
 	if verbose {
-		for _, status := range failing {
-			if tail := podLogTail(ctx, clientset, pod, status); tail != "" {
-				b.WriteString(fmt.Sprintf("    last log (%s):\n%s\n", status.Name, indentLines(tail, "      ")))
-			}
-		}
-		if events := podEventLines(ctx, clientset, pod); len(events) > 0 {
-			b.WriteString("    events:\n")
-			for _, e := range events {
-				b.WriteString("      " + e + "\n")
-			}
-		}
+		writeVerboseDiagnostics(ctx, &b, clientset, pod, failing)
 	}
 	return b.String()
+}
+
+// writeVerboseDiagnostics appends the per-container log tail and the pod's recent
+// events, used only at debug/trace level.
+func writeVerboseDiagnostics(ctx context.Context, b *strings.Builder, clientset kubernetes.Interface, pod *corev1.Pod, failing []*corev1.ContainerStatus) {
+	for _, status := range failing {
+		if tail := podLogTail(ctx, clientset, pod, status); tail != "" {
+			fmt.Fprintf(b, "    last log (%s):%s%s%s", status.Name, diagNewline, indentLines(tail, "      "), diagNewline)
+		}
+	}
+	events := podEventLines(ctx, clientset, pod)
+	if len(events) == 0 {
+		return
+	}
+	b.WriteString("    events:")
+	b.WriteString(diagNewline)
+	for _, event := range events {
+		b.WriteString("      " + event + diagNewline)
+	}
 }
 
 // allContainerStatuses returns init + regular container statuses so a failing init
@@ -132,7 +148,7 @@ func allContainerStatuses(pod *corev1.Pod) []corev1.ContainerStatus {
 // in a failing state. A container is failing when it is waiting on a non-transient
 // reason (CrashLoopBackOff, ImagePullBackOff, ...) or has terminated with a
 // non-zero exit code. A running or successfully-completed container is not failing.
-func containerFailureSummary(status corev1.ContainerStatus) (string, bool) {
+func containerFailureSummary(status *corev1.ContainerStatus) (string, bool) {
 	switch {
 	case status.State.Waiting != nil && isFailureReason(status.State.Waiting.Reason):
 		return waitingSummary(status), true
@@ -147,18 +163,20 @@ func containerFailureSummary(status corev1.ContainerStatus) (string, bool) {
 	}
 }
 
-func waitingSummary(status corev1.ContainerStatus) string {
+// waitingSummary summarizes a container stuck in a failing Waiting state.
+func waitingSummary(status *corev1.ContainerStatus) string {
 	reason := status.State.Waiting.Reason
 	if last := status.LastTerminationState.Terminated; last != nil {
 		return fmt.Sprintf("%s %s (exit %d, %d restarts)", status.Name, reason, last.ExitCode, status.RestartCount)
 	}
 	msg := strings.TrimSpace(status.State.Waiting.Message)
 	if msg != "" {
-		return fmt.Sprintf("%s %s: %s", status.Name, reason, truncate(msg, 200))
+		return fmt.Sprintf("%s %s: %s", status.Name, reason, truncate(msg, diagnosticsMaxMessageLen))
 	}
 	return fmt.Sprintf("%s %s", status.Name, reason)
 }
 
+// terminatedSummary summarizes a container that exited with a non-zero code.
 func terminatedSummary(name string, term *corev1.ContainerStateTerminated, restarts int32) string {
 	reason := strings.TrimSpace(term.Reason)
 	if reason == "" {
@@ -177,8 +195,7 @@ func isFailureReason(reason string) bool {
 		"CreateContainerConfigError",
 		"CreateContainerError",
 		"InvalidImageName",
-		"RunContainerError",
-		"CrashLoopBackoff":
+		"RunContainerError":
 		return true
 	default:
 		return false
@@ -188,7 +205,7 @@ func isFailureReason(reason string) bool {
 // podLogTail returns the last lines of the failing container's log. For a
 // restarted (crash-looping) container it reads the previous instance's log, which
 // holds the crash output; otherwise it reads the current instance.
-func podLogTail(ctx context.Context, clientset kubernetes.Interface, pod *corev1.Pod, status corev1.ContainerStatus) string {
+func podLogTail(ctx context.Context, clientset kubernetes.Interface, pod *corev1.Pod, status *corev1.ContainerStatus) string {
 	tail := int64(diagnosticsLogTailLines)
 	opts := &corev1.PodLogOptions{
 		Container: status.Name,
@@ -200,7 +217,7 @@ func podLogTail(ctx context.Context, clientset kubernetes.Interface, pod *corev1
 		log.Debug("helm: could not read pod log for failure diagnostics", "pod", pod.Name, "container", status.Name, "error", err)
 		return ""
 	}
-	return strings.TrimRight(string(raw), "\n")
+	return strings.TrimRight(string(raw), diagNewline)
 }
 
 // podEventLines returns up to diagnosticsMaxEvents recent events for the pod,
@@ -218,7 +235,7 @@ func podEventLines(ctx context.Context, clientset kubernetes.Interface, pod *cor
 			continue
 		}
 		message := strings.TrimSpace(event.Message)
-		lines = append(lines, strings.TrimSpace(fmt.Sprintf("%s  %s", event.Reason, truncate(message, 200))))
+		lines = append(lines, strings.TrimSpace(fmt.Sprintf("%s  %s", event.Reason, truncate(message, diagnosticsMaxMessageLen))))
 		if len(lines) >= diagnosticsMaxEvents {
 			break
 		}
@@ -226,14 +243,16 @@ func podEventLines(ctx context.Context, clientset kubernetes.Interface, pod *cor
 	return lines
 }
 
+// indentLines prefixes every line of s with prefix.
 func indentLines(s, prefix string) string {
-	lines := strings.Split(s, "\n")
+	lines := strings.Split(s, diagNewline)
 	for i, line := range lines {
 		lines[i] = prefix + line
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, diagNewline)
 }
 
+// truncate shortens s to maxLen bytes, appending an ellipsis when it was cut.
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

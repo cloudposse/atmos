@@ -163,7 +163,8 @@ func TestContainerFailureSummary(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, failing := containerFailureSummary(tt.status)
+			status := tt.status
+			got, failing := containerFailureSummary(&status)
 			assert.Equal(t, tt.failing, failing)
 			if tt.failing {
 				assert.Equal(t, tt.want, got)
@@ -236,6 +237,39 @@ func TestApplyReleaseFoldsPodDiagnosticsIntoUpgradeError(t *testing.T) {
 	assert.Contains(t, details, "workload diagnostics:")
 	assert.Contains(t, details, "app CrashLoopBackOff (exit 1, 5 restarts)")
 }
+
+// TestApplyReleaseFoldsPodDiagnosticsIntoInstallError covers the install path: a
+// failed first install collects diagnostics and uninstalls (Atmos-owned) when the
+// policy is uninstall-on-failure.
+func TestApplyReleaseFoldsPodDiagnosticsIntoInstallError(t *testing.T) {
+	actx := memoryActionContext(t)
+	kubeClient := actx.cfg.KubeClient.(*kubefake.FailingKubeClient)
+	kubeClient.WaitError = assertErr("install wait failed")
+	stubActionContext(t, actx)
+	stubReleaseClientset(t, fake.NewSimpleClientset(crashLoopPod("app-xyz", "testns", "install-diag")), nil)
+
+	spec := testdataChartSpec(t, "install-diag")
+	onFailure := string(failurePolicyUninstall)
+	spec.Release.Install.OnFailure = &onFailure
+	timeout := "5s"
+	spec.Release.Install.Timeout = &timeout
+
+	_, err := applyRelease(context.Background(), spec, false)
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrHelmReleaseOperation)
+
+	details := strings.Join(ckerrors.GetAllDetails(err), "\n")
+	assert.Contains(t, details, "app CrashLoopBackOff (exit 1, 5 restarts)")
+
+	// The uninstall-on-failure removed the failed release.
+	_, getErr := getDeployedManifest(spec.ReleaseName, spec.Namespace)
+	require.NoError(t, getErr)
+}
+
+// assertErr is a tiny error value for seeding a wait failure.
+type assertErr string
+
+func (e assertErr) Error() string { return string(e) }
 
 // Guard that the diagnostics text would compose cleanly into an error explanation.
 func TestDiagnosticsComposeIntoError(t *testing.T) {

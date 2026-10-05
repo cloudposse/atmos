@@ -407,6 +407,10 @@ func releaseOperationErrorWithDiagnostics(operation string, spec *chartSpec, cau
 // slow or unreachable cluster never delays surfacing the original failure.
 const releaseDiagnosticsTimeout = 30 * time.Second
 
+// releaseErrWrapFormat wraps a sentinel, the release name, and a cause into one
+// error ("sentinel "release": cause").
+const releaseErrWrapFormat = "%w %q: %w"
+
 // diagnoseReleaseFailure collects crash-looping pod diagnostics for a failed
 // release operation before any rollback/uninstall deletes the evidence. The log
 // tail and events are gated behind debug/trace so normal output is unchanged. It
@@ -434,10 +438,10 @@ func rollbackFailedUpgrade(actx *actionContext, spec *chartSpec, upgradeErr erro
 	rollback.WaitForJobs = policy.WaitForJobs
 	rollback.Timeout = policy.Timeout
 	if rbErr := rollback.Run(spec.ReleaseName); rbErr != nil {
-		upgradeErr = errors.Join(upgradeErr, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseRollback, spec.ReleaseName, rbErr))
+		upgradeErr = errors.Join(upgradeErr, fmt.Errorf(releaseErrWrapFormat, errUtils.ErrHelmReleaseRollback, spec.ReleaseName, rbErr))
 	}
 	if historyErr := enforceReleaseHistoryLimit(actx.cfg.Releases, spec.ReleaseName, policy.MaxHistory); historyErr != nil {
-		upgradeErr = errors.Join(upgradeErr, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr))
+		upgradeErr = errors.Join(upgradeErr, fmt.Errorf(releaseErrWrapFormat, errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr))
 	}
 	return upgradeErr
 }
@@ -451,7 +455,7 @@ func uninstallFailedInstall(actx *actionContext, spec *chartSpec, installErr err
 	uninstall.WaitStrategy = policy.WaitStrategy
 	uninstall.Timeout = policy.Timeout
 	if _, rbErr := uninstall.Run(spec.ReleaseName); rbErr != nil && !errors.Is(rbErr, driver.ErrReleaseNotFound) {
-		installErr = errors.Join(installErr, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, rbErr))
+		installErr = errors.Join(installErr, fmt.Errorf(releaseErrWrapFormat, errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, rbErr))
 	}
 	return installErr
 }
