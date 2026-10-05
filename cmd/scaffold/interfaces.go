@@ -23,6 +23,10 @@ type ScaffoldUI interface {
 	// SetMergeDriver selects the merger used by scaffold updates (YAML-aware
 	// auto-detection vs. forcing the line-oriented text merger).
 	SetMergeDriver(driver merge.Driver)
+	// SetRecreateDeleted controls whether --update recreates a file the user
+	// deleted but the template still generates (default false: the deletion
+	// is left in place).
+	SetRecreateDeleted(recreate bool)
 	SetDryRun(dryRun bool)
 	SetSkipHooks(skip func(string) bool)
 	// SetUpdateStrategy selects where --update's 3-way merge base comes from
