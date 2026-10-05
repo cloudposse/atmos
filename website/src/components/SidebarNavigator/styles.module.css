@@ -1,5 +1,5 @@
 .navigator {
-  --navigation-muted: color-mix(in srgb, var(--ifm-font-color-base) 70%, var(--ifm-background-color));
+  --navigation-muted: color-mix(in srgb, var(--ifm-font-color-base) 70%, var(--ifm-background-surface-color));
   margin: 0;
   padding: 0;
 }
@@ -8,12 +8,18 @@
   display: none !important;
 }
 
+/* Let the sticky toolbar cover the scrollport's top edge. Menu padding would
+   leave a strip of scrolling links visible above its opaque background. */
+:global(.menu):has(.navigator) {
+  padding-top: 0;
+}
+
 .toolbar {
   position: sticky;
   top: 0;
   z-index: 2;
   padding: 0.5rem 0.5rem 0.75rem;
-  background: var(--ifm-background-color);
+  background: var(--ifm-background-surface-color);
 }
 
 .filterRow {
@@ -24,7 +30,7 @@
   padding: 0 0.625rem;
   border: 1px solid color-mix(in srgb, var(--ifm-font-color-base) 16%, transparent);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--ifm-font-color-base) 3%, var(--ifm-background-color));
+  background: color-mix(in srgb, var(--ifm-font-color-base) 3%, var(--ifm-background-surface-color));
   color: var(--ifm-color-content-secondary);
 }
 
