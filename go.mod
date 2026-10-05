@@ -491,6 +491,7 @@ require (
 	github.com/updatecli/updatecli v0.999.0
 	golang.org/x/image v0.45.0
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
+	k8s.io/api v0.36.3
 )
 
 require (
@@ -604,7 +605,6 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
-	k8s.io/api v0.36.3 // indirect
 	k8s.io/apiextensions-apiserver v0.36.1 // indirect
 	k8s.io/apiserver v0.36.1 // indirect
 	k8s.io/cli-runtime v0.36.2 // indirect
