@@ -1,9 +1,13 @@
 package ui
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
@@ -146,4 +150,241 @@ func (ui *InitUI) renderPristineBaseFiles(oldConfig *tmpl.Configuration, oldScaf
 			Err()
 	}
 	return nil
+}
+
+// templateDeletionResult bundles handleTemplateDeletions's counts (grouped
+// into a struct, rather than three separate return values alongside err, to
+// stay under revive's function-result-limit).
+type templateDeletionResult struct {
+	successCount int
+	errorCount   int
+	failedPaths  []string
+}
+
+// handleTemplateDeletions deletes a file the template stopped generating
+// between the old and new ref. This is only possible for
+// engine.UpdateStrategyRendered -- it's the only strategy with a full old-ref
+// file tree to diff against (ui.renderedBaseRoot, set by setupUpdateBase from
+// renderPristineBase's own full when-filtered render of the old config). By
+// contrast, engine.UpdateStrategyTracked has no equivalent: there is no safe
+// way to enumerate "every file the template generated at base-ref" without
+// conflating unrelated files that merely happen to exist in that historical
+// commit, so it's a documented limitation instead (see
+// docs/prd/atmos-scaffold.md).
+//
+// The newPaths argument is executeWithSetup's own seenRenderedPaths map: its
+// keys are exactly this run's current output paths (populated only for
+// spec.When-true, actually-attempted files -- see checkDuplicateRenderedPath),
+// so no separate "new file set" needs computing here. Every file under
+// ui.renderedBaseRoot not in newPaths is a deletion candidate, handled by
+// processDeletionCandidate. The force argument is forwarded to it unchanged
+// -- see that function's own doc comment for what it does here.
+func (ui *InitUI) handleTemplateDeletions(targetPath string, newPaths map[string]string, force bool) (templateDeletionResult, error) {
+	if ui.renderedBaseRoot == "" {
+		return templateDeletionResult{}, nil
+	}
+
+	var result templateDeletionResult
+	var failureErrs []error
+	walkErr := filepath.WalkDir(ui.renderedBaseRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		relPath, relErr := filepath.Rel(ui.renderedBaseRoot, path)
+		if relErr != nil {
+			return relErr
+		}
+		relPath = filepath.Clean(relPath)
+		if _, stillWanted := newPaths[relPath]; stillWanted {
+			return nil
+		}
+
+		deleted, candidateErr := ui.processDeletionCandidate(targetPath, relPath, force)
+		switch {
+		case candidateErr != nil:
+			result.errorCount++
+			result.failedPaths = append(result.failedPaths, relPath)
+			failureErrs = append(failureErrs, candidateErr)
+		case deleted:
+			result.successCount++
+		}
+		return nil
+	})
+	if walkErr != nil {
+		return result, fmt.Errorf("failed to scan the rendered base for removed files: %w", walkErr)
+	}
+	if len(failureErrs) > 0 {
+		return result, errors.Join(failureErrs...)
+	}
+	return result, nil
+}
+
+// processDeletionCandidate handles one path the template no longer generates
+// (see handleTemplateDeletions): deletes it when the on-disk copy still
+// matches the old pristine render exactly, and silently no-ops when the file
+// is already gone.
+//
+// When local edits survive, force decides the outcome: false (default)
+// reports an unresolved merge conflict (reusing errUtils.ErrMergeConflict and
+// the same "✗ path (error: ...)" shape a real content conflict already uses
+// -- see merge_update.go's mergeFile -- rather than a new reporting shape);
+// true deletes it anyway. This mirrors --force's existing meaning elsewhere
+// in this subsystem ("on conflict, the template's choice wins" -- see
+// merge.ResolveConflictStrategy) -- here the template's choice is deletion,
+// so --force deletes through the local edits instead of leaving them as an
+// unresolved conflict.
+func (ui *InitUI) processDeletionCandidate(targetPath, relPath string, force bool) (deleted bool, err error) {
+	if !fileExistsAt(targetPath, relPath) {
+		return false, nil
+	}
+	targetFullPath := filepath.Join(targetPath, relPath)
+
+	if symlinkErr := ui.refuseSymlinkDeletionCandidate(targetPath, relPath, targetFullPath); symlinkErr != nil {
+		return false, symlinkErr
+	}
+
+	oldContent, err := os.ReadFile(filepath.Join(ui.renderedBaseRoot, relPath))
+	if err != nil {
+		return false, fmt.Errorf("failed to read the old rendered base for `%s`: %w", relPath, err)
+	}
+	currentContent, err := os.ReadFile(targetFullPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to read `%s`: %w", relPath, err)
+	}
+
+	locallyModified := !bytes.Equal(oldContent, currentContent)
+	if locallyModified && !force {
+		return false, ui.reportDeletionConflict(relPath)
+	}
+
+	if err := ui.deleteCandidate(targetFullPath, relPath, locallyModified); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// deletionStatusLabel picks the per-file status label deleteCandidate
+// reports, per this file's deletedStatus/dryRunDeleteStatus/
+// forcedDeletedStatus/dryRunForcedDeleteStatus constants (see ui.go) -- split
+// out of deleteCandidate purely to keep processDeletionCandidate's own
+// cyclomatic complexity down.
+func deletionStatusLabel(locallyModified, dryRun bool) string {
+	switch {
+	case locallyModified && dryRun:
+		return dryRunForcedDeleteStatus
+	case locallyModified:
+		return forcedDeletedStatus
+	case dryRun:
+		return dryRunDeleteStatus
+	default:
+		return deletedStatus
+	}
+}
+
+// deleteCandidate performs (or, in dry-run, only reports) the deletion
+// processDeletionCandidate has already decided on -- either the file was
+// unmodified, or force overrode a local-edit conflict (locallyModified tracks
+// which, purely to pick the right status label via deletionStatusLabel).
+func (ui *InitUI) deleteCandidate(targetFullPath, relPath string, locallyModified bool) error {
+	status := deletionStatusLabel(locallyModified, ui.processor.DryRun)
+	if !ui.processor.DryRun {
+		if removeErr := os.Remove(targetFullPath); removeErr != nil {
+			return fmt.Errorf("failed to delete `%s`: %w", relPath, removeErr)
+		}
+	}
+	ui.writeOutput(fileStatusFormat,
+		ui.successStyle.Render(ui.checkmark),
+		relPath,
+		ui.grayStyle.Render(status))
+	return nil
+}
+
+// refuseSymlinkDeletionCandidate reports (and returns) an error if
+// targetFullPath is itself a symlink, OR if any ancestor directory between
+// targetPath and targetFullPath is one -- mirroring BOTH halves of
+// engine.validateWriteTarget's write-side protection, not just the leaf
+// check. The ancestor case matters because fileExistsAt (processDeletionCandidate's
+// own existence check, via os.Stat) follows symlinks: if targetPath/somedir is
+// a symlink to an external directory, a leaf-only Lstat on
+// targetPath/somedir/file.txt sees an ordinary file -- the symlink is one
+// level up -- and would otherwise let the byte-comparison below read, and a
+// clean match or --force delete, content entirely outside the target
+// directory.
+//
+// Returns nil when the path is a plain file with no symlink in its ancestry,
+// and also when the leaf has already vanished (a race between the caller's
+// own fileExistsAt check and here) -- processDeletionCandidate's own
+// os.ReadFile calls right after this surface that case properly. Any other
+// Lstat/EvalSymlinks failure (e.g. permission denied) is returned as a real
+// error instead of silently treated as safe.
+func (ui *InitUI) refuseSymlinkDeletionCandidate(targetPath, relPath, targetFullPath string) error {
+	info, lstatErr := os.Lstat(targetFullPath)
+	switch {
+	case os.IsNotExist(lstatErr):
+		return nil
+	case lstatErr != nil:
+		return fmt.Errorf("failed to check `%s`: %w", relPath, lstatErr)
+	case info.Mode()&os.ModeSymlink != 0:
+		return ui.reportDeletionGuardError(errUtils.ErrSymlinkWrite, relPath,
+			fmt.Sprintf("Refusing to inspect `%s` for deletion: it's a symlink", relPath),
+			"Remove the symlink manually if it's no longer needed, or replace it with a real file")
+	}
+
+	realTargetPath, err := filepath.EvalSymlinks(targetPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve target directory `%s`: %w", targetPath, err)
+	}
+	realParentPath, err := filepath.EvalSymlinks(filepath.Dir(targetFullPath))
+	if err != nil {
+		return fmt.Errorf("failed to resolve the directory containing `%s`: %w", relPath, err)
+	}
+	if realParentPath != realTargetPath && !strings.HasPrefix(realParentPath, realTargetPath+string(filepath.Separator)) {
+		return ui.reportDeletionGuardError(errUtils.ErrPathTraversal, relPath,
+			fmt.Sprintf("Refusing to inspect `%s` for deletion: its containing directory escapes the target directory", relPath),
+			"Check for symlinks that redirect outside the target directory")
+	}
+	return nil
+}
+
+// reportDeletionGuardError builds, reports (via the same "✗ path (error:
+// ...)" shape reportDeletionConflict uses), and returns a deletion-safety
+// guard error. Shared by refuseSymlinkDeletionCandidate's two distinct
+// cases, a symlink leaf and an ancestor directory that escapes the target,
+// which intentionally use different sentinels (ErrSymlinkWrite vs.
+// ErrPathTraversal) to match engine.validateWriteTarget's own distinction.
+func (ui *InitUI) reportDeletionGuardError(sentinel error, relPath, explanation, hint string) error {
+	guardErr := errUtils.Build(sentinel).
+		WithExplanation(explanation).
+		WithHint(hint).
+		WithContext("file_path", relPath).
+		WithExitCode(2).
+		Err()
+	ui.writeOutput(fileStatusFormat,
+		ui.errorStyle.Render(ui.xMark),
+		relPath,
+		ui.grayStyle.Render(fmt.Sprintf("(error: %v)", guardErr)))
+	return guardErr
+}
+
+// reportDeletionConflict reports (and returns) the unresolved-merge-conflict
+// error for a deletion candidate with surviving local edits and force=false
+// (see processDeletionCandidate's own doc comment for what force=true does
+// instead), reusing the same "✗ path (error: ...)" shape a real content
+// conflict already uses -- see merge_update.go's mergeFile.
+func (ui *InitUI) reportDeletionConflict(relPath string) error {
+	conflictErr := errUtils.Build(errUtils.ErrMergeConflict).
+		WithExplanationf("`%s` was removed from the template but has local modifications", relPath).
+		WithHint("Resolve manually: delete the file if it's no longer needed, or keep it -- future updates won't touch it again since the template no longer generates it").
+		WithHint("Or re-run with `--force` to delete it anyway").
+		WithContext("file_path", relPath).
+		WithExitCode(1).
+		Err()
+	ui.writeOutput(fileStatusFormat,
+		ui.errorStyle.Render(ui.xMark),
+		relPath,
+		ui.grayStyle.Render(fmt.Sprintf("(error: %v)", conflictErr)))
+	return conflictErr
 }
