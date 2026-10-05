@@ -3,10 +3,13 @@ package helm
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -220,27 +223,56 @@ func podLogTail(ctx context.Context, clientset kubernetes.Interface, pod *corev1
 	return strings.TrimRight(string(raw), diagNewline)
 }
 
-// podEventLines returns up to diagnosticsMaxEvents recent events for the pod,
-// formatted "Reason  Message".
+// podEventLines returns up to diagnosticsMaxEvents of the pod's most recent
+// events, newest first, formatted "Reason  Message". It narrows the list
+// server-side to this pod (Kubernetes does not guarantee list order, and an
+// event-heavy namespace would otherwise return everything), sorts newest-first by
+// the best available timestamp, then truncates. The client-side kind/name check is
+// kept as a defensive fallback for backends that ignore the field selector.
 func podEventLines(ctx context.Context, clientset kubernetes.Interface, pod *corev1.Pod) []string {
-	events, err := clientset.CoreV1().Events(pod.Namespace).List(ctx, metav1.ListOptions{})
+	selector := fields.Set{
+		"involvedObject.name": pod.Name,
+		"involvedObject.kind": "Pod",
+	}.AsSelector().String()
+	events, err := clientset.CoreV1().Events(pod.Namespace).List(ctx, metav1.ListOptions{FieldSelector: selector})
 	if err != nil {
 		log.Debug("helm: could not list events for failure diagnostics", "pod", pod.Name, "error", err)
 		return nil
 	}
-	var lines []string
+
+	items := make([]*corev1.Event, 0, len(events.Items))
 	for i := range events.Items {
 		event := &events.Items[i]
 		if event.InvolvedObject.Kind != "Pod" || event.InvolvedObject.Name != pod.Name {
 			continue
 		}
-		message := strings.TrimSpace(event.Message)
-		lines = append(lines, strings.TrimSpace(fmt.Sprintf("%s  %s", event.Reason, truncate(message, diagnosticsMaxMessageLen))))
+		items = append(items, event)
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return eventTime(items[i]).After(eventTime(items[j]))
+	})
+
+	var lines []string
+	for _, event := range items {
 		if len(lines) >= diagnosticsMaxEvents {
 			break
 		}
+		message := strings.TrimSpace(event.Message)
+		lines = append(lines, strings.TrimSpace(fmt.Sprintf("%s  %s", event.Reason, truncate(message, diagnosticsMaxMessageLen))))
 	}
 	return lines
+}
+
+// eventTime returns the most reliable timestamp for ordering an event. LastTimestamp
+// is optional in newer APIs, so fall back to EventTime and then CreationTimestamp.
+func eventTime(event *corev1.Event) time.Time {
+	if !event.LastTimestamp.IsZero() {
+		return event.LastTimestamp.Time
+	}
+	if !event.EventTime.IsZero() {
+		return event.EventTime.Time
+	}
+	return event.CreationTimestamp.Time
 }
 
 // indentLines prefixes every line of s with prefix.

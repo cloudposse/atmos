@@ -3,8 +3,10 @@ package helm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	ckerrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -143,6 +145,45 @@ func TestCollectReleaseFailureDiagnostics_EventListErrorStillReportsStatus(t *te
 	out := collectReleaseFailureDiagnostics(context.Background(), &actionContext{}, &chartSpec{ReleaseName: "r", Namespace: "ns"}, true)
 	assert.Contains(t, out, "CrashLoopBackOff (exit 1, 5 restarts)")
 	assert.NotContains(t, out, "events:", "an event-list error drops only the events section")
+}
+
+// TestPodEventLinesNewestFirstAndBounded covers the #3273 review: events are
+// returned newest-first, bounded to diagnosticsMaxEvents, and scoped to the pod.
+func TestPodEventLinesNewestFirstAndBounded(t *testing.T) {
+	now := time.Now()
+	var objs []runtime.Object
+	for i := 0; i < 7; i++ {
+		objs = append(objs, &corev1.Event{
+			ObjectMeta:     metav1.ObjectMeta{Name: fmt.Sprintf("e%d", i), Namespace: "ns"},
+			InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "p"},
+			Reason:         fmt.Sprintf("R%d", i),
+			Message:        "msg",
+			LastTimestamp:  metav1.NewTime(now.Add(time.Duration(i) * time.Minute)),
+		})
+	}
+	// An event for a different pod must be excluded by the client-side check.
+	objs = append(objs, &corev1.Event{
+		ObjectMeta:     metav1.ObjectMeta{Name: "other", Namespace: "ns"},
+		InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "q"},
+		Reason:         "OTHER",
+	})
+
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "ns"}}
+	lines := podEventLines(context.Background(), fake.NewSimpleClientset(objs...), pod)
+
+	require.Len(t, lines, diagnosticsMaxEvents)
+	assert.True(t, strings.HasPrefix(lines[0], "R6"), "newest event (R6) must be first, got %q", lines[0])
+	assert.True(t, strings.HasPrefix(lines[1], "R5"))
+	assert.NotContains(t, strings.Join(lines, "\n"), "OTHER", "another pod's events must be excluded")
+}
+
+// TestEventTimeFallbacks confirms the ordering timestamp falls back from
+// LastTimestamp to EventTime to CreationTimestamp.
+func TestEventTimeFallbacks(t *testing.T) {
+	ts := time.Now().Truncate(time.Second)
+	assert.Equal(t, ts, eventTime(&corev1.Event{LastTimestamp: metav1.NewTime(ts)}))
+	assert.Equal(t, ts, eventTime(&corev1.Event{EventTime: metav1.NewMicroTime(ts)}))
+	assert.Equal(t, ts, eventTime(&corev1.Event{ObjectMeta: metav1.ObjectMeta{CreationTimestamp: metav1.NewTime(ts)}}))
 }
 
 func TestContainerFailureSummary(t *testing.T) {

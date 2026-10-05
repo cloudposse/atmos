@@ -15,6 +15,7 @@ import (
 	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/registry"
 	helmrelease "helm.sh/helm/v4/pkg/release"
+	rcommon "helm.sh/helm/v4/pkg/release/common"
 	release "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage"
 	"helm.sh/helm/v4/pkg/storage/driver"
@@ -431,12 +432,33 @@ func diagnoseReleaseFailure(ctx context.Context, actx *actionContext, spec *char
 // as the authoritative history trim.
 func rollbackFailedUpgrade(actx *actionContext, spec *chartSpec, upgradeErr error) error {
 	policy := spec.Lifecycle.Policy
+
+	// Roll back to the latest *successful* revision, mirroring Helm's own
+	// failRelease: version 0 would target the immediately-previous revision, which
+	// may itself be a failed one.
+	targetVersion, ok, selErr := lastSuccessfulRevision(actx.cfg.Releases, spec.ReleaseName)
+	if selErr != nil {
+		return errors.Join(upgradeErr, fmt.Errorf(releaseErrWrapFormat, errUtils.ErrHelmReleaseRollback, spec.ReleaseName, selErr))
+	}
+	if !ok {
+		// No previously successful release to roll back to; leave the failed release
+		// in place rather than rolling back to another failed revision.
+		return upgradeErr
+	}
+
 	rollback := action.NewRollback(actx.cfg)
+	rollback.Version = targetVersion
 	rollback.MaxHistory = policy.MaxHistory
 	rollback.CleanupOnFail = policy.CleanupOnFailure
 	rollback.WaitStrategy = policy.WaitStrategy
 	rollback.WaitForJobs = policy.WaitForJobs
 	rollback.Timeout = policy.Timeout
+	// Honor the release's chart-hook and apply-method policy, matching the upgrade.
+	rollback.DisableHooks = !policy.ChartHooks
+	rollback.ForceConflicts = policy.ForceConflicts
+	if policy.ServerSideApply != serverSideApplyUnset {
+		rollback.ServerSideApply = string(policy.ServerSideApply)
+	}
 	if rbErr := rollback.Run(spec.ReleaseName); rbErr != nil {
 		upgradeErr = errors.Join(upgradeErr, fmt.Errorf(releaseErrWrapFormat, errUtils.ErrHelmReleaseRollback, spec.ReleaseName, rbErr))
 	}
@@ -444,6 +466,33 @@ func rollbackFailedUpgrade(actx *actionContext, spec *chartSpec, upgradeErr erro
 		upgradeErr = errors.Join(upgradeErr, fmt.Errorf(releaseErrWrapFormat, errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr))
 	}
 	return upgradeErr
+}
+
+// lastSuccessfulRevision returns the highest release revision whose status is
+// deployed or superseded (a previously successful release). A rollback after a
+// failed upgrade must target such a revision rather than an earlier failed one.
+func lastSuccessfulRevision(releases *storage.Storage, name string) (int, bool, error) {
+	history, err := releases.History(name)
+	if err != nil {
+		if errors.Is(err, driver.ErrReleaseNotFound) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	best := -1
+	for _, stored := range history {
+		rel, ok := stored.(*release.Release)
+		if !ok || rel.Info == nil {
+			continue
+		}
+		if rel.Info.Status != rcommon.StatusDeployed && rel.Info.Status != rcommon.StatusSuperseded {
+			continue
+		}
+		if rel.Version > best {
+			best = rel.Version
+		}
+	}
+	return best, best >= 0, nil
 }
 
 // uninstallFailedInstall removes a failed first install (Atmos owns the
