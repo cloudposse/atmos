@@ -1701,6 +1701,7 @@ var (
 	ErrHelmReleaseHistory            = errors.New("failed to inspect helm release history")
 	ErrHelmReleaseUpgrade            = errors.New("failed to upgrade helm release")
 	ErrHelmReleaseUninstall          = errors.New("failed to uninstall helm release")
+	ErrHelmReleaseRollback           = errors.New("failed to roll back helm release")
 	ErrHelmReleaseOperation          = errors.New("failed to perform helm release operation")
 )
 
