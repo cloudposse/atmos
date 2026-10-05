@@ -339,18 +339,4 @@ module.exports = {
     link: { type: "doc", id: "stacks/stacks" },
     items: sorted(items),
   },
-  stackGuides: {
-    type: "category",
-    label: "Stack Guides",
-    className: "sidebar-title",
-    collapsible: true,
-    collapsed: true,
-    items: [
-      {
-        type: "ref",
-        id: "tutorials/sharing-state/remote-state-module",
-        label: "Remote State",
-      },
-    ],
-  },
 };

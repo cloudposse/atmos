@@ -11,7 +11,7 @@
 
 // @ts-check
 
-const {stackConfiguration, stackGuides} = require('./sidebars/stacks');
+const {stackConfiguration} = require('./sidebars/stacks');
 
 module.exports = {
     tutorials: [
@@ -351,7 +351,6 @@ module.exports = {
         },
 
         stackConfiguration,
-        stackGuides,
 
         {
             type: 'category',
@@ -376,7 +375,6 @@ module.exports = {
             collapsed: true,
             link: {type: 'doc', id: 'workflows/workflows/index'},
             items: [
-                {type: 'link', label: 'Steps reference', href: '/steps'},
                 {
                     type: 'category',
                     label: 'workflow',
@@ -390,6 +388,7 @@ module.exports = {
                         {type: 'doc', id: 'workflows/workflows/workflow/container', label: 'container'},
                         {type: 'doc', id: 'workflows/workflows/workflow/output', label: 'output'},
                         {type: 'doc', id: 'workflows/workflows/workflow/show', label: 'show'},
+                        {type: 'link', label: 'steps', href: '/steps'},
                     ],
                 },
             ]

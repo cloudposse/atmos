@@ -5,12 +5,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
 import navigation from "./stacks.js";
+import sidebars from "../sidebars.js";
 import {
   filterItems,
   findSection,
 } from "../src/components/SidebarNavigator/navigation.mjs";
 
-const { stackConfiguration: tree, stackGuides } = navigation;
+const { stackConfiguration: tree } = navigation;
+const howTo = sidebars.cli.find((item) => item.label === "How-To Guides");
+const sharingState = howTo.items.find((item) => item.label === "Sharing State");
+const remoteStateGuide = sharingState.items.find(
+  (item) => item.label === "Remote State Module",
+);
 const at = (...labels) =>
   labels.reduce(
     (item, label) => item?.items?.find((child) => child.label === label),
@@ -130,7 +136,7 @@ test("shared fields retain canonical pages and use references for repeated leave
     assert.equal(at(key), undefined);
   assert.ok(at("terraform", "backend"));
   assert.ok(at("components", "terraform", "<name>", "command"));
-  const nodes = [...walk(tree), ...walk(stackGuides)];
+  const nodes = [...walk(tree), remoteStateGuide];
   const ids = new Set(
     nodes.flatMap((item) => [item.id, item.link?.id]).filter(Boolean),
   );
@@ -147,8 +153,8 @@ test("shared fields retain canonical pages and use references for repeated leave
   }
 });
 
-test("filtering preserves YAML ancestry and guides have their own section", () => {
-  const resolved = [resolve(tree), resolve(stackGuides)];
+test("filtering preserves YAML ancestry and state guides belong to How-To", () => {
+  const resolved = [resolve(tree), resolve(howTo)];
   const matches = filterItems(resolved, "terraform mocks");
   assert.equal(matches[0].items[0].label, "components");
   assert.equal(matches[0].items[0].items[0].items[0].label, "<name>");
@@ -160,12 +166,17 @@ test("filtering preserves YAML ancestry and guides have their own section", () =
   assert.equal(at("settings", "depends_on").label, "depends_on");
 });
 
-test("Stack Guides links to the visible canonical guide instead of its hidden redirect", () => {
-  assert.equal(stackGuides.items[0].type, "ref");
-  assert.equal(stackGuides.items[0].id, remoteStateId);
+test("Remote State appears once under How-To without a standalone Stack Guides group", () => {
+  assert.equal(sidebars.cli.some((item) => item.label === "Stack Guides"), false);
+  assert.equal(
+    sidebars.cli.flatMap(walk).filter((item) => item.id === remoteStateId).length,
+    1,
+  );
+  assert.equal(remoteStateGuide.type, "doc");
+  assert.equal(remoteStateGuide.id, remoteStateId);
   assert.notEqual(remoteState.sidebar_class_name, "hidden");
   assert.equal(
-    resolve(stackGuides).items[0].href,
+    resolve(remoteStateGuide).href,
     "/stacks/sharing-state/remote-state-module",
   );
 });
