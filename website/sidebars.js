@@ -55,7 +55,7 @@ module.exports = {
         }
     ],
     docs: [
-        {type: 'doc', id: 'learn/index', label: 'Overview'},
+        {type: 'doc', id: 'learn/index', label: 'Learn', customProps: {navigationOverview: true}},
         {
             type: 'category',
             label: 'Get Started',

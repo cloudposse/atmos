@@ -161,6 +161,18 @@ export default function SidebarNavigator({
   }
 
   const selected = section === null ? null : prepared[section];
+  const overview = prepared.find(
+    (item) => item.type === "link" && item.customProps?.navigationOverview,
+  );
+  const headingLink =
+    selected?.type === "category"
+      ? selected.href && !selected.linkUnlisted
+        ? selected
+        : undefined
+      : section === null && overview?.type === "link"
+        ? overview
+        : undefined;
+  const headingLabel = selected?.label || `All ${sidebarLabel(sidebarName)}`;
   const mounted = new Set([...visited, ...(section === null ? [] : [section])]);
   return (
     <li ref={rootRef} className={styles.navigator}>
@@ -221,30 +233,28 @@ export default function SidebarNavigator({
         >
           {filtering ? (
             `Matches in ${sidebarLabel(sidebarName)}`
-          ) : selected?.type === "category" &&
-            selected.href &&
-            !selected.linkUnlisted ? (
+          ) : headingLink ? (
             <Link
               className={styles.sectionOverview}
-              to={selected.href}
+              to={headingLink.href}
               aria-current={
-                normalizePath(selected.href) === normalizePath(activePath)
+                normalizePath(headingLink.href) === normalizePath(activePath)
                   ? "page"
                   : undefined
               }
               onClick={() =>
                 navigate({
                   type: "link",
-                  label: selected.label,
-                  href: selected.href!,
+                  label: headingLabel,
+                  href: headingLink.href!,
                 })
               }
             >
-              {selected.label}
-              <RouteStatusDot href={selected.href} />
+              {headingLabel}
+              <RouteStatusDot href={headingLink.href} />
             </Link>
           ) : (
-            selected?.label || `All ${sidebarLabel(sidebarName)}`
+            headingLabel
           )}
           {!filtering && <NavigationScope scope={selected?.customProps?.yamlScope} />}
         </h2>
@@ -252,7 +262,7 @@ export default function SidebarNavigator({
       <div data-sections hidden={filtering || section !== null}>
         <ul className="menu__list">
           {prepared.map((item, index) =>
-            item.type === "category" ? (
+            item.customProps?.navigationOverview ? null : item.type === "category" ? (
               <li key={index} className="menu__list-item">
                 {item.href && !item.linkUnlisted ? (
                   <Link

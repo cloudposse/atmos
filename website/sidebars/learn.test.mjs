@@ -6,11 +6,12 @@ import {
   filterItems,
 } from "../src/components/SidebarNavigator/navigation.mjs";
 
-test("Learn has its own overview beside its six learning sections", () => {
+test("Learn exposes its overview through the heading above its six learning sections", () => {
   assert.deepEqual(sidebars.docs[0], {
     type: "doc",
     id: "learn/index",
-    label: "Overview",
+    label: "Learn",
+    customProps: { navigationOverview: true },
   });
   assert.deepEqual(
     sidebars.docs
