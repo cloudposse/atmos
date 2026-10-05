@@ -39,7 +39,7 @@ function doc(label, id) {
 }
 
 /** Build an alphabetical YAML grouping, optionally linked to an existing page. */
-function category(label, items, id) {
+function category(label, items, id, yamlScope) {
   const yamlReference = Boolean(id && usedDocs.has(id));
   if (id) usedDocs.add(id);
   return {
@@ -49,7 +49,10 @@ function category(label, items, id) {
     collapsed: true,
     collapsible: true,
     link: id ? { type: "doc", id } : null,
-    ...(id ? { customProps: { title: titles.get(id), yamlReference } } : {}),
+    customProps: {
+      ...(id ? { title: titles.get(id), yamlReference } : {}),
+      ...(yamlScope ? { yamlScope } : {}),
+    },
     items: sorted(items),
   };
 }
@@ -304,6 +307,8 @@ items.push(
             category(
               "<name>",
               keys.map((key) => field(key, kind, "component")),
+              undefined,
+              "Component instance",
             ),
           ],
           overview(kind),
@@ -317,6 +322,8 @@ items.push(
     category(
       kind,
       keys.map((key) => field(key, kind, "defaults")),
+      undefined,
+      "Toolchain defaults",
     ),
   ),
 );
@@ -325,6 +332,7 @@ module.exports = {
   stackConfiguration: {
     type: "category",
     label: "Stack Configuration",
+    customProps: { yamlScope: "Stack root" },
     className: "sidebar-title",
     collapsible: true,
     collapsed: true,
@@ -337,6 +345,12 @@ module.exports = {
     className: "sidebar-title",
     collapsible: true,
     collapsed: true,
-    items: [{ type: "doc", id: "stacks/remote-state", label: "Remote State" }],
+    items: [
+      {
+        type: "ref",
+        id: "tutorials/sharing-state/remote-state-module",
+        label: "Remote State",
+      },
+    ],
   },
 };

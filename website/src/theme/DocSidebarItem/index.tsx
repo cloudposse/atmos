@@ -5,6 +5,7 @@ import type { WrapperProps } from "@docusaurus/types";
 import { experimentalRoutes } from "@site/src/data/experimentalRoutes";
 import { getFeatureStatus } from "@site/src/data/featureStatus.mjs";
 import RouteStatusDot from "@site/src/components/FeatureStatusDot/RouteStatusDot";
+import NavigationScope from "@site/src/components/NavigationScope";
 
 import { sidebarActivePath } from "@site/src/components/SidebarNavigator/canonical.mjs";
 
@@ -16,12 +17,19 @@ export default function DocSidebarItemWrapper(props: Props): JSX.Element {
   const item = props.item as { href?: string; label?: React.ReactNode };
   // `href` is the permalink for `link` items and for categories linked to a doc.
   const href = item?.href;
+  // Linked section scopes appear in the navigator heading. Keep their labels
+  // textual so Docusaurus can name the separate expand/collapse button.
+  const scope = href ? undefined : props.item.customProps?.yamlScope;
 
-  if (getFeatureStatus(href, experimentalRoutes) && item.label != null) {
+  if (
+    (getFeatureStatus(href, experimentalRoutes) || scope) &&
+    item.label != null
+  ) {
     const label = (
       <>
         {item.label}
         <RouteStatusDot href={href} />
+        <NavigationScope scope={scope} />
       </>
     );
     return (

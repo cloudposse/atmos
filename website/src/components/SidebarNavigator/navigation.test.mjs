@@ -106,7 +106,7 @@ test("clearing a filter returns the original tree; absent terms return no entrie
   assert.deepEqual(filterItems(tree, "nonexistent"), []);
 });
 
-test("prepare keeps inactive categories collapsed and does not expose unlisted docs", () => {
+test("prepare honors expansion defaults and does not expose unlisted docs", () => {
   const input = [
     category("Private", "/private", [
       { ...leaf("Secret", "/secret"), unlisted: true },
@@ -118,13 +118,18 @@ test("prepare keeps inactive categories collapsed and does not expose unlisted d
   const before = structuredClone(input);
   const result = prepareItems(input, "/current");
   assert.equal(result[0].collapsible, true);
-  assert.equal(result[0].collapsed, true);
+  assert.equal(result[0].collapsed, false);
   assert.deepEqual(
     result[0].items.map((item) => item.label),
     ["Current"],
   );
   assert.deepEqual(filterItems(result, "secret"), []);
   assert.deepEqual(input, before);
+});
+
+test("prepare defaults unspecified categories to collapsed", () => {
+  const input = [{ type: "category", label: "Section", items: [] }];
+  assert.equal(prepareItems(input, "/")[0].collapsed, true);
 });
 
 test("route normalization ignores query strings, fragments, and trailing slashes", () => {

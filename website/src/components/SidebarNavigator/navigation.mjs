@@ -28,7 +28,7 @@ export function findSection(items, activePath) {
   return section;
 }
 
-/** Clone resolved items with closed categories and hide inactive unlisted pages. */
+/** Preserve category expansion defaults and hide inactive unlisted pages. */
 export function prepareItems(items, activePath) {
   return items
     .filter(
@@ -41,7 +41,7 @@ export function prepareItems(items, activePath) {
         ? {
             ...item,
             collapsible: true,
-            collapsed: true,
+            collapsed: item.collapsed ?? true,
             items: prepareItems(item.items, activePath),
           }
         : item,

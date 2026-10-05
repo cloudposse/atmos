@@ -55,10 +55,11 @@ module.exports = {
         }
     ],
     docs: [
-
+        {type: 'doc', id: 'learn/index', label: 'Overview'},
         {
             type: 'category',
             label: 'Get Started',
+            description: 'Install Atmos, explore its features, and migrate existing infrastructure.',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
@@ -72,7 +73,7 @@ module.exports = {
                     type: 'category',
                     label: 'Migration Guides',
                     collapsible: true,
-                    collapsed: true,
+                    collapsed: false,
                     items: [
                         'migration/native-terraform',
                         'migration/terragrunt',
@@ -97,6 +98,7 @@ module.exports = {
         {
             type: 'category',
             label: 'Learn Atmos',
+            description: 'Understand the concepts, YAML configuration, and stacks.',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
@@ -111,6 +113,7 @@ module.exports = {
         {
             type: 'category',
             label: 'Your First Stack',
+            description: 'Build a stack with imports, inheritance, and connected components.',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
@@ -126,6 +129,7 @@ module.exports = {
         {
             type: 'category',
             label: 'Quick Start',
+            description: 'Follow a hands-on tutorial to deploy infrastructure with Atmos.',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
@@ -161,6 +165,7 @@ module.exports = {
         {
             type: 'category',
             label: 'Best Practices',
+            description: 'Organize infrastructure with proven conventions and design patterns.',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
@@ -188,6 +193,7 @@ module.exports = {
         {
             type: 'category',
             label: 'Troubleshoot',
+            description: 'Resolve common errors and investigate performance issues.',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,

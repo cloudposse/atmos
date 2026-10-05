@@ -32,6 +32,14 @@ const docs = new Map(
       return [id, data.slug || `/${id.replace(/\/index$/, "")}`];
     }),
 );
+const remoteStateId = "tutorials/sharing-state/remote-state-module";
+const { data: remoteState } = matter(
+  readFileSync(
+    path.join(docsDir, "../tutorials/sharing-state/remote-state-module.mdx"),
+    "utf8",
+  ),
+);
+docs.set(remoteStateId, remoteState.slug);
 
 function resolve(item) {
   const id = item.id || item.link?.id;
@@ -69,6 +77,22 @@ test("component fields sit below a named instance, never beside component types"
   assert.equal(at("provision"), undefined);
   assert.equal(at("components", "helmfile", "<name>", "mocks"), undefined);
   assert.equal(at("components", "*.metadata"), undefined);
+});
+
+test("scope annotations distinguish defaults from named component instances", () => {
+  assert.equal(tree.customProps.yamlScope, "Stack root");
+  assert.equal(at("terraform").customProps.yamlScope, "Toolchain defaults");
+  assert.equal(
+    at("components", "terraform", "<name>").customProps.yamlScope,
+    "Component instance",
+  );
+  const matches = filterItems([resolve(tree)], "terraform settings");
+  assert.equal(matches[0].customProps.yamlScope, "Stack root");
+  assert.equal(
+    matches[0].items.find((item) => item.label === "terraform").customProps
+      .yamlScope,
+    "Toolchain defaults",
+  );
 });
 
 test("provisioning respects toolchain and component runtime scopes", () => {
@@ -112,7 +136,7 @@ test("shared fields retain canonical pages and use references for repeated leave
   );
   for (const id of ids) assert.ok(docs.has(id), `Unknown document ${id}`);
   for (const id of docs.keys()) {
-    if (id !== "stacks/share-data")
+    if (!["stacks/share-data", "stacks/remote-state"].includes(id))
       assert.ok(ids.has(id), `Unreachable reference ${id}`);
   }
   for (const item of nodes.filter((item) => item.items)) {
@@ -129,8 +153,21 @@ test("filtering preserves YAML ancestry and guides have their own section", () =
   assert.equal(matches[0].items[0].label, "components");
   assert.equal(matches[0].items[0].items[0].items[0].label, "<name>");
   assert.equal(findSection(resolved, "/stacks/components/mocks"), 0);
-  assert.equal(findSection(resolved, "/stacks/remote-state"), 1);
+  assert.equal(
+    findSection(resolved, "/stacks/sharing-state/remote-state-module"),
+    1,
+  );
   assert.equal(at("settings", "depends_on").label, "depends_on");
+});
+
+test("Stack Guides links to the visible canonical guide instead of its hidden redirect", () => {
+  assert.equal(stackGuides.items[0].type, "ref");
+  assert.equal(stackGuides.items[0].id, remoteStateId);
+  assert.notEqual(remoteState.sidebar_class_name, "hidden");
+  assert.equal(
+    resolve(stackGuides).items[0].href,
+    "/stacks/sharing-state/remote-state-module",
+  );
 });
 
 test("custom commands represent list entries without introducing a fictitious YAML key", () => {

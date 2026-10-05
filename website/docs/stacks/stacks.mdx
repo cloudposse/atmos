@@ -22,6 +22,11 @@ represents a user-defined component name. For example, **components → terrafor
 named `vpc`. Root-level toolchain sections such as `terraform` configure defaults;
 `components.terraform.<name>` configures an individual component.
 
+Small scope annotations distinguish **Stack root**, **Toolchain defaults**, and
+**Component instance** in the sidebar. These annotations describe where keys apply;
+they are not additional YAML keys. A repeated field such as `settings` applies at
+the location shown by its parents in the tree.
+
 Fields that support multiple scopes link to the same reference page from each
 supported location. Page scope tables explain restrictions, such as the subset of
 `metadata` fields permitted at the stack root. Colored dots indicate feature status:

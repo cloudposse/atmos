@@ -5,6 +5,7 @@ import OriginalDocSidebarItems from "@theme-original/DocSidebarItems";
 import type { Props } from "@theme/DocSidebarItems";
 import type { PropSidebarItem } from "@docusaurus/plugin-content-docs";
 import RouteStatusDot from "@site/src/components/FeatureStatusDot/RouteStatusDot";
+import NavigationScope from "@site/src/components/NavigationScope";
 import {
   filterItems,
   findSection,
@@ -245,6 +246,7 @@ export default function SidebarNavigator({
           ) : (
             selected?.label || `All ${sidebarLabel(sidebarName)}`
           )}
+          {!filtering && <NavigationScope scope={selected?.customProps?.yamlScope} />}
         </h2>
       </div>
       <div data-sections hidden={filtering || section !== null}>

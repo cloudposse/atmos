@@ -673,7 +673,7 @@ const config = {
                     // See src/theme/Footer/.
                     {
                         type: 'doc',
-                        docId: 'intro/index',
+                        docId: 'learn/index',
                         position: 'left',
                         label: 'Learn',
                     },
