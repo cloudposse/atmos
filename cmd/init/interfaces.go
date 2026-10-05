@@ -23,6 +23,10 @@ type InitUI interface {
 	SetMaxChanges(thresholdPercent int)
 	SetConflictStrategy(strategy merge.ConflictStrategy)
 	SetMergeDriver(driver merge.Driver)
+	// SetRecreateDeleted controls whether --update recreates a file the user
+	// deleted but the template still generates (default false: the deletion
+	// is left in place).
+	SetRecreateDeleted(recreate bool)
 	SetSkipHooks(skip func(string) bool)
 	// SetUpdateStrategy selects where --update's 3-way merge base comes from
 	// (engine.UpdateStrategyTracked, the default: the target's own git
