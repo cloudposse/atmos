@@ -11,11 +11,13 @@ cast:
 Stand up an **entire GitOps loop on your laptop** — no GitHub account, no real
 cluster, no cloud credentials — and watch a change travel all the way around:
 
+[//]: # (editorconfig-checker-disable: Preserve literal output alignment.)
 ```
 atmos render  ─push─▶  Gitea (Git server emulator)  ─watch─▶  Flux  ─apply─▶  k3s (Kubernetes emulator)
      ▲                                                                              │
      └──────────────────────────  you observe it running  ◀───────────────────────┘
 ```
+[//]: # (editorconfig-checker-enable)
 
 Two local emulators do the heavy lifting:
 

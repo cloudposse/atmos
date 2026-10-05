@@ -135,9 +135,9 @@ RUN code-server --install-extension hashicorp.terraform
 When you run `atmos devcontainer shell`, Atmos will:
 
 1. **Build the image** (if not already built or if changed)
-   - Uses `docker build` or `podman build`
-   - Passes build args from `devcontainer.json`
-   - Tags the image as `atmos-devcontainer-geodesic`
+    - Uses `docker build` or `podman build`
+    - Passes build args from `devcontainer.json`
+    - Tags the image as `atmos-devcontainer-geodesic`
 
 2. **Create the container** from the built image
 

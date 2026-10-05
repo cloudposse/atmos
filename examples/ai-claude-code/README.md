@@ -19,18 +19,18 @@ Learn more in the [Atmos AI documentation](https://atmos.tools/ai).
 ## Prerequisites
 
 1. **Claude Code** installed and authenticated:
-   ```bash
-   brew install --cask claude-code
-   claude auth login
-   ```
+    ```bash
+    brew install --cask claude-code
+    claude auth login
+    ```
 
 2. **Atmos Auth** configured for AWS MCP servers that need credentials.
-   Update the `auth` section in `atmos.yaml` with your SSO start URL, permission set,
-   and account ID, then run:
-   ```bash
-   atmos auth login
-   ```
-   See the [Atmos Auth documentation](https://atmos.tools/cli/configuration/auth) for setup details.
+    Update the `auth` section in `atmos.yaml` with your SSO start URL, permission set,
+    and account ID, then run:
+    ```bash
+    atmos auth login
+    ```
+    See the [Atmos Auth documentation](https://atmos.tools/cli/configuration/auth) for setup details.
 
 ## Try It
 

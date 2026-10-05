@@ -56,11 +56,11 @@ To plug in your own tool, mirror this:
 
 1. Have your script (or binary) read whatever ATMOS_\* env vars it needs.
 2. Write structured output to `$ATMOS_OUTPUT_FILE` (or skip it — output
-   to stdout streams through Atmos's I/O layer to the user's terminal
-   regardless).
+    to stdout streams through Atmos's I/O layer to the user's terminal
+    regardless).
 3. Set `format: markdown` if the output is markdown so it gets nicely
-   rendered. Otherwise omit `format:` and the artifact is just stored
-   downloadably (or sent to Atmos Pro as an opaque blob).
+    rendered. Otherwise omit `format:` and the artifact is just stored
+    downloadably (or sent to Atmos Pro as an opaque blob).
 
 ## When to use a named kind instead
 

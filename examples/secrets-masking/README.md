@@ -40,37 +40,37 @@ settings:
 ## Testing the Feature
 
 1. **Run a terraform plan with secrets in output**:
-   ```bash
-   cd examples/secrets-masking
-   atmos terraform plan secrets-demo -s demo-dev-test
-   ```
+    ```bash
+    cd examples/secrets-masking
+    atmos terraform plan secrets-demo -s demo-dev-test
+    ```
 
 2. **Verify masking in terraform output**:
-   The component outputs secrets which will be masked as `[REDACTED]` in the output.
+    The component outputs secrets which will be masked as `[REDACTED]` in the output.
 
 3. **Disable masking to compare**:
-   ```bash
-   atmos terraform plan secrets-demo -s demo-dev-test --mask=false
-   ```
+    ```bash
+    atmos terraform plan secrets-demo -s demo-dev-test --mask=false
+    ```
 
 ## What Gets Masked
 
 1. **Built-in patterns** (always active):
-   - AWS Access Key IDs (`AKIA...`)
-   - AWS Secret Access Keys
-   - GitHub tokens (`ghp_...`, `gho_...`, `ghu_...`)
-   - Generic API keys and passwords
-   - JWT tokens
-   - Private keys
+    - AWS Access Key IDs (`AKIA...`)
+    - AWS Secret Access Keys
+    - GitHub tokens (`ghp_...`, `gho_...`, `ghu_...`)
+    - Generic API keys and passwords
+    - JWT tokens
+    - Private keys
 
 2. **Custom patterns** (from `atmos.yaml`):
-   - `demo-key-XXXX...` format
-   - `internal-XXXX...` format
-   - `tkn_live_...` and `tkn_test_...` tokens
+    - `demo-key-XXXX...` format
+    - `internal-XXXX...` format
+    - `tkn_live_...` and `tkn_test_...` tokens
 
 3. **Custom literals** (from `atmos.yaml`):
-   - `super-secret-demo-value`
-   - `my-api-key-12345`
+    - `super-secret-demo-value`
+    - `my-api-key-12345`
 
 ## Masking Coverage
 
