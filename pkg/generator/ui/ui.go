@@ -919,7 +919,7 @@ func (ui *InitUI) resolvePreCollectedValues(
 	if cfgErr != nil {
 		return nil, useDefaults, cfgErr
 	}
-	merged := make(map[string]interface{}, len(preCollectedValues)+len(cmdTemplateValues))
+	merged := make(map[string]interface{}, len(preCollectedValues))
 	for k, v := range preCollectedValues {
 		merged[k] = v
 	}
@@ -1551,7 +1551,7 @@ func (ui *InitUI) reportWriteResult(err error, renderedPath string, existedBefor
 // in place, since it's the shared per-run answers map, read again by
 // scaffoldhooks.Run after every file in this run has been processed.
 func mergedValuesWithContext(mergedValues map[string]interface{}, row map[string]string, file tmpl.File, spec config.FileSpec) map[string]interface{} {
-	values := make(map[string]interface{}, len(mergedValues)+2)
+	values := make(map[string]interface{}, len(mergedValues))
 	for k, v := range mergedValues {
 		values[k] = v
 	}

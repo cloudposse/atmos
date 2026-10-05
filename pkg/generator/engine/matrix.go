@@ -336,7 +336,7 @@ func cartesianProduct(matrix map[string][]string) []map[string]string {
 		next := make([]map[string]string, 0, len(rows))
 		for _, row := range rows {
 			for _, value := range matrix[axis] {
-				copied := make(map[string]string, len(row)+1)
+				copied := make(map[string]string, len(row))
 				for k, v := range row {
 					copied[k] = v
 				}

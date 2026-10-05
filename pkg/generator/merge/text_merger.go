@@ -13,6 +13,11 @@ import (
 // newlineSeparator splits/joins line-based content throughout this file.
 const newlineSeparator = "\n"
 
+// maxLCSLines bounds countDifferentLines's exact, O(m*n)-allocating LCS
+// path -- see its own doc comment for why a file beyond this falls back to
+// countDifferentLinesApprox instead.
+const maxLCSLines = 5000
+
 // TextMerger handles 3-way merging of text files using the diff3 algorithm.
 type TextMerger struct {
 	thresholdPercent int              // Percentage threshold (0-100) for change detection.
@@ -220,6 +225,14 @@ func countDifferentLines(base, changed []string) int {
 	m := len(base)
 	n := len(changed)
 
+	// The exact LCS table below is O(m*n) time and space. Past maxLCSLines on
+	// either side that table alone could require gigabytes, so fall back to
+	// the cheaper approximation instead of letting an unusually large
+	// generated file blow up memory just to compute a change percentage.
+	if m > maxLCSLines || n > maxLCSLines {
+		return countDifferentLinesApprox(base, changed)
+	}
+
 	// dp[i][j] = length of LCS of base[:i] and changed[:j].
 	// Allocate a (m+1) x (n+1) table.
 	dp := make([][]int, m+1)
@@ -244,6 +257,38 @@ func countDifferentLines(base, changed []string) int {
 	lcsLen := dp[m][n]
 	// Lines deleted from base, plus lines inserted in changed.
 	return (m - lcsLen) + (n - lcsLen)
+}
+
+// countDifferentLinesApprox approximates countDifferentLines in O(m+n) time
+// and space via a multiset (line -> count) symmetric difference, once base
+// or changed is too large for the exact O(m*n) LCS table above. It agrees
+// with the exact LCS-based count as long as neither side reorders lines
+// relative to the other (the common case for a template update); a reorder
+// can only make this undercount, never overcount, so it still errs toward
+// treating a change as smaller rather than tripping --max-changes
+// unnecessarily on a large file that only moved lines around.
+func countDifferentLinesApprox(base, changed []string) int {
+	baseCounts := make(map[string]int, len(base))
+	for _, line := range base {
+		baseCounts[line]++
+	}
+	changedCounts := make(map[string]int, len(changed))
+	for _, line := range changed {
+		changedCounts[line]++
+	}
+
+	var diff int
+	for line, bc := range baseCounts {
+		if cc := changedCounts[line]; bc > cc {
+			diff += bc - cc
+		}
+	}
+	for line, cc := range changedCounts {
+		if bc := baseCounts[line]; cc > bc {
+			diff += cc - bc
+		}
+	}
+	return diff
 }
 
 // resolveTextConflicts rewrites diff3 conflict blocks (<<<<<<< Ours /
