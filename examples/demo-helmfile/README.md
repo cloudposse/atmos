@@ -4,6 +4,11 @@ tags: [Kubernetes]
 cast:
   file: /casts/examples/demo-helmfile/lifecycle.cast
   title: atmos helmfile lifecycle
+related_docs:
+  - label: "Helmfile commands"
+    url: /cli/commands/helmfile/usage
+  - label: "Helmfile component configuration"
+    url: /stacks/components/helmfile
 ---
 
 # Example: Demo Helmfile

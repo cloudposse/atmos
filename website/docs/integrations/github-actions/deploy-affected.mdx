@@ -1,0 +1,66 @@
+---
+title: Deploy Affected Components
+slug: /integrations/github-actions/deploy-affected
+description: Run CI jobs only for component instances affected by a change. Atmos produces the GitHub Actions matrix from your stacks and Git changes.
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Run CI jobs only for component instances affected by a change. Atmos produces the GitHub Actions matrix from your stacks and Git changes.
+</Intro>
+
+Use [Setup Atmos](/integrations/github-actions/setup-atmos) to pin the Atmos container version, enable [native CI reporting](/ci#quick-start), and configure [authentication and permissions](/integrations/github-actions/authentication) for your repository.
+
+## Workflow
+
+Fan out across only the components that changed in the PR using `atmos describe affected --format=matrix`. When `ci.enabled: true` is set in `atmos.yaml`, the matrix is automatically written to `$GITHUB_OUTPUT` — no `--output-file` flag needed.
+
+<File title=".github/workflows/deploy-affected.yml">
+```yaml
+on:
+  pull_request:
+
+permissions:
+  id-token: write
+  contents: read
+  statuses: write
+  checks: write
+  pull-requests: write
+
+jobs:
+  affected:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    outputs:
+      matrix: ${{ steps.affected.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: affected
+        run: atmos describe affected --format=matrix
+
+  deploy:
+    needs: affected
+    if: ${{ needs.affected.outputs.matrix != '' }}
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    strategy:
+      matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v6
+
+      - env:
+          COMPONENT: ${{ matrix.component }}
+          STACK: ${{ matrix.stack }}
+        run: atmos terraform deploy "$COMPONENT" -s "$STACK"
+```
+</File>
+
+The `affected` job emits a matrix of `{component, stack}` pairs; the `deploy` job spreads across them in parallel.

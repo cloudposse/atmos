@@ -91,10 +91,9 @@ const config = {
                     {from: '/integrations/integrations', to: '/cli/configuration/integrations'},
                     {from: '/cli/configuration/integrations/spacelift', to: '/deprecated/spacelift'},
                     // Legacy GitHub Actions redirected to native CI (deprecated)
-                    {from: '/integrations/github-actions', to: '/ci'},
-                    {from: '/integrations/github-actions/affected-stacks', to: '/ci'},
-                    {from: '/integrations/github-actions/atmos-terraform-plan', to: '/ci'},
-                    {from: '/integrations/github-actions/atmos-terraform-apply', to: '/ci'},
+                    {from: '/integrations/github-actions/affected-stacks', to: '/integrations/github-actions/deploy-affected'},
+                    {from: '/integrations/github-actions/atmos-terraform-plan', to: '/integrations/github-actions/plan-on-pull-request'},
+                    {from: '/integrations/github-actions/atmos-terraform-apply', to: '/integrations/github-actions/apply-on-merge'},
                     {from: '/integrations/github-actions/atmos-terraform-drift-detection', to: '/ci'},
                     {from: '/integrations/github-actions/atmos-terraform-drift-remediation', to: '/ci'},
                     // Vendored dependency management moved out of GitHub Actions integrations.
@@ -566,7 +565,30 @@ const config = {
                     async sidebarItemsGenerator({defaultSidebarItemsGenerator, ...args}) {
                         // The default generator returns items already ordered by
                         // `sidebar_position` (then strips the position field).
-                        const items = await defaultSidebarItemsGenerator(args);
+                        const generated = await defaultSidebarItemsGenerator(args);
+
+                        // Many reference pages use a YAML-key label (e.g. `commands`) while the
+                        // human name lives in the doc title (e.g. "Custom Commands"). Attach the
+                        // title so the sidebar filter can match either.
+                        const titles = new Map(args.docs.map((doc) => [doc.id, doc.title]));
+                        const attachTitles = (sidebarItems) =>
+                            sidebarItems.map((item) => {
+                                const docId =
+                                    item.type === 'doc'
+                                        ? item.id
+                                        : item.type === 'category' && item.link && item.link.type === 'doc'
+                                          ? item.link.id
+                                          : undefined;
+                                const title = docId && titles.get(docId);
+                                const withTitle =
+                                    title && title !== item.label
+                                        ? {...item, customProps: {...item.customProps, title}}
+                                        : item;
+                                return item.type === 'category' && item.items
+                                    ? {...withTitle, items: attachTitles(item.items)}
+                                    : withTitle;
+                            });
+                        const items = attachTitles(generated);
 
                         // The step-by-step quick-start tutorials are a deliberate
                         // sequence, so honor `sidebar_position` for them by returning
@@ -650,12 +672,13 @@ const config = {
                     // See src/theme/Footer/.
                     {
                         type: 'doc',
-                        docId: 'intro/index',
+                        docId: 'learn/index',
                         position: 'left',
                         label: 'Learn',
                     },
                     {
-                        to: '/cli',
+                        type: 'docSidebar',
+                        sidebarId: 'cli',
                         position: 'left',
                         label: 'Reference'
                     },

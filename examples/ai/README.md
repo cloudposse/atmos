@@ -1,6 +1,11 @@
 ---
 title: Atmos AI
 tags: [AI]
+related_docs:
+  - label: "AI commands"
+    url: /cli/commands/ai/usage
+  - label: "AI providers"
+    url: /cli/configuration/ai/providers
 ---
 
 # Example: Atmos AI
