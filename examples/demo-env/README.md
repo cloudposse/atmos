@@ -4,11 +4,16 @@ tags: [Stacks]
 cast:
   file: /casts/examples/demo-env/masked-token.cast
   title: atmos env masked token
+related_docs:
+  - label: "Export environment variables"
+    url: /cli/commands/env
+  - label: "Environment configuration"
+    url: /stacks/env
 ---
 
 # Demo: Using `atmos env` with GitHub Provider
 
-This example demonstrates how to use `atmos env` to export environment variables
+This example demonstrates how to use [`atmos env`](https://atmos.tools/cli/commands/env) to export [environment variables](https://atmos.tools/stacks/env)
 for Terraform providers that authenticate via environment variables.
 
 ## Overview
@@ -23,9 +28,9 @@ variable. This example shows how to:
 ## Prerequisites
 
 1. [GitHub CLI](https://cli.github.com/) - Install and authenticate:
-   ```bash
-   gh auth login
-   ```
+    ```bash
+    gh auth login
+    ```
 2. **Terraform** >= 1.0
 3. **Atmos CLI**
 
@@ -102,18 +107,18 @@ This example demonstrates dynamic credential retrieval using `!exec`. While conv
 for development, consider these security practices:
 
 1. **Local development**: Using `gh auth token` is appropriate since the token is
-   already stored securely by the GitHub CLI and retrieved on-demand.
+    already stored securely by the GitHub CLI and retrieved on-demand.
 
 2. **CI/CD environments**: In GitHub Actions, prefer using the built-in `GITHUB_TOKEN`
-   secret or repository secrets instead of `!exec`:
-   ```yaml
-   env:
-     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-   ```
+    secret or repository secrets instead of `!exec`:
+    ```yaml
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    ```
 
 3. **Sensitive secrets**: For highly sensitive credentials (API keys, database passwords),
-   consider using dedicated secret managers (AWS Secrets Manager, HashiCorp Vault) via
-   the `!store` YAML function instead of `!exec`.
+    consider using dedicated secret managers (AWS Secrets Manager, HashiCorp Vault) via
+    the `!store` YAML function instead of `!exec`.
 
 4. **Output masking**: Atmos automatically masks detected secrets in terminal output
-   to prevent accidental exposure in logs.
+    to prevent accidental exposure in logs.

@@ -4,6 +4,17 @@ tags: [Automation]
 cast:
   file: /casts/examples/packer-docker/build.cast
   title: atmos Packer Docker build
+related_docs:
+  - label: "Packer commands"
+    url: /cli/commands/packer/usage
+  - label: "Packer component configuration"
+    url: /stacks/components/packer
+  - label: "Packer Components"
+    url: /components/packer
+  - label: "Packer Build"
+    url: /cli/commands/packer/build
+  - label: "Toolchain Configuration"
+    url: /cli/configuration/toolchain
 ---
 
 # Example: Packer Docker Image

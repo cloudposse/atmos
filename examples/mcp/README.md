@@ -1,6 +1,11 @@
 ---
 title: MCP Server Integrations
 tags: [AI]
+related_docs:
+  - label: "MCP commands"
+    url: /mcp
+  - label: "MCP configuration"
+    url: /cli/configuration/mcp
 ---
 
 # Example: MCP Server Integrations
@@ -28,12 +33,12 @@ Learn more in the [MCP Configuration documentation](https://atmos.tools/cli/conf
 1. **Python 3.10+** — `uvx` is auto-installed by the [Atmos Toolchain](https://atmos.tools/cli/configuration/toolchain).
 
 2. **Atmos Auth** — servers that need credentials use `identity: "readonly"`.
-   Update the `auth` section in `atmos.yaml` with your SSO start URL, permission set,
-   and account ID, then run:
-   ```bash
-   atmos auth login
-   ```
-   See the [Atmos Auth documentation](https://atmos.tools/cli/configuration/auth) for setup details.
+    Update the `auth` section in `atmos.yaml` with your SSO start URL, permission set,
+    and account ID, then run:
+    ```bash
+    atmos auth login
+    ```
+    See the [Atmos Auth documentation](https://atmos.tools/cli/configuration/auth) for setup details.
 
 3. **AI provider** — configure at least one [AI provider](https://atmos.tools/cli/configuration/ai/providers).
 
@@ -94,6 +99,7 @@ Servers with `identity` are wrapped with `atmos auth exec` for automatic credent
 
 ### Documentation Search
 
+[//]: # (editorconfig-checker-disable: Preserve literal output alignment.)
 ```text
 $ atmos ai ask "How do I configure S3 bucket lifecycle rules?"
 
@@ -118,9 +124,11 @@ $ atmos ai ask "How do I configure S3 bucket lifecycle rules?"
   ## Tool Executions (1)
   1. ✅ aws-knowledge → aws.search_documentation (2874ms)
 ```
+[//]: # (editorconfig-checker-enable)
 
 ### Billing Summary
 
+[//]: # (editorconfig-checker-disable: Preserve literal output alignment.)
 ```text
 $ atmos ai ask "Show our billing summary for the past 2 months"
 
@@ -153,9 +161,11 @@ $ atmos ai ask "Show our billing summary for the past 2 months"
   ## Tool Executions (1)
   1. ✅ aws-billing → cost-explorer (381ms)
 ```
+[//]: # (editorconfig-checker-enable)
 
 ### Security Audit
 
+[//]: # (editorconfig-checker-disable: Preserve literal output alignment.)
 ```text
 $ atmos ai ask "Is GuardDuty enabled in all regions?"
 
@@ -191,9 +201,11 @@ $ atmos ai ask "Is GuardDuty enabled in all regions?"
   3. ✅ aws-api → call_aws (7ms)
   4. ✅ aws-api → call_aws (9450ms)
 ```
+[//]: # (editorconfig-checker-enable)
 
 ### IAM Audit
 
+[//]: # (editorconfig-checker-disable: Preserve literal output alignment.)
 ```text
 $ atmos ai ask "List all IAM roles with admin access"
 
@@ -225,6 +237,7 @@ $ atmos ai ask "List all IAM roles with admin access"
   1. ✅ aws-iam → list_roles (314ms)
   2. ✅ aws-iam → list_policies (174ms)
 ```
+[//]: # (editorconfig-checker-enable)
 
 ## Related Examples
 
