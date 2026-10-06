@@ -1,0 +1,10 @@
+version: 1
+tracks:
+  default:
+    atmos:
+      version: v1.229.0
+      ecosystem: github
+      datasource: github-releases
+      package: cloudposse/atmos
+      resolved_at: "2026-09-20T02:17:21Z"
+      released_at: "2026-09-17T04:35:02Z"
