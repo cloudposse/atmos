@@ -1,4 +1,7 @@
 ---
+title: Scaffold YAML Functions
+tags: [Scaffolding, YAML Functions]
+description: Use YAML functions to load shared data and computed values in scaffold templates.
 related_docs:
   - label: "Scaffold generation and template configuration"
     url: /cli/commands/scaffold/generate

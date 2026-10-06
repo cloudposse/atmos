@@ -4,6 +4,11 @@ tags: [Emulators, Components]
 description: >-
   Deploy a native aws/cloudformation component — no external binary, no AWS
   account or credentials required — against a local Floci AWS emulator.
+related_docs:
+  - label: CloudFormation component configuration
+    url: /stacks/components/aws-cloudformation
+  - label: Emulator commands
+    url: /cli/commands/emulator/usage
 ---
 
 > **Availability:** This example requires the native CloudFormation implementation in
