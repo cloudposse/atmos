@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkstruct"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/script"
 )
 
@@ -48,8 +48,14 @@ func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args 
 	var extraEnv *starlark.Dict
 	dir := scope.dir
 	opts := newRunOptions()
+	var timeout string
+	var retryValue starlark.Value = starlark.None
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "argv", &argv, "working_directory?", &dir, "env?", &extraEnv,
-		"output?", &opts.output, "check?", &opts.check); err != nil {
+		"output?", &opts.output, "check?", &opts.check, "timeout?", &timeout, "retry?", &retryValue); err != nil {
+		return nil, err
+	}
+	policy, err := s.processPolicy(thread, timeout, retryValue)
+	if err != nil {
 		return nil, err
 	}
 	command, err := processArgv(argv)
@@ -67,7 +73,7 @@ func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args 
 	if !filepath.IsAbs(dir) {
 		dir = filepath.Join(scope.dir, dir)
 	}
-	return s.runProcess(thread, processCall{argv: command, dir: dir, env: env, check: opts.check, stream: stream})
+	return s.runProcess(thread, processCall{argv: command, dir: dir, env: env, check: opts.check, stream: stream, policy: policy})
 }
 
 type processCall struct {
@@ -76,6 +82,7 @@ type processCall struct {
 	env              []string
 	check, stream    bool
 	allowPlanChanges bool
+	policy           automation.ExecutionPolicy
 }
 
 func (s *session) runProcess(thread *starlark.Thread, call processCall) (starlark.Value, error) {
@@ -83,6 +90,7 @@ func (s *session) runProcess(thread *starlark.Thread, call processCall) (starlar
 		Argv: call.argv, Dir: call.dir, Env: s.tools.Environment(call.env),
 		Check: call.check, Stream: call.stream, AllowPlanChanges: call.allowPlanChanges,
 		Stdout: s.writer(thread, stdoutStream), Stderr: s.writer(thread, stderrStream),
+		Policy: call.policy,
 	})
 	if err != nil {
 		if errors.Is(err, errUtils.ErrScriptProcessFailed) {
@@ -90,9 +98,7 @@ func (s *session) runProcess(thread *starlark.Thread, call processCall) (starlar
 		}
 		return nil, err
 	}
-	return starlarkstruct.FromStringDict(starlark.String("process_result"), starlark.StringDict{
-		"stdout": starlark.String(result.Stdout), "stderr": starlark.String(result.Stderr), "exit_code": starlark.MakeInt(result.ExitCode),
-	}), nil
+	return newProcessResult(result), nil
 }
 
 func processArgv(argv starlark.Value) ([]string, error) {

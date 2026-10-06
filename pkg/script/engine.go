@@ -4,6 +4,8 @@ package script
 import (
 	"context"
 	"io"
+
+	"github.com/cloudposse/atmos/pkg/automation"
 )
 
 // Spec describes one invocation. Env is explicit script input; ProcessEnv is
@@ -17,12 +19,14 @@ type Spec struct {
 	// ProjectRoot is the Atmos project base path. When set, paths under it are shown relative to
 	// it (for example `scripts/boom.star:7:8`) in error messages and tracebacks. It only affects
 	// display: import resolution and script context paths keep using absolute paths.
-	ProjectRoot           string
-	Env                   map[string]string
-	Flags, Arguments      map[string]any
-	ProcessEnv            []string
-	Stdout, Stderr        io.Writer
-	DryRun                bool
+	ProjectRoot      string
+	Env              map[string]string
+	Flags, Arguments map[string]any
+	ProcessEnv       []string
+	Stdout, Stderr   io.Writer
+	DryRun           bool
+	// Parallel marks execution inside a control runner that cannot grant exclusive terminal access.
+	Parallel              bool
 	Component             *ComponentRef
 	ResolveComponent      ComponentResolver
 	ProcessOverrides      map[string]string
@@ -31,6 +35,7 @@ type Spec struct {
 	File                  *File
 	InstallTools          ToolInstaller
 	ParseCommand          CommandParser
+	Steps                 automation.StepLibrary
 }
 
 // ToolInstaller provisions pinned tools and returns their executable directories.

@@ -1,0 +1,73 @@
+---
+slug: automation-data-queries
+title: "Select build, test, and deploy work in a monorepo"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Build, test, and deploy what changed. In a monorepo, that means identifying the
+affected projects and their dependents, then running the work that matters for
+that change.
+
+The [Atmos Automation Language](/automation/language) lets you turn
+[affected components and stacks](/cli/commands/describe/affected) into build,
+test, and deployment tasks. Write your project logic once and run it locally or
+in CI.
+
+<!--truncate-->
+
+## Select work across your monorepo {#the-problem}
+
+Monorepos bring related projects together. A single change can span an
+application, its shared configuration, and the components that depend on it.
+Knowing those relationships lets you focus validation and deployment on the
+parts of the repository that need them.
+
+Atmos identifies affected components and stacks from its configuration and
+declared dependencies. The Atmos Automation Language puts those results in your
+script, where you can apply your project's build, test, and release rules.
+
+## Turn affected components into tasks {#the-fix}
+
+Query the affected set, iterate over the results, and choose the commands to run
+for each component. You can use that set to select tests, prepare deployments,
+or run independent work in parallel.
+
+The [query wrappers](/functions/automation/atmos.run#query-defaults) capture
+output and request JSON by default. This applies to `atmos.list`,
+`atmos.describe`, and the config and stack config getters. Explicit formats
+and streaming options still take precedence.
+
+Command results expose decoded JSON through `data` and retain raw `stdout`,
+`stderr`, and `exit_code`. The [step library](/functions/automation/steps.run#results)
+also exposes `data`, decoded from its primary `value`. Decoding happens only
+when accessed, so text results remain usable. Decoded collections are read-only
+and can be shared with parallel tasks.
+
+## How to Use It
+
+Run this script in an Atmos project with the comparison ref available locally:
+
+```python
+result = atmos.describe(
+    "affected",
+    flags = {"base": "origin/main", "include-dependents": True},
+)
+for item in result.data:
+    if not item.get("deleted", False):
+        ui.info("{} in {}".format(item["component"], item["stack"]))
+```
+
+Use the records to select project commands or construct parallel tasks.
+Affected detection follows Atmos configuration and declared dependencies;
+the loop does not establish execution order between dependent components.
+
+For individual child processes, [exec.run](/functions/automation/exec.run)
+and [component.exec](/functions/automation/component.exec) now accept
+`timeout` and `retry` directly. A timeout bounds the entire call, including
+retry delays. Only retry operations that are safe to repeat.
+
+## Get Involved
+
+Try the query defaults in your project automation and
+[open an issue](https://github.com/cloudposse/atmos/issues) with feedback.

@@ -42,6 +42,8 @@ atmos stack get settings.spacelift.workspace_enabled -s plat-ue2-prod -c vpc
 ## Flags
 
 <dl>
+  <dt>`--format` / `-f` (string)</dt>
+  <dd>Output format: `raw` (default) or `json`. JSON preserves scalar and collection types, including quoted strings that look like booleans or numbers.</dd>
   <dt>`--stack` / `-s` (string, required)</dt>
   <dd>The stack name.</dd>
   <dt>`--component` / `-c` (string, required)</dt>

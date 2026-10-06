@@ -48,7 +48,11 @@ to inspect one file's own declared value instead.`,
 			return err
 		}
 
-		value, err := atmosyaml.Get([]byte(effectiveYAML), args[0])
+		format, err := cmd.Flags().GetString("format")
+		if err != nil {
+			return err
+		}
+		value, err := atmosyaml.GetFormatted([]byte(effectiveYAML), args[0], format)
 		if err != nil {
 			return err
 		}

@@ -2,6 +2,7 @@ package stack
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -34,6 +34,8 @@ var (
 // editTarget holds the resolved file and in-file path for an edit, plus the
 // effective merged value and where it currently resolves from.
 type editTarget struct {
+	valueContent       []byte // original YAML for typed output, before scalar unwrapping.
+	valuePath          string // path within valueContent.
 	file               string // manifest file to edit
 	inFilePath         string // raw dot-path used as the provenance lookup key (components.<type>.<name>.<rel>)
 	yqPath             string // escaped dot-path used to address the YAML node safely
@@ -54,7 +56,7 @@ var stackGetCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "stack.getRunE")()
-		return runStackGet(args)
+		return runStackGetCommand(cmd, args)
 	},
 }
 
@@ -102,6 +104,7 @@ values. Use --file to format one manifest explicitly.`,
 
 func init() {
 	registerStackEditFlags(stackGetCmd)
+	stackGetCmd.Flags().StringP("format", "f", "raw", "Output format: raw or json")
 	registerStackEditFlags(stackSetCmd)
 	registerStackEditFlags(stackDeleteCmd)
 	registerStackEditFlags(stackFormatCmd)
@@ -120,14 +123,7 @@ func registerStackEditFlags(c *cobra.Command) {
 }
 
 func runStackGet(args []string) error {
-	tgt, err := resolveEditTarget(args[0], false)
-	if err != nil {
-		return err
-	}
-	if tgt.provFile != "" {
-		ui.Infof("%s resolves from %s:%d", args[0], tgt.provFile, tgt.provLine)
-	}
-	return data.Writeln(tgt.value)
+	return runStackGetFormat(args, "raw")
 }
 
 func runStackSet(args []string) error {
@@ -415,6 +411,7 @@ func resolveEditTarget(dotPath string, requireEditable bool) (*editTarget, error
 	// draw on an *inherited* value, since GetFileType only ever sees the
 	// literal target file's own bytes.
 	if sectionYAML, convErr := u.ConvertToYAML(result.ComponentSection); convErr == nil {
+		tgt.valueContent, tgt.valuePath = []byte(sectionYAML), dotPath
 		if v, getErr := atmosyaml.Get([]byte(sectionYAML), dotPath); getErr == nil {
 			tgt.value = v
 		}
@@ -435,8 +432,11 @@ func resolveEditTarget(dotPath string, requireEditable bool) (*editTarget, error
 		// For read-only get, reflect the value actually stored in the explicit
 		// file rather than the merged value.
 		if !requireEditable {
-			if v, getErr := atmosyaml.GetFile(flagFile, tgt.yqPath); getErr == nil {
-				tgt.value = v
+			if content, readErr := os.ReadFile(flagFile); readErr == nil {
+				if v, getErr := atmosyaml.Get(content, tgt.yqPath); getErr == nil {
+					tgt.value = v
+					tgt.valueContent, tgt.valuePath = content, tgt.yqPath
+				}
 			}
 		}
 		return tgt, nil

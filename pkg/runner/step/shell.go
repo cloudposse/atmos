@@ -87,6 +87,7 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	}
 
 	writer := NewOutputModeWriter(mode, step.Name, step.Viewport, GetShowConfig(step, nil))
+	writer.writers = vars.OutputWriters
 	stdout, stderr, err := h.runInterpreter(ctx, writer, shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars})
 	if err != nil {
 		err = deadline.Wrap(err)
@@ -215,6 +216,7 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 	show := GetShowConfig(step, workflow)
 
 	writer := NewOutputModeWriter(mode, step.Name, viewport, show)
+	writer.writers = vars.OutputWriters
 	stdout, stderr, err := h.runInterpreter(ctx, writer, shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars})
 	if err != nil {
 		err = deadline.Wrap(err)

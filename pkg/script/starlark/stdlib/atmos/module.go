@@ -281,5 +281,6 @@ func (s *binding) atmosCommand(thread *starlark.Thread, b *starlark.Builtin, arg
 	argv := append([]string{name}, positionals...)
 	argv = append(argv, flagArgs...)
 	argv = append(argv, extraArgs...)
+	argv = s.queryDefaults(argv, commandPath, &opts, kwargs)
 	return s.run(thread, argv, opts, false)
 }

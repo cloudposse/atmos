@@ -19,7 +19,7 @@ The method is available on the handle returned by [`components.get`](/functions/
 [`ctx.component`](/functions/automation/ctx.component):
 
 ```python
-component.exec(argv, working_directory = ..., env = ..., output = "stream", check = True)
+component.exec(argv, working_directory = ..., env = ..., output = "stream", check = True, timeout = "", retry = None)
 ```
 
 ## Arguments
@@ -61,6 +61,28 @@ The program inherits the invocation's execution environment, and Atmos then laye
 5. The `env` argument of the call.
 
 Each layer replaces variables of the same name from the layers before it.
+
+The `timeout` and `retry` options apply to this individual process call:
+
+<dl>
+    <dt>`timeout`</dt>
+    <dd>A positive duration such as `"30s"` or `"5m"`. It bounds the entire call,
+    including all attempts and retry delays. Omit it for no additional deadline;
+    an enclosing task or script can still cancel the call.</dd>
+    <dt>`retry`</dt>
+    <dd>A dictionary using the same policy fields as
+    [`steps.task`](/functions/automation/steps.task#retry-policy), including
+    `max_attempts`, `initial_delay`, and `backoff_strategy`. Optional `conditions`
+    are regular expressions matched against the failed attempt's stdout and stderr.
+    At least one must match when supplied. Omit the policy to run once.</dd>
+</dl>
+
+Only ordinary nonzero exits are retried. Cancellation, timeout, failure to start,
+signals, and I/O errors stop the call. With `check=False`, an ordinary nonzero exit
+is returned immediately and does not trigger retries. Captured output contains
+only the final attempt; streaming displays each attempt as it runs. Retrying
+repeats the command's effects, so use it only for operations safe to repeat.
+Set `max_attempts` or `timeout` to bound a retry policy.
 
 ## Returns
 

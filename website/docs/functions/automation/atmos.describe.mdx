@@ -23,10 +23,15 @@ atmos.describe(
     args = [],
     working_directory = ...,
     env = ...,
-    output = "stream",
+    output = "capture",
     check = True,
 )
 ```
+
+Calls default to JSON and captured output. Read `result.data` directly; `result.stdout`
+retains the raw JSON. Explicit formats and `output = "stream"` override these defaults.
+Subcommands without a `--format` flag retain their native format. See
+[query defaults](/functions/automation/atmos.run#query-defaults).
 
 ## Subcommands
 
@@ -78,7 +83,7 @@ Options other than the positionals are keyword-only.
 
 ## Returns
 
-A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+A result with decoded JSON in `data`, raw text in `stdout` and `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
 
 ## Examples
 
@@ -90,12 +95,12 @@ station = atmos.describe(
     flags = {"stack": "dev", "format": "json", "provenance": False},
     output = "capture",
 )
-config = json.decode(station.stdout)
+config = station.data
 print(config["vars"]["location"])
 ```
 
-This runs `atmos describe component station --format=json --provenance=false --stack=dev`. Request JSON so the
-output decodes with `json.decode`; the default format is YAML.
+This runs `atmos describe component station --format=json --provenance=false --stack=dev`. The
+output is also available as raw JSON in `station.stdout`; JSON is the wrapper's default format.
 
 ### Pull one value with a query
 
@@ -105,7 +110,7 @@ location = atmos.describe(
     flags = {"stack": "dev", "format": "json", "query": ".vars.location", "provenance": False},
     output = "capture",
 )
-print(json.decode(location.stdout))
+print(location.data)
 ```
 
 ### List the stacks that define a component
@@ -116,19 +121,19 @@ stacks = atmos.describe(
     flags = {"components": "station", "sections": "vars", "format": "json"},
     output = "capture",
 )
-for stack_name in sorted(json.decode(stacks.stdout).keys()):
+for stack_name in sorted(stacks.data.keys()):
     print(stack_name)
 ```
 
 ### Find affected components
 
 ```python
-affected = atmos.describe("affected", flags = {"base": "main", "format": "json"}, output = "capture")
-for item in json.decode(affected.stdout):
+affected = atmos.describe("affected", flags = {"base": "origin/main", "include-dependents": True})
+for item in affected.data:
     print(item["component"], "in", item["stack"])
 ```
 
-The `base` key becomes `--base=main`, which compares the working tree against the `main` branch.
+The `base` key becomes `--base=origin/main`, which compares the working tree against the `origin/main` ref.
 
 ## Related
 

@@ -27,6 +27,7 @@ type workflowControlContext struct {
 func executeWorkflowControlStep(ctx context.Context, control *workflowControlContext, parent *schema.WorkflowStep) error {
 	vars := workflowControlVariables(control)
 	childExecutor := &workflow.ControlCommandExecutor{
+		ScriptSteps:         stepPkg.NewAutomationLibrary(vars, control.workflowDefinition),
 		InstallTools:        stepPkg.ScriptToolInstaller(&control.atmosConfig),
 		DryRun:              control.dryRun,
 		ScriptComponent:     stepPkg.ScriptComponentRef(vars),
