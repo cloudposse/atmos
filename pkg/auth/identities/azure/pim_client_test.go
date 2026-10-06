@@ -477,6 +477,234 @@ func TestARMPIMClient_PolicyMaxDuration_BadDurationFormat(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid-iso")
 }
 
+func TestARMPIMClient_PolicyMaxDuration_FollowsContinuationLinks(t *testing.T) {
+	page1 := `{
+		"value": [
+			{
+				"name": "assignment-page1",
+				"properties": {
+					"roleDefinitionId": "/providers/Microsoft.Authorization/roleDefinitions/unrelated",
+					"effectiveRules": [
+						{
+							"id": "Expiration_EndUser_Assignment",
+							"ruleType": "RoleManagementPolicyExpirationRule",
+							"maximumDuration": "PT1H",
+							"target": {"caller": "EndUser", "level": "Assignment"}
+						}
+					]
+				}
+			}
+		],
+		"nextLink": "https://management.azure.com/subscriptions/test-sub/providers/Microsoft.Authorization/roleManagementPolicyAssignments?$skiptoken=token-page-2&api-version=2020-10-01"
+	}`
+
+	page2 := `{
+		"value": [
+			{
+				"name": "assignment-page2",
+				"properties": {
+					"roleDefinitionId": "` + testRoleDefID + `",
+					"effectiveRules": [
+						{
+							"id": "Expiration_EndUser_Assignment",
+							"ruleType": "RoleManagementPolicyExpirationRule",
+							"maximumDuration": "PT6H",
+							"target": {"caller": "EndUser", "level": "Assignment"}
+						}
+					]
+				}
+			}
+		],
+		"nextLink": ""
+	}`
+
+	doer := &fakeDoer{handler: func(req *http.Request) (*http.Response, error) {
+		if req.URL.Query().Get("$skiptoken") == "token-page-2" {
+			return jsonResponse(http.StatusOK, page2), nil
+		}
+		return jsonResponse(http.StatusOK, page1), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	maxDuration, found, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, 6*time.Hour, maxDuration)
+
+	require.Len(t, doer.requests, 2)
+	assert.Equal(t, "token-page-2", doer.requests[1].URL.Query().Get("$skiptoken"))
+	assert.Equal(t, "2020-10-01", doer.requests[1].URL.Query().Get("api-version"))
+	assert.Equal(t, "Bearer test-token", doer.requests[1].Header.Get("Authorization"))
+}
+
+func TestARMPIMClient_PolicyMaxDuration_ContinuationLinkRelative(t *testing.T) {
+	page1 := `{
+		"value": [],
+		"nextLink": "/subscriptions/test-sub/providers/Microsoft.Authorization/roleManagementPolicyAssignments?$skiptoken=rel-token"
+	}`
+
+	page2 := `{
+		"value": [
+			{
+				"name": "assignment-page2",
+				"properties": {
+					"roleDefinitionId": "` + testRoleDefID + `",
+					"effectiveRules": [
+						{
+							"id": "Expiration_EndUser_Assignment",
+							"ruleType": "RoleManagementPolicyExpirationRule",
+							"maximumDuration": "PT3H",
+							"target": {"caller": "EndUser", "level": "Assignment"}
+						}
+					]
+				}
+			}
+		]
+	}`
+
+	doer := &fakeDoer{handler: func(req *http.Request) (*http.Response, error) {
+		if req.URL.Query().Get("$skiptoken") == "rel-token" {
+			return jsonResponse(http.StatusOK, page2), nil
+		}
+		return jsonResponse(http.StatusOK, page1), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	maxDuration, found, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, 3*time.Hour, maxDuration)
+
+	require.Len(t, doer.requests, 2)
+	assert.Equal(t, "https", doer.requests[1].URL.Scheme)
+	assert.Equal(t, "management.azure.com", doer.requests[1].URL.Host)
+	assert.Equal(t, "rel-token", doer.requests[1].URL.Query().Get("$skiptoken"))
+	assert.Equal(t, "2020-10-01", doer.requests[1].URL.Query().Get("api-version"))
+}
+
+func TestARMPIMClient_PolicyMaxDuration_ContinuationSSRFProtection(t *testing.T) {
+	page1 := `{
+		"value": [],
+		"nextLink": "https://evil.attacker.com/subscriptions/steal-token"
+	}`
+
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, page1), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	_, _, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMInvalidScope)
+	require.Len(t, doer.requests, 1) // Attacker host is never contacted
+}
+
+func TestARMPIMClient_PolicyMaxDuration_ContinuationCycleDetected(t *testing.T) {
+	page := `{
+		"value": [],
+		"nextLink": "https://management.azure.com/subscriptions/test-sub/providers/Microsoft.Authorization/roleManagementPolicyAssignments?page=loop"
+	}`
+
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, page), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	_, _, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMRequestFailed)
+	assert.Contains(t, err.Error(), "cyclic continuation link")
+}
+
+func TestARMPIMClient_PolicyMaxDuration_ContinuationHTTPError(t *testing.T) {
+	page1 := `{
+		"value": [],
+		"nextLink": "https://management.azure.com/subscriptions/test-sub/providers/Microsoft.Authorization/roleManagementPolicyAssignments?page=2"
+	}`
+
+	doer := &fakeDoer{handler: func(req *http.Request) (*http.Response, error) {
+		if req.URL.Query().Get("page") == "2" {
+			return jsonResponse(http.StatusBadGateway, `{"error":"gateway error"}`), nil
+		}
+		return jsonResponse(http.StatusOK, page1), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	_, _, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMRequestFailed)
+	assert.Contains(t, err.Error(), "502")
+}
+
+func TestARMPIMClient_PolicyMaxDuration_ContinuationBadJSON(t *testing.T) {
+	page1 := `{
+		"value": [],
+		"nextLink": "https://management.azure.com/subscriptions/test-sub/providers/Microsoft.Authorization/roleManagementPolicyAssignments?page=2"
+	}`
+
+	doer := &fakeDoer{handler: func(req *http.Request) (*http.Response, error) {
+		if req.URL.Query().Get("page") == "2" {
+			return jsonResponse(http.StatusOK, `{"value": [bad-json`), nil
+		}
+		return jsonResponse(http.StatusOK, page1), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	_, _, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMRequestFailed)
+	assert.Contains(t, err.Error(), "decoding")
+}
+
+func TestARMPIMClient_PolicyMaxDuration_ContinuationInvalidURL(t *testing.T) {
+	page1 := `{
+		"value": [],
+		"nextLink": "://invalid-url"
+	}`
+
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, page1), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	_, _, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMRequestFailed)
+	assert.Contains(t, err.Error(), "parsing continuation URL")
+}
+
+func TestARMPIMClient_PolicyMaxDuration_ConflictingTargetIgnoredEvenWithMatchingID(t *testing.T) {
+	body := `{
+		"value": [
+			{
+				"name": "assignment-1",
+				"properties": {
+					"roleDefinitionId": "` + testRoleDefID + `",
+					"effectiveRules": [
+						{
+							"id": "Expiration_EndUser_Assignment",
+							"ruleType": "RoleManagementPolicyExpirationRule",
+							"maximumDuration": "P180D",
+							"target": {"caller": "Admin", "level": "Eligibility"}
+						},
+						{
+							"id": "Expiration_EndUser_Assignment",
+							"ruleType": "RoleManagementPolicyExpirationRule",
+							"maximumDuration": "PT2H",
+							"target": {"caller": "EndUser", "level": "Assignment"}
+						}
+					]
+				}
+			}
+		]
+	}`
+
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, body), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	maxDuration, found, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, 2*time.Hour, maxDuration)
+}
+
 func TestParseISO8601Duration(t *testing.T) {
 	validTests := []struct {
 		in   string
@@ -577,12 +805,60 @@ func TestIsActivationExpirationRule(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "valid empty caller Assignment level",
+			rule: armPolicyAssignmentRule{
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "PT8H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "",
+					Level:  "Assignment",
+				},
+			},
+			want: true,
+		},
+		{
 			name: "EndUser with non-assignment level",
 			rule: armPolicyAssignmentRule{
 				RuleType:        "RoleManagementPolicyExpirationRule",
 				MaximumDuration: "PT8H",
 				Target: armPolicyAssignmentRuleTarget{
 					Caller: "EndUser",
+					Level:  "Eligibility",
+				},
+			},
+			want: false,
+		},
+		{
+			name: "Admin caller with Assignment level",
+			rule: armPolicyAssignmentRule{
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "PT8H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "Admin",
+					Level:  "Assignment",
+				},
+			},
+			want: false,
+		},
+		{
+			name: "Admin caller with empty level",
+			rule: armPolicyAssignmentRule{
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "PT8H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "Admin",
+					Level:  "",
+				},
+			},
+			want: false,
+		},
+		{
+			name: "empty caller with non-assignment level",
+			rule: armPolicyAssignmentRule{
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "PT8H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "",
 					Level:  "Eligibility",
 				},
 			},
@@ -613,7 +889,7 @@ func TestIsActivationExpirationRule(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "fallback by ID Expiration_EndUser_Assignment",
+			name: "conflicting explicit target rejected with Expiration_EndUser_Assignment ID",
 			rule: armPolicyAssignmentRule{
 				ID:              "Expiration_EndUser_Assignment",
 				RuleType:        "RoleManagementPolicyExpirationRule",
@@ -623,10 +899,10 @@ func TestIsActivationExpirationRule(t *testing.T) {
 					Level:  "OtherLevel",
 				},
 			},
-			want: true,
+			want: false,
 		},
 		{
-			name: "fallback by ID containing enduser",
+			name: "conflicting explicit target rejected with enduser ID",
 			rule: armPolicyAssignmentRule{
 				ID:              "custom_enduser_rule",
 				RuleType:        "RoleManagementPolicyExpirationRule",
@@ -636,17 +912,43 @@ func TestIsActivationExpirationRule(t *testing.T) {
 					Level:  "OtherLevel",
 				},
 			},
+			want: false,
+		},
+		{
+			name: "fallback by ID Expiration_EndUser_Assignment when target absent",
+			rule: armPolicyAssignmentRule{
+				ID:              "Expiration_EndUser_Assignment",
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "PT4H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "",
+					Level:  "",
+				},
+			},
 			want: true,
 		},
 		{
-			name: "unmatched non-enduser rule",
+			name: "fallback by ID containing enduser when target absent",
+			rule: armPolicyAssignmentRule{
+				ID:              "custom_enduser_rule",
+				RuleType:        "RoleManagementPolicyExpirationRule",
+				MaximumDuration: "PT4H",
+				Target: armPolicyAssignmentRuleTarget{
+					Caller: "",
+					Level:  "",
+				},
+			},
+			want: true,
+		},
+		{
+			name: "unmatched non-enduser rule when target absent",
 			rule: armPolicyAssignmentRule{
 				ID:              "Expiration_Admin_Eligibility",
 				RuleType:        "RoleManagementPolicyExpirationRule",
 				MaximumDuration: "PT4H",
 				Target: armPolicyAssignmentRuleTarget{
-					Caller: "Admin",
-					Level:  "Eligibility",
+					Caller: "",
+					Level:  "",
 				},
 			},
 			want: false,
@@ -659,4 +961,3 @@ func TestIsActivationExpirationRule(t *testing.T) {
 		})
 	}
 }
-
