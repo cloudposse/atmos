@@ -969,7 +969,7 @@ sub {
 /* Year headings on ALL blog pages and sidebar - consistent styling */
 .blog-list-page h3,
 .blog-post-page aside h3,
-aside[class*="sidebar"] h3 {
+aside[class*="sidebar"] h3:not(.reference-group-label) {
     font-size: 1.5rem !important;
     font-weight: 700 !important;
     margin-top: 2rem !important;
@@ -981,7 +981,7 @@ aside[class*="sidebar"] h3 {
 
 html[data-theme='light'] .blog-list-page h3,
 html[data-theme='light'] .blog-post-page aside h3,
-html[data-theme='light'] aside[class*="sidebar"] h3 {
+html[data-theme='light'] aside[class*="sidebar"] h3:not(.reference-group-label) {
     color: rgba(0, 0, 0, 0.6) !important;
     border-bottom-color: rgba(0, 0, 0, 0.2) !important;
 }

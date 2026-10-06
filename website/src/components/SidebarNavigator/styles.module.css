@@ -8,6 +8,16 @@
   display: none !important;
 }
 
+.navigator :global(.reference-group-label) {
+  margin: 1.25rem 0.5rem 0.5rem;
+  color: var(--navigation-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 /* Let the sticky toolbar cover the scrollport's top edge. Menu padding would
    leave a strip of scrolling links visible above its opaque background. */
 :global(.menu):has(.navigator) {

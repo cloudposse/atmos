@@ -172,7 +172,9 @@ export default function SidebarNavigator({
       : section === null && overview?.type === "link"
         ? overview
         : undefined;
-  const headingLabel = selected?.label || `All ${sidebarLabel(sidebarName)}`;
+  const headingLabel = selected?.label ||
+    (sidebarName === "cli" && overview?.label) ||
+    `All ${sidebarLabel(sidebarName)}`;
   const mounted = new Set([...visited, ...(section === null ? [] : [section])]);
   return (
     <li ref={rootRef} className={styles.navigator}>

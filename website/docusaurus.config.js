@@ -91,10 +91,9 @@ const config = {
                     {from: '/integrations/integrations', to: '/cli/configuration/integrations'},
                     {from: '/cli/configuration/integrations/spacelift', to: '/deprecated/spacelift'},
                     // Legacy GitHub Actions redirected to native CI (deprecated)
-                    {from: '/integrations/github-actions', to: '/ci'},
-                    {from: '/integrations/github-actions/affected-stacks', to: '/ci'},
-                    {from: '/integrations/github-actions/atmos-terraform-plan', to: '/ci'},
-                    {from: '/integrations/github-actions/atmos-terraform-apply', to: '/ci'},
+                    {from: '/integrations/github-actions/affected-stacks', to: '/integrations/github-actions/deploy-affected'},
+                    {from: '/integrations/github-actions/atmos-terraform-plan', to: '/integrations/github-actions/plan-on-pull-request'},
+                    {from: '/integrations/github-actions/atmos-terraform-apply', to: '/integrations/github-actions/apply-on-merge'},
                     {from: '/integrations/github-actions/atmos-terraform-drift-detection', to: '/ci'},
                     {from: '/integrations/github-actions/atmos-terraform-drift-remediation', to: '/ci'},
                     // Vendored dependency management moved out of GitHub Actions integrations.
@@ -678,7 +677,8 @@ const config = {
                         label: 'Learn',
                     },
                     {
-                        to: '/cli',
+                        type: 'docSidebar',
+                        sidebarId: 'cli',
                         position: 'left',
                         label: 'Reference'
                     },
