@@ -42,6 +42,7 @@ reviews:
     drafts: false
     base_branches:
       - "main"
+      - "^osterman/starlark-execution-support$"
   tools:
     ast-grep:
       essential_rules: true
