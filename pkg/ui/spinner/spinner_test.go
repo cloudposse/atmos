@@ -5,14 +5,49 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 )
+
+func TestSpinnerViews_PreserveRenderedProgress(t *testing.T) {
+	t.Setenv("CLICOLOR_FORCE", "1")
+	t.Setenv("NO_COLOR", "")
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	original := ui.GetColorProfile()
+	t.Cleanup(func() { ui.SetColorProfile(original) })
+	ui.SetColorProfile(termenv.TrueColor)
+	bar := ui.NewProgress(progress.WithWidth(10), progress.WithoutPercentage()).ViewAs(0.5)
+	require.Contains(t, bar, "\x1b[", "exercise a colored bar")
+	message := "Downloading artifact (50%) " + bar
+	assert.Equal(t, ui.FormatInline("Installing `atmos`"), formatProgressMessage("Installing `atmos`"),
+		"unrendered labels retain the standard Markdown formatting")
+	for name, model := range map[string]tea.Model{
+		"manual":  newManualSpinnerModel(message),
+		"static":  newSpinnerModel(message, "done"),
+		"dynamic": newDynamicSpinnerModel(message),
+	} {
+		t.Run(name, func(t *testing.T) {
+			view := model.View()
+			assert.Contains(t, view, bar, "preserve the rendered gradient")
+			assert.Contains(t, ansi.Strip(view), "Downloading artifact (50%) █████░░░░░")
+			assert.NotContains(t, ansi.Strip(view), "[38;", "never print color parameters as text")
+			assert.NotContains(t, ansi.Strip(view), "[0m")
+		})
+	}
+}
 
 func TestNewSpinnerModel(t *testing.T) {
 	t.Run("creates model with correct messages", func(t *testing.T) {

@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/github"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestArtifactDownloadProgressBar(t *testing.T) {
@@ -35,23 +34,28 @@ func TestArtifactDownloadProgressBar(t *testing.T) {
 		{name: "half", tty: true, width: "120", downloaded: 50, total: 100, filled: 12, empty: 12},
 		{name: "complete", tty: true, width: "120", downloaded: 100, total: 100, filled: 24},
 		{name: "over total", tty: true, width: "120", downloaded: 110, total: 100, filled: 24},
-		{name: "narrow", tty: true, width: "50", downloaded: 50, total: 100, filled: 4, empty: 4},
+		{name: "narrow", tty: true, width: "51", downloaded: 50, total: 100, filled: 4, empty: 4},
 		{name: "too narrow", tty: true, width: "40", downloaded: 50, total: 100},
 		{name: "unknown total", tty: true, width: "120", downloaded: 50},
 		{name: "logs", width: "120", downloaded: 50, total: 100},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("CLICOLOR_FORCE", "1")
+			t.Setenv("NO_COLOR", "")
 			t.Setenv("COLUMNS", tt.width)
 			t.Setenv("ATMOS_CAST_RECORDING_WIDTH", "")
 			captureUITestOutput(t, func() {
 				viper.Set("force-tty", tt.tty)
 				message := formatArtifactDownloadProgress("artifact", tt.downloaded, tt.total)
-				// The spinner renders messages as inline Markdown; the bar must survive it.
-				text := ansi.Strip(ui.FormatInline(message))
+				// Colored progress is already rendered; the spinner preserves it verbatim.
+				text := ansi.Strip(message)
 				assert.Equal(t, tt.filled, strings.Count(text, "█"))
 				assert.Equal(t, tt.empty, strings.Count(text, "░"))
 				assert.Contains(t, text, "Downloading artifact")
 				assert.NotContains(t, text, "\n")
+				if !tt.tty {
+					assert.NotContains(t, message, "\x1b", "log progress contains no terminal controls")
+				}
 			})
 		})
 	}
@@ -162,6 +166,8 @@ func TestDownloadAndInstallArtifactToDir_ProgressAndSilentMode(t *testing.T) {
 			if tt.showProgress {
 				if tt.color {
 					assert.Contains(t, output, "\x1b[", "exercise ANSI output even outside CI")
+				} else {
+					assert.NotContains(t, output, "\x1b", "plain logs contain no terminal controls")
 				}
 				// Styling can insert escape sequences between words in the message.
 				text := ansi.Strip(output)
@@ -169,6 +175,8 @@ func TestDownloadAndInstallArtifactToDir_ProgressAndSilentMode(t *testing.T) {
 				assert.Contains(t, text, "100%")
 				assert.Contains(t, text, "Extracting build-artifacts-test")
 				assert.Contains(t, text, "Installed to")
+				assert.NotContains(t, text, "█", "non-TTY output uses text progress")
+				assert.NotContains(t, text, "░")
 			} else {
 				assert.Empty(t, output)
 			}

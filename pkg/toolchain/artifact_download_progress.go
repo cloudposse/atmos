@@ -19,8 +19,8 @@ const (
 	artifactLogInterval      = 5 * time.Second
 	artifactBarWidth         = 24
 	artifactMinBarWidth      = 6
-	// Reserve the spinner, two spaces, and the final column to prevent line wrapping.
-	artifactProgressMargin = 4
+	// Reserve the spinner (including its trailing space), two separators, and the final column.
+	artifactProgressMargin = 5
 )
 
 type artifactDownloadOptions struct {
@@ -42,7 +42,8 @@ func formatArtifactDownloadProgress(name string, downloaded, total int64) string
 		return message
 	}
 	bar := ui.NewProgress(progress.WithWidth(min(artifactBarWidth, width)), progress.WithoutPercentage())
-	return message + " " + bar.ViewAs(percent/artifactCompletePercent)
+	// Format only the label; the progress component already contains rendered ANSI.
+	return ui.FormatInline(message) + " " + bar.ViewAs(percent/artifactCompletePercent)
 }
 
 // newArtifactProgressReporter limits terminal redraws and keeps non-TTY logs

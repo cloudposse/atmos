@@ -86,8 +86,22 @@ Very narrow terminals and unknown-size downloads retain text progress. Logs keep
 their throttled text messages, and silent installs remain silent.
 
 Regression tests cover empty, half-full, complete, and over-total bars, narrow
-terminals, unknown lengths, and non-interactive logs, including the spinner's
-inline Markdown rendering. Focused artifact tests pass with the race detector.
+terminals, unknown lengths, and non-interactive logs. Focused artifact tests pass
+with the race detector.
+
+The first bar implementation sent its rendered ANSI colors through the spinner's
+Markdown formatter, exposing color parameters such as `[38;2;...m` in real
+terminals. The initial tests counted bar cells without verifying that color
+sequences survived. Spinner views now preserve already-rendered ANSI components,
+while ordinary labels retain Markdown formatting. The artifact label is formatted
+before the shared progress component is appended. Regression tests initialize the
+real formatter with color enabled and verify the complete spinner view preserves
+the gradient without printing escape-code fragments. Non-TTY integration tests
+also verify text-only progress, no terminal controls in plain logs, and silence
+when progress is disabled.
+
+A live PTY preview of the shared spinner and progress component also passed at
+0%, 25%, 50%, 75%, and 100%, preserving the gradient without visible ANSI fragments.
 
 ## Follow-up
 
