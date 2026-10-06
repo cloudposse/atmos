@@ -3,27 +3,26 @@ title: atmos container
 sidebar_label: container
 sidebar_class_name: command
 id: usage
-description: Build, run, and operate persistent, stack-scoped container components.
+description: Run your application and its supporting services locally using container components defined in Atmos stacks.
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Use the `atmos container` subcommands to build, run, and operate **container components** — stack-scoped,
-Atmos-native, persistent containers. One component is one service. Atmos owns the image artifact
-(build/push/pull) and an optional long-running named container lifecycle (`up`/`start`/`ps`/`logs`/`exec`/
-`attach`/`restart`/`stop`/`rm`/`down`), discovered by labels derived from the canonical component instance
-address — not from local state files.
+Run your application and its supporting services locally with Atmos container
+components. Like Docker Compose, they let you define services such as an API,
+database, and cache, then bring them up together for development and testing.
+Keeping those definitions in Atmos stacks lets you share configuration through
+imports and inheritance and use the same tooling as the rest of your infrastructure.
 </Intro>
 
 <CastPlayer title="atmos container --help" src="/casts/screengrabs/atmos-container--help.cast" static chrome />
 
-A container component is the per-service building block. A set of container components grouped by a
-[composition](#compositions) is effectively "your own Compose" — Atmos orchestrates a multi-container
-local system with no `compose.yaml`. This is distinct from the ephemeral [`type: container`
-step](/workflows), which is `docker run --rm` and workflow-scoped; the component is
-declarative, addressable infrastructure.
+Each container component defines one service. Group related services in a
+[composition](#compositions) to manage them together. Atmos can build their images,
+start and stop containers, and show logs while you work. For a temporary container
+that runs a single workflow task, use a [container step](/workflows) instead.
 
 ## Usage
 
