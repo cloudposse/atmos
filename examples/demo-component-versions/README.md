@@ -4,6 +4,13 @@ tags: [Components]
 cast:
   file: /casts/examples/demo-component-versions/vendor-versions.cast
   title: atmos component version vendoring
+related_docs:
+  - label: "Vendor commands"
+    url: /cli/commands/vendor/usage
+  - label: "Vendor manifest"
+    url: /vendor/vendor-config
+  - label: "Component Versions"
+    url: /design-patterns/version-management
 ---
 
 # Example: Demo Component Versions
@@ -14,8 +21,8 @@ Learn more about [Vendoring](https://atmos.tools/vendor).
 
 ## What You'll See
 
-- [Version pinning](https://atmos.tools/vendor#versioning) with git refs
-- [YAML anchors](https://atmos.tools/vendor/vendor-manifest#yaml-anchors) to DRY up vendor configs
+- [Version pinning](https://atmos.tools/vendor/url-syntax#query-parameters) with git refs
+- [YAML anchors](https://atmos.tools/vendor/vendor-config) to DRY up vendor configs
 - Multiple component versions side-by-side
 
 ## Try It

@@ -3,7 +3,7 @@ title: atmos describe affected
 sidebar_label: affected
 sidebar_class_name: command
 id: affected
-description: This command produces a list of the affected Atmos components and stacks given two Git commits.
+description: "Find which components and stacks are affected by changes between Git revisions."
 ---
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
@@ -12,7 +12,9 @@ import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
-Use this command to show a list of the affected Atmos components and stacks given two Git commits.
+Find which components and stacks are affected by changes between Git revisions. Use the results to
+understand a pull request's impact and select the infrastructure your CI pipeline needs to plan or
+validate.
 </Intro>
 
 <DemoVideo id="describe-affected" title="atmos describe affected" showCaption={false} />

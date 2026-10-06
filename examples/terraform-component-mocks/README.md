@@ -1,6 +1,14 @@
+---
+related_docs:
+  - label: "Terraform plan"
+    url: /cli/commands/terraform/plan
+  - label: "Component mock configuration"
+    url: /stacks/components/mocks
+---
+
 # Terraform component mocks
 
-This example lets `app` consume `vpc`'s output either from real Terraform state or from a component-owned mock.
+This example lets `app` consume `vpc`'s output either from real Terraform state or from a [component-owned mock](https://atmos.tools/stacks/components/mocks).
 
 Mocks are fallbacks by default. With `--use-mocks`, a `!terraform.state` lookup returns the real value when it exists and uses the component's `mocks` value only when the referenced component is not provisioned or the output is missing.
 
