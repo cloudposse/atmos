@@ -4,11 +4,16 @@ tags: [Hooks]
 cast:
   file: /casts/examples/hooks-custom-command/hook-config.cast
   title: atmos custom command hook
+related_docs:
+  - label: "Terraform plan"
+    url: /cli/commands/terraform/plan
+  - label: "Lifecycle hook configuration"
+    url: /stacks/hooks
 ---
 
 # `hooks-custom-command`
 
-Demonstrates the generic **`kind: command`** hook by wiring a custom
+Demonstrates the generic [**`kind: command`** hook](https://atmos.tools/stacks/hooks) by wiring a custom
 Python script as an `after.terraform.plan` hook — the pattern for
 **anything** Atmos doesn't ship a named kind for.
 
@@ -56,11 +61,11 @@ To plug in your own tool, mirror this:
 
 1. Have your script (or binary) read whatever ATMOS_\* env vars it needs.
 2. Write structured output to `$ATMOS_OUTPUT_FILE` (or skip it — output
-   to stdout streams through Atmos's I/O layer to the user's terminal
-   regardless).
+    to stdout streams through Atmos's I/O layer to the user's terminal
+    regardless).
 3. Set `format: markdown` if the output is markdown so it gets nicely
-   rendered. Otherwise omit `format:` and the artifact is just stored
-   downloadably (or sent to Atmos Pro as an opaque blob).
+    rendered. Otherwise omit `format:` and the artifact is just stored
+    downloadably (or sent to Atmos Pro as an opaque blob).
 
 ## When to use a named kind instead
 

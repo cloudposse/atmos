@@ -1,11 +1,16 @@
-import React from 'react';
-import OriginalDocBreadcrumbs from '@theme-original/DocBreadcrumbs';
-import { useDoc } from '@docusaurus/plugin-content-docs/client';
+import React, { useMemo } from "react";
+import OriginalDocBreadcrumbs from "@theme-original/DocBreadcrumbs";
+import {
+  useDoc,
+  useDocsSidebar,
+  DocsSidebarProvider,
+} from "@docusaurus/plugin-content-docs/client";
+import { canonicalSidebar } from "@site/src/components/SidebarNavigator/canonical.mjs";
 
-import CopyMarkdownButton from '@site/src/components/CopyMarkdownButton';
-import { deriveMarkdownHref } from '@site/src/theme/docUtils';
+import CopyMarkdownButton from "@site/src/components/CopyMarkdownButton";
+import { deriveMarkdownHref } from "@site/src/theme/docUtils";
 
-import styles from './styles.module.css';
+import styles from "./styles.module.css";
 
 /**
  * Wraps the default DocBreadcrumbs so the "Copy Markdown" split button shares
@@ -21,20 +26,29 @@ import styles from './styles.module.css';
  * fixed by Docusaurus, not by component-internal state. No
  * eslint-plugin-react-hooks is configured in this repo.
  */
-export default function DocBreadcrumbsWrapper(props: Record<string, unknown>): JSX.Element {
-  let mdHref = '';
+export default function DocBreadcrumbsWrapper(
+  props: Record<string, unknown>,
+): JSX.Element {
+  const sidebar = useDocsSidebar();
+  const canonicalItems = useMemo(
+    () => (sidebar ? canonicalSidebar(sidebar.items) : undefined),
+    [sidebar],
+  );
+  let mdHref = "";
   try {
     // eslint-disable-next-line react-hooks/rules-of-hooks
     const { metadata } = useDoc();
-    mdHref = deriveMarkdownHref(metadata?.permalink ?? '');
+    mdHref = deriveMarkdownHref(metadata?.permalink ?? "");
   } catch {
-    mdHref = '';
+    mdHref = "";
   }
 
   return (
     <div className={styles.row}>
       <div className={styles.breadcrumbsCol}>
-        <OriginalDocBreadcrumbs {...props} />
+        <DocsSidebarProvider name={sidebar?.name} items={canonicalItems}>
+          <OriginalDocBreadcrumbs {...props} />
+        </DocsSidebarProvider>
       </div>
       {mdHref && (
         <div className={styles.actionsCol}>
