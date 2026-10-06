@@ -58,6 +58,12 @@ type AzureKeyVaultStore struct {
 	withoutAuth    bool
 	secret         bool
 
+	// Secret attributes applied to every write (see azure_keyvault_expires.go).
+	// tags is nil when no tags are configured. At most one of expiresAt and expiresIn is set.
+	tags      map[string]*string
+	expiresAt *time.Time
+	expiresIn time.Duration
+
 	// Identity-based authentication fields.
 	identityName string
 	authResolver store.AuthContextResolver
@@ -74,6 +80,13 @@ type AzureKeyVaultStoreOptions struct {
 	WithoutAuthentication                bool    `mapstructure:"without_authentication"`
 	InsecureAllowCredentialWithHTTP      bool    `mapstructure:"insecure_allow_credential_with_http"`
 	EndpointInsecure                     bool    `mapstructure:"endpoint_insecure"`
+
+	// Tags are applied to every secret Atmos writes.
+	Tags map[string]string `mapstructure:"tags"`
+	// Expires sets the expiration of every secret Atmos writes. It is either an absolute RFC 3339
+	// timestamp (or a YYYY-MM-DD date, midnight UTC) or a duration such as "90d" or "2160h" that is
+	// applied relative to the time of each write.
+	Expires *string `mapstructure:"expires"`
 }
 
 // Ensure AzureKeyVaultStore implements the store.Store, store.IdentityAwareStore,
@@ -118,6 +131,12 @@ func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName strin
 		prefix = *options.Prefix
 	}
 
+	// Parse the expiry before any client initialization so a bad value fails fast.
+	expiresAt, expiresIn, err := resolveAzureExpires(options.Expires)
+	if err != nil {
+		return nil, err
+	}
+
 	store := &AzureKeyVaultStore{
 		vaultURL:       vaultURL,
 		prefix:         prefix,
@@ -125,6 +144,9 @@ func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName strin
 		clientOptions:  clientOptions,
 		withoutAuth:    options.WithoutAuthentication,
 		identityName:   identityName,
+		tags:           azureTagsToPointers(options.Tags),
+		expiresAt:      expiresAt,
+		expiresIn:      expiresIn,
 	}
 
 	// If no identity is configured, initialize the client eagerly (backward compatible behavior).
@@ -326,11 +348,7 @@ func (s *AzureKeyVaultStore) Set(stack string, component string, key string, val
 		return fmt.Errorf(errWrapFormat, store.ErrSerializeJSON, err)
 	}
 
-	params := azsecrets.SetSecretParameters{
-		Value: &strValue,
-	}
-
-	_, err = s.client.SetSecret(context.Background(), secretName, params, nil)
+	_, err = s.client.SetSecret(context.Background(), secretName, s.secretParameters(&strValue), nil)
 	if err != nil {
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) && respErr.StatusCode == statusCodeForbidden {

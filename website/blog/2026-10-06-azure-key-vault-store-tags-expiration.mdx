@@ -1,0 +1,62 @@
+---
+slug: azure-key-vault-store-tags-expiration
+title: "Tags and expiration dates for Azure Key Vault store secrets"
+authors: [osterman]
+tags: [feature, enhancement]
+---
+
+Many organizations enforce an Azure Policy that rejects any Key Vault secret created without an expiration date and a set of tags. It is a sensible governance rule, and it blocks every write that doesn't comply. Until now, that ruled out using Azure Key Vault as an Atmos store in those environments: Atmos wrote the secret value and nothing else, so the policy denied the request.
+
+The Azure Key Vault store now accepts `tags` and `expires` options, and applies them to every secret Atmos writes.
+
+<!--truncate-->
+
+## The Problem
+
+Azure Key Vault lets administrators require metadata on every secret through Azure Policy, for example "all secrets must have an expiration date" and "all secrets must carry an owner tag". The Atmos [Azure Key Vault store](/cli/configuration/stores) created secrets with only a name and a value, so under such a policy `atmos terraform apply` hooks, `!store` writes, and `atmos secret set` all failed with a policy violation.
+
+The only workaround was to pre-create every secret outside Atmos with the right metadata, which defeats the point of letting Atmos manage the store.
+
+## The Fix
+
+Two new options on the store apply metadata at write time:
+
+- `tags` sets key-value tags on every secret Atmos writes.
+- `expires` sets the expiration. It accepts either a duration or a specific date, so you don't need separate fields for each style.
+
+Reads, existence checks, listing, and deletion are unchanged, and stores that set neither option behave exactly as before.
+
+## How to Use It
+
+Configure both options in the store's `options` block in `atmos.yaml`:
+
+```yaml
+stores:
+  prod/azure:
+    kind: azure/keyvault
+    options:
+      vault_url: "https://my-keyvault.vault.azure.net/"
+      tags:
+        managed-by: atmos
+        environment: prod
+      expires: 90d
+```
+
+`expires` accepts these forms:
+
+| Value | Meaning |
+| --- | --- |
+| `90d` | A relative expiration: now plus 90 days, recalculated on every write |
+| `2160h` | Go durations such as `720h30m` also work |
+| `2027-01-01T00:00:00Z` | An absolute RFC 3339 timestamp |
+| `2027-01-01` | A date only, interpreted as midnight UTC |
+
+Prefer a relative duration for long-lived stores. A fixed date eventually passes, and from then on every new secret is created already expired or is rejected by policy. A relative value never goes stale, and because it's recalculated on each write, rewriting a secret renews its expiration. A fixed date that is already in the past is accepted, but Atmos logs a warning because Key Vault or your policy may reject it.
+
+Invalid values, such as `0d` or `soon`, fail when the store is created rather than on the first write. Tag values must be strings, so quote values like `"true"` or `"5"`.
+
+See the [stores configuration reference](/cli/configuration/stores) for the full list of Azure Key Vault options.
+
+## Get Involved
+
+This came from a request in [issue #1549](https://github.com/cloudposse/atmos/issues/1549). If another store backend needs metadata at write time, such as AWS tags or Google Secret Manager labels, tell us in the issue tracker.
