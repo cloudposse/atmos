@@ -1,14 +1,27 @@
-/* Discrete yellow dot marking an experimental feature in the sidebar. No cursor
+/* Discrete lifecycle marker in the sidebar. No cursor
    override, so it inherits the enclosing link's pointer cursor (no "help" caret). */
 .dot {
   display: inline-block;
   width: 6px;
   height: 6px;
-  margin-left: 0.4rem;
+  /* Keep the focus ring inside Docusaurus' overflow-clipped label. */
+  margin-inline: 0.4rem;
   border-radius: 50%;
-  background-color: #ffd700; /* Atmos gold; matches the list-command status dot. */
   vertical-align: middle;
   flex-shrink: 0;
+}
+
+.experimental {
+  background-color: #ffd700;
+}
+
+.deprecated {
+  background-color: #f97316;
+}
+
+.dot:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
 }
 
 /* Fixed-positioned so it is never clipped by the scrollable sidebar. The inline
@@ -27,10 +40,10 @@
   white-space: nowrap;
   pointer-events: none;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  animation: expTooltipIn 0.12s ease-out;
+  animation: statusTooltipIn 0.12s ease-out;
 }
 
-@keyframes expTooltipIn {
+@keyframes statusTooltipIn {
   from {
     opacity: 0;
     transform: translate(-50%, calc(-100% - 4px));

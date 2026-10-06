@@ -3,16 +3,21 @@ title: atmos stack
 sidebar_label: stack
 sidebar_class_name: command
 id: usage
-description: Read and edit component values in stack manifests using provenance to find the file that defines each value, preserving comments, anchors, YAML functions, and templates.
+description: "Inspect and update a component's effective configuration without tracing through imported YAML files by hand."
 ---
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `atmos stack` commands read and edit component-relative values (e.g. `vars.region`)
-for a component in a stack. Because stack configuration is assembled by deep-merging
-many manifests, Atmos uses [provenance](/stacks/imports) to find the
-manifest file that actually defines the effective value, then edits that file in place —
-preserving comments, anchors/aliases, Atmos YAML functions, and Go templates.
+Inspect and update a component's effective configuration without tracing through imported YAML files
+by hand. Atmos finds the manifest that defines a value and edits it while preserving comments,
+anchors, and templates.
+</Intro>
+
+:::note Editing shared configuration
+A value may come from an imported manifest shared by multiple stacks. Editing that manifest can affect every stack that imports it. Review the defining file before changing a value, or use `--file` to target a specific manifest.
+:::
+
+## Usage
 
 [`atmos stack config get|set|delete|format|list`](/cli/commands/stack/config) is
 the **canonical** command set. The flat commands documented below (`get`, `set`,
@@ -20,9 +25,6 @@ the **canonical** command set. The flat commands documented below (`get`, `set`,
 `list` has no flat form — a flat `atmos stack list` would collide with the existing
 [`atmos list stacks`](/cli/commands/list/stacks) — so use `atmos stack config list`
 directly.
-</Intro>
-
-## Usage
 
 ```shell
 atmos stack get <path> -s <stack> -c <component>

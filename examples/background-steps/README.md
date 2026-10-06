@@ -4,12 +4,17 @@ tags: [Automation]
 cast:
   file: /casts/examples/background-steps/service.cast
   title: atmos background service
+related_docs:
+  - label: "Run workflows"
+    url: /cli/commands/workflow
+  - label: "Container steps"
+    url: /steps/type/container
 ---
 
 # Background container services
 
-This example shows how to start a long-running container service in the background,
-run work against it, and tear it down — all from a workflow.
+This example shows how to start a long-running [container service](https://atmos.tools/steps/type/container) in the background,
+run work against it, and tear it down — all from a [workflow](https://atmos.tools/cli/commands/workflow).
 
 A container step with `background: true` starts detached and the workflow continues
 to the next step. Atmos reuses the existing container lifecycle to supervise it:

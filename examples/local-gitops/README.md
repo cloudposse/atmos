@@ -4,20 +4,31 @@ tags: [Emulators, Kubernetes, Automation]
 cast:
   file: /casts/examples/local-gitops/lifecycle.cast
   title: atmos gitops with flux lifecycle
+related_docs:
+  - label: "Kubernetes commands and GitOps publishing"
+    url: /cli/commands/kubernetes/usage
+  - label: "Kubernetes component configuration"
+    url: /stacks/components/kubernetes
+  - label: "Managed repository configuration"
+    url: /cli/configuration/git
+  - label: "Emulator commands"
+    url: /cli/commands/emulator/usage
 ---
 
 # Example: Local GitOps Round Trip
 
-Stand up an **entire GitOps loop on your laptop** — no GitHub account, no real
+Stand up an **entire [GitOps loop](https://atmos.tools/cli/commands/kubernetes/usage) on your laptop** — no GitHub account, no real
 cluster, no cloud credentials — and watch a change travel all the way around:
 
+[//]: # (editorconfig-checker-disable: Preserve literal output alignment.)
 ```
 atmos render  ─push─▶  Gitea (Git server emulator)  ─watch─▶  Flux  ─apply─▶  k3s (Kubernetes emulator)
      ▲                                                                              │
      └──────────────────────────  you observe it running  ◀───────────────────────┘
 ```
+[//]: # (editorconfig-checker-enable)
 
-Two local emulators do the heavy lifting:
+Two [local emulators](https://atmos.tools/cli/commands/emulator/usage) do the heavy lifting:
 
 - **`gitserver`** — a [Gitea](https://about.gitea.com/) Git server (the `gitea`
   emulator driver). Atmos auto-bootstraps a throwaway admin (`atmos`/`atmos`) and a

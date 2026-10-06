@@ -11,6 +11,18 @@
 
 // @ts-check
 
+const {stackConfiguration} = require('./sidebars/stacks');
+const continuousIntegration = require('./sidebars/ci');
+const {componentLibraryItems} = require('./sidebars/component-library');
+
+// Visual separators in the Reference index, not another navigation level.
+const referenceGroup = (label) => ({
+    type: 'html',
+    value: `<h3 class="reference-group-label">${label}</h3>`,
+    defaultStyle: false,
+    customProps: {navigationGroup: label},
+});
+
 module.exports = {
     tutorials: [
         {
@@ -53,10 +65,11 @@ module.exports = {
         }
     ],
     docs: [
-
+        {type: 'doc', id: 'learn/index', label: 'Learn', customProps: {navigationOverview: true}},
         {
             type: 'category',
             label: 'Get Started',
+            description: 'Install Atmos, explore its features, and migrate existing infrastructure.',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
@@ -70,7 +83,7 @@ module.exports = {
                     type: 'category',
                     label: 'Migration Guides',
                     collapsible: true,
-                    collapsed: true,
+                    collapsed: false,
                     items: [
                         'migration/native-terraform',
                         'migration/terragrunt',
@@ -95,6 +108,7 @@ module.exports = {
         {
             type: 'category',
             label: 'Learn Atmos',
+            description: 'Understand the concepts, YAML configuration, and stacks.',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
@@ -109,6 +123,7 @@ module.exports = {
         {
             type: 'category',
             label: 'Your First Stack',
+            description: 'Build a stack with imports, inheritance, and connected components.',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
@@ -124,6 +139,7 @@ module.exports = {
         {
             type: 'category',
             label: 'Quick Start',
+            description: 'Follow a hands-on tutorial to deploy infrastructure with Atmos.',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
@@ -159,6 +175,7 @@ module.exports = {
         {
             type: 'category',
             label: 'Best Practices',
+            description: 'Organize infrastructure with proven conventions and design patterns.',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
@@ -186,6 +203,7 @@ module.exports = {
         {
             type: 'category',
             label: 'Troubleshoot',
+            description: 'Resolve common errors and investigate performance issues.',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
@@ -198,65 +216,8 @@ module.exports = {
         }
     ],
     cli: [
-        {
-            type: 'doc',
-            id: 'cli/cli',
-            label: 'atmos (Interactive)',
-            className: 'sidebar-title',
-        },
-        {
-            type: 'category',
-            label: 'CLI',
-            className: 'sidebar-title',
-            collapsible: true,
-            collapsed: true,
-            items: [
-                {type: 'doc', id: 'cli/global-flags', label: 'Global Flags'},
-                {type: 'doc', id: 'cli/environment-variables', label: 'Environment Variables'},
-                {type: 'doc', id: 'cli/versioning', label: 'Versioning'},
-                {type: 'doc', id: 'projects/layout', label: 'Folder Structure'},
-                {
-                    type: 'category',
-                    label: 'Atmos AI',
-                    link: {type: 'doc', id: 'ai/ai'},
-                    items: [
-                        {type: 'link', label: 'Agent Skills', href: '/ai/skills'},
-                        {type: 'doc', id: 'mcp/mcp', label: 'MCP'},
-                    ]
-                },
-                {type: 'doc', id: 'pro/pro', label: 'Atmos Pro'},
-                {
-                    type: 'category',
-                    label: 'Native CI',
-                    collapsible: true,
-                    collapsed: true,
-                    link: { type: 'doc', id: 'ci/ci' },
-                    items: [
-                        {type: 'doc', id: 'ci/job-summaries', label: 'Job Summaries'},
-                        {type: 'doc', id: 'ci/planfile-storage', label: 'Planfile Storage'},
-                    ]
-                },
-                {
-                    type: 'category',
-                    label: 'Setup Editor (IDE)',
-                    link: {type: 'doc', id: 'projects/setup-editor/index'},
-                    items: [
-                        {type: 'doc', id: 'projects/setup-editor/setup-ai-assistants', label: 'AI Assistants'},
-                        {type: 'doc', id: 'ai/claude-code-integration', label: 'Claude Code'},
-                        {type: 'doc', id: 'ai/mcp-server', label: 'MCP Server'},
-                        {
-                            type: 'category',
-                            label: 'LSP',
-                            link: {type: 'doc', id: 'lsp/lsp'},
-                            items: [
-                                {type: 'doc', id: 'lsp/lsp-server', label: 'LSP Server'},
-                                {type: 'doc', id: 'lsp/lsp-client', label: 'LSP Client'},
-                            ]
-                        },
-                    ]
-                },
-            ]
-        },
+        {type: 'doc', id: 'reference-overview', label: 'Reference', customProps: {navigationOverview: true}},
+        referenceGroup('CLI essentials'),
         {
             type: 'category',
             label: 'Commands',
@@ -265,12 +226,48 @@ module.exports = {
             collapsed: true,
             link: {type: 'doc', id: 'cli/commands/commands'},
             items: [
+                {type: 'doc', id: 'cli/cli', label: 'atmos (Interactive)'},
                 {
                     type: 'autogenerated',
                     dirName: 'cli/commands',
                 },
             ]
         },
+        {type: 'doc', id: 'cli/global-flags', label: 'Global Flags'},
+        {type: 'doc', id: 'cli/environment-variables', label: 'Environment Variables'},
+        {type: 'doc', id: 'cli/versioning', label: 'Versioning'},
+        referenceGroup('Capabilities'),
+        continuousIntegration,
+        {
+            type: 'category',
+            label: 'Atmos AI & MCP',
+            link: {type: 'doc', id: 'ai/ai'},
+            items: [
+                {type: 'link', label: 'Agent Skills', href: '/ai/skills'},
+                {type: 'doc', id: 'mcp/mcp', label: 'MCP'},
+            ]
+        },
+        {type: 'doc', id: 'pro/pro', label: 'Atmos Pro'},
+        {
+            type: 'category',
+            label: 'Editor Integration',
+            link: {type: 'doc', id: 'projects/setup-editor/index'},
+            items: [
+                {type: 'doc', id: 'projects/setup-editor/setup-ai-assistants', label: 'AI Assistants'},
+                {type: 'doc', id: 'ai/claude-code-integration', label: 'Claude Code'},
+                {type: 'doc', id: 'ai/mcp-server', label: 'MCP Server'},
+                {
+                    type: 'category',
+                    label: 'LSP',
+                    link: {type: 'doc', id: 'lsp/lsp'},
+                    items: [
+                        {type: 'doc', id: 'lsp/lsp-server', label: 'LSP Server'},
+                        {type: 'doc', id: 'lsp/lsp-client', label: 'LSP Client'},
+                    ]
+                },
+            ]
+        },
+        referenceGroup('Configuration'),
         {
             type: 'category',
             label: 'CLI Configuration',
@@ -285,6 +282,7 @@ module.exports = {
                 },
             ]
         },
+        stackConfiguration,
         {
             type: 'category',
             label: 'Component Library',
@@ -292,86 +290,11 @@ module.exports = {
             collapsible: true,
             collapsed: true,
             link: {type: 'doc', id: 'components/components-overview'},
-            items: [
-                {
-                    type: 'category',
-                    label: 'Terraform/OpenTofu',
-                    collapsible: true,
-                    collapsed: true,
-                    link: {type: 'doc', id: 'components/terraform/terraform'},
-                    items: [
-                        {type: 'doc', id: 'components/terraform/stack-config', label: 'Stack Configuration'},
-                        {type: 'doc', id: 'components/terraform/root-modules', label: 'Root Modules'},
-                        {type: 'doc', id: 'components/terraform/backends', label: 'State Backends'},
-                        {type: 'doc', id: 'components/terraform/workspaces', label: 'Workspaces'},
-                        {type: 'doc', id: 'components/terraform/providers', label: 'Provider Generation'},
-                        {type: 'doc', id: 'components/terraform/planfiles', label: 'Planfiles'},
-                        {type: 'doc', id: 'components/terraform/brownfield', label: 'Brownfield'},
-                    ]
-                },
-                {
-                    type: 'doc',
-                    id: 'components/helmfile',
-                    label: 'Helmfile',
-                },
-                {
-                    type: 'doc',
-                    id: 'components/packer',
-                    label: 'Packer',
-                },
-                {
-                    type: 'doc',
-                    id: 'components/ansible',
-                    label: 'Ansible',
-                },
-                {
-                    type: 'doc',
-                    id: 'components/container',
-                    label: 'Container',
-                },
-                {
-                    type: 'doc',
-                    id: 'components/emulator',
-                    label: 'Emulator',
-                },
-                {
-                    type: 'doc',
-                    id: 'components/custom',
-                    label: 'Custom Components',
-                },
-            ]
+            items: componentLibraryItems(),
         },
 
-        {
-            type: 'category',
-            label: 'Stack Configuration',
-            className: 'sidebar-title',
-            collapsible: true,
-            collapsed: true,
-            link: {type: 'doc', id: 'stacks/stacks'},
-            items: [
-                {
-                    type: 'autogenerated',
-                    dirName: 'stacks',
-                },
-            ]
-        },
 
-        {
-            type: 'category',
-            label: 'Vendor',
-            className: 'sidebar-title',
-            collapsible: true,
-            collapsed: true,
-            link: {type: 'doc', id: 'vendor/vendor'},
-            items: [
-                {
-                    type: 'autogenerated',
-                    dirName: 'vendor',
-                },
-            ]
-        },
-
+        referenceGroup('Automation'),
         {
             type: 'category',
             label: 'Workflows',
@@ -380,20 +303,27 @@ module.exports = {
             collapsed: true,
             link: {type: 'doc', id: 'workflows/workflows/index'},
             items: [
-                {type: 'link', label: 'Steps reference', href: '/steps'},
                 {
                     type: 'category',
-                    label: 'workflow',
+                    label: 'workflows',
                     collapsed: true,
                     link: {type: 'doc', id: 'workflows/workflows/workflow/index'},
                     items: [
-                        {type: 'doc', id: 'workflows/workflows/workflow/stack', label: 'stack'},
-                        {type: 'doc', id: 'workflows/workflows/workflow/env', label: 'env'},
-                        {type: 'doc', id: 'workflows/workflows/workflow/working-directory', label: 'working_directory'},
-                        {type: 'doc', id: 'workflows/workflows/workflow/dependencies', label: 'dependencies'},
-                        {type: 'doc', id: 'workflows/workflows/workflow/container', label: 'container'},
-                        {type: 'doc', id: 'workflows/workflows/workflow/output', label: 'output'},
-                        {type: 'doc', id: 'workflows/workflows/workflow/show', label: 'show'},
+                        {
+                            type: 'category',
+                            label: '<name>',
+                            collapsed: false,
+                            items: [
+                                {type: 'doc', id: 'workflows/workflows/workflow/stack', label: 'stack'},
+                                {type: 'doc', id: 'workflows/workflows/workflow/env', label: 'env'},
+                                {type: 'doc', id: 'workflows/workflows/workflow/working-directory', label: 'working_directory'},
+                                {type: 'doc', id: 'workflows/workflows/workflow/dependencies', label: 'dependencies'},
+                                {type: 'doc', id: 'workflows/workflows/workflow/container', label: 'container'},
+                                {type: 'doc', id: 'workflows/workflows/workflow/output', label: 'output'},
+                                {type: 'doc', id: 'workflows/workflows/workflow/show', label: 'show'},
+                                {type: 'link', label: 'steps', href: '/steps', customProps: {navigationReference: true}},
+                            ],
+                        },
                     ],
                 },
             ]
@@ -446,43 +376,16 @@ module.exports = {
 
         {
             type: 'category',
-            label: 'How-To Guides',
+            label: 'Vendoring',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
+            link: {type: 'doc', id: 'vendor/vendor'},
             items: [
                 {
                     type: 'autogenerated',
-                    dirName: 'howto',
+                    dirName: 'vendor',
                 },
-                {
-                    type: 'category',
-                    label: 'Sharing State',
-                    collapsible: true,
-                    collapsed: true,
-                    link: {type: 'doc', id: 'tutorials/sharing-state/sharing-state'},
-                    items: [
-                        {type: 'doc', id: 'tutorials/sharing-state/terraform-state', label: '!terraform.state (Recommended)'},
-                        {type: 'doc', id: 'tutorials/sharing-state/terraform-output', label: '!terraform.output'},
-                        {type: 'doc', id: 'tutorials/sharing-state/remote-state-module', label: 'Remote State Module'},
-                        {type: 'doc', id: 'tutorials/sharing-state/stores', label: '!store'},
-                    ]
-                },
-                {type: 'doc', id: 'templates/templates', label: 'Template Configurations'},
-                {type: 'doc', id: 'templates/datasources', label: 'Use Data Sources'},
-                {
-                    type: 'category',
-                    label: 'Design Patterns',
-                    collapsible: true,
-                    collapsed: true,
-                    link: {type: 'doc', id: 'design-patterns/design-patterns'},
-                    items: [
-                        {
-                            type: 'autogenerated',
-                            dirName: 'design-patterns',
-                        },
-                    ]
-                }
             ]
         },
 
@@ -537,19 +440,50 @@ module.exports = {
             ]
         },
 
+        referenceGroup('Guides & resources'),
         {
             type: 'category',
-            label: 'GitHub Actions',
+            label: 'How-To Guides',
             className: 'sidebar-title',
             collapsible: true,
             collapsed: true,
             items: [
                 {
                     type: 'autogenerated',
-                    dirName: 'integrations/github-actions',
+                    dirName: 'howto',
+                },
+                {
+                    type: 'category',
+                    label: 'Sharing State',
+                    collapsible: true,
+                    collapsed: true,
+                    link: {type: 'doc', id: 'tutorials/sharing-state/sharing-state'},
+                    items: [
+                        {type: 'doc', id: 'tutorials/sharing-state/terraform-state', label: '!terraform.state (Recommended)'},
+                        {type: 'doc', id: 'tutorials/sharing-state/terraform-output', label: '!terraform.output'},
+                        {type: 'doc', id: 'tutorials/sharing-state/remote-state-module', label: 'Remote State Module'},
+                        {type: 'doc', id: 'tutorials/sharing-state/stores', label: '!store'},
+                    ]
+                },
+                {type: 'doc', id: 'templates/templates', label: 'Template Configurations'},
+                {type: 'doc', id: 'templates/datasources', label: 'Use Data Sources'},
+                {
+                    type: 'category',
+                    label: 'Design Patterns',
+                    collapsible: true,
+                    collapsed: true,
+                    link: {type: 'doc', id: 'design-patterns/design-patterns'},
+                    items: [
+                        {
+                            type: 'autogenerated',
+                            dirName: 'design-patterns',
+                        },
+                    ]
                 }
             ]
         },
+
+        {type: 'doc', id: 'projects/layout', label: 'Project Layout'},
         {
             type: 'category',
             label: 'Resources',
