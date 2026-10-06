@@ -4,6 +4,12 @@ sidebar_position: 8
 sidebar_label: Emulator
 id: emulator
 description: Run local cloud-API, Kubernetes, and backing-service emulators as stack-scoped components, so the rest of your stack runs offline with no cloud account.
+component_library:
+  type: emulator
+  label: Emulator
+  position: 8
+  implementation: Stack config via components.emulator.*.driver; no component directory
+  description: Run cloud-API, Kubernetes, and backing-service emulators offline
 ---
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'

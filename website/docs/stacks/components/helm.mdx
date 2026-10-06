@@ -5,6 +5,14 @@ sidebar_label: helm
 sidebar_class_name: command
 description: Configure native Helm components in Atmos stack manifests.
 id: helm
+component_library:
+  type: helm
+  label: Helm
+  position: 3
+  implementation: Local, repository, or OCI Helm charts
+  description: Deploy chart releases with values inherited from stacks
+  reference: true
+slug: /stacks/components/helm
 ---
 
 import File from "@site/src/components/File";

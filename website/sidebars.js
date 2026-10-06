@@ -13,6 +13,7 @@
 
 const {stackConfiguration} = require('./sidebars/stacks');
 const continuousIntegration = require('./sidebars/ci');
+const {componentLibraryItems} = require('./sidebars/component-library');
 
 // Visual separators in the Reference index, not another navigation level.
 const referenceGroup = (label) => ({
@@ -289,66 +290,7 @@ module.exports = {
             collapsible: true,
             collapsed: true,
             link: {type: 'doc', id: 'components/components-overview'},
-            items: [
-                {
-                    type: 'category',
-                    label: 'Terraform/OpenTofu',
-                    collapsible: true,
-                    collapsed: true,
-                    link: {type: 'doc', id: 'components/terraform/terraform'},
-                    items: [
-                        {type: 'doc', id: 'components/terraform/stack-config', label: 'Stack Configuration'},
-                        {type: 'doc', id: 'components/terraform/root-modules', label: 'Root Modules'},
-                        {type: 'doc', id: 'components/terraform/backends', label: 'State Backends'},
-                        {type: 'doc', id: 'components/terraform/workspaces', label: 'Workspaces'},
-                        {type: 'doc', id: 'components/terraform/providers', label: 'Provider Generation'},
-                        {type: 'doc', id: 'components/terraform/planfiles', label: 'Planfiles'},
-                        {type: 'doc', id: 'components/terraform/brownfield', label: 'Brownfield'},
-                    ]
-                },
-                {
-                    type: 'link',
-                    label: 'Kubernetes',
-                    href: '/stacks/components/kubernetes',
-                    customProps: {navigationReference: true},
-                },
-                {
-                    type: 'link',
-                    label: 'Helm',
-                    href: '/stacks/components/helm',
-                    customProps: {navigationReference: true},
-                },
-                {
-                    type: 'doc',
-                    id: 'components/helmfile',
-                    label: 'Helmfile',
-                },
-                {
-                    type: 'doc',
-                    id: 'components/packer',
-                    label: 'Packer',
-                },
-                {
-                    type: 'doc',
-                    id: 'components/ansible',
-                    label: 'Ansible',
-                },
-                {
-                    type: 'doc',
-                    id: 'components/container',
-                    label: 'Container',
-                },
-                {
-                    type: 'doc',
-                    id: 'components/emulator',
-                    label: 'Emulator',
-                },
-                {
-                    type: 'doc',
-                    id: 'components/custom',
-                    label: 'Custom Components',
-                },
-            ]
+            items: componentLibraryItems(),
         },
 
 
