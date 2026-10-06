@@ -3,17 +3,16 @@ title: atmos config
 sidebar_label: config
 sidebar_class_name: command
 id: usage
-description: Read and edit your atmos.yaml configuration using dot-notation paths while preserving comments, anchors, YAML functions, and templates.
+description: Inspect, update, and validate your Atmos CLI settings from the terminal or a script.
 ---
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `atmos config get|set|delete|list|format` commands read and edit values in your
-`atmos.yaml` configuration using dot-notation paths — this is already the canonical
-form for the config domain (there's no separate `atmos config config` sub-namespace,
-unlike `stack`/`vendor`). Edits preserve comments, anchors/aliases, Atmos YAML
-functions, and Go templates, so you can script configuration changes without
-`sed`/`yq` and without losing formatting.
+Your `atmos.yaml` configures how Atmos works in your project, including where to
+find components and stacks and how to run your tools. Use `atmos config` to inspect
+those settings, automate changes in setup scripts or CI, and validate your
+configuration. Edits preserve comments, YAML anchors, Atmos YAML functions, and
+Go templates.
 </Intro>
 
 ## Usage
