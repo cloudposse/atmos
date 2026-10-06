@@ -25,9 +25,12 @@ import "context"
 // the same crash signature recurred four more times on Windows shard 3 on 2026-09-12,
 // across two unrelated PRs -- #3107 (run 34699763477) and #3122 (runs 34703060789 and
 // 34726124320, twice in the same PR). Lowered to 2 so fewer real `go` toolchain
-// subprocesses can ever be in flight at once on Windows; revisit upward only with new
-// evidence that 2 is unnecessarily conservative.
-const maxConcurrentSubprocesses = 2
+// subprocesses could be in flight at once on Windows. The crash recurred with that
+// cap on 2026-10-05 in PR #3277 (run 37380640146, job 112005518816), with one
+// goroutine in syscall.envSorted during Cmd.Start and another waiting in Cmd.Run.
+// Allow only one subprocess at a time as a mitigation; revisit upward only with
+// evidence that concurrent launches are safe on the Windows Go runtime in use.
+const maxConcurrentSubprocesses = 1
 
 // subprocessSlots limits how many commandRunner.run/output calls -- across every
 // commandRunner instance, since each caller constructs its own -- may have a real
