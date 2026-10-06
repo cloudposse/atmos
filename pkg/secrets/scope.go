@@ -72,7 +72,7 @@ func stampDeclarationScope(name string, spec map[string]any, scope Scope) (map[s
 		// `scope` is evaluated later (it is in the evaluated-field list), so it cannot be validated
 		// against its position yet. Keep it, and record the position so the rendered value is
 		// validated once it is known.
-		deferred := make(map[string]any, len(spec)+1)
+		deferred := make(map[string]any)
 		for sk, sv := range spec {
 			deferred[sk] = sv
 		}
