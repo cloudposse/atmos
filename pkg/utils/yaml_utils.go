@@ -767,7 +767,18 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 	// This avoids expensive recursive processing for YAML subtrees that don't use custom tags.
 	// Most YAML content doesn't use custom tags, so this optimization significantly reduces
 	// unnecessary recursion and tag checking.
-	if !hasCustomTags(node) {
+	//
+	// The one exception is a literal_fields key: only the loader may write it, so a tree that
+	// holds one still gets the step sanitizing pass even without any custom tag.
+	tagged, hasLiteralFieldsKey := scanTagsAndLiteralFieldsKey(node)
+	if !tagged && !hasLiteralFieldsKey {
+		return nil
+	}
+
+	// Record which step fields carry !literal before the walk below clears those tags, and strip
+	// any literal_fields a user wrote on a workflow or hook step.
+	markLiteralStepFields(node)
+	if !tagged {
 		return nil
 	}
 
@@ -807,6 +818,36 @@ func hasCustomTags(node *yaml.Node) bool {
 	}
 
 	return false
+}
+
+// scanTagsAndLiteralFieldsKey makes one pass over a node tree. It reports whether the tree holds an
+// explicit custom tag (the same test as hasCustomTags) and, when it holds none, whether any mapping
+// has a literal_fields key. The scan stops at the first custom tag, since the caller then runs the
+// full literal-fields pass anyway.
+func scanTagsAndLiteralFieldsKey(node *yaml.Node) (tagged, hasLiteralFieldsKey bool) {
+	if node == nil {
+		return false, false
+	}
+	tag := strings.TrimSpace(node.Tag)
+	if strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!") {
+		return true, false
+	}
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if node.Content[i].Value == schema.LiteralFieldsKey {
+				hasLiteralFieldsKey = true
+				break
+			}
+		}
+	}
+	for _, child := range node.Content {
+		childTagged, childHasKey := scanTagsAndLiteralFieldsKey(child)
+		if childTagged {
+			return true, false
+		}
+		hasLiteralFieldsKey = hasLiteralFieldsKey || childHasKey
+	}
+	return false, hasLiteralFieldsKey
 }
 
 // UnmarshalYAML unmarshals YAML into a Go type.

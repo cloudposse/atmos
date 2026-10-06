@@ -35,6 +35,9 @@ steps:
 
   <dt>`output`</dt>
   <dd>Optional output mode. See [output](/steps/output).</dd>
+
+  <dt>`timeout`</dt>
+  <dd>Optional duration such as `30s` or `5m`. When it elapses, Atmos cancels the command and fails the step with `step timed out`. The timeout bounds the whole step, including every [`retry`](/steps/retry) attempt and the wait between attempts, so retries never extend it.</dd>
 </dl>
 
 The step result stores stdout as the step value and includes `stdout`, `stderr`, and `exit_code` metadata.

@@ -1520,6 +1520,63 @@ func TestCloneCommandKeepsScriptSource(t *testing.T) {
 	assert.Equal(t, "/p/main.star", clone.Steps[0].ToWorkflowStep().ScriptSource)
 }
 
+// TestCloneCommandKeepsLiteralFields verifies the JSON round trip does not lose the loader-set
+// !literal markers of steps, nested group steps, and subcommands.
+func TestCloneCommandKeepsLiteralFields(t *testing.T) {
+	orig := &schema.Command{
+		Name: "outer",
+		Steps: schema.Tasks{
+			{Name: "main", Type: schema.TaskTypeScript, Script: "x", LiteralFields: []string{"script", "env.GREETING"}},
+			{Name: "group", Type: schema.TaskTypeParallel, Steps: []schema.WorkflowStep{
+				{Name: "child", Type: schema.TaskTypeScript, Script: "y", LiteralFields: []string{"script"}},
+			}},
+		},
+		Commands: []schema.Command{{Name: "inner", Steps: schema.Tasks{{Name: "sub", LiteralFields: []string{"command"}}}}},
+	}
+
+	clone, err := cloneCommand(orig)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"script", "env.GREETING"}, clone.Steps[0].LiteralFields)
+	assert.Equal(t, []string{"script"}, clone.Steps[1].Steps[0].LiteralFields)
+	assert.Equal(t, []string{"command"}, clone.Commands[0].Steps[0].LiteralFields)
+	assert.Equal(t, []string{"script", "env.GREETING"}, clone.Steps[0].ToWorkflowStep().LiteralFields)
+}
+
+// TestExecuteCustomCommandShellStepKeepsLiteralFields verifies a custom command step written with
+// !literal uses its command and env values exactly as written, while its other values still render.
+func TestExecuteCustomCommandShellStepKeepsLiteralFields(t *testing.T) {
+	_ = NewTestKit(t)
+	ensureIOInitialized(t)
+
+	workDir := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+	parentCmd := &cobra.Command{Use: "atmos"}
+	commands := []schema.Command{{
+		Name:             "cover-literal-shell",
+		Description:      "exercise literal fields on a shell step",
+		WorkingDirectory: workDir,
+		Steps: []schema.Task{{
+			Name:          "write",
+			Type:          schema.TaskTypeShell,
+			Command:       `printf %s "{{ y }}|$LIT|$TPL" > out.txt`,
+			Env:           map[string]string{"LIT": "{{ keep }}", "TPL": `{{ "rendered" }}`},
+			LiteralFields: []string{"command", "env.LIT"},
+		}},
+	}}
+
+	require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+	customCmd := findSubcommand(parentCmd, "cover-literal-shell")
+	require.NotNil(t, customCmd)
+
+	customCmd.PreRun(customCmd, nil)
+	customCmd.Run(customCmd, nil)
+
+	got, err := os.ReadFile(filepath.Join(workDir, "out.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "{{ y }}|{{ keep }}|rendered", string(got))
+}
+
 // TestHandleHelpRequest tests the handleHelpRequest function.
 func TestHandleHelpRequest(t *testing.T) {
 	// Note: handleHelpRequest calls os.Exit(0) when help is requested,

@@ -30,11 +30,48 @@ steps:
 | --- | --- |
 | `interpreter` | Required executable, or `starlark` for the embedded runtime. Supports templates. |
 | `script` | Required inline program text. Supports templates. |
-| `working_directory` | Optional process directory. |
-| `env` | Optional environment map. |
+| `working_directory` | Optional process directory. Supports templates. |
+| `env` | Optional environment map. Only these declared values are rendered as templates. |
+| `output` | Optional output mode: `raw`, `log`, `viewport`, or `none`. Any other value is rejected before the step runs. Script steps default to `raw`. |
+| `show` | Optional display settings such as `show.labels`. See [Step labels](#step-labels). |
+| `retry` | Optional retry policy that reruns the whole step on failure. |
+| `timeout` | Optional duration such as `30s` or `5m`. Atmos stops the interpreter and its subprocesses when it elapses and fails the step with `step timed out`. The timeout bounds the whole step, including every [`retry`](/steps/retry) attempt and the wait between attempts, so retries never extend it. |
+| `when` | Optional [condition](/steps#conditional-execution) that decides whether the step runs. |
+| `outputs` | Optional named values derived from the step result, available as `{{ .steps.<name>.outputs.<key> }}`. |
+| `container` | Rejected for `interpreter: starlark`, which runs inside Atmos. See [Containers and dry runs](#containers-and-dry-runs). |
 
 Do not set `command` on a `script` step. Use `type: shell` for a real shell command and
 `type: script` when the interpreter and body are the intentional interface.
+
+### Environment and templates {#environment-and-templates}
+
+Atmos renders the values you declare under the step's `env` as templates. The ambient process
+environment, which includes everything inherited from your shell, is never rendered. It
+reaches the interpreter and its child processes exactly as it is, so a variable such as
+`FOO='{{ bad'` neither fails the step nor changes value. Use
+[`!literal`](/functions/yaml/literal) on a declared `env` value to keep that value unrendered too.
+
+### Keep braces out of template rendering {#literal-script}
+
+Atmos renders the script body as a Go template before the interpreter runs, so a script that
+contains `{{` or `}}` fails with a template error. Tag the body with
+[`!literal`](/functions/yaml/literal) to run it exactly as written:
+
+```yaml
+steps:
+  - name: report
+    type: script
+    interpreter: starlark
+    script: !literal |
+      row = {"name": "vpc", "status": "ok"}
+      print("{} is {}".format(row["name"], row["status"]))
+      print("Atmos templates look like {{ .vars.stage }}")
+```
+
+`!literal` works the same in custom commands, workflows, hooks, and in `parallel` and `matrix`
+children. It applies to the field it tags: a literal `script` next to a templated `interpreter`
+or `env` value still renders the other fields. It also works on `interpreter`, `working_directory`,
+and individual `env` values. A script loaded with `!include` is still rendered as a template.
 
 ## Atmos Automation Language {#embedded-starlark}
 
@@ -85,8 +122,35 @@ output = {"service": "api"}          # {{ .steps.<name>.value }} is: {"service":
 ```
 
 A value that cannot be encoded as JSON, such as a function, fails the step with the
-error `output must be a string or JSON-encodable value`. Without `output`, the captured
-stdout (everything passed to `print()`) is the step's value.
+error ``output` must be a string or JSON-encodable value: <reason>``, followed by a hint to
+assign a string, number, bool, list, or dict. Without `output`, the captured stdout
+(everything passed to `print()`) is the step's value.
+
+A later step reads a dict or list `output` as its JSON text, never as Go map syntax, so
+`{{ .steps.<name>.value }}` renders `{"service":"api"}` for the dict above. JSON text
+contains double quotes. When you place it inside a double-quoted shell string or a
+Starlark string literal, the quotes end that string early and the shell strips them. Wrap the
+template in single quotes in a shell command, or pass the value through `env` and read it
+there:
+
+```yaml
+steps:
+  - name: first
+    type: script
+    interpreter: starlark
+    script: |
+      output = {"n": 3}
+  - name: show
+    type: shell
+    command: echo '{{ .steps.first.value }}'   # {"n":3}
+  - name: read
+    type: script
+    interpreter: starlark
+    env:
+      FIRST: "{{ .steps.first.value }}"
+    script: |
+      n = json.decode(env["FIRST"])["n"]
+```
 
 Atmos treats stdout as data and stderr as messages for people, so use `print()` for values
 the step produces and `ui.info()`, `ui.success()`, or `ui.warning()` for status and progress
@@ -117,8 +181,10 @@ $ atmos workflow deploy --logs-level=Debug
  DEBU  resolved component step=deploy component=api attempts=2
 ```
 
-Every message includes a `step` field with the step name. Inside `steps.parallel`, a `task`
-field names the running task, for example `task=grp/inner` for a nested group. Field values
+Every message includes a `step` field with the step name. Inside a `steps.parallel` group
+with more than one task, a `task` field names the running task, for example `task=grp/inner`
+for a nested group. A group with a single task adds no `task` field, just as it adds no
+`[task]` output prefix. Field values
 can be strings, numbers, booleans, or `None`; any other value is logged using its `str()`
 form. Field names must be identifiers, and a field you pass named `step` or `task` replaces
 the automatic one.
@@ -296,8 +362,10 @@ By default, all independent branches finish and failures are aggregated. With
 `fail_fast=True`, a branch that exhausts its retries cancels running branches and
 skips queued branches. The group still waits for cancellation to finish.
 
-Shared globals, closures, and task arguments become immutable before dispatch.
-Create mutable lists and dictionaries inside each function and return results.
+Before dispatch, Atmos freezes everything the tasks can reach: the task functions, their
+closures, default values, and arguments, and every global of each task function's module,
+including globals of loaded modules. A task's return value is frozen as well, once the
+task finishes. Create mutable lists and dictionaries inside each function and return results.
 Process directories and environment overrides belong to each invocation; they do
 not change Atmos's own working directory or environment.
 
@@ -453,9 +521,11 @@ The `working_directory` must exist; Atmos checks it before the script runs and f
 the step with a hint when it is missing. It applies to `fs.read_file`, `exec.run`, and
 `load()` in inline scripts. A `component.exec` call defaults to the component directory instead.
 
-The `env` dictionary contains explicitly declared step inputs. Child processes
-inherit the effective execution environment, including authentication and command
-environment settings.
+The `env` dictionary contains only explicitly declared step inputs: the step's own `env:`
+entries. In a custom command, command-level `env:` entries are not in `env`; they reach
+child processes through the process environment instead. Child processes inherit the
+effective execution environment, including authentication and command environment settings.
+See [Environment and templates](#environment-and-templates) for what Atmos renders.
 
 ### Containers and dry runs
 
@@ -605,7 +675,7 @@ executes independent processes concurrently.
 
 Arbitrary typed-step dispatch and Starlark test-file discovery are not available yet.
 
-### Standalone executable scripts {#standalone-script-spike}
+### Standalone executable scripts {#standalone-scripts}
 
 Use an Atmos shebang to run an automation program directly:
 
@@ -706,11 +776,15 @@ print("{}: {} replicas".format(service, replicas))
 ```
 
 These dictionaries preserve the host command's value types. A custom command flag
-declared as `type: string` still needs `int(...)` when used in arithmetic; boolean
-flags remain booleans. Workflow flags are strings. Inputs are immutable and are
-inherited by control and test children. Contexts without declared inputs expose
-empty dictionaries. Standalone command callbacks receive their parsed values as
-the `args` and `flags` callback parameters.
+declared as `type: string` still needs `int(...)` when used in arithmetic, while a
+`type: int` flag arrives as an integer and a `type: bool` flag as a boolean. Positional
+arguments are always strings. An optional argument that has no default and was not
+supplied is an empty string, and an omitted argument with a default holds its default.
+Workflow flags are strings, and `ctx.flags` in a workflow always includes `stack` (an
+empty string when no stack applies). Inputs are immutable and are inherited by control and
+test children. Contexts without declared inputs expose empty dictionaries. Standalone
+command callbacks receive their parsed values as the `args` and `flags` callback
+parameters.
 
 ### Calling Atmos commands
 

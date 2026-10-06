@@ -8,7 +8,8 @@ more depth. If a name is not listed here, it does not exist.
 
 - `ctx.args`: immutable list of raw script arguments (standalone scripts only).
 - `ctx.flags`, `ctx.arguments`: immutable parsed inputs for script steps. Custom command
-  string and bool flags keep their types; workflow flags are strings. In standalone scripts
+  string, bool, and `type: int` flags keep their types; workflow flags are strings and always
+  include `stack`. In standalone scripts
   both are empty; use the `cli.command` callback instead.
 - `ctx.script`: `.path` and `.directory` of the physical file (standalone only; `None` in steps).
 - `ctx.component`, `ctx.hook`, `ctx.operation`: see the entry-point table in `SKILL.md`.

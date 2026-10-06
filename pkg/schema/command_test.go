@@ -157,37 +157,49 @@ func TestCommandFlag_EffectiveProvides(t *testing.T) {
 	}
 }
 
-func TestCommandCopyScriptSources(t *testing.T) {
+func TestCommandCopyLoaderFields(t *testing.T) {
 	src := Command{
 		Steps: Tasks{
-			{Name: "a", ScriptSource: "/p/a.star"},
+			{Name: "a", ScriptSource: "/p/a.star", LiteralFields: []string{"script"}},
 			{Name: "group", Steps: []WorkflowStep{
-				{Name: "child", ScriptSource: "/p/child.star"},
-				{Name: "inner", Steps: []WorkflowStep{{Name: "deep", ScriptSource: "/p/deep.star"}}},
+				{Name: "child", ScriptSource: "/p/child.star", LiteralFields: []string{"command", "env.GREETING"}},
+				{Name: "inner", Steps: []WorkflowStep{{Name: "deep", ScriptSource: "/p/deep.star", LiteralFields: []string{"script"}}}},
 			}},
 			{Name: "inline"},
 		},
-		Commands: []Command{{Steps: Tasks{{Name: "sub", ScriptSource: "/p/sub.star"}}}},
+		Commands: []Command{{Steps: Tasks{{Name: "sub", ScriptSource: "/p/sub.star", LiteralFields: []string{"command"}}}}},
 	}
-	// A JSON round trip is what cloneCommand does; it drops ScriptSource.
+	// A JSON round trip is what cloneCommand does; it drops both fields.
 	encoded, err := json.Marshal(src)
 	require.NoError(t, err)
 	var clone Command
 	require.NoError(t, json.Unmarshal(encoded, &clone))
 	require.Empty(t, clone.Steps[0].ScriptSource)
+	require.Empty(t, clone.Steps[0].LiteralFields)
 
-	clone.CopyScriptSources(&src)
+	clone.CopyLoaderFields(&src)
 
 	assert.Equal(t, "/p/a.star", clone.Steps[0].ScriptSource)
+	assert.Equal(t, []string{"script"}, clone.Steps[0].LiteralFields)
 	assert.Equal(t, "/p/child.star", clone.Steps[1].Steps[0].ScriptSource)
+	assert.Equal(t, []string{"command", "env.GREETING"}, clone.Steps[1].Steps[0].LiteralFields)
 	assert.Equal(t, "/p/deep.star", clone.Steps[1].Steps[1].Steps[0].ScriptSource)
+	assert.Equal(t, []string{"script"}, clone.Steps[1].Steps[1].Steps[0].LiteralFields)
 	assert.Empty(t, clone.Steps[2].ScriptSource)
+	assert.Empty(t, clone.Steps[2].LiteralFields)
 	assert.Equal(t, "/p/sub.star", clone.Commands[0].Steps[0].ScriptSource)
+	assert.Equal(t, []string{"command"}, clone.Commands[0].Steps[0].LiteralFields)
+
+	t.Run("source to clone isolation", func(t *testing.T) {
+		clone.Steps[0].LiteralFields[0] = "mutated"
+		assert.Equal(t, []string{"script"}, src.Steps[0].LiteralFields)
+	})
 
 	t.Run("mismatched shapes copy only what lines up", func(t *testing.T) {
 		short := Command{Steps: Tasks{{Name: "a"}}}
-		short.CopyScriptSources(&src)
+		short.CopyLoaderFields(&src)
 		assert.Equal(t, "/p/a.star", short.Steps[0].ScriptSource)
+		assert.Equal(t, []string{"script"}, short.Steps[0].LiteralFields)
 	})
 }
 
@@ -227,4 +239,37 @@ func TestScriptSourceHasNoYAMLOrJSONKey(t *testing.T) {
 	var fromYAML WorkflowStep
 	require.NoError(t, yaml.Unmarshal([]byte("name: s\nscript_source: /etc/passwd\n"), &fromYAML))
 	assert.Empty(t, fromYAML.ScriptSource)
+}
+
+func TestLiteralFieldsSurviveStepConversion(t *testing.T) {
+	task := Task{Name: "t", Script: "x", LiteralFields: []string{"script", "env.GREETING"}}
+	step := task.ToWorkflowStep()
+	assert.Equal(t, []string{"script", "env.GREETING"}, step.LiteralFields)
+	assert.Equal(t, []string{"script", "env.GREETING"}, TaskFromWorkflowStep(&step).LiteralFields)
+}
+
+func TestIsLiteral(t *testing.T) {
+	step := WorkflowStep{LiteralFields: []string{"script", "env.Greeting"}}
+	task := Task{LiteralFields: []string{"command"}}
+
+	tests := []struct {
+		name  string
+		got   bool
+		wants bool
+	}{
+		{"step script", step.IsLiteral("script"), true},
+		{"step command not marked", step.IsLiteral("command"), false},
+		{"step env name is not a field", step.IsLiteral("env"), false},
+		{"env exact case", step.IsLiteralEnv("Greeting"), true},
+		{"env case-insensitive", step.IsLiteralEnv("GREETING"), true},
+		{"env other name", step.IsLiteralEnv("OTHER"), false},
+		{"task command", task.IsLiteral("command"), true},
+		{"task script not marked", task.IsLiteral("script"), false},
+		{"zero step", (&WorkflowStep{}).IsLiteral("script"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wants, tt.got)
+		})
+	}
 }

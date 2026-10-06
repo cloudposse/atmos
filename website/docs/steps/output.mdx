@@ -29,6 +29,6 @@ A live viewport follows recent stdout and stderr, collapses on success, and reve
 full output on failure. See [live viewport](/workflows/output#live-viewport) for sizing
 and noninteractive behavior.
 
-Supported values are `raw`, `log`, `viewport`, and `none`. See workflow-level [output](/workflows/output) for the value definitions.
+Supported values are `raw`, `log`, `viewport`, and `none`. See workflow-level [output](/workflows/output) for the value definitions. Any other value, such as `capture`, fails validation before the step runs, and the error lists the valid modes. This applies to `shell`, `script`, `atmos`, and `container` steps and to the workflow-level `output`.
 
 Terminal-handoff steps such as `tty`, `interactive`, and `exec` own the terminal while they run, so normal output capture modes do not apply in the same way.

@@ -21,6 +21,8 @@ var (
 	ErrStarlarkOutputEncode = errors.New("starlark output encoding failed")
 	// ErrStarlarkRecursionLimit identifies a Starlark call stack that exceeded the maximum recursion depth.
 	ErrStarlarkRecursionLimit = errors.New("starlark recursion depth exceeded")
+	// ErrScriptUsage identifies command-line input that does not satisfy a standalone script's declared interface.
+	ErrScriptUsage = errors.New("usage error")
 )
 
 const (
@@ -890,6 +892,12 @@ var (
 	ErrStepFieldRequired             = errors.New("required field missing for step")
 	ErrStepExecutionFailed           = errors.New("step execution failed")
 	ErrStepTTYRequired               = errors.New("interactive terminal required for step")
+	ErrStepTimeout                   = errors.New("step timed out")
+	ErrStepTimeoutInvalid            = errors.New("invalid step timeout")
+	ErrStepInvalidOutputMode         = schemaPkg.ErrStepInvalidOutputMode
+	ErrCustomCommandArgumentMissing  = errors.New("missing required argument for custom command")
+	ErrCustomCommandFlagType         = errors.New("unsupported custom command flag type")
+	ErrCustomCommandFlagDefault      = errors.New("invalid default value for custom command flag")
 	ErrHTTPStepURLRequired           = errors.New("url is required for http step")
 	ErrHTTPStepInvalidMethod         = errors.New("invalid HTTP method for http step")
 	ErrHTTPStepBodyFormConflict      = errors.New("http step cannot set both body and form")

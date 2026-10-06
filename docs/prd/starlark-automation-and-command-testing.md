@@ -1,13 +1,142 @@
 # Starlark automation and command testing
 
-## Purpose
+**Last Updated:** 2026-10-05
+
+**Status:** Core interpreter, script-step integration, and standalone CLI support
+implemented in the current codebase; service APIs and broader command-testing
+features remain proposed. This status does not identify a released version.
+
+## Problem Statement
 
 Custom commands and workflows need reusable, testable orchestration without large Bash
-programs. Embed Starlark in `type: script`, and use Atmos execution services for
-concurrency, retries, processes, output, and cancellation. Command declarations,
-arguments, flags, and custom-component bindings remain in YAML.
+programs. Automation authors otherwise repeat process handling, retries, argument
+parsing, and assertions across scripts, making failures and lifecycle behavior
+harder to reason about. Embedded Starlark addresses this with native Atmos execution
+services and standalone tools; repository examples and field-test fixes provide
+evidence of these problems, but aggregate user frequency and time savings have not
+been measured.
 
-## Implemented increment: parallel functions
+YAML custom commands retain their YAML declarations and component bindings.
+Their embedded script steps receive parsed inputs directly. Standalone scripts
+can declare their own arguments, typed flags, validation, and help in Starlark.
+
+## Goals
+
+1. Let automation authors reuse functions and modules across commands, workflows,
+    hooks, and standalone tools, verified through each supported host integration.
+2. Preserve cancellation, retries, environment isolation, and deterministic result
+    ordering under concurrent execution, verified with controlled runtime tests.
+3. Preserve parsed input types and literal user data, with no template rewriting
+    or cross-invocation mutation in the input regression cases.
+4. Give CLI users generated help and actionable errors, separating usage mistakes
+    from script failures and keeping data output usable by other programs.
+5. Let maintainers test automation through injected process, clock, and component
+    services without requiring live infrastructure for unit validation.
+
+## Non-Goals
+
+- Replace YAML stack definitions; native stack authoring is a separate exploration.
+- Implement full Python compatibility or replace every existing Python/shell tool;
+  Starlark is an embedded language with a deliberately limited standard library.
+- Run the embedded interpreter inside workflow containers; scripts currently opt
+  out with `container: false`, and external interpreters retain their own paths.
+- Expose arbitrary registered steps, background services, or a new state/secret
+  engine in this increment; future APIs must reuse existing Atmos services.
+- Execute external Safire migrations or publish script packages as part of this
+  feature's tests; those require separate scope and side-effect decisions.
+
+## User Stories
+
+1. As a custom-command author, I want scripts to receive parsed flags and arguments
+    so that I do not need to interpolate user values into source code.
+2. As a workflow author, I want reusable functions with bounded parallel execution
+    so that related operations share consistent retries, timeouts, and cancellation.
+3. As a hook author, I want component and lifecycle context so that checks operate
+    against the same resolved configuration as the parent operation.
+4. As a standalone-tool author, I want typed inputs, validation, and generated help
+    so that my script behaves like a documented CLI.
+5. As a CLI user, I want invalid arguments to identify the mistake and show usage
+    so that I can correct input without interpreting a Starlark traceback.
+6. As an automation maintainer, I want literal braces, commas, missing optional
+    inputs, and empty results handled explicitly so that user data is not corrupted.
+7. As a test author, I want injectable host services so that I can verify failure,
+    retry, and cancellation behavior without deploying infrastructure.
+
+## Requirements
+
+Priorities distinguish the implemented core from proposed extensions. Future
+items are not commitments to ship; their contracts require further design.
+
+### Must-Have (P0): implemented core
+
+| ID | Requirement and acceptance criterion | Dependencies and constraints |
+|----|--------------------------------------|------------------------------|
+| R1 | Execute `interpreter: starlark` in process across supported script-step hosts; dry runs parse entry source without executing it. | Embedded engine registry, step adapters, and `container: false`; AC-01. |
+| R2 | Preserve typed command inputs, literal fields, environment data, and output values across sequential/control-step boundaries. | Native command parsers, literal-field metadata, and step output handling; AC-02/AC-03. |
+| R3 | Execute parallel functions with bounded concurrency, input-order results, failed-only retries, and cancellable deadlines. | Process runner, injected retry clock, frozen shared values; AC-04. |
+| R4 | Expose resolved component/hook context and registered Atmos command wrappers through existing services. | Stack resolver, command catalog, authentication and masking; AC-05. |
+| R5 | Support standalone shebang/file execution, declared interfaces, help, leading global flags, and argument-preserving re-execution. | CLI host, version/profile re-execution, installed Atmos binary; AC-06. |
+| R6 | Keep usage errors distinct from script errors, enforce recursion protection, and route data/diagnostics consistently. | Error rendering, output writers, logger and cancellation; AC-07. |
+
+### Nice-to-Have (P1): proposed follow-ups
+
+| Capability | Acceptance criterion before becoming supported | Dependency |
+|------------|------------------------------------------------|------------|
+| Direct secret, store, and Terraform state/output APIs | Preserve identity, scope, masking, caching, cancellation, and provider behavior under success and failure tests. | Existing service adapters; see service-access requirements below. |
+| Native `components.list` | Return documented structured results through the existing resolver with explicit scope and cancellation. | Resolver/query API design; `atmos.list` already exists as a CLI wrapper. |
+| Dedicated Starlark error-event frames | Include safe filename/line/function and task context without duplicate reporting or secret/raw-output tags. | Error-to-observability mapping. |
+
+### Future Considerations (P2): not implemented
+
+| Capability | Acceptance criterion for a future increment | Dependency |
+|------------|--------------------------------------------|------------|
+| Typed step dispatch and lifecycle helpers | Reuse the shared runner's policies and enforce restrictions for interactive/background/terminal steps. | Runner API and lifecycle ownership. |
+| Starlark test-file discovery and command assertions | Discover tests predictably, isolate process/HTTP/step mocks, and require explicit integration-test opt-in. | Test-runner design; injected services already support Go-hosted tests. |
+| File writes, globbing, temporary workspaces, and broader UI/time helpers | Define permissions, deterministic ordering, parallel writes, and cleanup on failure/cancellation. | Filesystem and lifecycle API design. |
+| External automation migrations | Demonstrate required APIs, side effects, retry boundaries, and cleanup in representative fixtures. | Separate migration scope; no Safire commands run here. |
+
+## Success Metrics
+
+No adoption or time-savings baseline is available. The following are verification
+targets, not newly measured results. Evaluate them when runtime or host behavior
+changes; historical validation evidence is linked at the end of this document.
+
+| Outcome | Measurement | Target |
+|---------|-------------|--------|
+| Host compatibility | Focused interpreter, command, workflow, hook, and CLI fixture checks. | All supported-host regression cases pass. |
+| Input fidelity | Typed flags, literal braces, commas, optional inputs, ambient env, and parallel/matrix propagation cases. | Exact expected values and types; no unintended rewriting. |
+| Execution isolation | Barrier-based concurrency tests, fake-clock retry tests, cancellation cases, and race-enabled runtime checks. | Correct ordering/retry behavior, bounded concurrency, and no reported data races. |
+| CLI behavior | Help, invalid input, global flags, version/profile re-execution, and output fixtures. | Correct usage exit code, no callbacks for declared help/parse failure, and preserved script arguments. |
+| Diagnostics | Runtime/recursion failures, secret-masking cases, and data-versus-UI output snapshots. | Actionable diagnostics without traceback floods or secret leakage in displayed output. |
+
+Future usability evaluation should measure task completion and debugging effort
+against existing scripts before setting adoption or productivity targets.
+
+## Open Questions
+
+These questions concern unimplemented extensions; they do not block use of the
+documented core. Owners are roles, not assigned individuals.
+
+| Question | Owner | Timing |
+|----------|-------|--------|
+| What are the scope, return types, and side-effect rules for direct service reads/writes and `components.list`? | Runtime and service maintainers | Blocking before those APIs are implemented. |
+| How should arbitrary typed steps expose context restrictions and own background processes or cleanup? | Workflow/runtime maintainers | Blocking before shared step dispatch. |
+| What discovery convention and mock boundaries should command-level Starlark tests use? | Test-runner maintainers | Blocking before test-file discovery. |
+| How should Starlark frames map into observability events without unsafe details or retry duplicates? | Runtime and observability maintainers | Blocking before richer event mapping. |
+| Which file/UI/lifecycle helpers and external migrations provide sufficient benefit to prioritize? | Product owner and automation authors | Non-blocking prioritization; no committed release. |
+
+## Timeline Considerations
+
+The current codebase implements the core described below, including the fixes
+recorded on 2026-10-04. This PRD does not infer a released version from repository
+state. Future P1/P2 work has no supplied deadline, staffing assignment, or release
+commitment; each increment requires scoped contracts and validation before being
+advertised as available. Service access, typed-step dispatch, and command testing
+depend on their existing Atmos subsystems rather than independent replacements.
+
+## Implemented Behavior
+
+### Interpreter, parallel functions, and step integration
 
 - `interpreter: starlark` runs in process through the `pkg/script` engine registry.
 - `steps.parallel(functions=[fn, ...], max_concurrency=4, fail_fast=False)` invokes
@@ -40,7 +169,11 @@ arguments, flags, and custom-component bindings remain in YAML.
 - Script `env` contains explicit step inputs, not ambient process variables.
   `print` is captured as stdout; an optional top-level `output` becomes the step
   value (a string as-is, any other value JSON-encoded; a non-encodable value fails
-  with a clear error). Without `output`, the value remains stdout.
+  with a clear error). An unset or `None` output supplies no explicit result; an
+  embedded step then retains captured stdout as its value. Standalone scripts
+  print no additional result for `None`. Nested `None` values still encode as JSON
+  `null`. Structured step values reach later templates as JSON text and need
+  appropriate quoting when passed through a shell.
 - Local `load()` evaluates and caches modules per invocation, detects cycles, and
   supports functions from imported files. Inline scripts anchor loads at
   `working_directory`; a script read from a file, and every module it loads, resolves
@@ -84,8 +217,38 @@ arguments, flags, and custom-component bindings remain in YAML.
   env, command overrides, step overrides, then per-call overrides. Stack resolution is
   serialized; child processes remain concurrent. Resolution uses the execution pipeline
   so inspection-only secret masking does not supply placeholder credentials.
+- Successful component resolutions are cached; failures may be retried and waiting
+  callers may cancel. Lazy `ctx.component` attribute access uses the invocation's
+  context. To bound resolution by a parallel task's deadline, call `components.get`
+  inside that task with explicit name, stack, and type.
 
-## Implemented increment: dialect, output, and diagnostics
+### Parsed inputs and literal fields
+
+- Embedded scripts receive immutable `ctx.flags` and `ctx.arguments` dictionaries.
+  They preserve host-supplied types and raw strings rather than rendering those
+  strings as templates. Custom commands preserve native flag types; workflow flag
+  values remain strings. Hosts without named inputs provide empty dictionaries.
+- Sequential, parallel, matrix, and test children retain the host inputs. Dictionary
+  conversion sorts keys and freezes nested values for deterministic iteration and
+  isolation from host or script mutation.
+- YAML custom-command flags support string, bool, and int types; invalid types and
+  invalid integer defaults fail registration. Custom-command arguments containing
+  commas are preserved. Omitted optional YAML arguments without defaults become
+  empty strings; omitted standalone `cli.arg` values become `None`.
+- Step fields remain templated unless marked `!literal`. The tag protects `script`,
+  `command`, `interpreter`, `working_directory`, and individual declared `env`
+  values through custom commands, workflows, hooks, parallel, and matrix execution.
+  Loader-owned `literal_fields` metadata carries this intent to the runner.
+- Only declared environment values are rendered; ambient process environment values
+  pass through verbatim. Protecting `script` does not implicitly protect adjacent
+  fields. Template failures identify the step, field, and included source when
+  available, and suggest `!literal` for source containing template braces.
+- A script step's `timeout:` applies to the interpreter and subprocess context;
+  expiration is reported through the step timeout contract. Unknown step `output:`
+  modes fail validation. The step output modes and `exec.run(output="capture")`
+  are different interfaces: `output: capture` is not a valid step mode.
+
+### Dialect, output, and diagnostics
 
 - Top-level `if`/`for`/`while`, `set()`, and recursion are enabled for entry scripts and
   loaded modules. Globals stay single-assignment: rebinding a global (including `n += 1`
@@ -95,17 +258,25 @@ arguments, flags, and custom-component bindings remain in YAML.
 - Script output streams line by line while the script runs. In a `steps.parallel` group
   with more than one task, each line carries a `[<task name>] ` prefix and lines never
   interleave mid-line; a lone task inherits its enclosing prefix.
+- Script steps use command-step output defaults: raw output and no step labels
+  unless step/workflow output settings or `show.labels` opt in. Task prefixes are
+  independent of these outer step labels.
 - `working_directory` must exist, checked before any code runs. `load()` and `fs.read_file`
   accept relative and absolute paths. `fs.read_file` and `exec.run` resolve against the
   step's `working_directory`; `load()` resolves against the script's own file when it has
   one and against `working_directory` for an inline script.
-- Errors are single-line messages with the Starlark traceback as an explanation. Task
+- Runtime errors are single-line messages with the Starlark traceback as an explanation. Task
   timeouts read `task "<name>" timed out after <duration>`; failed processes include the
-  last stderr lines.
+  last stderr lines. Standalone CLI usage errors bypass Starlark traceback wrapping.
+- Every interpreter thread samples call depth every 4096 execution steps and
+  cancels when depth exceeds 10,000 frames. This sampled circuit breaker can stop
+  slightly beyond the threshold; it is not a total execution-step budget. Recursive
+  failures use `ErrStarlarkRecursionLimit`, an actionable hint, and collapsed repeated
+  traceback frames. Long-running nonrecursive work still needs cancellation/timeouts.
 - Hook script steps (`kind: step`, `kind: steps`, `type: test`) can call `components.get`
   for components other than their own.
 
-## Implemented increment: logging
+### Logging
 
 - `log.trace/debug/info/warn/error(message, **fields)` write to the Atmos logger
   (`pkg/logger`), so they respect `--logs-level`, `ATMOS_LOGS_LEVEL`, and `logs.file`. Fields
@@ -115,7 +286,7 @@ arguments, flags, and custom-component bindings remain in YAML.
 - Convention: `print` is data (stdout), `ui.*` is human status (stderr), `log.*` is
   diagnostics shown only at the configured level.
 
-## Implemented increment: lifecycle context and Atmos commands
+### Lifecycle context and Atmos commands
 
 - Hook script steps receive immutable `ctx.component`, `ctx.hook`, and
   `ctx.operation` snapshots. Component vars, settings, metadata, env, and the hook's
@@ -130,6 +301,12 @@ arguments, flags, and custom-component bindings remain in YAML.
   Generic wrappers accept positional CLI strings, `flags={}`, `args=[]`, and the
   standard cwd/env/output/check options; commands with no arguments work as well.
   These calls retain native CLI behavior and return process results.
+- The CLI supplies an immutable snapshot of its registered commands, including
+  custom commands and aliases, to the runtime. Named wrappers and flag spelling
+  follow that catalog rather than a separate hard-coded CLI surface. Embedding
+  hosts without a catalog retain explicit `run`, `terraform`, `helm`, and
+  `toolchain` helpers. Wrappers execute child Atmos processes, not direct Go command
+  handlers or native object queries.
 - `atmos.run(argv)` calls any CLI/custom command using the current binary.
   `atmos.terraform(command, component, stack, flags={}, args=[])` and `atmos.helm(...)`
   add structured arguments. All use the injectable process runner, effective env,
@@ -140,28 +317,92 @@ arguments, flags, and custom-component bindings remain in YAML.
   still raise. Task policies own retries/timeouts/parallelism. Calls execute normal
   hook lifecycles, so recursive hook dispatch must be avoided by configuration.
 
-## Acceptance and validation
+### Standalone executable scripts
 
-### Standalone shebang spike
-
-The workspace spike recognizes a leading `.star` filename or an explicit file path
-with an Atmos shebang. `#!/usr/bin/env atmos` and an absolute Atmos interpreter path
-work through the operating system's normal script dispatch. No arguments preserve
-the existing root UI/help behavior; ordinary CLI commands retain their existing path.
+The CLI recognizes a `.star` filename or an explicit file path with an Atmos
+shebang after any leading Atmos global flags. `#!/usr/bin/env atmos` and an
+absolute Atmos interpreter path work through the operating system's normal script
+dispatch. Invoking Atmos without arguments preserves the existing root UI/help
+behavior; ordinary CLI commands retain their existing path.
 Bare extensionless names remain commands. A new `atmos script run` command is not
-part of this spike, nor are global flags preceding a script filename.
+part of this interface. The `.star` extension is optional for an explicit script
+path with a recognized shebang.
 
-Script arguments are isolated before CLI/config argument processing and exposed as
-immutable `ctx.args`. `ctx.script.path` and `.directory` identify the physical script
+Leading global flags such as `atmos --chdir=dir ./tool.star arg` apply normally.
+`--chdir` (or `ATMOS_CHDIR`) is applied before resolving a relative script path.
+Arguments after the filename belong to the script and are isolated before CLI/config
+argument processing and exposed as immutable `ctx.args`. `ctx.script.path` and
+`.directory` identify the physical script
 file, resolving symlinks so local module loads find adjacent libraries. The caller's
-working directory and Atmos configuration discovery remain unchanged. Script errors
-return through the normal error-reporting path.
+working directory and normal configuration discovery are preserved unless changed
+through Atmos's global controls. Version/profile re-execution retains the original
+script and its arguments, without stripping script-owned flags with names such as
+`--chdir` or `--use-version`.
+
+Standalone metrics summaries are disabled when `settings.metrics.enabled` is unset;
+an explicit setting is honored. Tracebacks display paths relative to the working
+directory where possible, while load resolution retains physical paths. Log fields
+and hints use the script filename.
+
+#### Declared command interfaces
+
+`cli.command` declares a standalone interface using native positional and flag
+definitions. It is available once per invocation on the standalone main thread,
+not in embedded steps or parallel children.
+
+```python
+#!/usr/bin/env atmos
+
+def validate(args, flags):
+    if flags["replicas"] < 1:
+        fail("replicas must be positive")
+
+def main(args, flags):
+    return {"service": args["service"], "replicas": flags["replicas"]}
+
+output = cli.command(
+    description = "Report a service's replica count",
+    args = [cli.arg("service", description = "Service name")],
+    flags = [cli.flag("replicas", type = "int", shorthand = "r", default = 2)],
+    validate = validate,
+    run = main,
+)
+```
+
+- `cli.arg` declares required or optional positional strings; required arguments
+  precede optional ones. `cli.flag` supports `string`, `int`, `bool`, and
+  `string_list`, with supported defaults, shorthand, choices, required values,
+  descriptions, and optional environment binding. Required flags cannot have
+  defaults; boolean flags use defaults rather than required declarations.
+- Parsed callback arguments are immutable dictionaries. Explicit CLI flag values
+  take precedence over environment bindings and defaults. Integer values parse in
+  base 10. String-list CLI and environment inputs use comma-separated CSV semantics;
+  choices are checked per list element. Names must be unique ignoring case.
+- Help documents required flags, choices, and environment bindings, and skips both
+  `validate` and `run`. Parsing failures also skip these callbacks. Top-level script
+  statements still execute, so side effects belong inside `run`; help is not a
+  parse-only mode for the entire file.
+- Validation runs before `run` and accepts `None` or `True`, rejects `False`, and
+  propagates callback errors. These are script validation failures, distinct from
+  native parser usage errors.
+- Invalid CLI input returns `ErrScriptUsage`, usage and a script-specific help hint,
+  exit code 2, and no Starlark traceback. A boolean flag followed by a `true`/`false`
+  word is rejected with guidance to use `--flag=false` or a literal argument after
+  `--`. Unknown flags, missing/extra arguments, invalid values, and failed choices
+  use the same usage-error path.
+- `cli.command` returns the `run` callback's value; assigning it to top-level
+  `output` emits that value under the normal output contract. Help or a callback
+  returning `None` emits no additional result. `ctx.args` retains raw script argv;
+  parsed standalone inputs are passed to callbacks, not substituted into the
+  embedded-host `ctx.flags`/`ctx.arguments` snapshots.
+
+#### Tool dependencies and distribution
 
 Scripts declare tools directly through the dependency module:
 
 ```python
 #!/usr/bin/env atmos
-dependencies.tools("jq", "1.7.1")
+dependencies.tools("jqlang/jq", "1.7.1")
 exec.run(["jq", "--version"])
 ```
 
@@ -172,7 +413,7 @@ before starting parallel tasks; declarations inside branches are rejected. Subpr
 uses the supplied environment, without mutating the process-wide PATH, including
 inside parallel branches.
 
-Explicit toolchain operations use `atmos.toolchain("install", "jq@1.7.1")`,
+Explicit toolchain operations use `atmos.toolchain("install", "jqlang/jq@1.7.1")`,
 consistent with the Terraform and Helm wrappers. This is a normal child command
 with process results, output/error policies, and optional flags/args; it does not
 change the calling script's PATH. Use `dependencies.tools` to provision and activate
@@ -180,19 +421,20 @@ a tool for the current script.
 
 Distribution uses the existing toolchain registry's `type: http`, `format: raw`
 support for a single executable script. Atmos must already be available on PATH for
-an `env atmos` shebang. A local HTTP spike verifies installing an extensionless
+an `env atmos` shebang. A recorded local HTTP experiment covered installing an extensionless
 deployment script, executing it directly, auto-installing its missing helper tool,
 parallel helper calls, and a second run using the cached helper. No infrastructure
 or external registry publication is needed. Archive/module packaging remains outside
 this proof of concept.
 
-### Python automation inventory
+## Migration Inventory
 
-The cast-authoring review found 102 Python script-step declarations in 80 files
+The initial cast-authoring review recorded 102 Python script-step declarations in 80 files
 across `demo/casts`, `examples`, and `.github` before converting the Starlark cast's
 validator. Most cast validators import the shared `demo/casts/cast_checks.py`.
-This inventory is a migration guide, not a requirement to replace Python tools
-or web-server fixtures with Starlark.
+These are historical counts, not a current inventory or adoption metric. This
+inventory is a migration guide, not a requirement to replace Python tools or
+web-server fixtures with Starlark.
 
 | Existing Python usage | Starlark surface | Status |
 | --- | --- | --- |
@@ -206,10 +448,36 @@ or web-server fixtures with Starlark.
 | Temporary directories and atomic replacement in screengrab generation | Scoped temporary workspace and atomic file APIs | Proposed; deterministic cleanup on success, failure and cancellation. |
 | UTC timestamps and hook artifacts in `examples/hooks-custom-command/scripts/notify.py` | Injectable clock, explicit hook inputs, file writes and Markdown UI | Proposed; avoid ambient environment reads and make time deterministic in tests. |
 
-The new `demo/casts/cast_checks.star` module and `scripts/validate-starlark.star`
+The shared `demo/casts/cast_checks.star` module and `scripts/validate-starlark.star`
 use file reads, JSON, regex and `fail()` to validate the real Starlark recording
 without a Python subprocess. Keep cast-specific assertions in loaded Starlark
 modules rather than adding cast-specific builtins to the interpreter.
+
+## Acceptance and Validation
+
+The following are regression criteria for the implemented core, not a record of
+tests rerun during this PRD refresh:
+
+- [ ] **AC-01:** Embedded scripts execute through supported hosts; entry-source dry
+  runs execute no code/processes, and enabled containers fail with actionable guidance.
+- [ ] **AC-02:** Typed/raw inputs survive sequential, parallel, matrix, and test
+  boundaries; commas, optional arguments, literal fields, and ambient env remain
+  faithful to the documented host-specific contracts.
+- [ ] **AC-03:** Strings remain raw results; structured values become JSON text;
+  top-level `None` produces no explicit result. Output defaults, labels, and invalid
+  step-mode validation agree with command-step behavior.
+- [ ] **AC-04:** Controlled concurrency/retry/deadline tests preserve order, retry
+  only failed work, isolate environment/cwd, and allow cancellation without leaked
+  shared mutations. Include recursion inside parallel tasks.
+- [ ] **AC-05:** Component/hook context, resolver caching and cancellation, catalog
+  wrappers, flag spelling, auth-aware resolution, and displayed secret masking retain
+  their existing execution contracts.
+- [ ] **AC-06:** Standalone help and parser failures skip callbacks; typed flags,
+  environment precedence, leading globals, `--chdir`, and version/profile re-execution
+  preserve script selection and arguments.
+- [ ] **AC-07:** Parser usage errors exit 2 without script tracebacks, runtime errors
+  retain useful source context, recursive traces are bounded in presentation, and
+  stdout/UI/log output and standalone metrics follow their documented policies.
 
 ### Runtime verification
 
@@ -262,7 +530,8 @@ available Starlark APIs yet:
 
 - Expose registered Atmos steps through one shared policy-aware runner, including
   context restrictions for interactive, background, and terminal-control steps.
-- Add typed invocation inputs and `components.list`. Custom providers' no-op `Execute`
+- Add native `components.list`; typed invocation inputs are already implemented.
+  Custom providers' no-op `Execute`
   methods must never stand in for actual custom-command execution.
 - Expand UI aliases, polling, cleanup, and state helpers through existing services.
 - Add `type: test` discovery of Starlark test files and command-level assertions,
@@ -271,3 +540,24 @@ available Starlark APIs yet:
   side effects, retry boundaries, and cleanup using representative command fixtures.
 
 No external Safire commands are executed by this implementation or its tests.
+
+## References and Change History
+
+Implementation sources: [engine](../../pkg/script/starlark/engine.go),
+[script-step adapter](../../pkg/runner/step/script.go),
+[standalone host](../../cmd/standalone_script.go),
+[CLI declaration binding](../../pkg/script/starlark/stdlib/cli/module.go), and
+[runtime architecture](../../pkg/script/starlark/README.md).
+
+User documentation: [script step](../../website/docs/steps/type/script.mdx) and
+[standalone CLI apps](../../website/docs/automation/standalone-cli-apps.mdx).
+
+The following fix records contain historical validation evidence; they do not
+replace checks against the current codebase:
+
+- [Declared inputs](../fixes/2026-10-04-starlark-declared-command-inputs.md).
+- [Output defaults and recursion protection](../fixes/2026-10-04-starlark-output-defaults-and-recursion-limit.md).
+
+| Date | PRD change |
+|------|------------|
+| 2026-10-05 | Reorganized into explicit PRD sections and reconciled implemented inputs, literal fields, output, recursion, command catalog, standalone declarations, global flags, usage errors, and re-execution. Kept unimplemented service and testing APIs separate. |

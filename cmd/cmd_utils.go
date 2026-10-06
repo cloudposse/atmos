@@ -30,6 +30,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component/custom"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/customcommand"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -73,6 +74,9 @@ const (
 	customCommandKeyIdentity = "identity"
 	customCommandKeyStep     = "step"
 	annotationDefaultChain   = "atmos.custom.default.chain"
+	// The annotationResolvedArgs annotation carries the JSON-encoded positional arguments, merged with
+	// their defaults, from the pre-run hook to the executor.
+	annotationResolvedArgs = "resolvedArgs"
 )
 
 var (
@@ -330,27 +334,24 @@ func preCustomCommand(
 		errUtils.CheckErrorPrintAndExit(errors.New(sb.String()), "", "")
 	}
 
-	// Merge user-supplied arguments with defaults
-	finalArgs := make([]string, len(commandConfig.Arguments))
-
-	for i, arg := range commandConfig.Arguments {
-		if i < len(args) {
-			finalArgs[i] = args[i]
-		} else {
-			if arg.Default != "" {
-				finalArgs[i] = fmt.Sprintf("%v", arg.Default)
-			} else {
-				// This theoretically shouldn't happen:
-				sb.WriteString(fmt.Sprintf("Missing required argument '%s' with no default!\n", arg.Name))
-				errUtils.CheckErrorPrintAndExit(errors.New(sb.String()), "", "")
-			}
-		}
+	// Merge user-supplied arguments with defaults. An optional argument with no default resolves
+	// to an empty string.
+	finalArgs, err := customcommand.ResolveArguments(commandConfig.Arguments, args)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return
 	}
-	// Set the resolved arguments as annotations on the command
+	// Set the resolved arguments as an annotation on the command. They are JSON-encoded so values
+	// containing commas (or any other character) survive the trip to executeCustomCommand.
+	encodedArgs, err := customcommand.EncodeArguments(finalArgs)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return
+	}
 	if cmd.Annotations == nil {
 		cmd.Annotations = make(map[string]string)
 	}
-	cmd.Annotations["resolvedArgs"] = strings.Join(finalArgs, ",")
+	cmd.Annotations[annotationResolvedArgs] = encodedArgs
 
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
@@ -563,6 +564,11 @@ func validateCustomCommandFlags(commandConfig *schema.Command, parentCommand *co
 
 // validateFlag checks a single flag for duplicates and type conflicts with parent flags.
 func validateFlag(cmdName string, flag *schema.CommandFlag, seen map[string]bool, parentCommand *cobra.Command) error {
+	// Reject unsupported flag types (and unusable defaults) before anything is registered.
+	if err := customcommand.ValidateFlag(cmdName, flag); err != nil {
+		return err
+	}
+
 	// Detect duplicates within the same command config early.
 	if seen[flag.Name] {
 		return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
@@ -696,11 +702,25 @@ func registerFlag(cmd *cobra.Command, flag *schema.CommandFlag) {
 		flagUsage = flag.Usage
 	}
 
-	if flag.Type == "bool" {
+	switch customcommand.EffectiveFlagType(flag) {
+	case customcommand.FlagTypeBool:
 		registerBoolFlag(cmd, flag, flagUsage)
-		return
+	case customcommand.FlagTypeInt:
+		registerIntFlag(cmd, flag, flagUsage)
+	default:
+		registerStringFlag(cmd, flag, flagUsage)
 	}
-	registerStringFlag(cmd, flag, flagUsage)
+}
+
+// registerIntFlag adds an integer persistent flag to the command. The default was already
+// checked by customcommand.ValidateFlag, so an unparsable default cannot reach this point.
+func registerIntFlag(cmd *cobra.Command, flag *schema.CommandFlag, usage string) {
+	defaultVal, _ := customcommand.IntFlagDefault(flag)
+	if flag.Shorthand != "" {
+		cmd.PersistentFlags().IntP(flag.Name, flag.Shorthand, defaultVal, usage)
+	} else {
+		cmd.PersistentFlags().Int(flag.Name, defaultVal, usage)
+	}
 }
 
 // registerBoolFlag adds a boolean persistent flag to the command.
@@ -789,11 +809,14 @@ func executeCustomCommand(
 		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
 
-	mergedArgsStr := cmd.Annotations["resolvedArgs"]
-	finalArgs := strings.Split(mergedArgsStr, ",")
-	if mergedArgsStr == "" {
-		// If for some reason no annotation was set, just fallback
-		finalArgs = args
+	finalArgs, hasResolvedArgs, err := customcommand.DecodeArguments(cmd.Annotations[annotationResolvedArgs])
+	if err == nil && !hasResolvedArgs {
+		// If for some reason no annotation was set, resolve the arguments here.
+		finalArgs, err = customcommand.ResolveArguments(commandConfig.Arguments, args)
+	}
+	if err != nil {
+		exitOrRecordDependencyErr(cmd, err, "", "")
+		return
 	}
 
 	// Extract raw (pre-prompt) arguments/flags once, before the `when:` pre-check loop below --
@@ -804,7 +827,11 @@ func executeCustomCommand(
 	// see the comment at that call site.
 	argumentsData := map[string]string{}
 	for ix, arg := range commandConfig.Arguments {
-		argumentsData[arg.Name] = finalArgs[ix]
+		if ix < len(finalArgs) {
+			argumentsData[arg.Name] = finalArgs[ix]
+		} else {
+			argumentsData[arg.Name] = ""
+		}
 	}
 
 	flagsData := map[string]any{}
@@ -815,16 +842,23 @@ func executeCustomCommand(
 			exitOrRecordDependencyErr(cmd, fmt.Errorf("%w: %q", errCustomCommandFlagNotRegistered, fl.Name), "", "")
 			return
 		}
-		switch fl.Type {
-		case "", "string":
+		switch customcommand.EffectiveFlagType(fl) {
+		case customcommand.FlagTypeString:
 			flagsData[fl.Name] = flag.Value.String()
-		case "bool":
+		case customcommand.FlagTypeBool:
 			boolFlag, err := strconv.ParseBool(flag.Value.String())
 			if err != nil {
 				exitOrRecordDependencyErr(cmd, err, "", "")
 				return
 			}
 			flagsData[fl.Name] = boolFlag
+		case customcommand.FlagTypeInt:
+			intFlag, err := customcommand.ParseIntFlagValue(fl.Name, flag.Value.String())
+			if err != nil {
+				exitOrRecordDependencyErr(cmd, err, "", "")
+				return
+			}
+			flagsData[fl.Name] = intFlag
 		}
 	}
 
@@ -1250,7 +1284,8 @@ func executeCustomCommand(
 			stepEnv = atmosConfig.CaseMaps.ApplyCase("env", stepEnv)
 		}
 		if len(stepEnv) > 0 {
-			resolvedStepEnv, resolveErr := stepVars.ResolveEnvMap(stepEnv)
+			// Env values written with !literal are kept exactly as written.
+			resolvedStepEnv, resolveErr := stepVars.ResolveStepEnvMap(&schema.WorkflowStep{LiteralFields: step.LiteralFields}, stepEnv)
 			if resolveErr != nil {
 				exitOrRecordDependencyErr(cmd, resolveErr, "", "")
 				return
@@ -1279,9 +1314,11 @@ func executeCustomCommand(
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
-		commandToRun, err := stepVars.Resolve(step.Command)
+		// A command written with !literal is used exactly as written and never rendered.
+		renderStep := &schema.WorkflowStep{Name: step.Name, Command: step.Command, LiteralFields: step.LiteralFields}
+		commandToRun, err := stepVars.ResolveStepField(renderStep, "command", step.Command)
 		if err != nil {
-			exitOrRecordDependencyErr(cmd, err, "", "")
+			exitOrRecordDependencyErr(cmd, stepPkg.TemplateFieldError(renderStep, "command", err), "", "")
 			return
 		}
 
@@ -1325,7 +1362,7 @@ func executeCustomCommand(
 		// runExtendedStep converts step to a schema.WorkflowStep and routes it through the
 		// registered pkg/runner/step handlers (used for genuinely-extended step types like
 		// input/confirm/choose, and for "script" steps with no active container override).
-		runExtendedStep := func(workflowStep schema.WorkflowStep) error {
+		runExtendedStep := func(stepCtx context.Context, workflowStep schema.WorkflowStep) error {
 			// Carry env onto the step so handlers that read step.Env (e.g. the
 			// container handler's in-container env) see it. The step's own
 			// declared `env:` had its map keys lowercased by Viper, so restore
@@ -1341,7 +1378,9 @@ func executeCustomCommand(
 				workflowStep.ScriptEnv[key] = value
 				mergedStepEnv[key] = value
 			}
-			workflowStep.Env = mergedStepEnv
+			// Only the step's own declared env is template-rendered by the handlers; the ambient
+			// process environment passes through to child processes verbatim.
+			stepPkg.ApplyAmbientEnv(&workflowStep, envpkg.SliceToMap(env), stepOwnEnv)
 			workflowStep.ScriptProcessOverrides = map[string]string{}
 			for _, entry := range commandConfig.Env {
 				key := strings.TrimSpace(entry.Key)
@@ -1354,16 +1393,18 @@ func executeCustomCommand(
 			}
 
 			// Execute the extended step.
-			_, execErr := executor.Execute(executionCtx, &workflowStep)
+			_, execErr := executor.Execute(stepCtx, &workflowStep)
 			return execErr
 		}
 		// runContainerOverrideStep routes a step-level `container:` override through the same
 		// pkg/workflow session/merge logic internal/exec/workflow_utils.go uses for
 		// workflow-file container steps, shared by both the "shell" and "script" cases below
 		// (which differ only in the workflowStep and the command shown in output/logs).
-		runContainerOverrideStep := func(workflowStep *schema.WorkflowStep, displayCommand string) error {
+		runContainerOverrideStep := func(stepCtx context.Context, workflowStep *schema.WorkflowStep, displayCommand string) error {
+			// The step's timeout, applied around the whole retry loop below, cancels the
+			// container command through stepCtx.
 			return runCommandStep(func(stdout, stderr io.Writer) error {
-				return workflowPkg.RunStepContainerOverride(executionCtx, &workflowPkg.ContainerStepParams{
+				return workflowPkg.RunStepContainerOverride(stepCtx, &workflowPkg.ContainerStepParams{
 					Workflow:      commandConfig.Name,
 					WorkflowPath:  atmosConfig.CliConfigPath,
 					BasePath:      atmosConfig.BasePath,
@@ -1378,7 +1419,10 @@ func executeCustomCommand(
 				})
 			})
 		}
-		runStep := func() error {
+		// runStep runs one attempt of the step under stepCtx. For step types whose `timeout:` is a
+		// deadline (see stepPkg.StepTimeoutBoundsRetries), stepCtx carries one deadline that covers
+		// every attempt and backoff wait, so a later attempt can never outlive the timeout.
+		runStep := func(stepCtx context.Context) error {
 			switch stepType {
 			case "shell":
 				// Execute shell command (backward compatible).
@@ -1395,10 +1439,11 @@ func executeCustomCommand(
 				// the step's own `container:` block is the whole config.
 				workflowStep := step.ToWorkflowStep()
 				if workflowPkg.StepContainerOverride(&workflowStep) {
-					return runContainerOverrideStep(&workflowStep, commandToRun)
+					return runContainerOverrideStep(stepCtx, &workflowStep, commandToRun)
 				}
+				// The step's timeout cancels the shell command through stepCtx.
 				return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
-					return process.RunShellStep(executionCtx, &process.ShellSessionSpec{
+					return process.RunShellStep(stepCtx, &process.ShellSessionSpec{
 						Command:     commandToRun,
 						Name:        commandName,
 						Dir:         stepWorkDir,
@@ -1412,7 +1457,7 @@ func executeCustomCommand(
 							// secret split across two pipe reads is still masked; flush once the step ends.
 							masked := ioLayer.NewMaskedStreams(os.Stdin, stdout, stderr)
 							shellErr := e.ExecuteShellWithWriters(&e.ExecuteShellSpec{
-								Context: executionCtx,
+								Context: stepCtx,
 								Command: commandToRun,
 								Name:    commandName,
 								Dir:     stepWorkDir,
@@ -1438,9 +1483,9 @@ func executeCustomCommand(
 					if renderErr := workflowPkg.RenderScriptInterpreter(&workflowStep, executor.Variables().Resolve); renderErr != nil {
 						return renderErr
 					}
-					return runContainerOverrideStep(&workflowStep, process.FormatScriptDisplay(workflowStep.Interpreter, step.Script))
+					return runContainerOverrideStep(stepCtx, &workflowStep, process.FormatScriptDisplay(workflowStep.Interpreter, step.Script))
 				}
-				return runExtendedStep(workflowStep)
+				return runExtendedStep(stepCtx, workflowStep)
 			case schema.TaskTypeExec:
 				// Replace the Atmos process with the command (shell exec semantics).
 				return process.ReplaceShellSession(&process.ExecSpec{
@@ -1456,12 +1501,13 @@ func executeCustomCommand(
 				if execErr != nil {
 					return execErr
 				}
+				// The step's timeout cancels the atmos subprocess through stepCtx.
 				return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
 					writer := customCommandOutputWriter(&step, commandConfig.Name)
 					_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 						return e.ExecuteShellCommand(
 							atmosConfig, execPath, args, stepWorkDir, env, false, "",
-							e.WithProcessContext(executionCtx), e.WithStdoutCapture(stdoutCapture), e.WithStderrCapture(stderrCapture),
+							e.WithProcessContext(stepCtx), e.WithStdoutCapture(stdoutCapture), e.WithStderrCapture(stderrCapture),
 							e.WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
 						)
 					})
@@ -1490,17 +1536,29 @@ func executeCustomCommand(
 			default:
 				// Check if this is an extended step type (input, confirm, choose, etc.).
 				if stepPkg.IsExtendedStepType(stepType) {
-					return runExtendedStep(step.ToWorkflowStep())
+					return runExtendedStep(stepCtx, step.ToWorkflowStep())
 				}
 				return fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
 			}
 		}
-		err = stepPkg.RunGroupedForType(&atmosConfig, step.Name, commandToRun, stepType, func() error {
-			if step.Retry != nil {
-				if retryErr := retry.Do(executionCtx, step.Retry, runStep); retryErr != nil {
-					return retryErr
+		// runStepBounded applies the step's `retry:` policy. The `timeout:` of shell, script, atmos, and
+		// tflint steps bounds the whole logical step: one deadline wraps the retry loop, so backoff waits
+		// and later attempts end with the timeout instead of each attempt getting a fresh one.
+		runStepBounded := func() error {
+			runRetrying := func(ctx context.Context) error {
+				if step.Retry == nil {
+					return runStep(ctx)
 				}
-			} else if runErr := runStep(); runErr != nil {
+				return retry.Do(ctx, step.Retry, func() error { return runStep(ctx) })
+			}
+			if !stepPkg.StepTimeoutBoundsRetries(stepType) {
+				return runRetrying(executionCtx)
+			}
+			deadlineStep := step.ToWorkflowStep()
+			return stepPkg.RunWithStepDeadline(executionCtx, &deadlineStep, stepVars, runRetrying)
+		}
+		err = stepPkg.RunGroupedForType(&atmosConfig, step.Name, commandToRun, stepType, func() error {
+			if runErr := runStepBounded(); runErr != nil {
 				return runErr
 			}
 			return stepPkg.StoreCommandResult(stepVars, step.Name, step.Outputs, commandResult)
@@ -1716,8 +1774,9 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	if err = json.Unmarshal(origJSON, &clone); err != nil {
 		return nil, err
 	}
-	// The JSON round trip drops fields that have no JSON key; restore the script provenance.
-	clone.CopyScriptSources(orig)
+	// The JSON round trip drops fields that have no JSON key; restore the script provenance and
+	// the !literal markers.
+	clone.CopyLoaderFields(orig)
 
 	return &clone, nil
 }

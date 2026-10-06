@@ -209,8 +209,10 @@ can call Atmos commands directly. Load `atmos-starlark` for the API. Step-specif
 - Script steps default to raw output with no `[step]` or `completed` labels, like shell
   steps. Set `show: {labels: true}` to restore labels. Valid `output:` modes are `raw`,
   `log`, `viewport`, and `none`; `capture` is not a mode.
-- `timeout:` on a script step is not enforced. Use `steps.task(..., timeout="30s")` inside
-  the script for time limits.
+- `timeout:` on a script, shell, or atmos step is enforced: the step is canceled and fails with
+  `step timed out`. Use `steps.task(..., timeout="30s")` inside a script for per-task limits.
+- Only the values declared under a step's `env:` are rendered as templates. The ambient process
+  environment reaches the step's processes verbatim.
 - An enabled `container` fails validation for embedded Starlark; set `container: false`.
 
 ## Workdir Steps

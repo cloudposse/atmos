@@ -108,6 +108,7 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!literal`__](/functions/yaml/literal) YAML function preserves values exactly as written,
    bypassing all template processing. Use it to pass template-like syntax (e.g., `{{...}}` or `${...}`)
    to downstream tools like Terraform, Helm, or ArgoCD without Atmos attempting to evaluate them.
+   It also works in `atmos.yaml` and on the `script` and `command` of custom command, workflow, and hook steps.
 
  - The [__`!version`__](/functions/yaml/version) YAML function resolves a value from the active
    Atmos-managed version track lock file. Use it for locked toolchain versions, image tags,

@@ -12,7 +12,9 @@ const stepsKey = "steps"
 // applyScriptSources maps the in-band `script_source` key Atmos records next to an included
 // `script` (see utils.ScriptSourceKey) onto WorkflowStep.ScriptSource for ws and, recursively,
 // for its child steps. WorkflowStep.ScriptSource has no YAML key, so the YAML round trip that
-// builds the step from the hook payload drops it and it has to be restored explicitly.
+// builds the step from the hook payload drops it and it has to be restored explicitly. The
+// in-band `literal_fields` key (see schema.LiteralFieldsKey) is restored onto
+// WorkflowStep.LiteralFields the same way.
 //
 // The raw argument is the step payload as it came from the merged stack configuration, before hook
 // template rendering. The recorded provenance is honored only while the raw `script` still hashes to the
@@ -33,6 +35,7 @@ func applyScriptSources(atmosConfig *schema.AtmosConfiguration, ws *schema.Workf
 		log.Debug("Ignoring stale script_source; the step script no longer matches the included file",
 			"script_source", stale)
 	}
+	ws.LiteralFields = schema.LiteralFieldsFromValue(m[schema.LiteralFieldsKey])
 	children, ok := m[stepsKey].([]any)
 	if !ok {
 		return
@@ -65,17 +68,18 @@ func stringKeyedMap(v any) (map[string]any, bool) {
 	}
 }
 
-// withoutScriptSource returns m without the internal script_source and script_source_sha256
-// keys. It returns m itself when both are absent, so the common case does not copy.
+// withoutScriptSource returns m without the internal script_source, script_source_sha256, and
+// literal_fields keys. It returns m itself when all are absent, so the common case does not copy.
 func withoutScriptSource(m map[string]any) map[string]any {
 	_, hasSource := m[utils.ScriptSourceKey]
 	_, hasHash := m[utils.ScriptSourceSHA256Key]
-	if !hasSource && !hasHash {
+	_, hasLiteral := m[schema.LiteralFieldsKey]
+	if !hasSource && !hasHash && !hasLiteral {
 		return m
 	}
 	filtered := make(map[string]any, len(m))
 	for k, v := range m {
-		if k != utils.ScriptSourceKey && k != utils.ScriptSourceSHA256Key {
+		if k != utils.ScriptSourceKey && k != utils.ScriptSourceSHA256Key && k != schema.LiteralFieldsKey {
 			filtered[k] = v
 		}
 	}

@@ -40,7 +40,7 @@ Public documentation: [Language reference](https://atmos.tools/automation/langua
 | Entry point | Run with | Inputs the script reads |
 |---|---|---|
 | Standalone script | `atmos ./deploy.star args...`, `atmos deploy.star`, or `./deploy` with an Atmos shebang | `cli.command` callback `args` and `flags` dicts; raw `ctx.args`. `ctx.flags`, `ctx.arguments`, and `env` are empty. |
-| Custom command step | `atmos <name>` (command declared in `atmos.yaml`) | `ctx.flags` (string and bool types preserved), `ctx.arguments`. `ctx.args` is empty; arguments after `--` are not exposed to scripts. |
+| Custom command step | `atmos <name>` (command declared in `atmos.yaml`) | `ctx.flags` (string, bool, and `int` types preserved), `ctx.arguments` (an omitted optional argument is `""`). `ctx.args` is empty; arguments after `--` are not exposed to scripts. |
 | Workflow step | `atmos workflow <name>` | `ctx.flags` (string map). `env` holds only the step's declared `env`. |
 | Hook step | lifecycle event (`kind: step`, `kind: steps`, `type: test`) | `ctx.component`, `ctx.hook`, `ctx.operation`. |
 
@@ -102,6 +102,9 @@ workflows:
 - `ctx.flags` and `ctx.arguments`: immutable parsed command inputs, preserving host types
   in custom commands. Read these directly; do not map flags through `env` or template
   values into script source.
+- Atmos renders step script bodies as Go templates before Starlark runs, so `{{` in source
+  fails. Write `script: !literal |` for any script that contains braces; it runs the body exactly
+  as written. Split the delimiter (`"{" + "{"`) only for included scripts, which are still rendered.
 - Output channels: `print` writes data to stdout. `ui.info` (`▶`), `ui.success` (`✓`), and
   `ui.warning` (`⚠`) write human status to stderr. `log.trace/debug/info/warn/error(message, **fields)`
   writes diagnostics through the Atmos logger with `step` (and, in parallel tasks, `task`)
@@ -198,8 +201,9 @@ Provide `max_attempts` or a task timeout: an explicit policy without an attempt
 limit retries until success, timeout, or cancellation. Output-regex `conditions` are
 not supported. A task timeout failure reads `task "<name>" timed out after <duration>`.
 
-Use `steps.task(..., timeout="30s")` for time limits. A `timeout:` key on the YAML
-script step itself is not enforced.
+Use `steps.task(..., timeout="30s")` for per-task limits. A `timeout:` on the YAML script step
+is enforced: the interpreter and its subprocesses are canceled and the step fails with
+`step timed out`.
 
 Script output is live: lines appear as they are produced. Inside `steps.parallel` with
 more than one task, each line is prefixed `[<task name>] ` and lines never interleave
