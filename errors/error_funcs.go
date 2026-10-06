@@ -75,7 +75,7 @@ func InitializeMarkdown(config *schema.AtmosConfiguration) {
 	atmosConfig = config
 
 	// Initialize Sentry if configured.
-	if config.Errors.Sentry.Enabled {
+	if config.Errors.Sentry.Enabled && currentReporter() == nil {
 		if err := InitializeSentry(&config.Errors.Sentry); err != nil {
 			log.Warn("failed to initialize Sentry", "error", err)
 		}
@@ -222,9 +222,7 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 	}
 
 	// Capture error to Sentry if configured.
-	if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
-		CaptureError(err)
-	}
+	CaptureError(err)
 
 	// Use new error formatter if config is available.
 	// Pass title and suggestion to ensure backward compatibility.
@@ -359,19 +357,11 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 		// Silent exits propagate the code without printing (terminal-handoff
 		// steps; rendering would query the terminal and can hang).
 		if exitCodeErr.Silent {
-			if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
-				CloseSentry()
-			}
 			Exit(exitCodeErr.Code)
 			return
 		}
 		// Non-zero exit codes: print error and exit with that code
 		CheckErrorAndPrint(err, title, suggestion)
-
-		// Close Sentry before exiting.
-		if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
-			CloseSentry()
-		}
 
 		Exit(exitCodeErr.Code)
 		return
@@ -379,11 +369,6 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 
 	// Print error message for all other error types
 	CheckErrorAndPrint(err, title, suggestion)
-
-	// Close Sentry before exiting.
-	if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
-		CloseSentry()
-	}
 
 	// Get exit code from error (supports custom codes and exec.ExitError).
 	exitCode := GetExitCode(err)
@@ -394,8 +379,9 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 	Exit(exitCode)
 }
 
-// Exit exits the program with the specified exit code.
+// Exit flushes exception destinations before exiting with the specified exit code.
 func Exit(exitCode int) {
+	CloseSentry()
 	OsExit(exitCode)
 }
 

@@ -203,3 +203,18 @@ func TestCollectInstallSpecsFromComponentErrors(t *testing.T) {
 	_, err = collectInstallSpecs(cmd, nil)
 	assert.ErrorIs(t, err, sentinel)
 }
+
+func TestRunPluginInstallPropagatesCancellation(t *testing.T) {
+	withPluginCommandSeams(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	resolveHelmBinaryForPlugin = func(*cobra.Command) (string, error) { return "/bin/helm", nil }
+	ensureHelmPluginsForComponent = func(got context.Context, _ string, _ []string) (string, error) {
+		require.Same(t, ctx, got)
+		return "", got.Err()
+	}
+	cmd := &cobra.Command{Use: "install"}
+	cmd.SetContext(ctx)
+	cmd.Flags().String(flagComponent, "", "")
+	require.ErrorIs(t, runPluginInstall(cmd, []string{"diff@v3.9.4"}), context.Canceled)
+}

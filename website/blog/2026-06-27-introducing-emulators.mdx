@@ -4,9 +4,11 @@ title: "Introducing Emulators: Run Real Cloud Infrastructure Locally"
 authors: [osterman]
 tags: [feature]
 date: 2026-06-27T12:00:00.000Z
+cast: "/casts/examples/emulator-aws/lifecycle.cast"
+castTitle: "atmos emulator aws lifecycle"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 A big challenge for infrastructure developers is how hard it is to iterate locally. Every
 `terraform apply` needs a real cloud account, costs real money, and touches a live environment. And in
@@ -54,7 +56,7 @@ Atmos wires the emulator into the rest of the system automatically:
 - **The same stacks everywhere.** Because the emulator is bound through Atmos identity and provider
   generation, your component code doesn't change between local and real cloud — laptop and CI run the
   identical configuration.
-- **Persistent by default.** State survives `down`/`up`; `atmos emulator reset` wipes it, and
+- **Persistent by default.** State survives `down`/`up`; [`atmos emulator reset`](/cli/commands/emulator/reset) wipes it, and
   `--ephemeral` opts out per run.
 
 You can apply, destroy, and re-apply against a local cloud in seconds, without touching an account or
@@ -126,9 +128,9 @@ atmos emulator up registry -s local --ephemeral
 
 ## How to Use It
 
-- `atmos emulator up <component> -s <stack>` to start an emulator, then run your normal
-  `atmos terraform …` commands against it.
-- `atmos emulator ps`, `logs`, and `exec` to inspect a running emulator (it outlives the `atmos`
+- [`atmos emulator up <component> -s <stack>`](/cli/commands/emulator/up) to start an emulator, then run your normal
+  [`atmos terraform …`](/cli/commands/terraform/usage) commands against it.
+- [`atmos emulator ps`](/cli/commands/emulator/ps), `logs`, and `exec` to inspect a running emulator (it outlives the `atmos`
   process and is rediscovered by label — no local state files).
 - `atmos emulator reset <component> -s <stack>` to wipe persisted state.
 - `--ephemeral` (or `ephemeral: true` on the component) for a throwaway instance.
@@ -143,12 +145,14 @@ See the [emulator component reference](/stacks/components/emulator) and the
 
 See the AWS emulator lifecycle in action:
 
-<CastPlayer src="/casts/examples/emulator-aws/lifecycle.cast" title="atmos emulator aws lifecycle" chrome controls scrubber />
+<CastEmbed src="/casts/examples/emulator-aws/lifecycle.cast" title="atmos emulator aws lifecycle" chrome controls scrubber />
 
 [View the full example](/examples/emulator-aws)
 
 And the Kubernetes emulator lifecycle:
 
-<CastPlayer src="/casts/examples/emulator-k8s/lifecycle.cast" title="atmos kubernetes emulator lifecycle" chrome controls scrubber />
+<CastEmbed src="/casts/examples/emulator-k8s/lifecycle.cast" title="atmos kubernetes emulator lifecycle" chrome controls scrubber />
 
 [View the full example](/examples/emulator-k8s)
+
+For usage and configuration, see [Using Emulators](/components/emulator).

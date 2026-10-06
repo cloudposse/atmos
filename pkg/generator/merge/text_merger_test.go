@@ -753,6 +753,97 @@ text`,
 	}
 }
 
+// TestHasUnresolvedConflictMarkers covers the stricter, false-positive-safe
+// check engine.Processor.mergeFile uses to reject re-running --update against
+// a file a previous conflict already left with real markers: unlike
+// HasConflictMarkers, a single bare "=======" line (e.g. a markdown rule) or
+// an out-of-order/incomplete triplet must NOT match.
+func TestHasUnresolvedConflictMarkers(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{name: "no markers", content: "plain text content", want: false},
+		{
+			name: "full triplet in order",
+			content: `<<<<<<< Ours
+user version
+=======
+template version
+>>>>>>> Theirs
+`,
+			want: true,
+		},
+		{
+			name: "indented triplet (nested/block-style YAML conflict)",
+			content: `key:
+  <<<<<<< Ours
+  nested: true
+  =======
+  - item
+  >>>>>>> Theirs
+`,
+			want: true,
+		},
+		{
+			name:    "bare separator alone is not a false positive",
+			content: "Title\n=======\nSome content",
+			want:    false,
+		},
+		{
+			name:    "start marker with no separator or end marker",
+			content: "<<<<<<< Ours\nsomething\n",
+			want:    false,
+		},
+		{
+			name:    "start and separator but no end marker",
+			content: "<<<<<<< Ours\na\n=======\nb\n",
+			want:    false,
+		},
+		{
+			name:    "end marker before start marker does not count",
+			content: ">>>>>>> Theirs\n<<<<<<< Ours\n=======\n",
+			want:    false,
+		},
+		{
+			name:    "generic diff3 labels (not our Ours/Theirs) do not match",
+			content: "<<<<<<< HEAD\na\n=======\nb\n>>>>>>> branch\n",
+			want:    false,
+		},
+		{
+			// Regression: the start marker is always emitted verbatim by both
+			// mergers (diff3's "<<<<<<< %s" label format and YAMLMerger's
+			// literal "<<<<<<< Ours") with no trailing suffix, unlike the
+			// closing marker, which YAMLMerger can append the original line's
+			// suffix to. A prefix match on the start marker would
+			// false-positive here.
+			name:    "start marker with suffix is not a real marker",
+			content: "<<<<<<< OursSomethingElse\na\n=======\nb\n>>>>>>> Theirs\n",
+			want:    false,
+		},
+		{
+			name: "closing marker with suffix still matches (YAMLMerger appends the original line's suffix)",
+			content: `<<<<<<< Ours
+setting: user-change
+=======
+setting: template-change
+>>>>>>> Theirs # trailing comment
+`,
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HasUnresolvedConflictMarkers(tt.content)
+			if got != tt.want {
+				t.Errorf("HasUnresolvedConflictMarkers() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestTextMerger_TrailingNewlinePreservation asserts exact byte-for-byte
 // merge output, trailing-newline count included, split into merges with no
 // genuine ours/theirs divergence (result must equal the unchanged content
@@ -866,5 +957,118 @@ func TestTextMerger_TrailingNewlinePreservation(t *testing.T) {
 				t.Errorf("Unexpected conflicts: %d", result.ConflictCount)
 			}
 		})
+	}
+}
+
+// TestTextMerger_CRLFFromGitCheckoutDoesNotInflateThreshold reproduces a
+// real-world mismatch: base/theirs are frequently sourced from a fresh git
+// clone of a template (e.g. --update-strategy=rendered, or any initial
+// fetch), which on a checkout with core.autocrlf=true (the default
+// Git-for-Windows install option) rewrites committed LF line endings to
+// CRLF; ours is the user's own file on disk, untouched by that checkout. Mirrors
+// "both sides modify same line" from TestTextMerger_Conflicts, whose all-LF
+// content computes to 133% (2 changed lines each side / 3 base lines) and
+// passes at threshold 150 -- only base/theirs here are CRLF. If CRLF noise on
+// the two untouched lines were still counted as changes, this would compute
+// far higher (every line differs, not just the one real edit) and
+// incorrectly exceed threshold 150.
+func TestTextMerger_CRLFFromGitCheckoutDoesNotInflateThreshold(t *testing.T) {
+	toCRLF := func(s string) string { return strings.ReplaceAll(s, "\n", "\r\n") }
+
+	base := toCRLF("line 1\nline 2\nline 3")
+	ours := "line 1\nuser modified line 2\nline 3"
+	theirs := toCRLF("line 1\ntemplate modified line 2\nline 3")
+
+	result, err := NewTextMerger(150).Merge(base, ours, theirs)
+	if err != nil {
+		t.Fatalf("Unexpected error (threshold incorrectly exceeded due to CRLF noise): %v", err)
+	}
+	if !result.HasConflicts {
+		t.Errorf("Expected a real conflict on the shared line, got none")
+	}
+	if result.ConflictCount != 1 {
+		t.Errorf("ConflictCount = %d, want 1 (CRLF noise must not count the untouched lines as conflicts)", result.ConflictCount)
+	}
+	if strings.Contains(result.Content, "\r\n") {
+		t.Errorf("ours was LF-only; result must not gain CRLF line endings:\n%q", result.Content)
+	}
+
+	// The same content should also still correctly fail at a stricter
+	// threshold below the real (uninflated) 133% change size.
+	if _, err := NewTextMerger(100).Merge(base, ours, theirs); err == nil {
+		t.Errorf("Expected threshold 100 to still reject the real 133%% change, got no error")
+	}
+}
+
+// TestTextMerger_PreservesOursCRLFOnCleanMerge ensures that when ours is
+// already CRLF (an ordinary Windows file) and the merge cleanly applies two
+// independent, non-overlapping changes, the user's line-ending style isn't
+// silently flattened to LF as a side effect of the CRLF-normalization fix.
+func TestTextMerger_PreservesOursCRLFOnCleanMerge(t *testing.T) {
+	toCRLF := func(s string) string { return strings.ReplaceAll(s, "\n", "\r\n") }
+
+	// An unchanged anchor line (line 3) separates the two edits: without it,
+	// diff3 treats adjacent independent edits as one conflicting hunk even
+	// with no actual disagreement.
+	base := "line 1\nline 2\nline 3\nline 4\nline 5"
+	ours := toCRLF("line 1\nline 2 edited by user\nline 3\nline 4\nline 5")
+	theirs := "line 1\nline 2\nline 3\nline 4\nline 5 updated by template"
+
+	result, err := NewTextMerger(50).Merge(base, ours, theirs)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if result.HasConflicts {
+		t.Fatalf("Expected a clean merge (independent, non-overlapping edits), got conflicts: %d", result.ConflictCount)
+	}
+	if !strings.Contains(result.Content, "\r\n") {
+		t.Errorf("Clean merge must preserve ours' CRLF line endings, got:\n%q", result.Content)
+	}
+	if !strings.Contains(result.Content, "line 2 edited by user") || !strings.Contains(result.Content, "line 5 updated by template") {
+		t.Errorf("Expected both independent edits to survive the merge, got:\n%q", result.Content)
+	}
+}
+
+// TestTextMerger_PreservesOursCRLFWithUnresolvedConflict ensures that when
+// ours is CRLF and a real conflict remains (manual strategy), the
+// unconflicted lines still come back CRLF instead of silently flattening to
+// LF.
+func TestTextMerger_PreservesOursCRLFWithUnresolvedConflict(t *testing.T) {
+	toCRLF := func(s string) string { return strings.ReplaceAll(s, "\n", "\r\n") }
+
+	base := "line 1\nline 2\nline 3"
+	ours := toCRLF("line 1\nuser version\nline 3")
+	theirs := "line 1\ntemplate version\nline 3"
+
+	result, err := NewTextMerger(0).Merge(base, ours, theirs)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if !result.HasConflicts {
+		t.Fatalf("Expected an unresolved conflict on the shared line, got none")
+	}
+	if !HasConflictMarkers(result.Content) {
+		t.Fatalf("Expected conflict markers in the result, got:\n%q", result.Content)
+	}
+
+	lines := strings.Split(result.Content, "\n")
+	if lines[0] != "line 1\r" {
+		t.Errorf("Expected ours' untouched CRLF line before the conflict to survive, got:\n%q", result.Content)
+	}
+	if lines[len(lines)-1] != "line 3" {
+		t.Errorf("Expected ours' untouched trailing line (no original trailing newline) to survive unchanged, got:\n%q", result.Content)
+	}
+}
+
+// TestHasUnresolvedConflictMarkers_IgnoresRestoredCarriageReturn is a
+// regression test for the CRLF-restoration path in Merge: once ours' CRLF
+// style is restored across an unresolved-conflict result, the marker lines
+// themselves gain a trailing "\r" too (since the restore is a blanket
+// "\n" -> "\r\n" replace). HasUnresolvedConflictMarkers must still recognize
+// the triplet despite that trailing "\r".
+func TestHasUnresolvedConflictMarkers_IgnoresRestoredCarriageReturn(t *testing.T) {
+	content := "<<<<<<< Ours\r\nuser version\r\n=======\r\ntemplate version\r\n>>>>>>> Theirs\r\n"
+	if !HasUnresolvedConflictMarkers(content) {
+		t.Errorf("HasUnresolvedConflictMarkers() = false, want true for CRLF-restored markers:\n%q", content)
 	}
 }

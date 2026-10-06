@@ -120,7 +120,7 @@ var multiComponentFlagNames = []string{"all", "affected", "components", "query",
 // before.terraform.test) operate on the chosen target instead of an empty one. With
 // explicit args or in non-interactive contexts it is a no-op beyond the normal hook run.
 func runBeforeHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
-	if err := validateTerraformMockFlags(cmd_); err != nil {
+	if err := validateTerraformMockFlags(cmd_, args); err != nil {
 		return err
 	}
 	if err := preResolveInteractiveSelection(cmd_, args); err != nil {
@@ -131,14 +131,22 @@ func runBeforeHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error
 
 // validateTerraformMockFlags rejects an invalid mock invocation before hook or
 // stack resolution. RunE repeats this validation for commands without hooks and
-// for values supplied through environment variables.
-func validateTerraformMockFlags(cmd_ *cobra.Command) error {
+// for values supplied through environment variables. The positional arguments
+// (the component first) are used to catch `--use-mocks always`.
+func validateTerraformMockFlags(cmd_ *cobra.Command, args []string) error {
 	if cmd_ == nil || cmd_.Flags().Lookup("use-mocks") == nil {
 		return nil
 	}
 
-	useMocks, err := cmd_.Flags().GetBool("use-mocks")
+	rawUseMocks, err := cmd_.Flags().GetString("use-mocks")
+	if err != nil {
+		return err
+	}
+	useMocks, mocksMode, err := cfg.ParseUseMocksFlag(rawUseMocks)
 	if err != nil || !useMocks {
+		return err
+	}
+	if err := cfg.CheckUseMocksSeparatedMode(useMocks, mocksMode, argsAfterComponent(args)); err != nil {
 		return err
 	}
 	processFunctions, err := cmd_.Flags().GetBool("process-functions")
@@ -578,7 +586,7 @@ func (n *terraformNodeHooks) recordExecResult(info *schema.ConfigAndStacksInfo, 
 		}
 	}
 
-	data := buildTerraformExecData(n.subCommand, ansi.Strip(output), info.Component, info.Stack, exitCode)
+	data := buildTerraformExecData(n.subCommand, ansi.Strip(output), info.ComponentFromArg, info.Stack, exitCode)
 	if data == nil {
 		return
 	}
@@ -642,13 +650,15 @@ type terraformOutputResultMirror struct {
 // onAfterDeploy override ("deploy is semantically apply for CI purposes").
 // Returns (nil, false) for subcommands with no terraform-shaped output,
 // empty output, or when parsing finds nothing.
-// These constants name the two subcommands this feature's structured Data
-// shape covers, shared by parseTerraformOutputMirror and
-// terraformCoveredSubcommand to avoid repeating the "plan"/"apply" string
-// literals (golangci-lint revive add-constant).
+// These constants name the Terraform subcommands referenced by name
+// throughout this file (parseTerraformOutputMirror, terraformCoveredSubcommand,
+// the aggregate CI event mappings, and wirePerComponentHook's subcommand
+// switch) to avoid repeating the "plan"/"apply"/"destroy" string literals
+// (golangci-lint revive add-constant).
 const (
-	terraformSubCommandPlan  = "plan"
-	terraformSubCommandApply = "apply"
+	terraformSubCommandPlan    = "plan"
+	terraformSubCommandApply   = "apply"
+	terraformSubCommandDestroy = "destroy"
 )
 
 func parseTerraformOutputMirror(subCommand, output string) (*terraformOutputResultMirror, bool) {
@@ -1007,7 +1017,13 @@ func (n *terraformNodeHooks) BeforeWithWriters(_ context.Context, info *schema.C
 	// identity-aware store hooks (for example, after-apply output publishing)
 	// do not fall back to ambient credentials.
 	injectHookStoreAuthResolver(&atmosConfig, info)
-	return n.runUserHooksForNodeWithWriters(&atmosConfig, info, n.beforeEvent, h.Outcome{Status: h.RunSuccess}, writers)
+	if err := n.runUserHooksForNodeWithWriters(&atmosConfig, info, n.beforeEvent, h.Outcome{Status: h.RunSuccess}, writers); err != nil {
+		return err
+	}
+	if !n.skipPerNodeCI {
+		n.runCIHooksForNodeBefore(&atmosConfig, info)
+	}
+	return nil
 }
 
 // After implements schema.ComponentNodeHooks.
@@ -1102,6 +1118,25 @@ func (n *terraformNodeHooks) runCIHooksForNode(atmosConfig *schema.AtmosConfigur
 	}
 }
 
+// runCIHooksForNodeBefore fires the CI hook for this node's before-event with
+// the node's real, resolved component. Before-side counterpart to
+// runCIHooksForNode. Only reachable when skipPerNodeCI is false — currently
+// only deploy (plan/apply/destroy suppress this in CI-aggregate mode and get
+// their up-front pending statuses from the before.terraform.*.aggregate hook
+// fired once in ExecuteTerraform instead).
+func (n *terraformNodeHooks) runCIHooksForNodeBefore(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	forceCIMode := resolveCIMode(n.cmd.Flags())
+
+	if err := h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:       n.beforeEvent,
+		AtmosConfig: atmosConfig,
+		Info:        info,
+		ForceCIMode: forceCIMode,
+	}); err != nil {
+		log.Warn(ciHookFailedMsg, logKeyComponent, info.Component, "error", err)
+	}
+}
+
 // terraformHookEvents returns the user-hook before/after event pair for a
 // Terraform subcommand, and whether user hooks are supported for it. Destroy
 // is intentionally excluded — no before/after per-component user-hook events
@@ -1124,6 +1159,24 @@ func terraformHookEvents(subCommand string) (before, after h.HookEvent, ok bool)
 	}
 }
 
+// resolveTerraformCICommand resolves the Terraform subcommand an aggregate CI
+// hook should report as, in priority order: the handler's own configured
+// command (set once at wiring time in wirePerComponentHook), then the
+// command already carried on the payload (resultSet.Command /
+// pending.Command), then the info struct's SubCommand as a last resort.
+// Shared by terraformPlanCIResultHandler.HandleTerraformPlanCIResults and
+// terraformPlanCIBeforeHandler.HandleTerraformPlanCIBefore, which previously
+// duplicated this exact fallback chain.
+func resolveTerraformCICommand(handlerCommand, payloadCommand, infoSubCommand string) string {
+	if handlerCommand != "" {
+		return handlerCommand
+	}
+	if payloadCommand != "" {
+		return payloadCommand
+	}
+	return infoSubCommand
+}
+
 // terraformPlanCIResultHandler forwards scheduler results into the aggregate CI hook.
 type terraformPlanCIResultHandler struct {
 	cmd     *cobra.Command
@@ -1137,13 +1190,7 @@ func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(result
 		return nil
 	}
 
-	command := handler.command
-	if command == "" {
-		command = resultSet.Command
-	}
-	if command == "" {
-		command = handler.info.SubCommand
-	}
+	command := resolveTerraformCICommand(handler.command, resultSet.Command, handler.info.SubCommand)
 	resultSet.Command = command
 
 	atmosConfig, err := cfg.InitCliConfig(*handler.info, true)
@@ -1166,12 +1213,57 @@ func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(result
 // terraformAggregateEvent returns the aggregate CI hook event for a Terraform command.
 func terraformAggregateEvent(command string) h.HookEvent {
 	switch command {
-	case "apply":
+	case terraformSubCommandApply:
 		return h.AfterTerraformApplyAggregate
-	case "destroy":
+	case terraformSubCommandDestroy:
 		return h.AfterTerraformDestroyAggregate
 	default:
 		return h.AfterTerraformPlanAggregate
+	}
+}
+
+// terraformPlanCIBeforeHandler forwards the resolved node list into the
+// before-aggregate CI hook, creating one real pending check-run per component
+// before the scheduler starts. Before-side counterpart to
+// terraformPlanCIResultHandler.
+type terraformPlanCIBeforeHandler struct {
+	cmd     *cobra.Command
+	info    *schema.ConfigAndStacksInfo
+	command string
+}
+
+// HandleTerraformPlanCIBefore initializes config and runs the before-aggregate CI hook.
+func (handler *terraformPlanCIBeforeHandler) HandleTerraformPlanCIBefore(pending schema.TerraformPlanCIPendingSet) error {
+	if handler == nil || handler.cmd == nil || handler.info == nil {
+		return nil
+	}
+
+	command := resolveTerraformCICommand(handler.command, pending.Command, handler.info.SubCommand)
+	pending.Command = command
+
+	atmosConfig, err := cfg.InitCliConfig(*handler.info, true)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err)
+	}
+
+	return h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:       terraformBeforeAggregateEvent(command),
+		AtmosConfig: &atmosConfig,
+		Info:        handler.info,
+		ForceCIMode: terraformCIModeEnabled(handler.cmd),
+		Aggregate:   pending,
+	})
+}
+
+// terraformBeforeAggregateEvent returns the before-aggregate CI hook event for a Terraform command.
+func terraformBeforeAggregateEvent(command string) h.HookEvent {
+	switch command {
+	case terraformSubCommandApply:
+		return h.BeforeTerraformApplyAggregate
+	case terraformSubCommandDestroy:
+		return h.BeforeTerraformDestroyAggregate
+	default:
+		return h.BeforeTerraformPlanAggregate
 	}
 }
 
@@ -1205,8 +1297,13 @@ func wirePerComponentHook(info *schema.ConfigAndStacksInfo, subCommand string, a
 	ciAggregate := false
 	if terraformCIModeEnabled(actualCmd) {
 		switch subCommand {
-		case "plan", "apply", "destroy":
+		case terraformSubCommandPlan, terraformSubCommandApply, terraformSubCommandDestroy:
 			info.TerraformPlanCIResultHandler = &terraformPlanCIResultHandler{
+				cmd:     actualCmd,
+				info:    info,
+				command: subCommand,
+			}
+			info.TerraformPlanCIBeforeHandler = &terraformPlanCIBeforeHandler{
 				cmd:     actualCmd,
 				info:    info,
 				command: subCommand,
@@ -1473,6 +1570,9 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	if err := validateTerraformMockOptions(subCommand, opts.UseMocks, opts.ProcessFunctions); err != nil {
 		return err
 	}
+	if err := cfg.CheckUseMocksSeparatedMode(opts.UseMocks, opts.MocksMode, argsAfterComponent(args)); err != nil {
+		return err
+	}
 
 	// Validate Atmos config first to provide specific error messages.
 	if err := internal.ValidateAtmosConfig(); err != nil {
@@ -1611,9 +1711,20 @@ func validateTerraformMockOptions(subCommand string, useMocks, processFunctions 
 		return fmt.Errorf("%w: --use-mocks requires --process-functions=true", errUtils.ErrInvalidFlagValue)
 	}
 	if subCommand != "plan" {
-		return fmt.Errorf("%w: --use-mocks is supported only by `atmos terraform plan`", errUtils.ErrInvalidFlagValue)
+		return errUtils.Build(fmt.Errorf("%w: %s is supported only by `atmos terraform plan`", errUtils.ErrInvalidFlagValue, cfg.UseMocksFlagAndEnvSource)).
+			WithHintf("If `ATMOS_USE_MOCKS` is set in your shell or CI environment, unset it for `atmos terraform %s`.", subCommand).
+			Err()
 	}
 	return nil
+}
+
+// argsAfterComponent returns the positional arguments that follow the component (the first
+// positional argument), or nil when there are none.
+func argsAfterComponent(args []string) []string {
+	if len(args) < 2 {
+		return nil
+	}
+	return args[1:]
 }
 
 // verifyStoredPlanForDeploy runs planfile drift verification before a deploy

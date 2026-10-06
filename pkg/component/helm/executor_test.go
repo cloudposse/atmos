@@ -96,6 +96,18 @@ func TestRunOperationDispatchesWithSummaries(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, summary["diff"], "app-config")
 
+	info.SubCommand = "values"
+	spec.Values = map[string]any{"image": map[string]any{"tag": "preview"}}
+	summary, err = runOperation(
+		&component.ExecutionContext{Flags: map[string]any{}},
+		&schema.AtmosConfiguration{},
+		info,
+		OperationValues,
+		spec,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "values", summary["command"])
+
 	info.SubCommand = "apply"
 	summary, err = runOperation(&component.ExecutionContext{Flags: map[string]any{}}, &schema.AtmosConfiguration{}, info, OperationApply, spec)
 	require.NoError(t, err)
@@ -185,6 +197,16 @@ func TestExecuteBulkInitializesConfigAndGraph(t *testing.T) {
 	assert.Equal(t, cfg.HelmComponentType, graphOpts.ComponentType)
 	assert.Equal(t, "template", graphOpts.SubCommand)
 	assert.Equal(t, ctx.Flags, graphOpts.Flags)
+	assert.False(t, graphOpts.ReverseOrder)
+
+	graphOpts = nil
+	require.NoError(t, executeBulk(ctx, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{
+		All:        true,
+		Stack:      "dev",
+		SubCommand: "delete",
+	}, OperationDelete))
+	require.NotNil(t, graphOpts)
+	assert.True(t, graphOpts.ReverseOrder)
 }
 
 func TestExecuteSingleSkipsDisabledComponent(t *testing.T) {

@@ -31,7 +31,7 @@ func RenderTable(
 
 	// Create section header style.
 	sectionHeaderStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 		Bold(true).
 		Underline(true)
 

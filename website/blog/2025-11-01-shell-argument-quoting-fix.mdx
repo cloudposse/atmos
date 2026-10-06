@@ -141,11 +141,11 @@ Atmos uses the industry-standard shell quoting library (`mvdan.cc/sh/v3/syntax`)
 
 This fix **only** affects custom commands using `{{ .TrailingArgs }}` in shell execution. These commands are **not affected**:
 
-- ✅ `atmos terraform` - passes arguments directly to Terraform SDK
-- ✅ `atmos helmfile` - passes arguments directly to Helmfile
-- ✅ `atmos packer` - passes arguments directly to Packer
-- ✅ `atmos auth exec` - passes arguments directly to subprocess
-- ✅ `atmos auth shell` - passes arguments to shell initialization
+- ✅ [`atmos terraform`](/cli/commands/terraform/usage) - passes arguments directly to Terraform SDK
+- ✅ [`atmos helmfile`](/cli/commands/helmfile/usage) - passes arguments directly to Helmfile
+- ✅ [`atmos packer`](/cli/commands/packer/usage) - passes arguments directly to Packer
+- ✅ [`atmos auth exec`](/cli/commands/auth/exec) - passes arguments directly to subprocess
+- ✅ [`atmos auth shell`](/cli/commands/auth/shell) - passes arguments to shell initialization
 
 ## What We Learned
 

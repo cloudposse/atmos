@@ -37,6 +37,13 @@ type GraphExecutionOptions struct {
 	SubCommand    string
 	Flags         map[string]any
 	Selection     *GraphSelection
+	ReverseOrder  bool
+}
+
+// GraphNodeSkipObserver is implemented by providers that need to record graph
+// nodes skipped after execution stops before reaching them.
+type GraphNodeSkipObserver interface {
+	OnGraphNodeSkipped(node *dependency.Node)
 }
 
 // ExecuteGraph runs selected components in dependency order and stops before
@@ -59,26 +66,43 @@ func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 		return nil
 	}
 
-	log.Info("Processing components in dependency order", "component_type", opts.ComponentType, "count", len(order))
+	orderName := "dependency"
+	if opts.ReverseOrder {
+		orderName = "reverse_dependency"
+	}
+	log.Info("Processing components", "component_type", opts.ComponentType, "order", orderName, "count", len(order))
 	for i := range order {
 		select {
 		case <-ctx.Done():
+			notifyGraphNodeSkips(opts.Provider, order[i:])
 			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, ctx.Err())
 		default:
 		}
 
 		if err := executeGraphNode(ctx, opts, &order[i]); err != nil {
+			notifyGraphNodeSkips(opts.Provider, order[i+1:])
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, errors.Join(ctxErr, err))
 			}
 			return err
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
+			notifyGraphNodeSkips(opts.Provider, order[i+1:])
 			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, ctxErr)
 		}
 	}
 
 	return nil
+}
+
+func notifyGraphNodeSkips(provider ComponentProvider, nodes dependency.ExecutionOrder) {
+	observer, ok := provider.(GraphNodeSkipObserver)
+	if !ok {
+		return
+	}
+	for i := range nodes {
+		observer.OnGraphNodeSkipped(&nodes[i])
+	}
 }
 
 // prepareExecutionOrder validates options, builds and filters the graph, and returns
@@ -94,7 +118,11 @@ func prepareExecutionOrder(opts *GraphExecutionOptions) (dependency.ExecutionOrd
 		opts.ComponentType = opts.Provider.GetType()
 	}
 
-	graph, err := BuildGraph(opts.Stacks, opts.ComponentType)
+	leftDelim := ""
+	if opts.AtmosConfig != nil {
+		leftDelim, _ = tags.TemplateDelims(opts.AtmosConfig.Templates.Settings.Delimiters)
+	}
+	graph, err := BuildGraph(opts.Stacks, opts.ComponentType, leftDelim)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +136,16 @@ func prepareExecutionOrder(opts *GraphExecutionOptions) (dependency.ExecutionOrd
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrTopologicalOrder, err)
 	}
+	if opts.ReverseOrder {
+		reverseExecutionOrder(order)
+	}
 	return order, nil
+}
+
+func reverseExecutionOrder(order dependency.ExecutionOrder) {
+	for left, right := 0, len(order)-1; left < right; left, right = left+1, right-1 {
+		order[left], order[right] = order[right], order[left]
+	}
 }
 
 // executeGraphNode executes a single graph node through the component provider.
@@ -156,18 +193,22 @@ func executeGraphNode(ctx context.Context, opts *GraphExecutionOptions, node *de
 	return nil
 }
 
-func BuildGraph(stacks map[string]any, componentType string) (*dependency.Graph, error) {
+func BuildGraph(stacks map[string]any, componentType string, leftDelims ...string) (*dependency.Graph, error) {
 	defer perf.Track(nil, "component.BuildGraph")()
 
+	leftDelim := ""
+	if len(leftDelims) > 0 {
+		leftDelim = leftDelims[0]
+	}
 	builder := dependency.NewBuilder()
-	nodeIDs := make(map[string]struct{})
+	targets := make(map[string]componentTargetState)
 
 	if err := walkComponents(stacks, componentType, func(stackName, componentName string, componentSection map[string]any) error {
+		nodeID := GraphNodeID(componentName, stackName)
+		targets[nodeID] = targetStateFor(componentSection)
 		if shouldSkipGraphComponent(componentSection) {
 			return nil
 		}
-		nodeID := GraphNodeID(componentName, stackName)
-		nodeIDs[nodeID] = struct{}{}
 		return builder.AddNode(&dependency.Node{
 			ID:        nodeID,
 			Component: componentName,
@@ -183,7 +224,7 @@ func BuildGraph(stacks map[string]any, componentType string) (*dependency.Graph,
 		if shouldSkipGraphComponent(componentSection) {
 			return nil
 		}
-		return addComponentDependencies(builder, nodeIDs, dependencyParams{
+		return addComponentDependencies(builder, targets, leftDelim, dependencyParams{
 			componentType:    componentType,
 			stackName:        stackName,
 			componentName:    componentName,
@@ -357,67 +398,104 @@ type dependencyParams struct {
 	componentSection map[string]any
 }
 
+type componentTargetState struct {
+	available bool
+	reason    string
+}
+
 func addComponentDependencies(
 	builder *dependency.GraphBuilder,
-	nodeIDs map[string]struct{},
+	targets map[string]componentTargetState,
+	leftDelim string,
 	params dependencyParams,
 ) error {
 	fromID := GraphNodeID(params.componentName, params.stackName)
-	deps := componentDependencies(params.componentSection)
+	deps, modern, err := componentDependencies(params.componentSection, params.componentType, params.stackName, leftDelim)
+	if err != nil {
+		return err
+	}
 	for i := range deps {
 		dep := &deps[i]
-		if !dep.IsComponentDependency() {
+		if !dep.IsComponentDependency() || dep.Component == "" {
 			continue
 		}
 		if dep.Kind != "" && dep.Kind != params.componentType {
 			continue
 		}
-		if dep.Component == "" {
-			continue
+		if modern && (tags.SelectorUnresolved(dep.Component, leftDelim) || tags.SelectorUnresolved(dep.Stack, leftDelim)) {
+			return fmt.Errorf("%w: from=%s component=%s stack=%s", errUtils.ErrDependencyResolution, fromID, dep.Component, dep.Stack)
 		}
 		depStack := dep.Stack
 		if depStack == "" {
 			depStack = params.stackName
 		}
 		toID := GraphNodeID(dep.Component, depStack)
-		if _, ok := nodeIDs[toID]; !ok {
-			log.Warn("Dependency target not found", "from", fromID, "to", toID)
+		target, exists := targets[toID]
+		if !exists {
+			target.reason = "target_missing"
+		}
+		//nolint:nestif // Required, optional, legacy, and disabled states have distinct contracts.
+		if !target.available {
+			if !modern {
+				log.Warn("Dependency target not found", "from", fromID, "to", toID)
+				continue
+			}
+			if dep.IsRequired() {
+				targetErr := errUtils.ErrDependencyTargetNotFound
+				if target.reason != "target_missing" {
+					targetErr = errUtils.ErrDependencyTargetUnavailable
+				}
+				return fmt.Errorf("%w: from=%s to=%s reason=%s", targetErr, fromID, toID, target.reason)
+			}
+			log.Info("optional dependency skipped", "event", "optional_dependency_skipped",
+				"from", fromID, "to", toID, "from_component", params.componentName, "from_stack", params.stackName,
+				"to_component", dep.Component, "to_stack", depStack, "kind", dep.Kind, "reason", target.reason)
 			continue
 		}
-		if err := builder.AddDependency(fromID, toID); err != nil {
+		if err := builder.AddDependencyWithOptional(fromID, toID, modern && !dep.IsRequired()); err != nil {
 			return err
+		}
+		if modern && !dep.IsRequired() {
+			log.Debug("optional dependency included", "event", "optional_dependency_included",
+				"from", fromID, "to", toID, "from_component", params.componentName, "from_stack", params.stackName,
+				"to_component", dep.Component, "to_stack", depStack, "kind", dep.Kind)
 		}
 	}
 	return nil
 }
 
-func componentDependencies(componentSection map[string]any) []schema.ComponentDependency {
-	if deps := dependenciesFromSection(componentSection); len(deps) > 0 {
-		return deps
+func componentDependencies(componentSection map[string]any, componentType, stackName, leftDelim string) ([]schema.ComponentDependency, bool, error) {
+	deps, found, err := dependenciesFromSection(componentSection, componentType, stackName, leftDelim)
+	if err != nil || found {
+		return deps, found, err
 	}
 
 	settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any)
 	if !ok {
-		return nil
+		return nil, false, nil
 	}
-	return legacyDependenciesFromSettings(settingsSection)
+	return legacyDependenciesFromSettings(settingsSection), false, nil
 }
 
 // dependenciesFromSection extracts dependencies from the 'dependencies.components' section.
-func dependenciesFromSection(componentSection map[string]any) []schema.ComponentDependency {
-	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
+func dependenciesFromSection(componentSection map[string]any, componentType, stackName, leftDelim string) ([]schema.ComponentDependency, bool, error) {
+	dependenciesValue, exists := componentSection[cfg.DependenciesSectionName]
+	if !exists {
+		return nil, false, nil
+	}
+	depsSection, ok := dependenciesValue.(map[string]any)
 	if !ok {
-		return nil
+		return nil, true, fmt.Errorf("%w: %w", errUtils.ErrDependencyResolution, errUtils.ErrInvalidDependenciesSection)
 	}
 	if _, hasComponents := depsSection["components"]; !hasComponents {
-		return nil
+		return nil, false, nil
 	}
-	var deps schema.Dependencies
-	if err := mapstructure.Decode(depsSection, &deps); err != nil {
-		return nil
+	depsSection = schema.DeferUnresolvedRequired(depsSection, leftDelim)
+	deps, err := schema.ParseComponentDependencies(depsSection, componentType, stackName)
+	if err != nil {
+		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
 	}
-	_ = deps.Normalize()
-	return deps.Components
+	return deps, true, nil
 }
 
 // legacyDependenciesFromSettings extracts dependencies from the deprecated 'settings.depends_on' section.
@@ -507,6 +585,20 @@ func parseLegacyDependsOnEntry(value any) (schema.ComponentDependency, bool) {
 	default:
 		return schema.ComponentDependency{}, false
 	}
+}
+
+func targetStateFor(componentSection map[string]any) componentTargetState {
+	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return componentTargetState{available: true}
+	}
+	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
+		return componentTargetState{reason: "target_missing"}
+	}
+	if enabled, ok := metadataSection["enabled"].(bool); ok && !enabled {
+		return componentTargetState{reason: "target_disabled"}
+	}
+	return componentTargetState{available: true}
 }
 
 func shouldSkipGraphComponent(componentSection map[string]any) bool {

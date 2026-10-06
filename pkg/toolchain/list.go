@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -199,7 +200,7 @@ func printAtmosVersionTable(rows []atmosVersionRow) {
 	ui.Writeln(headerStyle.Render(headerLine))
 
 	// Print rows.
-	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Selected))
 	for _, row := range rows {
 		activeIndicator := "  "
 		if row.isActive {

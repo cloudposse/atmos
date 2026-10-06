@@ -34,10 +34,10 @@ type Class string
 
 const (
 	// ClassRunnerStuckAfterComplete is a cancelled job whose every step
-	// succeeded (or was skipped) but whose job-level completion landed at
-	// least Options.StuckGap after its last step: the runner finished all its
-	// work, never reported completion, and GitHub reaped it. On Windows this
-	// is harden-runner's post step killing its agent mid DNS-restore.
+	// succeeded (or was skipped), apart from a possibly still-running final
+	// `Complete job` step. Job-level completion landed at least Options.StuckGap
+	// after the last step completed or finalization started: the runner finished
+	// its work but hung during or after finalization, and GitHub reaped it.
 	ClassRunnerStuckAfterComplete Class = "runner-stuck-after-complete"
 	// ClassRunnerLost is a failed job with no failed step: the runner vanished.
 	ClassRunnerLost Class = "runner-lost"
@@ -103,9 +103,10 @@ var checkResultStepNames = map[string]bool{
 
 // Step is one step of a job as returned by the GitHub jobs API.
 type Step struct {
-	Name       string `json:"name"`
-	Status     string `json:"status"`
-	Conclusion string `json:"conclusion"`
+	Name       string     `json:"name"`
+	Status     string     `json:"status"`
+	Conclusion string     `json:"conclusion"`
+	StartedAt  *time.Time `json:"started_at"`
 	// CompletedAt is nil when the API returns null. encoding/json parses
 	// RFC 3339 timestamps with or without fractional seconds.
 	CompletedAt *time.Time `json:"completed_at"`
@@ -206,7 +207,7 @@ func Classify(jobs []Job, opts Options) []Classified {
 func classify(job *Job, gap time.Duration) Class {
 	switch job.Conclusion {
 	case conclusionCancelled:
-		if allStepsOK(job.Steps) && gapAfterLastStep(job) >= gap {
+		if stuckAfterWork(job, gap) {
 			return ClassRunnerStuckAfterComplete
 		}
 		return ClassSuperseded
@@ -222,6 +223,26 @@ func classify(job *Job, gap time.Duration) Class {
 	default:
 		return ClassRealFailure
 	}
+}
+
+// stuckAfterWork also recognizes runners that hang inside `Complete job`,
+// leaving its conclusion and completion time unset. Only that exact final
+// step may be unfinished; a running test or post action still vetoes recovery.
+// Measure from finalization's own start, not an older completed step, so a
+// cancellation just as finalization starts is not mistaken for a stalled runner.
+func stuckAfterWork(job *Job, gap time.Duration) bool {
+	if allStepsOK(job.Steps) {
+		return gapAfterLastStep(job) >= gap
+	}
+	if len(job.Steps) < 2 || job.CompletedAt == nil {
+		return false
+	}
+	last := job.Steps[len(job.Steps)-1]
+	if last.Name != "Complete job" || last.Status != "in_progress" ||
+		last.Conclusion != "" || last.CompletedAt != nil || last.StartedAt == nil {
+		return false
+	}
+	return allStepsOK(job.Steps[:len(job.Steps)-1]) && job.CompletedAt.Sub(*last.StartedAt) >= gap
 }
 
 func allStepsOK(steps []Step) bool {

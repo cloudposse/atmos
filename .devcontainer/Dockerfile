@@ -6,7 +6,7 @@ WORKDIR /app
 # Install the confetty application
 RUN go install github.com/maaslalani/confetty@6c6f1b5b605f78c3ed3bab2d2a1357c0dd794221
 
-FROM mcr.microsoft.com/vscode/devcontainers/base:debian@sha256:b8c3669fb4cc652621b3386517c40ab3e151e827de958d6fe75528798ffb5727
+FROM mcr.microsoft.com/vscode/devcontainers/base:debian@sha256:1f851004adcd3dff3776b4a1da86727cf52280b0fdc9d5b0568c9c7d74274286
 
 # Copy the binary from the builder stage
 COPY --from=confetty /go/bin/confetty /usr/local/bin/confetty

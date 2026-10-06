@@ -820,6 +820,28 @@ func TestFilterComputedFields(t *testing.T) {
 			},
 		},
 		{
+			// Issue #3218: native Helm components define `chart`, `values`, and
+			// `values_files` (the primary Helm configuration), which were absent from
+			// this allowlist and therefore hidden from the default `describe component`
+			// output. They must survive the schema filter, while Atmos-computed
+			// bookkeeping (e.g. atmos_component) is still removed.
+			name: "Keeps native Helm chart, values, and values_files (#3218)",
+			input: map[string]any{
+				"chart":           ".",
+				"values":          map[string]any{"replicaCount": 2},
+				"values_files":    []any{"values.yaml"},
+				"vars":            map[string]any{"stage": "dev"},
+				"atmos_component": "demo",
+				"deps":            []any{"dep1"},
+			},
+			expected: map[string]any{
+				"chart":        ".",
+				"values":       map[string]any{"replicaCount": 2},
+				"values_files": []any{"values.yaml"},
+				"vars":         map[string]any{"stage": "dev"},
+			},
+		},
+		{
 			name:     "Handles empty input",
 			input:    map[string]any{},
 			expected: map[string]any{},
@@ -848,6 +870,64 @@ func TestDescribeComponentFilter(t *testing.T) {
 	assert.Equal(t, describeComponentFilterFull, describeComponentFilter(&schema.AtmosConfiguration{
 		Describe: schema.Describe{Component: schema.DescribeComponentSettings{Filter: describeComponentFilterFull}},
 	}))
+}
+
+// TestDescribeComponentSchemaFilterKeepsHelmValuesAndChart is the end-to-end regression
+// test for issue #3218: running the real describe-component pipeline against the native
+// Helm example and applying the default `schema` filter must surface the user-definable
+// `chart` and `values` sections (previously dropped by the allowlist) while still hiding
+// Atmos-computed bookkeeping. It uses the local examples/helm fixture and runs offline
+// (the `demo` component uses a local chart, no cluster or network access).
+func TestDescribeComponentSchemaFilterKeepsHelmValuesAndChart(t *testing.T) {
+	// Clear caches to ensure fresh processing.
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
+	// Isolate from the repo's atmos.yaml and any inherited env.
+	t.Chdir("../../examples/helm")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	component := "demo"
+	stack := "dev"
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		ComponentFromArg: component,
+		Stack:            stack,
+	}, true)
+	require.NoError(t, err)
+
+	// The default filter is the schema filter, which is the path under test.
+	require.Equal(t, describeComponentFilterSchema, describeComponentFilter(&atmosConfig))
+
+	section, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		AtmosConfig:          &atmosConfig,
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, section)
+
+	// Before filtering, the full section carries the Helm sections and the computed fields.
+	require.Contains(t, section, "chart", "unfiltered section should contain the Helm chart")
+	require.Contains(t, section, "values", "unfiltered section should contain the Helm values")
+
+	filtered := FilterComputedFields(section)
+
+	// The native Helm sections the allowlist previously dropped must now survive (#3218).
+	assert.Equal(t, ".", filtered["chart"], "schema filter must keep the Helm 'chart' section")
+	values, ok := filtered["values"].(map[string]any)
+	require.True(t, ok, "schema filter must keep the Helm 'values' section as a map")
+	assert.Equal(t, 2, values["replicaCount"], "Helm values content must be preserved intact")
+
+	// Atmos-computed bookkeeping must still be dropped by the schema filter.
+	for _, computed := range []string{"atmos_cli_config", "atmos_component", "atmos_stack", "component_info", "sources", "deps"} {
+		assert.NotContains(t, filtered, computed, "schema filter must drop computed field %q", computed)
+	}
 }
 
 func TestFilterAbstractComponents(t *testing.T) {
@@ -1057,6 +1137,45 @@ func TestExtractImportsList(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := extractImportsList(tt.input)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestExecuteDescribeComponentCmd_MocksModeReachesConfigInit verifies the --use-mocks=<mode>
+// override is carried into config initialization, where it is applied to
+// components.terraform.mocks.mode, and that UseMocks reaches the describe call.
+func TestExecuteDescribeComponentCmd_MocksModeReachesConfigInit(t *testing.T) {
+	for _, mode := range []string{"", "fallback", "always"} {
+		t.Run("mode="+mode, func(t *testing.T) {
+			var initInfo schema.ConfigAndStacksInfo
+			var describeParams *ExecuteDescribeComponentParams
+
+			mockedExec := &DescribeComponentExec{
+				printOrWriteToFile:    func(*schema.AtmosConfiguration, string, string, any) error { return nil },
+				IsTTYSupportForStdout: func() bool { return false },
+				initCliConfig: func(info schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+					initInfo = info
+					return schema.AtmosConfiguration{}, nil
+				},
+				executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+					describeParams = params
+					return map[string]any{}, nil
+				},
+				evaluateYqExpression: func(_ *schema.AtmosConfiguration, data any, _ string) (any, error) { return data, nil },
+			}
+
+			err := mockedExec.ExecuteDescribeComponentCmd(DescribeComponentParams{
+				Component: "vpc",
+				Stack:     "dev",
+				Format:    "yaml",
+				UseMocks:  true,
+				MocksMode: mode,
+			})
+
+			require.NoError(t, err)
+			assert.Equal(t, mode, initInfo.MocksMode)
+			require.NotNil(t, describeParams)
+			assert.True(t, describeParams.UseMocks)
 		})
 	}
 }

@@ -3,10 +3,10 @@ name: Rerun infra failures
 # Re-run a `Tests` (test.yml) workflow run when, and only when, every job that
 # did not succeed is an infrastructure zombie:
 #
-#   runner-stuck-after-complete  the job's steps all succeeded (including
-#                                `Complete job`) but the runner never reported
-#                                completion and GitHub cancelled it >= 5 min
-#                                later. Cause: harden-runner's Windows post
+#   runner-stuck-after-complete  the job's actions all succeeded, but the runner
+#                                stalled during or after `Complete job` and
+#                                GitHub cancelled it >= 5 min later. One known
+#                                cause: harden-runner's Windows post
 #                                step kills its agent mid DNS-restore, leaving
 #                                the runner on a dead resolver (see
 #                                docs/fixes/2026-09-03-rerun-infra-cancelled-ci-runs.md).
@@ -15,7 +15,7 @@ name: Rerun infra failures
 #                                `test-required` alias checks) that failed only
 #                                because a zombie upstream job never reported.
 #
-# Any job with a genuinely failed step (`real-failure`) or an interrupted step
+# Any job with a genuinely failed step (`real-failure`) or an interrupted action
 # (`superseded`) vetoes the rerun. Both the classification and the rerun
 # decision (including the PR-head-SHA re-check and the rerun-failed-jobs API
 # call) are typed, unit-tested Go (internal/ci/rerun, dispatched through

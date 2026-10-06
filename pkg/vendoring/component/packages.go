@@ -4,6 +4,7 @@
 package component
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/url"
@@ -45,6 +46,7 @@ type TemplateFunc func(atmosConfig *schema.AtmosConfiguration, tmplName, tmplVal
 // >4-total-parameters threshold once RefreshLock/Lister/TemplateFunc joined the original
 // AtmosConfig/VendorComponentSpec/Component/ComponentPath).
 type BuildPackagesOptions struct {
+	Context             context.Context
 	AtmosConfig         *schema.AtmosConfiguration
 	VendorComponentSpec *schema.VendorComponentSpec
 	Component           string
@@ -137,7 +139,7 @@ func resolveComponentSourceURI(
 ) (sourceResolution, error) {
 	uri := vendorComponentSpec.Source.Uri
 
-	resolvedVersion, rawVersion, err := install.ResolveEffectiveVersion(&install.ResolveEffectiveVersionInputs{
+	resolvedVersion, rawVersion, err := install.ResolveEffectiveVersionContext(opts.Context, &install.ResolveEffectiveVersionInputs{
 		AtmosConfig: atmosConfig,
 		Name:        component,
 		Source:      vendorComponentSpec.Source.Uri,

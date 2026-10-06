@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -134,6 +135,21 @@ func TestValidateFieldValuesReportsAllInvalidFieldsInFieldOrder(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGeneratorValidation), err)
 	assert.Equal(t, "generator validation failed: field has unsupported option: field \"first\" option \"two\" (valid values: one); field must be true or false: \"second\"", err.Error())
+}
+
+// TestValidateFieldValues_ComputedFieldsAreNeverValidated proves a type:
+// computed field is skipped entirely by ValidateFieldValues, even though it
+// is declared Required and missing from values -- ValidateFieldValues runs
+// before ComputeFields derives a computed field's value, so there is never
+// anything user-supplied to validate for one.
+func TestValidateFieldValues_ComputedFieldsAreNeverValidated(t *testing.T) {
+	config := &ScaffoldConfig{Spec: ScaffoldSpec{Fields: []FieldDefinition{
+		{Name: "regular", Type: "input", Required: true},
+		{Name: "derived", Type: fieldTypeComputed, Value: "{{ answers.regular }}", Required: true},
+	}}}
+
+	err := ValidateFieldValues(config, map[string]interface{}{"regular": "value"})
+	require.NoError(t, err)
 }
 
 func TestValidateFieldValuesReportsMissingFieldsInFieldOrder(t *testing.T) {
@@ -278,6 +294,53 @@ func TestLoadScaffoldConfigRejectsInvalidFieldValidation(t *testing.T) {
 			assert.ErrorContains(t, err, tt.contains)
 		})
 	}
+}
+
+// TestLoadScaffoldConfigRejectsInvalidComputedFieldDefinition proves
+// validateFieldDefinitions' new type: computed check (validateComputedFieldDefinition,
+// already unit-tested in isolation in computed_test.go) is actually wired
+// into the LoadScaffoldConfigFromContent load path, not just callable on its
+// own.
+func TestLoadScaffoldConfigRejectsInvalidComputedFieldDefinition(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  fields:\n" +
+		"    - name: derived\n      type: computed\n      required: true\n      value: \"{{ answers.x }}\"\n"
+
+	_, err := LoadScaffoldConfigFromContent(content)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrScaffoldComputedFieldInvalid), err)
+	assert.Contains(t, cockroachErrors.GetAllDetails(err)[0], "derived")
+}
+
+// TestLoadScaffoldConfigRejectsComputedFieldForwardReference proves
+// validateComputedFieldOrdering (computed_test.go unit-tests it in
+// isolation) is wired into the real load path: a computed field
+// referencing a later-declared computed field must fail to load rather
+// than silently resolving to "<no value>" at render time.
+func TestLoadScaffoldConfigRejectsComputedFieldForwardReference(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  fields:\n" +
+		"    - name: first\n      type: computed\n      value: \"{{ answers.second }}\"\n" +
+		"    - name: second\n      type: computed\n      value: \"literal\"\n"
+
+	_, err := LoadScaffoldConfigFromContent(content)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrScaffoldComputedFieldInvalid), err)
+	assert.Contains(t, cockroachErrors.GetAllDetails(err)[0], "second")
+}
+
+// TestLoadScaffoldConfigRejectsOptionsReferencingComputedField proves
+// validateOptionsNotComputed (computed_test.go unit-tests it in isolation)
+// is wired into the real load path: a select field's options: dot-path
+// can't reference a computed field, since options: is resolved before any
+// computed field has a value.
+func TestLoadScaffoldConfigRejectsOptionsReferencingComputedField(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  fields:\n" +
+		"    - name: derived\n      type: computed\n      value: \"literal\"\n" +
+		"    - name: picked\n      type: select\n      options: \"answers.derived\"\n"
+
+	_, err := LoadScaffoldConfigFromContent(content)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrScaffoldFieldOptionsInvalid), err)
+	assert.Contains(t, cockroachErrors.GetAllDetails(err)[0], "derived")
 }
 
 // TestLoadScaffoldConfigRejectsInvalidFileMatrix covers matrix
@@ -437,6 +500,37 @@ func TestValidateFileMatrixSkipsFilesWithoutMatrix(t *testing.T) {
 	require.Len(t, scaffoldConfig.Spec.Files, 2)
 	assert.Empty(t, scaffoldConfig.Spec.Files[0].Matrix)
 	assert.NotEmpty(t, scaffoldConfig.Spec.Files[1].Matrix)
+}
+
+// TestLoadScaffoldConfigRejectsMalformedFilePathGlob is a regression test:
+// a malformed glob pattern (an unclosed `[` character class here) used to be
+// indistinguishable from "no discovered file happens to match it" at
+// generation time -- pkg/generator/ui's FileSpecByPath treated the match
+// error identically to a plain non-match, silently and permanently
+// disabling that entry's when:/matrix:/target: with zero signal, even
+// though `atmos scaffold validate` reported the manifest as valid.
+// validateFilePathPatterns now catches this at load time instead.
+func TestLoadScaffoldConfigRejectsMalformedFilePathGlob(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+		"    - path: \"docs/legacy/[**\"\n      when: \"never\"\n"
+
+	_, err := LoadScaffoldConfigFromContent(content)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldFilePathPatternInvalid)
+	assert.True(t, errUtils.HasContext(err, "file_path", "docs/legacy/[**"))
+}
+
+// TestLoadScaffoldConfigAcceptsGlobFilePath proves a well-formed glob
+// pattern (which is the common case now that spec.files[].path supports
+// globs) is not rejected by the same check.
+func TestLoadScaffoldConfigAcceptsGlobFilePath(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+		"    - path: \"docs/legacy/**\"\n      when: \"always\"\n"
+
+	scaffoldConfig, err := LoadScaffoldConfigFromContent(content)
+	require.NoError(t, err)
+	require.Len(t, scaffoldConfig.Spec.Files, 1)
+	assert.Equal(t, "docs/legacy/**", scaffoldConfig.Spec.Files[0].Path)
 }
 
 func TestLoadScaffoldConfigAcceptsValidFileMatrix(t *testing.T) {

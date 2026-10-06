@@ -250,11 +250,12 @@ workflows on a per-stack, per-event basis. The contract is defined under
 Atmos Pro to handle, declare which workflow file to dispatch and which inputs
 to pass.
 
-The CLI does not interpret these blocks — they are passed through unchanged in
-the payload uploaded by `atmos describe affected --upload` (and `atmos list
-instances --upload`). Atmos Pro reads the blocks server-side when the matching
-GitHub webhook arrives and dispatches the configured workflow against the
-correct SHA.
+Atmos evaluates the stack’s templates and YAML functions, including workflow
+inputs, before uploading the resolved event configuration with
+[`atmos describe affected --upload`](/cli/commands/describe/affected) or
+[`atmos list instances --upload`](/cli/commands/list/list-instances). Atmos Pro reads
+that configuration server-side when the matching GitHub webhook arrives and
+dispatches the configured workflow against the correct SHA.
 
 ### Supported events
 
@@ -488,15 +489,192 @@ inferred from a backstop.
 
 ### Workflow input templating
 
-Inputs to dispatched workflows are rendered as Go templates against the
-component context. The most common variables:
+Atmos resolves workflow inputs against the component’s [template context](/templates)
+while processing the stack, before uploading the workflow configuration to Atmos Pro.
+These are Atmos Go templates; GitHub evaluates its own `${{ inputs.runner }}` expressions
+later, in the dispatched workflow.
 
-- `{{ .atmos_component }}` — the affected component name
-- `{{ .atmos_stack }}` — the affected stack name
-- `{{ .vars.<name> }}` — any value from the component's `vars` section
-- `{{ .settings.<name> }}` — any value from the component's `settings` section
+- `{{ .atmos_component }}` — the Atmos component instance name, such as `cluster/prod`
+- `{{ .atmos_stack }}` or `{{ .stack }}` — the stack name
+- `{{ .vars.<name> }}` — a value from the component’s [`vars`](/stacks/vars)
+- `{{ .settings.<name> }}` — a value from its [`settings`](/stacks/settings)
+- `{{ .metadata.labels.runner }}` — a value from its [labels](/stacks/components/component-metadata#labels)
+- `{{ index .metadata.labels "cost-center" }}` — a label whose key contains a hyphen
 
-Use these to keep workflow definitions DRY across stacks.
+Use `.atmos_component` for the workflow’s component input. The shorter `.component`
+can identify the underlying implementation selected by
+[`metadata.component`](/stacks/components/component-metadata#component), which may
+be shared by several differently named instances.
+
+The [YAML functions](/functions/yaml) also work in workflow inputs. For example,
+[`!labels runner ubuntu-latest`](/functions/yaml/labels#single-label-lookup) reads
+one label and supplies a fallback when it is absent.
+
+### Choose a runner per component or stack
+
+Set a [runner label](/stacks/components/component-metadata#labels) on the component
+and pass it to the workflow:
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    cluster:
+      metadata:
+        labels:
+          runner: self-hosted-large
+      settings:
+        pro:
+          pull_request:
+            synchronize:
+              workflows:
+                atmos-terraform-plan.yaml:
+                  inputs:
+                    component: "{{ .atmos_component }}"
+                    stack: "{{ .atmos_stack }}"
+                    runner: "{{ .metadata.labels.runner }}"
+```
+</File>
+
+In the GitHub workflow, add a `runner` dispatch input and use it on the job.
+These excerpts extend the workflow’s existing inputs and job steps:
+
+<File title=".github/workflows/atmos-terraform-plan.yaml">
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner label
+        type: string
+        default: ubuntu-latest
+
+jobs:
+  atmos-plan:
+    runs-on: "${{ inputs.runner }}"
+```
+</File>
+
+Do the same in the **apply workflow**, and pass `runner` in its event configuration
+for merges, releases, and drift remediation. The selector must match an existing
+runner available to the repository; it does not create or size one. Workflows
+using job containers require a compatible Linux runner with Docker.
+
+This selects one runner label. Putting the input in a one-element array does not
+split comma-separated labels. See [GitHub’s runner syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idruns-on)
+for selecting multiple labels.
+
+For components without a runner label, supply a fallback with
+[`!labels`](/functions/yaml/labels#single-label-lookup):
+
+```yaml
+runner: !labels runner ubuntu-latest
+```
+
+Alternatively, [import a stack-wide label default](/stacks/components/component-metadata#global-stack-wide-metadata).
+The template form requires the label to exist: GitHub’s input default cannot
+recover from an Atmos template error before dispatch. See
+[metadata inheritance](/howto/inheritance) for sharing component labels; mapping
+a component with `metadata.component` alone does not inherit its labels.
+
+Inspect the resolved runner with
+[`atmos describe component cluster -s <stack>`](/cli/commands/describe/component).
+You can also select components by it using
+[`atmos list components --labels runner=self-hosted-large`](/cli/commands/list/components).
+
+### Execution metrics and runner sizing
+
+Starting with **Atmos CLI v1.228.0**, qualifying invocations in recognized CI
+environments automatically upload execution records when Atmos Pro credentials
+are configured. Records include elapsed time and, on supported platforms, CPU
+time and peak memory — combining the `terraform`/`tofu` subprocess tree
+(including provider plugins) with Atmos's own usage, so the numbers reflect
+what the run actually cost, not just the CLI wrapper's overhead.
+
+CPU time is not peak CPU utilization, and the reported peak memory is the
+largest single process observed during the run (`terraform`, `tofu`, or one
+provider plugin) — not a simultaneous sum across every concurrently running
+process. If Terraform and two provider plugins each peak at 200 MB at the
+same moment, this reports roughly 200 MB, not 600 MB; treat it as a lower
+bound, not an exact whole-job figure, when choosing runner capacity. See
+[Metrics](/cli/configuration/settings/metrics) for the local-display
+counterpart of these same numbers, and [execution
+metadata](/changelog/pro-exec-metadata-upload) for upload behavior and
+configuration.
+
+## Automatic exception reporting
+
+In GitHub Actions, Atmos reports CLI failures to Atmos Pro when the effective
+`settings.pro.enabled` is `true`. Set this in `atmos.yaml` for invocation-wide
+reporting, or in stack/component settings for component failures. Component
+settings override the invocation defaults.
+
+```yaml title="atmos.yaml"
+settings:
+  pro:
+    enabled: true
+    # Optional: select another Pro deployment, including QA.
+    base_url: https://qa-2.atmos-pro.com
+    errors:
+      enabled: true
+```
+
+The workflow must grant `permissions: {id-token: write}`. Atmos uses the GitHub
+repository ID and requests a fresh OIDC token for audience `atmos-pro.com` for
+each delivery. No manually configured Sentry DSN or workspace token is needed
+for this reporter. Outside GitHub Actions, or without OIDC credentials and a
+repository ID, automatic Pro exception reporting is skipped.
+
+<dl>
+  <dt>`settings.pro.enabled`</dt>
+  <dd>
+    Enable Pro exception reporting by default. The CLI-wide default is `false`.
+    Environment variable: `ATMOS_PRO_ENABLED`.
+  </dd>
+  <dt>`settings.pro.errors.enabled`</dt>
+  <dd>
+    Set to `false` to opt out of exceptions while keeping other Pro features.
+    Omission follows Pro enablement. Set in `atmos.yaml` or stack/component
+    settings. `ATMOS_PRO_ERRORS_ENABLED` takes precedence over component values;
+    setting it to `true` still requires Pro to be enabled.
+  </dd>
+</dl>
+
+Separately configured [`errors.sentry`](/cli/configuration/errors) destinations
+continue receiving errors. Both destinations receive the same event ID and
+fingerprint. The PostHog telemetry setting does not control exception reporting.
+Terraform diagnostics continue through execution uploads.
+
+### Tags, labels, and execution context
+
+Resolved component metadata, including inherited stack defaults, enriches
+exception events. For example:
+
+```yaml title="stacks/prod.yaml"
+metadata:
+  tags:
+    - production
+  labels:
+    team: platform
+```
+
+The event contains unprefixed Sentry tags `production: "true"` and
+`team: "platform"`. Values come from resolved metadata, not Terraform variables
+or command-line selection filters. Labels override presence tags, global
+`errors.sentry.tags` override metadata, and component error tags override global
+error tags. Runtime identity tags such as `atmos.component`, `atmos.stack`, and
+`atmos.execution_id` take precedence over user values.
+
+Events retain masked metadata in the `atmos_metadata` context. Keys or values
+that exceed Sentry tag constraints remain in that context instead of being
+truncated into ambiguous tags. Events also include the command, available CI
+commit/run identity, Atmos version, and the execution ID shared with execution
+uploads.
+
+Reporting applies Atmos's existing masking rules, queues up to 32 events, and
+limits envelopes to 1 MiB. Each delivery and the shared shutdown flush have a
+two-second timeout. Authentication or delivery failures do not change the
+command's exit code.
 
 ## Related Commands
 

@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -30,11 +31,14 @@ type DescribeComponentParams struct {
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	UseMocks             bool
-	Skip                 []string
-	Query                string
-	Format               string
-	File                 string
-	Provenance           bool
+	// MocksMode overrides components.terraform.mocks.mode (fallback, always) for this run when
+	// --use-mocks carries an explicit mode; empty means use the configured mode.
+	MocksMode  string
+	Skip       []string
+	Query      string
+	Format     string
+	File       string
+	Provenance bool
 	// ProvenanceExplicit marks that --provenance was set on the command line, so
 	// Provenance overrides the `describe.provenance` config default.
 	ProvenanceExplicit bool
@@ -92,10 +96,13 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	atmosConfig, err = d.initCliConfig(schema.ConfigAndStacksInfo{
 		ComponentFromArg: component,
 		Stack:            stack,
+		MocksMode:        describeComponentParams.MocksMode,
 	}, true)
 	if err != nil {
 		return err
 	}
+	atmosConfig.AuthManager = describeComponentParams.AuthManager
+	errOptions.EvaluationPaths = deferred.PathsForQuery(query)
 
 	// The --provenance flag overrides the `describe.provenance` config default
 	// (on by default; journaled in pkg/edition, so an edition pin can disable it).
@@ -261,6 +268,9 @@ type DescribeComponentResult struct {
 
 // ExecuteDescribeComponentParams contains parameters for ExecuteDescribeComponent.
 type ExecuteDescribeComponentParams struct {
+	// ResolveSecrets retrieves actual secrets for internal value-producing callers.
+	// The default preserves credential-free, masked inspection.
+	ResolveSecrets       bool
 	AtmosConfig          *schema.AtmosConfiguration // Optional: Use provided config instead of initializing new one.
 	Component            string
 	Stack                string
@@ -279,6 +289,7 @@ func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[strin
 	defer perf.Track(params.AtmosConfig, "exec.ExecuteDescribeComponent")()
 
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+		ResolveSecrets:       params.ResolveSecrets,
 		AtmosConfig:          params.AtmosConfig,
 		Component:            params.Component,
 		Stack:                params.Stack,
@@ -441,6 +452,8 @@ func recordImportsProvenance(mergeContext *m.MergeContext, imports []string) {
 
 // DescribeComponentContextParams contains parameters for describing a component with context.
 type DescribeComponentContextParams struct {
+	// ResolveSecrets retrieves actual secrets while retaining output masking.
+	ResolveSecrets       bool
 	AtmosConfig          *schema.AtmosConfiguration
 	Component            string
 	Stack                string
@@ -456,6 +469,7 @@ type DescribeComponentContextParams struct {
 
 // componentTypeProcessParams contains parameters for tryProcessWithComponentType.
 type componentTypeProcessParams struct {
+	resolveSecrets       bool
 	atmosConfig          *schema.AtmosConfiguration
 	configAndStacksInfo  schema.ConfigAndStacksInfo
 	componentType        string
@@ -469,10 +483,9 @@ type componentTypeProcessParams struct {
 // tryProcessWithComponentType attempts to process stacks with a specific component type.
 func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.ConfigAndStacksInfo, error) {
 	params.configAndStacksInfo.ComponentType = params.componentType
-	// `describe component` is an inspection command: when masking is enabled (the default),
-	// resolve `!secret` to the mask replacement WITHOUT retrieving from the backend, so the
-	// command needs no credentials for the secret provider.
-	params.configAndStacksInfo.SecretsMaskOnly = iolib.MaskingEnabled()
+	// Inspection can avoid provider access, but internal value-producing callers must
+	// retrieve real secrets even when their terminal output is masked.
+	params.configAndStacksInfo.SecretsMaskOnly = !params.resolveSecrets && iolib.MaskingEnabled()
 	result, err := ProcessStacksWithDegradation(params.atmosConfig, params.configAndStacksInfo, true, params.processTemplates, params.processYamlFunctions, params.skip, params.authManager, params.onWarning)
 	result.ComponentSection[cfg.ComponentTypeSectionName] = params.componentType
 	return result, err
@@ -485,6 +498,7 @@ func detectComponentType(
 	params DescribeComponentContextParams,
 ) (schema.ConfigAndStacksInfo, error) {
 	baseParams := componentTypeProcessParams{
+		resolveSecrets:       params.ResolveSecrets,
 		atmosConfig:          atmosConfig,
 		configAndStacksInfo:  *configAndStacksInfo,
 		processTemplates:     params.ProcessTemplates,
@@ -493,6 +507,7 @@ func detectComponentType(
 		authManager:          params.AuthManager,
 		onWarning:            params.ErrorOptions.OnWarning,
 	}
+	baseParams.configAndStacksInfo.EvaluationPaths = params.ErrorOptions.EvaluationPaths
 
 	// If a specific component type is provided, use it directly.
 	if params.ComponentType != "" {
@@ -642,10 +657,16 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 
 	// Fields to keep (the sections a stack manifest can define).
 	//
-	// NOTE: this allowlist is already missing several other real sections a stack
-	// manifest can define (e.g. retry, generate, auth, secrets, command, backend_type,
-	// workspace) — a broader, pre-existing gap out of scope for the "flags" addition
-	// below. See docs/fixes/ for the field-test finding that added "flags" here.
+	// NOTE: this is an intentional allowlist, not an exhaustive one. It still omits
+	// several real stack-definable sections (e.g. retry, generate, auth, secrets,
+	// command, backend_type, workspace). Whether to surface those, and whether this
+	// filter should be driven by the manifest schema instead of a hand-maintained
+	// list, is a broader design question tracked separately (see #3223).
+	//
+	// Incremental additions to date: "flags" (field-test finding, PR #2992) and the
+	// native Helm sections chart/values/values_files (#3218). For a Helm component
+	// those Helm sections are the primary configuration and were the visible gap.
+	// See docs/fixes/2026-09-28-describe-component-helm-values-chart.md.
 	fieldsToKeep := map[string]bool{
 		"vars":         true,
 		"settings":     true,
@@ -659,6 +680,9 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 		"component":    true,
 		"hooks":        true,
 		"flags":        true,
+		"chart":        true, // Native Helm chart reference (#3218).
+		"values":       true, // Native Helm chart values (#3218).
+		"values_files": true, // Native Helm values files (#3218).
 	}
 
 	filtered := make(map[string]any)

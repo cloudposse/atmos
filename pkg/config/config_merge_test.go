@@ -13,6 +13,8 @@ import (
 )
 
 func TestMergeConfig_ConfigFileNotFound(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir() // Empty directory, no config file
 
 	v := viper.New()
@@ -23,6 +25,8 @@ func TestMergeConfig_ConfigFileNotFound(t *testing.T) {
 }
 
 func TestMergeConfig_MultipleConfigFilesMerge(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	content := `
 base_path: ./
@@ -53,6 +57,8 @@ vendor:
 }
 
 func TestMergeConfig_EmptyConfig(t *testing.T) {
+	t.Parallel()
+
 	// Test mergeConfig with an empty config file to ensure edge case coverage.
 	tempDir := t.TempDir()
 
@@ -70,6 +76,8 @@ func TestMergeConfig_EmptyConfig(t *testing.T) {
 }
 
 func TestMergeConfig_WithoutImports(t *testing.T) {
+	t.Parallel()
+
 	// Test mergeConfig with processImports=false to ensure that code path is covered.
 	tempDir := t.TempDir()
 
@@ -97,7 +105,10 @@ logs:
 }
 
 func TestLoadConfigFile(t *testing.T) {
+	t.Parallel()
+
 	t.Run("successful load", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 		content := `
 base_path: ./test
@@ -114,6 +125,7 @@ logs:
 	})
 
 	t.Run("file not found", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 
 		v, err := loadConfigFile(tempDir, "nonexistent")
@@ -123,6 +135,7 @@ logs:
 	})
 
 	t.Run("invalid yaml", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 		invalidYAML := "invalid: yaml: content:\n  - with bad indentation\n    and broken structure"
 		path := filepath.Join(tempDir, "atmos.yaml")
@@ -137,7 +150,10 @@ logs:
 }
 
 func TestReadConfigFileContent(t *testing.T) {
+	t.Parallel()
+
 	t.Run("successful read", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 		expectedContent := "test: content\nkey: value"
 		path := filepath.Join(tempDir, "test.yaml")
@@ -150,6 +166,7 @@ func TestReadConfigFileContent(t *testing.T) {
 	})
 
 	t.Run("file not found", func(t *testing.T) {
+		t.Parallel()
 		content, err := readConfigFileContent("/nonexistent/path/file.yaml")
 		assert.Error(t, err)
 		assert.Nil(t, content)
@@ -157,6 +174,7 @@ func TestReadConfigFileContent(t *testing.T) {
 	})
 
 	t.Run("empty file", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 		path := filepath.Join(tempDir, "empty.yaml")
 		err := os.WriteFile(path, []byte(""), 0o644)
@@ -169,7 +187,10 @@ func TestReadConfigFileContent(t *testing.T) {
 }
 
 func TestProcessConfigImportsAndReapply(t *testing.T) {
+	t.Parallel()
+
 	t.Run("successful processing", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 
 		// Create a config file for the viper instance
@@ -203,6 +224,7 @@ settings:
 	})
 
 	t.Run("invalid yaml in content", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 
 		// Create a minimal config file
@@ -224,7 +246,10 @@ settings:
 }
 
 func TestMarshalViperToYAML(t *testing.T) {
+	t.Parallel()
+
 	t.Run("successful marshal", func(t *testing.T) {
+		t.Parallel()
 		v := viper.New()
 		v.Set("key", "value")
 		v.Set("nested.key", "nested_value")
@@ -242,6 +267,7 @@ func TestMarshalViperToYAML(t *testing.T) {
 	})
 
 	t.Run("empty viper", func(t *testing.T) {
+		t.Parallel()
 		v := viper.New()
 
 		yamlBytes, err := marshalViperToYAML(v)
@@ -252,7 +278,10 @@ func TestMarshalViperToYAML(t *testing.T) {
 }
 
 func TestMergeYAMLIntoViper(t *testing.T) {
+	t.Parallel()
+
 	t.Run("successful merge", func(t *testing.T) {
+		t.Parallel()
 		v := viper.New()
 		v.SetConfigType("yaml")
 
@@ -270,6 +299,7 @@ nested:
 	})
 
 	t.Run("invalid yaml", func(t *testing.T) {
+		t.Parallel()
 		v := viper.New()
 		v.SetConfigType("yaml")
 
@@ -283,6 +313,7 @@ nested:
 	})
 
 	t.Run("empty yaml", func(t *testing.T) {
+		t.Parallel()
 		v := viper.New()
 		v.SetConfigType("yaml")
 		v.Set("existing", "value")
@@ -295,6 +326,8 @@ nested:
 }
 
 func TestMergeDefaultConfig(t *testing.T) {
+	t.Parallel()
+
 	v := viper.New()
 
 	err := mergeDefaultConfig(v)

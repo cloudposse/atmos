@@ -18,8 +18,16 @@ func wrapDescribeError(component, stack string, err error) error {
 	return errUtils.WrapComponentDescribeError(component, stack, err, "component")
 }
 
-// terraformOutputsCache caches terraform outputs by stack-component key.
+// terraformOutputsCache caches terraform outputs by stack, component, and authentication scope.
 var terraformOutputsCache = sync.Map{}
+
+// InvalidateComponentOutputs removes the cached outputs for a single component so
+// subsequent lookups reflect its current state, including after its first apply.
+func InvalidateComponentOutputs(stack, component string) {
+	defer perf.Track(nil, "output.InvalidateComponentOutputs")()
+
+	terraformOutputsCache.Delete(stackComponentKey(stack, component))
+}
 
 // ResetOutputsCache clears the terraform outputs cache.
 // This is exported for use in tests to ensure cache isolation between test functions.
@@ -64,6 +72,23 @@ func (w *quietModeWriter) String() string {
 	return w.buffer.String()
 }
 
+// Reset clears any output captured so far. The same *quietModeWriter is reused across every
+// terraform-exec call within a single execute() invocation (init, workspace select, output, and
+// any recovery re-runs of those), since runner.SetStderr is only called once. Without resetting
+// between attempts, a later failed command's diagnosticText/autoinit.Classify call would also see
+// leftover stderr from an earlier, unrelated, already-successful (or already-classified) command
+// sharing this writer -- corrupting the diagnostic classification. Callers reset immediately
+// before any subprocess call whose failure will be classified. A nil receiver is a no-op, since
+// stderrCapture is nil whenever quiet mode isn't enabled.
+func (w *quietModeWriter) Reset() {
+	defer perf.Track(nil, "output.quietModeWriter.Reset")()
+
+	if w == nil {
+		return
+	}
+	w.buffer.Reset()
+}
+
 // wrapErrorWithStderr wraps an error with captured stderr output if available.
 // Used in quiet mode to include terraform output in error messages on failure.
 func wrapErrorWithStderr(err error, capture *quietModeWriter) error {
@@ -77,7 +102,7 @@ func wrapErrorWithStderr(err error, capture *quietModeWriter) error {
 }
 
 // checkOutputsCache checks if terraform outputs are already cached for the given stack/component.
-func checkOutputsCache(stackSlug, component, stack string) map[string]any {
+func checkOutputsCache(stackSlug any, component, stack string) map[string]any {
 	cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
 	if found && cachedOutputs != nil {
 		log.Debug("Cache hit for terraform outputs", "stack", stack, "component", component)
@@ -108,14 +133,14 @@ type cachedOutputResult struct {
 // output" was logged -- at Debug level only, so it never appeared outside
 // debug/trace logging. A test.vars block with nine !terraform.output lookups
 // across two components would then show only two "Fetching ..." messages.
-func resolveOutputFromCache(atmosConfig *schema.AtmosConfiguration, stackSlug, component, stack, output string) *cachedOutputResult {
+func resolveOutputFromCache(atmosConfig *schema.AtmosConfiguration, stackSlug any, component, stack, output string) *cachedOutputResult {
 	cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
 	if !found || cachedOutputs == nil {
 		return nil
 	}
 
 	log.Debug("Cache hit for terraform output", "stack", stack, "component", component, "output", output)
-	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+	message := fetchingOutputMessage(output, component, stack)
 
 	value, exists, err := getOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
 	if err != nil {
@@ -173,4 +198,14 @@ func outputLookupFailed(message string) {
 
 func outputLookupVisible() bool {
 	return !spinnersSuppressed()
+}
+
+// fetchingOutputMessage builds the progress message for an output lookup. The YQ identity `.`
+// requests the whole output map (component mocks in fallback mode use it), so it reads as
+// "all outputs" instead of a literal "." output name.
+func fetchingOutputMessage(output, component, stack string) string {
+	if output == dotSeparator {
+		return fmt.Sprintf("Fetching all outputs from %s in %s", component, stack)
+	}
+	return fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 }

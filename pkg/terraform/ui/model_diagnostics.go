@@ -132,16 +132,29 @@ func extractFirstSentence(text string) string {
 		return ""
 	}
 
-	// Find the first sentence ending with a period followed by space or newline.
-	for i := 0; i < len(text)-1; i++ {
-		if text[i] == '.' && (text[i+1] == ' ' || text[i+1] == '\n') {
-			return strings.TrimSpace(text[:i+1])
-		}
+	// Terraform diagnostic details commonly read "<generic lead-in>:\n\n<specific reason>." -
+	// e.g. "This value's attribute new.acceleration_status is derived from ..., which is
+	// deprecated with the following message:\n\nacceleration_status is deprecated. Use the
+	// aws_s3_bucket_accelerate_configuration resource instead." The final paragraph is the
+	// only part that says what's actually deprecated; the lead-in is boilerplate repeated
+	// across every such warning. Prefer the final paragraph so the terse one-line summary
+	// carries the useful info, and so a raw blank line never ends up embedded in what's meant
+	// to be a single log line.
+	if idx := strings.LastIndex(text, "\n\n"); idx >= 0 {
+		text = strings.TrimSpace(text[idx+2:])
 	}
 
-	// If no sentence boundary found, check if text ends with period.
-	if text[len(text)-1] == '.' {
-		return text
+	// Find the first sentence ending with a period followed by a space, a newline, or the
+	// end of the text. Requiring that boundary (rather than any period) avoids mistaking
+	// periods inside dotted identifiers - e.g. "new.acceleration_status" or
+	// "aws_s3_bucket.origin.acceleration_status" - for sentence ends.
+	for i := 0; i < len(text); i++ {
+		if text[i] != '.' {
+			continue
+		}
+		if i+1 == len(text) || text[i+1] == ' ' || text[i+1] == '\n' {
+			return strings.TrimSpace(text[:i+1])
+		}
 	}
 
 	// Return the whole text if it's short enough.

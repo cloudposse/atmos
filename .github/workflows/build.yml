@@ -26,7 +26,7 @@ jobs:
       id-token: write
       contents: write
       pull-requests: write
-    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
+    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@4e05ff6c113efa9322288cedbc7c8950c22616cc # main
     # `secrets: inherit`, not an explicit map: shared-release-branches.yml doesn't declare a
     # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
     # (this job only triggers on `release`/`workflow_dispatch`, not `pull_request`, so the
@@ -61,16 +61,30 @@ jobs:
       # their Homebrew-5 fix, so bumping the pin to v8 does not help (identical
       # code). Call the wrapped command directly instead - it is unaffected by the
       # wrapper bug. atmos lives in Homebrew/homebrew-core; bump-formula-pr forks it
-      # under the bot and opens the version-bump PR. HOMEBREW_NO_INSTALL_FROM_API
-      # forces brew to use the cloned core tap so the formula file is editable.
+      # under the bot and opens the version-bump PR.
+      #
+      # Do NOT set HOMEBREW_NO_INSTALL_FROM_API here. It forces a full homebrew-core
+      # tap clone and makes bump-formula-pr resolve the formula from that freshly
+      # cloned tree, which fails with "No available formula with the name atmos"
+      # (verified across v1.228.0/v1.229.0/v1.230.0/v1.230.1 release runs). In the
+      # default API mode, bump-formula-pr resolves atmos via the formulae API,
+      # edits the formula, forks under the bot token, and opens the PR - no tap
+      # clone needed. It still edits and submits the formula correctly.
       - name: "Bump Homebrew formula"
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
           HOMEBREW_NO_AUTO_UPDATE: "1"
-          HOMEBREW_NO_INSTALL_FROM_API: "1"
           TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
+          # An unspecified-`shell` Linux `run:` step runs under `bash -e {0}` - a
+          # non-login, non-interactive shell that does not source /etc/profile.d/*,
+          # so the runner-preinstalled Homebrew's PATH entry
+          # (/home/linuxbrew/.linuxbrew/bin) is never loaded and `brew` resolves to
+          # "command not found" (exit 127) - the bump silently failed on every
+          # release. Load Homebrew explicitly here instead of relying on a login
+          # shell (see docs/fixes).
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           brew bump-formula-pr --no-browse --no-audit --version="${TAG#v}" atmos
 
   docker:
@@ -151,7 +165,7 @@ jobs:
 
       - name: "Upload Trivy scan results to code-scanning"
         if: always()
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           sarif_file: trivy-results.sarif
 

@@ -1,13 +1,11 @@
 # Migrating from Taskfile.yml (go-task)
 
-This guide shows how to move Task's tasks to Atmos. Find the correct shape for the Taskfile
-below. Then follow the matching steps. For the full tutorial, see
-[atmos.tools/migration/taskfile](https://atmos.tools/migration/taskfile).
+Migrate Task tasks to Atmos as a general-purpose task runner. Preserve the user's build,
+test, lint, release, and maintenance commands. Start with `atmos.yaml` and custom commands;
+Terraform, stacks, components, and cloud credentials are not prerequisites.
 
-Task and Atmos both use declarative YAML. This makes the migration mostly mechanical. It is the
-simplest of the three task-runner migrations this skill covers. If the Taskfile also selects a
-Terraform environment, also use [from-native-terraform.md](from-native-terraform.md) for the
-Terraform-specific steps.
+Atmos can call the existing task runner as a shell step while individual tasks are migrated.
+Follow the matching shape below and the [end-user guide](https://atmos.tools/migration/taskfile).
 
 ## Find the Shape of the Taskfile
 
@@ -38,17 +36,15 @@ tasks:
   lint:
     desc: Run static analysis
     cmds:
-      - golangci-lint run ./...
+      - go vet ./...
 ```
 
 **Steps:**
 
 1. Turn `desc:` into the command's `description:` field.
-2. Turn each entry in `cmds:` into a `type: shell` step. If the line is a native Atmos verb, such
-    as `terraform plan` or `terraform apply`, use a `type: atmos` step instead. `type: atmos` is
-    reserved for native Atmos verbs only. If the line calls another custom command (for example
-    `atmos build`), keep it as a `type: shell` step with `command: atmos build` -- do not use
-    `type: atmos` for that.
+2. Turn each shell command in `cmds:` into a `type: shell` step. Use `type: atmos` with
+    `command: build` to invoke another custom command, or `dependencies.commands` for a named
+    prerequisite. Both native and custom Atmos commands support `type: atmos`.
 3. Set `internal: true` on a command created from an `internal: true` task. It runs normally
     (`atmos <name> ...`, as a `default:` target, or from another command's steps) but is excluded
     from `atmos --help` listings and completion suggestions. Only inline the task's body into a
@@ -66,7 +62,7 @@ commands:
     description: Run static analysis
     steps:
       - type: shell
-        command: golangci-lint run ./...
+        command: go vet ./...
 ```
 
 ## Shape B: Task Dependencies (Parallel by Default)
@@ -81,10 +77,12 @@ tasks:
       - go test ./...
 
   deploy:
-    desc: Plan and apply the given environment
+    desc: Deploy the application to the selected environment
+    vars:
+      ENV: '{{.ENV | default "dev"}}'
     deps: [test, lint]
     cmds:
-      - terraform -chdir=terraform apply -var-file=envs/dev.tfvars
+      - ./scripts/deploy.sh "{{.ENV}}"
 ```
 
 Task runs `deps:` at the same time by default. Atmos custom-command and workflow steps run one
@@ -96,18 +94,20 @@ directly, not working around it with a hand-built `parallel` step:
 ```yaml
 commands:
   - name: deploy
-    description: Plan and apply the given environment
+    description: Deploy the application to the selected environment
+    flags:
+      - name: env
+        default: "dev"
     dependencies:
       commands: [test, lint]
     steps:
-      - type: atmos
-        command: terraform apply infra -s dev
+      - type: shell
+        command: ./scripts/deploy.sh "{{ .Flags.env }}"
 ```
 
-`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the
-task's Terraform code to `components/terraform/infra/` (the default
-`components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever the
-user actually names the component.
+Keep the user's existing deployment script. No component or stack configuration is needed.
+`atmos deploy` passes the default `dev` to the script; `atmos deploy --env staging` passes
+`staging`. These match `task deploy` and `task deploy ENV=staging`, respectively.
 
 `dependencies.commands` also matches a behavior Task itself has that a hand-rolled `parallel`
 step does not: if two commands both depend on the same one -- for example both `test` and `lint`
@@ -125,9 +125,6 @@ commands side by side that were never their own Task tasks to begin with.
 
 **Before:**
 ```yaml
-vars:
-  ENV: '{{.ENV | default "dev"}}'
-
 tasks:
   build:
     desc: Compile the deployable artifact
@@ -141,8 +138,9 @@ tasks:
 
 **Steps:**
 
-- Turn `vars: ENV: '{{.ENV | default "dev"}}'` into a command `flags:` entry with
-  `default: "dev"`. Task's Sprig `default` filter becomes the plain `default:` field.
+- As shown in Shape B, turn `vars: ENV: '{{.ENV | default "dev"}}'` into a command `flags:`
+  entry with `default: "dev"`, and pass `{{ .Flags.env }}` to the script that uses it.
+  Task's Sprig `default` filter becomes the plain `default:` field.
 - Turn `env:` into an `env:` map. The two are almost identical.
 
 ### `sources:`/`generates:` becomes `inputs`/`artifacts`

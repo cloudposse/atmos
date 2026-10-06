@@ -90,6 +90,45 @@ func (p *Plugin) onAfterTerraformAggregate(ctx *plugin.HookContext) error {
 	return nil
 }
 
+// onBeforeTerraformAggregate handles before.terraform.{plan,apply,destroy}.aggregate
+// for graph-backed multi-component runs. It creates one real pending
+// check-run per resolved component before the scheduler starts — the
+// before-side counterpart to onAfterTerraformAggregate's per-component
+// fan-out, so bulk runs get the same "pending" signal a single-component run
+// already gets instead of one status with no known component.
+func (p *Plugin) onBeforeTerraformAggregate(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeTerraformAggregate")()
+
+	if !isCheckEnabled(ctx.Config) {
+		return nil
+	}
+
+	pending, ok := normalizeTerraformPlanPending(ctx.Aggregate)
+	if !ok || len(pending.Nodes) == 0 {
+		log.Debug("Skipping before-aggregate Terraform CI hook: no resolved components")
+		return nil
+	}
+
+	ctx.Command = normalizeAggregateCommand(pending.Command)
+	p.createAggregateCheckRuns(ctx, pending.Nodes)
+	return nil
+}
+
+// normalizeTerraformPlanPending extracts a Terraform pending-node set from hook payload data.
+func normalizeTerraformPlanPending(value any) (schema.TerraformPlanCIPendingSet, bool) {
+	switch v := value.(type) {
+	case schema.TerraformPlanCIPendingSet:
+		return v, true
+	case *schema.TerraformPlanCIPendingSet:
+		if v == nil {
+			return schema.TerraformPlanCIPendingSet{}, false
+		}
+		return *v, true
+	default:
+		return schema.TerraformPlanCIPendingSet{}, false
+	}
+}
+
 // writeAggregateArtifacts serializes all CI provider side effects for an aggregate run.
 func (p *Plugin) writeAggregateArtifacts(ctx *plugin.HookContext, aggregate *terraformPlanAggregate) error {
 	if isSummaryEnabled(ctx.Config) {

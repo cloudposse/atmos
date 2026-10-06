@@ -7,6 +7,11 @@ type DependencyTree struct {
 	nodes     map[string]*TreeNode
 	Stack     string // Atmos stack name (e.g., "plat-ue2-dev").
 	Component string // Atmos component name (e.g., "vpc").
+	// outputChanges is the count of plan.OutputChanges entries with a real (non-no-op, non-read)
+	// action. Kept separate from GetChangeSummary's (add, change, remove) resource-only counts,
+	// which have specific semantics used elsewhere (exit codes, Destroy labeling) - see
+	// HasOutputChanges.
+	outputChanges int
 }
 
 // TreeNode represents a resource in the dependency tree.
@@ -17,6 +22,10 @@ type TreeNode struct {
 	Parent   *TreeNode
 	IsModule bool               // True if this is a module node.
 	Changes  []*AttributeChange // Attribute-level changes.
+	// UnchangedAttrCount is the number of top-level attributes present on this resource
+	// that did not change, mirroring Terraform's own "# (N unchanged attributes hidden)"
+	// summary so the diff-only Changes list doesn't read as the resource's entire content.
+	UnchangedAttrCount int
 }
 
 // AttributeChange represents a single attribute change.

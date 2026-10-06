@@ -82,3 +82,5 @@ The key change is using `url.QueryEscape()` instead of `url.PathEscape()` for st
 ---
 
 This change improves reliability for users with complex naming conventions and ensures the Atmos CLI stays in sync with the latest Atmos Pro API improvements.
+
+For usage and configuration, see [atmos list instances](/cli/commands/list/list-instances).

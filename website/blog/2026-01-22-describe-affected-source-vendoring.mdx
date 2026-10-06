@@ -14,7 +14,7 @@ Atmos now correctly detects file changes in components that use the `source` att
 
 ## The Problem
 
-When using [Atmos vendoring](https://atmos.tools/vendor/) with the `source` attribute to pull components from remote repositories, the `atmos describe affected` command was not detecting changes to those component files. This occurred because the affected detection logic required an explicit `component` field to determine which folder to monitor for changes.
+When using [Atmos vendoring](https://atmos.tools/vendor/) with the `source` attribute to pull components from remote repositories, the [`atmos describe affected`](/cli/commands/describe/affected) command was not detecting changes to those component files. This occurred because the affected detection logic required an explicit `component` field to determine which folder to monitor for changes.
 
 Components configured like this were not being tracked:
 

@@ -8,7 +8,7 @@ slug: /components
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Components are the building blocks of your infrastructure. Each component is a Terraform root module, Helmfile, Packer template, or Ansible playbook that does one thing well.
+Components are the building blocks of your infrastructure. A component can be a Terraform or OpenTofu root module, Helm release, Helmfile, Kubernetes manifest, Packer template, Ansible playbook, container service, or emulator. Each has its own implementation and stack-based configuration.
 </Intro>
 
 The most common use case for Atmos is implementing components using [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module). Since Atmos is tool-agnostic, [custom commands](/cli/configuration/commands) can implement components for any tooling.
@@ -33,7 +33,7 @@ Components offer a multitude of applications across various business scenarios. 
 
 ## Flavors of Components
 
-Atmos natively supports four kinds of components:
+Atmos supports these native component types:
 
 1. [Terraform](/components/terraform): These are stand-alone "root modules" that implement some piece of your infrastructure. For example, typical components might be an
    EKS cluster, RDS cluster, EFS filesystem, S3 bucket, DynamoDB table, etc. You can find
@@ -46,6 +46,16 @@ Atmos natively supports four kinds of components:
 3. [Packer](/components/packer): These build machine images (AMIs, VM images, container images) using HashiCorp Packer. By convention, we store Packer components in the `components/packer/` directory.
 
 4. [Ansible](/components/ansible): These run Ansible playbooks for configuration management and infrastructure automation. Atmos passes stack variables to playbooks via `--extra-vars`. By convention, we store Ansible components in the `components/ansible/` directory.
+
+5. [Kubernetes](/stacks/components/kubernetes): These manage plain Kubernetes manifests and Kustomize overlays with native rendering, diffing, validation, and deployment.
+
+6. [Helm](/stacks/components/helm): These deploy chart releases directly from local charts, chart repositories, or OCI registries, with values inherited from Atmos stacks.
+
+7. [Containers](/components/container): These build and distribute container images and manage persistent, stack-scoped services through native lifecycle commands.
+
+8. [Emulators](/components/emulator): These run local cloud APIs, Kubernetes, and backing services for development and testing, with stack-scoped configuration and lifecycle management.
+
+You can also define [custom component types](/components/custom) through custom commands. Atmos resolves their stack configuration while your command supplies the execution steps.
 
 ## Terraform Components
 

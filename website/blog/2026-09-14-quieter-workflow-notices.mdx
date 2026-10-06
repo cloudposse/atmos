@@ -1,0 +1,39 @@
+---
+slug: quieter-workflow-notices
+title: "Quieter Workflow Output and Daily Experimental Warnings"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Workflows and custom commands can invoke Atmos many times, repeating startup banners and experimental warnings before each step. Those repeated notices make it harder to find the output that matters. Atmos now shows each experimental feature's warning once every 24 hours by default and suppresses repeated startup banners in child invocations.
+
+<!--truncate-->
+
+## The Problem
+
+An experimental warning is useful when you first use a feature. Seeing it again for every component in a workflow adds noise, especially alongside repeated Atmos version, CI, and Pro status messages.
+
+## The Fix
+
+The new [experimental mode](/cli/configuration/settings/experimental) `warn-daily` gives each feature its own 24-hour timer. A toolchain warning does not suppress the first warning for devcontainers or an experimental setting. Commands in the same experimental family share a timer, and CI commands and CI hooks share the CI feature's timer.
+
+Atmos stores readable feature names and timestamps in its shared local cache. The timers apply across invocations and projects using that cache. Clearing the cache makes warnings eligible again; an unavailable cache never blocks the command. Concurrent suppression is best effort on Windows.
+
+Startup banners appear at the top-level invocation and are suppressed in child Atmos calls. Markdown output also follows Atmos's explicit theme and color profile without automatic terminal-style probing.
+
+## How to Use It
+
+The new default requires no configuration for unpinned projects. To choose it explicitly:
+
+```yaml title="atmos.yaml"
+settings:
+  experimental: warn-daily
+```
+
+Projects pinned to a [config edition](/cli/configuration/edition) before `2026-09-14` retain `warn` as the default. An explicit `settings.experimental` value or `ATMOS_EXPERIMENTAL` takes precedence over the edition default.
+
+To show experimental warnings on each top-level invocation, set `experimental: warn`. Child command and setting notices are now suppressed in this mode too, independently of the edition pin. CI hooks retain their existing `warn` behavior. The `error` and `disable` modes remain enforced on every invocation, including nested calls, regardless of cached warnings.
+
+## Get Involved
+
+See the [experimental settings reference](/cli/configuration/settings/experimental) for all modes, or [report unexpected output](https://github.com/cloudposse/atmos/issues).

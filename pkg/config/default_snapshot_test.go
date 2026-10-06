@@ -67,6 +67,8 @@ func snapshotPath(t *testing.T) string {
 // value additionally requires a matching journal entry in pkg/edition. This
 // makes an unjournaled default change un-mergeable.
 func TestDefaultConfigurationSnapshot(t *testing.T) {
+	t.Parallel()
+
 	current := flattenDefaults(t)
 	require.Positive(t, len(current), "setDefaultConfiguration produced no defaults; the guardrail is misconfigured")
 
@@ -177,6 +179,8 @@ func canonicalYAMLValue(value any) string {
 }
 
 func TestValidateSnapshotRegeneration(t *testing.T) {
+	t.Parallel()
+
 	snapshot := map[string]string{"settings.example.enabled": "false"}
 	current := map[string]string{"settings.example.enabled": "true"}
 	matchingJournal := map[string]edition.Entry{
@@ -184,12 +188,15 @@ func TestValidateSnapshotRegeneration(t *testing.T) {
 	}
 
 	t.Run("accepts a matching journal entry", func(t *testing.T) {
+		t.Parallel()
 		assert.Empty(t, validateSnapshotRegeneration(snapshot, current, matchingJournal))
 	})
 	t.Run("rejects an unjournaled changed default", func(t *testing.T) {
+		t.Parallel()
 		assert.Contains(t, strings.Join(validateSnapshotRegeneration(snapshot, current, nil), "\n"), "without a journal entry")
 	})
 	t.Run("rejects a journal entry with the wrong old value", func(t *testing.T) {
+		t.Parallel()
 		journal := map[string]edition.Entry{
 			"settings.example.enabled": {Old: true, New: true},
 		}

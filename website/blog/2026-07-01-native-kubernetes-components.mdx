@@ -4,9 +4,11 @@ title: "Native Kubernetes Components: Render, Apply, and Publish to GitOps Repos
 date: 2026-07-01T12:00:00.000Z
 authors: [osterman]
 tags: [feature]
+cast: "/casts/examples/kubernetes/lifecycle.cast"
+castTitle: "atmos kubernetes lifecycle"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Atmos now treats Kubernetes as a first-class component type. Define Kubernetes
 objects — inline manifests, files, directories, or Kustomize overlays — in your
@@ -47,10 +49,10 @@ atmos kubernetes diff   argocd -s plat-ue2-dev    # server-side diff
 atmos kubernetes apply  argocd -s plat-ue2-dev    # server-side apply
 ```
 
-`--all` and `--affected` run components in dependency order, so the same change
+[`--all`](/cli/commands/kubernetes/usage) and [`--affected`](/cli/commands/kubernetes/usage) run components in dependency order, so the same change
 detection that drives Terraform pipelines works for Kubernetes.
 
-<CastPlayer src="/casts/examples/kubernetes/lifecycle.cast" title="atmos kubernetes lifecycle" chrome controls scrubber />
+<CastEmbed src="/casts/examples/kubernetes/lifecycle.cast" title="atmos kubernetes lifecycle" chrome controls scrubber />
 
 [View the full example](/examples/kubernetes)
 

@@ -27,7 +27,7 @@ spec:
 
 ```yaml
 - name: component_name        # required; used as the template variable (.Config.component_name)
-  type: input                 # input|text|string|select|multiselect|confirm|bool|boolean
+  type: input                 # input|text|string|select|multiselect|confirm|bool|boolean|computed
   label: Component name       # short prompt label (falls back to name if omitted)
   description: ...            # longer help text shown with the prompt
   required: true
@@ -42,6 +42,62 @@ spec:
 
 Field name uniqueness is enforced — a duplicate `name` fails to load
 (`ErrDuplicateScaffoldFieldName`) rather than silently dropping an answer.
+
+### `type: computed` — derived fields
+
+A `computed` field is never prompted for and can't be set with `--set`
+(`ErrScaffoldComputedFieldNotSettable`) — its `value:` is either a
+Go-template expression deriving it from other answers (evaluated with the
+same `answers.*` binding `options:`'s dynamic form uses), or a literal of
+any type used as-is with no rendering. A string is only treated as an
+expression when it actually contains a template action; a plain string
+with none is a literal too:
+
+```yaml
+- name: regions
+  type: multiselect
+  options: [us-east-1, us-west-2, eu-west-1]
+- name: primary_region_select
+  type: select
+  options: answers.regions
+  when: "size(answers.regions) > 1"
+- name: primary_region
+  type: computed
+  value: "{{ ternary answers.primary_region_select (index answers.regions 0) (gt (len answers.regions) 1) }}"
+```
+
+Rules, enforced at scaffold-load time (`ErrScaffoldComputedFieldInvalid`):
+
+- `value:` is required on a `computed` field, and only valid on a `computed` field.
+- `required:` and `default:` are both rejected on a `computed` field — it's always
+  self-supplied, and `value:` already determines its value.
+- A `computed` field may reference any regular field's answer, or an
+  **earlier-declared** `computed` field's own result — computed fields are evaluated
+  once, in `spec.fields[]` declaration order, after every regular field's answer is
+  final (prompted, `--set`, or defaulted). Unlike an `options:` dot-path forward
+  reference, a `computed` field's own name is always statically known at load time, so
+  referencing itself or a *later*-declared `computed` field is a load-time error rather
+  than silently resolving to no value — the alternative would be a nil silently
+  interpolated into generated file content as the literal string `<no value>`.
+- Because computed fields are only evaluated after the interactive form completes, a
+  regular field's `when:` cannot depend on a computed field's result — only the
+  reverse (a computed field depending on a regular field) works. Referencing a
+  computed field from a regular field's `when:` is a load-time error
+  (`ErrScaffoldComputedFieldInvalid`), the same way `options:` referencing a computed
+  field is (`ErrScaffoldFieldOptionsInvalid`) — `options:` resolves at
+  form-build/validation time, before any computed field has a value, for the same
+  reason. A `matrix:` axis, by contrast, expands after `ComputeFields` runs, so
+  referencing a computed field there works correctly.
+- The resolved value lands in `.Config.<name>` exactly like any other field, so it's
+  usable everywhere `.Config` is (file content, `target:`, `matrix:` axes, and other
+  computed fields) — except `options:`, per the point above.
+- A `computed` field's `value:` must be **pure** (deterministic given the same
+  answers). Interactive generation with no target directory given evaluates every
+  computed field twice: once (against a throwaway temp directory) to suggest a
+  target directory name, again against the final answers to generate files. An
+  impure expression (the current time, an environment variable, a remote fetch not
+  guaranteed to return the same content twice) can compute a different value each
+  time, so the suggested directory and the generated files can disagree.
 
 ### `options:` — static, label/value, or dynamic
 
@@ -116,6 +172,23 @@ path-templating sentinel-skip behavior). This overlay does not declare *which* f
 exist — the template's file tree does that; it only gates whether an already-discovered
 file gets written.
 
+`path:` may be a glob pattern (doublestar syntax) instead of a literal path, matched
+against every discovered file:
+
+```yaml
+- path: "docs/legacy/**"          # *, ?, [...], ** (any depth incl. zero), {a,b}
+  when: "answers.include_legacy_docs == true"
+```
+
+- Always forward slashes; a backslash in the pattern is normalized to `/` regardless
+  of authoring/runtime OS (`pkg/utils.NormalizeGlobPattern`).
+- A malformed pattern (unclosed `[`/`{`) fails scaffold load and
+  `atmos scaffold validate` (`ErrScaffoldFilePathPatternInvalid`) — not just a silent
+  permanent non-match at generation time.
+- When multiple entries' `path:` match the same file, the **last** declared entry
+  wins (`.gitignore`/`CODEOWNERS` precedence: write broad patterns first, specific
+  overrides after — a wrong-order override is a silent no-op, not a load error).
+
 ### `spec.files[].matrix` — dynamic file generation
 
 ```yaml
@@ -142,6 +215,23 @@ Each axis's value is one of:
 `when:` gets a `matrix` CEL variable alongside `answers`, evaluated once per resolved
 combination to prune ones that don't apply. The resolved combination is also available
 as `.matrix.<axis>` in `target:` and the file's own rendered content.
+
+When `path:` is a glob matching more than one file, `matrix:` is resolved once per
+`path:` (cached, not recomputed per matched file — so a non-deterministic axis
+expression, e.g. Sprig's `randAlphaNum`, still resolves the same value across every
+matched file for one combination) and every matched file gets its own output per
+combination. Two additional template variables, available in `target:` and content
+alongside `.matrix.<axis>` regardless of whether `path:` is a glob:
+
+- `.file.Path` — the currently matched file's own discovered path.
+- `.file.RelPath` — `.file.Path` with the matching entry's glob literal prefix
+  stripped (equal to `.file.Path` when `path:` has no glob metacharacter).
+
+`target:` must reference `.file.Path` or `.file.RelPath` whenever its `path:` matches
+more than one file, or every matched file renders to the same output path for a given
+combination — checked deterministically before any file in the run is written
+(`ErrScaffoldMatrixTargetMissingFileContext`), not only once a collision is reached
+mid-run. `.file.*` is Go-template-only; it is not exposed to CEL `when:`.
 
 ## `spec.hooks` — step-backed hooks
 

@@ -32,6 +32,8 @@ func makeIndexServer(t *testing.T, indexYAML string) *httptest.Server {
 }
 
 func TestResolveShortName_Canonical(t *testing.T) {
+	t.Parallel()
+
 	// terraform is canonical: binary == repo_name == "terraform" under hashicorp.
 	const indexYAML = `packages:
   - type: github_release
@@ -51,6 +53,8 @@ func TestResolveShortName_Canonical(t *testing.T) {
 }
 
 func TestResolveShortName_ThreeSegmentBinaryOnly(t *testing.T) {
+	t.Parallel()
+
 	// kubectl lives at kubernetes/kubernetes/kubectl — binary differs from repo.
 	// The canonical owner/repo is (kubernetes, kubernetes), and the resolver must
 	// return that — not (kubernetes, kubectl) as the old URL-probe code did.
@@ -79,6 +83,8 @@ func TestResolveShortName_ThreeSegmentBinaryOnly(t *testing.T) {
 }
 
 func TestResolveShortName_CanonicalBeatsBinaryOnly(t *testing.T) {
+	t.Parallel()
+
 	// If a canonical match exists, it must outrank a binary-only match of the same name.
 	const indexYAML = `packages:
   - type: github_release
@@ -99,6 +105,8 @@ func TestResolveShortName_CanonicalBeatsBinaryOnly(t *testing.T) {
 }
 
 func TestResolveShortName_AmbiguousBinaryOnly(t *testing.T) {
+	t.Parallel()
+
 	// Two packages where neither is canonical and both have the same binary name.
 	const indexYAML = `packages:
   - type: github_release
@@ -122,6 +130,8 @@ func TestResolveShortName_AmbiguousBinaryOnly(t *testing.T) {
 }
 
 func TestResolveShortName_NotFound(t *testing.T) {
+	t.Parallel()
+
 	const indexYAML = `packages:
   - type: github_release
     repo_owner: hashicorp
@@ -136,6 +146,8 @@ func TestResolveShortName_NotFound(t *testing.T) {
 }
 
 func TestResolveShortName_EmptyName(t *testing.T) {
+	t.Parallel()
+
 	ar := NewAquaRegistry()
 	_, _, err := ar.ResolveShortName("")
 	require.Error(t, err)
@@ -143,6 +155,8 @@ func TestResolveShortName_EmptyName(t *testing.T) {
 }
 
 func TestResolveShortName_IndexFetchFailure(t *testing.T) {
+	t.Parallel()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "simulated outage", http.StatusInternalServerError)
 	}))
@@ -157,6 +171,8 @@ func TestResolveShortName_IndexFetchFailure(t *testing.T) {
 }
 
 func TestBinaryFromPath(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name         string
 		path         string
@@ -170,12 +186,15 @@ func TestBinaryFromPath(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tc.want, binaryFromPath(tc.path, tc.fallbackRepo))
 		})
 	}
 }
 
 func TestSplitOwnerRepo(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		key       string
 		wantOwner string
@@ -190,6 +209,7 @@ func TestSplitOwnerRepo(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.key, func(t *testing.T) {
+			t.Parallel()
 			o, r, ok := splitOwnerRepo(tc.key)
 			assert.Equal(t, tc.wantOK, ok)
 			assert.Equal(t, tc.wantOwner, o)
@@ -204,6 +224,8 @@ func TestSplitOwnerRepo(t *testing.T) {
 // owner/repo. Without alias expansion, the 11 kubernetes/kubernetes binaries all
 // share one pathIndex key and only one survives — breaking install for the others.
 func TestResolveShortName_MonorepoAlias(t *testing.T) {
+	t.Parallel()
+
 	const indexYAML = `packages:
   - type: github_release
     repo_owner: kubernetes
@@ -250,6 +272,8 @@ func TestResolveShortName_MonorepoAlias(t *testing.T) {
 // TestResolveShortName_ErrorMessage smoke-checks the ambiguity error mentions the
 // "owner/repo" remediation hint so users know what to do.
 func TestResolveShortName_ErrorMessage(t *testing.T) {
+	t.Parallel()
+
 	const indexYAML = `packages:
   - type: github_release
     repo_owner: a

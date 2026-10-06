@@ -130,7 +130,7 @@ func NewArtifactFetcher(prs PullRequestService, actions ActionsService) *Artifac
 
 // defaultArtifactFetcher returns a fetcher using the real GitHub client.
 func defaultArtifactFetcher(ctx context.Context) *ArtifactFetcher {
-	client := newGitHubClient(ctx)
+	client, _ := newGitHubClient(ctx)
 	return &ArtifactFetcher{
 		pullRequests: client.PullRequests,
 		actions:      client.Actions,
@@ -140,7 +140,23 @@ func defaultArtifactFetcher(ctx context.Context) *ArtifactFetcher {
 
 // defaultArtifactFetcherWithToken returns a fetcher using a GitHub client with an explicit token.
 func defaultArtifactFetcherWithToken(ctx context.Context, token string) *ArtifactFetcher {
-	client := newGitHubClientWithToken(ctx, token)
+	client, _ := newGitHubClientWithToken(ctx, token)
+	return &ArtifactFetcher{
+		pullRequests: client.PullRequests,
+		actions:      client.Actions,
+		repositories: client.Repositories,
+	}
+}
+
+// NewToolchainArtifactFetcher returns an ArtifactFetcher backed by a GitHub client scoped to
+// ToolchainEndpoints rather than RepoEndpoints. Use this (instead of the free GetPRArtifactInfo/
+// GetPRHeadSHA/GetSHAArtifactInfo/GetRefSHA functions) when fetching build artifacts of a
+// toolchain-managed repository -- e.g. atmos's own PR/SHA/ref build artifacts for self-install --
+// which live on public github.com by default even for GHES users.
+func NewToolchainArtifactFetcher(ctx context.Context) *ArtifactFetcher {
+	defer perf.Track(nil, "github.NewToolchainArtifactFetcher")()
+
+	client, _ := newToolchainGitHubClient(ctx)
 	return &ArtifactFetcher{
 		pullRequests: client.PullRequests,
 		actions:      client.Actions,

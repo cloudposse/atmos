@@ -8,6 +8,8 @@ import (
 )
 
 func TestInitBulkExecutionFlagsRegistered(t *testing.T) {
+	t.Parallel()
+
 	for _, name := range []string{"all", "affected", "max-concurrency", "failure-mode", "log-order"} {
 		f := initCmd.Flags().Lookup(name)
 		require.NotNil(t, f, "init must register --%s", name)

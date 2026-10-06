@@ -9,6 +9,8 @@ import (
 )
 
 func TestExecuteTerraformAll_ValidationSimple(t *testing.T) {
+	t.Parallel()
+
 	// --all without a stack is allowed: it processes every stack
 	// (see website/docs/cli/commands/terraform/terraform-apply.mdx).
 	tests := []struct {
@@ -31,6 +33,7 @@ func TestExecuteTerraformAll_ValidationSimple(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ExecuteTerraformAll(tt.info)
 
 			if tt.expectError {

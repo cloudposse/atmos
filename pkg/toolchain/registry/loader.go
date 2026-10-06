@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	github "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -167,9 +168,9 @@ func createAquaRegistry(config *schema.ToolchainRegistry) (ToolRegistry, error) 
 	if config.Source == "" {
 		return createDefaultAquaRegistry(config.Ref)
 	}
-	// Validate ref is only used with GitHub URLs.
+	// Validate ref is only used with GitHub (or configured GitHub Enterprise Server) URLs.
 	if config.Ref != "" && !isGitHubURL(config.Source) {
-		return nil, fmt.Errorf("%w: 'ref' is only supported for github.com URLs, got %q", ErrRegistryConfiguration, config.Source)
+		return nil, fmt.Errorf("%w: 'ref' is only supported for github.com (or configured GitHub Enterprise Server) URLs, got %q", ErrRegistryConfiguration, config.Source)
 	}
 	// Custom Aqua-format registry at specified URL (e.g., corporate registry, mirror).
 	// If ref is provided, it will be used to pin the registry to a specific Git ref.
@@ -198,7 +199,17 @@ func createAtmosRegistry(config *schema.ToolchainRegistry) (ToolRegistry, error)
 	return atmosRegistryConstructor(config.Tools)
 }
 
-// isGitHubURL checks if the URL is a github.com URL (not raw.githubusercontent.com).
-func isGitHubURL(url string) bool {
-	return strings.Contains(url, "github.com") && !strings.Contains(url, "raw.githubusercontent.com")
+// isGitHubURL checks if the URL is a github.com URL (not raw.githubusercontent.com), or a URL
+// on the GitHub Enterprise Server host configured via RepoEndpoints (GITHUB_SERVER_URL).
+func isGitHubURL(rawURL string) bool {
+	if strings.Contains(rawURL, "raw.githubusercontent.com") {
+		return false
+	}
+	if strings.Contains(rawURL, "github.com") {
+		return true
+	}
+	if host := github.RepoEndpoints().Host; host != "github.com" {
+		return strings.Contains(rawURL, host)
+	}
+	return false
 }

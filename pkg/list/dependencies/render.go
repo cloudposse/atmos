@@ -308,7 +308,11 @@ func buildSubtree(graph *dependency.Graph, node *dependency.Node, dir edgeDirect
 		if !exists {
 			continue
 		}
-		child := &format.DepTreeNode{Component: next.Component, Stack: next.Stack, Type: next.Type}
+		optional := node.OptionalDependencies[id]
+		if dir == reverse {
+			optional = next.OptionalDependencies[node.ID]
+		}
+		child := &format.DepTreeNode{Component: next.Component, Stack: next.Stack, Type: next.Type, Optional: optional}
 		if path[id] {
 			child.Circular = true
 			children = append(children, child)

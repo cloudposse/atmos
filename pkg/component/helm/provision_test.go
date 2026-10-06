@@ -65,6 +65,21 @@ func registerFakeTarget(t *testing.T, kind string, ft *fakeTarget) {
 	target.Register(kind, ft)
 }
 
+func rejectHelmApplyProgressCreation(t *testing.T) {
+	t.Helper()
+	original := newHelmApplyProgress
+	newHelmApplyProgress = func(
+		_ *schema.ConfigAndStacksInfo,
+		_ *chartSpec,
+		_ string,
+		_ bool,
+	) *helmOperationProgress {
+		t.Error("native Helm progress must not be created before Kubernetes target selection")
+		return nil
+	}
+	t.Cleanup(func() { newHelmApplyProgress = original })
+}
+
 func stubRenderChartManifest(t *testing.T, manifest string, err error) {
 	t.Helper()
 	original := renderChartManifest
@@ -134,6 +149,7 @@ func TestDeliverToExternalTarget_DeliverError(t *testing.T) {
 // SelectTarget resolves the configured default to a non-Kubernetes kind, which
 // is delivered via deliverToExternalTarget.
 func TestDeliverApply_RoutesToExternalTarget(t *testing.T) {
+	rejectHelmApplyProgressCreation(t)
 	ft := &fakeTarget{}
 	registerFakeTarget(t, "helm-apply-external", ft)
 	stubRenderChartManifest(t, helmExecutorManifest, nil)
@@ -236,6 +252,7 @@ func TestLifecycleSummary(t *testing.T) {
 }
 
 func TestDeliverApply_SelectTargetError(t *testing.T) {
+	rejectHelmApplyProgressCreation(t)
 	// An explicitly requested target that is not configured fails to resolve.
 	_, err := deliverApply(
 		context.Background(),

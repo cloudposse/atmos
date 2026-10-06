@@ -260,12 +260,26 @@ func stepFromHookWithVariables(ctx *ExecContext, vars *runnerstep.Variables) (*s
 // hook template context plus the current step template environment, then
 // decodes it through WorkflowStep's normal YAML unmarshaler.
 func workflowStepFromHookPayload(ctx *ExecContext, vars *runnerstep.Variables, payload any) (*schema.WorkflowStep, error) {
+	// Test children are rendered after matrix expansion and prior steps have results.
+	// Rendering the entire tree here would evaluate .matrix/.steps before they exist.
+	nested, deferred := deferredTestPayload(ctx, payload)
+	if deferred != nil {
+		payload = deferred
+		vars.ResolveTestStep = func(s *schema.WorkflowStep, local *runnerstep.Variables) (*schema.WorkflowStep, error) {
+			return resolveTestHookStep(ctx, s, local)
+		}
+	}
 	processed, err := processHookExecutionValue(ctx.AtmosConfig, payload, hookStepTemplateInfo(ctx, vars))
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
 			WithCause(err).
 			WithExplanation("Failed to render a step hook payload").
 			Err()
+	}
+	if deferred != nil {
+		if m, ok := processed.(map[string]any); ok {
+			m["steps"] = nested
+		}
 	}
 	data, err := yaml.Marshal(processed)
 	if err != nil {
@@ -325,8 +339,9 @@ func hookStepTemplateInfo(ctx *ExecContext, vars *runnerstep.Variables) *schema.
 		section[key] = value
 	}
 	templateData := vars.TemplateData()
-	section["env"] = templateData["env"]
-	section["Env"] = templateData["Env"]
+	for key, value := range templateData {
+		section[key] = value
+	}
 	clone.ComponentSection = section
 	return &clone
 }
@@ -386,8 +401,13 @@ func verifyStepsHookTypes(name string, hook *Hook) error {
 	return nil
 }
 
+// stepVariables builds the step Variables for a kind: step/kind: steps lifecycle hook run: OS
+// environment (via NewVariables' default), the standard ATMOS_* variables, the hook's own env:
+// overrides, and the component working-directory anchor used by setDefaultStepWorkingDirectory
+// and by any other relative step field.
 func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	vars := runnerstep.NewVariables()
+	vars.SetAtmosConfig(ctx.AtmosConfig)
 	for k, v := range BuildAtmosEnv(ctx, "", "") {
 		vars.SetEnv(k, v)
 	}
@@ -405,39 +425,51 @@ func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	return vars
 }
 
-// atmosStepType is the step type that re-invokes the atmos binary itself
+// AtmosStepType is the step type that re-invokes the atmos binary itself
 // (pkg/runner/step.AtmosHandler). It must keep inheriting the ambient process
 // working directory rather than defaulting to the component directory: the
 // nested atmos process resolves its own atmos.yaml/stacks relative to that
 // directory, and a component subdirectory won't necessarily contain (or sit
 // under) the project's config root.
-const atmosStepType = "atmos"
+const AtmosStepType = "atmos"
 
 // setDefaultStepWorkingDirectory gives lifecycle steps the same component directory as command
-// hooks. An empty working_directory defaults to the component directory outright. A non-empty,
-// BARE value (no "./"/"../" prefix, not absolute -- e.g. "foo", "foo/bar") has no anchor of its
-// own, so it's resolved relative to the component directory too, rather than falling through to
-// exec.Cmd.Dir's default of the ambient process CWD. A dot-prefixed value ("./foo", ".", "..",
-// "../foo") is left as-is: exec.Cmd.Dir already resolves it against CWD, matching the "here means
-// CWD" convention runtime sources use elsewhere (docs/prd/base-path-resolution-semantics.md). An
-// absolute value is always left as-is.
+// hooks, anchoring at ComponentPath(ctx). See ApplyDefaultWorkingDirectory for the anchor-agnostic
+// empty/bare/dot/absolute defaulting convention this delegates to.
 func setDefaultStepWorkingDirectory(ctx *ExecContext, step *schema.WorkflowStep) {
-	if step == nil || step.Type == atmosStepType {
+	if step == nil {
+		return
+	}
+	ApplyDefaultWorkingDirectory(step, ComponentPath(ctx))
+}
+
+// ApplyDefaultWorkingDirectory applies the shared empty/bare/dot/absolute working-directory
+// defaulting convention (docs/prd/base-path-resolution-semantics.md) to step, anchoring an empty
+// or bare-relative step.WorkingDirectory at anchorDir. An empty working_directory defaults to
+// anchorDir outright. A non-empty, BARE value (no "./"/"../" prefix, not absolute -- e.g. "foo",
+// "foo/bar") has no anchor of its own, so it's resolved relative to anchorDir too, rather than
+// falling through to exec.Cmd.Dir's default of the ambient process CWD. A dot-prefixed value
+// ("./foo", ".", "..", "../foo") is left as-is: exec.Cmd.Dir already resolves it against CWD,
+// matching the "here means CWD" convention runtime sources use elsewhere. An absolute value is
+// always left as-is. Steps of type: atmos are exempt: a nested atmos invocation must keep
+// resolving its own atmos.yaml/stacks against the ambient process cwd.
+func ApplyDefaultWorkingDirectory(step *schema.WorkflowStep, anchorDir string) {
+	if step == nil || step.Type == AtmosStepType {
 		return
 	}
 	if step.WorkingDirectory == "" {
-		step.WorkingDirectory = ComponentPath(ctx)
+		step.WorkingDirectory = anchorDir
 		return
 	}
-	if isBareRelativePath(step.WorkingDirectory) {
-		step.WorkingDirectory = filepath.Join(ComponentPath(ctx), step.WorkingDirectory)
+	if IsBareRelativePath(step.WorkingDirectory) {
+		step.WorkingDirectory = filepath.Join(anchorDir, step.WorkingDirectory)
 	}
 }
 
-// isBareRelativePath reports whether path is a BARE relative value -- not absolute, and not
+// IsBareRelativePath reports whether path is a BARE relative value -- not absolute, and not
 // dot-prefixed ("./foo", "../foo", ".", "..") -- per the value classification in
 // docs/prd/base-path-resolution-semantics.md.
-func isBareRelativePath(path string) bool {
+func IsBareRelativePath(path string) bool {
 	if filepath.IsAbs(path) {
 		return false
 	}
@@ -483,4 +515,60 @@ func stepsSummary(result *runnerstep.StepResult, runErr error) *Output {
 	}
 	log.Debug("Steps hook finished", logKeyKind, stepsKindName, "status", summary.Status)
 	return &Output{Summary: summary}
+}
+
+// deferredTestPayload extracts test children without mutating the hook payload.
+func deferredTestPayload(ctx *ExecContext, payload any) (any, map[string]any) {
+	data, err := yaml.Marshal(payload)
+	if err != nil {
+		return nil, nil
+	}
+	var m map[string]any
+	if yaml.Unmarshal(data, &m) != nil {
+		return nil, nil
+	}
+	kind, _ := m["type"].(string)
+	if kind != "test" && ctx.Hook.Type != "test" {
+		return nil, nil
+	}
+	nested, ok := m["steps"]
+	if !ok {
+		return nil, nil
+	}
+	delete(m, "steps")
+	return nested, m
+}
+
+// resolveTestHookStep applies hook YAML functions and templates to one expanded leaf.
+func resolveTestHookStep(ctx *ExecContext, s *schema.WorkflowStep, vars *runnerstep.Variables) (*schema.WorkflowStep, error) {
+	copy := *s
+	copy.Steps = nil
+	data, err := yaml.Marshal(&copy)
+	if err != nil {
+		return nil, err
+	}
+	var payload map[string]any
+	if err = yaml.Unmarshal(data, &payload); err != nil {
+		return nil, err
+	}
+	// Generic handler parameters are excluded from WorkflowStep's YAML fields.
+	// Restore them before rendering so expanded matrix and hook variables apply.
+	if copy.With != nil {
+		payload["with"] = copy.With
+	}
+	rendered, err := processHookExecutionValue(ctx.AtmosConfig, payload, hookStepTemplateInfo(ctx, vars))
+	if err != nil {
+		return nil, err
+	}
+	data, err = yaml.Marshal(rendered)
+	if err != nil {
+		return nil, err
+	}
+	var result schema.WorkflowStep
+	if err = yaml.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	result.Steps = s.Steps
+	result.DryRun = s.DryRun
+	return &result, nil
 }

@@ -103,6 +103,12 @@
         "max": {"type": "integer", "minimum": 0}
       }
     },
+    "helm_server_side_apply": {
+      "oneOf": [
+        {"type": "boolean"},
+        {"type": "string", "enum": ["auto", "true", "false"]}
+      ]
+    },
     "helm_install_policy": {
       "type": "object",
       "additionalProperties": false,
@@ -111,7 +117,9 @@
         "chart_hooks": {"type": "boolean"},
         "wait": {"$ref": "#/definitions/helm_wait_policy"},
         "crds": {"type": "string", "enum": ["create", "skip"]},
-        "on_failure": {"type": "string", "enum": ["uninstall", "keep"]}
+        "on_failure": {"type": "string", "enum": ["uninstall", "keep"]},
+        "server_side_apply": {"$ref": "#/definitions/helm_server_side_apply"},
+        "force_conflicts": {"type": "boolean"}
       }
     },
     "helm_upgrade_policy": {
@@ -122,7 +130,9 @@
         "chart_hooks": {"type": "boolean"},
         "wait": {"$ref": "#/definitions/helm_wait_policy"},
         "on_failure": {"type": "string", "enum": ["rollback", "keep"]},
-        "cleanup_on_failure": {"type": "boolean"}
+        "cleanup_on_failure": {"type": "boolean"},
+        "server_side_apply": {"$ref": "#/definitions/helm_server_side_apply"},
+        "force_conflicts": {"type": "boolean"}
       }
     },
     "helm_delete_policy": {
@@ -142,6 +152,8 @@
         "chart_hooks": {"type": "boolean"},
         "wait": {"$ref": "#/definitions/helm_wait_policy"},
         "history": {"$ref": "#/definitions/helm_history_policy"},
+        "server_side_apply": {"$ref": "#/definitions/helm_server_side_apply"},
+        "force_conflicts": {"type": "boolean"},
         "install": {"$ref": "#/definitions/helm_install_policy"},
         "upgrade": {"$ref": "#/definitions/helm_upgrade_policy"},
         "delete": {"$ref": "#/definitions/helm_delete_policy"}
@@ -1513,6 +1525,27 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
+            "pro": {
+              "type": "object",
+              "description": "Atmos Pro integration settings.",
+              "additionalProperties": true,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable Atmos Pro for this stack or component, including automatic exception reporting in GitHub Actions."
+                },
+                "errors": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Report CLI exceptions to Atmos Pro. Omit to follow Pro enablement."
+                    }
+                  }
+                }
+              }
+            },
             "validation": {
               "$ref": "#/definitions/validation"
             },

@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strings"
 
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
@@ -153,7 +154,11 @@ func checksumFileURL(tool *registry.Tool, version, assetURL string, checksum *re
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", repoOwner, repoName, releaseVersion, checksumAsset), nil
+	// Checksum sidecars live alongside the tool's own release asset, which is always fetched
+	// via the toolchain endpoints (ATMOS_TOOLCHAIN_GITHUB_URL) -- a separate concern from the
+	// repo endpoints, since aqua-registry tool releases live on public github.com by default
+	// even for GHES users.
+	return ghtoken.ToolchainEndpoints().ReleaseAssetURL(repoOwner, repoName, releaseVersion, checksumAsset), nil
 }
 
 func checksumReleaseVersion(tool *registry.Tool, version, assetURL, assetName string, replacements map[string]string) (string, error) {
@@ -185,7 +190,7 @@ func effectiveReleaseVersionFromAssetURL(assetURL, version string) string {
 
 func releaseVersionFromGitHubAssetURL(rawURL string) string {
 	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Host != "github.com" {
+	if err != nil || (parsed.Host != "github.com" && !ghtoken.ToolchainEndpoints().IsHost(parsed.Host)) {
 		return ""
 	}
 	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
@@ -219,6 +224,38 @@ func replaceVersionSegmentInURL(rawURL, version, effectiveVersion string) string
 	}
 	parsed.Path = "/" + strings.Join(parts, "/")
 	return parsed.String()
+}
+
+// replaceVersionSegmentInPath applies the same version-segment correction as
+// replaceVersionSegmentInURL, but to a non-URL, slash-delimited value - e.g. a cosign
+// `--certificate-github-workflow-ref` value such as `refs/tags/0.64.0`.
+//
+// Template rendering yields the v-stripped version for `{{.Version}}` when the tool has no version
+// prefix, while the tool's actual GitHub release tag is `v`-prefixed. The URL-only corrector
+// rewrites URL-shaped values (those with a host) only, so a bare ref arg keeps the v-stripped
+// version and cosign then fails the certificate workflow-ref match ("expected GitHub Workflow Ref
+// not found in certificate"). This corrects such non-URL args using the effective release tag.
+func replaceVersionSegmentInPath(raw, version, effectiveVersion string) string {
+	if effectiveVersion == "" || effectiveVersion == version {
+		return raw
+	}
+	// URL-shaped values are handled by replaceVersionSegmentInURL; leave them untouched here.
+	if parsed, err := url.Parse(raw); err == nil && parsed.Host != "" {
+		return raw
+	}
+	target := strings.TrimPrefix(version, versionPrefixV)
+	parts := strings.Split(raw, "/")
+	changed := false
+	for i, part := range parts {
+		if strings.TrimPrefix(part, versionPrefixV) == target {
+			parts[i] = effectiveVersion
+			changed = true
+		}
+	}
+	if !changed {
+		return raw
+	}
+	return strings.Join(parts, "/")
 }
 
 func alignSidecarURLWithAssetURL(rawURL, assetURL, version string) string {

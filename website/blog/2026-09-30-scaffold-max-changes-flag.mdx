@@ -1,0 +1,61 @@
+---
+slug: scaffold-max-changes-flag
+title: "Configurable merge-conflict threshold for --update"
+date: 2026-09-30T12:00:00.000Z
+authors: [jorrite]
+tags: [feature]
+---
+
+Running `--update` against a generated project is supposed to save you from re-doing your own
+customizations by hand. But once your local changes and the template's own changes overlap enough
+— more than half of a file's lines, by the merge's own accounting — the merge doesn't hand you
+conflict markers to work through. It refuses outright, with no way to say "I understand, show me
+the conflict anyway."
+
+<!--truncate-->
+
+## The Problem
+
+[`atmos scaffold generate --update`](/cli/commands/scaffold/generate) and
+[`atmos init --update`](/cli/commands/init) compute a three-way merge for every existing file: what
+changed in the template, layered onto what you've customized locally. If that merge would touch
+more than 50% of a file's lines, it bails out entirely — no conflict markers, no partial result,
+just a hard failure and the file left untouched. That 50% ceiling was hardcoded, with no flag to
+raise it, even though a large conflict is often exactly the kind of thing a person wants surfaced
+for manual review rather than blocked outright.
+
+## The Fix
+
+`--max-changes` on both commands controls that same conflict-percentage threshold. The default
+stays `50` — no behavior change if you don't pass it. `0` disables the check entirely: the merge
+always proceeds and writes conflict markers for you to resolve, instead of refusing the update.
+
+One nuance worth understanding before you reach for a specific number: the change percentage this
+is compared against isn't itself capped at 100. When your local edits and the template's changes
+both diverge significantly from the common base, the computed percentage can climb well past
+100% (200%+ in some cases). That means only `--max-changes=0` is a guaranteed "never fail on this"
+setting — raising it to 100, 200, or higher only makes a hard failure progressively less likely,
+it doesn't rule one out. If what you actually want is "always give me conflict markers, never a
+hard failure," reach for `0`, not a large number.
+
+## How to Use It
+
+```shell
+# Default behavior is unchanged: fails if a merge would touch more than 50% of a file.
+atmos scaffold generate my-template ./my-project --update
+
+# Always get conflict markers instead of a hard failure.
+atmos scaffold generate my-template ./my-project --update --max-changes=0
+atmos init --update --max-changes=0
+
+# Or configure it once via environment variable.
+ATMOS_SCAFFOLD_MAX_CHANGES=0 atmos scaffold generate my-template ./my-project --update
+ATMOS_INIT_MAX_CHANGES=0 atmos init --update
+```
+
+## Get Involved
+
+See the [`atmos scaffold generate`](/cli/commands/scaffold/generate) and
+[`atmos init`](/cli/commands/init) docs for the full flag reference. Have feedback on this
+feature? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the conversation in
+the [Cloud Posse community Slack](https://cloudposse.com/slack).

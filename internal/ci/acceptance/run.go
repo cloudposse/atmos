@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
+	"strconv"
 
 	"github.com/google/shlex"
 	"golang.org/x/sync/errgroup"
@@ -29,16 +32,40 @@ func ParseMode(value string) (Mode, error) {
 }
 
 type RunOptions struct {
-	RepoRoot       string
-	Mode           Mode
-	Target         Target
-	Shard          Shard
-	BuildDir       string
-	CoverageRoot   string
-	GoTestTimeout  string
+	RepoRoot      string
+	Mode          Mode
+	Target        Target
+	Shard         Shard
+	BuildDir      string
+	CoverageRoot  string
+	GoTestTimeout string
+	// GoTestParallel is the -parallel value (-test.parallel for precompiled
+	// binaries) every test process in the shard runs with; see
+	// defaultTestParallel for why it is not left at Go's GOMAXPROCS default.
+	GoTestParallel string
 	CmdTestBinary  string
 	TestsBinary    string
 	ExecTestBinary string
+}
+
+// testParallelEnv overrides the shard's -parallel value.
+const testParallelEnv = "ATMOS_TEST_PARALLEL"
+
+// defaultTestParallel is half the runner's cores, at least one. A shard runs
+// its source-package groups concurrently with each other and with the
+// precompiled suites, and `go test` runs up to GOMAXPROCS package binaries
+// at once, so with -parallel also at GOMAXPROCS the concurrent tests per
+// core compound once packages' tests call t.Parallel. On the 3-vCPU hosted
+// macOS runners that oversubscription made several shards' test step
+// 50-150% slower (e.g. shard 1: 665s -> 1134s, shard 10: 408s -> 1004s,
+// run 34266829114 vs 34179823625) while 4-vCPU Linux and Windows shards
+// were unchanged.
+func defaultTestParallel() string {
+	return strconv.Itoa(max(1, runtime.NumCPU()/2))
+}
+
+func (o *RunOptions) testParallel() string {
+	return defaultValue(o.GoTestParallel, defaultTestParallel())
 }
 
 type sourceTestGroup struct {
@@ -153,13 +180,13 @@ func runSourceTestGroup(
 			DataOut:  dataDir,
 			TextOut:  "",
 			Timeout:  options.GoTestTimeout,
-		}, group.packages, group.testArgs)
+		}, group.packages, append(slices.Clone(group.testArgs), "-parallel="+options.testParallel()))
 		return dataDir, err
 	}
 	args := []string{"test"}
 	args = append(args, group.packages...)
 	args = append(args, group.testArgs...)
-	args = append(args, "-timeout", defaultValue(options.GoTestTimeout, defaultTestTimeout))
+	args = append(args, "-parallel="+options.testParallel(), "-timeout", defaultValue(options.GoTestTimeout, defaultTestTimeout))
 	return "", runner.run(ctx, runOptions{dir: options.RepoRoot, env: goCommandEnvironment(), retryTransient: true}, "go", args...)
 }
 
@@ -174,7 +201,7 @@ func runWindowsTests(ctx context.Context, runner commandRunner, options *RunOpti
 		return fmt.Errorf("list tests package cases: %w", err)
 	}
 	assigned := windowsTestsForShard(tests, options.Shard)
-	args := []string{"-test.run=" + testRunPattern(assigned), "-test.timeout=" + defaultValue(options.GoTestTimeout, defaultTestTimeout)}
+	args := []string{"-test.run=" + testRunPattern(assigned), "-test.parallel=" + options.testParallel(), "-test.timeout=" + defaultValue(options.GoTestTimeout, defaultTestTimeout)}
 	return runner.run(ctx, runOptions{dir: dir}, binary, args...)
 }
 
@@ -192,7 +219,7 @@ func runWindowsExecTests(ctx context.Context, runner commandRunner, options *Run
 	if len(assigned) == 0 {
 		return nil
 	}
-	args := []string{"-test.run=" + testRunPattern(assigned), "-test.timeout=" + defaultValue(options.GoTestTimeout, defaultTestTimeout)}
+	args := []string{"-test.run=" + testRunPattern(assigned), "-test.parallel=" + options.testParallel(), "-test.timeout=" + defaultValue(options.GoTestTimeout, defaultTestTimeout)}
 	return runner.run(ctx, runOptions{dir: dir}, binary, args...)
 }
 
@@ -211,7 +238,7 @@ func runCmdTests(ctx context.Context, runner commandRunner, options *RunOptions)
 		}
 	}
 	dir := filepath.Join(options.RepoRoot, "cmd")
-	args := []string{"-test.v", "-test.timeout=10m"}
+	args := []string{"-test.v", "-test.parallel=" + options.testParallel(), "-test.timeout=10m"}
 	coverDir := ""
 	if options.Mode == ModeCoverage {
 		coverDir = filepath.Join(options.CoverageRoot, fmt.Sprintf("shard-%d-cmd", options.Shard.Index))
@@ -296,6 +323,7 @@ func DefaultRunOptions(repoRoot string, mode Mode, target Target, shard Shard) R
 		BuildDir:       defaultValue(environment("BUILD_DIR"), "."),
 		CoverageRoot:   defaultValue(environment("COVERAGE_ROOT"), "coverage"),
 		GoTestTimeout:  defaultValue(environment("GO_TEST_TIMEOUT"), defaultTestTimeout),
+		GoTestParallel: defaultValue(environment(testParallelEnv), defaultTestParallel()),
 		CmdTestBinary:  environment("CMD_TEST_BIN"),
 		TestsBinary:    environment("TESTS_TEST_BIN"),
 		ExecTestBinary: environment("INTERNAL_EXEC_TEST_BIN"),

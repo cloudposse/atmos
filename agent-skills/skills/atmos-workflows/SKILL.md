@@ -163,6 +163,7 @@ Route provider, identity, OIDC, assume role/root, and profile details to `atmos-
 | Complete workflow schema and examples | [references/workflow-syntax.md](references/workflow-syntax.md) |
 | Custom CLI commands under `commands` | `atmos-custom-commands` |
 | Shared step fields and step types | `atmos-steps` |
+| Smoke tests, integration tests, and test groups | `atmos-tests` |
 | Cast/simulate workflow recordings | `atmos-cast` |
 | Tool installation and PATH behavior | `atmos-toolchain` |
 | Auth identities and providers | `atmos-auth` |

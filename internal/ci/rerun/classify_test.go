@@ -343,6 +343,15 @@ func TestRealRuns(t *testing.T) {
 		outcome Outcome
 	}{
 		{
+			// macOS shard 2 passed every action, then stalled inside Complete job.
+			run: "35091338411",
+			want: []Classified{
+				{Job: "Acceptance Tests (macos, shard 2/10)", Conclusion: conclusionCancelled, Class: ClassRunnerStuckAfterComplete},
+				{Job: "Acceptance Tests (macos)", Conclusion: conclusionFailure, Class: ClassCheckCascade},
+			},
+			outcome: OutcomeRerun,
+		},
+		{
 			// Build (windows) reaped 34 min after `Complete job`; everything
 			// downstream is an aggregator that saw no shards.
 			run: "33774798945",

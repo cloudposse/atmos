@@ -19,6 +19,8 @@ import (
 )
 
 func TestInstallFromTool_VerifiesChecksumBeforeExtraction(t *testing.T) {
+	t.Parallel()
+
 	assetName := EnsureWindowsExeExtension("tool")
 	asset := []byte("#!/bin/sh\n")
 	sum := "a8076d3d28d21e02012b20eaf7dbf75409a6277134439025f282e368e3305abf"
@@ -70,6 +72,8 @@ func TestInstallFromTool_VerifiesChecksumBeforeExtraction(t *testing.T) {
 // supply-chain downgrade) and installs the same tool@version again -- with real verification
 // wired up, this must fail loudly instead of silently overwriting the tampered value.
 func TestInstallFromTool_DetectsTamperedLockFileChecksum(t *testing.T) {
+	t.Parallel()
+
 	assetName := EnsureWindowsExeExtension("tool")
 	asset := []byte("#!/bin/sh\n")
 	realSum := "a8076d3d28d21e02012b20eaf7dbf75409a6277134439025f282e368e3305abf"
@@ -131,6 +135,8 @@ func TestInstallFromTool_DetectsTamperedLockFileChecksum(t *testing.T) {
 }
 
 func TestInstallFromTool_DoesNotUpdateLockFileWhenExtractionFails(t *testing.T) {
+	t.Parallel()
+
 	assetName := "tool.zip"
 	asset := []byte("not a zip archive")
 	sum := "a90877b716582c036052f8b70ed0e9a60464ad21daa00ed4c77d2f478ca16239"
@@ -171,6 +177,8 @@ func TestInstallFromTool_DoesNotUpdateLockFileWhenExtractionFails(t *testing.T) 
 }
 
 func TestInstallFromTool_RemovesTamperedCachedAsset(t *testing.T) {
+	t.Parallel()
+
 	assetName := EnsureWindowsExeExtension("tool")
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

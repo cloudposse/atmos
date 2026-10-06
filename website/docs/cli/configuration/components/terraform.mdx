@@ -39,7 +39,7 @@ components:
     # Run terraform init before deploy
     deploy_run_init: true
 
-    # Add -reconfigure to init commands
+    # Deprecated: use init.reconfigure instead
     init_run_reconfigure: true
 
     # Generate backend.tf.json from stack configuration
@@ -50,11 +50,22 @@ components:
 
     # Init command options
     init:
+      # Skip init when nothing that affects it has changed (auto | always | never)
+      mode: auto
+      # Add -reconfigure only when the backend changed (auto | always | never)
+      reconfigure: auto
+      # Add -upgrade only when Terraform/OpenTofu says it's required (auto | always | never)
+      upgrade: auto
       pass_vars: false
 
     # Plan command options
     plan:
       skip_planfile: false
+
+    # Component mocks (used only with --use-mocks)
+    mocks:
+      # fallback: real state wins, mocks fill gaps. always: mocks only, never read state (fallback | always)
+      mode: fallback
 
     # Provider plugin caching (enabled by default)
     plugin_cache: true
@@ -126,9 +137,9 @@ components:
     **Default:** `true`
   </dd>
 
-  <dt>`init_run_reconfigure`</dt>
+  <dt>`init_run_reconfigure` <em>(deprecated)</em></dt>
   <dd>
-    When `true`, Atmos adds `-reconfigure` to `terraform init` commands, updating backend configuration.
+    Deprecated in favor of `init.reconfigure` (see [Configuration Reference](#configuration-reference) below). When `init.reconfigure` is not explicitly set (at any precedence level), Atmos maps this legacy boolean: `false` behaves as `init.reconfigure: never`, and the default `true` behaves as `init.reconfigure: auto` — **not** `always`. This is the one behavior change existing projects relying on the old default will see: Atmos no longer adds `-reconfigure` to every init by default. Set `init.reconfigure: always` explicitly to keep the previous unconditional behavior.
 
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE`
     **Command-line flag:** `--init-run-reconfigure`
@@ -161,6 +172,41 @@ components:
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS`
     **Command-line flag:** `--init-pass-vars`
     **Default:** `false`
+  </dd>
+
+  <dt>`init.mode`, `init.reconfigure`, `init.upgrade`</dt>
+  <dd>
+    Control whether and how Atmos runs `terraform init` automatically before other commands, before `deploy` (when `deploy_run_init` is enabled), and before resolving [`!terraform.output`](/functions/yaml/terraform.output) or [`atmos.Component`](/functions/template/atmos.Component). All three accept `auto`, `always`, or `never`, and all three default to `auto` for unpinned projects and projects pinned to a [config edition](/cli/configuration/edition) on or after September 12, 2026; pinning an earlier edition restores `always` for `init.mode` and `never` for `init.upgrade` (Atmos's pre-this-setting behavior for each) with no config changes.
+
+    - **`init.mode`** — `auto` skips `terraform init` when nothing that affects it (root `.tf`/`.tofu` files, `.terraform.lock.hcl`, the CLI configuration, the resolved binary, relevant environment variables, and — when `init.pass_vars` is `true` — the varfile) has changed since the last successful init, and the working directory still looks initialized. `always` restores the previous unconditional behavior. `never` disables the ordinary implicit init — but unlike `--skip-init`, it does not suppress the always-forced reconfigure init that [`atmos terraform workspace`](/cli/commands/terraform/workspace) `select`/`new` needs; `--skip-init` suppresses init unconditionally, including for `workspace`.
+    - **`init.reconfigure`** — `auto` adds `-reconfigure` only when the backend configuration changed since the last init, on the first init, after a JIT working directory is re-provisioned, or for [`atmos terraform workspace`](/cli/commands/terraform/workspace). `always` adds it to every init. `never` never adds it.
+    - **`init.upgrade`** — `auto` (default) adds `-upgrade` only when Terraform or OpenTofu reports that an upgrade is required (for example, a provider version constraint was raised beyond the locked version). `never` never adds it — set this to opt out of automatic upgrades. `always` adds it to every init.
+
+    If a skipped init turns out to have been wrong — a nested module changed, or `.terraform` was altered by hand — Terraform/OpenTofu fails with a diagnostic (e.g. *"Backend initialization required"*, *"Required plugins are not installed"*) before touching state. Atmos recognizes these diagnostics, runs the init it should have run (adding `-reconfigure`/`-upgrade` when the diagnostic calls for it and the setting isn't `never`), and retries the command once. No retry happens when init was explicitly disabled (`--skip-init`, `init.mode: never`, `deploy_run_init: false`). Atmos never runs `-migrate-state` as part of this recovery. See [Automatic Initialization](/cli/commands/terraform/init#automatic-initialization) for the full behavior.
+
+    An explicit `atmos terraform init` invocation always runs, regardless of these settings, and refreshes the cached fingerprint. Deleting `.terraform` (including with [`atmos terraform clean`](/cli/commands/terraform/clean)) forces a fresh init on the next command.
+
+    **Environment variables:** `ATMOS_COMPONENTS_TERRAFORM_INIT_MODE`, `ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE`, `ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE`
+    **Command-line flags:** `--init-mode`, `--init-reconfigure`, `--init-upgrade`
+    **Default:** `auto` for all three
+  </dd>
+
+  <dt>`mocks.mode`</dt>
+  <dd>
+    Controls how [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output) lookups use a component's [`mocks`](/stacks/components/mocks) when you pass `--use-mocks` to `atmos terraform plan` or `atmos describe component`. Without `--use-mocks`, this setting has no effect.
+
+    - **`fallback`** — Atmos reads the real state or output first and returns it when it exists. The component's `mocks` value is used only when the referenced component's state is not provisioned or the requested output is missing. Credential, network, and backend errors still fail. Mocks are deep-merged under the real outputs: every value present in real state wins, and a mock fills keys missing from a real map output. Lists and scalars are never merged element by element, so a real list replaces the mock list wholesale. When neither a real value nor a mock exists, a YQ `//` default applies. Otherwise the result is the same as without mocks: for a component that was never applied and declares no matching mock, `!terraform.state` returns the not-provisioned error and `!terraform.output` returns `null`; for an output missing from provisioned state, both return `null`. Terraform does not record outputs whose value is `null` in state, so in this mode such an output resolves to the mock. If the real lookup fails with an error that is not recoverable (credentials, network, backend, initialization, or a missing Terraform binary), the error includes a hint to use `--use-mocks=always` or `mocks.mode: always`.
+    - **`always`** — Lookups resolve from `mocks` only. Atmos never initializes Terraform, authenticates, or reads a backend for those lookups, and a missing mock is an error (a YQ `//` default still applies).
+
+    The default is `fallback` for unpinned projects and projects pinned to a [config edition](/cli/configuration/edition) on or after October 1, 2026. Pinning an earlier edition restores `always`, the behavior bare `--use-mocks` had before this setting existed, with no config changes.
+
+    The value in `atmos.yaml` is case-insensitive (`Always` works). An invalid value, in `atmos.yaml` or in `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`, fails at configuration load for every command, not only when a `--use-mocks` lookup runs.
+
+    The effective value resolves in this order (highest wins): the `--use-mocks=fallback` or `--use-mocks=always` flag value, the `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE` environment variable, the value in `atmos.yaml`, then the edition-aware default. A bare `--use-mocks`, `--use-mocks=true`, or (for `atmos terraform plan`) `ATMOS_USE_MOCKS=true` turns mocks on using the resolved `mocks.mode` and does not change it.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`
+    **Command-line flag:** `--use-mocks=<mode>` (per run, on `atmos terraform plan` and `atmos describe component`). Attach the mode with `=`; `--use-mocks always` does not select a mode.
+    **Default:** `fallback` (`always` when pinned to an edition before 2026-10-01)
   </dd>
 
   <dt>`plan.skip_planfile`</dt>

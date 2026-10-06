@@ -6,9 +6,12 @@
 package startup
 
 import (
+	"fmt"
+	"os"
 	"runtime"
 
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -16,11 +19,50 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
+// legacyActionDocsURL is where the legacy-action warning sends people.
+// Deliberately the Native CI landing page itself, not the
+// /deprecated/github-actions migration hub — that hub's own pages open with
+// another "this is deprecated" banner, which reads as a dead end right after
+// the warning that sent you there. /ci is where the actual replacement
+// commands and workflow examples live, and it links onward to the specific
+// deprecated-action page (and to `atmos vendor update` for the component
+// updater) for anyone who wants the exact 1:1 mapping.
+const legacyActionDocsURL = "https://atmos.tools/ci"
+
+// noticesShownEnvVar marks that this process tree has already printed its
+// startup notices, so atmos child processes spawned afterward (workflow and
+// custom-command steps re-exec the atmos binary once per component) can skip
+// reprinting them. Mirrors the loop-guard sentinel pattern in
+// pkg/reexec/depth.go's ATMOS_REEXEC_DEPTH.
+const noticesShownEnvVar = "ATMOS_STARTUP_NOTICES_SHOWN"
+
+// AlreadyShown reports whether a top-level atmos invocation has already
+// printed its startup notices earlier in this process tree.
+func AlreadyShown() bool {
+	defer perf.Track(nil, "startup.AlreadyShown")()
+
+	return os.Getenv(noticesShownEnvVar) != ""
+}
+
+// MarkShown records that this process tree has already handled startup
+// notices. Any atmos child process spawned afterward inherits this via the
+// OS environment and skips startup banners and warn-mode experimental notices.
+// Daily experimental warnings are tracked separately per feature in the cache.
+func MarkShown() {
+	defer perf.Track(nil, "startup.MarkShown")()
+
+	_ = os.Setenv(noticesShownEnvVar, "1")
+}
+
 // PrintStartupStatus prints the Atmos version, Native CI status, Atmos Pro
 // status, and (when detected) a legacy-action warning. It is a no-op unless
 // Atmos detects it is actually running inside a CI provider.
 func PrintStartupStatus(atmosConfig *schema.AtmosConfiguration) {
 	defer perf.Track(atmosConfig, "startup.PrintStartupStatus")()
+
+	if AlreadyShown() {
+		return
+	}
 
 	if !ci.IsCI() {
 		return
@@ -51,6 +93,15 @@ func printStatusLines(atmosConfig *schema.AtmosConfiguration) {
 	}
 
 	if repo, ok := github.LegacyActionRepo(); ok {
-		ui.Warningf("Detected legacy action %s; migrate to Native CI for better performance — learn more at https://atmos.tools/ci", repo)
+		msg := fmt.Sprintf("Detected legacy action %s; migrate to Native CI for better performance — learn more at %s", repo, legacyActionDocsURL)
+		ui.Warning(msg)
+
+		// Also surface this as a real GitHub Actions annotation (not just a
+		// console line) so it shows up in the PR Checks/Files UI.
+		_ = github.NewProvider().Annotate([]provider.Annotation{{
+			Level:   provider.AnnotationWarning,
+			Title:   "Deprecated GitHub Action",
+			Message: msg,
+		}})
 	}
 }

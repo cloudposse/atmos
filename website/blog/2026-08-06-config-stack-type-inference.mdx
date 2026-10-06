@@ -7,7 +7,7 @@ tags: [enhancement, bugfix]
 
 Editing a config value from the command line is supposed to be the easy path. Type `atmos stack set
 vars.replicas 5`, expect a `5`, move on. Except a value like that used to come back out the other side as the
-string `"5"` unless you remembered to pass `--type=int` — and for `atmos stack set` specifically, that was
+string `"5"` unless you remembered to pass `--type=int` — and for [`atmos stack set`](/cli/commands/stack/stack-set) specifically, that was
 true every single time, no matter what was already there. A `true` became `"true"`. A number stayed a number
 only if you told the CLI so yourself.
 
@@ -15,10 +15,10 @@ only if you told the CLI so yourself.
 
 ## The Problem
 
-`atmos config set` already tried to guess a value's type from the Atmos config schema, but only for fields
+[`atmos config set`](/cli/commands/config/config-set) already tried to guess a value's type from the Atmos config schema, but only for fields
 the schema knows about — everything else, including the free-form `vars` and `settings` sections most people
 actually edit, fell back to a plain string with no warning. `atmos stack set` didn't even have that: it always
-wrote a string unless you passed `--type` explicitly, since component variables have no fixed schema to infer
+wrote a string unless you passed [`--type`](/cli/commands/stack/stack-set#flags) explicitly, since component variables have no fixed schema to infer
 from in the first place.
 
 On top of that, editing a value that came from an imported catalog file — the normal way Atmos stacks are

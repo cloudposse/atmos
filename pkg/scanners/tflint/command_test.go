@@ -173,15 +173,21 @@ func TestExecuteRejectsMissingInputs(t *testing.T) {
 func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 	stubInitCLIConfig(t)
 
-	originalGraph := buildTerraformGraph
-	buildTerraformGraph = func(map[string]any) (*dependency.Graph, error) {
-		return &dependency.Graph{Nodes: map[string]*dependency.Node{
-			"vpc-prod": {Component: "vpc", Stack: "prod"},
-			"vpc-dev":  {Component: "vpc", Stack: "dev"},
-			"app-dev":  {Component: "app", Stack: "dev"},
-		}}, nil
+	runtime := testRuntime()
+	runtime.DescribeStacks = func(
+		_ *schema.AtmosConfiguration, _ string, _ []string, _ []string, _ []string, _ bool, _ bool, _ bool, _ bool, _ []string, _ auth.AuthManager, _ bool,
+	) (map[string]any, error) {
+		return map[string]any{
+			"dev": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{},
+						"app": map[string]any{},
+					},
+				},
+			},
+		}, nil
 	}
-	t.Cleanup(func() { buildTerraformGraph = originalGraph })
 
 	originalRun := runTarget
 	var linted []string
@@ -192,18 +198,80 @@ func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 	}
 	t.Cleanup(func() { runTarget = originalRun })
 
-	require.NoError(t, Execute(context.Background(), testRuntime(), &schema.ConfigAndStacksInfo{ComponentFromArg: "requested", Stack: "dev"}, nil, 0))
+	require.NoError(t, Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{ComponentFromArg: "requested", Stack: "dev"}, nil, 0))
 	assert.Equal(t, []string{"app:dev", "vpc:dev"}, linted)
+}
+
+func TestExecuteSingleTargetSkipsUnrequestedDependencyGraphNodes(t *testing.T) {
+	stubInitCLIConfig(t)
+
+	runtime := testRuntime()
+	runtime.DescribeStacks = func(
+		_ *schema.AtmosConfiguration, _ string, components []string, _ []string, _ []string, _ bool, _ bool, _ bool, _ bool, _ []string, _ auth.AuthManager, _ bool,
+	) (map[string]any, error) {
+		assert.Equal(t, []string{"sqs-queue"}, components)
+		return map[string]any{
+			"dev": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"sqs-queue": map[string]any{
+							"dependencies": map[string]any{
+								"components": []any{map[string]any{"name": "sns-topic"}},
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	}
+
+	originalRun := runTarget
+	var linted []string
+	runTarget = func(_ context.Context, _ *targetExecution, target *dependency.Node) error {
+		linted = append(linted, target.Component+":"+target.Stack)
+		return nil
+	}
+	t.Cleanup(func() { runTarget = originalRun })
+
+	err := Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{ComponentFromArg: "sqs-queue", Stack: "dev"}, nil, 0)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sqs-queue:dev"}, linted)
+}
+
+func TestExecuteSkipsAbstractAndDisabledComponents(t *testing.T) {
+	stubInitCLIConfig(t)
+
+	runtime := testRuntime()
+	runtime.DescribeStacks = func(
+		_ *schema.AtmosConfiguration, _ string, _ []string, _ []string, _ []string, _ bool, _ bool, _ bool, _ bool, _ []string, _ auth.AuthManager, _ bool,
+	) (map[string]any, error) {
+		return map[string]any{
+			"dev": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"active":   map[string]any{},
+						"abstract": map[string]any{"metadata": map[string]any{"type": "abstract"}},
+						"disabled": map[string]any{"metadata": map[string]any{"enabled": false}},
+					},
+				},
+			},
+		}, nil
+	}
+
+	originalRun := runTarget
+	var linted []string
+	runTarget = func(_ context.Context, _ *targetExecution, target *dependency.Node) error {
+		linted = append(linted, target.Component)
+		return nil
+	}
+	t.Cleanup(func() { runTarget = originalRun })
+
+	require.NoError(t, Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{}, nil, 0))
+	assert.Equal(t, []string{"active"}, linted)
 }
 
 func TestExecuteDisablesComponentAuthDuringStackDiscovery(t *testing.T) {
 	stubInitCLIConfig(t)
-
-	originalGraph := buildTerraformGraph
-	buildTerraformGraph = func(map[string]any) (*dependency.Graph, error) {
-		return &dependency.Graph{}, nil
-	}
-	t.Cleanup(func() { buildTerraformGraph = originalGraph })
 
 	runtime := testRuntime()
 	runtime.SetupAuth = func(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {

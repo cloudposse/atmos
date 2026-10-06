@@ -12,7 +12,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -107,21 +109,52 @@ type describeStacksProcessor struct {
 	// nil and reported here instead of aborting the whole describe-stacks call. See
 	// ProcessCustomYamlTagsLenient and ExecuteDescribeStacksWithOptions.
 	onWarning func(DegradationWarning)
+	// degradeAuthErrors mirrors onWarning's lenient/strict split specifically for
+	// resolveComponentAuthManager's own construction failures. withDegradation defaults this
+	// to true (matching the original, single-flag list/describe --error-mode=warn behavior);
+	// withStrictAuth flips it back to false for callers (the Terraform --all/--query preflight)
+	// that want YAML-function values to degrade but a component's own unresolvable identity to
+	// stay fatal.
+	degradeAuthErrors bool
 	// deferredContexts holds every component's deferred-merge contexts, recovered from the
 	// FindStacksMap cache in ExecuteDescribeStacks. processComponentEntry looks up each
 	// component's entry to run Stage 3 (resolveDeferredYamlFunctions) after Stage 2 — this
 	// processor does not go through processStacks (utils.go), so it must resolve deferred
 	// YAML functions itself instead of silently losing their contribution (#2888).
 	deferredContexts AllStacksDeferredContexts
+	// evalSections is the opt-in evaluation-scope filter set by
+	// ExecuteDescribeStacksWithEvalSections: when non-nil, template rendering and YAML-function
+	// resolution (Stages 2/3, plus Go-template rendering) only run for these top-level component
+	// sections -- see deferred.IsSectionRequired. This is DELIBERATELY separate from `sections` (which
+	// only trims the OUTPUT after full evaluation and is unaffected by this field): the two solve
+	// different problems and reusing `sections` for both would silently change the long-standing
+	// behavior of `atmos describe stacks --sections=X` (today a pure output filter that never
+	// skips evaluation). Only the `list` commands ever set evalSections; every other caller
+	// leaves it nil and gets exactly the eager-evaluation behavior that predates this field.
+	evalSections []string
+	evalPaths    [][]string
 }
 
 // withDegradation switches the processor to lenient YAML-function processing: recoverable
 // per-value errors are substituted with nil and reported via onWarning instead of failing
 // the whole describe-stacks call. Passing a nil onWarning restores the default strict
-// behavior (equivalent to not calling withDegradation at all).
+// behavior (equivalent to not calling withDegradation at all). A non-nil onWarning also
+// defaults degradeAuthErrors to true (the original, single-flag behavior); chain
+// withStrictAuth to opt back out just for component-specific auth-manager failures.
 func (p *describeStacksProcessor) withDegradation(onWarning func(DegradationWarning)) *describeStacksProcessor {
 	p.onWarning = onWarning
+	p.degradeAuthErrors = onWarning != nil
 	return p
+}
+
+// withStrictAuth keeps a component-specific auth-manager construction failure fatal even
+// though withDegradation has enabled lenient YAML-function processing. Used by the
+// Terraform --all/--query preflight (DescribeStacksErrorOptions.StrictAuth): a not-yet-applied
+// dependency's `!terraform.state` value should degrade, but a component whose own identity
+// can't be resolved should still abort before real Terraform commands run with the wrong
+// (or a merely inherited) credential set.
+func (p *describeStacksProcessor) withStrictAuth() {
+	p.degradeAuthErrors = false
 }
 
 // newDescribeStacksProcessor creates a processor with an empty result map.
@@ -206,6 +239,9 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	componentName, stackName string,
 ) (auth.AuthManager, error) {
 	componentAuthManager := p.authManager
+	if authdeferred.IsDeferred(p.atmosConfig.AuthManager) {
+		return componentAuthManager, nil
+	}
 	if p.authDisabled || !shouldResolvePerComponentAuth(p.processTemplates, p.processYamlFunctions) {
 		return componentAuthManager, nil
 	}
@@ -230,7 +266,7 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	}
 	resolved, createErr := resolver(p.atmosConfig, componentSection, componentName, stackName, p.authManager)
 	if createErr != nil {
-		if p.onWarning != nil {
+		if p.onWarning != nil && p.degradeAuthErrors {
 			p.onWarning(DegradationWarning{
 				Stack:     stackName,
 				Component: componentName,
@@ -429,6 +465,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 
 	info := buildConfigAndStacksInfo(componentName, stackFileName, stackManifestName, secs)
+	info.EvaluationPaths = deferred.ExpandEvaluationPaths(componentSection, p.evalPaths, p.atmosConfig.Templates.Settings.Delimiters...)
 
 	// Ensure the component key is present in the info's ComponentSection.
 	if comp, ok := info.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
@@ -528,7 +565,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 
 	// Process Go templates.
 	if p.processTemplates {
-		componentSection, err = processComponentSectionTemplates(p.atmosConfig, &info, componentSection, secs.settings)
+		componentSection, err = processComponentSectionTemplates(p.atmosConfig, &info, componentSection, secs.settings, p.evaluationSections(&info), p.onWarning)
 		if err != nil {
 			return err
 		}
@@ -554,6 +591,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 			skip,
 			p.onWarning,
 			!p.resolveSecrets && iolib.MaskingEnabled(),
+			p.evaluationSections(&info),
 		)
 		if err != nil {
 			return err
@@ -614,7 +652,7 @@ func (p *describeStacksProcessor) resolveDeferredForComponent(
 	for k, v := range info.ComponentSection {
 		componentTemplateContext[k] = v
 	}
-	if err := resolveDeferredYamlFunctions(p.atmosConfig, info, &settingsSectionStruct, componentTemplateContext, skip); err != nil {
+	if err := resolveDeferredYamlFunctions(p.atmosConfig, info, &settingsSectionStruct, componentTemplateContext, skip, p.evaluationSections(info), p.onWarning); err != nil {
 		return nil, err
 	}
 
@@ -1029,16 +1067,46 @@ func addSectionsToComponentEntry(
 
 // processComponentSectionTemplates applies Go template processing to a component section
 // and returns the rendered section as a map.
+//
+// The evalSections parameter is the opt-in evaluation-scope filter (see deferred.IsSectionRequired): when
+// non-nil, only the top-level sections it names are serialized into the template SOURCE that
+// text/template actually parses and executes -- any atmos.Component/atmos.GomplateDatasource/etc.
+// call embedded in a skipped section's raw text is never invoked, which is the actual fix for
+// https://github.com/cloudposse/atmos/issues/3068. The template CONTEXT (the "." root available
+// to {{ }} expressions) is still built from the full, unfiltered componentSection below, so a
+// required section's template can still plain-field-access into a skipped section's raw (merged
+// but unrendered) value -- see the accepted cross-section limitation documented on
+// deferred.IsSectionRequired's callers.
 func processComponentSectionTemplates(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	componentSection map[string]any,
 	settingsSection map[string]any,
+	evalSections []string,
+	warnings ...func(DegradationWarning),
 ) (map[string]any, error) {
+	evalInput, evalExcluded := deferred.SplitSectionsByRequirement(componentSection, evalSections)
+	evalInput, fieldExcluded := deferred.SplitEvaluationFields(evalInput, info.EvaluationPaths)
+
 	// Sections computed from Terraform source code (`component_info`) are not Atmos
 	// configuration and must not be rendered as `Go` templates. They stay in the template
 	// context below, only the rendered input excludes them. See #2145.
-	templateInput, nonTemplatedSections := splitNonTemplatedSections(componentSection)
+	templateInput, nonTemplatedSections := splitNonTemplatedSections(evalInput)
+
+	if len(templateInput) == 0 {
+		// Nothing needs template rendering (e.g. no column references any section). Skip
+		// ProcessTmplWithDatasources and the YAML round-trip entirely and hand back every section
+		// untouched -- this is the fast path that avoids the atmos.Component/GomplateDatasource
+		// slow path in #3068 when it isn't needed at all.
+		//
+		// Size the map from a single len() — CodeQL's allocation-size-overflow rule flags
+		// len(nonTemplatedSections)+len(evalExcluded); the map grows as needed for the rest.
+		result := make(map[string]any, len(nonTemplatedSections))
+		restoreNonTemplatedSections(result, nonTemplatedSections)
+		restoreNonTemplatedSections(result, evalExcluded)
+		deferred.RestoreEvaluationFields(result, fieldExcluded)
+		return result, nil
+	}
 
 	componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
 		templateInput,
@@ -1082,6 +1150,19 @@ func processComponentSectionTemplates(
 		true,
 	)
 	if err != nil {
+		if authdeferred.IsDeferred(atmosConfig.AuthManager) && canDegradeValue(atmosConfig, err) && len(warnings) > 0 && warnings[0] != nil {
+			converted, renderErr := renderDeferredTemplateValues(templateInput, &deferredTemplateOptions{
+				config: atmosConfig, info: info, settings: &settingsSectionStruct,
+				templateContext: componentTemplateContext, onWarning: warnings[0],
+			})
+			if renderErr != nil {
+				return nil, renderErr
+			}
+			restoreNonTemplatedSections(converted, nonTemplatedSections)
+			restoreNonTemplatedSections(converted, evalExcluded)
+			deferred.RestoreEvaluationFields(converted, fieldExcluded)
+			return converted, nil
+		}
 		return nil, err
 	}
 
@@ -1100,6 +1181,8 @@ func processComponentSectionTemplates(
 	}
 
 	restoreNonTemplatedSections(converted, nonTemplatedSections)
+	restoreNonTemplatedSections(converted, evalExcluded)
+	deferred.RestoreEvaluationFields(converted, fieldExcluded)
 
 	return converted, nil
 }
@@ -1108,6 +1191,14 @@ func processComponentSectionTemplates(
 // When onWarning is non-nil, recoverable per-value errors are tolerated — see
 // ProcessCustomYamlTagsLenient. For example, a Terraform backend might not yet be provisioned.
 // The secretsMaskOnly parameter selects the inspection behavior that replaces !secret values without a backend lookup.
+//
+// The evalSections parameter is the opt-in evaluation-scope filter (see deferred.IsSectionRequired): when
+// non-nil, only the top-level sections it names are walked for
+// `!terraform.state`/`!terraform.output`/`!store`/etc. YAML functions. Skipped sections are
+// restored untouched afterward. Stage 2's YAML-function resolution has no cross-section
+// dependency -- each tag resolves independently of its siblings (only a shared ResolutionContext
+// exists, for cycle detection) -- so narrowing its input map is safe without needing a separate
+// "context" the way Go-template rendering does.
 func processComponentSectionYAMLFunctions(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
@@ -1115,14 +1206,19 @@ func processComponentSectionYAMLFunctions(
 	skip []string,
 	onWarning func(DegradationWarning),
 	secretsMaskOnly bool,
+	evalSections []string,
 ) (map[string]any, error) {
 	info.SecretsMaskOnly = secretsMaskOnly
+
+	evalInput, evalExcluded := deferred.SplitSectionsByRequirement(componentSection, evalSections)
+	evalInput, fieldExcluded := deferred.SplitEvaluationFields(evalInput, info.EvaluationPaths)
+
 	var converted map[string]any
 	var err error
 	if onWarning != nil {
 		converted, err = ProcessCustomYamlTagsLenient(
 			atmosConfig,
-			componentSection,
+			evalInput,
 			info.Stack,
 			skip,
 			info,
@@ -1131,7 +1227,7 @@ func processComponentSectionYAMLFunctions(
 	} else {
 		converted, err = ProcessCustomYamlTags(
 			atmosConfig,
-			componentSection,
+			evalInput,
 			info.Stack,
 			skip,
 			info,
@@ -1140,6 +1236,8 @@ func processComponentSectionYAMLFunctions(
 	if err != nil {
 		return nil, err
 	}
+	deferred.RestoreEvaluationFields(converted, fieldExcluded)
+	restoreNonTemplatedSections(converted, evalExcluded)
 	return converted, nil
 }
 
@@ -1309,4 +1407,20 @@ func stackHasNonEmptyComponents(componentsSection map[string]any) bool {
 		}
 	}
 	return false
+}
+
+func (p *describeStacksProcessor) evaluationSections(info *schema.ConfigAndStacksInfo) []string {
+	if p.evalPaths == nil {
+		return p.evalSections
+	}
+	if info.EvaluationPaths == nil {
+		return nil
+	}
+	sections := make([]string, 0)
+	for _, path := range info.EvaluationPaths {
+		if len(path) > 0 && !slices.Contains(sections, path[0]) {
+			sections = append(sections, path[0])
+		}
+	}
+	return sections
 }

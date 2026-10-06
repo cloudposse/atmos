@@ -24,6 +24,8 @@ type body = matchers.StructMatcher
 
 // TestPact_UploadAffectedStacks verifies the consumer contract for POST /api/v1/affected-stacks.
 func TestPact_UploadAffectedStacks(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -90,6 +92,8 @@ func TestPact_UploadAffectedStacks(t *testing.T) {
 
 // TestPact_LockStack verifies the consumer contract for POST /api/v1/locks.
 func TestPact_LockStack(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -131,6 +135,8 @@ func TestPact_LockStack(t *testing.T) {
 
 // TestPact_UnlockStack verifies the consumer contract for DELETE /api/v1/locks.
 func TestPact_UnlockStack(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -159,6 +165,8 @@ func TestPact_UnlockStack(t *testing.T) {
 
 // TestPact_ExchangeOIDCToken verifies the consumer contract for POST /api/v1/auth/github-oidc.
 func TestPact_ExchangeOIDCToken(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -195,6 +203,8 @@ func TestPact_ExchangeOIDCToken(t *testing.T) {
 
 // TestPact_UploadInstances verifies the consumer contract for POST /api/v1/instances.
 func TestPact_UploadInstances(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -242,6 +252,8 @@ func TestPact_UploadInstances(t *testing.T) {
 
 // TestPact_UploadInstanceStatus verifies the consumer contract for PATCH /api/v1/repos/{owner}/{repo}/instances.
 func TestPact_UploadInstanceStatus(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -279,6 +291,8 @@ func TestPact_UploadInstanceStatus(t *testing.T) {
 
 // TestPact_CreateCommit verifies the consumer contract for POST /api/v1/git/commit.
 func TestPact_CreateCommit(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -336,6 +350,8 @@ func TestPact_CreateCommit(t *testing.T) {
 // TestPact_GetGitHubOIDCToken verifies the consumer contract for GET ACTIONS_ID_TOKEN_REQUEST_URL.
 // A TLS mock provider is required because buildOIDCRequestURL enforces the https:// scheme.
 func TestPact_GetGitHubOIDCToken(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newTLSMockProvider(t)
 
 	err := mockProvider.
@@ -378,6 +394,8 @@ func TestPact_GetGitHubOIDCToken(t *testing.T) {
 // wrapper as a multi-component run, just with a one-element list — never a
 // bare TerraformExecData object at the top level.
 func TestPact_UploadExecMetadata(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -540,6 +558,8 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 // `-detailed-exitcode` convention the way `plan` does, so 0 covers both
 // "succeeded" and "succeeded with changes applied").
 func TestPact_UploadExecMetadata_Apply(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -670,6 +690,8 @@ func TestPact_UploadExecMetadata_Apply(t *testing.T) {
 // at the contract level so a provider-side error-handling regression on the
 // apply failure path is caught here too.
 func TestPact_UploadExecMetadata_ApplyFailure(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -786,6 +808,8 @@ func TestPact_UploadExecMetadata_ApplyFailure(t *testing.T) {
 // extension (e.g. a non-terraform command) — `data` is absent entirely,
 // per spec Acceptance Scenario US3.4.
 func TestPact_UploadExecMetadata_NoData(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -858,6 +882,8 @@ func TestPact_UploadExecMetadata_NoData(t *testing.T) {
 // model (no batch_id/batch_index/batch_total anywhere). MaxPayloadBytes is
 // set to 1 to deterministically force this path regardless of envelope size.
 func TestPact_UploadExecMetadata_BlobURL(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	const executionID = "d5d3a4d2-3456-4c3d-ae3f-34567890abcd"
@@ -996,6 +1022,8 @@ func TestPact_UploadExecMetadata_BlobURL(t *testing.T) {
 // to prove the list itself, not just the wrapper. Per-component entries omit
 // their own "version" field — it's redundant with the outer wrapper's.
 func TestPact_UploadExecMetadata_MultiComponent(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -1117,6 +1145,8 @@ func TestPact_UploadExecMetadata_MultiComponent(t *testing.T) {
 // structured Data shape (`{version, stacks}` — FR-006b, research.md Decision
 // 22, contracts/interactions.md interaction 12), inline mode.
 func TestPact_UploadExecMetadata_DescribeAffected(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -1211,6 +1241,8 @@ func TestPact_UploadExecMetadata_DescribeAffected(t *testing.T) {
 // interactions 13/14), constructed directly rather than routed through the
 // real size-threshold decision code (research.md Decision 25).
 func TestPact_UploadExecMetadata_DescribeAffected_BlobURL(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	const executionID = "f7f5c6f4-5678-4e5f-cf5b-567890abcdef"
@@ -1314,6 +1346,8 @@ func TestPact_UploadExecMetadata_DescribeAffected_BlobURL(t *testing.T) {
 // contracts/interactions.md interaction 15), inline mode. This shape is only
 // ever present when `--upload` was passed for the invocation.
 func TestPact_UploadExecMetadata_ListInstances(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	err := mockProvider.
@@ -1402,6 +1436,8 @@ func TestPact_UploadExecMetadata_ListInstances(t *testing.T) {
 // constructed directly rather than routed through the real size-threshold
 // decision code (research.md Decision 25).
 func TestPact_UploadExecMetadata_ListInstances_BlobURL(t *testing.T) {
+	t.Parallel()
+
 	mockProvider := newHTTPMockProvider(t)
 
 	const executionID = "b9b7e8b6-789a-4a7b-ea7d-7890abcdef01"

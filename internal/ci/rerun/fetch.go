@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/cli/go-gh/v2/pkg/api"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -54,6 +56,23 @@ func FetchJobs(ctx context.Context, client RESTClient, repo, runID, runAttempt s
 		path = nextLink(resp.Header.Get("Link"))
 	}
 	return jobs, nil
+}
+
+// IsTransient reports whether an error from a RESTClient request is worth
+// retrying: a 5xx response from GitHub (the jobs API has answered HTTP 502
+// mid-run, failing a required check on a run whose jobs had all passed) or a
+// transport-level failure that never produced a response. 4xx responses are
+// definitive, and a cancelled or expired context must stop the caller, so
+// neither counts as transient.
+func IsTransient(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var httpErr *api.HTTPError
+	if errors.As(err, &httpErr) {
+		return httpErr.StatusCode >= http.StatusInternalServerError
+	}
+	return true
 }
 
 func decodeJobsResponse(resp *http.Response) ([]Job, error) {

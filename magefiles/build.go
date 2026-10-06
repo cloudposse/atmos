@@ -55,7 +55,8 @@ var goModDownloadSleep = time.Sleep
 // Binary builds the atmos binary for target ("default", "linux", "windows",
 // "macos", or "macos-intel"), embedding version (and the current commit, when
 // building from a git checkout) via -ldflags. This is the Go implementation
-// backing the `atmos build binary` custom command.
+// backing the `atmos build binary` custom command. ATMOS_BUILD_NO_CACHE=true
+// forces recompilation of all packages without deleting the shared Go cache.
 func (Build) Binary(target, version string) error {
 	if target == "" {
 		target = "default"
@@ -104,7 +105,11 @@ func (Build) Binary(target, version string) error {
 		versionLdflagsPackage, version, versionLdflagsPackage, strings.TrimSpace(commit),
 	)
 
-	return runIn(root, buildEnv, "go", "build", "-o", targetConfig.Output, "-v", "-ldflags", ldflags)
+	args := []string{"build", "-o", targetConfig.Output, "-v", "-ldflags", ldflags}
+	if os.Getenv("ATMOS_BUILD_NO_CACHE") == "true" {
+		args = append(args, "-a")
+	}
+	return runIn(root, buildEnv, "go", args...)
 }
 
 // buildTarget is the GOOS/GOARCH/output-path a build target resolves to.

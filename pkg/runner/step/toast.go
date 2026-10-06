@@ -6,7 +6,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // ToastHandler displays a styled message with icon (success, info, warning, error).
@@ -39,14 +38,14 @@ func (h *ToastHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	// Display based on level (default to info).
 	switch strings.ToLower(step.Level) {
 	case "success":
-		ui.Success(content)
+		vars.UI().Success(content)
 	case "warning", "warn":
-		ui.Warning(content)
+		vars.UI().Warning(content)
 	case "error":
-		ui.Error(content)
+		vars.UI().Error(content)
 	default:
 		// Default to info for "", "info", or any other value.
-		ui.Info(content)
+		vars.UI().Info(content)
 	}
 
 	return NewStepResult(content), nil

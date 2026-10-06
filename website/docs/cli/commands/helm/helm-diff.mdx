@@ -29,6 +29,9 @@ atmos helm diff monitoring -s plat-ue2-dev --from-manifest=current.yaml
 # Diff against the GitOps deployment repository (offline, git access only).
 atmos helm diff monitoring -s plat-ue2-dev --against=target
 
+# Preview an apply with transient Helm values.
+atmos helm diff monitoring -s plat-ue2-dev -f incident-values.yaml --set image.tag=2026.09.09
+
 # Diff all components tagged "production" (composes with --all/--affected)
 atmos helm diff --all --tags production
 ```
@@ -66,6 +69,9 @@ precedence (`--from-manifest` → `--against` → deployed release):
 
   <dt>`--dependency-update` <em>(optional)</em></dt>
   <dd>Fetch declared chart dependencies when they are missing. This may access dependency repositories and update the chart's <code>charts/</code> directory and lock file.</dd>
+
+  <dt>`-f` / `--values`, `--set`, `--set-string`, `--set-file`, `--set-json`, `--set-literal` <em>(optional)</em></dt>
+  <dd>Repeatable Helm-compatible value overrides for this preview. Reuse them with <code>apply</code> to preview the exact deployment; they do not modify stack configuration. See <a href="/cli/commands/helm/usage#runtime-value-overrides">runtime value overrides</a>.</dd>
 
   <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
   <dd>Process multiple Helm components in dependency order.</dd>

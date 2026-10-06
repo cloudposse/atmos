@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [enhancement, security, bugfix]
 ---
 
-Security scanner hooks (Checkov, Trivy, KICS) now write their findings to the GitHub Actions job step summary automatically — so scan results show up in the pipeline run instead of being buried in the `atmos terraform plan` log stream. The official Atmos Docker image was also updated so Checkov runs without a glibc error.
+Security scanner hooks (Checkov, Trivy, KICS) now write their findings to the GitHub Actions job step summary automatically — so scan results show up in the pipeline run instead of being buried in the [`atmos terraform plan`](/cli/commands/terraform/plan) log stream. The official Atmos Docker image was also updated so Checkov runs without a glibc error.
 
 <!--truncate-->
 
@@ -50,6 +50,8 @@ And the Docker image now builds on `debian:trixie-slim` (glibc 2.41), so Checkov
 ## How to Use It
 
 Nothing to configure. Run your existing scanner hooks in a GitHub Actions workflow and open the job summary on the run — the findings table is there. See the [hooks documentation](/stacks/hooks#format-symmetry) for details on where summaries are rendered.
+
+For usage and configuration, see [CI Job Summaries](/cli/configuration/ci/summary).
 
 ## Get Involved
 

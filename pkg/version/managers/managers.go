@@ -203,9 +203,29 @@ func Plan(ctx context.Context, opts *RunOptions) ([]PlannedChange, error) {
 		}
 	}
 	if len(errs) > 0 {
-		return nil, errors.Join(errs...)
+		return nil, withheldChangesError(errs, planned)
 	}
 	return planned, nil
+}
+
+// withheldChangesError joins the rules that failed to plan (preserving each
+// one's hints -- see errUtils.JoinPreservingHints) and, when other rules
+// planned real changes, attaches a hint naming them. Apply is atomic across
+// every configured rule: a single broken rule withholds every other rule's
+// otherwise-valid changes too, so a user needs to see that explicitly rather
+// than just the one error that blocked the whole run.
+func withheldChangesError(errs []error, withheld []PlannedChange) error {
+	joined := errUtils.JoinPreservingHints(errs...)
+	if len(withheld) == 0 {
+		return joined
+	}
+	paths := make([]string, len(withheld))
+	for i := range withheld {
+		paths[i] = fmt.Sprintf("%s (%s)", withheld[i].Path, withheld[i].Manager)
+	}
+	return errUtils.Build(joined).
+		WithHintf("%d other planned change(s) were withheld because of the error(s) above: %s", len(withheld), strings.Join(paths, ", ")).
+		Err()
 }
 
 // fileRules returns the configured version.files rules, or one default rule

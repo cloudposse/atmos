@@ -10,6 +10,8 @@ import (
 )
 
 func TestExecuteBashCommandTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -30,6 +32,8 @@ func TestExecuteBashCommandTool_Interface(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_MissingParameter(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -46,6 +50,8 @@ func TestExecuteBashCommandTool_Execute_MissingParameter(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_EmptyCommand(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -63,6 +69,8 @@ func TestExecuteBashCommandTool_Execute_EmptyCommand(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_ValidCommand(t *testing.T) {
+	t.Parallel()
+
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping bash test on Windows")
 	}
@@ -86,6 +94,8 @@ func TestExecuteBashCommandTool_Execute_ValidCommand(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_BlacklistedCommand(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp",
 	}
@@ -119,6 +129,8 @@ func TestExecuteBashCommandTool_Execute_BlacklistedCommand(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_WorkingDirectory(t *testing.T) {
+	t.Parallel()
+
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping test that requires bash on Windows")
 	}
@@ -143,6 +155,8 @@ func TestExecuteBashCommandTool_Execute_WorkingDirectory(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_CommandFails(t *testing.T) {
+	t.Parallel()
+
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping test that requires bash on Windows")
 	}
@@ -166,6 +180,8 @@ func TestExecuteBashCommandTool_Execute_CommandFails(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_ShellFeatures(t *testing.T) {
+	t.Parallel()
+
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping test that requires bash on Windows")
 	}
@@ -188,6 +204,8 @@ func TestExecuteBashCommandTool_Execute_ShellFeatures(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_GitCommand(t *testing.T) {
+	t.Parallel()
+
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping test that requires bash on Windows")
 	}

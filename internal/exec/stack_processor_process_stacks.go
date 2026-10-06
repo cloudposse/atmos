@@ -1070,6 +1070,7 @@ func ProcessStackConfig(
 					GlobalMetadata:           globalMetadataSection,
 					GlobalComponentRetry:     globalRetrySection,
 					GlobalCommand:            helmfileCommand,
+					GlobalPlugins:            globalHelmfileSection[cfg.PluginsSectionName],
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
 				}, nil
@@ -1267,6 +1268,7 @@ func ProcessStackConfig(
 					GlobalMetadata:             globalMetadataSection,
 					GlobalComponentRetry:       globalRetrySection,
 					GlobalCommand:              helmCommand,
+					GlobalPlugins:              globalHelmSection[cfg.PluginsSectionName],
 					AtmosGlobalAuthMap:         atmosAuthConfig,
 					GlobalAndTerraformHooks:    globalAndHelmHooks,
 					GlobalAndTerraformGenerate: globalAndHelmGenerate,

@@ -12,7 +12,7 @@ Interactive component selection now filters out non-deployable components.
 
 ## What Changed
 
-When using `atmos terraform plan -s stack-name` without specifying a component, the interactive
+When using [`atmos terraform plan -s stack-name`](/cli/commands/terraform/plan) without specifying a component, the interactive
 "Choose a component" menu now correctly filters the component list:
 
 - **Abstract components** (`metadata.type: abstract`) are hidden - they're templates, not deployable
@@ -29,3 +29,5 @@ that couldn't actually be deployed.
 
 Tab completion for component arguments also uses the same filtering logic, so you'll only see
 valid, deployable components when completing `atmos terraform plan -s stack <TAB>`.
+
+For usage and configuration, see [atmos terraform](/cli/commands/terraform/usage).

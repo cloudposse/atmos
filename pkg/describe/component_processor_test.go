@@ -26,6 +26,8 @@ func logOnFailure(t *testing.T, result map[string]any) {
 }
 
 func TestProcessComponentInStack(t *testing.T) {
+	t.Parallel()
+
 	component := "infra/vpc"
 	stack := "tenant1-ue2-dev"
 
@@ -36,6 +38,8 @@ func TestProcessComponentInStack(t *testing.T) {
 }
 
 func TestProcessComponentInStackReturnsVars(t *testing.T) {
+	t.Parallel()
+
 	component := "top-level-component1"
 	stack := "tenant1-ue2-dev"
 
@@ -51,6 +55,8 @@ func TestProcessComponentInStackReturnsVars(t *testing.T) {
 }
 
 func TestProcessComponentInStackReturnsWorkspace(t *testing.T) {
+	t.Parallel()
+
 	component := "test/test-component-override-3"
 	stack := "tenant1-ue2-dev"
 
@@ -64,6 +70,8 @@ func TestProcessComponentInStackReturnsWorkspace(t *testing.T) {
 }
 
 func TestProcessComponentInStackErrorCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		component string
@@ -75,6 +83,8 @@ func TestProcessComponentInStackErrorCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, err := ProcessComponentInStack(tt.component, tt.stack, "", "")
 			assert.Error(t, err)
 		})
@@ -82,6 +92,8 @@ func TestProcessComponentInStackErrorCases(t *testing.T) {
 }
 
 func TestProcessComponentFromContext(t *testing.T) {
+	t.Parallel()
+
 	result, err := ProcessComponentFromContext(&ComponentFromContextParams{
 		Component:   "infra/vpc",
 		Tenant:      "tenant1",
@@ -94,6 +106,8 @@ func TestProcessComponentFromContext(t *testing.T) {
 }
 
 func TestProcessComponentFromContextReturnsVars(t *testing.T) {
+	t.Parallel()
+
 	result, err := ProcessComponentFromContext(&ComponentFromContextParams{
 		Component:   "top-level-component1",
 		Tenant:      "tenant1",
@@ -111,11 +125,15 @@ func TestProcessComponentFromContextReturnsVars(t *testing.T) {
 }
 
 func TestProcessComponentFromContextNilParams(t *testing.T) {
+	t.Parallel()
+
 	_, err := ProcessComponentFromContext(nil)
 	assert.Error(t, err)
 }
 
 func TestProcessComponentFromContextErrorCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		params *ComponentFromContextParams
@@ -142,6 +160,8 @@ func TestProcessComponentFromContextErrorCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, err := ProcessComponentFromContext(tt.params)
 			assert.Error(t, err)
 		})
@@ -149,6 +169,8 @@ func TestProcessComponentFromContextErrorCases(t *testing.T) {
 }
 
 func TestProcessComponentInStackMatchesFromContext(t *testing.T) {
+	t.Parallel()
+
 	component := "infra/vpc"
 	stack := "tenant1-ue2-dev"
 
@@ -173,6 +195,8 @@ func TestProcessComponentInStackMatchesFromContext(t *testing.T) {
 }
 
 func TestProcessComponentInStackTenant2(t *testing.T) {
+	t.Parallel()
+
 	component := "infra/vpc"
 	stack := "tenant2-ue2-dev"
 
@@ -188,6 +212,8 @@ func TestProcessComponentInStackTenant2(t *testing.T) {
 }
 
 func TestProcessComponentFromContextTenant2(t *testing.T) {
+	t.Parallel()
+
 	result, err := ProcessComponentFromContext(&ComponentFromContextParams{
 		Component:   "infra/vpc",
 		Tenant:      "tenant2",
@@ -203,6 +229,8 @@ func TestProcessComponentFromContextTenant2(t *testing.T) {
 }
 
 func TestProcessComponentInStackDerivedComponent(t *testing.T) {
+	t.Parallel()
+
 	component := "derived-component-3"
 	stack := "tenant1-ue2-test-1"
 
@@ -213,6 +241,8 @@ func TestProcessComponentInStackDerivedComponent(t *testing.T) {
 }
 
 func TestProcessComponentInStackServiceIamRole(t *testing.T) {
+	t.Parallel()
+
 	component := "service-iam-role/webservices/prod"
 	stack := "tenant2-ue2-prod"
 
@@ -227,6 +257,8 @@ func TestProcessComponentInStackServiceIamRole(t *testing.T) {
 // in ProcessComponentFromContext.
 
 func TestProcessComponentInStackWithNameTemplate(t *testing.T) {
+	t.Parallel()
+
 	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "locals-logical-names")
 	component := "vpc"
 	stack := "dev-us-east-1"
@@ -242,6 +274,8 @@ func TestProcessComponentInStackWithNameTemplate(t *testing.T) {
 }
 
 func TestProcessComponentFromContextWithNameTemplate(t *testing.T) {
+	t.Parallel()
+
 	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "locals-logical-names")
 
 	result, err := ProcessComponentFromContext(&ComponentFromContextParams{
@@ -260,6 +294,8 @@ func TestProcessComponentFromContextWithNameTemplate(t *testing.T) {
 }
 
 func TestProcessComponentFromContextWithNameTemplateInvalidContext(t *testing.T) {
+	t.Parallel()
+
 	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "locals-logical-names")
 
 	_, err := ProcessComponentFromContext(&ComponentFromContextParams{
@@ -272,6 +308,8 @@ func TestProcessComponentFromContextWithNameTemplateInvalidContext(t *testing.T)
 }
 
 func TestProcessComponentFromContextMatchesStackWithNameTemplate(t *testing.T) {
+	t.Parallel()
+
 	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "locals-logical-names")
 
 	resultByStack, err := ProcessComponentInStack("vpc", "prod-us-west-2", atmosCliConfigPath, "")
@@ -299,11 +337,14 @@ func TestProcessComponentFromContextMatchesStackWithNameTemplate(t *testing.T) {
 // verifying that disabling one flag does not affect the other.
 
 func TestProcessComponentInStackTemplatesDisabledOnly(t *testing.T) {
+	t.Parallel()
+
 	// Uses stack-templates fixture where component-1 has Go templates in vars:
 	//   foo: "{{ .settings.config.a }}"  → resolves to "component-1-a" when templates enabled
 	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "stack-templates")
 
-	result, err := ProcessComponentInStack("component-1", "nonprod", atmosCliConfigPath, "",
+	result, err := ProcessComponentInStack(
+		"component-1", "nonprod", atmosCliConfigPath, "",
 		WithProcessTemplates(false),
 		WithProcessYamlFunctions(true),
 	)
@@ -321,10 +362,13 @@ func TestProcessComponentInStackTemplatesDisabledOnly(t *testing.T) {
 }
 
 func TestProcessComponentInStackTemplatesEnabledOnly(t *testing.T) {
+	t.Parallel()
+
 	// Same fixture, but with templates enabled — verifies the templates are actually resolved
 	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "stack-templates")
 
-	result, err := ProcessComponentInStack("component-1", "nonprod", atmosCliConfigPath, "",
+	result, err := ProcessComponentInStack(
+		"component-1", "nonprod", atmosCliConfigPath, "",
 		WithProcessTemplates(true),
 		WithProcessYamlFunctions(false),
 	)
@@ -342,12 +386,15 @@ func TestProcessComponentInStackTemplatesEnabledOnly(t *testing.T) {
 }
 
 func TestProcessComponentInStackYamlFunctionsDisabledOnly(t *testing.T) {
+	t.Parallel()
+
 	// Uses atmos-template-yaml-function fixture where test-basic-template has !template YAML tags:
 	//   simple_string: !template "hello-world"
 	//   json_number: !template '42'
 	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-template-yaml-function")
 
-	result, err := ProcessComponentInStack("test-basic-template", "nonprod", atmosCliConfigPath, "",
+	result, err := ProcessComponentInStack(
+		"test-basic-template", "nonprod", atmosCliConfigPath, "",
 		WithProcessTemplates(true),
 		WithProcessYamlFunctions(false),
 	)
@@ -367,10 +414,13 @@ func TestProcessComponentInStackYamlFunctionsDisabledOnly(t *testing.T) {
 }
 
 func TestProcessComponentInStackYamlFunctionsEnabledOnly(t *testing.T) {
+	t.Parallel()
+
 	// Same fixture, but with YAML functions enabled — verifies they are actually resolved
 	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-template-yaml-function")
 
-	result, err := ProcessComponentInStack("test-basic-template", "nonprod", atmosCliConfigPath, "",
+	result, err := ProcessComponentInStack(
+		"test-basic-template", "nonprod", atmosCliConfigPath, "",
 		WithProcessTemplates(false),
 		WithProcessYamlFunctions(true),
 	)
@@ -389,6 +439,8 @@ func TestProcessComponentInStackYamlFunctionsEnabledOnly(t *testing.T) {
 }
 
 func TestProcessComponentInStackBackwardCompatNoOptions(t *testing.T) {
+	t.Parallel()
+
 	// Verify that calling without any options (the old 4-arg signature) still works
 	component := "infra/vpc"
 	stack := "tenant1-ue2-dev"
@@ -403,15 +455,18 @@ func TestProcessComponentInStackBackwardCompatNoOptions(t *testing.T) {
 }
 
 func TestProcessComponentFromContextWithProcessingDisabled(t *testing.T) {
+	t.Parallel()
+
 	// Uses stack-templates fixture (name_template: "{{ .vars.stage }}")
 	// Verifies that ProcessComponentFromContext also respects the functional options
 	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "stack-templates")
 
-	result, err := ProcessComponentFromContext(&ComponentFromContextParams{
-		Component:          "component-1",
-		Stage:              "nonprod",
-		AtmosCliConfigPath: atmosCliConfigPath,
-	},
+	result, err := ProcessComponentFromContext(
+		&ComponentFromContextParams{
+			Component:          "component-1",
+			Stage:              "nonprod",
+			AtmosCliConfigPath: atmosCliConfigPath,
+		},
 		WithProcessTemplates(false),
 		WithProcessYamlFunctions(false),
 	)
@@ -427,6 +482,8 @@ func TestProcessComponentFromContextWithProcessingDisabled(t *testing.T) {
 }
 
 func TestProcessComponentFromContextNoNameConfig(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	atmosYaml := []byte(`base_path: "./"

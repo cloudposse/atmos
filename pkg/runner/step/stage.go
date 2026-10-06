@@ -6,7 +6,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -60,7 +59,7 @@ func (h *StageHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 
 	// Format: [Stage 1/3] Setup
 	output := formatStageOutput(stageIndex, totalStages, resolvedTitle)
-	ui.Writeln(output)
+	vars.UI().Writeln(output)
 
 	return NewStepResult(resolvedTitle), nil
 }

@@ -8,6 +8,8 @@ import (
 )
 
 func TestMergeCacheContribution_CacheOwnsProviderInstallation(t *testing.T) {
+	t.Parallel()
+
 	rcMap := map[string]any{
 		"provider_installation": []any{
 			map[string]any{"direct": map[string]any{}},
@@ -30,6 +32,8 @@ func TestMergeCacheContribution_CacheOwnsProviderInstallation(t *testing.T) {
 }
 
 func TestMergeCacheContribution_MergesHostsPreservingUserHosts(t *testing.T) {
+	t.Parallel()
+
 	rcMap := map[string]any{
 		"host": map[string]any{
 			"private.example.com": map[string]any{
@@ -57,6 +61,8 @@ func TestMergeCacheContribution_MergesHostsPreservingUserHosts(t *testing.T) {
 // "host" map in place, leaking cache loopback overrides back into atmosConfig for later
 // components. The clone path must isolate the source map (result -> src isolation).
 func TestConfigureTerraformRC_CloneDoesNotMutateSourceHosts(t *testing.T) {
+	t.Parallel()
+
 	// The user's RC config, as it lives on atmosConfig.Components.Terraform.RC.Config.
 	sourceConfig := map[string]any{
 		"host": map[string]any{
@@ -95,6 +101,8 @@ func TestConfigureTerraformRC_CloneDoesNotMutateSourceHosts(t *testing.T) {
 // TestCloneRCValue verifies deep isolation in both directions: mutating the clone must
 // not affect the source, and mutating the source after cloning must not affect the clone.
 func TestCloneRCValue(t *testing.T) {
+	t.Parallel()
+
 	src := map[string]any{
 		"host": map[string]any{
 			"a.example.com": map[string]any{"services": map[string]any{"modules.v1": "https://a/"}},
@@ -123,6 +131,8 @@ func TestCloneRCValue(t *testing.T) {
 // TestSortComponentStacks verifies deterministic stack-then-component ordering. Assert
 // element contents (first and last), not just length, per the slice-result test rule.
 func TestSortComponentStacks(t *testing.T) {
+	t.Parallel()
+
 	targets := []ComponentStack{
 		{Component: "vpc", Stack: "plat-ue2-prod"},
 		{Component: "eks", Stack: "plat-ue2-prod"},

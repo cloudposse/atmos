@@ -298,6 +298,8 @@ atmos workflow deploy --tags networking --labels deployment:dev      # forwarded
 vars:
   tags: !tags      # -> ["vpc", "production"]
   owner: !labels    # -> {cost-center: platform, compliance: sox}
+  cost_center: !labels cost-center
+  runner: !labels runner ubuntu-latest
 ```
 Atmos rarely *needs* this the way Terramate does, since Atmos components don't hand-generate
 conditional HCL the way `generate_hcl` mixins do -- but it's available for cases like feeding a

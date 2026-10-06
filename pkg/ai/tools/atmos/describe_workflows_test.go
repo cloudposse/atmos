@@ -43,6 +43,8 @@ func setupWorkflowsTestEnv(t *testing.T) *schema.AtmosConfiguration {
 }
 
 func TestDescribeWorkflowsTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}
@@ -64,6 +66,8 @@ func TestDescribeWorkflowsTool_Interface(t *testing.T) {
 }
 
 func TestDescribeWorkflowsTool_Execute_DefaultList(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := setupWorkflowsTestEnv(t)
 	tool := NewDescribeWorkflowsTool(atmosConfig)
 
@@ -87,6 +91,8 @@ func TestDescribeWorkflowsTool_Execute_DefaultList(t *testing.T) {
 }
 
 func TestDescribeWorkflowsTool_Execute_MapOutputType(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := setupWorkflowsTestEnv(t)
 	tool := NewDescribeWorkflowsTool(atmosConfig)
 
@@ -105,6 +111,8 @@ func TestDescribeWorkflowsTool_Execute_MapOutputType(t *testing.T) {
 }
 
 func TestDescribeWorkflowsTool_Execute_AllOutputType(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := setupWorkflowsTestEnv(t)
 	tool := NewDescribeWorkflowsTool(atmosConfig)
 
@@ -123,6 +131,8 @@ func TestDescribeWorkflowsTool_Execute_AllOutputType(t *testing.T) {
 }
 
 func TestDescribeWorkflowsTool_Execute_InvalidOutputType(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := setupWorkflowsTestEnv(t)
 	tool := NewDescribeWorkflowsTool(atmosConfig)
 
@@ -136,6 +146,8 @@ func TestDescribeWorkflowsTool_Execute_InvalidOutputType(t *testing.T) {
 }
 
 func TestDescribeWorkflowsTool_Execute_NoWorkflowsDir(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 		Workflows: schema.Workflows{

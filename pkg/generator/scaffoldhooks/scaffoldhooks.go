@@ -30,39 +30,59 @@ const (
 	hookErrFormat = "scaffold hook %q: %w"
 )
 
-// Run evaluates and executes every hook in hooksMap that matches event, in a
-// stable (name-sorted) order, skipping any hook that the skipHooks predicate
-// (implementing --skip-hooks) reports true for before event/when: evaluation,
-// mirroring pkg/hooks' own --skip-hooks semantics.
-func Run(hooksMap map[string]hooks.Hook, event hooks.HookEvent, answers map[string]any, status string, skipHooks func(string) bool) error {
+// RunInput bundles scaffoldhooks.Run's inputs into a single argument, mirroring how
+// pkg/hooks.ExecContext bundles a stack-level lifecycle hook run's inputs.
+type RunInput struct {
+	// HooksMap is the scaffold's decoded spec.hooks block.
+	HooksMap map[string]hooks.Hook
+	// Event is the scaffold lifecycle event being fired (before/after.scaffold.generate).
+	Event hooks.HookEvent
+	// Answers is the collected prompt answers, exposed to hooks as {{ .Answers.<field> }} and as
+	// the `answers` when: CEL variable.
+	Answers map[string]any
+	// Status is the run outcome ("success"/"failure"), exposed as the `status` when: CEL variable.
+	Status string
+	// SkipHooks implements --skip-hooks; nil means no hook is skipped.
+	SkipHooks func(string) bool
+	// TargetPath is the scaffold's target/output directory. An unset or bare-relative
+	// working_directory on a step-backed hook defaults to it (see
+	// hooks.ApplyDefaultWorkingDirectory), and it is exposed to hook templates as
+	// {{ .TargetPath }}.
+	TargetPath string
+}
+
+// Run evaluates and executes every hook in in.HooksMap that matches in.Event, in a stable
+// (name-sorted) order, skipping any hook that in.SkipHooks (implementing --skip-hooks) reports
+// true for before event/when: evaluation, mirroring pkg/hooks' own --skip-hooks semantics.
+func Run(in RunInput) error {
 	defer perf.Track(nil, "scaffoldhooks.Run")()
 
-	names := make([]string, 0, len(hooksMap))
-	for name := range hooksMap {
+	names := make([]string, 0, len(in.HooksMap))
+	for name := range in.HooksMap {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 
 	for _, name := range names {
-		hook := hooksMap[name]
+		hook := in.HooksMap[name]
 
 		// Event match first, then --skip-hooks, matching the check order
 		// pkg/hooks.Hooks.runHookIfMatch uses -- a hook that wouldn't have
 		// run for this event shouldn't log a misleading "skipped by
 		// --skip-hooks" line.
-		if !hook.MatchesEvent(event) {
+		if !hook.MatchesEvent(in.Event) {
 			continue
 		}
 
-		if skipHooks != nil && skipHooks(name) {
+		if in.SkipHooks != nil && in.SkipHooks(name) {
 			log.Info("Skipping scaffold hook (--skip-hooks)", "hook", name, "kind", hook.Kind)
 			continue
 		}
 
 		runs, err := hook.RunsWhenE(schema.ConditionContext{
-			Answers: answers,
-			Event:   string(event),
-			Status:  status,
+			Answers: in.Answers,
+			Event:   string(in.Event),
+			Status:  in.Status,
 			Hook:    name,
 		})
 		if err != nil {
@@ -72,7 +92,7 @@ func Run(hooksMap map[string]hooks.Hook, event hooks.HookEvent, answers map[stri
 			continue
 		}
 
-		if err := runHook(name, &hook, answers); err != nil {
+		if err := runHook(name, &hook, in.Answers, in.TargetPath); err != nil {
 			return err
 		}
 	}
@@ -81,12 +101,12 @@ func Run(hooksMap map[string]hooks.Hook, event hooks.HookEvent, answers map[stri
 
 // runHook dispatches a single hook to its kind's step conversion and runs
 // the resulting step(s) through the shared step executor.
-func runHook(name string, hook *hooks.Hook, answers map[string]any) error {
+func runHook(name string, hook *hooks.Hook, answers map[string]any, targetPath string) error {
 	switch hook.Kind {
 	case stepKind:
-		return runStep(name, hook, answers)
+		return runStep(name, hook, answers, targetPath)
 	case stepsKind:
-		return runSteps(name, hook, answers)
+		return runSteps(name, hook, answers, targetPath)
 	default:
 		return errUtils.Build(errUtils.ErrScaffoldHookKindUnsupported).
 			WithExplanationf("Scaffold hook %q uses kind %q, which is not yet supported", name, hook.Kind).
@@ -98,7 +118,9 @@ func runHook(name string, hook *hooks.Hook, answers map[string]any) error {
 	}
 }
 
-func runStep(name string, hook *hooks.Hook, answers map[string]any) error {
+// runStep builds and executes the single step a kind: step hook decodes to, anchoring its
+// working_directory at targetPath before running it through the shared step executor.
+func runStep(name string, hook *hooks.Hook, answers map[string]any, targetPath string) error {
 	ws, err := hooks.StepFromHook(hook)
 	if err != nil {
 		return fmt.Errorf(hookErrFormat, name, err)
@@ -106,25 +128,29 @@ func runStep(name string, hook *hooks.Hook, answers map[string]any) error {
 	if ws.Name == "" {
 		ws.Name = "hook:" + name
 	}
+	hooks.ApplyDefaultWorkingDirectory(ws, targetPath)
 
-	executor := runnerstep.NewStepExecutorWithVars(stepVariables(answers))
+	executor := runnerstep.NewStepExecutorWithVars(stepVariables(answers, targetPath))
 	if _, err := executor.Execute(context.Background(), ws); err != nil {
 		return fmt.Errorf(hookErrFormat, name, err)
 	}
 	return nil
 }
 
-func runSteps(name string, hook *hooks.Hook, answers map[string]any) error {
+// runSteps builds and executes, in order, the step list a kind: steps hook decodes to, anchoring
+// each step's working_directory at targetPath before running it through the shared step executor.
+func runSteps(name string, hook *hooks.Hook, answers map[string]any, targetPath string) error {
 	steps, err := hooks.StepsFromHook(hook)
 	if err != nil {
 		return fmt.Errorf(hookErrFormat, name, err)
 	}
 
-	executor := runnerstep.NewStepExecutorWithVars(stepVariables(answers))
+	executor := runnerstep.NewStepExecutorWithVars(stepVariables(answers, targetPath))
 	for i := range steps {
 		if steps[i].Name == "" {
 			steps[i].Name = fmt.Sprintf("hook:%s:%d", name, i+1)
 		}
+		hooks.ApplyDefaultWorkingDirectory(&steps[i], targetPath)
 		if _, err := executor.Execute(context.Background(), &steps[i]); err != nil {
 			return fmt.Errorf(hookErrFormat, name, err)
 		}
@@ -135,9 +161,13 @@ func runSteps(name string, hook *hooks.Hook, answers map[string]any) error {
 // stepVariables builds the step Variables for a scaffold hook run: OS
 // environment (via NewVariables' default) plus the collected prompt answers
 // exposed as {{ .Answers.<field> }} in step bodies and as the `answers` when:
-// CEL variable (via Hook.RunsWhenE, not this function).
-func stepVariables(answers map[string]any) *runnerstep.Variables {
+// CEL variable (via Hook.RunsWhenE, not this function). The targetPath
+// parameter is likewise exposed as {{ .TargetPath }}, and anchors any other
+// relative step field (e.g. a file/workdir step's source/destination/path)
+// that resolves through pkg/runner/step's componentWorkingDir mechanism.
+func stepVariables(answers map[string]any, targetPath string) *runnerstep.Variables {
 	vars := runnerstep.NewVariables()
-	vars.SetTemplateData(map[string]any{"Answers": answers})
+	vars.SetTemplateData(map[string]any{"Answers": answers, "TargetPath": targetPath})
+	vars.SetComponentWorkingDirectory(targetPath)
 	return vars
 }

@@ -369,3 +369,31 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
   <dt>`--lock-enforcement` <em>(optional)</em></dt>
   <dd>Override `vendor.lock.enforcement` for this run: `strict`, `warn`, or `silent`.</dd>
 </dl>
+
+## Concurrent progress
+
+<CastPlayer src="/casts/demo/fixtures/concurrent-vendoring/pull.cast" title="Concurrent vendoring" chrome controls scrubber />
+
+Use `--max-concurrency N` to bound simultaneous downloads/preparation and upstream
+checks. The default is four workers; [editions](/cli/configuration/edition) pinned
+before `2026-09-15` retain one. Set `vendor.max_concurrency` in `atmos.yaml` or
+`ATMOS_VENDOR_MAX_CONCURRENCY` for a persistent override. Explicit flags win over
+environment and configuration. Values must be positive integers.
+
+```shell
+atmos vendor pull --max-concurrency 8
+atmos vendor update --check --max-concurrency 8
+atmos vendor update --pull --max-concurrency 8
+```
+
+The display identifies active packages, phases, retries, and available download
+sizes. Downloads may finish in any order; destination writes remain ordered.
+The overall bar gives equal weight to preparation and installation for each package.
+Known download bytes advance the preparation portion; otherwise it advances when
+the package is ready. This is milestone progress, not an estimate of time remaining.
+The completed count advances only after a package finishes processing.
+All editions use this display, including serial execution. Non-interactive runs
+emit plain result lines to stderr. Update report formats on stdout are unchanged.
+
+See [vendor concurrency configuration](/cli/configuration/vendor#concurrency)
+for precedence, ordering, interruption, and shared-file coordination.

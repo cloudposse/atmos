@@ -69,7 +69,7 @@ jobs:
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           languages: ${{ matrix.language }}
           # If you wish to specify custom queries, you can do so here or in a config file.
@@ -82,7 +82,7 @@ jobs:
       # Autobuild attempts to build any compiled languages (C/C++, C#, Go, Java, or Swift).
       # If this step fails, then you should remove it and run the build manually (see below)
       - name: Autobuild
-        uses: github/codeql-action/autobuild@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/autobuild@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
 
       # ℹ️ Command-line programs to run using the OS shell.
       # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
@@ -95,7 +95,7 @@ jobs:
       #     ./location_of_script_within_repo/buildscript.sh
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           category: "/language:${{matrix.language}}"
           # The merge queue's ephemeral gh-readonly-queue/... ref is deleted as
@@ -177,7 +177,7 @@ jobs:
           set -euo pipefail
           attempt=1
           max_attempts=3
-          until go install golang.org/x/vuln/cmd/govulncheck@latest; do
+          until go install golang.org/x/vuln/cmd/govulncheck@v1.8.0; do
             if [ "$attempt" -ge "$max_attempts" ]; then
               echo "go install govulncheck failed after $max_attempts attempts" >&2
               exit 1
@@ -187,32 +187,41 @@ jobs:
             attempt=$((attempt + 1))
           done
 
+      # govulncheck only builds its whole-program call graph when an imported
+      # package has a known vuln (otherwise it returns early in seconds). On
+      # this module that pass peaks around 25GB RSS — measured locally when
+      # GO-2026-6597 (containerd/v2 < 2.3.6) landed — which exceeds the public
+      # runner's 16GB RAM and gets the runner OOM-killed (seen as `Killed`,
+      # exit 143 "shutdown signal", or "The operation was canceled"). Swap
+      # absorbs the overflow; with 20G added the pass finishes in ~12 min.
+      - name: Add swap space
+        uses: ./.github/actions/swap-space
+        with:
+          size-gb: '20'
+
       - name: Run govulncheck
         shell: bash
+        # Bounds a swap-thrashing run instead of burning the 6h job default.
+        timeout-minutes: 30
         env:
           # Atmos ships with CGO disabled (see Makefile/test.yml) — without this,
           # the runner's default CGO_ENABLED=1 makes govulncheck try to compile
           # the cgo-only half of github.com/bearsh/hid (pulled in transitively via
           # saml2aws's U2F support), which needs libudev-dev and fails to load.
           CGO_ENABLED: "0"
-          # govulncheck's whole-program (`./...`) SSA call-graph analysis over
-          # this repo's large, dependency-heavy module (cloud SDKs, client-go,
-          # Terraform/OpenTofu, ...) peaks high enough in memory to get
-          # OOM-killed by the standard 16GB runner (observed as an unexplained
-          # SIGTERM/exit 143 partway through, with no findings ever produced).
-          # A soft memory ceiling forces the Go runtime to GC earlier/more
-          # often instead of letting the heap grow unchecked, trading some run
-          # time for staying under the runner's memory limit. GOFLAGS=-p=1
-          # (serializing package builds) was tried first and rejected: it only
-          # marginally reduced peak memory (govulncheck's SSA construction
-          # parallelizes via goroutines internally, which -p doesn't govern)
-          # while nearly tripling run time.
-          GOMEMLIMIT: "12GiB"
+          # Sized to RAM + swap. A limit below the call-graph pass's real ~25GB
+          # need (the previous 12GiB) can't shrink the live heap; it only keeps
+          # the GC running near-continuously, and each cycle would page the
+          # swapped heap back in. GOFLAGS=-p=1 (serializing package builds) was
+          # tried earlier and rejected: it barely reduced peak memory
+          # (govulncheck's SSA construction parallelizes via goroutines, which
+          # -p doesn't govern) while nearly tripling run time.
+          GOMEMLIMIT: "32GiB"
         run: govulncheck -format sarif ./... > govulncheck.sarif
 
       - name: Upload SARIF file
         if: always()
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
@@ -259,7 +268,7 @@ jobs:
 
       - name: Upload SARIF to code-scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           sarif_file: semgrep.sarif
           category: semgrep
@@ -271,12 +280,7 @@ jobs:
 
   lint-golangci:
     name: "Lint (golangci)"
-    runs-on:
-      - runs-on=${{github.run_id}}
-      - runner=terraform
-      - tag=atmos
-      - extras=s3-cache
-      - private=false
+    runs-on: ubuntu-latest
 
     # golangci-lint-action supports merge_group with fetch-depth: 0 below,
     # using the merge group's base revision to limit findings to new issues.
@@ -314,10 +318,25 @@ jobs:
       - name: Download modules
         uses: ./.github/actions/go-mod-download-retry
 
+      # The custom-gcl binary is a full golangci-lint build with the
+      # lintroller plugin compiled in — several minutes of compile on every
+      # run without this cache (the mage target's mtime-based staleness check
+      # can never pass on a fresh checkout). Key on everything that goes into
+      # the binary: its build manifest, the plugin source, the module graph,
+      # and the Go version that compiles it.
+      - name: Cache the custom golangci-lint binary
+        id: custom-gcl-cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ./custom-gcl
+          key: custom-gcl-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.custom-gcl.yml', 'tools/lintroller/**', 'go.mod', 'go.sum') }}
+
       # Install the golangci-lint v2 CLI tool (not the linters themselves).
       # This tool is needed to run `golangci-lint custom` which builds a custom binary
       # that includes both standard linters AND our custom module plugins.
+      # Skipped on a cache hit: it exists only to build custom-gcl.
       - name: Install golangci-lint v2 for custom build
+        if: steps.custom-gcl-cache.outputs.cache-hit != 'true'
         run: |
           # Pin to commit that fixes "-c advice.detachedHead=false" bug (PR #6206)
           # https://github.com/golangci/golangci-lint/pull/6206
@@ -325,6 +344,7 @@ jobs:
 
       # Build a custom golangci-lint binary with our lintroller plugin compiled in.
       - name: Build custom golangci-lint with lintroller plugin
+        if: steps.custom-gcl-cache.outputs.cache-hit != 'true'
         run: |
           set -e
 
@@ -334,11 +354,15 @@ jobs:
           # Build custom golangci-lint with plugins (staleness-guarded; see magefiles/)
           go tool mage lint:customGCL
 
-          # Verify the custom binary was created
+      - name: Put the custom golangci-lint on PATH
+        run: |
+          set -e
+
+          # Verify the custom binary exists (built above, or cache-restored)
           test -x ./custom-gcl || { echo "Error: custom-gcl not found or not executable"; exit 1; }
 
-          # Replace system binary with our custom one
-          mv ~/go/bin/golangci-lint ~/go/bin/golangci-lint.system
+          # Make our custom build the `golangci-lint` the action below invokes
+          mkdir -p ~/go/bin
           cp ./custom-gcl ~/go/bin/golangci-lint
           chmod +x ~/go/bin/golangci-lint
 
@@ -388,7 +412,7 @@ jobs:
         # option here either: it would leave the native "CodeQL" code-scanning
         # required check without this SARIF's contribution.
         if: always()
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           sarif_file: golangci-lint.sarif
           ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}

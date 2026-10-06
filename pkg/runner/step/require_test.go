@@ -68,6 +68,8 @@ func allHints(err error) string {
 }
 
 func TestRequireHandler_Registered(t *testing.T) {
+	t.Parallel()
+
 	for _, name := range []string{"require", "assert"} {
 		h, ok := Get(name)
 		require.True(t, ok, "handler %q should be registered", name)
@@ -78,26 +80,34 @@ func TestRequireHandler_Registered(t *testing.T) {
 }
 
 func TestRequireHandler_Validate(t *testing.T) {
+	t.Parallel()
+
 	h := requireHandlerWith(newFakePathExecutor(t))
 
 	t.Run("empty step is rejected", func(t *testing.T) {
+		t.Parallel()
 		err := h.Validate(&schema.WorkflowStep{Name: "gate", Type: "require"})
 		require.Error(t, err)
 		require.ErrorIs(t, err, errUtils.ErrRequireStepEmpty)
 	})
 
 	t.Run("tools only is valid", func(t *testing.T) {
+		t.Parallel()
 		require.NoError(t, h.Validate(&schema.WorkflowStep{Tools: []string{"vhs"}}))
 	})
 	t.Run("files only is valid", func(t *testing.T) {
+		t.Parallel()
 		require.NoError(t, h.Validate(&schema.WorkflowStep{Files: []string{"a.txt"}}))
 	})
 	t.Run("dirs only is valid", func(t *testing.T) {
+		t.Parallel()
 		require.NoError(t, h.Validate(&schema.WorkflowStep{Dirs: []string{"d"}}))
 	})
 }
 
 func TestRequireHandler_Execute_AllPresent(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	file := filepath.Join(dir, "present.txt")
 	require.NoError(t, writeTempFile(file))
@@ -120,6 +130,8 @@ func TestRequireHandler_Execute_AllPresent(t *testing.T) {
 }
 
 func TestRequireHandler_Execute_MissingTool(t *testing.T) {
+	t.Parallel()
+
 	// vhs present, ttyd missing.
 	h := requireHandlerWith(newFakePathExecutor(t, "vhs"))
 	step := &schema.WorkflowStep{
@@ -139,6 +151,8 @@ func TestRequireHandler_Execute_MissingTool(t *testing.T) {
 }
 
 func TestRequireHandler_Execute_MissingFileAndDir(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	missingFile := filepath.Join(dir, "nope.txt")
 	missingDir := filepath.Join(dir, "no-such-dir")
@@ -164,6 +178,8 @@ func TestRequireHandler_Execute_MissingFileAndDir(t *testing.T) {
 }
 
 func TestRequireHandler_Execute_MixedMissing_ListsFirstAndLast(t *testing.T) {
+	t.Parallel()
+
 	h := requireHandlerWith(newFakePathExecutor(t)) // nothing installed.
 	step := &schema.WorkflowStep{
 		Name:  "gate",
@@ -180,6 +196,8 @@ func TestRequireHandler_Execute_MixedMissing_ListsFirstAndLast(t *testing.T) {
 }
 
 func TestRequireHandler_Execute_PathFromVarsEnv(t *testing.T) {
+	t.Parallel()
+
 	// The handler must search vars.Env["PATH"], not the host PATH. Use a fake
 	// executor that records the directories it was asked about.
 	ctrl := gomock.NewController(t)
@@ -200,6 +218,8 @@ func TestRequireHandler_Execute_PathFromVarsEnv(t *testing.T) {
 }
 
 func TestRequireHandler_Execute_TemplateResolution(t *testing.T) {
+	t.Parallel()
+
 	h := requireHandlerWith(newFakePathExecutor(t, "vhs"))
 	vars := varsWithPath("/fake/bin")
 	vars.Flags["tool"] = "vhs"
@@ -216,6 +236,8 @@ func TestRequireHandler_Execute_TemplateResolution(t *testing.T) {
 }
 
 func TestRequireHandler_Execute_AbsoluteToolPath(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "mytool")
 	require.NoError(t, writeTempFile(bin))

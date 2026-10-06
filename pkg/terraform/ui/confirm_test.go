@@ -14,6 +14,8 @@ import (
 // the case under `go test`. This exercises the early-return guard without
 // invoking the interactive huh prompt.
 func TestConfirmApply_NoTTY(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 	}{
@@ -22,6 +24,7 @@ func TestConfirmApply_NoTTY(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			confirmed, err := ConfirmApply()
 
 			require.Error(t, err)
@@ -36,6 +39,8 @@ func TestConfirmApply_NoTTY(t *testing.T) {
 // the case under `go test`. This exercises the early-return guard without
 // invoking the interactive huh prompt.
 func TestConfirmDestroy_NoTTY(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 	}{
@@ -44,6 +49,7 @@ func TestConfirmDestroy_NoTTY(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			confirmed, err := ConfirmDestroy()
 
 			require.Error(t, err)

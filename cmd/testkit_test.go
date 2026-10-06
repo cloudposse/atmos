@@ -63,6 +63,17 @@ func NewTestKit(tb testing.TB) *TestKit {
 		restoreRootCmdState(snapshot)
 	})
 
+	// Reset the startup-notices-shown sentinel so a real os.Setenv call made by
+	// cistartup.MarkShown() during PersistentPreRun (a process-tree-spanning
+	// loop guard, not per-test state) can't leak into later tests that expect
+	// the experimental notice to render. t.Setenv's cleanup restores whatever
+	// value preceded this call, regardless of subsequent direct os.Setenv calls.
+	tb.Setenv("ATMOS_STARTUP_NOTICES_SHOWN", "")
+	// General command tests need deterministic warnings; daily-warning tests override this.
+	tb.Setenv("ATMOS_EXPERIMENTAL", "warn")
+	// Daily warnings must never read or modify the developer's shared cache.
+	tb.Setenv("ATMOS_XDG_CACHE_HOME", tb.TempDir())
+
 	return &TestKit{TB: tb}
 }
 

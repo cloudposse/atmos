@@ -29,17 +29,19 @@ import (
 type componentConfigFetcher func(params *ExecuteDescribeComponentParams) (map[string]any, error)
 
 // authManagerCreator is a function type for creating and authenticating an AuthManager.
-// The trailing stack is threaded into manager construction so stack-scoped identities
-// (e.g. kind: <target>/emulator) receive it before authentication and can populate the
-// in-process auth context. This allows dependency injection for testing.
-type authManagerCreator func(identity string, authConfig *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration, stack string) (auth.AuthManager, error)
+// The trailing ReExecContext is threaded into manager construction so stack-scoped
+// identities (e.g. kind: <target>/emulator) receive the target stack before authentication
+// and can populate the in-process auth context, and so a later identity-not-found fallback
+// can re-inject prompted component/stack values into a profile-fallback re-exec. This allows
+// dependency injection for testing.
+type authManagerCreator func(identity string, authConfig *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration, reExecCtx auth.ReExecContext) (auth.AuthManager, error)
 
 // defaultComponentConfigFetcher is the default implementation that calls ExecuteDescribeComponent.
 var defaultComponentConfigFetcher componentConfigFetcher = ExecuteDescribeComponent
 
-// defaultAuthManagerCreator is the default implementation that calls the stack-aware
-// auth.CreateAndAuthenticateManagerWithAtmosConfigForStack.
-var defaultAuthManagerCreator authManagerCreator = auth.CreateAndAuthenticateManagerWithAtmosConfigForStack
+// defaultAuthManagerCreator is the default implementation that calls the ReExecContext-aware
+// auth.CreateAndAuthenticateManagerWithReExecContext.
+var defaultAuthManagerCreator authManagerCreator = auth.CreateAndAuthenticateManagerWithReExecContext
 
 // resolveIdentityConfigError checks whether err signals a missing/invalid identity that a
 // profile might resolve, offering the interactive profile-selection prompt `atmos auth
@@ -47,8 +49,8 @@ var defaultAuthManagerCreator authManagerCreator = auth.CreateAndAuthenticateMan
 // non-nil error: either the fallback's own outcome (a successful re-exec never returns;
 // otherwise a hint-enriched error or ErrUserAborted) or err wrapped with wrapSentinel when
 // no fallback applies.
-func resolveIdentityConfigError(atmosConfig *schema.AtmosConfiguration, err error, wrapSentinel error) error {
-	if fbErr := offerIdentityProfileFallback(atmosConfig, err); fbErr != nil {
+func resolveIdentityConfigError(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, err error, wrapSentinel error) error {
+	if fbErr := offerIdentityProfileFallback(atmosConfig, info, err); fbErr != nil {
 		return fbErr
 	}
 	return fmt.Errorf("%w: %w", wrapSentinel, err)
@@ -59,7 +61,7 @@ func resolveIdentityConfigError(atmosConfig *schema.AtmosConfiguration, err erro
 // caller should proceed with its own wrap of err). A user-aborted fallback exits the
 // process with ExitCodeSIGINT rather than returning, matching the existing abort-handling
 // convention for identity-selection prompts.
-func offerIdentityProfileFallback(atmosConfig *schema.AtmosConfiguration, err error) error {
+func offerIdentityProfileFallback(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, err error) error {
 	if !errors.Is(err, errUtils.ErrInvalidIdentityConfig) {
 		return nil
 	}
@@ -67,7 +69,13 @@ func offerIdentityProfileFallback(atmosConfig *schema.AtmosConfiguration, err er
 	if !ok || identityName == "" {
 		return nil
 	}
-	fbErr := auth.MaybeOfferProfileFallbackForIdentity(context.Background(), atmosConfig.CliConfigPath, identityName)
+	reExecCtx := auth.ReExecContext{
+		Component:         info.ComponentFromArg,
+		ComponentPrompted: info.ComponentPrompted,
+		Stack:             info.Stack,
+		StackPrompted:     info.StackPrompted,
+	}
+	fbErr := auth.MaybeOfferProfileFallbackForIdentity(context.Background(), atmosConfig.CliConfigPath, identityName, reExecCtx)
 	if fbErr == nil {
 		return nil
 	}
@@ -102,15 +110,22 @@ func createAndAuthenticateAuthManagerWithDeps(
 		if errors.Is(err, errUtils.ErrInvalidComponent) {
 			return nil, err
 		}
-		return nil, resolveIdentityConfigError(atmosConfig, err, errUtils.ErrInvalidAuthConfig)
+		return nil, resolveIdentityConfigError(atmosConfig, info, err, errUtils.ErrInvalidAuthConfig)
 	}
 
 	// Create and authenticate AuthManager from --identity flag if specified.
 	// Uses merged auth config that includes both global and component-specific identities/defaults.
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
-	authManager, err := authCreator(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, info.Stack)
+	// Carry forward prompted component/stack so a later identity-not-found fallback inside
+	// Authenticate can re-inject them into a profile-fallback re-exec instead of dropping them.
+	authManager, err := authCreator(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, auth.ReExecContext{
+		Component:         info.ComponentFromArg,
+		ComponentPrompted: info.ComponentPrompted,
+		Stack:             info.Stack,
+		StackPrompted:     info.StackPrompted,
+	})
 	if err != nil {
-		return nil, resolveIdentityConfigError(atmosConfig, err, errUtils.ErrFailedToInitializeAuthManager)
+		return nil, resolveIdentityConfigError(atmosConfig, info, err, errUtils.ErrFailedToInitializeAuthManager)
 	}
 
 	// If AuthManager was created and identity was auto-detected (info.Identity was empty),

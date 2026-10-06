@@ -633,6 +633,8 @@ func TestSetDefaultStepWorkingDirectory_ExcludesAtmosStepType(t *testing.T) {
 	explicitStep := &schema.WorkflowStep{Type: "atmos", WorkingDirectory: explicitDir}
 	setDefaultStepWorkingDirectory(ctx, explicitStep)
 	assert.Equal(t, explicitDir, explicitStep.WorkingDirectory, "an explicit working_directory is never overwritten")
+
+	assert.NotPanics(t, func() { setDefaultStepWorkingDirectory(ctx, nil) }, "a nil step is a no-op")
 }
 
 // TestSetDefaultStepWorkingDirectory_BareVsDotVsAbsolute verifies the value-classification rule
@@ -670,6 +672,38 @@ func TestSetDefaultStepWorkingDirectory_BareVsDotVsAbsolute(t *testing.T) {
 	absStep := &schema.WorkflowStep{Type: "shell", WorkingDirectory: absDir}
 	setDefaultStepWorkingDirectory(ctx, absStep)
 	assert.Equal(t, absDir, absStep.WorkingDirectory, "an absolute working_directory is left as-is")
+}
+
+// TestApplyDefaultWorkingDirectory verifies the exported, ExecContext-independent entry point
+// that setDefaultStepWorkingDirectory delegates to -- the same empty/bare/dot/absolute/atmos-type
+// rules apply, anchored at an arbitrary caller-supplied directory (e.g. a scaffold's target path)
+// rather than ComponentPath(ctx).
+func TestApplyDefaultWorkingDirectory(t *testing.T) {
+	anchor := filepath.Join(t.TempDir(), "target")
+	absDir := t.TempDir()
+
+	tests := []struct {
+		name string
+		step *schema.WorkflowStep
+		want string
+	}{
+		{"empty working_directory defaults to anchorDir", &schema.WorkflowStep{Type: "shell"}, anchor},
+		{
+			"bare (non-dot-prefixed) working_directory anchors under anchorDir",
+			&schema.WorkflowStep{Type: "shell", WorkingDirectory: "sub"},
+			filepath.Join(anchor, "sub"),
+		},
+		{"dot-prefixed working_directory is left as-is", &schema.WorkflowStep{Type: "shell", WorkingDirectory: "."}, "."},
+		{"absolute working_directory is left as-is", &schema.WorkflowStep{Type: "shell", WorkingDirectory: absDir}, absDir},
+		{"type: atmos steps are exempt from defaulting", &schema.WorkflowStep{Type: AtmosStepType}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ApplyDefaultWorkingDirectory(tt.step, anchor)
+			assert.Equal(t, tt.want, tt.step.WorkingDirectory)
+		})
+	}
 }
 
 func TestStepsSummary(t *testing.T) {

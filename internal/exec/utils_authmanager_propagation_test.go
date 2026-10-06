@@ -12,6 +12,8 @@ import (
 )
 
 func TestProcessComponentConfig_PropagatesAuthManager(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 
 	mockAuthManager := types.NewMockAuthManager(ctrl)
@@ -56,6 +58,8 @@ func TestProcessComponentConfig_PropagatesAuthManager(t *testing.T) {
 }
 
 func TestProcessComponentConfig_AuthManagerGuardBranches(t *testing.T) {
+	t.Parallel()
+
 	stacksMap := map[string]any{
 		"tenant-dev-test": map[string]any{
 			"components": map[string]any{
@@ -71,6 +75,7 @@ func TestProcessComponentConfig_AuthManagerGuardBranches(t *testing.T) {
 	}
 
 	t.Run("nil auth manager leaves auth fields unset", func(t *testing.T) {
+		t.Parallel()
 		info := &schema.ConfigAndStacksInfo{}
 		err := ProcessComponentConfig(
 			&schema.AtmosConfiguration{},
@@ -87,6 +92,7 @@ func TestProcessComponentConfig_AuthManagerGuardBranches(t *testing.T) {
 	})
 
 	t.Run("nil stack info keeps manager and leaves auth context unset", func(t *testing.T) {
+		t.Parallel()
 		ctrl := gomock.NewController(t)
 		mockAuthManager := types.NewMockAuthManager(ctrl)
 		mockAuthManager.EXPECT().GetStackInfo().Return(nil).Times(1)
@@ -107,6 +113,7 @@ func TestProcessComponentConfig_AuthManagerGuardBranches(t *testing.T) {
 	})
 
 	t.Run("nil auth context keeps manager and leaves auth context unset", func(t *testing.T) {
+		t.Parallel()
 		ctrl := gomock.NewController(t)
 		mockAuthManager := types.NewMockAuthManager(ctrl)
 		mockAuthManager.EXPECT().
@@ -135,6 +142,8 @@ func TestProcessComponentConfig_AuthManagerGuardBranches(t *testing.T) {
 // surfaced as a descriptive error rather than silently ignored, mirroring how the
 // analogous retry-decode error is surfaced.
 func TestProcessComponentConfig_InvalidFlagsSection(t *testing.T) {
+	t.Parallel()
+
 	stacksMap := map[string]any{
 		"tenant-dev-test": map[string]any{
 			"components": map[string]any{

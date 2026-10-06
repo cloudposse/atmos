@@ -355,6 +355,36 @@ func TestModel_View_Done_NoChanges(t *testing.T) {
 	assert.Contains(t, view, "no changes")
 }
 
+// TestModel_View_Done_OutputOnlyChangeNotReportedAsNoChanges is a regression test for issue
+// #3114: a resource-count-only ChangeSummaryMessage of all zeros must not render "(no changes)"
+// when an output value actually changed, or `atmos terraform apply --ui` would exit claiming
+// nothing happened while silently skipping the apply that would have written the new output.
+func TestModel_View_Done_OutputOnlyChangeNotReportedAsNoChanges(t *testing.T) {
+	clock := newTestClock()
+	reader := strings.NewReader("")
+	m := NewModel("myapp", "dev", "apply", reader, WithClock(clock))
+	m.done = true
+
+	// An output value changed even though no resources changed.
+	m.tracker.HandleMessage(&OutputsMessage{
+		Outputs: map[string]OutputValue{
+			"vpc_id": {Value: "vpc-123abc", Action: "update"},
+		},
+	})
+	m.tracker.HandleMessage(&ChangeSummaryMessage{
+		Changes: Changes{
+			Add:       0,
+			Change:    0,
+			Remove:    0,
+			Operation: "apply",
+		},
+	})
+
+	view := m.View()
+
+	assert.NotContains(t, view, "no changes")
+}
+
 func TestModel_View_Done_Destroy(t *testing.T) {
 	clock := newTestClock()
 	reader := strings.NewReader("")

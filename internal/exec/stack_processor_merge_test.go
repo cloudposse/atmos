@@ -575,6 +575,52 @@ func TestMergeComponentConfigurations_HelmLifecyclePrecedence(t *testing.T) {
 	assert.Equal(t, map[string]any{"source": "override"}, component[cfg.ValuesSectionName])
 }
 
+// TestMergeComponentConfigurations_CreateNamespacePrecedence proves the precedence
+// chain for the native-Helm `create_namespace` toggle through the merge: a stack-level
+// `helm:` default is the weakest and a component-level value wins over it, while an
+// unset component inherits the stack default. (Overrides-block support is a separate
+// follow-up; not exercised here.)
+func TestMergeComponentConfigurations_CreateNamespacePrecedence(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("component-value-wins-over-stack-default", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.HelmComponentType,
+			Component:     "api",
+			AtmosConfig:   atmosCfg,
+			GlobalHelmLifecycle: map[string]any{
+				cfg.HelmCreateNamespaceSectionName: true,
+			},
+		}
+		result := minimalComponentResult()
+		result.ComponentHelm = map[string]any{
+			cfg.HelmCreateNamespaceSectionName: false,
+		}
+
+		component, _, err := mergeComponentConfigurations(atmosCfg, &opts, result)
+		require.NoError(t, err)
+		assert.Equal(t, false, component[cfg.HelmCreateNamespaceSectionName],
+			"a component-level create_namespace=false must win over a stack-level default of true")
+	})
+
+	t.Run("stack-default-applies-when-component-unset", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.HelmComponentType,
+			Component:     "api",
+			AtmosConfig:   atmosCfg,
+			GlobalHelmLifecycle: map[string]any{
+				cfg.HelmCreateNamespaceSectionName: false,
+			},
+		}
+		result := minimalComponentResult()
+
+		component, _, err := mergeComponentConfigurations(atmosCfg, &opts, result)
+		require.NoError(t, err)
+		assert.Equal(t, false, component[cfg.HelmCreateNamespaceSectionName],
+			"a stack-level create_namespace=false must apply when the component does not set it")
+	})
+}
+
 func TestMergeComponentConfigurations_HelmReleaseIgnoresListMergeStrategy(t *testing.T) {
 	atmosCfg := &schema.AtmosConfiguration{Settings: schema.AtmosSettings{ListMergeStrategy: "append"}}
 	opts := ComponentProcessorOptions{

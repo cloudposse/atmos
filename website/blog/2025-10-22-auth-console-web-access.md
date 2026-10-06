@@ -10,7 +10,7 @@ tags:
 release: v1.196.0
 ---
 
-Atmos now includes `atmos auth console`, a convenience command for opening cloud provider web consoles. Similar to `aws-vault login`, this command uses your authenticated Atmos identities to generate temporary console sign-in URLs and open them in your browser.
+Atmos now includes [`atmos auth console`](/cli/commands/auth/console), a convenience command for opening cloud provider web consoles. Similar to `aws-vault login`, this command uses your authenticated Atmos identities to generate temporary console sign-in URLs and open them in your browser.
 
 <!--truncate-->
 

@@ -26,6 +26,8 @@ type fakeSecretsManager struct {
 	delErr      error // returned by DeleteSecret when set.
 	listErr     error // returned by ListSecrets when set.
 
+	// nilOutputOnGet makes GetSecretValue return a nil output without an error.
+	nilOutputOnGet bool
 	// nilStringOnGet makes GetSecretValue return an output with a nil SecretString.
 	nilStringOnGet bool
 
@@ -61,6 +63,9 @@ func (f *fakeSecretsManager) GetSecretValue(_ context.Context, in *secretsmanage
 	f.getCalls++
 	if f.getErr != nil {
 		return nil, f.getErr
+	}
+	if f.nilOutputOnGet {
+		return nil, nil
 	}
 	id := aws.ToString(in.SecretId)
 	v, ok := f.data[id]
@@ -326,6 +331,37 @@ func TestSecretsManagerStore_Get_JSONStructuredRoundTrips(t *testing.T) {
 	got, err := s.Get("prod", "api", "CFG")
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"a": float64(1), "b": "x"}, got)
+}
+
+func TestSecretsManagerStore_GetRawPreservesPayload(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+	}{
+		{name: "JSON object", payload: `{"type":"service_account","enabled":true}`},
+		{name: "plain text", payload: "example-token"},
+		{name: "quoted string", payload: `"example-token"`},
+		{name: "multiline", payload: "-----BEGIN PRIVATE KEY-----\nAAAA\nBBBB\n-----END PRIVATE KEY-----\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := newFakeSecretsManager()
+			fake.data["atmos/secrets/prod/api/RAW"] = tt.payload
+
+			got, err := newTestASMStore(fake).GetRaw("prod", "api", "RAW")
+			require.NoError(t, err)
+			assert.Equal(t, tt.payload, got)
+		})
+	}
+}
+
+func TestSecretsManagerStore_GetRaw_NilOutput(t *testing.T) {
+	fake := newFakeSecretsManager()
+	fake.nilOutputOnGet = true
+
+	_, err := newTestASMStore(fake).GetRaw("prod", "api", "RAW")
+	assert.ErrorIs(t, err, store.ErrGetSecret)
 }
 
 func TestSecretsManagerStore_Get_NilSecretString(t *testing.T) {

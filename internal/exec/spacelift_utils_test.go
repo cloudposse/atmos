@@ -10,6 +10,8 @@ import (
 )
 
 func TestResolveSpaceliftContextPrefix(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	context := schema.Context{Tenant: "tenant1", Environment: "ue2", Stage: "dev"}
 	componentVars := map[string]any{"tenant": "tenant1", "environment": "ue2", "stage": "dev"}
@@ -39,6 +41,7 @@ func TestResolveSpaceliftContextPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			naming := SpaceliftStackNaming{NameTemplate: tt.nameTemplate, NamePattern: tt.namePattern}
 			result, err := ResolveSpaceliftContextPrefix(atmosConfig, "orgs/cp/tenant1/dev/us-east-2", &context, componentVars, naming)
 			require.NoError(t, err)
@@ -48,6 +51,8 @@ func TestResolveSpaceliftContextPrefix(t *testing.T) {
 }
 
 func TestBuildSpaceliftStackNames(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	stacks := map[string]any{
 		"orgs/cp/tenant1/dev/us-east-2": map[string]any{
@@ -67,6 +72,7 @@ func TestBuildSpaceliftStackNames(t *testing.T) {
 	}
 
 	t.Run("name_template resolves logical stack names", func(t *testing.T) {
+		t.Parallel()
 		naming := SpaceliftStackNaming{NameTemplate: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"}
 		names, err := BuildSpaceliftStackNames(atmosConfig, stacks, naming)
 		require.NoError(t, err)
@@ -74,6 +80,7 @@ func TestBuildSpaceliftStackNames(t *testing.T) {
 	})
 
 	t.Run("deprecated name_pattern still resolves logical stack names", func(t *testing.T) {
+		t.Parallel()
 		naming := SpaceliftStackNaming{NamePattern: "{tenant}-{environment}-{stage}"}
 		names, err := BuildSpaceliftStackNames(atmosConfig, stacks, naming)
 		require.NoError(t, err)
@@ -81,6 +88,7 @@ func TestBuildSpaceliftStackNames(t *testing.T) {
 	})
 
 	t.Run("neither configured falls back to raw stack name", func(t *testing.T) {
+		t.Parallel()
 		names, err := BuildSpaceliftStackNames(atmosConfig, stacks, SpaceliftStackNaming{})
 		require.NoError(t, err)
 		assert.Equal(t, []string{"orgs-cp-tenant1-dev-us-east-2-infra-vpc"}, names)
@@ -88,6 +96,8 @@ func TestBuildSpaceliftStackNames(t *testing.T) {
 }
 
 func TestBuildSpaceliftStackNames_ComponentLevelSpaceliftSettingsOverride(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	stacks := map[string]any{
 		"orgs/cp/tenant1/dev/us-east-2": map[string]any{
@@ -120,6 +130,8 @@ func TestBuildSpaceliftStackNames_ComponentLevelSpaceliftSettingsOverride(t *tes
 }
 
 func TestBuildSpaceliftStackNames_NameTemplateErrorPropagates(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	stacks := map[string]any{
 		"orgs/cp/tenant1/dev/us-east-2": map[string]any{
@@ -148,6 +160,8 @@ func TestBuildSpaceliftStackNames_NameTemplateErrorPropagates(t *testing.T) {
 }
 
 func TestBuildSpaceliftStackNames_SkipsStacksWithoutTerraformComponents(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	stacks := map[string]any{
 		"stack-without-components": map[string]any{},

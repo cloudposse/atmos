@@ -118,6 +118,31 @@ func TestResolveDeclaredVersion_RangeSecondPullReusesLockWithZeroNetworkCalls(t 
 	assert.Equal(t, 1, lister.calls, "second pull with an unchanged range must not call ListTags again")
 }
 
+func TestResolveDeclaredVersion_CleanPreservesLockedResolution(t *testing.T) {
+	config := newVersionResolveConfig(t)
+	lister := &countingLister{tags: []string{"v1.2.3"}}
+	params := VersionResolveParams{
+		RawVersion: "^1.0.0", Name: "vpc",
+		SourceForGitURI: "github.com/cloudposse/terraform-aws-vpc", Lister: lister,
+	}
+	first, err := ResolveDeclaredVersion(context.Background(), config, &params)
+	require.NoError(t, err)
+	require.Equal(t, "v1.2.3", first)
+
+	_, err = lockfile.Clean(config, "", false, false)
+	require.NoError(t, err)
+	lister.tags = append(lister.tags, "v1.9.0")
+	resolved, err := ResolveDeclaredVersion(context.Background(), config, &params)
+	require.NoError(t, err)
+	assert.Equal(t, first, resolved, "cleanup must not cause an implicit version upgrade")
+	assert.Equal(t, 1, lister.calls, "the retained resolution must avoid another upstream check")
+
+	params.RefreshLock = true
+	resolved, err = ResolveDeclaredVersion(context.Background(), config, &params)
+	require.NoError(t, err)
+	assert.Equal(t, "v1.9.0", resolved, "explicit refresh must still discover newer versions")
+}
+
 // TestResolveDeclaredVersion_RefreshLockReResolves proves --refresh-lock (params.RefreshLock)
 // bypasses a matching lock entry and lists tags again, even though the declared range is unchanged.
 func TestResolveDeclaredVersion_RefreshLockReResolves(t *testing.T) {

@@ -28,8 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/oauth2"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/cache"
 	"github.com/cloudposse/atmos/pkg/git"
@@ -150,7 +148,17 @@ func NewBackend(opts cache.Options) (cache.Backend, error) {
 	// ATMOS_GITHUB_TOKEN > GITHUB_TOKEN > `gh auth token`. Note that save/restore
 	// of content do not use this token — they authenticate with the Actions
 	// runtime token (ACTIONS_RUNTIME_TOKEN).
-	restClient := newRESTClient(ghtoken.GetGitHubToken())
+	//
+	// RepoEndpoints resolves GITHUB_API_URL (defaulting to api.github.com), so cache
+	// list/delete work against a GitHub Enterprise Server instance the same way they
+	// do against github.com. newRESTClient withholds the token when that API URL is not
+	// https (ResolveEndpointURL accepts http:// so tests can point it at a local server) --
+	// since sending it there would put it on the wire in cleartext -- and, because it is
+	// built on ghtoken.NewScopedTokenHTTPClient rather than a plain oauth2 client,
+	// re-validates every actual request (including each hop of a redirect) so a cross-host or
+	// https-to-http-downgrade redirect never carries the token along either.
+	repoEndpoints := ghtoken.RepoEndpoints()
+	restClient := newRESTClient(ghtoken.GetGitHubToken(), repoEndpoints)
 
 	sum := sha256.Sum256([]byte(cacheVersionSalt))
 	version := hex.EncodeToString(sum[:])
@@ -158,7 +166,7 @@ func NewBackend(opts cache.Options) (cache.Backend, error) {
 	b := &Backend{
 		blobClient: &http.Client{Timeout: blobTimeout},
 		restClient: restClient,
-		baseURL:    "https://api.github.com",
+		baseURL:    repoEndpoints.APIURL,
 		owner:      owner,
 		repo:       repo,
 		version:    version,
@@ -485,15 +493,12 @@ func (c *twirpClient) call(ctx context.Context, method string, reqBody, out any)
 	return nil
 }
 
-// newRESTClient builds an HTTP client that injects the GitHub token (if any).
-func newRESTClient(token string) *http.Client {
-	if token == "" {
-		return &http.Client{Timeout: httpTimeout}
-	}
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	client := oauth2.NewClient(context.Background(), ts)
-	client.Timeout = httpTimeout
-	return client
+// newRESTClient builds an HTTP client that injects the GitHub token (if any), scoped to
+// endpoints via ghtoken.NewScopedTokenHTTPClient: the token is attached only when a given
+// request's own URL -- re-checked on every hop of a redirect -- is https and its host matches
+// endpoints' server or API host.
+func newRESTClient(token string, endpoints ghtoken.Endpoints) *http.Client {
+	return ghtoken.NewScopedTokenHTTPClient(token, endpoints, httpTimeout)
 }
 
 // resolveOwnerRepo resolves owner/repo from options/GITHUB_REPOSITORY, falling
@@ -525,11 +530,26 @@ func ownerRepoFromLocalGit() (string, string) {
 		log.Debug("CI cache: could not read local git remote for owner/repo resolution", "error", err)
 		return "", ""
 	}
-	if info.RepoHost != "github.com" {
-		log.Debug("CI cache: local git remote is not hosted on github.com", "host", info.RepoHost)
+	if info.RepoHost != "github.com" && !repoHostMatchesConfiguredGitHub(&info) {
+		log.Debug("CI cache: local git remote is not hosted on github.com or the configured GHES host", "host", info.RepoHost)
 		return "", ""
 	}
 	return info.RepoOwner, info.RepoName
+}
+
+// repoHostMatchesConfiguredGitHub reports whether info's remote host matches the GHES host
+// configured via GITHUB_SERVER_URL. SCP-style remotes ("[user@]host:path", no "://") can never
+// carry a port, so info.RepoHost is always portless for them; comparing that against
+// RepoEndpoints().Host (which keeps a configured non-default port, e.g. "ghe.example.com:8443")
+// via IsHost would always fail. Match SCP-style remotes against the portless
+// RepoEndpoints().Hostname() instead, and keep the port-aware IsHost check for URL-style remotes
+// (http(s):// or ssh://), which do preserve a non-default port in RepoHost.
+func repoHostMatchesConfiguredGitHub(info *git.RepoInfo) bool {
+	endpoints := ghtoken.RepoEndpoints()
+	if strings.Contains(info.RepoUrl, "://") {
+		return endpoints.IsHost(info.RepoHost)
+	}
+	return strings.EqualFold(info.RepoHost, endpoints.Hostname())
 }
 
 // repoFromEnv resolves owner/repo from options or GITHUB_REPOSITORY.

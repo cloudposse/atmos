@@ -14,7 +14,7 @@ local, remote-repository, or OCI — through the **Helm Go SDK**, in-process. No
 binary is required. This is a different component type than `components.helmfile`; see
 [Native Helm vs. Helmfile](#native-helm-vs-helmfile) below before choosing one.
 
-This feature is **experimental** (`IsExperimental() == true` in `cmd/helm/helm.go`).
+This feature is **experimental**.
 
 ## Related Skills
 
@@ -44,6 +44,14 @@ first-class GitOps delivery targets. Use **Helmfile** ([atmos-helmfile](../atmos
 for existing `helmfile.yaml` projects, multi-release releases files, or `helm-secrets`/other Helm CLI
 plugins. `atmos helm plugin` manages plugins **for Helmfile components** (native Helm does not run Helm
 CLI subcommand plugins).
+
+Declare Helmfile plugins in the component's stack configuration; Atmos ensures them before running
+Helmfile. See [Helmfile plugin configuration](../atmos-helmfile/SKILL.md#helm-plugins) for declarations
+and optional cache warming. Do not add a plugin installation prerequisite to native Helm commands.
+
+When maintaining plugin support, extend the existing generic installer in `pkg/helm/plugin`.
+Let Helm run each plugin's installation hooks. Keep plugin requirements with the consuming component
+or engine; a built-in alias such as `diff` does not justify a separate downloader or shell wrapper.
 
 ## Component Shape
 
@@ -116,13 +124,14 @@ automatically wherever they'd otherwise be printed (e.g. in `atmos helm diff` ou
 |---|---|
 | `atmos helm template <component> -s <stack>` | Render the chart to manifests via the Helm Go SDK (equivalent to `helm template`). No cluster or credentials needed. `render` is an alias. |
 | `atmos helm diff <component> -s <stack>` | Real unified diff (embedded [helm-diff](https://github.com/databus23/helm-diff) library — no plugin install) against a baseline. `plan` is an alias. |
+| `atmos helm values <component> -s <stack>` | Print the fully resolved chart values as formatted, masked YAML. Accepts the same Helm CLI value overrides as rendering operations. |
 | `atmos helm apply <component> -s <stack>` | Install or upgrade the release (`helm upgrade --install`), or deliver to a `--target` provision target. |
 | `atmos helm deploy <component> -s <stack>` | Alias for `apply`. |
 | `atmos helm delete <component> -s <stack>` | Uninstall the release (`helm uninstall`). No-op if the release does not exist. |
 | `atmos helm repo list [component] -s <stack>` | List declarative repository associations (global, component, or direct) and whether each is used by the resolved `chart`. |
 | `atmos helm plugin list` / `atmos helm plugin install <plugin>...` | Manage Helm CLI plugins in the Atmos-managed `HELM_PLUGINS` directory — **for Helmfile components**, not native Helm. |
 
-All operation commands (`template`, `diff`, `plan`, `apply`, `deploy`, `delete`) accept `--all`,
+Render and lifecycle commands (`template`, `diff`, `plan`, `apply`, `deploy`, `delete`) accept `--all`,
 `--affected` (with `--base`/`--ref`/`--sha`/`--repo-path`/`--clone-target-ref`/`--ssh-key`/
 `--ssh-key-password`), and `--include-dependents`, matching `atmos describe affected` semantics.
 `--all`/`--affected` are mutually exclusive with a positional component argument.
@@ -139,6 +148,13 @@ flag precedence `--from-manifest` → `--against` → deployed release:
 | Provision target | `--against=target[:<name>]` | The manifests currently published in a non-cluster provision target (e.g. Git deployment repo) — offline, git access only. Without `:<name>` uses `provision.default`. |
 
 `--context=<n>` controls unified-diff context lines (default `3`).
+
+### Runtime value overrides
+
+`template`/`render`, `diff`/`plan`, `values`, and `apply`/`deploy` accept repeatable Helm-compatible
+`-f`/`--values`, `--set`, `--set-string`, `--set-file`, `--set-json`, and `--set-literal` flags.
+They are invocation-only and override component `values_files` then inline `values`; use the same flags
+with `values`, `diff`, and `apply` to inspect, preview, and deploy identical inputs.
 
 ### template output
 

@@ -116,7 +116,9 @@ func TestConfigureReleaseLifecycleActions(t *testing.T) {
 	installPolicy := policy
 	installPolicy.OnFailure = failurePolicyUninstall
 	configureInstallLifecycle(install, installPolicy)
-	assert.True(t, install.RollbackOnFailure)
+	// Atmos owns the uninstall-on-failure (so it can capture pod diagnostics first,
+	// cloudposse/atmos#3271), so Helm's own RollbackOnFailure is left off.
+	assert.False(t, install.RollbackOnFailure)
 	assert.Equal(t, kube.LegacyStrategy, install.WaitStrategy)
 	assert.True(t, install.WaitForJobs)
 	assert.Equal(t, 12*time.Minute, install.Timeout)
@@ -125,7 +127,9 @@ func TestConfigureReleaseLifecycleActions(t *testing.T) {
 
 	upgrade := &action.Upgrade{}
 	configureUpgradeLifecycle(upgrade, policy)
-	assert.True(t, upgrade.RollbackOnFailure)
+	// Atmos owns the rollback-on-failure (so it can capture pod diagnostics first,
+	// cloudposse/atmos#3271), so Helm's own RollbackOnFailure is left off.
+	assert.False(t, upgrade.RollbackOnFailure)
 	assert.Equal(t, kube.LegacyStrategy, upgrade.WaitStrategy)
 	assert.True(t, upgrade.WaitForJobs)
 	assert.Equal(t, 12*time.Minute, upgrade.Timeout)
@@ -139,6 +143,27 @@ func TestConfigureReleaseLifecycleActions(t *testing.T) {
 	assert.Equal(t, 12*time.Minute, uninstall.Timeout)
 	assert.True(t, uninstall.DisableHooks)
 	assert.True(t, uninstall.DryRun)
+}
+
+func TestReleaseOperationErrorIncludesEffectivePolicy(t *testing.T) {
+	cause := context.DeadlineExceeded
+	err := releaseOperationError("upgrade", &chartSpec{
+		ReleaseName: "demo",
+		Namespace:   "apps",
+		Lifecycle: releaseLifecycleResolution{Policy: effectiveReleasePolicy{
+			WaitStrategy: kube.StatusWatcherStrategy,
+			Timeout:      7 * time.Minute,
+		}, TimeoutField: "release.upgrade.timeout"},
+	}, cause)
+
+	require.ErrorIs(t, err, errUtils.ErrHelmReleaseOperation)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.True(t, errUtils.HasContext(err, "operation", "upgrade"))
+	assert.True(t, errUtils.HasContext(err, "release", "demo"))
+	assert.True(t, errUtils.HasContext(err, "namespace", "apps"))
+	assert.True(t, errUtils.HasContext(err, "wait_strategy", "watcher"))
+	assert.True(t, errUtils.HasContext(err, "timeout", "7m0s"))
+	assert.True(t, errUtils.HasContext(err, "timeout_field", "release.upgrade.timeout"))
 }
 
 func TestClusterOperationsReturnActionContextErrors(t *testing.T) {

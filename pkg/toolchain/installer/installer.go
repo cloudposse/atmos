@@ -15,15 +15,15 @@ import (
 	log "github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/filelock"
-
-	errUtils "github.com/cloudposse/atmos/errors"
 	github "github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
+	"github.com/cloudposse/atmos/pkg/toolchain/registry/aqua"
 	"github.com/cloudposse/atmos/pkg/toolchain/verification"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -188,6 +188,7 @@ type Installer struct {
 	useConfiguredReg   bool                  // Whether to use configured registry vs builtin registry list.
 	registryFactory    RegistryFactory       // Factory for creating Aqua registry instances.
 	verificationPolicy verification.Policy
+	frozenLockFile     bool
 	useLockFile        bool
 	verifyAgainstLock  bool // Distinct from useLockFile: false for lock's own force-write/refresh path.
 	lockFilePath       string
@@ -253,8 +254,9 @@ func WithAtmosConfig(config *schema.AtmosConfiguration) Option {
 		}
 		if config != nil {
 			i.verificationPolicy = verification.PolicyFromConfig(config.Toolchain.Verification)
-			i.useLockFile = config.Toolchain.UseLockFile
-			i.verifyAgainstLock = config.Toolchain.UseLockFile
+			i.frozenLockFile = config.Toolchain.FrozenLockFile
+			i.useLockFile = config.Toolchain.UseLockFile || i.frozenLockFile
+			i.verifyAgainstLock = i.useLockFile
 			i.lockFilePath = resolveLockFilePath(config)
 		}
 	}
@@ -267,15 +269,15 @@ func WithAtmosConfig(config *schema.AtmosConfiguration) Option {
 // toolchain.lock_file, or <install_path>/toolchain.lock.yaml by default) regardless of
 // the use_lock_file toggle -- this option only flips the write-gating bool.
 //
-// The verifyAgainstLock field is deliberately left false here (overriding whatever
-// WithAtmosConfig set): `atmos toolchain lock` intentionally re-locks/refreshes entries, so it
-// must never fail on its own previously-recorded checksum the way a normal `install` would.
+// Unless frozen mode is active, verifyAgainstLock is deliberately disabled here:
+// `atmos toolchain lock` intentionally refreshes previously recorded checksums.
+// Frozen mode retains verification and rejects the refresh before downloading.
 func WithForceLockFile() Option {
 	defer perf.Track(nil, "installer.WithForceLockFile")()
 
 	return func(i *Installer) {
 		i.useLockFile = true
-		i.verifyAgainstLock = false
+		i.verifyAgainstLock = i.frozenLockFile
 	}
 }
 
@@ -330,7 +332,10 @@ func New(opts ...Option) *Installer {
 		registryPath: "./tool-registry",
 		cacheDir:     cacheDir,
 		registries: []string{
-			"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs",
+			// Overridable via ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL (see aqua.RegistryBaseURL);
+			// this is a separate concern from the repo endpoints (GITHUB_SERVER_URL), since
+			// aqua-registry tools live on public github.com even for GHES users, by default.
+			aqua.RegistryBaseURL() + "/pkgs",
 			"./tool-registry",
 		},
 		registryFactory:    &defaultRegistryFactory{},
@@ -370,6 +375,10 @@ func (i *Installer) Install(owner, repo, version string) (string, error) {
 // This prevents a concurrent installer from replacing an executable while the
 // kernel is running it.
 func (i *Installer) installWithVersionLock(ctx context.Context, owner, repo, version string, afterInstall func(string) error) (string, error) {
+	if err := i.requireFrozenEntry(owner, repo, version); err != nil {
+		return "", err
+	}
+
 	// The complete check/extract/replace transaction for one installed version
 	// must be exclusive across Atmos processes. The stable sibling lock survives
 	// the atomic replacements performed by the extractor.
@@ -404,6 +413,10 @@ func (i *Installer) installWithVersionLock(ctx context.Context, owner, repo, ver
 
 // Helper to handle the rest of the install logic.
 func (i *Installer) installFromTool(tool *registry.Tool, version string) (string, error) {
+	if err := i.requireFrozenEntry(tool.RepoOwner, tool.RepoName, version); err != nil {
+		return "", err
+	}
+
 	// Set version on tool so extraction functions can use it for template expansion.
 	tool.Version = version
 
@@ -474,6 +487,10 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 func (i *Installer) LockTool(tool *registry.Tool, version string) error {
 	defer perf.Track(nil, "installer.Installer.LockTool")()
 
+	if i.frozenLockFile {
+		return errUtils.ErrFrozenLockfile
+	}
+
 	tool.Version = version
 
 	ApplyPlatformOverrides(tool)
@@ -523,6 +540,9 @@ func (i *Installer) verifyDownloadedAsset(tool *registry.Tool, version, assetURL
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify downloaded asset: %w", err)
+	}
+	if err := i.prepareLockChecksum(tool, version, assetPath, result); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -1102,6 +1122,10 @@ func (i *Installer) Uninstall(owner, repo, version string) error {
 // The binaryName parameter is optional - pass empty string to auto-detect.
 func (i *Installer) FindBinaryPath(owner, repo, version string, binaryName ...string) (string, error) {
 	defer perf.Track(nil, "toolchain.installBinaryFromGitHub")()
+
+	if err := i.requireFrozenEntry(owner, repo, version); err != nil {
+		return "", err
+	}
 
 	// Handle "latest" keyword
 	if version == "latest" {

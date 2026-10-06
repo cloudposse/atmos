@@ -290,6 +290,61 @@ func TestComponentDependency_IsComponentDependency(t *testing.T) {
 	}
 }
 
+func TestComponentDependency_IsRequiredDefaultsToTrue(t *testing.T) {
+	defaultDependency := ComponentDependency{}
+	assert.True(t, defaultDependency.IsRequired())
+
+	required := true
+	requiredDependency := ComponentDependency{Required: &required}
+	assert.True(t, requiredDependency.IsRequired())
+
+	optional := false
+	optionalDependency := ComponentDependency{Required: &optional}
+	assert.False(t, optionalDependency.IsRequired())
+}
+
+func TestDeferUnresolvedRequiredHonorsConfiguredDelimiter(t *testing.T) {
+	section := map[string]any{
+		"components": []any{
+			map[string]any{"name": "monitoring", "required": "[[ .vars.monitoring_required ]]"},
+		},
+	}
+
+	deferred := DeferUnresolvedRequired(section, "[[")
+	entry := deferred["components"].([]any)[0].(map[string]any)
+
+	assert.NotContains(t, entry, "required")
+	assert.Equal(t, "[[ .vars.monitoring_required ]]", section["components"].([]any)[0].(map[string]any)["required"])
+}
+
+func TestParseComponentDependenciesRejectsInvalidRenderedRequiredValue(t *testing.T) {
+	_, err := ParseComponentDependencies(map[string]any{
+		"components": []any{
+			map[string]any{"name": "monitoring", "required": "sometimes"},
+		},
+	}, "terraform", "dev")
+
+	require.ErrorIs(t, err, ErrComponentDependencyInvalidRequired)
+}
+
+func TestParseComponentDependenciesNormalizesOptionalEdges(t *testing.T) {
+	required := true
+	optional := false
+	dependencies, err := ParseComponentDependencies(map[string]any{
+		"components": []any{
+			map[string]any{"name": "vpc", "required": "false"},
+			map[string]any{"component": "vpc", "required": true},
+			map[string]any{"name": "database", "required": "false", "stack": "shared"},
+			map[string]any{"kind": "file", "path": "config.yaml"},
+		},
+	}, "terraform", "dev")
+
+	require.NoError(t, err)
+	require.Len(t, dependencies, 2)
+	assert.Equal(t, ComponentDependency{Component: "vpc", Required: &required}, dependencies[0])
+	assert.Equal(t, ComponentDependency{Component: "database", Stack: "shared", Required: &optional}, dependencies[1])
+}
+
 func TestDependencies_Normalize_NameAlias(t *testing.T) {
 	t.Run("name alone is promoted to component", func(t *testing.T) {
 		d := &Dependencies{
@@ -455,6 +510,20 @@ func TestDependencies_Normalize_FilesFoldersSiblings(t *testing.T) {
 		require.NoError(t, d.Normalize())
 		assert.Equal(t, first, d.Components, "second Normalize must not append duplicates")
 	})
+}
+
+func TestDependencies_Normalize_RejectsMissingComponent(t *testing.T) {
+	tests := []ComponentDependency{
+		{},
+		{Name: ""},
+		{Component: ""},
+		{Stack: "prod"},
+		{Kind: "terraform"},
+	}
+	for _, entry := range tests {
+		err := (&Dependencies{Components: []ComponentDependency{entry}}).Normalize()
+		require.ErrorIs(t, err, ErrComponentDependencyMissingComponent)
+	}
 }
 
 // Helpers for the equivalence assertion.

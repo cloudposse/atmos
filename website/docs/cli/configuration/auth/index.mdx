@@ -245,6 +245,14 @@ When disabled:
   <dd>Atmos Pro base URL for the `atmos/pro` provider (alternative to `spec.base_url`).</dd>
 </dl>
 
+:::note GitHub Enterprise Server (GHES)
+`GITHUB_TOKEN` / `ATMOS_GITHUB_TOKEN` authenticate against whatever host `GITHUB_SERVER_URL` /
+`GITHUB_API_URL` resolve to (public `github.com` by default, or a GHES instance) — see
+[Environment Variables](/cli/environment-variables#github-enterprise-server-ghes) for the full
+list. The `github/sts` (Atmos Pro) integration above brokers tokens for Atmos Pro's own GitHub
+App, which is registered against public github.com; it is unaffected by `GITHUB_SERVER_URL`.
+:::
+
 ## Complete Example
 
 <File title="atmos.yaml">

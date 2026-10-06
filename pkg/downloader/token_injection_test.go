@@ -78,7 +78,7 @@ func TestResolveToken_GitHub(t *testing.T) {
 				},
 			}
 
-			token, tokenSource := detector.resolveToken(hostGitHub)
+			token, tokenSource := detector.resolveToken(hostGitHub, hostGitHub)
 			assert.Equal(t, tt.expectedToken, token)
 			assert.Equal(t, tt.expectedTokenSource, tokenSource)
 		})
@@ -172,7 +172,7 @@ func TestResolveToken_GitHub_CLIFallback(t *testing.T) {
 				detector.atmosConfig.Settings.GithubToken = tt.explicitGithubToken
 			}
 
-			token, tokenSource := detector.resolveToken(hostGitHub)
+			token, tokenSource := detector.resolveToken(hostGitHub, hostGitHub)
 			assert.Equal(t, tt.expectedToken, token)
 			assert.Equal(t, tt.expectedTokenSource, tokenSource)
 		})
@@ -237,7 +237,7 @@ func TestResolveToken_Bitbucket(t *testing.T) {
 				},
 			}
 
-			token, tokenSource := detector.resolveToken(hostBitbucket)
+			token, tokenSource := detector.resolveToken(hostBitbucket, hostBitbucket)
 			assert.Equal(t, tt.expectedToken, token)
 			assert.Equal(t, tt.expectedTokenSource, tokenSource)
 		})
@@ -302,7 +302,7 @@ func TestResolveToken_GitLab(t *testing.T) {
 				},
 			}
 
-			token, tokenSource := detector.resolveToken(hostGitLab)
+			token, tokenSource := detector.resolveToken(hostGitLab, hostGitLab)
 			assert.Equal(t, tt.expectedToken, token)
 			assert.Equal(t, tt.expectedTokenSource, tokenSource)
 		})
@@ -327,7 +327,7 @@ func TestResolveToken_UnknownHost(t *testing.T) {
 		},
 	}
 
-	token, tokenSource := detector.resolveToken("example.com")
+	token, tokenSource := detector.resolveToken("example.com", "example.com")
 	assert.Empty(t, token, "Unknown host should return empty token")
 	assert.Empty(t, tokenSource, "Unknown host should return empty token source")
 }
@@ -379,7 +379,7 @@ func TestInjectToken_WithToken(t *testing.T) {
 				},
 			}
 
-			detector.injectToken(parsedURL, tt.host)
+			detector.injectToken(parsedURL, tt.host, tt.host)
 
 			// Verify token was injected
 			assert.NotNil(t, parsedURL.User)
@@ -410,7 +410,7 @@ func TestInjectToken_NoToken(t *testing.T) {
 		},
 	}
 
-	detector.injectToken(parsedURL, hostGitHub)
+	detector.injectToken(parsedURL, hostGitHub, hostGitHub)
 
 	// Verify no token was injected
 	assert.Nil(t, parsedURL.User, "User should be nil when no token is available")
@@ -479,7 +479,7 @@ func TestInjectToken_UserSpecifiedCredentials(t *testing.T) {
 				},
 			}
 
-			detector.injectToken(parsedURL, tt.host)
+			detector.injectToken(parsedURL, tt.host, tt.host)
 
 			// Verify user credentials were NOT overwritten
 			assert.NotNil(t, parsedURL.User, "User should not be nil when URL has pre-existing credentials")
@@ -513,7 +513,7 @@ func TestInjectToken_UnknownHost(t *testing.T) {
 		},
 	}
 
-	detector.injectToken(parsedURL, "example.com")
+	detector.injectToken(parsedURL, "example.com", "example.com")
 
 	// Verify no token was injected for unknown host
 	assert.Nil(t, parsedURL.User, "User should be nil for unknown host")
@@ -566,7 +566,7 @@ func TestInjectToken_AllHosts(t *testing.T) {
 				},
 			}
 
-			detector.injectToken(parsedURL, h.host)
+			detector.injectToken(parsedURL, h.host, h.host)
 
 			assert.NotNil(t, parsedURL.User)
 			assert.Equal(t, h.expectedUsername, parsedURL.User.Username())

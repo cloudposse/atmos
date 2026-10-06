@@ -19,6 +19,7 @@ import (
 	process "github.com/cloudposse/atmos/pkg/process"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/autoinit"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -271,6 +272,29 @@ func TestExecuteMainTerraformCommand_FailedExplicitInitSkipsAfterInit(t *testing
 		ComponentEnvList: []string{"_ATMOS_TEST_EXIT_ONE=1"},
 	}
 	require.Error(t, executeMainTerraformCommand(&atmosConfig, &info, []string{"-test.run=^$"}, "", false))
+}
+
+// TestExecuteMainTerraformCommand_ExplicitInitWritesMarker verifies that a successful explicit
+// `atmos terraform init` records the smart-init marker (recordAutoInit), exactly as an implicit
+// init would, so a later plan/apply against the same directory can skip a redundant init.
+func TestExecuteMainTerraformCommand_ExplicitInitWritesMarker(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	componentPath := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: subcommandInit,
+		Command:    exePath,
+	}
+
+	require.NoError(t, executeMainTerraformCommand(&atmosConfig, &info, []string{"-test.run=^$"}, componentPath, false))
+
+	dataDir := autoinit.DataDir(componentPath, nil)
+	marker, markerErr := autoinit.ReadMarker(autoinit.MarkerPath(dataDir))
+	require.NoError(t, markerErr)
+	require.NotNil(t, marker, "explicit init must record the smart-init marker")
+	assert.NotEmpty(t, marker.Fingerprint)
 }
 
 // TestExecuteMainTerraformCommand_LocalNeutralization_ExecMetadataOnly is the

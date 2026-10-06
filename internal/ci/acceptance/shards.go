@@ -24,11 +24,12 @@ const (
 )
 
 var (
-	errShardsNotSettled = errors.New("acceptance: shard results never settled")
-	errShardCount       = errors.New("acceptance: unexpected number of shard jobs")
-	errShardsFailed     = errors.New("acceptance: shard jobs did not succeed")
-	errInvalidCheckName = errors.New("acceptance: check name is not of the form \"Acceptance Tests (<target>)\"")
-	errShardCountValue  = errors.New("acceptance: shard count must be a positive integer")
+	errShardsNotSettled  = errors.New("acceptance: shard results never settled")
+	errShardListingFails = errors.New("acceptance: listing shard jobs kept failing")
+	errShardCount        = errors.New("acceptance: unexpected number of shard jobs")
+	errShardsFailed      = errors.New("acceptance: shard jobs did not succeed")
+	errInvalidCheckName  = errors.New("acceptance: check name is not of the form \"Acceptance Tests (<target>)\"")
+	errShardCountValue   = errors.New("acceptance: shard count must be a positive integer")
 )
 
 // TargetFromCheckName derives the OS target ("linux") from the legacy
@@ -83,6 +84,12 @@ type ShardResult struct {
 // printed; a shard count other than ShardCount fails at once, since every
 // job of an attempt exists from the start and a mismatch means the workflow
 // changed shape.
+//
+// A listing that fails transiently (a 5xx from the jobs API, or a transport
+// error - see rerun.IsTransient) is treated like an unsettled one: it spends a
+// poll and is retried, so a single HTTP 502 does not fail a required check
+// whose shards all passed. A definitive error (4xx, cancelled context) or a
+// transient one on the final poll fails at once.
 func CheckShardResults(ctx context.Context, client rerun.RESTClient, w io.Writer, p *ShardResultsParams) error {
 	defer perf.Track(nil, "acceptance.CheckShardResults")()
 
@@ -95,7 +102,13 @@ func CheckShardResults(ctx context.Context, client rerun.RESTClient, w io.Writer
 	for attempt := 1; attempt <= polls; attempt++ {
 		jobs, err := rerun.FetchJobs(ctx, client, p.Run.Repo, p.Run.RunID, p.Run.RunAttempt)
 		if err != nil {
-			return err
+			if failure := listingFailure(w, p.Target, err, pollStep{attempt, polls, interval}); failure != nil {
+				return failure
+			}
+			if err := waitForNextPoll(ctx, wait, interval); err != nil {
+				return err
+			}
+			continue
 		}
 		shards = shardResults(jobs, p.Target)
 		if len(shards) != p.ShardCount {
@@ -110,8 +123,8 @@ func CheckShardResults(ctx context.Context, client rerun.RESTClient, w io.Writer
 		fmt.Fprintf(w, "poll %d/%d: %d of %d %q shard jobs have no conclusion yet; retrying in %s\n",
 			attempt, polls, unsettled, len(shards), p.Target, interval)
 		if attempt < polls {
-			if err := wait(ctx, interval); err != nil {
-				return fmt.Errorf("acceptance: waiting for shard results: %w", err)
+			if err := waitForNextPoll(ctx, wait, interval); err != nil {
+				return err
 			}
 		}
 	}
@@ -119,6 +132,37 @@ func CheckShardResults(ctx context.Context, client rerun.RESTClient, w io.Writer
 	fmt.Fprintf(w, "%q shard results never settled after %d polls; last listing:\n", p.Target, polls)
 	writeShardListing(w, shards)
 	return fmt.Errorf("%w: %q after %d polls", errShardsNotSettled, p.Target, polls)
+}
+
+// pollStep is where the poll loop is: which attempt of how many, and the
+// wait before the next one.
+type pollStep struct {
+	attempt  int
+	polls    int
+	interval time.Duration
+}
+
+// listingFailure decides what a failed jobs listing at step means: a
+// definitive error is returned as-is, a transient one on the final poll is
+// wrapped in errShardListingFails, and any other transient one is reported to
+// w and returns nil so the caller waits and polls again.
+func listingFailure(w io.Writer, target string, err error, step pollStep) error {
+	if !rerun.IsTransient(err) {
+		return err
+	}
+	if step.attempt == step.polls {
+		return fmt.Errorf("%w: %w", errShardListingFails, err)
+	}
+	fmt.Fprintf(w, "poll %d/%d: listing %q shard jobs failed (%v); retrying in %s\n",
+		step.attempt, step.polls, target, err, step.interval)
+	return nil
+}
+
+func waitForNextPoll(ctx context.Context, wait func(context.Context, time.Duration) error, interval time.Duration) error {
+	if err := wait(ctx, interval); err != nil {
+		return fmt.Errorf("acceptance: waiting for shard results: %w", err)
+	}
+	return nil
 }
 
 // polling returns the poll count, interval and wait function with defaults

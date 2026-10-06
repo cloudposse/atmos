@@ -167,6 +167,7 @@ func promptMissingComponent(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 		return err
 	}
 	info.ComponentFromArg = component
+	info.ComponentPrompted = component != ""
 	return nil
 }
 
@@ -179,6 +180,7 @@ func promptMissingStack(info *schema.ConfigAndStacksInfo, cmd *cobra.Command) er
 		return err
 	}
 	info.Stack = stack
+	info.StackPrompted = stack != ""
 	return nil
 }
 

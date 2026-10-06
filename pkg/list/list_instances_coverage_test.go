@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -612,6 +613,97 @@ func TestGetInstanceColumns(t *testing.T) {
 	}
 }
 
+// TestResolveInstancesEvalSections verifies the evaluation-scope filter derived from the resolved
+// column set: `metadata` is always folded in (extract.Metadata and createInstance's abstract-type
+// filtering always read it, regardless of which columns are shown), `settings` is folded in
+// whenever this invocation may upload instances (opts.Upload or Atmos Pro's GateOpen), and
+// --filter/--query force a nil (full eager evaluation) fallback since their YQ expressions cannot
+// be statically analyzed the way column.Value Go-template refs can.
+func TestResolveInstancesEvalSections(t *testing.T) {
+	proConfigured := &schema.AtmosConfiguration{Settings: schema.AtmosSettings{Pro: schema.ProSettings{Token: "test-token"}}}
+
+	tests := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		columns     []column.Config
+		opts        *InstancesCommandOptions
+		forceCI     bool
+		expectNil   bool
+		expectExact []string
+	}{
+		{
+			name:        "default columns require only metadata",
+			atmosConfig: &schema.AtmosConfiguration{},
+			columns:     defaultInstanceColumns,
+			opts:        &InstancesCommandOptions{},
+			expectExact: []string{"metadata"},
+		},
+		{
+			name:        "columns referencing vars require vars and metadata",
+			atmosConfig: &schema.AtmosConfiguration{},
+			columns:     []column.Config{{Name: "Component", Value: "{{ .component }}"}, {Name: "Region", Value: "{{ .vars.region }}"}},
+			opts:        &InstancesCommandOptions{},
+			expectExact: []string{"metadata", "vars"},
+		},
+		{
+			name:        "unresolvable column (raw) falls back to nil",
+			atmosConfig: &schema.AtmosConfiguration{},
+			columns:     []column.Config{{Name: "Raw", Value: "{{ .raw }}"}},
+			opts:        &InstancesCommandOptions{},
+			expectNil:   true,
+		},
+		{
+			name:        "--filter set forces nil (YQ expression, not statically analyzable)",
+			atmosConfig: &schema.AtmosConfiguration{},
+			columns:     defaultInstanceColumns,
+			opts:        &InstancesCommandOptions{FilterSpec: ".enabled == true"},
+			expectNil:   true,
+		},
+		{
+			name:        "--query set forces nil (YQ expression, not statically analyzable)",
+			atmosConfig: &schema.AtmosConfiguration{},
+			columns:     defaultInstanceColumns,
+			opts:        &InstancesCommandOptions{Query: ".component"},
+			expectNil:   true,
+		},
+		{
+			name:        "--upload folds settings in alongside metadata",
+			atmosConfig: &schema.AtmosConfiguration{},
+			columns:     defaultInstanceColumns,
+			opts:        &InstancesCommandOptions{Upload: true},
+			expectExact: []string{"metadata", "settings"},
+		},
+		{
+			name:        "Atmos Pro GateOpen folds settings in even without --upload",
+			atmosConfig: proConfigured,
+			columns:     defaultInstanceColumns,
+			opts:        &InstancesCommandOptions{},
+			forceCI:     true,
+			expectExact: []string{"metadata", "settings"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.forceCI {
+				// GateOpen requires telemetry.IsCI() in addition to Pro credentials; force it
+				// deterministically rather than depending on whether this test happens to run
+				// inside real CI.
+				preserved := telemetry.PreserveCIEnvVars()
+				t.Cleanup(func() { telemetry.RestoreCIEnvVars(preserved) })
+				t.Setenv("CI", "true")
+			}
+			result := resolveInstancesEvalSections(tt.atmosConfig, tt.columns, tt.opts)
+			if tt.expectNil {
+				assert.Nil(t, result)
+				return
+			}
+			require.NotNil(t, result)
+			assert.ElementsMatch(t, tt.expectExact, result)
+		})
+	}
+}
+
 // TestBuildInstanceSorters tests sorter configuration.
 func TestBuildInstanceSorters(t *testing.T) {
 	tests := []struct {
@@ -837,7 +929,7 @@ func TestExecuteListInstancesCmd_ClosurePreview(t *testing.T) {
 		Tags:                []string{"istio"},
 		IncludeDependencies: -1,
 		ProcessTemplates:    true,
-		AuthDisabled:        true,
+		AuthManager:         authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true}),
 	})
 
 	require.NoError(t, err, "a closure preview over a healthy fixture should render cleanly")
@@ -899,9 +991,10 @@ func TestExecuteListInstancesCmd_ClosurePreviewPropagatesError(t *testing.T) {
 		Args:                []string{},
 		Format:              "json",
 		Tags:                []string{"broken-tag"},
+		ColumnsFlag:         []string{"Value={{ .vars.upstream_value }}"},
 		IncludeDependencies: -1,
 		ProcessTemplates:    true,
-		AuthDisabled:        true,
+		AuthManager:         authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true}),
 	})
 
 	require.Error(t, err)

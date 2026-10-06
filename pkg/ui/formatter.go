@@ -1177,7 +1177,10 @@ func (f *formatter) buildMarkdownRenderOptions(preserveNewlines, noWrap bool) []
 		}
 		// Fallback to notty style if theme conversion fails.
 	} else {
-		opts = append(opts, glamour.WithStylePath("notty"))
+		style, err := markdown.GetPlainTextStyle()
+		if err == nil {
+			opts = append(opts, glamour.WithStylesFromJSONBytes(style))
+		}
 	}
 
 	return opts
@@ -1204,6 +1207,11 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool
 		// Degrade gracefully: return plain content if rendering fails
 		return content, err
 	}
+
+	// Fix glamour's missing hanging indent on wrapped list continuation
+	// lines (see markdown.FixListHangingIndent for why this is a
+	// post-process rather than a renderer/style option).
+	rendered = markdown.FixListHangingIndent(rendered)
 
 	// Remove trailing whitespace that glamour adds for padding.
 	return atmosansi.TrimLinesRight(rendered), nil

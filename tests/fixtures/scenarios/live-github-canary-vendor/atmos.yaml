@@ -1,0 +1,12 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+vendor:
+  base_path: "./vendor.yaml"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

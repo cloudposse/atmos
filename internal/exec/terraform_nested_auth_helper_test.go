@@ -11,6 +11,8 @@ import (
 
 // TestHasDefaultIdentity tests the hasDefaultIdentity function with various auth configurations.
 func TestHasDefaultIdentity(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		authSection map[string]any
@@ -107,6 +109,7 @@ func TestHasDefaultIdentity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := hasDefaultIdentity(tt.authSection)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -116,6 +119,8 @@ func TestHasDefaultIdentity(t *testing.T) {
 // TestResolveAuthManagerForNestedComponent_NoAuthSection tests the case where
 // component has no auth section and should inherit parent AuthManager.
 func TestResolveAuthManagerForNestedComponent_NoAuthSection(t *testing.T) {
+	t.Parallel()
+
 	// This test requires fixture setup, will be tested via integration tests
 	// in describe_component_nested_authmanager_test.go
 	t.Skip("Covered by integration tests in describe_component_nested_authmanager_test.go")
@@ -123,6 +128,8 @@ func TestResolveAuthManagerForNestedComponent_NoAuthSection(t *testing.T) {
 
 // TestGetStaticRemoteStateOutput tests the GetStaticRemoteStateOutput function.
 func TestGetStaticRemoteStateOutput(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	tests := []struct {
@@ -226,6 +233,7 @@ func TestGetStaticRemoteStateOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, exists, err := GetStaticRemoteStateOutput(
 				atmosConfig,
 				"test-component",
@@ -252,6 +260,8 @@ func TestGetStaticRemoteStateOutput(t *testing.T) {
 // TestGetComponentConfigForAuthResolution_ErrorHandling tests error handling
 // in getComponentConfigForAuthResolution.
 func TestGetComponentConfigForAuthResolution_ErrorHandling(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		component string
@@ -281,6 +291,7 @@ func TestGetComponentConfigForAuthResolution_ErrorHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := getComponentConfigForAuthResolution(tt.component, tt.stack)
 			// We expect an error because these components/stacks don't exist
 			// The function should return an error with ErrDescribeComponent wrapped
@@ -293,6 +304,8 @@ func TestGetComponentConfigForAuthResolution_ErrorHandling(t *testing.T) {
 // This tests the core logic of identity inheritance that was added to fix the issue where
 // --identity flag wasn't propagating to nested components.
 func TestIdentityInheritanceLogic(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		chain            []string
@@ -327,6 +340,7 @@ func TestIdentityInheritanceLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Simulate the identity extraction logic from createComponentAuthManager
 			var identityName string
 			if len(tt.chain) > 0 {
@@ -341,6 +355,8 @@ func TestIdentityInheritanceLogic(t *testing.T) {
 // TestResolveAuthManagerForNestedComponent_WithoutAuthSection tests the case where
 // component has no auth section and should return parent AuthManager unchanged.
 func TestResolveAuthManagerForNestedComponent_WithoutAuthSection(t *testing.T) {
+	t.Parallel()
+
 	// This test verifies the early return paths in resolveAuthManagerForNestedComponent
 	// when component has no auth section or no default identity.
 	// The actual function requires fixture setup, so we test the logic directly.
@@ -388,6 +404,7 @@ func TestResolveAuthManagerForNestedComponent_WithoutAuthSection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Test the logic that determines if we should return early
 			if tt.authSection == nil {
 				assert.True(t, tt.shouldReturnEarly)
@@ -402,6 +419,8 @@ func TestResolveAuthManagerForNestedComponent_WithoutAuthSection(t *testing.T) {
 
 // TestHasDefaultIdentity_EdgeCases tests additional edge cases for hasDefaultIdentity.
 func TestHasDefaultIdentity_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		authSection map[string]any
@@ -451,6 +470,7 @@ func TestHasDefaultIdentity_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := hasDefaultIdentity(tt.authSection)
 			assert.Equal(t, tt.expected, result)
 		})

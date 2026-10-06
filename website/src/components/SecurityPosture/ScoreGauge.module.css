@@ -1,0 +1,55 @@
+.gauge {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+}
+
+.ring {
+  width: 100%;
+  height: 100%;
+}
+
+.track {
+  stroke: var(--ifm-color-emphasis-200);
+}
+
+.progress {
+  transition: stroke-dasharray 0.4s ease;
+}
+
+.progress.good {
+  stroke: var(--ifm-color-success);
+}
+
+.progress.warn {
+  stroke: var(--ifm-color-warning);
+}
+
+.progress.bad {
+  stroke: var(--ifm-color-danger);
+}
+
+.progress.neutral {
+  stroke: var(--ifm-color-emphasis-400);
+}
+
+.value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.number {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ifm-heading-color);
+}
+
+.na {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ifm-color-emphasis-500);
+}

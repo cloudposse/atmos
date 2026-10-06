@@ -16,6 +16,8 @@ import (
 // errUtils.CheckErrorPrintAndExit which exits the process.
 
 func TestProcessCustomTags_UnsupportedTagDetection(t *testing.T) {
+	t.Parallel()
+
 	unsupportedTags := []struct {
 		name        string
 		input       string
@@ -146,6 +148,7 @@ func TestProcessCustomTags_UnsupportedTagDetection(t *testing.T) {
 
 	for _, tt := range unsupportedTags {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// We need to test that the function would detect this as unsupported
 			// Check if the tag would be recognized as unsupported
 			// Use matchesSupportedTag which checks for exact tag followed by space/whitespace
@@ -158,6 +161,8 @@ func TestProcessCustomTags_UnsupportedTagDetection(t *testing.T) {
 }
 
 func TestProcessCustomTags_ErrorMessageFormat(t *testing.T) {
+	t.Parallel()
+
 	// Test that error messages for unsupported tags have the correct format
 	tests := []struct {
 		name             string
@@ -186,6 +191,7 @@ func TestProcessCustomTags_ErrorMessageFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create the expected error using the central list of supported tags.
 			err := fmt.Errorf("%w: '%s' in stack '%s'. Supported tags are: %s",
 				errUtils.ErrUnsupportedYamlTag,
@@ -204,6 +210,8 @@ func TestProcessCustomTags_ErrorMessageFormat(t *testing.T) {
 }
 
 func TestProcessCustomTags_ValidTagsNotReportedAsUnsupported(t *testing.T) {
+	t.Parallel()
+
 	validTags := []struct {
 		name  string
 		input string
@@ -225,6 +233,7 @@ func TestProcessCustomTags_ValidTagsNotReportedAsUnsupported(t *testing.T) {
 
 	for _, tt := range validTags {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Check that valid tags are recognized as supported
 			// Use matchesSupportedTag which checks for exact tag followed by space/whitespace
 			isSupportedTag := matchesSupportedTag(tt.input, fntag.AllYAML())
@@ -251,6 +260,8 @@ func matchesSupportedTag(input string, supportedTags []string) bool {
 }
 
 func TestProcessCustomTags_NonTagStrings(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	nonTagStrings := []struct {
@@ -312,6 +323,7 @@ func TestProcessCustomTags_NonTagStrings(t *testing.T) {
 
 	for _, tt := range nonTagStrings {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, _ := processCustomTags(atmosConfig, tt.input, "test-stack", []string{}, nil)
 			assert.Equal(t, tt.expected, result, "Non-tag string should be returned as-is")
 		})
@@ -319,6 +331,8 @@ func TestProcessCustomTags_NonTagStrings(t *testing.T) {
 }
 
 func TestProcessCustomTags_BoundaryConditions(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	tests := []struct {
@@ -380,6 +394,7 @@ func TestProcessCustomTags_BoundaryConditions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.shouldSkip {
 				t.Skipf("Skipping test '%s': would trigger CheckErrorPrintAndExit and exit the process", tt.name)
 			}
@@ -390,6 +405,8 @@ func TestProcessCustomTags_BoundaryConditions(t *testing.T) {
 }
 
 func TestProcessNodes_TypePreservation(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	input := map[string]any{

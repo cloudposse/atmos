@@ -20,6 +20,8 @@ const (
 	TaskTypeAtmos = "atmos"
 	// TaskTypeParallel is the task type for running nested steps concurrently.
 	TaskTypeParallel = "parallel"
+	// TaskTypeTest runs checks with a test report.
+	TaskTypeTest = "test"
 	// TaskTypeMatrix is the task type for expanding and running nested steps concurrently.
 	TaskTypeMatrix = "matrix"
 	// TaskTypeExec is the task type for commands that replace the Atmos
@@ -294,7 +296,7 @@ type Task struct {
 	// Show configuration for this step (overrides workflow-level show settings).
 	Show *ShowConfig `yaml:"show,omitempty" json:"show,omitempty" mapstructure:"show"`
 
-	// Control step fields.
+	// Control step fields for parallel, matrix, and test groups.
 	Steps          []WorkflowStep      `yaml:"steps,omitempty" json:"steps,omitempty" mapstructure:"steps"`
 	MaxConcurrency int                 `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty" mapstructure:"max_concurrency"`
 	Matrix         map[string][]string `yaml:"matrix,omitempty" json:"matrix,omitempty" mapstructure:"matrix"`
@@ -561,7 +563,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Show configuration.
 		Show: task.Show,
 
-		// Control step fields.
+		// Control step fields for parallel, matrix, and test groups.
 		Steps:           task.Steps,
 		MaxConcurrency:  task.MaxConcurrency,
 		Matrix:          task.Matrix,
@@ -728,7 +730,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		// Show configuration.
 		Show: step.Show,
 
-		// Control step fields.
+		// Control step fields for parallel, matrix, and test groups.
 		Steps:           step.Steps,
 		MaxConcurrency:  step.MaxConcurrency,
 		Matrix:          step.Matrix,

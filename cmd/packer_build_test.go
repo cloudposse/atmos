@@ -21,7 +21,7 @@ func TestPackerBuildCmd(t *testing.T) {
 
 	skipIfPackerNotInstalled(t)
 
-	workDir := "../tests/fixtures/scenarios/packer"
+	workDir := packerFixtureWorkDir(t)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.WarnLevel)
@@ -107,7 +107,7 @@ func TestPackerBuildCmdInvalidComponent(t *testing.T) {
 
 	skipIfPackerNotInstalled(t)
 
-	workDir := "../tests/fixtures/scenarios/packer"
+	workDir := packerFixtureWorkDir(t)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.WarnLevel)
@@ -150,7 +150,7 @@ func TestPackerBuildCmdMissingStack(t *testing.T) {
 
 	skipIfPackerNotInstalled(t)
 
-	workDir := "../tests/fixtures/scenarios/packer"
+	workDir := packerFixtureWorkDir(t)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.WarnLevel)
@@ -169,7 +169,7 @@ func TestPackerBuildCmdWithDirectoryTemplate(t *testing.T) {
 
 	skipIfPackerNotInstalled(t)
 
-	workDir := "../tests/fixtures/scenarios/packer"
+	workDir := packerFixtureWorkDir(t)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.WarnLevel)

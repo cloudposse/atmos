@@ -219,6 +219,33 @@ func TestGitHubActionsStore_Get_CIGating(t *testing.T) {
 	})
 }
 
+func TestGitHubActionsStore_GetRawPreservesEnvironmentValue(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+	}{
+		{name: "JSON object", payload: `{"type":"service_account","enabled":true}`},
+		{name: "plain text", payload: "example-token"},
+		{name: "quoted string", payload: `"example-token"`},
+		{name: "multiline", payload: "-----BEGIN PRIVATE KEY-----\nAAAA\nBBBB\n-----END PRIVATE KEY-----\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("RAW_SECRET", tt.payload)
+			store := newTestStore(
+				newFakeGitHubActionsClient(),
+				&GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"},
+				true,
+			)
+
+			got, err := store.GetRaw("dev", "app", "raw_secret")
+			require.NoError(t, err)
+			assert.Equal(t, tt.payload, got)
+		})
+	}
+}
+
 // TestGitHubActionsStore_ValueListingSupported proves ValueListingSupported mirrors readAllowed
 // in every case Get's own CI gating covers, so Service.ListKeyValues rejects value listing in
 // exactly the same conditions Get itself would reject a value read.

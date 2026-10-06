@@ -309,6 +309,28 @@ func TestFlagRegistry_SetCompletionFunc_StringSliceFlag(t *testing.T) {
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
 
+func TestFlagRegistry_SetCompletionFunc_StringArrayFlag(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringArrayFlag{StringSliceFlag: StringSliceFlag{Name: "set"}})
+
+	completionFn := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"image.tag=", "replicas="}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	assert.NotPanics(t, func() {
+		registry.SetCompletionFunc("set", completionFn)
+	})
+
+	flag := registry.Get("set")
+	af, ok := flag.(*StringArrayFlag)
+	require.True(t, ok)
+	require.NotNil(t, af.CompletionFunc)
+
+	results, directive := af.CompletionFunc(nil, nil, "")
+	assert.Equal(t, []string{"image.tag=", "replicas="}, results)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
 func TestFlagRegistry_SetCompletionFunc_NonExistentFlag(t *testing.T) {
 	registry := NewFlagRegistry()
 

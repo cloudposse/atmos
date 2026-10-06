@@ -12,12 +12,14 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	// Import backend provisioner to register S3 provisioner.
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
 )
 
@@ -36,10 +38,11 @@ const (
 	// can run a terraform subcommand against the live env, RC, and working directory.
 	afterTerraformInitEvent = "after.terraform.init"
 
-	subcommandApply     = "apply"
-	subcommandDeploy    = "deploy"
-	subcommandInit      = "init"
-	subcommandWorkspace = "workspace"
+	subcommandApply         = "apply"
+	subcommandDeploy        = "deploy"
+	subcommandInit          = "init"
+	subcommandWorkspace     = "workspace"
+	subcommandProvidersLock = "providers-lock"
 
 	autoApproveFlag           = "-auto-approve"
 	outFlag                   = "-out"
@@ -97,8 +100,11 @@ func startManagedTerraformCache(atmosConfig *schema.AtmosConfiguration, info *sc
 
 // ExecuteTerraform executes terraform commands.
 // Optional ShellCommandOption values are forwarded to the final ExecuteShellCommand call.
-func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+//
+//nolint:revive,cyclop,funlen,gocritic // Existing pipeline complexity; reporting adds only a deferred snapshot.
+func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
+	defer attachComponentReporting(&resultErr, &info, "terraform", info.SubCommand)
 
 	// Captured before any pipeline step can rewrite info.SubCommand (e.g.
 	// handleDeploySubcommand rewrites "deploy" to "apply" in place so
@@ -203,6 +209,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		// A successful Terraform command can create, change, or remove state. Drop
 		// any preflight snapshot so a dependent graph node reads the current outputs.
 		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
+		tfoutput.InvalidateComponentOutputs(info.Stack, info.ComponentFromArg)
 	}
 
 	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, execMetadataSyncParams{
@@ -295,7 +302,14 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 		data = params.Parser(subCommand, rawExitCode, info.ExecMetadataRawOutput)
 	}
 
-	in := &proexec.ExecRecordInput{Command: "terraform " + subCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data}
+	// info.ExecMetadataRawMetrics is typed `any` (not *process.ProcessMetrics)
+	// to avoid an import cycle — pkg/metrics/process imports pkg/schema for
+	// its own settings gate, so pkg/schema cannot import it back. A nil or
+	// mistyped value here is silently treated as "no override", falling back
+	// to proexec.buildRecord's own process.SelfUsageSoFar() default.
+	metrics, _ := info.ExecMetadataRawMetrics.(*metricsprocess.ProcessMetrics)
+
+	in := &proexec.ExecRecordInput{Command: "terraform " + subCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data, Metrics: metrics}
 	if syncErr := proexec.CaptureSync(atmosConfig, in); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}

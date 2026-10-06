@@ -12,11 +12,15 @@ import (
 )
 
 func TestNewAuthContextWrapper_NilContext(t *testing.T) {
+	t.Parallel()
+
 	result := newAuthContextWrapper(nil)
 	assert.Nil(t, result)
 }
 
 func TestNewAuthContextWrapper_WithContext(t *testing.T) {
+	t.Parallel()
+
 	authContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
 			Profile:         "test-profile",
@@ -33,6 +37,8 @@ func TestNewAuthContextWrapper_WithContext(t *testing.T) {
 }
 
 func TestAuthContextWrapper_GetStackInfo(t *testing.T) {
+	t.Parallel()
+
 	authContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
 			Profile: "test-profile",
@@ -48,6 +54,8 @@ func TestAuthContextWrapper_GetStackInfo(t *testing.T) {
 }
 
 func TestAuthContextWrapper_GetStackInfo_EmptyAuthContext(t *testing.T) {
+	t.Parallel()
+
 	authContext := &schema.AuthContext{}
 
 	wrapper := newAuthContextWrapper(authContext)
@@ -59,6 +67,8 @@ func TestAuthContextWrapper_GetStackInfo_EmptyAuthContext(t *testing.T) {
 }
 
 func TestAuthContextWrapper_AuthenticateProvider(t *testing.T) {
+	t.Parallel()
+
 	wrapper := &authContextWrapper{
 		stackInfo: &schema.ConfigAndStacksInfo{},
 	}
@@ -77,6 +87,8 @@ func TestAuthContextWrapper_AuthenticateProvider(t *testing.T) {
 // resolveAuthManagerForNestedComponent calls GetChain() on the parentAuthManager to inherit the identity.
 // Previously, GetChain() panicked, causing the reported bug. Now it returns an empty slice.
 func TestAuthContextWrapper_GetChain_NoLongerPanics(t *testing.T) {
+	t.Parallel()
+
 	authContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
 			Profile: "test-profile",
@@ -96,6 +108,8 @@ func TestAuthContextWrapper_GetChain_NoLongerPanics(t *testing.T) {
 }
 
 func TestAuthContextWrapper_PanicMethods(t *testing.T) {
+	t.Parallel()
+
 	wrapper := &authContextWrapper{
 		stackInfo: &schema.ConfigAndStacksInfo{},
 	}

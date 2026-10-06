@@ -251,7 +251,7 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 		RepoOwner:     repoInfo.RepoOwner,
 		RepoHost:      repoInfo.RepoHost,
 		Stack:         info.Stack,
-		Component:     info.Component,
+		Component:     info.ComponentFromArg,
 		Command:       info.SubCommand,
 		ExitCode:      exitCode,
 	}

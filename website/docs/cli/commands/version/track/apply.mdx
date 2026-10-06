@@ -24,6 +24,12 @@ atmos version track sync [track] [flags]
   <dt>`marker`</dt>
   <dd>Rewrites version tokens on lines annotated with `<comment> atmos:version <name> [match=<regex>]`.</dd>
 
+  <dt>`json`</dt>
+  <dd>Writes locked values into JSON files at configured field paths, preserving formatting and key order.</dd>
+
+  <dt>`yaml`</dt>
+  <dd>Writes locked values into YAML files at configured field paths, preserving comments, anchors, and key order.</dd>
+
   <dt>`template`</dt>
   <dd>Renders `*.tmpl` files to sibling files with the `.tmpl` suffix stripped, using the `.version` context.</dd>
 </dl>

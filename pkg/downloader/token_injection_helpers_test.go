@@ -50,7 +50,7 @@ func TestIsSupportedHost(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isSupportedHost(tt.host)
+			result := isSupportedHost(tt.host, tt.host)
 			assert.Equal(t, tt.expected, result, "isSupportedHost(%q) should return %v", tt.host, tt.expected)
 		})
 	}
@@ -172,7 +172,7 @@ func TestShouldInjectTokenForHost(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := shouldInjectTokenForHost(tt.host, &tt.settings)
+			result := shouldInjectTokenForHost(tt.host, tt.host, &tt.settings)
 			assert.Equal(t, tt.expected, result,
 				"shouldInjectTokenForHost(%q, settings) should return %v", tt.host, tt.expected)
 		})
@@ -256,10 +256,10 @@ func TestShouldInjectTokenForHost_Consistency(t *testing.T) {
 
 	// Call multiple times to ensure consistency.
 	for i := 0; i < 10; i++ {
-		assert.True(t, shouldInjectTokenForHost(hostGitHub, &settings), "GitHub should always return true")
-		assert.False(t, shouldInjectTokenForHost(hostBitbucket, &settings), "Bitbucket should always return false")
-		assert.True(t, shouldInjectTokenForHost(hostGitLab, &settings), "GitLab should always return true")
-		assert.False(t, shouldInjectTokenForHost("example.com", &settings), "Unknown host should always return false")
+		assert.True(t, shouldInjectTokenForHost(hostGitHub, hostGitHub, &settings), "GitHub should always return true")
+		assert.False(t, shouldInjectTokenForHost(hostBitbucket, hostBitbucket, &settings), "Bitbucket should always return false")
+		assert.True(t, shouldInjectTokenForHost(hostGitLab, hostGitLab, &settings), "GitLab should always return true")
+		assert.False(t, shouldInjectTokenForHost("example.com", "example.com", &settings), "Unknown host should always return false")
 	}
 }
 
@@ -291,7 +291,7 @@ func TestIsSupportedHost_CaseInsensitivity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isSupportedHost(tt.host)
+			result := isSupportedHost(tt.host, tt.host)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

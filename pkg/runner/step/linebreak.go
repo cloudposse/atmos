@@ -6,7 +6,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // LinebreakHandler outputs one or more blank lines.
@@ -38,7 +37,7 @@ func (h *LinebreakHandler) Execute(ctx context.Context, step *schema.WorkflowSte
 	}
 
 	output := strings.Repeat("\n", count)
-	ui.Write(output)
+	vars.UI().Write(output)
 
 	return NewStepResult(""), nil
 }

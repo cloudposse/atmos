@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // errFakeDescribeStack is returned by fakeDescribe when errOnStack matches.
@@ -165,6 +167,49 @@ func TestResolveScopedClosureEvaluatesOnlyClosureComponents(t *testing.T) {
 	// The merged stacks map must not carry the poison component either.
 	devComponents := result.Stacks["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)
 	assert.NotContains(t, devComponents, "poison")
+}
+
+// TestResolveScopedClosureDefersRequiredTargetValidationOutsideClosure proves
+// a bounded request validates required targets only after their declaring
+// component becomes part of the resolved closure. The unrelated component is
+// deliberately invalid, but must not block selecting "app" by its literal
+// inherited label.
+func TestResolveScopedClosureDefersRequiredTargetValidationOutsideClosure(t *testing.T) {
+	t.Parallel()
+
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {
+				"metadata": map[string]any{"labels": map[string]any{"deployment": "app-dev"}},
+			},
+			"unrelated": {
+				"dependencies": map[string]any{
+					"components": []any{map[string]any{"component": "missing"}},
+				},
+			},
+		},
+	})
+	fake := &fakeDescribe{full: stacks}
+
+	result, err := ResolveScopedClosure(fake.describe, &ScopeRequest{
+		Labels:           map[string]string{"deployment": "app-dev"},
+		Direction:        DirectionForward,
+		ProcessTemplates: true,
+	})
+	require.NoError(t, err)
+
+	_, hasApp := result.Closure.GetNode(NodeID("app", "dev"))
+	_, hasUnrelated := result.Closure.GetNode(NodeID("unrelated", "dev"))
+	assert.True(t, hasApp)
+	assert.False(t, hasUnrelated)
+	evaluatedApp := false
+	for _, call := range fake.calls {
+		if call.processTemplates || call.processFunctions {
+			evaluatedApp = true
+			assert.Equal(t, []string{"app"}, call.components)
+		}
+	}
+	assert.True(t, evaluatedApp, "Phase C must evaluate the selected component")
 }
 
 func TestResolveScopedClosureDepthBoundsEvaluation(t *testing.T) {
@@ -337,6 +382,7 @@ func TestResolveScopedClosurePropagatesPerStackDescribeErrors(t *testing.T) {
 		ProcessTemplates: true,
 	})
 	require.ErrorIs(t, err, errFakeDescribeStack)
+	require.ErrorContains(t, err, "evaluating stack \"dev\" components [app db]")
 }
 
 // TestMergeResolvedClosureStacks covers the overlay merge directly, including
@@ -445,8 +491,7 @@ func TestResolveScopedClosureReverseDiscoversTemplatedDependent(t *testing.T) {
 			// Also has a templated dependency, but it resolves to a target
 			// OUTSIDE the closure: it must be evaluated (conservatively) yet
 			// excluded from the final closure.
-			"batch": dependsOn(map[string]any{"component": "{{ .vars.other_component }}"}),
-			"other": {},
+			"batch": {"dependencies": map[string]any{"components": []any{map[string]any{"component": "{{ .vars.other_component }}"}}}},
 		},
 	})
 	resolved := terraformStacks(map[string]map[string]map[string]any{
@@ -458,8 +503,7 @@ func TestResolveScopedClosureReverseDiscoversTemplatedDependent(t *testing.T) {
 			"monitor": dependsOn(map[string]any{"component": "vpc", "stack": "dev"}),
 		},
 		"qa": {
-			"batch": dependsOn(map[string]any{"component": "other"}),
-			"other": {},
+			"batch": {"dependencies": map[string]any{"components": []any{map[string]any{"component": "missing"}}}},
 		},
 	})
 	describe := &fakeDescribe{full: lightweight, resolved: resolved}
@@ -478,12 +522,171 @@ func TestResolveScopedClosureReverseDiscoversTemplatedDependent(t *testing.T) {
 	_, ok = result.Closure.GetNode(NodeID("monitor", "ops"))
 	require.True(t, ok, "reverse closure must discover a cross-stack dependent with a templated stack target")
 
-	// Extra evaluation is conservative, not membership: batch resolved to a
-	// dependency outside the closure and must be excluded from it.
+	// Extra evaluation is conservative, not membership: batch resolves to a
+	// missing required target outside the closure and must not fail this request.
 	_, ok = result.Closure.GetNode(NodeID("batch", "qa"))
 	require.False(t, ok, "an evaluated non-dependent must not join the closure")
-	_, ok = result.Closure.GetNode(NodeID("other", "qa"))
-	require.False(t, ok, "the non-dependent's own dependency must not join the closure")
+}
+
+func TestResolveScopedClosureReverseSkipsRequiredSourceForDifferentTargetType(t *testing.T) {
+	t.Parallel()
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"image": map[string]any{},
+					"app": map[string]any{"dependencies": map[string]any{"components": []any{
+						map[string]any{"component": "image", "kind": "packer"},
+					}}},
+				},
+				"packer": map[string]any{
+					"image": map[string]any{"metadata": map[string]any{"enabled": false}},
+				},
+			},
+		},
+	}
+	fake := &fakeDescribe{full: stacks}
+
+	result, err := ResolveScopedClosure(fake.describe, &ScopeRequest{
+		Components:                    []string{"image"},
+		Stack:                         "dev",
+		Direction:                     DirectionReverse,
+		ProcessTemplates:              true,
+		SkipTargetValidation:          true,
+		IncludeRequiredReverseSources: true,
+	})
+
+	require.NoError(t, err)
+	components := result.Stacks["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)
+	_, ok := components["app"]
+	require.False(t, ok, "reverse scope must not evaluate a source whose typed target differs from the selected target")
+}
+
+func TestResolveScopedClosureReverseSkipsRequiredSourceForDifferentTargetTypeSelectedByTagOrLabel(t *testing.T) {
+	t.Parallel()
+
+	stacks := map[string]any{
+		"dev": map[string]any{"components": map[string]any{
+			"terraform": map[string]any{
+				"image": map[string]any{"metadata": map[string]any{
+					"tags":   []any{"target"},
+					"labels": map[string]any{"role": "target"},
+				}},
+				"app": map[string]any{"dependencies": map[string]any{"components": []any{
+					map[string]any{"component": "image", "kind": "packer"},
+				}}},
+			},
+			"packer": map[string]any{
+				"image": map[string]any{"metadata": map[string]any{"enabled": false}},
+			},
+		}},
+	}
+
+	for _, test := range []struct {
+		name string
+		req  ScopeRequest
+	}{
+		{name: "tag", req: ScopeRequest{Tags: []string{"target"}}},
+		{name: "label", req: ScopeRequest{Labels: map[string]string{"role": "target"}}},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fake := &fakeDescribe{full: stacks}
+			test.req.Stack = "dev"
+			test.req.Direction = DirectionReverse
+			test.req.ProcessTemplates = true
+			test.req.SkipTargetValidation = true
+			test.req.IncludeRequiredReverseSources = true
+
+			result, err := ResolveScopedClosure(fake.describe, &test.req)
+			require.NoError(t, err)
+			components := result.Stacks["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)
+			_, ok := components["app"]
+			require.False(t, ok, "reverse scope must not evaluate a source whose typed target differs from the selected target")
+		})
+	}
+}
+
+func TestResolveScopedClosureFailsForRequiredTargetWithinClosure(t *testing.T) {
+	t.Parallel()
+
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {"dependencies": map[string]any{"components": []any{map[string]any{"component": "missing"}}}},
+		},
+	})
+	fake := &fakeDescribe{full: stacks}
+
+	_, err := ResolveScopedClosure(fake.describe, &ScopeRequest{
+		Components:       []string{"app"},
+		Stack:            "dev",
+		Direction:        DirectionForward,
+		ProcessTemplates: true,
+	})
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
+}
+
+func TestResolveScopedClosureRendersTemplatedRequiredBeforeValidation(t *testing.T) {
+	t.Parallel()
+
+	lightweight := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {"dependencies": map[string]any{"components": []any{map[string]any{
+				"component": "metrics",
+				"required":  "[[ .vars.metrics_required ]]",
+			}}}},
+		},
+	})
+
+	t.Run("optional after rendering", func(t *testing.T) {
+		t.Parallel()
+
+		describe := &fakeDescribe{
+			full: lightweight,
+			resolved: terraformStacks(map[string]map[string]map[string]any{
+				"dev": {"app": {"dependencies": map[string]any{"components": []any{map[string]any{"component": "metrics", "required": false}}}}},
+			}),
+		}
+
+		result, err := ResolveScopedClosure(describe.describe, &ScopeRequest{
+			Components:       []string{"app"},
+			Stack:            "dev",
+			Direction:        DirectionForward,
+			ProcessTemplates: true,
+			LeftDelim:        "[[",
+			RightDelim:       "]]",
+		})
+
+		require.NoError(t, err)
+		app, ok := result.Closure.GetNode(NodeID("app", "dev"))
+		require.True(t, ok)
+		assert.Empty(t, app.Dependencies)
+	})
+
+	t.Run("required after rendering", func(t *testing.T) {
+		t.Parallel()
+
+		describe := &fakeDescribe{
+			full: lightweight,
+			resolved: terraformStacks(map[string]map[string]map[string]any{
+				"dev": {"app": {"dependencies": map[string]any{"components": []any{map[string]any{"component": "metrics", "required": true}}}}},
+			}),
+		}
+
+		_, err := ResolveScopedClosure(describe.describe, &ScopeRequest{
+			Components:       []string{"app"},
+			Stack:            "dev",
+			Direction:        DirectionForward,
+			ProcessTemplates: true,
+			LeftDelim:        "[[",
+			RightDelim:       "]]",
+		})
+
+		require.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
+	})
 }
 
 // TestResolveScopedClosureForwardSkipsUnresolvedSourceEvaluation is the

@@ -14,11 +14,15 @@ import (
 )
 
 func TestBuildSpinnerMessage(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(t, "Building image alpine:latest", buildSpinnerMessage("Building image", "alpine:latest"))
 	assert.Equal(t, "Building image", buildSpinnerMessage("Building image", "")) // tagless bake build.
 }
 
 func TestValidateBuildAction(t *testing.T) {
+	t.Parallel()
+
 	// Valid: plain build, no engine.
 	require.NoError(t, validateBuildAction(&schema.WorkflowStep{
 		Build: &schema.ContainerBuildStep{Context: ".", Tags: []string{"app:local"}},
@@ -37,12 +41,15 @@ func TestValidateBuildAction(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			require.Error(t, validateBuildAction(tt.step))
 		})
 	}
 }
 
 func TestResolveBuildBake(t *testing.T) {
+	t.Parallel()
+
 	h := &ContainerHandler{}
 	vars := NewVariables()
 	workDir := t.TempDir()
@@ -72,6 +79,8 @@ func TestResolveBuildBake(t *testing.T) {
 }
 
 func TestBuildConfigResolutionErrors(t *testing.T) {
+	t.Parallel()
+
 	h := &ContainerHandler{}
 	vars := NewVariables()
 
@@ -151,6 +160,7 @@ func TestBuildConfigResolutionErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := h.buildBuildConfig(tt.step, vars)
 			require.Error(t, err)
 		})
@@ -158,10 +168,13 @@ func TestBuildConfigResolutionErrors(t *testing.T) {
 }
 
 func TestBuildBuildConfigResolvesContextAndDockerfileAgainstWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
 	h := &ContainerHandler{}
 	workDir := t.TempDir()
 
 	t.Run("relative context and dockerfile", func(t *testing.T) {
+		t.Parallel()
 		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
 			Name:             "build",
 			WorkingDirectory: workDir,
@@ -173,6 +186,7 @@ func TestBuildBuildConfigResolvesContextAndDockerfileAgainstWorkingDirectory(t *
 	})
 
 	t.Run("defaults: dockerfile lands inside context, not working directory directly", func(t *testing.T) {
+		t.Parallel()
 		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
 			Name:             "build",
 			WorkingDirectory: workDir,
@@ -184,6 +198,7 @@ func TestBuildBuildConfigResolvesContextAndDockerfileAgainstWorkingDirectory(t *
 	})
 
 	t.Run("absolute dockerfile is not re-anchored to context", func(t *testing.T) {
+		t.Parallel()
 		absDockerfile := filepath.Join(t.TempDir(), "Dockerfile.custom")
 		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
 			Name:             "build",
@@ -204,10 +219,13 @@ func TestBuildBuildConfigResolvesContextAndDockerfileAgainstWorkingDirectory(t *
 // deleting the correct bake file entirely and observing the build still
 // "succeed" against a same-named file elsewhere.
 func TestBuildBuildConfigResolvesBakeFilesAgainstWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
 	h := &ContainerHandler{}
 	workDir := t.TempDir()
 
 	t.Run("relative bake file and files anchor to working directory", func(t *testing.T) {
+		t.Parallel()
 		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
 			Name:             "build",
 			WorkingDirectory: workDir,
@@ -229,6 +247,7 @@ func TestBuildBuildConfigResolvesBakeFilesAgainstWorkingDirectory(t *testing.T) 
 	})
 
 	t.Run("absolute bake file and files are not re-anchored", func(t *testing.T) {
+		t.Parallel()
 		absFile := filepath.Join(t.TempDir(), "docker-bake.hcl")
 		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
 			Name:             "build",
@@ -253,6 +272,7 @@ func TestBuildBuildConfigResolvesBakeFilesAgainstWorkingDirectory(t *testing.T) 
 	// panicking, mirroring the single-File error handling covered by
 	// TestBuildConfigResolutionErrors' "bake file" case.
 	t.Run("invalid template in a bake files entry returns wrapped error", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{Name: "build", WorkingDirectory: workDir}
 		_, err := resolveBakeFiles(h, step, NewVariables(), []string{"docker-bake.hcl", "{{"})
 		require.Error(t, err)
@@ -267,12 +287,15 @@ func TestBuildBuildConfigResolvesBakeFilesAgainstWorkingDirectory(t *testing.T) 
 // types, such as registry or gha, carry refs/URLs, not paths, and must be
 // left untouched.
 func TestResolveBuildCacheAnchorsLocalPaths(t *testing.T) {
+	t.Parallel()
+
 	h := &ContainerHandler{}
 	vars := NewVariables()
 	workDir := t.TempDir()
 	step := &schema.WorkflowStep{Name: "build", WorkingDirectory: workDir}
 
 	t.Run("type local src and dest anchor to working directory", func(t *testing.T) {
+		t.Parallel()
 		cache, err := resolveBuildCache(h, step, vars, &schema.ContainerCacheConfig{
 			From: []map[string]string{{"type": "local", "src": "cache-in"}},
 			To:   []map[string]string{{"type": "local", "dest": "cache-out", "mode": "max"}},
@@ -287,6 +310,7 @@ func TestResolveBuildCacheAnchorsLocalPaths(t *testing.T) {
 	})
 
 	t.Run("non-local types are left untouched", func(t *testing.T) {
+		t.Parallel()
 		cache, err := resolveBuildCache(h, step, vars, &schema.ContainerCacheConfig{
 			From: []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache"}},
 		})
@@ -304,6 +328,7 @@ func TestResolveBuildCacheAnchorsLocalPaths(t *testing.T) {
 	// That failure must surface as a wrapped ErrTemplateEvaluation, not be
 	// swallowed or panic.
 	t.Run("value that is not a valid template on the second resolve pass returns wrapped error", func(t *testing.T) {
+		t.Parallel()
 		err := anchorCacheLocalPaths(h, step, vars, map[string]string{"type": buildxCacheTypeLocal, "src": "{{"})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
@@ -316,6 +341,7 @@ func TestResolveBuildCacheAnchorsLocalPaths(t *testing.T) {
 	// the way out of resolveBuildCache, not just out of anchorCacheLocalPaths
 	// in isolation.
 	t.Run("anchoring error propagates out of resolveBuildCache", func(t *testing.T) {
+		t.Parallel()
 		_, err := resolveBuildCache(h, step, vars, &schema.ContainerCacheConfig{
 			From: []map[string]string{{"type": "local", "src": `{{ "{{" }}`}},
 		})
@@ -325,6 +351,8 @@ func TestResolveBuildCacheAnchorsLocalPaths(t *testing.T) {
 }
 
 func TestRunConfigResolutionErrors(t *testing.T) {
+	t.Parallel()
+
 	h := &ContainerHandler{}
 	vars := NewVariables()
 
@@ -348,17 +376,23 @@ func TestRunConfigResolutionErrors(t *testing.T) {
 }
 
 func TestDefaultMountType(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(t, "bind", defaultMountType(""))
 	assert.Equal(t, "volume", defaultMountType("volume"))
 }
 
 func TestEffectiveBuildStep(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(t, schema.ContainerBuildStep{}, effectiveBuildStep(&schema.WorkflowStep{}))
 	build := &schema.ContainerBuildStep{Context: ".", Tags: []string{"app:local"}}
 	assert.Equal(t, *build, effectiveBuildStep(&schema.WorkflowStep{Build: build}))
 }
 
 func TestValidateInspectAction(t *testing.T) {
+	t.Parallel()
+
 	h := &ContainerHandler{}
 
 	// Valid via the inspect block.
@@ -374,6 +408,8 @@ func TestValidateInspectAction(t *testing.T) {
 }
 
 func TestExecuteInspect_DryRun(t *testing.T) {
+	t.Parallel()
+
 	h := &ContainerHandler{}
 	vars := NewVariables()
 
@@ -389,6 +425,8 @@ func TestExecuteInspect_DryRun(t *testing.T) {
 }
 
 func TestResolveWorkDir(t *testing.T) {
+	t.Parallel()
+
 	vars := NewVariables()
 
 	// Explicit working_directory is resolved and made absolute.
@@ -403,6 +441,8 @@ func TestResolveWorkDir(t *testing.T) {
 }
 
 func TestEffectiveRunStepMergesShorthand(t *testing.T) {
+	t.Parallel()
+
 	// Run parameters live under `with:` (step.Run) and are returned as-is.
 	run := effectiveRunStep(&schema.WorkflowStep{
 		Run: &schema.ContainerRunStep{
@@ -426,6 +466,8 @@ func TestEffectiveRunStepMergesShorthand(t *testing.T) {
 }
 
 func TestEffectiveRunStepHostRuntime(t *testing.T) {
+	t.Parallel()
+
 	// Inline step-level runtime.host folds in.
 	run := effectiveRunStep(&schema.WorkflowStep{
 		Runtime: &schema.ContainerRuntimeConfig{Host: true},
@@ -454,6 +496,8 @@ func TestEffectiveRunStepHostRuntime(t *testing.T) {
 }
 
 func TestConvertContainerPorts(t *testing.T) {
+	t.Parallel()
+
 	ports := convertContainerPorts([]schema.ContainerPort{
 		{Host: 8080, Container: 80},
 		{Host: 53, Container: 53, Protocol: "udp"},
@@ -464,6 +508,8 @@ func TestConvertContainerPorts(t *testing.T) {
 }
 
 func TestEffectiveInspectStepRuntimeShorthand(t *testing.T) {
+	t.Parallel()
+
 	got := effectiveInspectStep(&schema.WorkflowStep{Inspect: &schema.ContainerInspectStep{Image: "alpine"}, Provider: "podman", RuntimeAutoStart: true})
 	assert.Equal(t, "alpine", got.Image)
 	assert.Equal(t, "podman", got.Provider)
@@ -477,6 +523,8 @@ func TestEffectiveInspectStepRuntimeShorthand(t *testing.T) {
 // example: provider/runtime_auto_start are top-level cross-cutting modifiers that
 // must fall through into the build/push config (bake requires `provider: docker`).
 func TestEffectiveBuildStepProviderFallthrough(t *testing.T) {
+	t.Parallel()
+
 	build := effectiveBuildStep(&schema.WorkflowStep{
 		Build:            &schema.ContainerBuildStep{Engine: "buildx", Bake: &schema.ContainerBuildBakeStep{File: "docker-bake.hcl"}},
 		Provider:         "docker",

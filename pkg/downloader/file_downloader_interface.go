@@ -35,6 +35,13 @@ type FileDownloader interface {
 	FetchWithMetadata(src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error)
 }
 
+// ContextFileDownloader is the optional capability for downloading with caller cancellation.
+// FileDownloader retains its original method set so existing implementations remain compatible.
+// Built-in downloaders implement both interfaces.
+type ContextFileDownloader interface {
+	FetchWithMetadataContext(ctx context.Context, src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error)
+}
+
 // ClientFactory abstracts the creation of a downloader client for better testability.
 type ClientFactory interface {
 	NewClient(ctx context.Context, src, dest string, mode ClientMode) (DownloadClient, error)

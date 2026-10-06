@@ -8,7 +8,7 @@ date: 2026-07-14T12:00:00.000Z
 
 import File from '@site/src/components/File'
 
-You set `mcp.enabled: true`, ran `atmos mcp start`, and got: `failed to initialize AI components:
+You set `mcp.enabled: true`, ran [`atmos mcp start`](/cli/commands/mcp/start), and got: `failed to initialize AI components:
 tools are disabled`. MCP was on. Why did anything else need to be "enabled" for a command whose
 entire job is exposing tools?
 
@@ -16,7 +16,7 @@ entire job is exposing tools?
 
 ## The Problem
 
-`ai.tools.enabled` was designed for `atmos ai chat`/`ask`/`exec` — Atmos's own assistant deciding
+`ai.tools.enabled` was designed for [`atmos ai chat`](/cli/commands/ai/chat)/`ask`/`exec` — Atmos's own assistant deciding
 whether it's allowed to call tools during a conversation. `atmos mcp start` reused that same flag
 as a hard gate, even though the MCP server has nothing to do with Atmos's own chat loop: its only
 job is exposing Atmos tools to *external* clients like Claude Desktop or Cursor. `mcp.enabled: true`
@@ -80,3 +80,5 @@ prompt*, note the semantics changed: an unlisted tool is no longer registered at
 an empty `allowed` (or drop the list) and lean on `restricted`/`blocked` instead.
 
 See [AI Tools Configuration](/cli/configuration/ai/tools) for the full reference.
+
+For usage and configuration, see [MCP](/mcp).

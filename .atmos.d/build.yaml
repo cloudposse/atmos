@@ -10,6 +10,8 @@ commands:
         value: "{{ .Flags.target }}"
       - key: ATMOS_BUILD_VERSION
         value: "{{ .Flags.version }}"
+      - key: ATMOS_BUILD_NO_CACHE
+        value: '{{ index .Flags "no-cache" }}'
     flags:
       - name: target
         description: "Build target: default, linux, windows, macos, or macos-intel"
@@ -17,12 +19,22 @@ commands:
       - name: version
         description: Version string to embed in the binary
         default: test
+      - &build_no_cache_flag
+        name: no-cache
+        type: bool
+        description: Force rebuilding all Go packages, including dependencies
+        default: false
     steps:
       - type: toast
         level: info
         content: Building Atmos...
       - &build_binary_step
+        name: Compiling
         type: shell
+        output: viewport
+        viewport:
+          height: 4
+          padding: 2
         command: |
           set -eu
           go tool mage build:binary "${ATMOS_BUILD_TARGET:-default}" "${ATMOS_BUILD_VERSION:-test}"
@@ -61,6 +73,7 @@ commands:
           - name: version
             description: Version string to embed in the binary
             default: test
+          - *build_no_cache_flag
         steps:
           - type: toast
             level: info

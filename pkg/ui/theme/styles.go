@@ -386,6 +386,13 @@ func GetCurrentStyles() *StyleSet {
 	return CurrentStyles
 }
 
+// GetCurrentColorScheme returns the semantic colors of the active theme.
+// Resolve styles first so callers never receive colors cached for a previous theme.
+func GetCurrentColorScheme() *ColorScheme {
+	GetCurrentStyles()
+	return lastColorScheme
+}
+
 // InitializeStyles initializes the styles with a specific color scheme.
 // Note: Does not clear currentThemeName to retain manually-passed scheme.
 func InitializeStyles(scheme *ColorScheme) {

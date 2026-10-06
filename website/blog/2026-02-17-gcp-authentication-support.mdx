@@ -13,7 +13,7 @@ Atmos now supports first-class Google Cloud authentication alongside AWS and Azu
 - Added GCP providers: `gcp/adc` and `gcp/workload-identity-federation`.
 - Added GCP identities: `gcp/service-account` and `gcp/project`.
 - Implemented provider-scoped file isolation at `~/.config/atmos/gcp/<provider-name>/...`.
-- Integrated GCP auth with `atmos auth login`, `atmos auth whoami`, and Terraform execution.
+- Integrated GCP auth with [`atmos auth login`](/cli/commands/auth/login), [`atmos auth whoami`](/cli/commands/auth/whoami), and Terraform execution.
 
 ## Why This Matters
 - Use the same auth flow across AWS, Azure, and GCP.
@@ -62,6 +62,8 @@ Authenticate and verify:
 atmos auth login --identity terraform
 atmos auth whoami
 ```
+
+For usage and configuration, see [Providers](/cli/configuration/auth/providers).
 
 ## Get Involved
 Feedback and testing reports are welcome. If you use GCP in CI/CD, try the WIF provider and share any edge cases you encounter.

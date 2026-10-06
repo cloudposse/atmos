@@ -67,11 +67,55 @@ and `pkg/generator/` for the source of truth on current behavior.
   registry reference, pulled via the same `pkg/oci` client `atmos vendor
   pull` and JIT component-source provisioning use. See "Phase 3: Remote
   Templates" below.
+- `--update-strategy=tracked|rendered` — controls where `--update`'s 3-way
+  merge *base* comes from, independently of `--merge-strategy`/`--merge-driver`.
+  `tracked` (default, unchanged) reads it from the target's own Git history at
+  `--base-ref`. `rendered` instead re-renders the template at the ref that
+  produced what's currently on disk (recorded in `.atmos/scaffold.yaml`, along
+  with that generation's own answers), so `--update` works with no dependency
+  on the target being a Git repository at all. `rendered` needs two separate
+  things: the template itself must carry a `scaffold.yaml` (so the old ref's
+  fields can be resolved), and the target must already carry a prior
+  generation's `.atmos/scaffold.yaml` record (a different file, at a
+  different path — so that generation's own answers are recoverable). Plain
+  `--set`-only templates aren't supported yet, since there's no persisted
+  record of what values a prior generation used. See
+  [PR #2989](https://github.com/cloudposse/atmos/pull/2989) for the base-ref
+  pinning this builds on and [PR #3047](https://github.com/cloudposse/atmos/pull/3047)
+  for the conflict-marker correctness fixes it depends on.
+- **File deletion handling during `--update`**: `--update-strategy=rendered`
+  deletes a file the template stopped generating between the old and new ref,
+  but only when the on-disk copy is still byte-identical to the old pristine
+  render — if local edits survived, the file is left untouched and the update
+  fails with an unresolved merge conflict (`ErrMergeConflict`, exit code 1)
+  instead of silently deleting or silently keeping it, so a human reviews it.
+  `--update-strategy=tracked` does **not** support this: there is no re-render
+  of "the template at whatever ref produced this base commit" available, no
+  reliable record of what that ref even was, and naively enumerating the git
+  tree at `--base-ref` would conflate files the template actually owns with
+  unrelated files that merely happen to exist in that historical commit — this
+  is a documented limitation, not an oversight. Independently of strategy,
+  `--update` also no longer recreates a file the user deliberately deleted:
+  both strategies check whether a base exists for a path that's missing on
+  disk, and skip regenerating it if so, rather than silently overwriting the
+  deletion (matching how tools like Copier treat user-deleted paths). Pass
+  `--recreate-deleted` to opt back into the old unconditional-recreate
+  behavior. It's a flag of its own rather than reusing `--force`: `--force`
+  combined with `--update` already means "on conflict, the template's version
+  wins" (`--force` with an explicit non-`theirs` `--merge-strategy` is
+  rejected as contradictory), so tying recreation to it would make "manual
+  conflict resolution" and "recreate what I deleted" mutually exclusive.
 
 **Still not implemented** (see "Future Enhancements" below):
 - ❌ Remote-template caching/version pinning beyond a single `--ref`
-- ❌ A `--max-changes` CLI flag — the merger has an internal conflict-percentage
-  threshold (hardcoded default, currently 50%), but it isn't exposed as a flag
+
+**Implemented since the above was written**:
+- ✅ `--max-changes` (both `atmos scaffold generate --update` and `atmos init --update`) —
+  exposes the merger's conflict-percentage threshold as a real flag (default `50`,
+  minimum `0`, no upper bound; env vars `ATMOS_SCAFFOLD_MAX_CHANGES` / `ATMOS_INIT_MAX_CHANGES`).
+  See `pkg/generator/engine.DefaultMergeThreshold` for the shared default. Only `0` disables
+  the check entirely (guaranteed to never fail); the computed change percentage itself has no
+  upper bound, so no positive value is a guaranteed bypass the way `0` is.
 
 ## Goals
 
@@ -213,10 +257,12 @@ atmos scaffold
     --force, -f                 # Overwrite existing files
     --dry-run                   # Preview without writing (with --update, drives the real merge and reports would-create/would-update/conflicts; skips only the disk write)
     --set key=value             # Set template variables
-    --update                    # Update an existing target directory via a 3-way merge (requires a git base; see --base-ref)
-    --base-ref                  # Git ref to use as the 3-way merge base with --update (defaults to HEAD)
+    --update                    # Update an existing target directory via a 3-way merge
+    --update-strategy           # Where --update's merge base comes from: tracked (default, needs a git base; see --base-ref) or rendered (no git dependency; see the "--update-strategy" note above)
+    --base-ref                  # Git ref to use as the 3-way merge base with --update-strategy=tracked (defaults to HEAD)
     --merge-strategy            # Conflict resolution for --update: manual (default), ours, theirs
-    --max-changes               # Change threshold (not implemented — no CLI flag; internal default is hardcoded)
+    --max-changes               # Maximum percentage of changed lines allowed in a 3-way merge before --update fails (default 50, minimum 0/no upper bound, 0 disables the check entirely; ATMOS_SCAFFOLD_MAX_CHANGES/ATMOS_INIT_MAX_CHANGES)
+    --recreate-deleted          # Recreate a file during --update even if you deleted it locally (default: false, the deletion is left in place)
 
   list                          # List available templates
 
@@ -367,7 +413,14 @@ spec:
   # Optional: step-backed hooks around generation. Reuses the exact
   # events/kind/when/type/with vocabulary stack-level lifecycle hooks use
   # (pkg/hooks.Hook) -- see the atmos-hooks skill for the shared vocabulary.
-  # Only kind: step / kind: steps are supported for scaffold hooks.
+  # Only kind: step / kind: steps are supported for scaffold hooks. A step's
+  # unset/bare-relative working_directory defaults to (or resolves under)
+  # the scaffold's target directory (also exposed as {{ .TargetPath }});
+  # use working_directory: "." to opt back into the directory atmos was
+  # launched from. Exception: a type: atmos step keeps running in the
+  # directory atmos was launched from when working_directory is unset,
+  # since it must resolve its own atmos.yaml/stacks there, but an explicit
+  # working_directory on that step is still honored.
   hooks:
     format:
       events:
@@ -792,14 +845,169 @@ successfully, can only be checked once real answers are available, at generation
 time.
 
 **Non-goals**:
-- Directory-level `matrix` — stamping a whole per-combination subtree from one
-  entry. The `path`/`target` split could extend to this, but doesn't today.
 - Changes to field types or the interactive prompt form.
 
 `--set` values for a `multiselect` field are still comma-split automatically, so a
 multiselect-sourced axis keeps working non-interactively without needing a template
 expression at all — free-text and computed axes are for the cases a fixed
 `options:` list can't cover.
+
+### Glob `path:` and Directory-Level Matrix
+
+**Status**: Implemented and shipped. Reuses the existing `doublestar` glob engine
+(`github.com/bmatcuk/doublestar/v4`, already a project dependency, wrapped by
+`pkg/utils.PathMatch`/`pkg/utils.WildcardRelPath`) — no new matching engine.
+
+**Motivation**: a glob `path:` lets one `spec.files[]` entry act on an entire
+directory at once, instead of requiring one entry per file:
+1. Skip (or gate) an entire directory, recursively, with one `when:`-gated entry.
+2. Duplicate an entire directory's files once per matrix combination (e.g. one
+    `components/` tree instance per environment), with every duplicated file
+    getting the same `.matrix.<axis>` values a single-file matrix entry gets.
+
+**`path:` may be a glob pattern**, not just a literal path — `*`, `?`, `[...]`,
+`**` (any depth, including zero), and `{a,b}` (brace expansion), matched against
+every discovered file's path via `doublestar`. A backslash in the pattern is
+always normalized to a forward slash before matching, regardless of the OS
+that authored the pattern or the OS evaluating it (`pkg/utils.NormalizeGlobPattern`)
+— discovered paths are always forward-slash normalized, so treating backslash as
+anything other than a directory-separator alias would make a pattern's behavior
+depend on which OS happened to run it. A single-level glob (`docs/*`) and a
+recursive one (`docs/**`) both fall out of doublestar's own semantics — no
+separate "recursive: true" flag exists or is needed.
+
+A malformed pattern (an unclosed `[` character class or `{` brace-expansion
+group) is rejected at scaffold-load time (`ErrScaffoldFilePathPatternInvalid`,
+caught by `atmos scaffold validate` too) rather than silently and permanently
+never matching anything — the failure mode a pattern-match error would
+otherwise be indistinguishable from.
+
+**Precedence when multiple entries match the same file**: the *last* matching
+entry in declaration order wins — the same convention `.gitignore`/`CODEOWNERS`
+use (write broad patterns first, specific overrides after). This is the opposite
+of many readers' first intuition ("the more specific one always wins, regardless
+of order"), and a wrong-order mistake fails *silently*: a shadowed entry simply
+never triggers, with nothing to warn the author their earlier, more specific
+entry is unreachable. Order entries broad-to-specific:
+
+```yaml
+spec:
+  files:
+    - path: "docs/legacy/**"
+      when: "answers.include_legacy_docs"
+    - path: "docs/legacy/keep-this.md"
+      when: "always"
+```
+
+**Directory-wide skip** (feature 1) needs nothing beyond glob matching itself —
+`when:` is evaluated per matched file exactly as it already is for a literal
+path, so a glob entry with `when:` naturally gates every file nested under that
+directory:
+
+```yaml
+spec:
+  files:
+    - path: "docs/legacy/**"
+      when: "answers.include_legacy_docs"
+```
+
+**Directory-level `matrix`** (feature 2) combines a glob `path:` with `matrix:`
+and `target:` exactly as a single-file matrix entry does — `matrix:` is
+resolved once per spec **path** (cached, not recomputed per matched file), so
+every file a glob entry matches sees the identical resolved combination(s)
+even when an axis expression uses a non-deterministic template function (e.g.
+Sprig's `randAlphaNum`) — without this, each matched file would independently
+re-execute the axis expression and could resolve a *different* value for what
+was meant to be one shared combination. Since a glob entry can match many
+discovered files, every matched file still gets its own full set of outputs
+per combination, so `target:` must differentiate *which* matched file an
+output came from. This is checked deterministically **before any file in the
+run is written** (`ErrScaffoldMatrixTargetMissingFileContext`): `.matrix.<axis>`
+and `.Config.*` are identical across every file one entry matches for a given
+combination, and `.file.*` (below) is the only template data that varies per
+matched file, so a `target:` that never references it is guaranteed — not
+merely likely — to collide. This is a stronger guarantee than the pre-existing
+global duplicate-output-path guard (`ErrScaffoldDuplicateOutputPath`, which
+still protects every other collision class), which would otherwise only catch
+this specific mistake once a *second* matched file's write collides with the
+first's — by which point the first has already been written to disk. Two
+new template variables make target differentiation possible, available
+identically in `target:` and the file's own content, regardless of whether
+`path:` is a glob or a literal and regardless of whether `matrix:` is set:
+- **`.file.Path`** — the currently matched file's own discovered path.
+- **`.file.RelPath`** — `.file.Path` with the matching entry's glob literal
+  prefix stripped (e.g. `"vpc/main.tf"` for path `"components/**"` matching
+  `"components/vpc/main.tf"`). Equal to `.file.Path` when the matching entry's
+  `path:` has no glob metacharacter, since there's no literal prefix to strip.
+
+```yaml
+spec:
+  files:
+    - path: "components/**"
+      target: "environments/{{ .matrix.env }}/{{ .file.RelPath }}"
+      matrix:
+        env: [dev, staging, production]
+```
+
+A `components/` tree containing `vpc/main.tf` and `eks/main.tf` produces six
+outputs: `environments/dev/vpc/main.tf`, `environments/dev/eks/main.tf`, and the
+same pair under `staging/` and `production/`.
+
+**Scoping decision**: `.file.Path`/`.file.RelPath` are Go-template-only — they
+are *not* added to the CEL `when:` environment alongside `answers`/`matrix`.
+Neither feature above needs per-file `when:` filtering (a directory-wide skip
+only needs answers-level `when:`; directory duplication only needs `target:`
+differentiation), so this stays out of scope. To exclude one specific file from
+a glob+matrix entry's own `when:`, declare a second, more specific entry after
+the broad one instead (shadowing it via the last-wins precedence above).
+
+**Migration caveat for `--update`'s 3-way merge**: `ProcessFile` only ever
+reaches the 3-way-merge base lookup (`determineBaseContent` in
+`pkg/generator/engine/merge_update.go`) when the newly-rendered target path
+*already exists on disk* — otherwise it takes the plain new-file write path
+(`writeNewFile`), bypassing the merge base entirely. Introducing, or changing,
+a glob+`.file.RelPath`-based `target:` on a template that existing projects
+already generated from changes every affected file's rendered output path —
+the same "breaking migration" class as changing any existing `target:` at
+all — with a two-stage consequence, not a single "written fresh" one:
+- **The first `--update` after the change**: the new path doesn't exist yet,
+  so the file is written fresh via `writeNewFile`, bypassing
+  `determineBaseContent` entirely. The file at the *old* path, if still
+  present, is left untouched rather than removed.
+- **Every `--update` after that**: the new path now exists, so
+  `determineBaseContent` runs and looks up the configured base storage at
+  that same (new) relative path — git history for `--update-strategy=tracked`
+  (the default), or the pristine re-render for `--update-strategy=rendered`
+  (see the `--update-strategy=tracked|rendered` bullet above). If that's not
+  found (only the *old* path was ever committed or rendered), it falls back
+  to a second lookup at `File.OriginalSourcePath` — the file's own path as
+  discovered in the template's source tree, before `target:` templating,
+  which is often identical to the old rendered path when the entry
+  previously had no `target:` at all (verbatim passthrough). When that
+  fallback lookup succeeds, the merge recovers the real base and proceeds
+  normally. When it *also* finds nothing (e.g. the very first
+  post-migration `--update` hasn't been committed at all yet), `mergeFile`
+  still returns immediately with no write, per its own "user-added, don't
+  touch it" contract — but logs a warning naming both the current and
+  original path instead of staying silent, since this specific "no history
+  under either path" state is genuinely ambiguous between a real user-added
+  file and an as-yet-uncommitted migration. This fallback is a targeted
+  mitigation for the common case above, not a full rename-tracking system —
+  it has no way to recover a base when the discovered source path itself
+  changed too (e.g. the template's own directory was reorganized in the same
+  release that introduced the new `target:`), and in that case the file is
+  left unchanged with a warning rather than a real 3-way merge (still no
+  silent mutation, but also no automatic recovery of the base). See
+  `determineBaseContent`'s doc comment in
+  `pkg/generator/engine/merge_update.go` for the full rationale and scoping.
+
+**Non-goals**:
+- A per-file `when:` predicate within a single glob+matrix entry (see the
+  scoping decision above).
+- A static "unreachable spec.files entry" lint flagging a shadowed
+  glob/literal-path combination at load time. This is fully computable without
+  real answers (glob patterns and discovered paths are both known at load time),
+  and would be valuable, but isn't implemented yet.
 
 ### Update Flow (with 3-Way Merge)
 
@@ -938,12 +1146,22 @@ skill's OCI auth documentation rather than duplicating it here. A
 `source:` exactly like a git source; `source:` is a freeform string with no
 scheme-specific schema.
 
-`--git`, `--base-ref`, and `--update` behave the same regardless of source
-type, OCI included: `--git` only initializes a git repository in the
-*generated output directory* after generation completes, and `--update`'s
-3-way-merge base is always read from that output directory's own git history
-(`pkg/generator/engine/merge_update.go`'s `SetupGitStorage`), never by
-re-fetching or re-checking-out the template source at a ref.
+`--git` and `--base-ref` behave the same regardless of source type, OCI
+included: `--git` only initializes a git repository in the *generated output
+directory* after generation completes, and `--base-ref` only ever means
+"a ref in that output directory's own git history."
+
+`--update`'s merge base depends on `--update-strategy`, and here OCI and git
+sources genuinely differ under `rendered`. `tracked` (the default) behaves
+identically across source types: the base is always read from the output
+directory's own git history (`pkg/generator/engine/merge_update.go`'s
+`SetupGitStorage`), never by re-fetching or re-checking-out the template
+source at a ref. `rendered` re-fetches the template source at the exact ref
+recorded from the original generation — a resolved commit SHA for git
+sources, a resolved manifest digest for OCI sources (`oci.PinDigest`,
+`Configuration.ResolvedRef`) — rather than whatever mutable branch/tag the
+source string names, so a later re-render reconstructs the same content even
+if the tag has since moved.
 
 ## CLI Usage Examples
 

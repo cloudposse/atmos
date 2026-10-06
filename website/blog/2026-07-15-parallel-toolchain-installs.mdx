@@ -38,3 +38,5 @@ Atmos rejects values lower than one. The command-line flag takes precedence over
 Atmos also isolates its bootstrap verifier from concurrent use and retries only transient, pre-verdict verifier failures. Legacy releases that publish detached Cosign certificates and signatures are verified with the compatible Cosign v2 path; newer bundle-based verification continues to use the current verifier. Verification remains required—retries never treat an invalid signature or identity mismatch as success.
 
 See the [toolchain documentation](/cli/commands/toolchain/usage) for installation and configuration details.
+
+For usage and configuration, see [atmos toolchain install](/cli/commands/toolchain/install).

@@ -28,6 +28,8 @@ variable "region" {
 `
 
 func TestNewTerraformComponentHCLGetTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewTerraformComponentHCLGetTool(atmosConfig)
 
@@ -36,16 +38,22 @@ func TestNewTerraformComponentHCLGetTool(t *testing.T) {
 }
 
 func TestTerraformComponentHCLGetTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewTerraformComponentHCLGetTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "atmos_terraform_component_hcl_get", tool.Name())
 }
 
 func TestTerraformComponentHCLGetTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewTerraformComponentHCLGetTool(&schema.AtmosConfiguration{})
 	assert.NotEmpty(t, tool.Description())
 }
 
 func TestTerraformComponentHCLGetTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewTerraformComponentHCLGetTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -60,18 +68,24 @@ func TestTerraformComponentHCLGetTool_Parameters(t *testing.T) {
 }
 
 func TestTerraformComponentHCLGetTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewTerraformComponentHCLGetTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.RequiresPermission())
 }
 
 func TestTerraformComponentHCLGetTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewTerraformComponentHCLGetTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestTerraformComponentHCLGetTool_Execute(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, tmpDir, cleanup := setupTestComponentEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	filePath := filepath.Join(tmpDir, "components", "terraform", "vpc", "main.tf")
 	require.NoError(t, os.WriteFile(filePath, []byte(hclFixtureWithComments), 0o644))
@@ -80,6 +94,7 @@ func TestTerraformComponentHCLGetTool_Execute(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("gets an attribute", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"file_path": "vpc/main.tf",
 			"address":   "resource.aws_instance.web.instance_type",
@@ -90,6 +105,7 @@ func TestTerraformComponentHCLGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("gets an attribute with comments", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"file_path":     "vpc/main.tf",
 			"address":       "resource.aws_instance.web.instance_type",
@@ -101,6 +117,7 @@ func TestTerraformComponentHCLGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("falls back to a block", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"file_path": "vpc/main.tf",
 			"address":   "resource.aws_instance.web",
@@ -111,6 +128,7 @@ func TestTerraformComponentHCLGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails when address is not found", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"file_path": "vpc/main.tf",
 			"address":   "resource.aws_instance.nonexistent.foo",
@@ -121,6 +139,7 @@ func TestTerraformComponentHCLGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing file_path", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"address": "resource.aws_instance.web.instance_type",
 		})
@@ -130,6 +149,7 @@ func TestTerraformComponentHCLGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing address", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"file_path": "vpc/main.tf",
 		})
@@ -139,6 +159,7 @@ func TestTerraformComponentHCLGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with path traversal attempt", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"file_path": "../../etc/passwd",
 			"address":   "resource.aws_instance.web.instance_type",
@@ -149,6 +170,7 @@ func TestTerraformComponentHCLGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with nonexistent file", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"file_path": "vpc/nonexistent.tf",
 			"address":   "resource.aws_instance.web.instance_type",

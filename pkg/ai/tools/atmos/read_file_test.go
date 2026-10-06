@@ -12,6 +12,8 @@ import (
 )
 
 func TestReadFileTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -30,6 +32,8 @@ func TestReadFileTool_Interface(t *testing.T) {
 }
 
 func TestReadFileTool_Execute_MissingParameter(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -46,6 +50,8 @@ func TestReadFileTool_Execute_MissingParameter(t *testing.T) {
 }
 
 func TestReadFileTool_Execute_FileNotFound(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -63,6 +69,8 @@ func TestReadFileTool_Execute_FileNotFound(t *testing.T) {
 }
 
 func TestReadFileTool_Execute_PathTraversal(t *testing.T) {
+	t.Parallel()
+
 	// Create temp directory.
 	tmpDir := t.TempDir()
 
@@ -85,6 +93,8 @@ func TestReadFileTool_Execute_PathTraversal(t *testing.T) {
 }
 
 func TestReadFileTool_Execute_Success(t *testing.T) {
+	t.Parallel()
+
 	// Create temp directory and file.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.yaml")
@@ -111,6 +121,8 @@ func TestReadFileTool_Execute_Success(t *testing.T) {
 }
 
 func TestReadFileTool_Execute_Directory(t *testing.T) {
+	t.Parallel()
+
 	// Create temp directory.
 	tmpDir := t.TempDir()
 	subDir := filepath.Join(tmpDir, "subdir")

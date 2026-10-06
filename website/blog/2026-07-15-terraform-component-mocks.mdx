@@ -8,7 +8,7 @@ tags: [feature, dx]
 
 Cross-component Terraform lookups are useful precisely when an application component needs the outputs of something like a VPC, cluster, or database. They can also make a local plan or configuration review depend on deployed infrastructure, backend access, and cloud credentials that are irrelevant to the change at hand.
 
-Atmos now supports **component mocks**: literal, component-owned Terraform outputs that you enable explicitly with `--use-mocks`.
+Atmos now supports **[component mocks](/stacks/components/mocks)**: literal, component-owned Terraform outputs that you enable explicitly with `--use-mocks`.
 
 <!--truncate-->
 
@@ -75,8 +75,8 @@ Mocks are opt-in. Without `--use-mocks`, existing `!terraform.state` and `!terra
 
 The flag is supported by:
 
-- `atmos terraform plan`
-- `atmos describe component`
+- [`atmos terraform plan`](/cli/commands/terraform/plan)
+- [`atmos describe component`](/cli/commands/describe/component)
 
 Mutating Terraform commands—including `apply`, `deploy`, and `destroy`—and Terraform passthrough commands reject it before stack resolution. `--use-mocks` also requires YAML function processing to remain enabled.
 
@@ -104,3 +104,5 @@ atmos terraform plan app -s dev
 ```
 
 Read more about [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output), or use the example as the smallest starting point for adding mocks to your own stack.
+
+For usage and configuration, see [component output mocks](/stacks/components/mocks).

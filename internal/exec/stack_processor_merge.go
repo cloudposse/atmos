@@ -717,13 +717,14 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	}
 
 	// Merge the Helm CLI plugins list (helm and helmfile components).
-	// Base-component plugins (e.g. from an abstract/catalog component) are merged
-	// with the concrete component's plugins; the configured list_merge_strategy
+	// Component-type defaults, base-component plugins, and concrete component plugins
+	// are merged in increasing precedence; the configured list_merge_strategy
 	// (default: replace) governs how the lists combine.
 	if supportsPlugins(opts.ComponentType) {
 		finalComponentPlugins, err := mergeComponentAnySection(
 			mergeConfig,
 			cfg.PluginsSectionName,
+			opts.GlobalPlugins,
 			result.BaseComponentPlugins,
 			result.ComponentPlugins,
 		)
@@ -752,6 +753,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 
 		// Merge provision from global, base component, component, and overrides levels.
 		// Priority (lowest to highest): global → base component → component → overrides.
+		// The global layer (`opts.GlobalProvisionSection`) is the stack-level `terraform.provision`
+		// (or `helmfile.provision`, etc.) block, which is where a global provision default belongs -
+		// consistent with global `vars`, `metadata`, and `secrets`. See #3197.
 		finalComponentProvision, err := m.Merge(
 			mergeConfig,
 			[]map[string]any{

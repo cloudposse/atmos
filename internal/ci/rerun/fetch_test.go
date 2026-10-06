@@ -3,11 +3,13 @@ package rerun
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -86,6 +88,30 @@ func TestFetchJobs(t *testing.T) {
 		_, err := FetchJobs(context.Background(), client, "cloudposse/atmos", "1", "1")
 		require.Error(t, err)
 	})
+}
+
+func TestIsTransient(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil", err: nil, want: false},
+		{name: "5xx from the API", err: &api.HTTPError{StatusCode: http.StatusBadGateway}, want: true},
+		{name: "wrapped 5xx", err: fmt.Errorf("rerun: fetch jobs: %w", &api.HTTPError{StatusCode: http.StatusServiceUnavailable}), want: true},
+		{name: "4xx from the API", err: &api.HTTPError{StatusCode: http.StatusNotFound}, want: false},
+		{name: "transport error", err: assert.AnError, want: true},
+		{name: "cancelled context", err: fmt.Errorf("wrapped: %w", context.Canceled), want: false},
+		{name: "deadline exceeded", err: context.DeadlineExceeded, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, IsTransient(tt.err))
+		})
+	}
 }
 
 func TestNextLink(t *testing.T) {

@@ -23,6 +23,8 @@ func writeConfigFixture(t *testing.T, dir, content string) string {
 }
 
 func TestNewConfigGetTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewConfigGetTool(atmosConfig)
 
@@ -31,16 +33,22 @@ func TestNewConfigGetTool(t *testing.T) {
 }
 
 func TestConfigGetTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigGetTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "atmos_config_get", tool.Name())
 }
 
 func TestConfigGetTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigGetTool(&schema.AtmosConfiguration{})
 	assert.Contains(t, tool.Description(), "Read a value")
 }
 
 func TestConfigGetTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigGetTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -52,20 +60,27 @@ func TestConfigGetTool_Parameters(t *testing.T) {
 }
 
 func TestConfigGetTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigGetTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.RequiresPermission())
 }
 
 func TestConfigGetTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigGetTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestConfigGetTool_Execute(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigGetTool(&schema.AtmosConfiguration{})
 	ctx := context.Background()
 
 	t.Run("successfully reads a value with explicit file override", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "logs:\n  level: debug\nmcp:\n  enabled: true\n")
 
@@ -82,6 +97,7 @@ func TestConfigGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("reads a bool value", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "mcp:\n  enabled: true\n")
 
@@ -96,6 +112,7 @@ func TestConfigGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing path parameter", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"file": filepath.Join(t.TempDir(), "atmos.yaml"),
 		})
@@ -106,6 +123,7 @@ func TestConfigGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with empty path parameter", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"path": "",
 			"file": filepath.Join(t.TempDir(), "atmos.yaml"),
@@ -117,6 +135,7 @@ func TestConfigGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails when the explicit file override does not exist", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"path": "logs.level",
 			"file": filepath.Join(t.TempDir(), "does-not-exist.yaml"),
@@ -128,6 +147,7 @@ func TestConfigGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails when the path does not exist in the file", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "logs:\n  level: debug\n")
 
@@ -142,6 +162,7 @@ func TestConfigGetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with malformed yaml path expression", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "logs:\n  level: debug\n")
 

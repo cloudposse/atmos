@@ -12,6 +12,8 @@ import (
 )
 
 func TestAuthListTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	tool := NewAuthListTool(&schema.AtmosConfiguration{})
 
 	assert.Equal(t, "atmos_auth_list", tool.Name())
@@ -28,6 +30,8 @@ func TestAuthListTool_Interface(t *testing.T) {
 }
 
 func TestAuthListTool_NewAuthListTool(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	tool := NewAuthListTool(config)
 
@@ -36,6 +40,8 @@ func TestAuthListTool_NewAuthListTool(t *testing.T) {
 }
 
 func TestAuthListTool_Execute_NilConfig(t *testing.T) {
+	t.Parallel()
+
 	tool := NewAuthListTool(nil)
 
 	result, err := tool.Execute(context.Background(), map[string]interface{}{})
@@ -46,6 +52,8 @@ func TestAuthListTool_Execute_NilConfig(t *testing.T) {
 }
 
 func TestAuthListTool_Execute_MutuallyExclusiveFilters(t *testing.T) {
+	t.Parallel()
+
 	authConfig := mockAuthConfig(true)
 	atmosConfig := &schema.AtmosConfiguration{Auth: authConfig, CliConfigPath: t.TempDir()}
 	tool := NewAuthListTool(atmosConfig)
@@ -62,6 +70,8 @@ func TestAuthListTool_Execute_MutuallyExclusiveFilters(t *testing.T) {
 }
 
 func TestAuthListTool_Execute_Empty(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth:          schema.AuthConfig{Keyring: schema.KeyringConfig{Type: "memory"}},
 		CliConfigPath: t.TempDir(),
@@ -78,6 +88,8 @@ func TestAuthListTool_Execute_Empty(t *testing.T) {
 }
 
 func TestAuthListTool_Execute_ListsProvidersAndIdentities(t *testing.T) {
+	t.Parallel()
+
 	authConfig := mockAuthConfig(true)
 	atmosConfig := &schema.AtmosConfiguration{Auth: authConfig, CliConfigPath: t.TempDir()}
 	tool := NewAuthListTool(atmosConfig)
@@ -104,6 +116,8 @@ func TestAuthListTool_Execute_ListsProvidersAndIdentities(t *testing.T) {
 }
 
 func TestAuthListTool_Execute_FilterProviders(t *testing.T) {
+	t.Parallel()
+
 	authConfig := mockAuthConfig(true)
 	atmosConfig := &schema.AtmosConfiguration{Auth: authConfig, CliConfigPath: t.TempDir()}
 	tool := NewAuthListTool(atmosConfig)
@@ -122,6 +136,8 @@ func TestAuthListTool_Execute_FilterProviders(t *testing.T) {
 }
 
 func TestAuthListTool_Execute_FilterUnknownProvider(t *testing.T) {
+	t.Parallel()
+
 	authConfig := mockAuthConfig(true)
 	atmosConfig := &schema.AtmosConfiguration{Auth: authConfig, CliConfigPath: t.TempDir()}
 	tool := NewAuthListTool(atmosConfig)
@@ -137,6 +153,8 @@ func TestAuthListTool_Execute_FilterUnknownProvider(t *testing.T) {
 }
 
 func TestAuthListTool_Execute_FilterUnknownIdentity(t *testing.T) {
+	t.Parallel()
+
 	authConfig := mockAuthConfig(true)
 	atmosConfig := &schema.AtmosConfiguration{Auth: authConfig, CliConfigPath: t.TempDir()}
 	tool := NewAuthListTool(atmosConfig)
@@ -152,6 +170,8 @@ func TestAuthListTool_Execute_FilterUnknownIdentity(t *testing.T) {
 }
 
 func TestParseNameList(t *testing.T) {
+	t.Parallel()
+
 	assert.Nil(t, parseNameList(""))
 	assert.Equal(t, []string{"a", "b"}, parseNameList("a, b"))
 	assert.Equal(t, []string{"a"}, parseNameList(" a , , "))

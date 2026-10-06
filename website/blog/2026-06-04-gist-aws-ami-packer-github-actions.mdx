@@ -8,7 +8,7 @@ tags: [documentation, dx]
 
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
-A common question from the community is: *how do I use Atmos with Packer to build AMIs,
+A common question from the community is: *how do I use Atmos with [Packer](/gists/aws-ami-packer-github-actions) to build AMIs,
 and automate the whole build → approve → share process?* We've published a new
 [**gist**](/gists/aws-ami-packer-github-actions) that shows exactly that — a reference
 recipe combining several Atmos features into one production-shaped workflow.
@@ -31,7 +31,7 @@ version of Atmos before relying on it.
 
 It combines, in one recipe:
 
-- **Packer components in Atmos** — `atmos packer init/build/output`.
+- **Packer components in Atmos** — [`atmos packer init/build/output`](/cli/commands/packer/usage).
 - **Stacks for Packer** — every build input is a stack var, not hardcoded HCL.
 - **Go templating** — the source AMI name resolves from an environment variable at build time.
 - **Nested custom commands** — an `atmos ami <subcommand>` tree (get-ami-id, tag, share, launch/terminate test instances).

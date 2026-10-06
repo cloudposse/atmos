@@ -21,6 +21,8 @@ import (
 // Viper/mergo/mapstructure change collapsed this distinction, this test must fail here rather
 // than silently resurrecting the "can't configure zero managed files" bug.
 func TestLoadConfigFromCLIArgs_VersionFilesNilVsExplicitEmpty(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		versionYAML string
@@ -52,6 +54,7 @@ version:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tmpDir := t.TempDir()
 			mainFile := filepath.Join(tmpDir, "atmos.yaml")
 
@@ -90,6 +93,8 @@ components:
 // to that general precedence rule doesn't silently break the version.files
 // "explicit files: [] suppresses default-path fallback" behavior alongside it.
 func TestMergeConfig_VersionFilesImportPrecedence(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		mainVersion   string
@@ -131,6 +136,7 @@ version:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tempDir := t.TempDir()
 			importDir := filepath.Join(tempDir, "atmos.d")
 			require.NoError(t, os.Mkdir(importDir, 0o755))

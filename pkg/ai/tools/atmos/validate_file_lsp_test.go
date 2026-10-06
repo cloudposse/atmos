@@ -16,11 +16,15 @@ import (
 )
 
 func TestValidateFileLSPTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewValidateFileLSPTool(nil, nil)
 	assert.Equal(t, "validate_file_lsp", tool.Name())
 }
 
 func TestValidateFileLSPTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewValidateFileLSPTool(nil, nil)
 	description := tool.Description()
 	assert.Contains(t, description, "Language Server Protocol")
@@ -28,6 +32,8 @@ func TestValidateFileLSPTool_Description(t *testing.T) {
 }
 
 func TestValidateFileLSPTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewValidateFileLSPTool(nil, nil)
 	params := tool.Parameters()
 
@@ -38,16 +44,22 @@ func TestValidateFileLSPTool_Parameters(t *testing.T) {
 }
 
 func TestValidateFileLSPTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewValidateFileLSPTool(nil, nil)
 	assert.False(t, tool.RequiresPermission())
 }
 
 func TestValidateFileLSPTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewValidateFileLSPTool(nil, nil)
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestValidateFileLSPTool_Execute_LSPDisabled(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: "/test",
 	}
@@ -67,6 +79,8 @@ func TestValidateFileLSPTool_Execute_LSPDisabled(t *testing.T) {
 }
 
 func TestValidateFileLSPTool_Execute_MissingFilePath(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: "/test",
@@ -79,7 +93,7 @@ func TestValidateFileLSPTool_Execute_MissingFilePath(t *testing.T) {
 
 	lspManager, err := client.NewManager(ctx, lspConfig, "/test")
 	require.NoError(t, err)
-	defer lspManager.Close()
+	t.Cleanup(func() { _ = lspManager.Close() })
 
 	tool := NewValidateFileLSPTool(atmosConfig, lspManager)
 
@@ -107,6 +121,7 @@ func TestValidateFileLSPTool_Execute_MissingFilePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := tool.Execute(context.Background(), tt.params)
 
 			require.NoError(t, err)
@@ -117,6 +132,8 @@ func TestValidateFileLSPTool_Execute_MissingFilePath(t *testing.T) {
 }
 
 func TestValidateFileLSPTool_Execute_FileNotFound(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
@@ -129,7 +146,7 @@ func TestValidateFileLSPTool_Execute_FileNotFound(t *testing.T) {
 
 	lspManager, err := client.NewManager(ctx, lspConfig, atmosConfig.BasePath)
 	require.NoError(t, err)
-	defer lspManager.Close()
+	t.Cleanup(func() { _ = lspManager.Close() })
 
 	tool := NewValidateFileLSPTool(atmosConfig, lspManager)
 
@@ -145,6 +162,8 @@ func TestValidateFileLSPTool_Execute_FileNotFound(t *testing.T) {
 }
 
 func TestValidateFileLSPTool_Execute_NoLSPServer(t *testing.T) {
+	t.Parallel()
+
 	// Table-driven test covering both absolute and relative path inputs.
 	tests := []struct {
 		name    string
@@ -156,6 +175,7 @@ func TestValidateFileLSPTool_Execute_NoLSPServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := context.Background()
 
 			// Create temp directory and file.
@@ -176,7 +196,7 @@ func TestValidateFileLSPTool_Execute_NoLSPServer(t *testing.T) {
 
 			lspManager, err := client.NewManager(ctx, lspConfig, tempDir)
 			require.NoError(t, err)
-			defer lspManager.Close()
+			t.Cleanup(func() { _ = lspManager.Close() })
 
 			tool := NewValidateFileLSPTool(atmosConfig, lspManager)
 
@@ -237,6 +257,8 @@ func (m *mockLSPManager) GetServerNames() []string {
 }
 
 func TestValidateFileLSPTool_Execute_WithDiagnostics(t *testing.T) {
+	t.Parallel()
+
 	// Create temp directory and file
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.yaml")
@@ -292,6 +314,8 @@ func TestValidateFileLSPTool_Execute_WithDiagnostics(t *testing.T) {
 }
 
 func TestValidateFileLSPTool_Execute_NoDiagnostics(t *testing.T) {
+	t.Parallel()
+
 	// Create temp directory and file
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.yaml")

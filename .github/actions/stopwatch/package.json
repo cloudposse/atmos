@@ -1,0 +1,19 @@
+{
+  "name": "@cloudposse/stopwatch-action",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Publish one sticky pull-request comment with cross-workflow GitHub Actions timings.",
+  "scripts": {
+    "build": "ncc build src/index.ts -o dist && node scripts/normalize-bundle.mjs",
+    "test": "tsx --test src/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.2",
+    "@vercel/ncc": "0.45.0",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3"
+  }
+}

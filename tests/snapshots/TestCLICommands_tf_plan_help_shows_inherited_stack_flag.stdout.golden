@@ -44,7 +44,13 @@ FLAGS
 
       --hide strings                       Hide Terraform plan output sections. Supported values: no-changes
 
+      --init-mode string                   Override init.mode from atmos.yaml (auto, always, never)
+
+      --init-reconfigure string            Override init.reconfigure from atmos.yaml (auto, always, never)
+
       --init-run-reconfigure string        Override init_run_reconfigure setting from atmos.yaml (true/false)
+
+      --init-upgrade string                Override init.upgrade from atmos.yaml (auto, always, never)
 
       --log-order string                   Order concurrent Terraform plan logs. Supported values: stream, grouped
                                            (default stream)
@@ -116,6 +122,9 @@ GLOBAL FLAGS
       --interactive                          Enable interactive prompts for missing required flags, optional value
                                              flags using the sentinel pattern, and missing positional arguments
                                              (requires TTY, disabled in CI) (default true)
+
+      --justification string                 Reason recorded for privileged auth actions such as PIM role activation (--
+                                             justification=REASON)
 
       --labels string                        Filter by labels (comma-separated key=value or key:value pairs, matches
                                              all): --labels=cost-center=platform,compliance=sox
@@ -191,8 +200,10 @@ GLOBAL FLAGS
 
       --ui                                   Enable streaming UI mode for real-time resource status display
 
-      --use-mocks                            Resolve Terraform state/output YAML functions from component mocks
-                                             instead of remote state. Supported only by plan and describe commands
+      --use-mocks string                     Resolve Terraform state/output YAML functions from component mocks. Set a
+                                             mode with =fallback (real state first, mocks only when missing) or
+                                             =always (mocks only); a bare flag uses components.terraform.mocks.mode.
+                                             Supported only by plan and describe commands
 
       --use-version string                   Use a specific version of Atmos (e.g., --use-version=1.160.0)
 

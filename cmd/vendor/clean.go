@@ -1,8 +1,10 @@
 package vendor
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -92,20 +94,51 @@ var vendorCleanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		report, err := lockfile.CleanSelected(&config, components, force, dryRun)
+		pruneLock, err := cmd.Flags().GetBool("prune-lock")
+		if err != nil {
+			return err
+		}
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		basePath := config.BasePathAbsolute
+		if basePath == "" {
+			basePath = config.BasePath
+		}
+		if basePath == "" {
+			basePath = config.BasePathConfigDir
+		}
+		basePath, err = filepath.Abs(basePath)
+		if err != nil {
+			return err
+		}
+		report, err := lockfile.CleanSelectedContext(ctx, &config, components, lockfile.CleanOptions{
+			Force:     force,
+			DryRun:    dryRun,
+			PruneLock: pruneLock,
+		})
 		if err != nil {
 			return err
 		}
 		for _, path := range report.Removed {
+			path = relativeVendorPathForDisplay(path, basePath)
 			if dryRun {
 				ui.Infof("Would remove %s", path)
 			} else {
-				ui.Infof("Removed %s", path)
+				ui.Successf("Removed %s", path)
+			}
+		}
+		for _, name := range report.Forgotten {
+			if dryRun {
+				ui.Infof("Would forget lock entry %s", name)
+			} else {
+				ui.Successf("Forgot lock entry %s", name)
 			}
 		}
 		if len(report.Conflicts) > 0 {
 			for _, conflict := range report.Conflicts {
-				ui.Warningf("Preserved modified vendor file %s", conflict.Path)
+				ui.Errorf("Preserved modified vendor file %s", relativeVendorPathForDisplay(conflict.Path, basePath))
 			}
 			return fmt.Errorf("%w: %d", errModifiedVendorFiles, len(report.Conflicts))
 		}
@@ -123,6 +156,7 @@ func init() {
 		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
 		flags.WithBoolFlag("force", "", false, "Delete modified lock-owned files"),
 		flags.WithBoolFlag("dry-run", "", false, "Show files that would be removed"),
+		flags.WithBoolFlag("prune-lock", "", false, "Also remove the cleaned components' entries from the vendor lock file (so a source removed from vendor.yaml no longer leaves an orphan entry)"),
 	)
 	vendorCleanParser.RegisterFlags(vendorCleanCmd)
 	if err := vendorCleanParser.BindToViper(viper.GetViper()); err != nil {

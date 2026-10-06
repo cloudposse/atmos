@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 
+	"github.com/cloudposse/atmos/pkg/deferred"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -55,12 +56,19 @@ func cloneComponentSectionWithOverrides(raw, overrides map[string]any) map[strin
 // (configAndStacksInfo.DeferredMergeContexts), resolve them with a real
 // TemplateAwareYAMLProcessor and deep-merge the result into configAndStacksInfo.ComponentSection,
 // in place. See the call site in processStacks (utils.go) for why this must run where it does.
+//
+// The evalSections parameter is the opt-in evaluation-scope filter described on
+// deferred.IsSectionRequired: nil (every caller except the `list` commands) resolves every section,
+// exactly as before this parameter was added; a non-nil filter skips sections outside it
+// entirely, leaving their deferred function strings unresolved.
 func resolveDeferredYamlFunctions(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	settingsSectionStruct *schema.Settings,
 	componentTemplateContext map[string]any,
 	skip []string,
+	evalSections []string,
+	warnings ...func(DegradationWarning),
 ) error {
 	defer perf.Track(atmosConfig, "exec.resolveDeferredYamlFunctions")()
 
@@ -78,6 +86,15 @@ func resolveDeferredYamlFunctions(
 		Skip:                     skip,
 		ResolutionCtx:            resolutionCtx,
 	})
+	if len(warnings) > 0 && warnings[0] != nil {
+		processor = &deferred.ValueProcessor{
+			Inner:       processor,
+			Recoverable: func(err error) bool { return canDegradeValue(atmosConfig, err) },
+			Warn: func(value string, err error) {
+				warnings[0](DegradationWarning{Stack: configAndStacksInfo.Stack, Component: configAndStacksInfo.Component, Function: value, Reason: err.Error()})
+			},
+		}
+	}
 
 	// Mirror mergeComponentConfigurations' effectiveAtmosConfig: a component-level
 	// `settings.list_merge_strategy` must govern list-typed deferred merges here the same way it
@@ -89,13 +106,19 @@ func resolveDeferredYamlFunctions(
 		if sectionDctx == nil || !sectionDctx.HasDeferredValues() {
 			continue
 		}
+		if !deferred.IsSectionRequired(evalSections, sectionName) {
+			continue
+		}
 		sectionMap, ok := configAndStacksInfo.ComponentSection[sectionName].(map[string]any)
 		if !ok {
 			continue
 		}
 		// Clone before resolving: sectionDctx may be a reference into the shared FindStacksMap
 		// cache (see DeferredMergeContexts' doc comment on ConfigAndStacksInfo).
-		if err := m.ApplyDeferredMerges(sectionDctx.Clone(), sectionMap, mergeConfig, processor); err != nil {
+		selected := sectionDctx.Clone()
+		deferred.FilterDeferredFields(selected, sectionName, configAndStacksInfo.EvaluationPaths)
+		deferred.ExcludeComputedFields(selected, sectionMap)
+		if err := m.ApplyDeferredMerges(selected, sectionMap, mergeConfig, processor); err != nil {
 			return fmt.Errorf("failed to resolve deferred YAML functions in %q: %w", sectionName, err)
 		}
 	}

@@ -7,6 +7,26 @@ type-safe, predictable, and unable to break YAML syntax.
 All YAML functions support Go template expressions in their arguments. Atmos processes
 templates first, then executes the YAML functions.
 
+## `!labels` — Component metadata lookup
+
+```yaml
+vars:
+  labels: !labels                       # Complete metadata.labels map
+  runner: !labels runner                # One literal, case-sensitive key
+  owner: !labels owner "Platform Team"  # Fallback only when the key is absent
+  optional: !labels missing ""          # Explicit empty fallback
+```
+
+The lookup uses resolved metadata after defaults and inheritance. Bare `!labels` returns `{}`
+when labels are absent; a missing key without a fallback is an error. An existing empty string
+counts as present. Keys with dots, slashes, and hyphens are literal, not nested paths.
+The function accepts at most two arguments; quote defaults containing spaces.
+
+For templates, use `{{ .metadata.labels.runner }}` or
+`{{ index .metadata.labels "cost-center" }}`. There is no built-in `.labels` shortcut.
+Functions also work in `settings.pro` workflow inputs; use `!labels runner ubuntu-latest`
+for per-component runner selection with a fallback. This does not provision GitHub runners.
+
 ## `!terraform.state` (Recommended)
 
 Read Terraform outputs directly from the state backend without initialization. This is the

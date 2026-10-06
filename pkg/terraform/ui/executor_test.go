@@ -1009,6 +1009,27 @@ func TestShowPlanTree_NoChangesShowsBadgeOnly(t *testing.T) {
 	assert.Contains(t, stderr.String(), "NO CHANGES")
 }
 
+// TestShowPlanTree_OutputOnlyChangeDoesNotShowNoChanges is a regression test for issue #3114:
+// a plan whose only diff is an output value (empty resource_changes but a populated
+// output_changes map) must not be reported as "NO CHANGES", or `atmos terraform plan --ui`
+// would hide the only diff that exists.
+func TestShowPlanTree_OutputOnlyChangeDoesNotShowNoChanges(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	stderr := captureUIOutput(t)
+
+	planJSON := `{"format_version":"1.2","resource_changes":[],` +
+		`"output_changes":{"vpc_id":{"actions":["update"],"before":"old","after":"new"}}}`
+	t.Setenv("_ATMOS_TEST_TF_SHOW_JSON", planJSON)
+
+	opts := &ExecuteOptions{Command: exePath, WorkingDir: t.TempDir(), Component: "vpc", Stack: "dev"}
+
+	showPlanTree(context.Background(), opts, "plan.tfplan")
+
+	assert.NotContains(t, stderr.String(), "NO CHANGES")
+	assert.Contains(t, stderr.String(), "OUTPUTS CHANGED")
+}
+
 // TestShowTwoPhasePlanTree_ReturnsFalseWhenPlanCannotBeParsed verifies an unparsable plan
 // falls through to the confirmation phase (returns false) rather than being mistaken for a
 // no-changes plan, matching the function's documented "prior behavior" contract.
@@ -1059,6 +1080,27 @@ func TestShowTwoPhasePlanTree_WithChangesReturnsFalse(t *testing.T) {
 	output := stderr.String()
 	assert.Contains(t, output, "aws_s3_bucket.main")
 	assert.Contains(t, output, "1 DELETE")
+}
+
+// TestShowTwoPhasePlanTree_OutputOnlyChangeReturnsFalse is a regression test for issue #3114:
+// a plan with zero resource changes but a real (non-no-op) output_changes entry must be
+// reported as "has changes" (false), or ExecuteApply's two-phase flow would skip confirmation
+// and apply entirely - silently dropping the new output value.
+func TestShowTwoPhasePlanTree_OutputOnlyChangeReturnsFalse(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	stderr := captureUIOutput(t)
+
+	planJSON := `{"format_version":"1.2","resource_changes":[],` +
+		`"output_changes":{"vpc_id":{"actions":["update"],"before":"old","after":"new"}}}`
+	t.Setenv("_ATMOS_TEST_TF_SHOW_JSON", planJSON)
+
+	opts := &ExecuteOptions{Command: exePath, WorkingDir: t.TempDir()}
+
+	noChanges := showTwoPhasePlanTree(context.Background(), opts, "plan.tfplan")
+
+	assert.False(t, noChanges, "an output-only diff must not be treated as no changes")
+	assert.NotContains(t, stderr.String(), "NO CHANGES")
 }
 
 // TestConfirmTwoPhaseOperation_PropagatesConfirmError verifies both the apply and destroy
@@ -1228,6 +1270,29 @@ func TestExecuteWithPlanFile_NoChangesDisplaysOutputsAndReturnsNil(t *testing.T)
 	assert.Contains(t, stderr.String(), "NO CHANGES")
 }
 
+// TestExecuteWithPlanFile_OutputOnlyChangePropagatesConfirmError is a regression test for issue
+// #3114 (the `--planfile` apply path): a planfile whose only diff is an output value must not
+// be treated as "no changes" - it must proceed to confirmation (and here, since stdin isn't a
+// TTY in `go test`, propagate the confirmation error) rather than short-circuiting to
+// fetchAndDisplayOutputs + a nil return, which would silently skip the apply entirely.
+func TestExecuteWithPlanFile_OutputOnlyChangePropagatesConfirmError(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	stderr := captureUIOutput(t)
+
+	planJSON := `{"format_version":"1.2","resource_changes":[],` +
+		`"output_changes":{"vpc_id":{"actions":["update"],"before":"old","after":"new"}}}`
+	t.Setenv("_ATMOS_TEST_TF_SHOW_JSON", planJSON)
+
+	opts := &ExecuteOptions{Command: exePath, WorkingDir: t.TempDir()}
+
+	runErr := executeWithPlanFile(context.Background(), opts, "plan.tfplan")
+
+	require.Error(t, runErr, "an output-only diff must proceed to confirmation/apply, not be skipped as no changes")
+	assert.ErrorIs(t, runErr, errUtils.ErrStreamingNotSupported)
+	assert.NotContains(t, stderr.String(), "NO CHANGES")
+}
+
 // TestExecute_FailsFastWhenNotTTY verifies Execute checks streaming UI preconditions (no TTY
 // in a `go test` process) before doing any real work.
 func TestExecute_FailsFastWhenNotTTY(t *testing.T) {
@@ -1300,4 +1365,34 @@ func TestExecuteDestroy_AutoApprove_PropagatesExecuteError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+}
+
+// TestShowPlanTree_LogsWarnOnTreeBuildFailure is a regression test for a silent-failure gap:
+// showPlanTree used to swallow a BuildDependencyTree error entirely, so when `terraform show
+// -json <planfile>` failed for any reason, the whole plan summary (tree + change badges) just
+// vanished with zero indication anything went wrong. This forces that failure (an unresolvable
+// "terraform" binary) and asserts it's now surfaced as a WARN log line instead of silence.
+func TestShowPlanTree_LogsWarnOnTreeBuildFailure(t *testing.T) {
+	origLevel := log.GetLevel()
+	t.Cleanup(func() {
+		log.SetOutput(os.Stderr)
+		log.SetLevel(origLevel)
+	})
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	log.SetLevel(log.InfoLevel)
+
+	opts := &ExecuteOptions{
+		Command:    filepath.Join(t.TempDir(), "no-such-terraform-binary"),
+		WorkingDir: t.TempDir(),
+		Component:  "comp",
+		Stack:      "stack",
+	}
+
+	showPlanTree(context.Background(), opts, "plan.tfplan")
+
+	out := buf.String()
+	assert.Contains(t, out, "WARN")
+	assert.Contains(t, out, "plan summary")
 }

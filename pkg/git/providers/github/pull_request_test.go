@@ -16,6 +16,18 @@ import (
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 )
 
+// TestPullRequestBodyBadge proves *Provider implements atmosgit.PullRequestBodyBadger (so
+// updater.RenderPRTemplates picks up GitHub's own badge instead of the static fallback) and that
+// the badge it returns actually carries the raw HTML light/dark <picture> markup this provider's
+// pull request rendering relies on.
+func TestPullRequestBodyBadge(t *testing.T) {
+	var badger atmosgit.PullRequestBodyBadger = New()
+	badge := badger.PullRequestBodyBadge()
+	assert.Contains(t, badge, "<picture>")
+	assert.Contains(t, badge, `prefers-color-scheme: dark`)
+	assert.Contains(t, badge, "https://atmos.tools/ci")
+}
+
 func TestReconcilePullRequest(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -109,6 +121,20 @@ func TestReconcileReturnsActionableErrors(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
 
 	_, err = p.Reconcile(context.Background(), &atmosgit.PullRequestOptions{Owner: "acme"})
+	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
+}
+
+// TestReconcileRejectsNamespace proves a non-empty Namespace (meaningful only to a three-segment
+// forge like Azure DevOps) is rejected outright rather than silently ignored -- GitHub addresses
+// repositories with exactly two segments, so silently dropping Namespace would resolve to the
+// wrong repository instead of surfacing the misconfiguration.
+func TestReconcileRejectsNamespace(t *testing.T) {
+	p := New()
+	options := validPullRequestOptions()
+	options.Namespace = []string{"proj"}
+
+	_, err := p.Reconcile(context.Background(), options)
+
 	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
 }
 

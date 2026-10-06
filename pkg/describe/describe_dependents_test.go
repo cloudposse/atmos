@@ -12,6 +12,8 @@ import (
 )
 
 func TestDescribeDependents(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -46,6 +48,8 @@ func TestDescribeDependents(t *testing.T) {
 }
 
 func TestDescribeDependents2(t *testing.T) {
+	t.Parallel()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)

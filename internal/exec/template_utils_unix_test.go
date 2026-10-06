@@ -10,6 +10,8 @@ import (
 
 // TestCreateTempDirectory verifies Unix-specific directory permissions.
 func TestCreateTempDirectory(t *testing.T) {
+	t.Parallel()
+
 	dir, err := createTempDirectory()
 	if err != nil {
 		t.Fatalf("createTempDirectory returned error: %v", err)

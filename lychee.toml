@@ -49,6 +49,10 @@ exclude = [
   "example\\.com",
   "cpco\\.io",
   "cloudposse\\.com.*utm_",
+  # These URLs repeatedly reset/refuse CI connections despite working outside CI.
+  # Keep other Cloud Posse pages and assets covered by link checks.
+  "^https?://cloudposse\\.com/?$",
+  "^https?://cloudposse\\.com/(support|office-hours|slack|readme/footer/img)/?$",
   # Private GitHub org (not accessible to CI)
   "github\\.com/cloudposse-corp",
   "slack\\.cloudposse\\.com",
@@ -218,4 +222,7 @@ exclude = [
   # asdf-vm.com's docs site intermittently resets connections from CI runners;
   # verified to return 200 outside CI via curl.
   "asdf-vm\\.com",
+  # k3s.io (GitHub Pages-fronted) intermittently resets connections from CI
+  # runners; verified to return 200 outside CI via curl.
+  "k3s\\.io",
 ]

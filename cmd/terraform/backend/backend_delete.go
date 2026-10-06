@@ -47,7 +47,8 @@ Requires the --force flag for safety. The backend must be empty
 			stack = v.GetString("stack")
 		}
 		identity := flags.ParseGlobalFlags(cmd, v).Identity.Value()
-		return executeDeleteCommandWithValues(result.Component, stack, identity, force)
+		prompted := promptedFlags{Component: result.ComponentPrompted, Stack: result.StackPrompted}
+		return executeDeleteCommandWithValues(result.Component, stack, identity, force, prompted)
 	},
 }
 

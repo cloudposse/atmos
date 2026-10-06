@@ -37,6 +37,15 @@ version:
           - path: version
             from: atmos
 
+    - manager: yaml
+      paths:
+        - charts/*/values.yaml
+      options:
+        set:
+          - path: version
+            from: cli
+            format: '{{ trimPrefix "v" .Version }}'
+
     - manager: template
       paths:
         - "**/*.tmpl"
@@ -58,6 +67,9 @@ When `version.files` is omitted, managers with default paths run over those defa
 
   <dt>`json`</dt>
   <dd>Writes locked values into JSON files at configured field paths, preserving formatting and key order.</dd>
+
+  <dt>`yaml`</dt>
+  <dd>Writes locked values into YAML files at configured field paths, preserving comments, anchors, and key order.</dd>
 
   <dt>`template`</dt>
   <dd>Renders `*.tmpl` source files to sibling files using the `.version` context.</dd>
@@ -214,9 +226,39 @@ version:
     ```
     </File>
   </TabItem>
+  <TabItem value="format" label="Reshaping the Value">
+    A dependency sourced from `github-releases`/`github-tags` locks the raw git tag (e.g. `v2.5.0`). When a target field needs a different shape, add `format` to the `set` entry: a Go template (Sprig plus Atmos's template functions) rendered against the resolved version, whose output replaces the verbatim value:
+
+    <File title="atmos.yaml">
+    ```yaml
+      files:
+        - manager: json
+          paths:
+            - package.json
+          options:
+            set:
+              - path: version
+                from: cli
+                format: '{{ trimPrefix "v" .Version }}'
+    ```
+    </File>
+
+    <File title="package.json">
+    ```json
+    {
+      "name": "example",
+      "version": "2.5.0"
+    }
+    ```
+    </File>
+
+    Without `format`, the same rule would write `"version": "v2.5.0"` verbatim.
+  </TabItem>
 </Tabs>
 
 `path` follows sjson/gjson dot syntax: dots nest into objects, a bare number indexes into an array, and a literal dot inside a key name is escaped as `\.`. `path` is always a YAML string — quote numeric segments (`path: "0"`), or the value decodes as a YAML integer and fails validation.
+
+`format` is optional. When omitted, the resolved value is written verbatim (today's default behavior). When set, it's a Go template rendered against the resolved version — `.Version` (the human-readable version), `.Digest`, and `.Pin` are all available in the template context — and the rendered string is written instead. Any string function from [Sprig](https://masterminds.github.io/sprig/) works, e.g. `trimPrefix`, `trimSuffix`, `replace`, or `regexReplaceAll`.
 
 A simple `path` (no wildcards) that doesn't exist yet in the file is created rather than rejected, so double-check `path` for typos — a misspelled path silently adds a new field instead of updating the intended one. Wildcard/query paths (`items.#.version`, `*`, `?`, `@`) update every matching location when the path resolves against the current document, but error instead of silently doing nothing when it resolves to nothing — for example, an empty array or a missing parent key.
 
@@ -225,6 +267,53 @@ A few configurations are rejected outright rather than risking silent data loss:
 - **Array-append paths** (any `-1` segment) — there's no way to tell "already applied" from "not yet applied" by reading the array back, so every `apply` would append another element forever.
 - **A `path` whose current value is an object or array** — writing a scalar there would silently discard the whole subtree. Target the specific field inside it instead (`engines.node`, not `engines`).
 - **Two `set` entries targeting the same `path`** — the second write would otherwise silently discard the first.
+- **A `format` template that fails to parse or execute** (a syntax error, or a reference to a field that doesn't exist) — rejected outright rather than writing garbage or an empty string.
+
+## Updating YAML Files
+
+The `yaml` manager writes locked values into YAML files at configured field paths, using the same format-preserving editor behind [`atmos config set`](/cli/commands/config/config-set) and [`atmos stack set`](/cli/commands/stack/stack-set). It edits the document via a targeted assignment rather than a full unmarshal/remarshal, so comments, anchors and aliases, and key order on untouched fields survive the write.
+
+<File title="atmos.yaml">
+```yaml
+version:
+  dependencies:
+    cli:
+      ecosystem: github/releases
+      datasource: github-releases
+      provider: github
+      package: cli/cli
+      desired: "~2"
+
+  files:
+    - manager: yaml
+      paths:
+        - charts/*/values.yaml
+      options:
+        set:
+          - path: version
+            from: cli
+            format: '{{ trimPrefix "v" .Version }}'
+```
+</File>
+
+`atmos version track apply` rewrites the configured field and leaves everything else — comments, anchors, unrelated keys — untouched:
+
+<File title="charts/example/values.yaml">
+```yaml
+# Chart values.
+image:
+  repository: example
+version: 2.50.0 # managed by atmos version track
+```
+</File>
+
+`path` uses the same dot-notation as `atmos config set`/`atmos stack set`: dots nest into maps, `[N]` indexes into a sequence (e.g. `sources[0].version`), and a key that isn't a simple identifier is quoted (`metadata."weird.key"`). This differs from the `json` manager's sjson/gjson dialect — the two managers don't share path syntax.
+
+`format` works exactly as it does for the `json` manager: an optional Go template rendered against the resolved version (`.Version`, `.Digest`, `.Pin`), with the rendered string written instead of the verbatim value. See [Sprig](https://masterminds.github.io/sprig/) for the available string functions.
+
+A simple `path` that doesn't exist yet in the document is created rather than rejected. A `path` whose current value is a map or list is rejected rather than silently replaced with a scalar — target the specific field inside it instead.
+
+Because the editor re-encodes the document, indentation is normalized to the file's own detected width rather than preserved byte-for-byte the way the `json` manager's sjson patch is — the practical difference shows up only in edge cases (unusual mixed indentation, some flow-style collections), not in ordinary block-style YAML.
 
 ## Updating GitHub Action Workflows
 

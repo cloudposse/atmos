@@ -12,7 +12,10 @@ import (
 
 // TestNewComponentYAMLProcessor tests the NewComponentYAMLProcessor constructor.
 func TestNewComponentYAMLProcessor(t *testing.T) {
+	t.Parallel()
+
 	t.Run("creates processor with all fields", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		currentStack := "test-stack"
 		skip := []string{"skip1", "skip2"}
@@ -31,6 +34,7 @@ func TestNewComponentYAMLProcessor(t *testing.T) {
 	})
 
 	t.Run("creates processor with nil values", func(t *testing.T) {
+		t.Parallel()
 		processor := NewComponentYAMLProcessor(nil, "", nil, nil, nil)
 
 		require.NotNil(t, processor)
@@ -39,7 +43,10 @@ func TestNewComponentYAMLProcessor(t *testing.T) {
 
 // TestComponentYAMLProcessor_ProcessYAMLFunctionString tests the ProcessYAMLFunctionString method.
 func TestComponentYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
+	t.Parallel()
+
 	t.Run("processes template function", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		processor := NewComponentYAMLProcessor(atmosConfig, "", nil, nil, nil)
 
@@ -52,6 +59,7 @@ func TestComponentYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("processes non-YAML function string", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		processor := NewComponentYAMLProcessor(atmosConfig, "", nil, nil, nil)
 
@@ -63,6 +71,7 @@ func TestComponentYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("processes empty string", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		processor := NewComponentYAMLProcessor(atmosConfig, "", nil, nil, nil)
 
@@ -73,6 +82,7 @@ func TestComponentYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("processes template with JSON", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		processor := NewComponentYAMLProcessor(atmosConfig, "", nil, nil, nil)
 
@@ -86,6 +96,7 @@ func TestComponentYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("processes template with JSON array", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		processor := NewComponentYAMLProcessor(atmosConfig, "", nil, nil, nil)
 
@@ -101,7 +112,10 @@ func TestComponentYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 
 // TestComponentYAMLProcessor_Integration tests integration with processCustomTagsWithContext.
 func TestComponentYAMLProcessor_Integration(t *testing.T) {
+	t.Parallel()
+
 	t.Run("integrates with processCustomTagsWithContext", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		processor := NewComponentYAMLProcessor(atmosConfig, "", nil, nil, nil)
 
@@ -128,7 +142,10 @@ func templatingEnabledConfig() *schema.AtmosConfiguration {
 
 // TestNewTemplateAwareYAMLProcessor tests the NewTemplateAwareYAMLProcessor constructor.
 func TestNewTemplateAwareYAMLProcessor(t *testing.T) {
+	t.Parallel()
+
 	t.Run("creates processor with all fields", func(t *testing.T) {
+		t.Parallel()
 		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
 			AtmosConfig:              templatingEnabledConfig(),
 			ConfigAndStacksInfo:      &schema.ConfigAndStacksInfo{Stack: "test-stack"},
@@ -143,7 +160,10 @@ func TestNewTemplateAwareYAMLProcessor(t *testing.T) {
 
 // TestTemplateAwareYAMLProcessor_ProcessYAMLFunctionString tests the ProcessYAMLFunctionString method.
 func TestTemplateAwareYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
+	t.Parallel()
+
 	t.Run("delegates non-!template values to the inner processor unchanged", func(t *testing.T) {
+		t.Parallel()
 		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
 			AtmosConfig:         templatingEnabledConfig(),
 			ConfigAndStacksInfo: &schema.ConfigAndStacksInfo{Stack: "test-stack"},
@@ -159,6 +179,7 @@ func TestTemplateAwareYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("fast-paths a !template value with no {{ }} expression without requiring template context", func(t *testing.T) {
+		t.Parallel()
 		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
 			AtmosConfig:         templatingEnabledConfig(),
 			ConfigAndStacksInfo: &schema.ConfigAndStacksInfo{Stack: "test-stack"},
@@ -174,6 +195,7 @@ func TestTemplateAwareYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("renders a deferred !template value's {{ }} expression against the component template context", func(t *testing.T) {
+		t.Parallel()
 		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
 			AtmosConfig:              templatingEnabledConfig(),
 			ConfigAndStacksInfo:      &schema.ConfigAndStacksInfo{Stack: "test-stack"},
@@ -193,6 +215,7 @@ func TestTemplateAwareYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("fails loudly instead of silently skipping when template context is unavailable", func(t *testing.T) {
+		t.Parallel()
 		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
 			AtmosConfig:         templatingEnabledConfig(),
 			ConfigAndStacksInfo: &schema.ConfigAndStacksInfo{Stack: "test-stack"},
@@ -208,6 +231,7 @@ func TestTemplateAwareYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("fails loudly on a render error instead of silently returning unrendered text", func(t *testing.T) {
+		t.Parallel()
 		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
 			AtmosConfig:              templatingEnabledConfig(),
 			ConfigAndStacksInfo:      &schema.ConfigAndStacksInfo{Stack: "test-stack"},
@@ -226,6 +250,7 @@ func TestTemplateAwareYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("renders a deferred !template value using configured custom delimiters, not the hardcoded {{ }}", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := templatingEnabledConfig()
 		atmosConfig.Templates.Settings.Delimiters = []string{"[[", "]]"}
 
@@ -247,6 +272,7 @@ func TestTemplateAwareYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("still fast-paths a !template value with no expression when custom delimiters are configured", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := templatingEnabledConfig()
 		atmosConfig.Templates.Settings.Delimiters = []string{"[[", "]]"}
 

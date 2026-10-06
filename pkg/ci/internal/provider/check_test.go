@@ -1,17 +1,21 @@
 package provider
 
 import (
+	"errors"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFormatStatusContext(t *testing.T) {
 	tests := []struct {
-		name     string
-		prefix   string
-		parts    []string
-		expected string
+		name        string
+		prefix      string
+		parts       []string
+		expected    string
+		expectError bool
 	}{
 		{
 			name:     "plan with stack and component",
@@ -43,11 +47,36 @@ func TestFormatStatusContext(t *testing.T) {
 			parts:    nil,
 			expected: "atmos",
 		},
+		{
+			name:        "empty prefix rejected",
+			prefix:      "",
+			parts:       []string{"plan", "dev", "vpc"},
+			expectError: true,
+		},
+		{
+			name:        "empty stack rejected",
+			prefix:      "atmos",
+			parts:       []string{"plan", "", "vpc"},
+			expectError: true,
+		},
+		{
+			name:        "empty component rejected",
+			prefix:      "atmos",
+			parts:       []string{"plan", "dev", ""},
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FormatStatusContext(tt.prefix, tt.parts...)
+			result, err := FormatStatusContext(tt.prefix, tt.parts...)
+			if tt.expectError {
+				require.Error(t, err)
+				assert.True(t, errors.Is(err, errUtils.ErrCIStatusContextIncomplete))
+				assert.Empty(t, result)
+				return
+			}
+			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

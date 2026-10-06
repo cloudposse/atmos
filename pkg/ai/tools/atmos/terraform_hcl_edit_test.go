@@ -14,6 +14,8 @@ import (
 )
 
 func TestNewTerraformComponentHCLEditTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewTerraformComponentHCLEditTool(atmosConfig)
 
@@ -22,16 +24,22 @@ func TestNewTerraformComponentHCLEditTool(t *testing.T) {
 }
 
 func TestTerraformComponentHCLEditTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewTerraformComponentHCLEditTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "atmos_terraform_component_hcl_edit", tool.Name())
 }
 
 func TestTerraformComponentHCLEditTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewTerraformComponentHCLEditTool(&schema.AtmosConfiguration{})
 	assert.NotEmpty(t, tool.Description())
 }
 
 func TestTerraformComponentHCLEditTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewTerraformComponentHCLEditTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -52,11 +60,15 @@ func TestTerraformComponentHCLEditTool_Parameters(t *testing.T) {
 }
 
 func TestTerraformComponentHCLEditTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewTerraformComponentHCLEditTool(&schema.AtmosConfiguration{})
 	assert.True(t, tool.RequiresPermission())
 }
 
 func TestTerraformComponentHCLEditTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewTerraformComponentHCLEditTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
@@ -69,8 +81,10 @@ func writeHCLFixture(t *testing.T, tmpDir string) string {
 }
 
 func TestTerraformComponentHCLEditTool_Execute_AttributeSet_PreservesSiblingComment(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, tmpDir, cleanup := setupTestComponentEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 	filePath := writeHCLFixture(t, tmpDir)
 
 	tool := NewTerraformComponentHCLEditTool(atmosConfig)
@@ -93,8 +107,10 @@ func TestTerraformComponentHCLEditTool_Execute_AttributeSet_PreservesSiblingComm
 }
 
 func TestTerraformComponentHCLEditTool_Execute_AttributeSet_NotFoundIsNoOp(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, tmpDir, cleanup := setupTestComponentEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 	writeHCLFixture(t, tmpDir)
 
 	tool := NewTerraformComponentHCLEditTool(atmosConfig)
@@ -111,8 +127,10 @@ func TestTerraformComponentHCLEditTool_Execute_AttributeSet_NotFoundIsNoOp(t *te
 }
 
 func TestTerraformComponentHCLEditTool_Execute_BlockAppend_LifecycleBlock(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, tmpDir, cleanup := setupTestComponentEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 	filePath := writeHCLFixture(t, tmpDir)
 
 	tool := NewTerraformComponentHCLEditTool(atmosConfig)
@@ -132,8 +150,10 @@ func TestTerraformComponentHCLEditTool_Execute_BlockAppend_LifecycleBlock(t *tes
 }
 
 func TestTerraformComponentHCLEditTool_Execute_AttributeRemove_VariableRemoved(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, tmpDir, cleanup := setupTestComponentEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 	filePath := writeHCLFixture(t, tmpDir)
 
 	tool := NewTerraformComponentHCLEditTool(atmosConfig)
@@ -160,6 +180,8 @@ func TestTerraformComponentHCLEditTool_Execute_AttributeRemove_VariableRemoved(t
 }
 
 func TestTerraformComponentHCLEditTool_Execute_MissingFilePath(t *testing.T) {
+	t.Parallel()
+
 	tool := NewTerraformComponentHCLEditTool(&schema.AtmosConfiguration{})
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
 		"operation": "attribute_set",
@@ -170,8 +192,10 @@ func TestTerraformComponentHCLEditTool_Execute_MissingFilePath(t *testing.T) {
 }
 
 func TestTerraformComponentHCLEditTool_Execute_MissingOperation(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, tmpDir, cleanup := setupTestComponentEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 	writeHCLFixture(t, tmpDir)
 
 	tool := NewTerraformComponentHCLEditTool(atmosConfig)
@@ -184,8 +208,10 @@ func TestTerraformComponentHCLEditTool_Execute_MissingOperation(t *testing.T) {
 }
 
 func TestTerraformComponentHCLEditTool_Execute_UnknownOperation(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, tmpDir, cleanup := setupTestComponentEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 	writeHCLFixture(t, tmpDir)
 
 	tool := NewTerraformComponentHCLEditTool(atmosConfig)
@@ -199,13 +225,16 @@ func TestTerraformComponentHCLEditTool_Execute_UnknownOperation(t *testing.T) {
 }
 
 func TestTerraformComponentHCLEditTool_Execute_MissingRequiredOperationParams(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, tmpDir, cleanup := setupTestComponentEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 	writeHCLFixture(t, tmpDir)
 
 	tool := NewTerraformComponentHCLEditTool(atmosConfig)
 
 	t.Run("attribute_set without value", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
 			"file_path": "vpc/main.tf",
 			"operation": "attribute_set",
@@ -217,6 +246,7 @@ func TestTerraformComponentHCLEditTool_Execute_MissingRequiredOperationParams(t 
 	})
 
 	t.Run("block_append without child", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(context.Background(), map[string]interface{}{
 			"file_path": "vpc/main.tf",
 			"operation": "block_append",
@@ -229,8 +259,10 @@ func TestTerraformComponentHCLEditTool_Execute_MissingRequiredOperationParams(t 
 }
 
 func TestTerraformComponentHCLEditTool_Execute_PathTraversalRejected(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, _, cleanup := setupTestComponentEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	tool := NewTerraformComponentHCLEditTool(atmosConfig)
 	result, err := tool.Execute(context.Background(), map[string]interface{}{

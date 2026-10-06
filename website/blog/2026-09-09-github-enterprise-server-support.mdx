@@ -1,0 +1,45 @@
+---
+slug: github-enterprise-server-support
+title: "GitHub Enterprise Server Support"
+authors: [osterman]
+tags: [feature]
+---
+
+Plenty of organizations run their own GitHub instance behind the firewall instead of using public github.com. Standard tools are expected to just work against it: `GITHUB_SERVER_URL` and `GITHUB_API_URL` are the same two variables GitHub Actions already exports on both public github.com and a GitHub Enterprise Server runner, precisely so that scripts and CLIs don't need special-casing.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos read those variables in a couple of places, but not consistently. The token allowlist that decides whether to attach a GitHub token to an outgoing request only recognized `api.github.com`, `raw.githubusercontent.com`, and `uploads.github.com`. Vendoring, remote imports, the CI provider, and the low-level GitHub API client each had their own github.com assumption baked in, hardcoded in a handful of different ways. On a GitHub Enterprise Server instance, that meant private-repo authentication, raw-content fetches, and CI metadata could silently fail or fall back to unauthenticated requests, depending on which code path happened to run.
+
+## The Fix
+
+Atmos now resolves `GITHUB_SERVER_URL` and `GITHUB_API_URL` from one place and honors that resolution everywhere it talks to your own repositories: the CI provider, imports and vendoring, release/tag/artifact lookups, the token host allowlist, and token injection for git operations. Point Atmos at your GitHub Enterprise Server instance and vendoring, remote imports, `atmos git clone`, and CI metadata all resolve against it, with no `atmos.yaml` changes required.
+
+Toolchain installs are a deliberately separate concern. The public Aqua registry that backs `atmos toolchain install` lives on public github.com regardless of where your own repositories are hosted, so toolchain traffic does **not** follow `GITHUB_SERVER_URL`. Without that separation, pointing Atmos at your GitHub Enterprise Server instance would break every `atmos toolchain install` on a GitHub Enterprise Server runner, since your instance obviously doesn't mirror the Aqua registry. Toolchain traffic gets its own variables instead, which default to public github.com and only need to be touched if you run a corporate release proxy or mirror.
+
+One shorthand stays github.com-only on purpose: writing `github.com/org/repo` (or bare `org/repo`) in an import, a vendor manifest, or an AI skill source can't be resolved against an arbitrary Enterprise Server host, because a bare hostname is indistinguishable from a relative path. On GitHub Enterprise Server, write the full URL instead — with one exception: AI skill sources also recognize the *actual* configured host without a scheme (`github.example.com/org/repo`), since a skill source is always meant to be a repository reference, never a local path. Imports and vendor manifests don't make that same assumption, so they need the explicit scheme there too (`https://github.example.com/org/repo`). `atmos git clone` has no shorthand form at all, on github.com or GitHub Enterprise Server alike — it always needs a full URI (HTTPS, SCP-style, or go-getter syntax).
+
+## How to Use It
+
+Set the two standard variables to point Atmos at your instance:
+
+```shell
+export GITHUB_SERVER_URL=https://github.example.com
+export GITHUB_API_URL=https://github.example.com/api/v3
+```
+
+If you run a corporate proxy or mirror in front of public GitHub releases for toolchain installs, point the toolchain at it separately:
+
+```shell
+export ATMOS_TOOLCHAIN_GITHUB_URL=https://releases.corp.example.com
+export ATMOS_TOOLCHAIN_GITHUB_API_URL=https://releases.corp.example.com/api/v3
+export ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL=https://releases.corp.example.com/aqua-registry/main
+```
+
+Leave the toolchain variables unset and `atmos toolchain install` keeps installing tools from public github.com, exactly as before — even when `GITHUB_SERVER_URL` points at your own instance. See the [environment variables reference](/cli/environment-variables#github-enterprise-server-ghes) for the complete list and defaults.
+
+## Get Involved
+
+Running Atmos against GitHub Enterprise Server and hitting a spot that still assumes public github.com? [Open an issue](https://github.com/cloudposse/atmos/issues) — the routing above covers the paths we could verify, but Enterprise Server deployments vary.

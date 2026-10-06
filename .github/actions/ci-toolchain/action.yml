@@ -11,7 +11,10 @@ description: >
   directory at job end (`cache: restore-and-save`); every consumer restores it
   and never saves (`cache: restore-only`), so ten shards do not race to write one key.
   On a miss, `atmos toolchain install` installs from the network as it always
-  did.
+  did. The install step gets one bounded retry on failure: `atmos toolchain
+  install` skips every tool already on disk, so a retry only re-attempts
+  whatever failed the first time (e.g. a transient HTTP error downloading a
+  release asset) -- no shell loop needed.
 
   Requires the `atmos` binary to be on PATH (install it before this step).
 
@@ -38,6 +41,15 @@ runs:
         mode: ${{ inputs.cache }}
 
     - name: Install the tools in .tool-versions that are not already on disk
+      id: install
+      shell: bash
+      continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: atmos toolchain install
+
+    - name: Retry installing tools after a transient failure
+      if: steps.install.outcome == 'failure'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}

@@ -98,6 +98,9 @@ func TestParseAndApplyRunOptions(t *testing.T) {
 	v.Set("init-pass-vars", true)
 	v.Set("auto-generate-backend-file", "true")
 	v.Set("init-run-reconfigure", "false")
+	v.Set("init-mode", "never")
+	v.Set("init-reconfigure", "always")
+	v.Set("init-upgrade", "always")
 	v.Set("planfile", "tfplan")
 	v.Set("skip-planfile", true)
 	v.Set("deploy-run-init", true)
@@ -117,6 +120,9 @@ func TestParseAndApplyRunOptions(t *testing.T) {
 	assert.True(t, opts.InitPassVars)
 	assert.Equal(t, "true", opts.AutoGenerateBackendFile)
 	assert.Equal(t, "false", opts.InitRunReconfigure)
+	assert.Equal(t, "never", opts.InitMode)
+	assert.Equal(t, "always", opts.InitReconfigure)
+	assert.Equal(t, "always", opts.InitUpgrade)
 	assert.Equal(t, "tfplan", opts.PlanFile)
 	assert.True(t, opts.PlanSkipPlanfile)
 	assert.True(t, opts.DeployRunInit)
@@ -141,6 +147,9 @@ func TestParseAndApplyRunOptions(t *testing.T) {
 	assert.Equal(t, ".vars.enabled", info.Query)
 	assert.Equal(t, "true", info.AutoGenerateBackendFile)
 	assert.Equal(t, "false", info.InitRunReconfigure)
+	assert.Equal(t, "never", info.InitMode)
+	assert.Equal(t, "always", info.InitReconfigure)
+	assert.Equal(t, "always", info.InitUpgrade)
 	assert.Equal(t, "true", info.InitPassVars)
 	assert.Equal(t, "tfplan", info.PlanFile)
 	assert.True(t, info.UseTerraformPlan)
@@ -449,9 +458,11 @@ func TestPromptHelpersReturnEmptyWhenNonInteractive(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{}
 	require.NoError(t, promptMissingComponent(info, &cobra.Command{}))
 	assert.Empty(t, info.ComponentFromArg)
+	assert.False(t, info.ComponentPrompted)
 
 	require.NoError(t, promptMissingStack(info, &cobra.Command{}))
 	assert.Empty(t, info.Stack)
+	assert.False(t, info.StackPrompted)
 }
 
 func TestHandleInteractiveIdentitySelectionInitCliConfigError(t *testing.T) {
@@ -551,6 +562,62 @@ func TestPromptMissingComponent_AlreadySetShortCircuits(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"}
 	require.NoError(t, promptMissingComponent(info, &cobra.Command{Use: "plan"}))
 	assert.Equal(t, "vpc", info.ComponentFromArg, "must not be overwritten")
+}
+
+// TestPromptMissingComponentAndStack_SetsPromptedFlags verifies that
+// promptMissingComponent/promptMissingStack record ComponentPrompted/
+// StackPrompted only when the interactive picker actually ran and returned a
+// value — this is what lets a later profile-fallback re-exec (see
+// pkg/auth.ReExecContext) tell a prompted value apart from one the user
+// already supplied on the command line.
+func TestPromptMissingComponentAndStack_SetsPromptedFlags(t *testing.T) {
+	origInteractive := isInteractiveFn
+	origSelect := selectFromOptions
+	origDescribe := executeDescribeStacks
+	origInit := initCliConfig
+	t.Cleanup(func() {
+		isInteractiveFn = origInteractive
+		selectFromOptions = origSelect
+		executeDescribeStacks = origDescribe
+		initCliConfig = origInit
+	})
+
+	initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+	isInteractiveFn = func() bool { return true }
+	executeDescribeStacks = func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+		return map[string]any{
+			"core-ue2-auto": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{"vpc": map[string]any{}},
+				},
+			},
+		}, nil
+	}
+	selectFromOptions = func(name, _ string, options []string) (string, error) {
+		return options[0], nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{}
+	require.NoError(t, promptMissingComponent(info, &cobra.Command{Use: "plan"}))
+	assert.Equal(t, "vpc", info.ComponentFromArg)
+	assert.True(t, info.ComponentPrompted, "component resolved via prompt must be flagged as prompted")
+
+	cmd := &cobra.Command{Use: "plan"}
+	cmd.Flags().String("stack", "", "Stack flag")
+	require.NoError(t, promptMissingStack(info, cmd))
+	assert.Equal(t, "core-ue2-auto", info.Stack)
+	assert.True(t, info.StackPrompted, "stack resolved via prompt must be flagged as prompted")
+
+	// A component/stack already supplied on the command line must never be
+	// marked as prompted, since promptMissing* short-circuits before calling
+	// the picker.
+	preSupplied := &schema.ConfigAndStacksInfo{ComponentFromArg: "eks", Stack: "core-ue2-corp"}
+	require.NoError(t, promptMissingComponent(preSupplied, &cobra.Command{Use: "plan"}))
+	require.NoError(t, promptMissingStack(preSupplied, &cobra.Command{Use: "plan"}))
+	assert.False(t, preSupplied.ComponentPrompted, "command-line-supplied component must not be flagged as prompted")
+	assert.False(t, preSupplied.StackPrompted, "command-line-supplied stack must not be flagged as prompted")
 }
 
 func TestHandleInteractiveComponentStackSelectionPropagatesComponentPromptError(t *testing.T) {

@@ -13,6 +13,8 @@ import (
 
 // TestCheckConfig tests the checkConfig function for various validation scenarios.
 func TestCheckConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		config         schema.AtmosConfiguration
@@ -119,6 +121,7 @@ func TestCheckConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := checkConfig(tt.config, tt.isProcessStack)
 
 			if tt.expectError {
@@ -135,6 +138,8 @@ func TestCheckConfig(t *testing.T) {
 
 // TestProcessCommandLineArgs tests command line argument processing.
 func TestProcessCommandLineArgs(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                string
 		configAndStacksInfo schema.ConfigAndStacksInfo
@@ -287,6 +292,7 @@ func TestProcessCommandLineArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			config := tt.initialConfig
 			err := processCommandLineArgs(&config, &tt.configAndStacksInfo)
 
@@ -304,6 +310,8 @@ func TestProcessCommandLineArgs(t *testing.T) {
 
 // TestProcessStoreConfig tests store configuration processing.
 func TestProcessStoreConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		config       schema.AtmosConfiguration
@@ -330,6 +338,7 @@ func TestProcessStoreConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			config := tt.config
 			err := processStoreConfig(&config)
 
@@ -347,6 +356,8 @@ func TestProcessStoreConfig(t *testing.T) {
 
 // TestGetContextFromVars tests extracting context from variables map.
 func TestGetContextFromVars(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		vars     map[string]any
@@ -410,6 +421,7 @@ func TestGetContextFromVars(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := GetContextFromVars(tt.vars)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -418,6 +430,8 @@ func TestGetContextFromVars(t *testing.T) {
 
 // TestGetContextPrefix tests context prefix calculation.
 func TestGetContextPrefix(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		stack            string
@@ -517,6 +531,7 @@ func TestGetContextPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := GetContextPrefix(tt.stack, tt.context, tt.stackNamePattern, tt.stackFile)
 
 			if tt.expectError {
@@ -534,6 +549,8 @@ func TestGetContextPrefix(t *testing.T) {
 
 // TestReplaceContextTokens tests token replacement in patterns.
 func TestReplaceContextTokens(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		context  schema.Context
@@ -604,6 +621,7 @@ func TestReplaceContextTokens(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ReplaceContextTokens(tt.context, tt.pattern)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -612,6 +630,8 @@ func TestReplaceContextTokens(t *testing.T) {
 
 // TestGetStackNameFromContextAndStackNamePattern tests stack name generation from pattern.
 func TestGetStackNameFromContextAndStackNamePattern(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		namespace        string
@@ -704,6 +724,7 @@ func TestGetStackNameFromContextAndStackNamePattern(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := GetStackNameFromContextAndStackNamePattern(
 				tt.namespace,
 				tt.tenant,
@@ -727,6 +748,8 @@ func TestGetStackNameFromContextAndStackNamePattern(t *testing.T) {
 
 // TestSearchConfigFile tests config file search with various extensions.
 func TestSearchConfigFile(t *testing.T) {
+	t.Parallel()
+
 	// Create temporary directory for test files.
 	tmpDir := t.TempDir()
 
@@ -795,6 +818,7 @@ func TestSearchConfigFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := SearchConfigFile(tt.configPath, atmosConfig)
 
 			if tt.expectError {
@@ -812,6 +836,8 @@ func TestSearchConfigFile(t *testing.T) {
 
 // TestGetConfigFilePatterns tests config file pattern generation.
 func TestGetConfigFilePatterns(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		path          string
@@ -849,6 +875,7 @@ func TestGetConfigFilePatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getConfigFilePatterns(tt.path, tt.forGlobMatch)
 
 			if tt.expectedCount > 0 {
@@ -864,6 +891,8 @@ func TestGetConfigFilePatterns(t *testing.T) {
 
 // TestMatchesStackFilePattern tests stack file pattern matching.
 func TestMatchesStackFilePattern(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		filePath  string
@@ -910,6 +939,7 @@ func TestMatchesStackFilePattern(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := matchesStackFilePattern(tt.filePath, tt.stackName)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -918,6 +948,8 @@ func TestMatchesStackFilePattern(t *testing.T) {
 
 // TestGetStackFilePatterns tests stack file pattern generation.
 func TestGetStackFilePatterns(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		basePath         string
@@ -948,6 +980,7 @@ func TestGetStackFilePatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getStackFilePatterns(tt.basePath, tt.includeTemplates)
 			assert.ElementsMatch(t, tt.expected, result)
 		})
@@ -956,6 +989,8 @@ func TestGetStackFilePatterns(t *testing.T) {
 
 // TestSetBasePaths tests base path configuration.
 func TestSetBasePaths(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{}
 	configAndStacks := &schema.ConfigAndStacksInfo{
 		BasePath: "/custom/base",
@@ -968,6 +1003,8 @@ func TestSetBasePaths(t *testing.T) {
 
 // TestSetTerraformConfig tests terraform configuration.
 func TestSetTerraformConfig(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{}
 	configAndStacks := &schema.ConfigAndStacksInfo{
 		TerraformCommand: "/usr/bin/terraform",
@@ -982,6 +1019,8 @@ func TestSetTerraformConfig(t *testing.T) {
 
 // TestSetHelmfileConfig tests helmfile configuration.
 func TestSetHelmfileConfig(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{}
 	configAndStacks := &schema.ConfigAndStacksInfo{
 		HelmfileCommand: "/usr/bin/helmfile",
@@ -996,6 +1035,8 @@ func TestSetHelmfileConfig(t *testing.T) {
 
 // TestSetPackerConfig tests packer configuration.
 func TestSetPackerConfig(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{}
 	configAndStacks := &schema.ConfigAndStacksInfo{
 		PackerCommand: "/usr/bin/packer",
@@ -1010,6 +1051,8 @@ func TestSetPackerConfig(t *testing.T) {
 
 // TestSetStacksConfig tests stacks configuration.
 func TestSetStacksConfig(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{}
 	configAndStacks := &schema.ConfigAndStacksInfo{
 		StacksDir: "/stacks",
@@ -1022,6 +1065,8 @@ func TestSetStacksConfig(t *testing.T) {
 
 // TestSetSchemaDirs tests schema directory configuration.
 func TestSetSchemaDirs(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		Schemas: make(map[string]interface{}),
 	}
@@ -1050,6 +1095,8 @@ func TestSetSchemaDirs(t *testing.T) {
 
 // TestSetLoggingConfig tests logging configuration.
 func TestSetLoggingConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		logsLevel   string
@@ -1070,6 +1117,7 @@ func TestSetLoggingConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			config := &schema.AtmosConfiguration{}
 			configAndStacks := &schema.ConfigAndStacksInfo{
 				LogsLevel: tt.logsLevel,
@@ -1091,6 +1139,8 @@ func TestSetLoggingConfig(t *testing.T) {
 
 // TestSetSettingsConfig tests settings configuration.
 func TestSetSettingsConfig(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{}
 	configAndStacks := &schema.ConfigAndStacksInfo{
 		SettingsListMergeStrategy: "append",

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
@@ -61,12 +60,7 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 	}
 
 	if atmosConfig.Settings.Terminal.NoColor {
-		renderer, err := glamour.NewTermRenderer(
-			glamour.WithStandardStyle(styles.AsciiStyle),
-			glamour.WithWordWrap(int(r.width)),
-			glamour.WithColorProfile(r.profile),
-			glamour.WithEmoji(),
-		)
+		renderer, err := newASCIIRenderer(r.width)
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +77,6 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 
 	// Initialize glamour renderer
 	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(int(r.width)),
 		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithColorProfile(r.profile),
@@ -125,12 +118,7 @@ func NewHelpRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*R
 	wordWrap := int(width) // #nosec G115 -- width is validated above
 
 	if atmosConfig.Settings.Terminal.NoColor {
-		renderer, err := glamour.NewTermRenderer(
-			glamour.WithStandardStyle(styles.AsciiStyle),
-			glamour.WithWordWrap(wordWrap),
-			glamour.WithColorProfile(r.profile),
-			glamour.WithEmoji(),
-		)
+		renderer, err := newASCIIRenderer(width)
 		if err != nil {
 			return nil, err
 		}
@@ -166,12 +154,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 	var out *glamour.TermRenderer
 	var err error
 	if r.atmosConfig.Settings.Terminal.NoColor {
-		out, err = glamour.NewTermRenderer(
-			glamour.WithStandardStyle(styles.AsciiStyle),
-			glamour.WithWordWrap(0),
-			glamour.WithColorProfile(r.profile),
-			glamour.WithEmoji(),
-		)
+		out, err = newASCIIRenderer(0)
 		if err != nil {
 			return "", err
 		}
@@ -182,7 +165,6 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 			return "", err
 		}
 		out, err = glamour.NewTermRenderer(
-			glamour.WithAutoStyle(), // Uses terminal's default style
 			glamour.WithWordWrap(0),
 			glamour.WithStylesFromJSONBytes(style),
 			glamour.WithColorProfile(r.profile),
@@ -251,19 +233,26 @@ func (r *Renderer) Render(content string) (string, error) {
 	return trimTrailingSpaces(output), nil
 }
 
-func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
-	// Get minimal style with just list indentation (no colors) for ASCII mode.
-	style, err := GetListIndentStyle()
-	if err != nil {
-		return "", err
+// newASCIIRenderer uses an independent style so renderer creation order cannot affect output.
+func newASCIIRenderer(width uint) (*glamour.TermRenderer, error) {
+	maxInt := ^uint(0) >> 1
+	if width > maxInt {
+		width = maxInt
 	}
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(styles.AsciiStyle),
+	style, err := GetASCIIStyle()
+	if err != nil {
+		return nil, err
+	}
+	return glamour.NewTermRenderer(
 		glamour.WithStylesFromJSONBytes(style),
-		glamour.WithWordWrap(0),
-		glamour.WithColorProfile(r.profile),
+		glamour.WithWordWrap(int(width)), // #nosec G115 -- width is bounded above.
+		glamour.WithColorProfile(termenv.Ascii),
 		glamour.WithEmoji(),
 	)
+}
+
+func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
+	renderer, err := newASCIIRenderer(0)
 	if err != nil {
 		return "", err
 	}
@@ -278,18 +267,7 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {
-	// Get minimal style with just list indentation (no colors) for ASCII mode.
-	style, err := GetListIndentStyle()
-	if err != nil {
-		return "", err
-	}
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(styles.AsciiStyle),
-		glamour.WithStylesFromJSONBytes(style),
-		glamour.WithWordWrap(int(r.width)),
-		glamour.WithColorProfile(r.profile),
-		glamour.WithEmoji(),
-	)
+	renderer, err := newASCIIRenderer(r.width)
 	if err != nil {
 		return "", err
 	}

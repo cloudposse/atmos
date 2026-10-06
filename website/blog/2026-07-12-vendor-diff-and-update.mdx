@@ -30,15 +30,15 @@ Atmos now provides that package-management workflow directly in the CLI.
 
 - **`atmos vendor update`** finds newer versions for Git-backed component sources, honors each
   source's version constraints, and updates the pinned version in place while preserving comments,
-  anchors, templates, and formatting. Use `--check` to preview available updates without writing
-  files, or `--pull` to pull the updated sources immediately afterward.
+  anchors, templates, and formatting. Use [`--check`](/cli/commands/vendor/vendor-update#flags) to preview available updates without writing
+  files, or [`--pull`](/cli/commands/vendor/vendor-update#flags) to pull the updated sources immediately afterward.
 - **`atmos vendor diff`** compares a component's current pinned version with another tag, branch,
   or commit so you can review the upstream changes before updating.
 
 Both commands work from your local workspace. They support sources declared in a repository-level
 `vendor.yaml` or in per-component `component.yaml` files, including repositories that use both
 styles. They also respect `vendor.base_path`, `ATMOS_VENDOR_BASE_PATH`, and `--chdir`, so the
-commands use the same vendoring layout as `atmos vendor pull`.
+commands use the same vendoring layout as [`atmos vendor pull`](/cli/commands/vendor/pull).
 
 ### Migrating from the legacy GitHub Action
 

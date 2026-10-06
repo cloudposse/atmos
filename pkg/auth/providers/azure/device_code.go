@@ -600,11 +600,24 @@ func (p *deviceCodeProvider) PrepareEnvironment(ctx context.Context, environ map
 	}), nil
 }
 
-// Logout removes cached device code tokens from disk by deleting the MSAL token cache file.
-// Returns an error if the cache deletion fails.
+// Logout removes this provider's cached credentials from disk by clearing two distinct
+// caches. The first is the Atmos device-code token
+// (~/.cache/atmos/azure-device-code/<provider>/token.json), removed by deleteCachedToken().
+// The second is the realm-scoped MSAL token cache
+// (~/.azure/atmos/{realm}/msal_token_cache.json), removed by RemoveMSALCache(): createMSALClient()
+// seeds its public client from it and Authenticate() reads it for a silent acquisition first,
+// so leaving it behind is what let the next `atmos auth login` reuse the previous session's
+// account and refresh token — a stale token that predates any role/PIM change — producing
+// persistent 403s. The shared Azure CLI cache (~/.azure/msal_token_cache.json) is intentionally
+// preserved so a user's own `az login` session survives.
 func (p *deviceCodeProvider) Logout(ctx context.Context) error {
 	log.Debug("Logout Azure device code provider", "provider", p.name)
-	return p.deleteCachedToken()
+
+	if err := p.deleteCachedToken(); err != nil {
+		return err
+	}
+
+	return azureCloud.RemoveMSALCache(p.realm)
 }
 
 // Paths returns credential files/directories used by this provider.

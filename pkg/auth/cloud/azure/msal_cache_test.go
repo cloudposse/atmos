@@ -12,6 +12,54 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestRemoveMSALCache(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	realmCache := filepath.Join(tmpHome, ".azure", "atmos", "cw", "msal_token_cache.json")
+	sharedCache := filepath.Join(tmpHome, ".azure", "msal_token_cache.json")
+
+	writeFile := func(t *testing.T, path string) {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte("{}"), 0o600))
+	}
+
+	t.Run("removes realm-scoped cache", func(t *testing.T) {
+		writeFile(t, realmCache)
+
+		require.NoError(t, RemoveMSALCache("cw"))
+
+		_, err := os.Stat(realmCache)
+		assert.True(t, os.IsNotExist(err), "realm cache should be removed")
+	})
+
+	t.Run("missing file is not an error", func(t *testing.T) {
+		require.NoError(t, RemoveMSALCache("does-not-exist"))
+	})
+
+	t.Run("empty realm never touches the shared Azure CLI cache", func(t *testing.T) {
+		writeFile(t, sharedCache)
+
+		require.NoError(t, RemoveMSALCache(""))
+
+		_, err := os.Stat(sharedCache)
+		assert.NoError(t, err, "shared Azure CLI cache (empty realm) must be preserved")
+	})
+
+	t.Run("non-removable cache path surfaces the error", func(t *testing.T) {
+		// Make the cache "file" a non-empty directory so os.Remove fails with a real
+		// error that is not os.IsNotExist (e.g. ENOTEMPTY), exercising the error branch.
+		blockedCache := filepath.Join(tmpHome, ".azure", "atmos", "blocked", "msal_token_cache.json")
+		require.NoError(t, os.MkdirAll(blockedCache, 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(blockedCache, "child"), []byte("x"), 0o600))
+
+		err := RemoveMSALCache("blocked")
+		require.Error(t, err, "a real os.Remove failure must be surfaced")
+	})
+}
+
 func TestNewMSALCache(t *testing.T) {
 	// Redirect HOME/USERPROFILE so the default-path case creates its cache
 	// directory under a temp home instead of the real ~/.azure.

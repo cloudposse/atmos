@@ -1,14 +1,11 @@
 # Migrating from Justfiles
 
-This guide shows how to move Just recipes to Atmos. Find the correct shape for the Justfile
-below. Then follow the matching steps. For the full tutorial, see
-[atmos.tools/migration/justfile](https://atmos.tools/migration/justfile).
+Migrate Just recipes to Atmos as a general-purpose task runner. Preserve the user's build,
+test, lint, release, and maintenance commands. Start with `atmos.yaml` and custom commands;
+Terraform, stacks, components, and cloud credentials are not prerequisites.
 
-Just recipe bodies do not require tab indentation, unlike Make. Just's named parameters with
-default values map closely to Atmos custom command `flags:` and `arguments:`. This is the
-closest match of the three task runners this skill covers. If the Justfile also selects a
-Terraform environment, also use [from-native-terraform.md](from-native-terraform.md) for the
-Terraform-specific steps.
+Atmos can call the existing task runner as a shell step while individual tasks are migrated.
+Follow the matching shape below and the [end-user guide](https://atmos.tools/migration/justfile).
 
 ## Find the Shape of the Justfile
 
@@ -28,7 +25,7 @@ build:
 
 # Run static analysis
 lint:
-    golangci-lint run ./...
+    go vet ./...
 
 [private]
 _clean:
@@ -60,7 +57,7 @@ commands:
     description: Run static analysis
     steps:
       - type: shell
-        command: golangci-lint run ./...
+        command: go vet ./...
 ```
 
 ## Shape B: Recipe Dependencies
@@ -73,7 +70,7 @@ test: build
 
 # Deploy to the given environment (defaults to dev)
 deploy env='dev': build test
-    cd terraform && terraform apply -var-file=envs/{{env}}.tfvars
+    ./scripts/deploy.sh "{{env}}"
 ```
 
 **Steps:** use the same method as Make's dependency chains. See
@@ -101,44 +98,12 @@ commands:
     steps:
       - type: atmos
         command: test
-      - type: atmos
-        command: terraform apply infra -s {{ .Flags.env }}
+      - type: shell
+        command: ./scripts/deploy.sh "{{ .Flags.env }}"
 ```
 
-`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Moving the
-recipe's Terraform code to `components/terraform/infra/` (the default
-`components.terraform.base_path` is `components/terraform`) is one option -- swap `infra` for
-whatever the user actually names the component. Alternatively, keep the existing `terraform/`
-directory where it is: set `components.terraform.base_path: "."` and add
-`metadata.component: terraform` on the `infra` stack component -- `metadata.component` points
-the stack component at the physical directory, so no files need to move.
-
-`-s {{ .Flags.env }}` only selects *which stack* runs; it does not, by itself, load that
-environment's Terraform variables the way the source `-var-file=envs/{{env}}.tfvars` did. Bring
-the per-environment `.tfvars` files in through each stack file instead, one per environment
-(`stacks/dev.yaml`, `stacks/staging.yaml`, `stacks/prod.yaml`), each pointing at its own file. The
-relative path depends on which of the two options above you picked:
-
-```yaml
-# stacks/dev.yaml (moved to components/terraform/infra/)
-components:
-  terraform:
-    infra:
-      vars: !include ../components/terraform/infra/envs/dev.tfvars
-```
-
-```yaml
-# stacks/dev.yaml (no-move, terraform/ stays put)
-components:
-  terraform:
-    infra:
-      metadata:
-        component: terraform    # points at the existing `terraform/` directory
-      vars: !include ../terraform/envs/dev.tfvars
-```
-
-See [Migrating from Native Terraform](from-native-terraform.md) for the full `.tfvars`/stack
-mapping.
+The deployment script receives the application environment as its first argument. Keep the
+user's existing script; `--env` is a custom flag and does not select an Atmos stack.
 
 ## Shape C: Environment and Shell Settings
 
@@ -147,7 +112,7 @@ mapping.
 set dotenv-load := true
 set shell := ["bash", "-uc"]
 
-export AWS_REGION := "us-east-1"
+export APP_LOG_LEVEL := "info"
 ```
 
 **Steps:**
@@ -167,7 +132,7 @@ commands:
     description: Build the deployable artifact
     env:
       <<: !include .env
-      AWS_REGION: us-east-1
+      APP_LOG_LEVEL: info
     steps:
       - type: shell
         command: go build -o bin/handler ./cmd/handler

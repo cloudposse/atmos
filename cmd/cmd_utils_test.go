@@ -3126,6 +3126,7 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			assert.Equal(t, "deploy-app", gotParams.Component)
 			assert.Equal(t, "dev", gotParams.Stack)
 			assert.Equal(t, tt.commandConfig.Component.Type, gotParams.ComponentType)
+			assert.True(t, gotParams.ResolveSecrets, "custom command execution needs real secrets")
 			assert.True(t, gotParams.ProcessTemplates)
 			assert.True(t, gotParams.ProcessYamlFunctions)
 		})

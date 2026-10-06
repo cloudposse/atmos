@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature, atmos-pro]
 ---
 
-`atmos describe affected --upload` now works under `GITHUB_EVENT_NAME=merge_group`, so Atmos Pro can correctly conclude check runs on the synthetic commits GitHub creates when a PR enters a merge queue. To control what runs on those synthetic commits, declare a new `settings.pro.merge_group.checks_requested.workflows` block in your stack config and point it at the workflow you want the queue to dispatch (in most cases, the same plan workflow you already use for `pull_request.synchronize`).
+[`atmos describe affected --upload`](/cli/commands/describe/affected) now works under `GITHUB_EVENT_NAME=merge_group`, so Atmos Pro can correctly conclude check runs on the synthetic commits GitHub creates when a PR enters a [merge queue](/cli/configuration/settings/pro#merge-queue-support). To control what runs on those synthetic commits, declare a new `settings.pro.merge_group.checks_requested.workflows` block in your stack config and point it at the workflow you want the queue to dispatch (in most cases, the same plan workflow you already use for `pull_request.synchronize`).
 
 <!--truncate-->
 

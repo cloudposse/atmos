@@ -7,8 +7,9 @@ description: >
   via the go-gh REST client (internal/ci/rerun.FetchJobs; GH_TOKEN
   authenticates it, same as `gh` itself), then prints one TSV line per
   non-success job: `job<TAB>conclusion<TAB>class`. Classes:
-  runner-stuck-after-complete (cancelled, all steps green, job completion
-  landed >= stuck-gap-seconds after the last step), runner-lost (failure with
+  runner-stuck-after-complete (cancelled, all actions green, job completion
+  landed >= stuck-gap-seconds after the last step completed or a still-running
+  final Complete job step started), runner-lost (failure with
   no failed step), check-cascade (failure whose only failed steps are
   `Check ... result` aggregator steps), superseded (any other cancellation)
   and real-failure (anything else). The verdict is `rerun` only when at least
@@ -37,8 +38,9 @@ inputs:
     required: true
   stuck-gap-seconds:
     description: >
-      Minimum seconds between a cancelled job's last step completing and the
-      job itself completing for it to count as runner-stuck-after-complete
+      Minimum seconds between a cancelled job's last step completing (or its
+      unfinished Complete job step starting) and the job itself completing
+      for it to count as runner-stuck-after-complete
     required: false
     default: '300'
 

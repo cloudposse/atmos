@@ -27,7 +27,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -370,26 +369,26 @@ func displayVerificationDialog(code, url string) {
 	// Styles using Atmos theme colors.
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 		PaddingLeft(1).
 		PaddingRight(1)
 
 	codeStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorGreen)).
-		Background(lipgloss.Color("#1a1a1a")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).
+		Background(lipgloss.Color(theme.GetCurrentColorScheme().Surface)).
 		Padding(0, 1)
 
 	urlStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorBorder)).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
 		Italic(true)
 
 	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorDarkGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorBorder)).
+		BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
 		Padding(1, 2).
 		MarginTop(1).
 		MarginBottom(1)
@@ -568,10 +567,7 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 	}()
 
 	// Create and run the spinner.
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
-	fps.Apply(&s)
+	s := ui.NewSpinner()
 
 	model := spinnerModel{
 		spinner:    s,
@@ -664,7 +660,7 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m spinnerModel) View() string {
 	if m.done {
 		if m.result != nil && m.result.err != nil {
-			return fmt.Sprintf("%s Authentication failed\n", theme.Styles.XMark)
+			return fmt.Sprintf("%s Authentication failed\n", theme.GetCurrentStyles().XMark)
 		}
 		// Success - don't print message here, auth login will display detailed table.
 		return ""

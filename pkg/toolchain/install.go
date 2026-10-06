@@ -10,13 +10,12 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
+	"github.com/cloudposse/atmos/pkg/ui/batch"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -48,12 +47,13 @@ type spinnerModel struct {
 	done    bool
 }
 
+// initialSpinnerModel creates the themed installation spinner with its status message.
 func initialSpinnerModel(message string) *spinnerModel {
-	s := bspinner.New()
-	s.Spinner = bspinner.Dot
+	s := ui.NewSpinner()
+
 	styles := theme.GetCurrentStyles()
 	s.Style = styles.Spinner
-	fps.Apply(&s)
+
 	return &spinnerModel{
 		spinner: s,
 		message: message,
@@ -110,56 +110,75 @@ func runBubbleTeaSpinner(message string) *tea.Program {
 // Special format: pr:NNNN - installs Atmos from a PR's build artifact.
 // Example: atmos version install pr:2038.
 func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProgressBar bool) error {
+	return runInstall(toolSpec, installRequest{
+		setAsDefault: setAsDefault, reinstall: reinstallFlag, showHint: showHint,
+		showProgressBar: showProgressBar, updateVersions: true,
+	})
+}
+
+// RunAutomaticInstall installs a dependency without changing declared tool versions.
+// Verified artifacts still participate in the configured lockfile policy.
+func RunAutomaticInstall(toolSpec string) error {
+	defer perf.Track(nil, "toolchain.RunAutomaticInstall")()
+
+	return runInstall(toolSpec, installRequest{showProgressBar: true})
+}
+
+type installRequest struct {
+	setAsDefault, reinstall, showHint, showProgressBar, updateVersions bool
+}
+
+// runInstall resolves a requested version and applies the caller's declaration policy.
+func runInstall(toolSpec string, opts installRequest) error {
 	defer perf.Track(nil, "toolchain.Install")()
 
 	if toolSpec == "" {
-		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag, showHint)
+		return installFromToolVersions(GetToolVersionsFilePath(), opts.reinstall, opts.showHint)
 	}
-
-	// Check if this is a PR version specifier (e.g., "pr:2038").
-	if prNumber, isPR := IsPRVersion(toolSpec); isPR {
-		_, err := InstallFromPR(prNumber, showProgressBar)
+	if err := validateFrozenToolSpec(toolSpec); err != nil {
 		return err
 	}
-
-	// Check if this is a SHA version specifier (e.g., "sha:ceb7526").
-	if sha, isSHA := IsSHAVersion(toolSpec); isSHA {
-		_, err := InstallFromSHA(sha, showProgressBar)
-		return err
-	}
-
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
 		return err
 	}
-
-	// Also check if the version is a PR specifier (e.g., "atmos@pr:2038").
-	if prNumber, isPR := IsPRVersion(version); isPR {
-		_, err := InstallFromPR(prNumber, showProgressBar)
+	if handled, err := installDevelopmentVersion(toolSpec, version, opts.showProgressBar); handled {
 		return err
 	}
-
-	// Also check if the version is a SHA specifier (e.g., "atmos@sha:ceb7526").
-	if sha, isSHA := IsSHAVersion(version); isSHA {
-		_, err := InstallFromSHA(sha, showProgressBar)
-		return err
-	}
-
 	// Resolve version if not specified.
 	if version == "" {
 		lookupResult, err := resolveVersionFromToolVersions(tool, toolSpec)
 		if err != nil {
 			return err
 		}
-		tool = lookupResult.tool
-		version = lookupResult.version
+		tool, version = lookupResult.tool, lookupResult.version
 	}
-
 	// Validate tool and version.
 	if err := validateToolAndVersion(tool, version, toolSpec); err != nil {
 		return err
 	}
+	return installRelease(tool, version, opts)
+}
 
+// installDevelopmentVersion handles both bare specs (pr:2038, sha:ceb7526)
+// and named specs (atmos@pr:2038, atmos@sha:ceb7526).
+func installDevelopmentVersion(toolSpec, version string, showProgress bool) (bool, error) {
+	if version != "" {
+		toolSpec = version
+	}
+	if prNumber, isPR := IsPRVersion(toolSpec); isPR {
+		_, err := InstallFromPR(prNumber, showProgress)
+		return true, err
+	}
+	if sha, isSHA := IsSHAVersion(toolSpec); isSHA {
+		_, err := InstallFromSHA(sha, showProgress)
+		return true, err
+	}
+	return false, nil
+}
+
+// installRelease installs a release and records declarations for explicit management requests.
+func installRelease(tool, version string, opts installRequest) error {
 	// Parse tool specification to get owner/repo.
 	installer := NewInstaller()
 	owner, repo, err := installer.ParseToolSpec(tool)
@@ -181,19 +200,42 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProg
 	// Skip .tool-versions update here; updateToolVersionsFile handles it below with the original tool name.
 	err = InstallSingleTool(owner, repo, version, InstallOptions{
 		IsLatest:               version == "latest",
-		ShowProgressBar:        showProgressBar,
-		ShowInstallDetails:     showProgressBar, // Single-tool mode shows verbose output.
-		ShowHint:               showHint,
+		ShowProgressBar:        opts.showProgressBar,
+		ShowInstallDetails:     opts.showProgressBar, // Single-tool mode shows verbose output.
+		ShowHint:               opts.showHint,
 		SkipToolVersionsUpdate: true,
 	})
 	if err != nil {
 		return err
 	}
 
-	// Update .tool-versions file.
-	return updateToolVersionsFile(tool, version, setAsDefault)
+	if !opts.updateVersions || (GetAtmosConfig() != nil && GetAtmosConfig().Toolchain.FrozenLockFile) {
+		return nil
+	}
+
+	// Update .tool-versions file only for explicit management commands.
+	return updateToolVersionsFile(tool, version, opts.setAsDefault)
 }
 
+// validateFrozenToolSpec rejects development artifacts that have no reproducible lock entry.
+func validateFrozenToolSpec(toolSpec string) error {
+	if config := GetAtmosConfig(); config != nil && config.Toolchain.FrozenLockFile {
+		_, version, err := ParseToolVersionArg(toolSpec)
+		if err != nil {
+			return err
+		}
+		if version == "" {
+			version = toolSpec
+		}
+		if kind, _, err := ParseVersionSpec(version); err == nil && kind != VersionTypeSemver {
+			return fmt.Errorf("%w: development artifacts do not have toolchain lock entries", errUtils.ErrFrozenLockfile)
+		}
+	}
+
+	return nil
+}
+
+// InstallSingleTool installs one resolved tool with the requested output and declaration options.
 func InstallSingleTool(owner, repo, version string, opts InstallOptions) error {
 	defer perf.Track(nil, "toolchain.InstallSingleTool")()
 
@@ -203,6 +245,10 @@ func InstallSingleTool(owner, repo, version string, opts InstallOptions) error {
 // installSingleToolWithInstaller preserves the complete single-install lifecycle
 // while allowing concurrent batches to retain their worker-specific callbacks.
 func installSingleToolWithInstaller(installer *Installer, owner, repo, version string, opts InstallOptions) error {
+	if config := GetAtmosConfig(); config != nil && config.Toolchain.FrozenLockFile && version == "latest" {
+		return fmt.Errorf("%w: latest is not an exact version", errUtils.ErrFrozenLockfile)
+	}
+
 	// Start spinner immediately before any potentially slow operations.
 	spinner := &spinnerControl{showingSpinner: opts.ShowProgressBar}
 	message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
@@ -243,6 +289,7 @@ func installSingleToolWithInstaller(installer *Installer, owner, repo, version s
 	return nil
 }
 
+// installFromToolVersions installs declared tools without rewriting the source manifest.
 func installFromToolVersions(toolVersionsPath string, reinstallFlag, showHint bool) error {
 	installer := NewInstaller()
 
@@ -256,7 +303,10 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag, showHint bo
 		ui.Writef("No tools found in %s\n", toolVersionsPath)
 		return nil
 	}
-	return installToolList(toolList, reinstallFlag, showHint, DefaultInstallMaxConcurrency)
+	return installToolList(toolList, BatchInstallOptions{
+		Reinstall: reinstallFlag, ShowHint: showHint, MaxConcurrency: DefaultInstallMaxConcurrency,
+		SkipToolVersionsUpdate: true,
+	})
 }
 
 // RunInstallFromToolVersions installs every configured tool with bounded
@@ -276,28 +326,32 @@ func RunInstallFromToolVersions(reinstallFlag, showHint bool, maxConcurrency int
 		ui.Writef("No tools found in %s\n", toolVersionsPath)
 		return nil
 	}
-	return installToolList(toolList, reinstallFlag, showHint, maxConcurrency)
+	return installToolList(toolList, BatchInstallOptions{
+		Reinstall: reinstallFlag, ShowHint: showHint, MaxConcurrency: maxConcurrency,
+		SkipToolVersionsUpdate: true,
+	})
 }
 
-func installToolList(toolList []toolInfo, reinstallFlag, showHint bool, maxConcurrency int) error {
-	if maxConcurrency < 1 {
+// installToolList installs or skips requested tools, respecting concurrency limits and reporting results.
+func installToolList(toolList []toolInfo, opts BatchInstallOptions) error {
+	if opts.MaxConcurrency < 1 {
 		return fmt.Errorf("%w: max concurrency must be at least 1", errUtils.ErrInvalidFlagValue)
 	}
-	if maxConcurrency > 1 && len(toolList) > 1 {
-		return installToolListConcurrently(toolList, reinstallFlag, showHint, maxConcurrency)
+	if opts.MaxConcurrency > 1 && len(toolList) > 1 {
+		return installToolListConcurrently(toolList, opts)
 	}
 
-	spinner := bspinner.New()
-	spinner.Spinner = bspinner.Dot
+	spinner := ui.NewSpinner()
+
 	styles := theme.GetCurrentStyles()
 	spinner.Style = styles.Spinner
-	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
+	progressBar := ui.NewProgress()
 
 	var installedCount, failedCount, alreadyInstalledCount int
 
 	installer := NewInstaller()
 	for i, tool := range toolList {
-		result, err := installOrSkipTool(installer, tool, reinstallFlag, showHint)
+		result, err := installOrSkipToolWithProgress(installer, tool, opts, true)
 		switch result {
 		case resultInstalled:
 			installedCount++
@@ -309,13 +363,14 @@ func installToolList(toolList []toolInfo, reinstallFlag, showHint bool, maxConcu
 		showProgress(&spinner, &progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
 	}
 
-	printSummary(installedCount, failedCount, alreadyInstalledCount, len(toolList), showHint)
+	printSummary(installedCount, failedCount, alreadyInstalledCount, len(toolList), opts.ShowHint)
 	if failedCount > 0 {
 		return fmt.Errorf("%w: %d tool installation(s) failed", errUtils.ErrToolInstall, failedCount)
 	}
 	return nil
 }
 
+// buildToolList expands each manifest declaration into its installable versions.
 func buildToolList(installer *Installer, toolVersions *ToolVersions) []toolInfo {
 	var toolList []toolInfo
 	for toolName, versions := range toolVersions.Tools {
@@ -324,17 +379,21 @@ func buildToolList(installer *Installer, toolVersions *ToolVersions) []toolInfo 
 			continue
 		}
 		for _, version := range versions {
-			toolList = append(toolList, toolInfo{version, owner, repo})
+			toolList = append(toolList, toolInfo{name: toolName, version: version, owner: owner, repo: repo})
 		}
 	}
 	return toolList
 }
 
+// installOrSkipTool installs or reuses a declared tool without changing its manifest.
 func installOrSkipTool(installer *Installer, tool toolInfo, reinstallFlag, showHint bool) (string, error) {
-	return installOrSkipToolWithProgress(installer, tool, reinstallFlag, showHint, true)
+	return installOrSkipToolWithProgress(installer, tool, BatchInstallOptions{
+		Reinstall: reinstallFlag, ShowHint: showHint, SkipToolVersionsUpdate: true,
+	}, true)
 }
 
-func installOrSkipToolWithProgress(installer *Installer, tool toolInfo, reinstallFlag, showHint, showProgress bool) (string, error) {
+// installOrSkipToolWithProgress applies installation and declaration policy to fresh or cached tools.
+func installOrSkipToolWithProgress(installer *Installer, tool toolInfo, opts BatchInstallOptions, showProgress bool) (string, error) {
 	// Reject unsupported version formats (e.g. a hand-edited range/constraint in
 	// .tool-versions) before any lookup or network call, with a clear per-tool error
 	// instead of a raw HTTP 404 from treating the value as a literal release tag.
@@ -343,22 +402,44 @@ func installOrSkipToolWithProgress(installer *Installer, tool toolInfo, reinstal
 	}
 
 	_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
-	if err == nil && !reinstallFlag {
+	if err == nil && !opts.Reinstall {
+		if err := recordBatchToolVersion(tool, opts); err != nil {
+			return resultFailed, err
+		}
 		return resultSkipped, nil
 	}
 	err = installSingleToolWithInstaller(installer, tool.owner, tool.repo, tool.version, InstallOptions{
-		IsLatest:           tool.version == "latest",
-		ShowProgressBar:    showProgress,
-		ShowInstallDetails: false, // Batch mode - showProgress handles the simple message.
-		ShowHint:           showHint,
+		IsLatest:               tool.version == "latest",
+		ShowProgressBar:        showProgress,
+		ShowInstallDetails:     false, // Batch mode - showProgress handles the simple message.
+		SkipToolVersionsUpdate: true,  // The batch caller records declarations after successful installs.
+		ShowHint:               opts.ShowHint,
 	})
 	if err != nil {
+		return resultFailed, err
+	}
+	if err := recordBatchToolVersion(tool, opts); err != nil {
 		return resultFailed, err
 	}
 	return resultInstalled, nil
 }
 
+// recordBatchToolVersion declares explicit installs, including cache hits, while
+// automatic, manifest-driven, and frozen installs preserve project declarations.
+func recordBatchToolVersion(tool toolInfo, opts BatchInstallOptions) error {
+	config := GetAtmosConfig()
+	if opts.SkipToolVersionsUpdate || (config != nil && config.Toolchain.FrozenLockFile) {
+		return nil
+	}
+	name := tool.name
+	if name == "" {
+		name = tool.owner + "/" + tool.repo
+	}
+	return updateToolVersionsFile(name, tool.version, false)
+}
+
 type toolInfo struct {
+	name                 string // Original declaration name, which may be an alias.
 	version, owner, repo string
 }
 
@@ -465,9 +546,20 @@ func RunInstallBatch(toolSpecs []string, reinstallFlag bool) error {
 // BatchInstallOptions controls batch installation without changing the
 // long-standing RunInstallBatch API used by dependencies and integrations.
 type BatchInstallOptions struct {
-	Reinstall      bool
-	ShowHint       bool
-	MaxConcurrency int
+	SkipToolVersionsUpdate bool
+	Reinstall              bool
+	ShowHint               bool
+	MaxConcurrency         int
+}
+
+// RunAutomaticInstallBatch installs execution dependencies without editing declarations.
+func RunAutomaticInstallBatch(toolSpecs []string, reinstall bool) error {
+	defer perf.Track(nil, "toolchain.RunAutomaticInstallBatch")()
+
+	return RunInstallBatchWithOptions(toolSpecs, BatchInstallOptions{
+		Reinstall:              reinstall,
+		SkipToolVersionsUpdate: true,
+	})
 }
 
 // RunInstallBatchWithOptions installs an explicit tool list with the supplied
@@ -485,7 +577,10 @@ func RunInstallBatchWithOptions(toolSpecs []string, opts BatchInstallOptions) er
 		return fmt.Errorf("%w: max concurrency must be at least 1", errUtils.ErrInvalidFlagValue)
 	}
 	if len(toolSpecs) == 1 {
-		return RunInstall(toolSpecs[0], false, opts.Reinstall, opts.ShowHint, true)
+		return runInstall(toolSpecs[0], installRequest{
+			reinstall: opts.Reinstall, showHint: opts.ShowHint, showProgressBar: true,
+			updateVersions: !opts.SkipToolVersionsUpdate,
+		})
 	}
 	return installMultipleToolsWithOptions(toolSpecs, opts)
 }
@@ -498,6 +593,7 @@ func installMultipleTools(toolSpecs []string, reinstallFlag bool) error {
 	})
 }
 
+// installMultipleToolsWithOptions resolves explicit specifications before scheduling installs.
 func installMultipleToolsWithOptions(toolSpecs []string, opts BatchInstallOptions) error {
 	defer perf.Track(nil, "toolchain.installMultipleTools")()
 
@@ -519,6 +615,7 @@ func installMultipleToolsWithOptions(toolSpecs []string, opts BatchInstallOption
 		}
 
 		toolList = append(toolList, toolInfo{
+			name:    tool,
 			version: version,
 			owner:   owner,
 			repo:    repo,
@@ -529,7 +626,7 @@ func installMultipleToolsWithOptions(toolSpecs []string, opts BatchInstallOption
 		return nil
 	}
 
-	return installToolList(toolList, opts.Reinstall, opts.ShowHint, opts.MaxConcurrency)
+	return installToolList(toolList, opts)
 }
 
 type batchEvent struct {
@@ -546,6 +643,7 @@ type downloadProgress struct {
 }
 
 type activeInstall struct {
+	id int
 	toolInfo
 	downloadProgress
 	phase string
@@ -555,115 +653,90 @@ type activeInstall struct {
 // result-toast style while reserving a small, redrawn area for active spinners.
 // Worker goroutines never touch the terminal.
 type batchRenderer struct {
-	spinner       bspinner.Model
-	progressBar   progress.Model
-	active        []activeInstall
-	completed     int
-	total         int
-	renderedLines int
+	display *batch.Renderer
+	active  []activeInstall
+	total   int
+	nextID  int
 }
 
+// newBatchRenderer creates the themed display for concurrent tool downloads and installation progress.
 func newBatchRenderer(total int) *batchRenderer {
-	spinner := bspinner.New()
-	spinner.Spinner = bspinner.Dot
-	styles := theme.GetCurrentStyles()
-	spinner.Style = styles.Spinner
-	return &batchRenderer{
-		spinner:     spinner,
-		progressBar: progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor())),
-		total:       total,
+	return &batchRenderer{total: total, display: batch.New(total, true, batch.WithToolchainStyle())}
+}
+
+func (r *batchRenderer) ensureDisplay() {
+	if r.display == nil {
+		r.display = batch.New(r.total, true, batch.WithToolchainStyle())
 	}
 }
 
 func (r *batchRenderer) start(tool toolInfo) {
-	r.clear()
-	r.active = append(r.active, activeInstall{toolInfo: tool, downloadProgress: downloadProgress{total: -1}, phase: "Downloading"})
-	r.render()
+	r.ensureDisplay()
+	id := r.nextID
+	r.nextID++
+	r.active = append(r.active, activeInstall{id: id, toolInfo: tool, downloadProgress: downloadProgress{total: -1}, phase: "Downloading"})
+	r.display.Update(&batch.Event{ID: id, Label: fmt.Sprintf("%s/%s@%s", tool.owner, tool.repo, tool.version), Phase: "Downloading"})
 }
 
 func (r *batchRenderer) complete(tool toolInfo, result string, err error) {
-	r.clear()
+	r.ensureDisplay()
 	for i, active := range r.active {
 		if active.toolInfo == tool {
 			r.active = append(r.active[:i], r.active[i+1:]...)
-			break
+			r.display.Complete(active.id, func() { printToolResult(tool, result, err) })
+			return
 		}
 	}
-	r.completed++
-	printToolResult(tool, result, err)
-	r.render()
+	id := r.nextID
+	r.nextID++
+	r.display.Complete(id, func() { printToolResult(tool, result, err) })
 }
 
 func (r *batchRenderer) updateProgress(tool toolInfo, download downloadProgress) {
 	for i := range r.active {
-		if r.active[i].toolInfo == tool {
-			r.active[i].downloadProgress = download
-			if download.total > 0 && download.downloaded >= download.total {
-				r.active[i].phase = "Verifying"
-			}
-			return
+		active := &r.active[i]
+		if active.toolInfo != tool {
+			continue
 		}
+		active.downloadProgress = download
+		oldPhase := active.phase
+		if download.total > 0 && download.downloaded >= download.total {
+			active.phase = "Verifying"
+		}
+		if r.display != nil {
+			if oldPhase != active.phase {
+				r.display.Update(&batch.Event{ID: active.id, Label: fmt.Sprintf("%s/%s@%s", tool.owner, tool.repo, tool.version), Phase: active.phase, Downloaded: download.downloaded, Total: download.total})
+			} else {
+				r.display.Update(&batch.Event{ID: active.id, Bytes: true, Downloaded: download.downloaded, Total: download.total})
+			}
+		}
+		return
 	}
 }
 
 func (r *batchRenderer) tick() {
-	r.clear()
-	updated, _ := r.spinner.Update(bspinner.TickMsg{})
-	r.spinner = updated
-	r.render()
+	if r.display != nil {
+		r.display.Tick()
+	}
 }
 
 func (r *batchRenderer) clear() {
-	if r.renderedLines == 0 {
-		return
-	}
-	ui.Writef("\033[%dA", r.renderedLines)
-	for i := 0; i < r.renderedLines; i++ {
-		ui.Write("\r\033[K")
-		if i < r.renderedLines-1 {
-			ui.Write("\n")
-		}
-	}
-	if r.renderedLines > 1 {
-		ui.Writef("\033[%dA", r.renderedLines-1)
-	}
-	r.renderedLines = 0
-}
-
-func (r *batchRenderer) render() {
-	for _, active := range r.active {
-		left := fmt.Sprintf("%s %s %s/%s@%s", r.spinner.View(), active.phase, active.owner, active.repo, active.version)
-		ui.Writef("%s\n", rightAlignInstallProgress(left, active.downloaded, active.total, getTerminalWidth()))
-		r.renderedLines++
-	}
-	if len(r.active) > 0 {
-		percent := float64(r.completed) / float64(r.total)
-		ui.Writef("%s %d/%d complete, %d running\n", r.progressBar.ViewAs(percent), r.completed, r.total, len(r.active))
-		r.renderedLines++
+	if r.display != nil {
+		r.display.Clear()
 	}
 }
 
 func rightAlignInstallProgress(left string, downloaded, total int64, terminalWidth int) string {
-	if downloaded == 0 && total <= 0 {
-		return left
-	}
-	progress := formatFileSize(downloaded)
-	if total > 0 {
-		progress = fmt.Sprintf("%s/%s", progress, formatFileSize(total))
-	}
-	padding := terminalWidth - lipgloss.Width(left) - lipgloss.Width(progress)
-	if padding < 1 {
-		return left
-	}
-	return left + strings.Repeat(" ", padding) + progress
+	return batch.AlignProgress(left, downloaded, total, terminalWidth)
 }
 
-func installToolListConcurrently(toolList []toolInfo, reinstallFlag, showHint bool, maxConcurrency int) error {
-	events := startBatchInstallWorkers(toolList, reinstallFlag, maxConcurrency)
+// installToolListConcurrently collects worker results while one renderer owns terminal output.
+func installToolListConcurrently(toolList []toolInfo, opts BatchInstallOptions) error {
+	events := startBatchInstallWorkers(toolList, opts)
 	display := newBatchDisplay(len(toolList))
 	counts := collectBatchInstallEvents(events, display, len(toolList))
 	display.clear()
-	return counts.finish(len(toolList), showHint)
+	return counts.finish(len(toolList), opts.ShowHint)
 }
 
 func collectBatchInstallEvents(events <-chan batchEvent, display *batchDisplay, total int) batchInstallCounts {
@@ -687,13 +760,14 @@ func collectBatchInstallEvents(events <-chan batchEvent, display *batchDisplay, 
 	return counts
 }
 
-func startBatchInstallWorkers(toolList []toolInfo, reinstallFlag bool, maxConcurrency int) <-chan batchEvent {
+// startBatchInstallWorkers carries the batch policy to a bounded pool of independent installers.
+func startBatchInstallWorkers(toolList []toolInfo, opts BatchInstallOptions) <-chan batchEvent {
 	jobs := make(chan toolInfo)
 	events := make(chan batchEvent, len(toolList)*2)
 	var workers sync.WaitGroup
-	for range min(maxConcurrency, len(toolList)) {
+	for range min(opts.MaxConcurrency, len(toolList)) {
 		workers.Add(1)
-		go runBatchInstallWorker(jobs, events, reinstallFlag, &workers)
+		go runBatchInstallWorker(jobs, events, opts, &workers)
 	}
 	go func() {
 		for _, tool := range toolList {
@@ -706,7 +780,8 @@ func startBatchInstallWorkers(toolList []toolInfo, reinstallFlag bool, maxConcur
 	return events
 }
 
-func runBatchInstallWorker(jobs <-chan toolInfo, events chan<- batchEvent, reinstallFlag bool, workers *sync.WaitGroup) {
+// runBatchInstallWorker reports progress and records declarations according to the batch policy.
+func runBatchInstallWorker(jobs <-chan toolInfo, events chan<- batchEvent, opts BatchInstallOptions, workers *sync.WaitGroup) {
 	defer workers.Done()
 	for tool := range jobs {
 		events <- batchEvent{tool: tool, started: true}
@@ -716,7 +791,9 @@ func runBatchInstallWorker(jobs <-chan toolInfo, events chan<- batchEvent, reins
 			default:
 			}
 		}))
-		result, err := installOrSkipToolWithProgress(installer, tool, reinstallFlag, false, false)
+		// The renderer owns batch output, including the final PATH hint.
+		opts.ShowHint = false
+		result, err := installOrSkipToolWithProgress(installer, tool, opts, false)
 		events <- batchEvent{tool: tool, result: result, err: err}
 	}
 }
@@ -727,16 +804,16 @@ type batchDisplay struct {
 	progressBar progress.Model
 }
 
+// newBatchDisplay selects a live terminal renderer or a simpler display for non-TTY and debug output.
 func newBatchDisplay(total int) *batchDisplay {
 	display := &batchDisplay{}
 	if isTTY() && log.GetLevel() > log.DebugLevel {
 		display.renderer = newBatchRenderer(total)
 		return display
 	}
-	display.spinner = bspinner.New()
-	display.spinner.Spinner = bspinner.Dot
-	display.spinner.Style = theme.GetCurrentStyles().Spinner
-	display.progressBar = progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
+	display.spinner = ui.NewSpinner()
+
+	display.progressBar = ui.NewProgress()
 	return display
 }
 

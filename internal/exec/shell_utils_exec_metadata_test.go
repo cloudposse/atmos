@@ -12,6 +12,8 @@ import (
 // WithInvokingCommand/invokingCommandFromOpts's existing shape (research.md
 // Decision 18).
 func TestExecMetadataParserFromOpts_RoundTrips(t *testing.T) {
+	t.Parallel()
+
 	called := false
 	fn := func(subCommand string, exitCode int, output string) any {
 		called = true
@@ -30,6 +32,8 @@ func TestExecMetadataParserFromOpts_RoundTrips(t *testing.T) {
 // TestExecMetadataParserFromOpts_NilWhenNotSet verifies the extractor returns
 // nil when no WithExecMetadataParser option was passed.
 func TestExecMetadataParserFromOpts_NilWhenNotSet(t *testing.T) {
+	t.Parallel()
+
 	assert.Nil(t, execMetadataParserFromOpts())
 	assert.Nil(t, execMetadataParserFromOpts(WithInvokingCommand(nil)))
 }

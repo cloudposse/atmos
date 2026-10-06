@@ -469,6 +469,7 @@ func TestSSMStore_Get(t *testing.T) {
 		mockSetup   func(*MockSSMClient, *MockSSMClient, *MockSTSClient)
 		want        interface{}
 		wantErr     bool
+		wantErrIs   error
 	}{
 		{
 			name:      "successful_get",
@@ -530,6 +531,39 @@ func TestSSMStore_Get(t *testing.T) {
 				mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).Return(nil, errors.New("aws error"))
 			},
 			wantErr: true,
+		},
+		{
+			name:      "successful_response_with_nil_output",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "config-key",
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).Return((*ssm.GetParameterOutput)(nil), nil)
+			},
+			wantErr:   true,
+			wantErrIs: storepkg.ErrGetParameter,
+		},
+		{
+			name:      "successful_response_with_nil_parameter",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "config-key",
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).Return(&ssm.GetParameterOutput{}, nil)
+			},
+			wantErr:   true,
+			wantErrIs: storepkg.ErrGetParameter,
+		},
+		{
+			name:      "successful_response_with_nil_value",
+			stack:     "dev/usw2/app",
+			component: "service",
+			key:       "config-key",
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.EXPECT().GetParameter(gomock.Any(), gomock.Any()).Return(&ssm.GetParameterOutput{Parameter: &types.Parameter{}}, nil)
+			},
+			wantErr:   true,
+			wantErrIs: storepkg.ErrGetParameter,
 		},
 		{
 			// A stack-scoped secret coordinate omits the component segment.
@@ -888,9 +922,61 @@ func TestSSMStore_Get(t *testing.T) {
 				t.Errorf("SSMStore.Get() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
+			if tt.wantErrIs != nil {
+				require.ErrorIs(t, err, tt.wantErrIs)
+			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("SSMStore.Get() = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func TestSSMStore_GetRaw(t *testing.T) {
+	tests := []struct {
+		name      string
+		output    *ssm.GetParameterOutput
+		want      string
+		wantErrIs error
+	}{
+		{
+			name: "returns_exact_raw_value",
+			output: &ssm.GetParameterOutput{Parameter: &types.Parameter{
+				Value: aws.String(`{"key":"value"}`),
+			}},
+			want: `{"key":"value"}`,
+		},
+		{name: "nil_output", wantErrIs: storepkg.ErrGetParameter},
+		{name: "nil_parameter", output: &ssm.GetParameterOutput{}, wantErrIs: storepkg.ErrGetParameter},
+		{
+			name:      "nil_value",
+			output:    &ssm.GetParameterOutput{Parameter: &types.Parameter{}},
+			wantErrIs: storepkg.ErrGetParameter,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			client := NewMockSSMClient(ctrl)
+			stackDelimiter := "/"
+			client.EXPECT().GetParameter(gomock.Any(), &ssm.GetParameterInput{
+				Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+				WithDecryption: aws.Bool(true),
+			}).Return(tt.output, nil)
+
+			store := &SSMStore{
+				client:         client,
+				prefix:         "/test-prefix",
+				stackDelimiter: &stackDelimiter,
+			}
+			got, err := store.GetRaw("dev/usw2/app", "service", "config-key")
+			if tt.wantErrIs != nil {
+				require.ErrorIs(t, err, tt.wantErrIs)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

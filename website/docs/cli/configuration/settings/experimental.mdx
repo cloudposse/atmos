@@ -19,7 +19,7 @@ Atmos introduces new capabilities as experimental features before stabilizing th
 
 <KeyPoints>
 - Control experimental feature visibility and behavior
-- Choose from four modes: silence, disable, warn, error
+- Choose from five modes: silence, disable, warn, warn-daily, error
 - Commands self-register as experimental
 - Automatic notifications without manual configuration
 </KeyPoints>
@@ -30,14 +30,14 @@ Atmos introduces new capabilities as experimental features before stabilizing th
 ```yaml
 settings:
   # Control experimental feature handling
-  # Values: "silence", "disable", "warn" (default), "error"
-  experimental: warn
+  # Values: "silence", "disable", "warn", "warn-daily" (default), "error"
+  experimental: warn-daily
 ```
 </File>
 
 ## Behavior Modes
 
-The `settings.experimental` setting accepts four values that control how Atmos handles experimental commands:
+The `settings.experimental` setting accepts five values that control how Atmos handles experimental commands:
 
 <dl>
   <dt>`silence`</dt>
@@ -71,9 +71,9 @@ The `settings.experimental` setting accepts four values that control how Atmos h
     ```
   </dd>
 
-  <dt>`warn` (default)</dt>
+  <dt>`warn`</dt>
   <dd>
-    Show a warning notification when running experimental commands, then continue execution. This is the recommended setting for most users - you'll be informed about experimental features while still being able to use them.
+    Show a warning notification when running experimental commands, then continue execution. Use this to retain warnings on each top-level invocation.
 
     ```yaml
     settings:
@@ -84,6 +84,30 @@ The `settings.experimental` setting accepts four values that control how Atmos h
     ```
     🧪 `devcontainer` is an experimental feature. Learn more https://atmos.tools/experimental
     ```
+  </dd>
+
+  <dt>`warn-daily` (default)</dt>
+  <dd>
+    Show a warning at most once per experimental feature every 24 hours, then continue.
+    Each feature has its own timestamp: seeing the toolchain warning does not suppress
+    the first warning for devcontainers or an experimental setting. Commands within
+    the same experimental command family share a timestamp.
+
+    ```yaml
+    settings:
+      experimental: warn-daily
+    ```
+
+    Timestamps are stored in the shared local Atmos cache and apply across commands,
+    workflows, custom commands, and projects using that cache. The interval starts
+    when each warning is shown, rather than resetting at midnight. Clearing the cache
+    makes warnings eligible again. If the cache cannot be read or written, Atmos
+    shows the warning and continues. Concurrent suppression is best effort on Windows.
+
+    Editions before `2026-09-14` retain `warn` as the default. An explicit
+    `settings.experimental` value or `ATMOS_EXPERIMENTAL` overrides the edition default.
+    The `error` and `disable` modes remain enforced on every invocation, including
+    nested calls, regardless of cached warnings.
   </dd>
 
   <dt>`error`</dt>
@@ -121,8 +145,11 @@ export ATMOS_EXPERIMENTAL=silence
 # Disable experimental features
 export ATMOS_EXPERIMENTAL=disable
 
-# Enable with warnings (default)
+# Enable with warnings on every top-level invocation
 export ATMOS_EXPERIMENTAL=warn
+
+# Warn once per feature every 24 hours (default)
+export ATMOS_EXPERIMENTAL=warn-daily
 
 # Require explicit opt-in
 export ATMOS_EXPERIMENTAL=error

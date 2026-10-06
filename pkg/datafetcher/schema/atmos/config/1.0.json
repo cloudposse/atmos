@@ -1807,7 +1807,7 @@
               "type": "null"
             }
           ],
-          "description": "Experimental controls how experimental features are handled.\nValues: \"silence\" (no output), \"disable\" (disabled), \"warn\" (default), \"error\" (exit)."
+          "description": "Experimental controls how experimental features are handled.\nValues: \"silence\" (no output), \"disable\" (disabled), \"warn\", \"warn-daily\" (default, once per feature every 24 hours), \"error\" (exit)."
         },
         "docs": {
           "anyOf": [
@@ -2008,6 +2008,20 @@
             }
           ],
           "description": "Provision contains global defaults for provisioning."
+        },
+        "metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricsSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Metrics controls local command-execution resource-usage display."
         }
       },
       "type": "object"
@@ -3813,6 +3827,20 @@
             }
           ],
           "description": "Kind specifies the dependency type: terraform, helmfile, packer, plugin\ntype, or — in the legacy inline shape — file/folder. Defaults to the\ndeclaring component's type for component dependencies."
+        },
+        "required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Required controls whether a missing or unavailable target causes an error. Nil defaults to true."
         },
         "path": {
           "anyOf": [
@@ -7791,6 +7819,26 @@
       "type": "object",
       "description": "MaskSettings contains configuration for sensitive data masking."
     },
+    "MetricsSettings": {
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Enabled controls the local per-command / final-summary resource-usage display (ui.Info). Defaults to true when unset. Never gates the Atmos Pro exec-metadata upload — only local display."
+        }
+      },
+      "type": "object",
+      "description": "MetricsSettings contains configuration for local command-execution metrics display."
+    },
     "Packer": {
       "properties": {
         "base_path": {
@@ -7871,7 +7919,7 @@
         }
       },
       "type": "object",
-      "description": "ParallelFailConfig configures failure behavior for parallel and matrix steps."
+      "description": "ParallelFailConfig configures failure behavior for parallel, matrix, and test steps."
     },
     "PlanfileStoreSpec": {
       "properties": {
@@ -8038,8 +8086,53 @@
       "type": "object",
       "description": "Preconditions declares tools that must already be on PATH for this step's work to be considered\nalready satisfied -- a lighter, inline, single-step-skip variant of the type: require/assert\nstep's hard preconditions gate (see pkg/runner/step/require.go), not a new concept. Deliberately\nnot named Expect: Task/WorkflowStep already has an unrelated Expect *HTTPExpect field (the\ntype: http step's post-hoc success criteria), and even without that collision, expect: is\nestablished elsewhere (HTTP step, CLI test-runner) as a post-hoc outcome assertion, whereas\nthis is a pre-hoc gate checked before the step runs. Plural, matching Inputs/Artifacts/\nDependencies: the block can hold multiple check kinds (currently Tools; more may follow)."
     },
+    "ProErrorsSettings": {
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "ProErrorsSettings controls automatic exception reporting independently of Sentry."
+    },
     "ProSettings": {
       "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "errors": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProErrorsSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "base_url": {
           "anyOf": [
             {
@@ -8384,19 +8477,6 @@
     },
     "ProvisionSettings": {
       "properties": {
-        "workdir": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ProvisionWorkdirSettings"
-            },
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/yamlFunction"
-            }
-          ]
-        },
         "default": {
           "anyOf": [
             {
@@ -8437,7 +8517,7 @@
         }
       },
       "type": "object",
-      "description": "ProvisionSettings contains global defaults for provisioning."
+      "description": "ProvisionSettings contains global defaults for provisioning.\n\nA global default for workdir provisioning is NOT configured here. It belongs in the stack\nconfiguration under the toolchain section (`terraform.provision`, `helmfile.provision`, etc.),\nconsistent with global `vars`, `metadata`, and `secrets`. Component-level `provision` values\noverride that stack-level default. See #3197."
     },
     "ProvisionTarget": {
       "properties": {
@@ -8583,37 +8663,6 @@
       },
       "type": "object",
       "description": "ProvisionTargetPullRequest configures pull-request publishing for a git delivery."
-    },
-    "ProvisionWorkdirSettings": {
-      "properties": {
-        "enabled": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/yamlFunction"
-            }
-          ],
-          "description": "Enabled sets the default enabled state for workdir provisioning."
-        },
-        "ttl": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "TTL is the default time-to-live for workdirs (e.g., \"7d\", \"24h\", \"weekly\").\nWorkdirs not accessed within this duration can be cleaned up."
-        }
-      },
-      "type": "object",
-      "description": "ProvisionWorkdirSettings contains default settings for workdir provisioning."
     },
     "Registry": {
       "properties": {
@@ -11015,7 +11064,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Control step fields."
+          "description": "Control step fields for parallel, matrix, and test groups."
         },
         "max_concurrency": {
           "anyOf": [
@@ -11735,6 +11784,20 @@
             }
           ]
         },
+        "mocks": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformMocks"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Mocks configures how `--use-mocks` resolves Terraform state/output lookups against a\ncomponent's literal `mocks` map."
+        },
         "plan": {
           "anyOf": [
             {
@@ -12309,9 +12372,43 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mode controls whether Atmos runs `terraform init` before a subcommand:\n`auto` (default since 2026-09-12; a project pinned to an earlier edition gets `always`\nrestored) skips it when the init fingerprint recorded after the last successful init is\nunchanged, `always` runs it on every invocation, and `never` never runs it (the same as\n`--skip-init`)."
+        },
+        "reconfigure": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Reconfigure controls when `-reconfigure` is added to `terraform init`:\n`auto` (default) adds it only when the backend configuration changed since\nthe last init, `always` adds it on every init, and `never` never adds it.\nTakes precedence over the deprecated `init_run_reconfigure`. Unlike Mode/Upgrade, this\ndefault is NOT edition-pin-protected (see EffectiveInitReconfigure's doc comment): its\nlegacy-boolean fallback makes the standard journal mechanism unsafe to apply here."
+        },
+        "upgrade": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Upgrade controls when `-upgrade` is added to `terraform init`: `auto` (default since\n2026-09-12; a project pinned to an earlier edition gets `never` restored) adds it only\nwhen terraform/tofu reports that an upgrade is required, `always` adds it on every init,\nand `never` never adds it."
         }
       },
-      "type": "object"
+      "type": "object",
+      "description": "TerraformInit configures the `terraform init` that Atmos runs before other\nterraform subcommands (and while resolving !terraform.output)."
     },
     "TerraformLint": {
       "properties": {
@@ -12339,6 +12436,31 @@
       },
       "type": "object",
       "description": "TerraformLint configures TFLint for Terraform components. Config may be an\nabsolute path or a path relative to the Atmos base path."
+    },
+    "TerraformMocks": {
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "",
+                "fallback",
+                "always"
+              ]
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Mode controls how `--use-mocks` resolves a lookup: `fallback` (default since 2026-10-01;\na project pinned to an earlier edition gets `always` restored) uses the real value when\nit exists and the component mock only when the state is not provisioned or the output is\nmissing, and `always` resolves every lookup from the mocks without reading real state."
+        }
+      },
+      "type": "object",
+      "description": "TerraformMocks configures component mock resolution for `--use-mocks`."
     },
     "TerraformPlan": {
       "properties": {
@@ -12520,6 +12642,19 @@
           ]
         },
         "use_lock_file": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "frozen_lock_file": {
           "anyOf": [
             {
               "type": "boolean"
@@ -12985,6 +13120,21 @@
     },
     "Vendor": {
       "properties": {
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "MaxConcurrency bounds concurrent preparation and update checks; earlier editions restore one worker."
+        },
         "base_path": {
           "anyOf": [
             {
@@ -13271,6 +13421,39 @@
               "type": "string"
             }
           ]
+        },
+        "organization": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Organization is the Azure DevOps organization name (azuredevops provider only). Together\nwith Project and Repository it addresses a repository the way GitHub's owner/repository\npair does, since Azure DevOps requires three segments: organization/project/repository."
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Project is the Azure DevOps project name (azuredevops provider only). See Organization."
+        },
+        "repository": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Repository is the repository name (azuredevops provider only). GitHub instead derives its\nowner/repository pair from the local Git remote, so this field is a no-op for that provider."
         }
       },
       "type": "object",
@@ -14508,6 +14691,21 @@
     },
     "ViewportConfig": {
       "properties": {
+        "padding": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Horizontal padding on each side, in columns."
+        },
         "height": {
           "anyOf": [
             {
@@ -16267,7 +16465,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Control step fields."
+          "description": "Control step fields for parallel, matrix, and test groups."
         },
         "max_concurrency": {
           "anyOf": [

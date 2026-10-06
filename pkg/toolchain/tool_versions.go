@@ -26,6 +26,12 @@ type ToolVersions struct {
 func LoadToolVersions(filePath string) (*ToolVersions, error) {
 	defer perf.Track(nil, "toolchain.LoadToolVersions")()
 
+	// A missing manifest is a read failure, not a reason to create its directory
+	// or concurrency lock (particularly during automatic bootstrap).
+	if _, err := os.Stat(filePath); err != nil {
+		return nil, err
+	}
+
 	var toolVersions *ToolVersions
 	err := withToolVersionsSharedLock(filePath, func() error {
 		var err error

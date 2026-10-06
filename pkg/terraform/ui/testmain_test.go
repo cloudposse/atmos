@@ -18,6 +18,9 @@ import (
 //     (e.g. `terraform show` exiting non-zero) in BuildDependencyTree tests.
 //   - _ATMOS_TEST_TF_SHOW_JSON: writes its value to stdout and exits 0; stands in for
 //     `terraform show -json` in BuildDependencyTree tests.
+//   - _ATMOS_TEST_TF_SHOW_STDERR: writes its value to stderr and exits 1; stands in for a
+//     `terraform show` failure that prints a real error message, so tests can verify that
+//     message is surfaced rather than discarded.
 func TestMain(m *testing.M) {
 	if secs := os.Getenv("_ATMOS_TEST_SLEEP_SECONDS"); secs != "" {
 		if n, err := strconv.Atoi(secs); err == nil {
@@ -31,6 +34,10 @@ func TestMain(m *testing.M) {
 	if planJSON := os.Getenv("_ATMOS_TEST_TF_SHOW_JSON"); planJSON != "" {
 		fmt.Fprint(os.Stdout, planJSON)
 		os.Exit(0)
+	}
+	if stderrMsg := os.Getenv("_ATMOS_TEST_TF_SHOW_STDERR"); stderrMsg != "" {
+		fmt.Fprint(os.Stderr, stderrMsg)
+		os.Exit(1)
 	}
 	os.Exit(m.Run())
 }

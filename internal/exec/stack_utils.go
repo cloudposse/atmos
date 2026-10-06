@@ -205,7 +205,13 @@ func BuildComponentPath(
 		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, componentFolder)
 	case cfg.PackerComponentType:
 		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, componentFolder)
+	case cfg.AnsibleComponentType:
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath, componentFolder)
+	case cfg.ContainerComponentType:
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Container.BasePath, componentFolder)
 	default:
+		// Emulator components (and any type with no filesystem source tree) have no component
+		// path. See getComponentBasePath in describe_stacks.go.
 		return ""
 	}
 }

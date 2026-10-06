@@ -14,7 +14,10 @@ import (
 var errCommandResultRun = errors.New("command result runner failed")
 
 func TestCommandResult(t *testing.T) {
+	t.Parallel()
+
 	t.Run("stores masked command output and declared outputs", func(t *testing.T) {
+		t.Parallel()
 		t.Cleanup(iolib.Reset)
 		iolib.ApplyMaskingConfig(&iolib.Config{DisableMasking: false})
 		secret := "step-output-secret-4d2793"
@@ -46,6 +49,7 @@ func TestCommandResult(t *testing.T) {
 	})
 
 	t.Run("runs unnamed commands without storing output", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		called := false
 		result, err := ExecuteCommandResult("", func(stdout, stderr io.Writer) error {
@@ -62,6 +66,7 @@ func TestCommandResult(t *testing.T) {
 	})
 
 	t.Run("does not store failed commands", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		result, err := ExecuteCommandResult("failed", func(stdout, stderr io.Writer) error {
 			_, _ = io.WriteString(stdout, "partial")
@@ -76,6 +81,7 @@ func TestCommandResult(t *testing.T) {
 	})
 
 	t.Run("does not store a result when declared output evaluation fails", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		result, err := ExecuteCommandResult("invalid-output", func(stdout, stderr io.Writer) error {
 			_, _ = io.WriteString(stdout, "complete")
@@ -91,6 +97,7 @@ func TestCommandResult(t *testing.T) {
 	})
 
 	t.Run("stores an empty successful result", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		result, err := ExecuteCommandResult("session", func(_, _ io.Writer) error {
 			return nil

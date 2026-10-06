@@ -269,7 +269,20 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		// surface a hint naming the profile (non-interactive). Explicit
 		// --profile / ATMOS_PROFILE selections are never overridden.
 		// See PRD: interactive-profile-suggestion.
-		if fbErr := m.maybeOfferProfileFallback(ctx, identityName); fbErr != nil {
+		//
+		// Carry forward any component/stack values already resolved via an
+		// interactive prompt on this process's stackInfo, so the re-exec'd
+		// child doesn't re-prompt for values the user just supplied.
+		reExecCtx := ReExecContext{}
+		if m.stackInfo != nil {
+			reExecCtx = ReExecContext{
+				Component:         m.stackInfo.ComponentFromArg,
+				ComponentPrompted: m.stackInfo.ComponentPrompted,
+				Stack:             m.stackInfo.Stack,
+				StackPrompted:     m.stackInfo.StackPrompted,
+			}
+		}
+		if fbErr := m.maybeOfferProfileFallback(ctx, identityName, reExecCtx); fbErr != nil {
 			return nil, fbErr
 		}
 		// Return a single rich error carrying the explanation and hint.
@@ -358,7 +371,47 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		m.deleteLegacyKeyringEntry(step)
 	}
 
+	m.warnIfJustificationUnused()
+
 	return m.buildWhoamiInfo(identityName, finalCreds), nil
+}
+
+// justificationFlagKey is the viper key the --justification flag and
+// ATMOS_AUTH_JUSTIFICATION environment variable bind to.
+const justificationFlagKey = "justification"
+
+// warnIfJustificationUnused warns when a per-invocation justification was supplied
+// (--justification / ATMOS_AUTH_JUSTIFICATION) but no identity in the authenticated chain
+// consumes it, so the reason is silently dropped. Identities that consume justification but
+// skip recording it in a given run (already-active role, resumed request) warn themselves in
+// context, so this only covers the "no consumer at all" case.
+func (m *manager) warnIfJustificationUnused() {
+	defer perf.Track(nil, "auth.Manager.warnIfJustificationUnused")()
+
+	if strings.TrimSpace(viper.GetString(justificationFlagKey)) == "" {
+		return
+	}
+	if chainConsumesJustification(m.chain, m.identities) {
+		return // A consumer exists; it records the justification or warns on its own skip.
+	}
+	// User-facing advisory (not a log event): the user explicitly supplied a reason that
+	// silently had no effect, so it must be visible regardless of log level.
+	ui.Warning("--justification (or ATMOS_AUTH_JUSTIFICATION) was supplied but no identity in the authentication chain records a justification; the value was ignored.")
+}
+
+// chainConsumesJustification reports whether any identity in the chain consumes a supplied
+// justification. Extracted for testability.
+func chainConsumesJustification(chain []string, identities map[string]types.Identity) bool {
+	for _, step := range chain {
+		identity, ok := identities[step]
+		if !ok {
+			continue // Chain also contains the root provider, which is not in identities.
+		}
+		if consumer, ok := identity.(types.JustificationConsumer); ok && consumer.ConsumesJustification() {
+			return true
+		}
+	}
+	return false
 }
 
 // AuthenticateProvider performs authentication directly with a provider.

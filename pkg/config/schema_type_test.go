@@ -9,6 +9,8 @@ import (
 )
 
 func TestInferValueType(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		dotPath  string
@@ -26,6 +28,7 @@ func TestInferValueType(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, ok := InferValueType(tt.dotPath)
 			assert.Equal(t, tt.wantOK, ok)
 			if tt.wantOK {
@@ -36,6 +39,8 @@ func TestInferValueType(t *testing.T) {
 }
 
 func TestInferValueType_MapAndStructFallToYAML(t *testing.T) {
+	t.Parallel()
+
 	// mcp.servers is a map[string]MCPServerConfig -- a "complex" field that
 	// should resolve to TypeYAML (raw literal), not one of the scalar types.
 	got, ok := InferValueType("mcp.servers")

@@ -12,6 +12,8 @@ import (
 // TestMergeGlobalAuthConfig_DeepMerge verifies deep-merge behavior.
 // Auth should behave like vars/settings/env: global auth merged with component auth, component wins.
 func TestMergeGlobalAuthConfig_DeepMerge(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		globalProviders  map[string]schema.Provider
@@ -128,6 +130,7 @@ func TestMergeGlobalAuthConfig_DeepMerge(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				Auth: schema.AuthConfig{
 					Providers:  tt.globalProviders,
@@ -154,6 +157,8 @@ func TestMergeGlobalAuthConfig_DeepMerge(t *testing.T) {
 
 // TestMergeGlobalAuthConfig_WithPostProcessIntegration verifies integration with postProcess.
 func TestMergeGlobalAuthConfig_WithPostProcessIntegration(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth: schema.AuthConfig{
 			Providers: map[string]schema.Provider{
@@ -202,6 +207,8 @@ func TestMergeGlobalAuthConfig_WithPostProcessIntegration(t *testing.T) {
 
 // TestMergeGlobalAuthConfig_LogsAndKeyringOnly tests logs and keyring without providers/identities.
 func TestMergeGlobalAuthConfig_LogsAndKeyringOnly(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth: schema.AuthConfig{
 			Providers:  map[string]schema.Provider{},

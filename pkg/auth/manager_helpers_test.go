@@ -846,7 +846,7 @@ func TestCreateAuthManagerInstance(t *testing.T) {
 		},
 	}
 
-	manager, err := createAuthManagerInstance(authConfig, "", "")
+	manager, err := createAuthManagerInstance(authConfig, "", ReExecContext{})
 
 	require.NoError(t, err, "should successfully create manager")
 	require.NotNil(t, manager, "manager should not be nil")
@@ -865,7 +865,7 @@ func TestCreateAuthManagerInstance_ThreadsStack(t *testing.T) {
 		},
 	}
 
-	manager, err := createAuthManagerInstance(authConfig, "", "plat-ue2-dev")
+	manager, err := createAuthManagerInstance(authConfig, "", ReExecContext{Stack: "plat-ue2-dev"})
 
 	require.NoError(t, err)
 	require.NotNil(t, manager)
@@ -874,9 +874,38 @@ func TestCreateAuthManagerInstance_ThreadsStack(t *testing.T) {
 	assert.Equal(t, "plat-ue2-dev", si.Stack, "target stack must be threaded into the manager at construction")
 }
 
+// TestCreateAuthManagerInstance_ThreadsPromptedComponentAndStack verifies that component and
+// stack values resolved via an interactive prompt are threaded into the manager's stackInfo.
+// Authenticate reads stackInfo to build the ReExecContext it passes to the profile-fallback
+// re-exec, so without this the prompted values never survive an identity-not-found fallback
+// for managers built through this constructor.
+func TestCreateAuthManagerInstance_ThreadsPromptedComponentAndStack(t *testing.T) {
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"local-aws": {Kind: "aws/emulator", Emulator: "aws"},
+		},
+	}
+
+	manager, err := createAuthManagerInstance(authConfig, "", ReExecContext{
+		Component:         "vpc",
+		ComponentPrompted: true,
+		Stack:             "plat-ue2-dev",
+		StackPrompted:     true,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, manager)
+	si := manager.GetStackInfo()
+	require.NotNil(t, si, "manager should carry stack info")
+	assert.Equal(t, "vpc", si.ComponentFromArg, "prompted component must be threaded into the manager at construction")
+	assert.True(t, si.ComponentPrompted, "ComponentPrompted must be threaded into the manager at construction")
+	assert.Equal(t, "plat-ue2-dev", si.Stack)
+	assert.True(t, si.StackPrompted, "StackPrompted must be threaded into the manager at construction")
+}
+
 func TestCreateAuthManagerInstance_NilConfig(t *testing.T) {
 	// Creating manager with nil config should fail validation.
-	manager, err := createAuthManagerInstance(nil, "", "")
+	manager, err := createAuthManagerInstance(nil, "", ReExecContext{})
 
 	// The NewAuthManager constructor should handle nil gracefully or error.
 	// In this case, we expect an error since nil config is invalid.
@@ -886,6 +915,20 @@ func TestCreateAuthManagerInstance_NilConfig(t *testing.T) {
 
 	assert.Error(t, err, "should error with nil config")
 	assert.Nil(t, manager, "manager should be nil on error")
+}
+
+// TestCreateAndAuthenticateManagerWithAtmosConfigForStack_StringSignaturePreserved pins
+// CreateAndAuthenticateManagerWithAtmosConfigForStack's exported signature to a plain `stack
+// string` fifth parameter. This is a public pkg/auth API; changing it to ReExecContext would
+// break any external caller compiled against the old signature. The ReExecContext-aware
+// behavior lives in the separate CreateAndAuthenticateManagerWithReExecContext function instead.
+// Uses an unconfigured authConfig (no identities) so the assertion doesn't depend on real auth.
+func TestCreateAndAuthenticateManagerWithAtmosConfigForStack_StringSignaturePreserved(t *testing.T) {
+	manager, err := CreateAndAuthenticateManagerWithAtmosConfigForStack("some-identity", &schema.AuthConfig{}, "__SELECT__", nil, "plat-ue2-dev")
+
+	require.Error(t, err, "an identity name with no auth configured must error")
+	assert.ErrorIs(t, err, errUtils.ErrAuthNotConfigured)
+	assert.Nil(t, manager)
 }
 
 // TestCreateManagerWithAtmosConfigForStack covers the no-auth (deferred-identity) manager
@@ -1196,7 +1239,7 @@ func TestAuthenticateWithIdentity_SelectValue(t *testing.T) {
 	}
 
 	// Create manager
-	manager, err := createAuthManagerInstance(authConfig, "", "")
+	manager, err := createAuthManagerInstance(authConfig, "", ReExecContext{})
 	require.NoError(t, err)
 
 	// Call with identity matching select value - triggers forceSelect branch

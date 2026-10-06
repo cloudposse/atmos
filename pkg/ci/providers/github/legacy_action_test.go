@@ -40,6 +40,27 @@ func TestLegacyActionRepo(t *testing.T) {
 			wantRepo: "cloudposse/github-action-setup-terraform",
 			wantOK:   false,
 		},
+		{
+			name:     "setup-atmos is not deprecated",
+			envSet:   true,
+			envValue: "cloudposse/github-action-setup-atmos",
+			wantRepo: "cloudposse/github-action-setup-atmos",
+			wantOK:   false,
+		},
+		{
+			name:     "plan-storage companion action is deprecated despite not matching the old prefix",
+			envSet:   true,
+			envValue: "cloudposse/github-action-terraform-plan-storage",
+			wantRepo: "cloudposse/github-action-terraform-plan-storage",
+			wantOK:   true,
+		},
+		{
+			name:     "component-updater is deprecated",
+			envSet:   true,
+			envValue: "cloudposse/github-action-atmos-component-updater",
+			wantRepo: "cloudposse/github-action-atmos-component-updater",
+			wantOK:   true,
+		},
 	}
 
 	for _, tt := range tests {

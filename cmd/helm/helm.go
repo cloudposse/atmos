@@ -25,8 +25,18 @@ const (
 	flagAffected = "affected"
 	flagWait     = "wait"
 	// The valueTrue const is the string representation of a set boolean flag.
-	valueTrue = "true"
+	valueTrue      = "true"
+	helmValuesName = "values"
 )
+
+var helmValueOverrideFlags = []string{
+	helmValuesName,
+	"set",
+	"set-string",
+	"set-file",
+	"set-json",
+	"set-literal",
+}
 
 var helmParser *flags.StandardParser
 
@@ -56,6 +66,7 @@ func init() {
 	helmCmd.AddCommand(newOperationCommand("template", "Render Helm chart manifests"))
 	helmCmd.AddCommand(newOperationCommand("diff", "Show changes a Helm apply would make"))
 	helmCmd.AddCommand(newOperationCommand("plan", "Preview changes a Helm apply would make"))
+	helmCmd.AddCommand(newOperationCommand(helmValuesName, "Show resolved Helm values as formatted YAML"))
 	helmCmd.AddCommand(newOperationCommand("apply", "Install or upgrade a Helm release"))
 	helmCmd.AddCommand(newOperationCommand("deploy", "Deploy a Helm release"))
 	helmCmd.AddCommand(newOperationCommand("delete", "Uninstall a Helm release"))
@@ -118,6 +129,9 @@ func newOperationCommand(name, short string) *cobra.Command {
 	parser.SetPositionalArgs(specs, validateOperationArgs, usage)
 	parser.RegisterFlags(cmd)
 	cmd.ValidArgsFunction = componentArgCompletion
+	if name == helmValuesName {
+		cmd.Example = "  atmos helm values monitoring -s plat-ue2-dev --set image.tag=2026.09.09"
+	}
 
 	return cmd
 }
@@ -126,7 +140,6 @@ func newOperationCommand(name, short string) *cobra.Command {
 // command: the shared selection/affected flags plus operation-specific output and target flags.
 func operationFlagOptions(name string) []flags.Option {
 	options := []flags.Option{
-		flags.WithStringFlag("namespace", "n", "", "Override the component's target Kubernetes namespace."),
 		flags.WithBoolFlag("all", "", false, "Process all Helm components in dependency order."),
 		flags.WithBoolFlag("affected", "", false, "Process affected Helm components in dependency order."),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary)."),
@@ -141,6 +154,14 @@ func operationFlagOptions(name string) []flags.Option {
 		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
 		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
 	}
+	if name == helmValuesName {
+		// Values produces one pipeable YAML document, so unlike lifecycle
+		// operations it intentionally accepts one component at a time.
+		options = []flags.Option{flags.WithStackFlag()}
+	}
+	if name != helmValuesName {
+		options = append([]flags.Option{flags.WithStringFlag("namespace", "n", "", "Override the component's target Kubernetes namespace.")}, options...)
+	}
 
 	if name == "template" {
 		options = append(
@@ -150,7 +171,18 @@ func operationFlagOptions(name string) []flags.Option {
 			flags.WithBoolFlag("split", "", false, "Write one rendered manifest file per object. Requires --output-dir."),
 		)
 	}
-	if name != "delete" {
+	if operationSupportsValueOverrides(name) {
+		options = append(
+			options,
+			flags.WithStringArrayFlag(helmValuesName, "f", nil, "Specify values in a YAML file or URL (can specify multiple)."),
+			flags.WithStringArrayFlag("set", "", nil, "Set values on the command line (can specify multiple)."),
+			flags.WithStringArrayFlag("set-string", "", nil, "Set STRING values on the command line (can specify multiple)."),
+			flags.WithStringArrayFlag("set-file", "", nil, "Set values from files on the command line (can specify multiple)."),
+			flags.WithStringArrayFlag("set-json", "", nil, "Set JSON values on the command line (can specify multiple)."),
+			flags.WithStringArrayFlag("set-literal", "", nil, "Set literal STRING values on the command line (can specify multiple)."),
+		)
+	}
+	if name != "delete" && name != helmValuesName {
 		options = append(options, flags.WithBoolFlag("dependency-update", "", false, "Update missing chart dependencies before rendering or applying."))
 	}
 
@@ -167,6 +199,9 @@ func operationFlagOptions(name string) []flags.Option {
 			flags.WithIntFlag("history-max", "", cfg.HelmDefaultMaxHistory, "Maximum release revisions to retain; 0 means unlimited."),
 			flags.WithBoolFlag("no-hooks", "", false, "Disable Helm chart hooks."),
 			flags.WithBoolFlag("skip-crds", "", false, "Do not install chart CRDs on first install."),
+			flags.WithStringFlag("server-side-apply", "", "", "Apply method: auto, true, or false. A bare --server-side-apply selects true. Omit to use the Helm default."),
+			flags.WithNoOptDefVal("server-side-apply", valueTrue),
+			flags.WithBoolFlag("force-conflicts", "", false, "Resolve server-side apply field-ownership conflicts by overwriting the contested fields and becoming their sole manager (opt-in)."),
 		)
 	}
 	if name == "delete" {
@@ -189,6 +224,15 @@ func operationFlagOptions(name string) []flags.Option {
 	}
 
 	return options
+}
+
+func operationSupportsValueOverrides(name string) bool {
+	switch name {
+	case "template", "diff", "plan", helmValuesName, "apply", "deploy":
+		return true
+	default:
+		return false
+	}
 }
 
 func validateOperationArgs(cmd *cobra.Command, args []string) error {
@@ -308,6 +352,13 @@ func getOperationFlags(cmd *cobra.Command) map[string]any {
 	if flag := cmd.Flag("dependency-update"); flag != nil && flag.Changed {
 		result[cfg.HelmDependencyUpdateSectionName] = flag.Value.String() == valueTrue
 	}
+	for _, name := range helmValueOverrideFlags {
+		if flag := cmd.Flag(name); flag != nil && flag.Changed {
+			if values, err := cmd.Flags().GetStringArray(name); err == nil {
+				result[name] = values
+			}
+		}
+	}
 	addLifecycleOperationFlags(cmd, result)
 	return result
 }
@@ -316,6 +367,7 @@ func addLifecycleOperationFlags(cmd *cobra.Command, result map[string]any) {
 	boolFlags := map[string]string{
 		"wait-for-jobs":      cfg.HelmWaitJobsSectionName,
 		"cleanup-on-failure": cfg.HelmCleanupOnFailureSectionName,
+		"force-conflicts":    cfg.HelmForceConflictsSectionName,
 	}
 	if flag := cmd.Flag("on-failure"); flag != nil && flag.Changed {
 		result[cfg.HelmOnFailureSectionName] = flag.Value.String()
@@ -336,8 +388,9 @@ func addLifecycleOperationFlags(cmd *cobra.Command, result map[string]any) {
 		}
 	}
 	stringFlags := map[string]string{
-		flagWait:  cfg.HelmWaitStrategySectionName,
-		"timeout": cfg.HelmTimeoutSectionName,
+		flagWait:            cfg.HelmWaitStrategySectionName,
+		"timeout":           cfg.HelmTimeoutSectionName,
+		"server-side-apply": cfg.HelmServerSideApplySectionName,
 	}
 	for flagName, fieldName := range stringFlags {
 		if flag := cmd.Flag(flagName); flag != nil && flag.Changed {

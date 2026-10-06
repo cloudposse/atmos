@@ -13,6 +13,8 @@ import (
 )
 
 func TestParser_Next_VersionMessage(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"info","@message":"Terraform 1.9.0","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"version","terraform":"1.9.0","ui":"1.2"}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -27,6 +29,8 @@ func TestParser_Next_VersionMessage(t *testing.T) {
 }
 
 func TestParser_Next_PlannedChange(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"info","@message":"Plan: 1 to add, 0 to change, 0 to destroy","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"planned_change","change":{"resource":{"addr":"aws_instance.example","module":"","resource":"aws_instance.example","resource_type":"aws_instance","resource_name":"example","resource_key":null},"action":"create"}}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -43,6 +47,8 @@ func TestParser_Next_PlannedChange(t *testing.T) {
 }
 
 func TestParser_Next_ApplyStart(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"info","@message":"aws_instance.example: Creating...","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"apply_start","hook":{"resource":{"addr":"aws_instance.example","module":"","resource":"aws_instance.example","resource_type":"aws_instance","resource_name":"example","resource_key":null},"action":"create"}}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -57,6 +63,8 @@ func TestParser_Next_ApplyStart(t *testing.T) {
 }
 
 func TestParser_Next_ApplyProgress(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"info","@message":"aws_instance.example: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:10.000000Z","type":"apply_progress","hook":{"resource":{"addr":"aws_instance.example","module":"","resource":"aws_instance.example","resource_type":"aws_instance","resource_name":"example","resource_key":null},"action":"create","elapsed_secs":10}}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -71,6 +79,8 @@ func TestParser_Next_ApplyProgress(t *testing.T) {
 }
 
 func TestParser_Next_ApplyComplete(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"info","@message":"aws_instance.example: Creation complete after 15s [id=i-1234567890abcdef0]","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:15.000000Z","type":"apply_complete","hook":{"resource":{"addr":"aws_instance.example","module":"","resource":"aws_instance.example","resource_type":"aws_instance","resource_name":"example","resource_key":null},"action":"create","id_key":"id","id_value":"i-1234567890abcdef0","elapsed_secs":15}}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -87,6 +97,8 @@ func TestParser_Next_ApplyComplete(t *testing.T) {
 }
 
 func TestParser_Next_ApplyErrored(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"error","@message":"Error: creating EC2 Instance: operation error","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"apply_errored","hook":{"resource":{"addr":"aws_instance.example","module":"","resource":"aws_instance.example","resource_type":"aws_instance","resource_name":"example","resource_key":null},"action":"create","elapsed_secs":5}}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -102,6 +114,8 @@ func TestParser_Next_ApplyErrored(t *testing.T) {
 }
 
 func TestParser_Next_RefreshStart(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"info","@message":"aws_instance.example: Refreshing state...","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"refresh_start","hook":{"resource":{"addr":"aws_instance.example","module":"","resource":"aws_instance.example","resource_type":"aws_instance","resource_name":"example","resource_key":null},"id_key":"id","id_value":"i-1234567890abcdef0"}}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -116,6 +130,8 @@ func TestParser_Next_RefreshStart(t *testing.T) {
 }
 
 func TestParser_Next_RefreshComplete(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"info","@message":"aws_instance.example: Refresh complete","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"refresh_complete","hook":{"resource":{"addr":"aws_instance.example","module":"","resource":"aws_instance.example","resource_type":"aws_instance","resource_name":"example","resource_key":null},"id_key":"id","id_value":"i-1234567890abcdef0"}}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -129,6 +145,8 @@ func TestParser_Next_RefreshComplete(t *testing.T) {
 }
 
 func TestParser_Next_Diagnostic(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"error","@message":"Error: creating EC2 Instance","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"diagnostic","diagnostic":{"severity":"error","summary":"creating EC2 Instance","detail":"operation error"}}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -144,6 +162,8 @@ func TestParser_Next_Diagnostic(t *testing.T) {
 }
 
 func TestParser_Next_ChangeSummary(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"info","@message":"Plan: 2 to add, 1 to change, 0 to destroy.","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"change_summary","changes":{"add":2,"change":1,"remove":0,"operation":"plan"}}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -160,6 +180,8 @@ func TestParser_Next_ChangeSummary(t *testing.T) {
 }
 
 func TestParser_Next_EOF(t *testing.T) {
+	t.Parallel()
+
 	parser := NewParser(strings.NewReader(""))
 
 	result, err := parser.Next()
@@ -168,6 +190,8 @@ func TestParser_Next_EOF(t *testing.T) {
 }
 
 func TestParser_Next_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
 	input := "not valid json\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -182,6 +206,8 @@ func TestParser_Next_InvalidJSON(t *testing.T) {
 // actionable error (mentioning the buffer limit) instead of the raw bufio.ErrTooLong wrapped
 // generically, so a huge single output line doesn't abort streaming with a confusing message.
 func TestParser_Next_LineTooLong(t *testing.T) {
+	t.Parallel()
+
 	input := strings.Repeat("a", maxScanTokenSize+1) + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -193,6 +219,8 @@ func TestParser_Next_LineTooLong(t *testing.T) {
 }
 
 func TestParser_Next_UnknownType(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"info","@message":"Unknown","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"unknown_type"}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -203,6 +231,8 @@ func TestParser_Next_UnknownType(t *testing.T) {
 }
 
 func TestParser_Next_MultipleMessages(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"info","@message":"Terraform 1.9.0","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"version","terraform":"1.9.0","ui":"1.2"}
 {"@level":"info","@message":"aws_instance.example: Creating...","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:01.000000Z","type":"apply_start","hook":{"resource":{"addr":"aws_instance.example","module":"","resource":"aws_instance.example","resource_type":"aws_instance","resource_name":"example","resource_key":null},"action":"create"}}
 {"@level":"info","@message":"aws_instance.example: Creation complete","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:02.000000Z","type":"apply_complete","hook":{"resource":{"addr":"aws_instance.example","module":"","resource":"aws_instance.example","resource_type":"aws_instance","resource_name":"example","resource_key":null},"action":"create","id_key":"id","id_value":"i-123","elapsed_secs":1}}
@@ -233,6 +263,8 @@ func TestParser_Next_MultipleMessages(t *testing.T) {
 }
 
 func TestParser_Next_OutputsMessage(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"info","@message":"Outputs","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"outputs","outputs":{"vpc_id":{"sensitive":false,"type":"string","value":"vpc-123abc"},"database_password":{"sensitive":true,"type":"string","value":"secret123"}}}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -250,6 +282,8 @@ func TestParser_Next_OutputsMessage(t *testing.T) {
 }
 
 func TestParser_Next_SkipsEmptyLines(t *testing.T) {
+	t.Parallel()
+
 	input := "\n\n\n" + `{"@level":"info","@message":"Terraform 1.9.0","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"version","terraform":"1.9.0","ui":"1.2"}` + "\n\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -263,6 +297,8 @@ func TestParser_Next_SkipsEmptyLines(t *testing.T) {
 }
 
 func TestParser_Next_WarningDiagnostic(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"warn","@message":"Warning: Deprecated attribute","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"diagnostic","diagnostic":{"severity":"warning","summary":"Deprecated attribute","detail":"The attribute 'foo' is deprecated. Use 'bar' instead."}}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -278,6 +314,8 @@ func TestParser_Next_WarningDiagnostic(t *testing.T) {
 }
 
 func TestParser_Next_DiagnosticWithRange(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"error","@message":"Error: Invalid expression","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"diagnostic","diagnostic":{"severity":"error","summary":"Invalid expression","detail":"Expected string, got number","range":{"filename":"main.tf","start":{"line":10,"column":5,"byte":100},"end":{"line":10,"column":15,"byte":110}}}}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 
@@ -294,6 +332,8 @@ func TestParser_Next_DiagnosticWithRange(t *testing.T) {
 }
 
 func TestParser_Next_LogMessage(t *testing.T) {
+	t.Parallel()
+
 	input := `{"@level":"info","@message":"Some log message","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"log"}` + "\n"
 	parser := NewParser(strings.NewReader(input))
 

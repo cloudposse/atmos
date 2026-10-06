@@ -12,6 +12,8 @@ import (
 )
 
 func TestHintHandler_Execute(t *testing.T) {
+	t.Parallel()
+
 	initToastTestIO(t)
 
 	handler, ok := Get("hint")
@@ -32,6 +34,8 @@ func TestHintHandler_Execute(t *testing.T) {
 }
 
 func TestHintHandler_ExecuteWithTemplate(t *testing.T) {
+	t.Parallel()
+
 	initToastTestIO(t)
 
 	handler, ok := Get("hint")
@@ -53,6 +57,8 @@ func TestHintHandler_ExecuteWithTemplate(t *testing.T) {
 }
 
 func TestHintHandler_ValidateRequiresContent(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("hint")
 	require.True(t, ok)
 
@@ -64,6 +70,8 @@ func TestHintHandler_ValidateRequiresContent(t *testing.T) {
 }
 
 func TestHintHandler_ExecutePropagatesTemplateResolutionError(t *testing.T) {
+	t.Parallel()
+
 	initToastTestIO(t)
 
 	handler, ok := Get("hint")

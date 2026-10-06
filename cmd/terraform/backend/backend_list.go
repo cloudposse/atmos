@@ -37,7 +37,7 @@ var listCmd = &cobra.Command{
 			stack = v.GetString("stack")
 		}
 		identity := flags.ParseGlobalFlags(cmd, v).Identity.Value()
-		return executeListCommandWithValues(stack, identity, result.Format)
+		return executeListCommandWithValues(stack, identity, result.Format, result.StackPrompted)
 	},
 }
 

@@ -35,11 +35,29 @@ const racePackagePrefix = "github.com/cloudposse/atmos/tests"
 // wasn't enough headroom in CI.
 const raceTestTimeout = "20m"
 
+// raceParallelEnv overrides the -parallel value the race sweep passes to
+// `go test` (how many t.Parallel tests one package's binary runs at once).
+const raceParallelEnv = "ATMOS_TEST_RACE_PARALLEL"
+
+// raceParallelDefault caps intra-package test parallelism in the race sweep.
+// `go test` already runs up to GOMAXPROCS package binaries concurrently
+// (-p), and with -parallel also defaulting to GOMAXPROCS the worst case is
+// GOMAXPROCS² race-instrumented tests in flight once the largest packages'
+// tests call t.Parallel. The cap bounds that to 4 per package binary, which
+// keeps package-level concurrency (the dominant win on this ~400-package
+// sweep) as the thing that scales with the runner. Tune with
+// ATMOS_TEST_RACE_PARALLEL; compare timings only across runs on the same
+// runner size.
+const raceParallelDefault = "4"
+
 // Race runs the full test suite (excluding ./tests/..., the CLI acceptance
 // suite) with the race detector and shuffled test order. This is the Go
 // implementation backing the `atmos test race` custom command
-// (.atmos.d/test.yaml) and the `[race] full test suite` CI job
-// (.github/workflows/test.yml).
+// (.atmos.d/test.yaml) and the `[race] non-acceptance test suite` CI job
+// (.github/workflows/test.yml). The CI job now shards this suite across
+// several parallel jobs by pre-splitting the package list upstream (see
+// Test.RaceMatrix in race_matrix.go) and passing each shard's slice through
+// the TEST override below -- Race itself has no shard-awareness of its own.
 func (Test) Race() error {
 	root, err := mageRepoRoot()
 	if err != nil {
@@ -56,8 +74,13 @@ func (Test) Race() error {
 		return err
 	}
 
-	args := make([]string, 0, len(packages)+len(testArgs)+5)
-	args = append(args, "test", "-race", "-shuffle=on")
+	parallel := os.Getenv(raceParallelEnv)
+	if parallel == "" {
+		parallel = raceParallelDefault
+	}
+
+	args := make([]string, 0, len(packages)+len(testArgs)+6)
+	args = append(args, "test", "-race", "-shuffle=on", "-parallel="+parallel)
 	args = append(args, packages...)
 	args = append(args, testArgs...)
 	args = append(args, "-timeout", raceTestTimeout)

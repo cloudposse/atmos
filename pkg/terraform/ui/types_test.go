@@ -7,6 +7,8 @@ import (
 )
 
 func TestResourceState_String(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		state    ResourceState
 		expected string
@@ -21,6 +23,7 @@ func TestResourceState_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
+			t.Parallel()
 			result := tt.state.String()
 			assert.Equal(t, tt.expected, result)
 		})
@@ -28,6 +31,8 @@ func TestResourceState_String(t *testing.T) {
 }
 
 func TestPhase_String(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		phase    Phase
 		expected string
@@ -43,6 +48,7 @@ func TestPhase_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
+			t.Parallel()
 			result := tt.phase.String()
 			assert.Equal(t, tt.expected, result)
 		})

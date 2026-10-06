@@ -63,6 +63,33 @@ type ExecuteOptions struct {
 	// RenderConfig controls dependency-tree rendering (compact spacing, attribute bar,
 	// max lines). Nil uses RenderTreeWithConfig's built-in defaults.
 	RenderConfig *RenderConfig
+	// StdoutCapture, when set, additionally tees the subprocess's raw stdout into this writer,
+	// alongside (not instead of) whatever the TUI itself reads. Lets a caller (e.g. Atmos's
+	// exec-metadata parser or retry-condition matcher) see the terraform/tofu output that
+	// streamed through the TUI instead of only the TUI's own rendering. Nil disables the tee.
+	StdoutCapture io.Writer
+	// StderrCapture, when set, additionally tees the subprocess's raw stderr into this writer,
+	// on the same terms as StdoutCapture. For ExecuteInit (where stdout and stderr are merged
+	// into a single stream for the TUI), both StdoutCapture and StderrCapture receive that same
+	// merged stream when set.
+	StderrCapture io.Writer
+}
+
+// teeReader wraps r with io.TeeReader when w is non-nil, otherwise returns r unchanged.
+func teeReader(r io.Reader, w io.Writer) io.Reader {
+	if w == nil {
+		return r
+	}
+	return io.TeeReader(r, w)
+}
+
+// teeWriter wraps w with io.MultiWriter(w, extra) when extra is non-nil, otherwise returns w
+// unchanged.
+func teeWriter(w io.Writer, extra io.Writer) io.Writer {
+	if extra == nil {
+		return w
+	}
+	return io.MultiWriter(w, extra)
 }
 
 // checkStreamingUIPreconditions returns an error if the streaming UI cannot run in the
@@ -196,8 +223,9 @@ func streamStderrToLog(r io.Reader) {
 }
 
 // newStreamingCommand creates and starts a terraform command with separate stdout/stderr
-// pipes: stdout is returned for JSON message streaming, stderr is streamed to the logger.
-func newStreamingCommand(ctx context.Context, opts *ExecuteOptions, args []string) (*exec.Cmd, io.ReadCloser, error) {
+// pipes: stdout is returned for JSON message streaming, stderr is streamed to the logger. When
+// opts.StdoutCapture / opts.StderrCapture are set, both streams are additionally teed into them.
+func newStreamingCommand(ctx context.Context, opts *ExecuteOptions, args []string) (*exec.Cmd, io.Reader, error) {
 	cmd := execCommandContext(ctx, opts.Command, args...)
 	cmd.Dir = opts.WorkingDir
 	cmd.Env = opts.Env
@@ -218,13 +246,13 @@ func newStreamingCommand(ctx context.Context, opts *ExecuteOptions, args []strin
 	}
 
 	// Stream stderr to logger in background.
-	go streamStderrToLog(stderrPipe)
+	go streamStderrToLog(teeReader(stderrPipe, opts.StderrCapture))
 
 	if err := cmd.Start(); err != nil {
 		return nil, nil, fmt.Errorf(fmtWrapErr, errUtils.ErrCommandStart, err)
 	}
 
-	return cmd, stdout, nil
+	return cmd, teeReader(stdout, opts.StdoutCapture), nil
 }
 
 // Execute runs a terraform command with streaming UI output.
@@ -301,25 +329,30 @@ func finalizeExecuteResult(opts *ExecuteOptions, m *Model, exitCode int) error {
 }
 
 // showPlanTree parses the given planfile and renders the dependency tree with a badge
-// summary. Silently does nothing if the planfile can't be parsed.
+// summary. Logs a warning and renders nothing if the planfile can't be parsed - the plan
+// itself already succeeded, so this best-effort presentation step must not fail the command,
+// but staying silent left users with no way to tell why the summary was missing.
 func showPlanTree(ctx context.Context, opts *ExecuteOptions, planFile string) {
 	tree, treeErr := BuildDependencyTree(ctx, &TreeBuildOptions{
 		PlanfilePath:  planFile,
 		TerraformPath: opts.Command,
 		WorkingDir:    opts.WorkingDir,
+		Env:           opts.Env,
 		Stack:         opts.Stack,
 		Component:     opts.Component,
 	})
 	if treeErr != nil {
+		log.Warn("Failed to render plan summary", "error", treeErr)
 		return
 	}
 
 	add, change, remove := tree.GetChangeSummary()
-	// Only render tree if there are changes; otherwise just show badge.
-	if add > 0 || change > 0 || remove > 0 {
+	hasOutputChanges := tree.HasOutputChanges()
+	// Only render tree if there are changes (resource or output); otherwise just show badge.
+	if add > 0 || change > 0 || remove > 0 || hasOutputChanges {
 		ui.Writef(fmtNewlineStr, tree.RenderTreeWithConfig(opts.RenderConfig))
 	}
-	ui.Write(RenderChangeSummaryBadges(add, change, remove))
+	ui.Write(RenderChangeSummaryBadges(add, change, remove, hasOutputChanges))
 }
 
 // executePlanWithUserFile runs plan using the caller-provided -out planfile, then
@@ -374,7 +407,10 @@ type initCommandResult struct {
 
 // newInitCommand starts a terraform init/workspace command, merging stdout and stderr
 // into a single pipe so all output is captured by the TUI. The command is waited on in
-// a background goroutine so the TUI can stream output concurrently.
+// a background goroutine so the TUI can stream output concurrently. Since stdout and stderr are
+// merged into one stream here, opts.StdoutCapture and opts.StderrCapture both receive that same
+// merged stream when set — there is no separate stdout-only / stderr-only view available for
+// init.
 func newInitCommand(ctx context.Context, opts *ExecuteOptions) (*initCommandResult, error) {
 	cmd := execCommandContext(ctx, opts.Command, opts.Args...)
 	cmd.Dir = opts.WorkingDir
@@ -384,8 +420,8 @@ func newInitCommand(ctx context.Context, opts *ExecuteOptions) (*initCommandResu
 	// Use a pipe to merge stdout and stderr into a single stream.
 	// This ensures all terraform output is captured by the TUI.
 	pr, pw := io.Pipe()
-	cmd.Stdout = pw
-	cmd.Stderr = pw
+	cmd.Stdout = teeWriter(pw, opts.StdoutCapture)
+	cmd.Stderr = teeWriter(pw, opts.StderrCapture)
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf(fmtWrapErr, errUtils.ErrCommandStart, err)
@@ -608,6 +644,7 @@ func showTwoPhasePlanTree(ctx context.Context, opts *ExecuteOptions, planFile st
 		PlanfilePath:  planFile,
 		TerraformPath: opts.Command,
 		WorkingDir:    opts.WorkingDir,
+		Env:           opts.Env,
 		Stack:         opts.Stack,
 		Component:     opts.Component,
 	})
@@ -616,15 +653,16 @@ func showTwoPhasePlanTree(ctx context.Context, opts *ExecuteOptions, planFile st
 	}
 
 	add, change, remove := tree.GetChangeSummary()
-	if add == 0 && change == 0 && remove == 0 {
+	hasOutputChanges := tree.HasOutputChanges()
+	if add == 0 && change == 0 && remove == 0 && !hasOutputChanges {
 		// No changes to apply - show badge only.
-		ui.Write(RenderChangeSummaryBadges(add, change, remove))
+		ui.Write(RenderChangeSummaryBadges(add, change, remove, hasOutputChanges))
 		return true
 	}
 
 	// Display the dependency tree and badge summary.
 	ui.Writef(fmtNewlineStr, tree.RenderTreeWithConfig(opts.RenderConfig))
-	ui.Write(RenderChangeSummaryBadges(add, change, remove))
+	ui.Write(RenderChangeSummaryBadges(add, change, remove, hasOutputChanges))
 	return false
 }
 
@@ -732,15 +770,16 @@ func executeWithPlanFile(ctx context.Context, opts *ExecuteOptions, planFile str
 	if err == nil {
 		// Check if there are any changes.
 		add, change, remove := tree.GetChangeSummary()
-		if add == 0 && change == 0 && remove == 0 {
+		hasOutputChanges := tree.HasOutputChanges()
+		if add == 0 && change == 0 && remove == 0 && !hasOutputChanges {
 			// No changes to apply - show badge, outputs, and exit.
-			ui.Write(RenderChangeSummaryBadges(add, change, remove))
+			ui.Write(RenderChangeSummaryBadges(add, change, remove, hasOutputChanges))
 			fetchAndDisplayOutputs(opts.Command, opts.WorkingDir, opts.Env)
 			return nil
 		}
 		// Display the dependency tree and badge summary.
 		ui.Writef(fmtNewlineStr, tree.RenderTreeWithConfig(opts.RenderConfig))
-		ui.Write(RenderChangeSummaryBadges(add, change, remove))
+		ui.Write(RenderChangeSummaryBadges(add, change, remove, hasOutputChanges))
 	}
 
 	// Confirm.

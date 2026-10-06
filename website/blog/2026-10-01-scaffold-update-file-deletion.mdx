@@ -1,0 +1,69 @@
+---
+slug: scaffold-update-file-deletion
+title: "File deletion handling for scaffold/init --update"
+date: 2026-10-01T12:00:00.000Z
+authors: [jorrite]
+tags: [feature]
+---
+
+Templates change over time: a file that made sense when you first generated your project gets
+renamed, split up, or just stops being relevant. Most codegen tools treat that evolution as
+something only a brand-new scaffold run can fix — your existing project just keeps carrying the
+leftover file forever. And if you'd deleted that file yourself to clean up, the next update used
+to bring it right back, overwriting the choice you'd already made.
+
+<!--truncate-->
+
+## The Problem
+
+[`atmos scaffold generate --update`](/cli/commands/scaffold/generate) and
+[`atmos init --update`](/cli/commands/init) compute a three-way merge for every file the template
+still generates: what changed upstream, layered onto what you've customized locally. But that
+merge only ever ran for files that exist on both sides. Two real gaps followed from that:
+
+- When the template stopped generating a file, `--update` never noticed. The stale file just sat
+  there, untouched, on every future update, forever.
+- When you deleted a file yourself — because you didn't need it, or you'd replaced it with
+  something else — the next `--update` silently wrote it straight back, as if your deletion had
+  never happened.
+
+## The Fix
+
+`--update-strategy=rendered` now detects a file the template stopped generating and removes it,
+but only when your copy still matches exactly what the template last produced. If you'd edited
+that file since, `--update` doesn't guess: it surfaces an unresolved conflict instead, the same
+way a genuine merge conflict does, so you decide whether to keep it or let it go.
+`--update-strategy=tracked` can't offer this part safely — there's no reliable way to know which
+files in your project's own git history actually belonged to the template versus anything else
+that happened to live there.
+
+Independently of strategy, `--update` also stops silently overwriting a deletion you made
+yourself. Both `tracked` and `rendered` now check whether a file was previously generated before
+recreating it, and leave your deletion in place if so. Pass `--recreate-deleted` to opt back into
+the old always-recreate behavior — it's deliberately its own flag rather than folded into
+`--force`, since `--force` already means "the template's version wins" for merge conflicts, and
+tying file recreation to it would make "resolve conflicts manually" and "recreate what I deleted"
+mutually exclusive. `--force` does, however, now resolve a deletion conflict the same way it
+resolves any other: if the template removed a file you'd since edited, `--force` deletes it anyway
+instead of leaving you stuck with a conflict only manual cleanup could clear.
+
+## How to Use It
+
+```shell
+# A file the template no longer generates is removed automatically on --update,
+# as long as you haven't edited it -- otherwise you'll get a conflict to resolve.
+atmos scaffold generate my-template ./my-project --update --update-strategy=rendered
+
+# Recreate a file you deleted instead of leaving the deletion in place.
+atmos scaffold generate my-template ./my-project --update --recreate-deleted
+
+# Force past a deletion conflict -- the template's choice (delete it) wins.
+atmos scaffold generate my-template ./my-project --update --update-strategy=rendered --force
+```
+
+## Get Involved
+
+See the [`atmos scaffold generate`](/cli/commands/scaffold/generate) and
+[`atmos init`](/cli/commands/init) docs for the full flag reference. Have feedback on this
+feature? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the conversation in
+the [Cloud Posse community Slack](https://cloudposse.com/slack).

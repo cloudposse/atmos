@@ -21,6 +21,8 @@ import (
 // never placing a binary in binDir, since locking must not require (or perform) an
 // install.
 func TestLockTool_WritesLockEntryWithoutInstalling(t *testing.T) {
+	t.Parallel()
+
 	assetName := EnsureWindowsExeExtension("tool")
 	asset := []byte("#!/bin/sh\n")
 	sum := "a8076d3d28d21e02012b20eaf7dbf75409a6277134439025f282e368e3305abf"
@@ -78,6 +80,8 @@ func TestLockTool_WritesLockEntryWithoutInstalling(t *testing.T) {
 // first version's checksum/URL/platform data entirely. This must be fixed (e.g. by keying lock
 // entries per-version) so both versions' verified checksums survive.
 func TestLockTool_LockingMultipleVersionsOfSameToolRetainsBoth(t *testing.T) {
+	t.Parallel()
+
 	asset1Name := EnsureWindowsExeExtension("tool-v1")
 	asset1 := []byte("#!/bin/sh\necho v1\n")
 	sum1 := "667f61a069b75f1f57fc561623da00e013e144221e8ea54de2803da9dd8aa952"
@@ -134,6 +138,8 @@ func TestLockTool_LockingMultipleVersionsOfSameToolRetainsBoth(t *testing.T) {
 // error) when useLockFile is false -- callers that want to force writing regardless (like
 // `atmos toolchain lock`) must use WithForceLockFile.
 func TestLockTool_NoOpsWhenLockFileDisabled(t *testing.T) {
+	t.Parallel()
+
 	assetName := EnsureWindowsExeExtension("tool")
 	asset := []byte("#!/bin/sh\n")
 	sum := "a8076d3d28d21e02012b20eaf7dbf75409a6277134439025f282e368e3305abf"
@@ -178,6 +184,8 @@ func TestLockTool_NoOpsWhenLockFileDisabled(t *testing.T) {
 // installFromTool would -- locking must not bypass this check just because it never installs
 // a binary.
 func TestLockTool_PlatformNotSupportedReturnsError(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{
 		cacheDir:           t.TempDir(),
 		binDir:             t.TempDir(),
@@ -202,6 +210,8 @@ func TestLockTool_PlatformNotSupportedReturnsError(t *testing.T) {
 // (e.g. a http-type tool missing its required Asset URL template) instead of silently writing
 // a lock entry for a tool spec that could never actually be downloaded.
 func TestLockTool_InvalidToolSpecReturnsError(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{
 		cacheDir:           t.TempDir(),
 		binDir:             t.TempDir(),
@@ -225,6 +235,8 @@ func TestLockTool_InvalidToolSpecReturnsError(t *testing.T) {
 // the direct attempt and the version-prefix fallback 404ing) instead of writing a lock entry
 // for an asset that was never actually fetched.
 func TestLockTool_DownloadFailureReturnsError(t *testing.T) {
+	t.Parallel()
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}))
@@ -260,6 +272,8 @@ func TestLockTool_DownloadFailureReturnsError(t *testing.T) {
 // subsequent lock/install attempt re-downloads rather than trusting the cached copy), and
 // never write a lock entry for an artifact that failed verification.
 func TestLockTool_VerificationFailureCleansUpCachedAsset(t *testing.T) {
+	t.Parallel()
+
 	assetName := EnsureWindowsExeExtension("tool")
 	asset := []byte("#!/bin/sh\n")
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
