@@ -1,3 +1,13 @@
+---
+related_docs:
+  - label: "Initialize a project"
+    url: /cli/commands/init
+  - label: "Scaffold generation and template configuration"
+    url: /cli/commands/scaffold/generate
+  - label: "Glob Paths and Directory-Level Matrix"
+    url: /cli/commands/scaffold/generate#glob-paths-and-directory-level-matrix
+---
+
 # Example: Scaffold Directory-Level Matrix
 
 Duplicate an entire directory's worth of files once per selection, instead of hand-maintaining a

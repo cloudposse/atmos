@@ -157,137 +157,15 @@ const CATEGORY_LABELS = {
   scaffolding: 'Scaffolding & Init',
 };
 
-// Cast recordings for examples whose README.md doubles as copied scaffold
-// template output (`atmos scaffold generate` copies the whole source
-// directory verbatim) — Docusaurus front matter in that README would leak
-// into every generated project, so the cast is registered here instead. A
-// README front matter `cast:` block still wins when present.
+// Keep site-only recordings out of copied scaffold READMEs. Those READMEs carry
+// related documentation in front matter, but generated projects should not
+// inherit the example's recording. A README `cast:` block still wins when present.
 const CAST_MAP = {
   scaffolding: { file: '/casts/examples/scaffolding/generate-example.cast', title: 'atmos scaffold generate' },
   'scaffolding-matrix': {
     file: '/casts/examples/scaffolding-matrix/generate-example.cast',
     title: 'atmos scaffold: one file per selection via matrix',
   },
-};
-
-// Documentation pages mapping for examples.
-const DOCS_MAP = {
-  'quick-start-simple': [
-    { label: 'Quick Start', url: '/quick-start' },
-    { label: 'Simple Tutorial', url: '/quick-start/simple' },
-  ],
-  'quick-start-advanced': [
-    { label: 'Quick Start', url: '/quick-start' },
-    { label: 'Advanced Tutorial', url: '/quick-start/advanced' },
-  ],
-  'demo-stacks': [
-    { label: 'Stacks', url: '/stacks' },
-  ],
-  'demo-context': [
-    { label: 'Describe Configuration', url: '/cli/commands/describe/config' },
-  ],
-  'demo-env': [
-    { label: 'Environment Variables', url: '/stacks/env' },
-  ],
-  'demo-auth': [
-    { label: 'Authentication', url: '/stacks/auth' },
-    { label: 'Auth Commands', url: '/cli/commands/auth/usage' },
-  ],
-  'demo-schemas': [
-    { label: 'JSON Schema Validation', url: '/validation/json-schema' },
-  ],
-  'demo-vendoring': [
-    { label: 'Vendoring', url: '/vendor/' },
-    { label: 'Vendor Configuration', url: '/vendor/vendor-config' },
-    { label: 'CLI Configuration', url: '/cli/configuration/vendor' },
-  ],
-  'demo-component-versions': [
-    { label: 'Component Versions', url: '/design-patterns/version-management' },
-  ],
-  'source-provisioning': [
-    { label: 'Source Provisioning', url: '/cli/commands/terraform/source' },
-  ],
-  'demo-library': [
-    { label: 'Components', url: '/components' },
-  ],
-  'demo-workflows': [
-    { label: 'Workflows', url: '/workflows' },
-    { label: 'CLI Configuration', url: '/cli/configuration/workflows' },
-  ],
-  'demo-atlantis': [
-    { label: 'Atlantis Integration', url: '/cli/configuration/integrations/atlantis' },
-  ],
-  'custom-commands': [
-    { label: 'Custom Commands', url: '/cli/configuration/commands' },
-  ],
-  'custom-components': [
-    { label: 'Custom Component Types', url: '/components/custom' },
-    { label: 'Custom Commands', url: '/cli/configuration/commands' },
-    { label: 'Custom Component Types Reference', url: '/cli/configuration/commands/component#custom-component-types' },
-  ],
-  'interactive-workflows': [
-    { label: 'Workflows', url: '/workflows' },
-    { label: 'CLI Configuration', url: '/cli/configuration/workflows' },
-  ],
-  'generate-files': [
-    { label: 'Generate Files', url: '/cli/commands/terraform/generate/files' },
-  ],
-  'config-profiles': [
-    { label: 'CLI Configuration', url: '/cli/configuration' },
-  ],
-  toolchain: [
-    { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
-    { label: 'Toolchain Registries', url: '/cli/configuration/toolchain/registries' },
-    { label: 'Toolchain Commands', url: '/cli/commands/toolchain/usage' },
-  ],
-  devcontainer: [
-    { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },
-  ],
-  'devcontainer-build': [
-    { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },
-  ],
-  'demo-helmfile': [
-    { label: 'Helmfile', url: '/stacks/components/helmfile' },
-  ],
-  scaffolding: [
-    { label: 'Init Command', url: '/cli/commands/init' },
-    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
-  ],
-  'scaffolding-matrix': [
-    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
-    { label: 'Dynamic File Generation (matrix)', url: '/cli/commands/scaffold/generate#dynamic-file-generation' },
-  ],
-  'scaffolding-directory-matrix': [
-    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
-    {
-      label: 'Glob Paths and Directory-Level Matrix',
-      url: '/cli/commands/scaffold/generate#glob-paths-and-directory-level-matrix',
-    },
-  ],
-  'stack-names': [
-    { label: 'Stack Names', url: '/stacks/name' },
-  ],
-  'demo-ansible': [
-    { label: 'Ansible Playbook', url: '/cli/commands/ansible/playbook' },
-  ],
-  'mcp-with-aws': [
-    { label: 'Custom Commands', url: '/cli/configuration/commands' },
-    { label: 'Authentication', url: '/stacks/auth' },
-    { label: 'Toolchain', url: '/cli/configuration/toolchain' },
-  ],
-  'packer-docker': [
-    { label: 'Packer Components', url: '/components/packer' },
-    { label: 'Packer Build', url: '/cli/commands/packer/build' },
-    { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
-  ],
-  init: [
-    { label: 'Init Command', url: '/cli/commands/init' },
-    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
-  ],
-  scaffolds: [
-    { label: 'Init Command', url: '/cli/commands/init' },
-    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
-  ],
 };
 
 // Map file extensions to syntax highlighting languages.
@@ -414,6 +292,18 @@ function parseReadmeFrontmatter(content) {
     // Malformed front matter: fall back to treating the whole file as body.
     return { data: {}, body: content };
   }
+}
+
+/** Read related documentation from the item's own README or SKILL front matter. */
+function parseRelatedDocs(value, filePath) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((doc) =>
+    !doc || typeof doc.label !== 'string' || !doc.label.trim() ||
+    typeof doc.url !== 'string' || !doc.url.trim()
+  )) {
+    throw new Error(`${filePath}: related_docs must be a list of nonempty label/url pairs`);
+  }
+  return value.map(({ label, url }) => ({ label: label.trim(), url: url.trim() }));
 }
 
 /**
@@ -636,7 +526,7 @@ function scanExamples(sourceDir, options) {
       hasAtmosYaml,
       featured: FEATURED.includes(entry.name),
       tags,
-      docs: DOCS_MAP[entry.name] || [],
+      docs: parseRelatedDocs(readmeMetadata.data.related_docs, tree.readme?.path || entry.name),
       cast: {
         file: cast.file || '',
         title: cast.title || '',

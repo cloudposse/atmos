@@ -7,6 +7,11 @@ description: >-
 cast:
   file: /casts/examples/custom-commands/hello-greet.cast
   title: atmos custom commands
+related_docs:
+  - label: "Custom command configuration"
+    url: /cli/configuration/commands
+  - label: "List commands"
+    url: /cli/commands/
 ---
 
 # Custom Commands
