@@ -17,20 +17,22 @@ export default function ComponentLibraryTypes(): JSX.Element {
   return (
     <>
       <p>Atmos natively supports {types.length} component types:</p>
-      <table>
-        <thead>
-          <tr><th>Type</th><th>Implementation</th><th>Description</th></tr>
-        </thead>
-        <tbody>
-          {types.map(item => (
-            <tr key={item.id}>
-              <td style={{whiteSpace: 'nowrap'}}><Link to={item.href}>{item.label}</Link></td>
-              <td>{item.implementation}</td>
-              <td>{item.description}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div style={{overflowX: 'auto'}} role="region" aria-label="Component types" tabIndex={0}>
+        <table style={{minWidth: '42rem'}}>
+          <thead>
+            <tr><th>Type</th><th>Implementation</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            {types.map(item => (
+              <tr key={item.id}>
+                <td style={{whiteSpace: 'nowrap'}}><Link to={item.href}>{item.label}</Link></td>
+                <td>{item.implementation}</td>
+                <td>{item.description}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }
