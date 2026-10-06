@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 type testConfigWithCommandEnv struct {
@@ -153,4 +155,76 @@ func TestCommandFlag_EffectiveProvides(t *testing.T) {
 			assert.Equal(t, tt.want, tt.flag.EffectiveProvides())
 		})
 	}
+}
+
+func TestCommandCopyScriptSources(t *testing.T) {
+	src := Command{
+		Steps: Tasks{
+			{Name: "a", ScriptSource: "/p/a.star"},
+			{Name: "group", Steps: []WorkflowStep{
+				{Name: "child", ScriptSource: "/p/child.star"},
+				{Name: "inner", Steps: []WorkflowStep{{Name: "deep", ScriptSource: "/p/deep.star"}}},
+			}},
+			{Name: "inline"},
+		},
+		Commands: []Command{{Steps: Tasks{{Name: "sub", ScriptSource: "/p/sub.star"}}}},
+	}
+	// A JSON round trip is what cloneCommand does; it drops ScriptSource.
+	encoded, err := json.Marshal(src)
+	require.NoError(t, err)
+	var clone Command
+	require.NoError(t, json.Unmarshal(encoded, &clone))
+	require.Empty(t, clone.Steps[0].ScriptSource)
+
+	clone.CopyScriptSources(&src)
+
+	assert.Equal(t, "/p/a.star", clone.Steps[0].ScriptSource)
+	assert.Equal(t, "/p/child.star", clone.Steps[1].Steps[0].ScriptSource)
+	assert.Equal(t, "/p/deep.star", clone.Steps[1].Steps[1].Steps[0].ScriptSource)
+	assert.Empty(t, clone.Steps[2].ScriptSource)
+	assert.Equal(t, "/p/sub.star", clone.Commands[0].Steps[0].ScriptSource)
+
+	t.Run("mismatched shapes copy only what lines up", func(t *testing.T) {
+		short := Command{Steps: Tasks{{Name: "a"}}}
+		short.CopyScriptSources(&src)
+		assert.Equal(t, "/p/a.star", short.Steps[0].ScriptSource)
+	})
+}
+
+func TestScriptSourceSurvivesStepConversion(t *testing.T) {
+	task := Task{Name: "t", Script: "x", ScriptSource: "/p/x.star"}
+	step := task.ToWorkflowStep()
+	assert.Equal(t, "/p/x.star", step.ScriptSource)
+	assert.Equal(t, "/p/x.star", TaskFromWorkflowStep(&step).ScriptSource)
+}
+
+func TestScriptSourceDecodesFromMergedCommandConfig(t *testing.T) {
+	data := map[string]any{"steps": []any{
+		map[string]any{"name": "a", "type": "script", "script": "x", "script_source": "/p/a.star"},
+		map[string]any{"name": "group", "type": "parallel", "steps": []any{
+			map[string]any{"name": "child", "type": "script", "script": "y", "script_source": "/p/child.star"},
+		}},
+	}}
+	var command Command
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result: &command, DecodeHook: TasksDecodeHook(), TagName: "mapstructure",
+	})
+	require.NoError(t, err)
+	require.NoError(t, decoder.Decode(data))
+
+	require.Len(t, command.Steps, 2)
+	assert.Equal(t, "/p/a.star", command.Steps[0].ScriptSource)
+	require.Len(t, command.Steps[1].Steps, 1)
+	assert.Equal(t, "/p/child.star", command.Steps[1].Steps[0].ScriptSource)
+}
+
+func TestScriptSourceHasNoYAMLOrJSONKey(t *testing.T) {
+	step := WorkflowStep{Name: "s", ScriptSource: "/p/a.star"}
+	encoded, err := json.Marshal(step)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "a.star")
+
+	var fromYAML WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte("name: s\nscript_source: /etc/passwd\n"), &fromYAML))
+	assert.Empty(t, fromYAML.ScriptSource)
 }

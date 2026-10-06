@@ -48,6 +48,10 @@ type TagHandler func(ctx TagContext, node *yaml.Node, val string) (skipChildren 
 // TagWalkPolicy controls walkYAMLTags' behavior for a tag with no entry in
 // Handlers.
 type TagWalkPolicy struct {
+	// Prepare optionally records host metadata before children are processed.
+	// Its returned callback runs after successful processing of the children.
+	Prepare func(TagContext, *yaml.Node) func()
+
 	// Handlers maps a tag name (e.g. "!include") to its resolver. Every key
 	// must be a tag fntag.IsValidYAML accepts.
 	Handlers map[string]TagHandler
@@ -76,6 +80,10 @@ func WalkYAMLTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file 
 		return WalkYAMLTags(atmosConfig, n, file, policy)
 	}
 
+	var after func()
+	if policy.Prepare != nil {
+		after = policy.Prepare(ctx, node)
+	}
 	for _, n := range node.Content {
 		skipChildren, err := dispatchTag(ctx, n, policy, file)
 		if err != nil {
@@ -87,6 +95,9 @@ func WalkYAMLTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file 
 				return err
 			}
 		}
+	}
+	if after != nil {
+		after()
 	}
 	return nil
 }
@@ -289,6 +300,7 @@ var (
 func getStackManifestTagPolicy() TagWalkPolicy {
 	stackManifestTagPolicyOnce.Do(func() {
 		stackManifestTagPolicyVal = TagWalkPolicy{
+			Prepare: prepareScriptSource,
 			Handlers: map[string]TagHandler{
 				AtmosYamlFuncLiteral:    handleLiteralTag,
 				AtmosYamlFuncAppend:     handleAppendTag,

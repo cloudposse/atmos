@@ -1585,12 +1585,16 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 		}
 	}
 
-	// Process YAML functions
-	if err := preprocessAtmosYamlFunc(content, tempViper); err != nil {
+	// Process YAML functions. Custom commands are decoded separately, anchored to this config
+	// file and the project base path, so their !include paths do not depend on the working directory.
+	if err := preprocessAtmosYamlFuncExceptCommands(content, tempViper); err != nil {
 		return errors.Join(errUtils.ErrPreprocessYAMLFunctions, err)
 	}
 	if processedCommands == nil {
-		processedCommands = tempViper.Get(commandsKey)
+		processedCommands, err = extractCommandsWithYamlFunctionsForFile(content, configFilePath)
+		if err != nil {
+			return errors.Join(errUtils.ErrPreprocessYAMLFunctions, err)
+		}
 	}
 
 	// Marshal to YAML
@@ -2053,6 +2057,17 @@ func mergeConfigFile(
 	return nil
 }
 
+// preprocessAtmosYamlFuncExceptCommands runs preprocessAtmosYamlFunc over everything but the
+// top-level `commands` key, which extractCommandsWithYamlFunctionsForFile decodes with its own
+// include scope.
+func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper) error {
+	withoutCommands, err := yamlContentWithoutTopLevelKey(content, commandsKey)
+	if err != nil {
+		return err
+	}
+	return preprocessAtmosYamlFunc(withoutCommands, v)
+}
+
 func yamlContentWithoutTopLevelKey(content []byte, key string) ([]byte, error) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(content, &root); err != nil {
@@ -2137,7 +2152,7 @@ func mergeConfigFileWithImports(path string, v *viper.Viper) error {
 		return err
 	}
 	if len(imports) > 0 {
-		if err = preprocessAtmosYamlFunc(content, tempViper); err != nil {
+		if err = preprocessAtmosYamlFuncExceptCommands(content, tempViper); err != nil {
 			return err
 		}
 		overlayProfileSettings(v, tempViper.AllSettings(), "")

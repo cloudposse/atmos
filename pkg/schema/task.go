@@ -106,6 +106,9 @@ type Task struct {
 	Script string `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`
 	// Interpreter is the executable used to run Script for TaskTypeScript.
 	Interpreter string `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"`
+	// ScriptSource is the absolute path of the file Script was read from (a local !include or
+	// !include.raw in a custom command). Loaders set it; it has no YAML or JSON key.
+	ScriptSource string `yaml:"-" json:"-" mapstructure:"script_source"`
 	// Type specifies the step type: shell, script, atmos, exec, cast, simulate, workdir, or another registered step kind. Defaults to shell.
 	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	// Timeout specifies the maximum duration for the task. Zero means no timeout.
@@ -420,6 +423,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Command:          task.Command,
 		Script:           task.Script,
 		Interpreter:      task.Interpreter,
+		ScriptSource:     task.ScriptSource,
 		Type:             task.Type,
 		Stack:            task.Stack,
 		WorkingDirectory: task.WorkingDirectory,
@@ -593,6 +597,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Command:          step.Command,
 		Script:           step.Script,
 		Interpreter:      step.Interpreter,
+		ScriptSource:     step.ScriptSource,
 		Type:             step.Type,
 		Stack:            step.Stack,
 		WorkingDirectory: step.WorkingDirectory,

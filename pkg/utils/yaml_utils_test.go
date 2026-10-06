@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	yaml "gopkg.in/yaml.v3"
 
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1574,4 +1575,42 @@ value: 123`
 
 	// Verify cache hit (hits should increase).
 	assert.Greater(t, hitsAfter, hitsBefore, "Cache hits should increase on second call")
+}
+
+func TestUnmarshalYAMLFromNode(t *testing.T) {
+	t.Run("decodes a parsed node and resolves include tags", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "body.txt"), []byte("included"), 0o600))
+		var node yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte("value: !include.raw "+filepath.ToSlash(filepath.Join(dir, "body.txt"))+"\nother: 1\n"), &node))
+
+		got, err := UnmarshalYAMLFromNode[map[string]any](&schema.AtmosConfiguration{}, &node, "manifest.yaml")
+
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{"value": "included", "other": 1}, got)
+	})
+
+	t.Run("a nil configuration is rejected", func(t *testing.T) {
+		_, err := UnmarshalYAMLFromNode[map[string]any](nil, &yaml.Node{}, "")
+		require.ErrorIs(t, err, ErrNilAtmosConfig)
+	})
+
+	t.Run("decode errors keep the line of the original text", func(t *testing.T) {
+		var node yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte("# comment\n\nvalue: not-a-list\n"), &node))
+
+		_, err := UnmarshalYAMLFromNode[struct {
+			Value []string `yaml:"value"`
+		}](&schema.AtmosConfiguration{}, &node, "")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "line 3")
+	})
+}
+
+func TestIsRemoteIncludePath(t *testing.T) {
+	assert.True(t, IsRemoteIncludePath("https://example.com/a.yaml"))
+	assert.True(t, IsRemoteIncludePath("github.com/org/repo/a.yaml"))
+	assert.False(t, IsRemoteIncludePath("scripts/a.star"))
+	assert.False(t, IsRemoteIncludePath("./a.star"))
 }

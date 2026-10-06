@@ -103,7 +103,7 @@ func (l *AtmosLogger) GetLevel() Level {
 
 // SetOutput sets the output writer.
 func (l *AtmosLogger) SetOutput(w io.Writer) {
-	l.charm.SetOutput(w)
+	setCharmOutput(l.charm, w)
 }
 
 // SetStyles sets the log styles.

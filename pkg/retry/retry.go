@@ -17,13 +17,44 @@ type Func func() error
 // Executor handles the retry logic.
 type Executor struct {
 	config schema.RetryConfig
+	clock  Clock
+}
+
+// Clock supplies retry time and waits; tests can advance time without sleeping.
+type Clock interface {
+	Now() time.Time
+	After(time.Duration) <-chan time.Time
+}
+
+type wallClock struct{}
+
+func (wallClock) Now() time.Time                         { return time.Now() }
+func (wallClock) After(d time.Duration) <-chan time.Time { return time.After(d) }
+
+// Option configures a retry executor.
+type Option func(*Executor)
+
+// WithClock replaces the retry clock. Implementations must support concurrent use.
+func WithClock(clock Clock) Option {
+	return func(e *Executor) {
+		if clock != nil {
+			e.clock = clock
+		}
+	}
 }
 
 // New creates a new retry executor with the given config.
-func New(config schema.RetryConfig) *Executor {
-	return &Executor{
+//
+//nolint:gocritic // Preserve the existing value-based configuration API.
+func New(config schema.RetryConfig, opts ...Option) *Executor {
+	e := &Executor{
 		config: config,
+		clock:  wallClock{},
 	}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
 }
 
 // Execute runs the function with retry logic.
@@ -118,7 +149,7 @@ func validateJitter(val *float64) error {
 // ExecuteWithPredicate runs the function with retry logic, using the predicate to determine
 // if an error should trigger a retry.
 func (e *Executor) ExecuteWithPredicate(ctx context.Context, fn Func, shouldRetry func(error) bool) error {
-	startTime := time.Now()
+	startTime := e.clock.Now()
 
 	// Determine effective max attempts (nil = unlimited, use MaxInt)
 	maxAttempts := math.MaxInt
@@ -127,8 +158,11 @@ func (e *Executor) ExecuteWithPredicate(ctx context.Context, fn Func, shouldRetr
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		// Check if we've exceeded max elapsed time (only if MaxElapsedTime is set)
-		if e.config.MaxElapsedTime != nil && time.Since(startTime) > *e.config.MaxElapsedTime {
+		if e.config.MaxElapsedTime != nil && e.clock.Now().Sub(startTime) > *e.config.MaxElapsedTime {
 			return MaxElapsedTimeError{MaxElapsedTime: *e.config.MaxElapsedTime}
 		}
 
@@ -154,7 +188,7 @@ func (e *Executor) ExecuteWithPredicate(ctx context.Context, fn Func, shouldRetr
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled during retry: %w", ctx.Err())
-		case <-time.After(delay):
+		case <-e.clock.After(delay):
 			// Continue to next attempt
 		}
 	}

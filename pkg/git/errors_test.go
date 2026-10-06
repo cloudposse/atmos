@@ -9,6 +9,8 @@ import (
 	cockroacherrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
 // stubBaseProvider implements Provider but deliberately has no SwapStderr method, so
@@ -123,4 +125,51 @@ func TestWrapOperationError_NoWorkdirOmitsQuotedEmptyPath(t *testing.T) {
 		joined += d
 	}
 	assert.NotContains(t, joined, `in ""`)
+}
+
+// writerCapturingProvider hands the swapped stderr writer to the operation so tests can write to it in chunks.
+type writerCapturingProvider struct {
+	stubBaseProvider
+	w io.Writer
+}
+
+func (p *writerCapturingProvider) SwapStderr(w io.Writer) func() {
+	p.w = w
+	return func() {}
+}
+
+func TestCaptureStderr_MasksSecretSplitAcrossWrites(t *testing.T) {
+	const secret = "git-stderr-split-secret"
+	iolib.Reset()
+	t.Cleanup(iolib.Reset)
+	require.NoError(t, iolib.Initialize())
+	iolib.RegisterSecret(secret)
+
+	provider := &writerCapturingProvider{}
+	stderr, err := CaptureStderr(provider, func() error {
+		_, _ = provider.w.Write([]byte("fatal: token git-stderr-split-"))
+		_, _ = provider.w.Write([]byte("secret rejected\n"))
+		return nil
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "fatal: token "+iolib.MaskReplacement+" rejected", stderr)
+	assert.NotContains(t, stderr, secret)
+}
+
+func TestCaptureStderr_FlushesHeldTailWhenOperationFails(t *testing.T) {
+	iolib.Reset()
+	t.Cleanup(iolib.Reset)
+	require.NoError(t, iolib.Initialize())
+	iolib.RegisterSecret("git-stderr-split-secret")
+
+	provider := &writerCapturingProvider{}
+	opErr := errors.New("boom")
+	stderr, err := CaptureStderr(provider, func() error {
+		_, _ = provider.w.Write([]byte("fatal: git-stderr-split-"))
+		return opErr
+	})
+
+	require.ErrorIs(t, err, opErr)
+	assert.Equal(t, "fatal: git-stderr-split-", stderr, "a prefix that never completed a secret is not lost")
 }

@@ -1,16 +1,35 @@
 package io
 
 import (
+	"errors"
 	stdio "io"
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Output contains composed stdout/stderr writers for one execution scope.
+//
+// Each sink is masked with a StreamingMaskWriter so a secret split across two writes is still
+// masked. Call Flush once the producer has finished to release any held tail.
 type Output struct {
 	Stdout stdio.Writer
 	Stderr stdio.Writer
+
+	maskers []*StreamingMaskWriter
+}
+
+// Flush releases the tail held back by the masked sinks. Call it when the producer is done.
+func (o Output) Flush() error {
+	defer perf.Track(nil, "io.Output.Flush")()
+
+	var errs []error
+	for _, m := range o.maskers {
+		errs = append(errs, m.Flush())
+	}
+	return errors.Join(errs...)
 }
 
 // OutputSinks are the destinations for one output stream.
@@ -39,31 +58,37 @@ func NewOutput(opts OutputOptions) Output {
 		stderr.Terminal = os.Stderr
 	}
 
+	stdoutWriter, stdoutMaskers := composeOutput(opts.Prefix, stdout)
+	stderrWriter, stderrMaskers := composeOutput(opts.Prefix, stderr)
 	return Output{
-		Stdout: composeOutput(opts.Prefix, stdout),
-		Stderr: composeOutput(opts.Prefix, stderr),
+		Stdout:  stdoutWriter,
+		Stderr:  stderrWriter,
+		maskers: append(stdoutMaskers, stderrMaskers...),
 	}
 }
 
-func composeOutput(prefix string, sinks OutputSinks) stdio.Writer {
+func composeOutput(prefix string, sinks OutputSinks) (stdio.Writer, []*StreamingMaskWriter) {
 	writers := make([]stdio.Writer, 0, 3)
+	maskers := make([]*StreamingMaskWriter, 0, 3)
 	addSink := func(w stdio.Writer) {
 		if w == nil {
 			return
 		}
-		writers = append(writers, MaskWriter(NewPrefixedWriter(prefix, w)))
+		sw := NewStreamingMaskWriter(NewPrefixedWriter(prefix, w))
+		writers = append(writers, sw)
+		maskers = append(maskers, sw)
 	}
 	addSink(sinks.Terminal)
 	addSink(sinks.File)
 	addSink(sinks.Capture)
 
 	if len(writers) == 0 {
-		return stdio.Discard
+		return stdio.Discard, nil
 	}
 	if len(writers) == 1 {
-		return writers[0]
+		return writers[0], maskers
 	}
-	return stdio.MultiWriter(writers...)
+	return stdio.MultiWriter(writers...), maskers
 }
 
 // NewPrefixedWriter returns a writer that prefixes each line with [prefix].

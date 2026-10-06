@@ -771,11 +771,12 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 		return nil
 	}
 
-	// We've established there IS a custom tag somewhere in this subtree; walk
-	// it via the shared tag walker (pkg/utils/yaml_tag_walker.go) using the
-	// stack-manifest policy -- resolve !literal/!append/!include/
-	// !include.raw immediately, defer every other valid tag to the later
-	// evaluation phase (internal/exec's processCustomTagsWithContext).
+	// Walk stack tags through the shared policy, including script-source provenance.
+	return processCustomTagsInner(atmosConfig, node, file)
+}
+
+// processCustomTagsInner walks an already-scanned subtree under the stack policy.
+func processCustomTagsInner(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	return WalkYAMLTags(atmosConfig, node, file, getStackManifestTagPolicy())
 }
 
@@ -834,11 +835,30 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 		expand.KeyDelimiters(&node, atmosConfig.Settings.YAML.KeyDelimiter)
 	}
 
-	if err := processCustomTags(atmosConfig, &node, file); err != nil {
+	return decodeYAMLNode[T](atmosConfig, &node, file)
+}
+
+// UnmarshalYAMLFromNode decodes an already parsed YAML node into a Go type, resolving Atmos YAML
+// function tags (such as !include) exactly like UnmarshalYAMLFromFile. Callers that must adjust
+// the parsed tree first (for example, to give !include its own resolution scope) use it to keep
+// the original line and column information in decode errors.
+func UnmarshalYAMLFromNode[T any](atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) (T, error) {
+	defer perf.Track(atmosConfig, "utils.UnmarshalYAMLFromNode")()
+
+	if atmosConfig == nil {
+		return *new(T), ErrNilAtmosConfig
+	}
+	return decodeYAMLNode[T](atmosConfig, node, file)
+}
+
+// decodeYAMLNode processes the custom tags of a parsed node and decodes it into T.
+func decodeYAMLNode[T any](atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) (T, error) {
+	var zeroValue T
+	if err := processCustomTags(atmosConfig, node, file); err != nil {
 		return zeroValue, err
 	}
 
-	// Decode the yaml.Node into the desired type T
+	// Decode the yaml.Node into the desired type T.
 	var data T
 	if err := node.Decode(&data); err != nil {
 		return zeroValue, err

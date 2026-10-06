@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -20,6 +21,10 @@ import (
 // "ready" marker in response to a scripted "printf ready" line, mirroring
 // pkg/asciicast's own session test helper.
 const sessionShellHelperEnv = "_ATMOS_STEP_SESSION_SHELL"
+
+// sessionShellDelayEnv simulates a subprocess scheduled after its PTY has
+// already echoed input, exposing waits that mistake input echo for a response.
+const sessionShellDelayEnv = "_ATMOS_STEP_SESSION_DELAY"
 
 // _atmosStepFakeRMGlobEnv names the env var carrying the glob pattern that the
 // "rm-glob-and-fail" _ATMOS_STEP_FAKE mode deletes before exiting non-zero.
@@ -96,6 +101,9 @@ func removeGlobMatches(pattern string) {
 // stdin/stdout: it recognizes a couple of scripted commands used by
 // runCastSessionMode tests and echoes deterministic output for each.
 func runStepSessionShellHelper() {
+	if os.Getenv(sessionShellDelayEnv) == "1" {
+		time.Sleep(3 * time.Second)
+	}
 	reader := bufio.NewReader(os.Stdin)
 	var line strings.Builder
 	for {

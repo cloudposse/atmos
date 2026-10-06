@@ -92,6 +92,15 @@ type Masker interface {
 	// Mask applies all registered masks to the input string.
 	Mask(input string) string
 
+	// HoldbackLen returns how many trailing bytes of s a streaming writer must withhold until more
+	// output arrives, so that emitting s[:len(s)-n] can never split a registered secret across two
+	// writes. The held suffix is the longest suffix of s that is a proper prefix of a registered
+	// literal (including whitespace-tolerant multiline and folded renderings); the cut point is also
+	// moved left so it never falls inside a complete literal occurrence. When lineBoundary is true
+	// and regex patterns are registered, the unfinished last line (after the last '\n' or '\r') is
+	// withheld too because a regex match can begin anywhere. It returns 0 when masking is disabled.
+	HoldbackLen(s string, lineBoundary bool) int
+
 	// ContainsSecret reports whether the input contains any registered secret literal
 	// (as a substring). Unlike Mask, this is NOT gated on the enabled flag: it is used
 	// to keep secrets off disk (e.g. out of Terraform varfiles) regardless of whether

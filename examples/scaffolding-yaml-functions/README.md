@@ -1,3 +1,11 @@
+---
+related_docs:
+  - label: Scaffold YAML functions
+    url: /cli/commands/scaffold/generate#loading-external-data-with-include-and-other-yaml-functions
+  - label: Include external data
+    url: /functions/yaml/include
+---
+
 # Example: Scaffold YAML Functions
 
 Load a shared reference table once from a local file via `!include`, instead of hand-duplicating
