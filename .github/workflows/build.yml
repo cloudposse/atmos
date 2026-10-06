@@ -92,6 +92,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: release
     if: ${{ github.event_name == 'release' }}
+    # The pushed image reference, for jobs that run inside it (plugin-version).
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+      tag: ${{ steps.build.outputs.tag }}
     # Job-level permissions REPLACE (not extend) the workflow-level block above,
     # so everything this job needs must be re-listed here: contents/packages for
     # the checkout+push, id-token for cosign keyless signing, security-events for
@@ -178,6 +182,73 @@ jobs:
           echo '```json' >> $GITHUB_STEP_SUMMARY
           docker inspect "$DOCKER_IMAGE:$DOCKER_TAG" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # Keeps the Claude Code plugin manifests (agent-skills/.claude-plugin/plugin.json
+  # and .claude-plugin/marketplace.json) in step with each stable release, so
+  # `claude plugin update` can see new skills (#2895). Runs inside the image the
+  # `docker` job just pushed: `atmos version track update` resolves the latest
+  # release (version.dependencies.atmos in atmos.yaml) and `apply` rewrites both
+  # manifests (version.files, json manager), then a PR carries the change.
+  #
+  # A sibling job rather than a workflow triggered by the image's
+  # `registry_package` event: the image is pushed with the default GITHUB_TOKEN,
+  # and GitHub does not start workflow runs from events that token causes, so
+  # that trigger would likely never fire. `needs: docker` also guarantees the
+  # image exists before `container:` pulls it.
+  plugin-version:
+    name: "Update Claude Code plugin version"
+    runs-on: ubuntu-latest
+    needs: docker
+    if: ${{ github.event.release.prerelease == false }}
+    # Same environment as the other release jobs that mint a token from the
+    # GitHub App (see release-major-tag.yml).
+    environment: release
+    # The default GITHUB_TOKEN only reads (release lookups); every write goes
+    # through the GitHub App token below.
+    permissions:
+      contents: read
+    container:
+      image: ${{ needs.docker.outputs.image }}:${{ needs.docker.outputs.tag }}
+    steps:
+      - name: "Checkout the default branch"
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: "Update plugin manifests from the resolved atmos version"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos version track update
+          atmos version track apply
+          echo "PLUGIN_VERSION=$(atmos version track get atmos)" >> "$GITHUB_ENV"
+
+      - name: "Generate a token"
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: github-app
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: "Create or update PR"
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.github-app.outputs.token }}
+          branch: "chore/update-plugin-version"
+          title: "chore: bump Claude Code plugin version to ${{ env.PLUGIN_VERSION }}"
+          delete-branch: true
+          sign-commits: true
+          add-paths: |
+            agent-skills/.claude-plugin/plugin.json
+            .claude-plugin/marketplace.json
+            versions.lock.yaml
+          commit-message: |
+            chore: bump Claude Code plugin version to ${{ env.PLUGIN_VERSION }}
+          base: ${{ github.event.repository.default_branch }}
+          labels: "no-release"
 
   # Rebuilds the release binaries from source at the published tag and
   # replaces GoReleaser's already-published assets with natively signed/SBOM'd
