@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/reflow/truncate"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -66,6 +67,16 @@ func clipToWidth(line string, width int) string {
 		return line
 	}
 	return truncate.StringWithTail(line, uint(effectiveWidth), ellipsis)
+}
+
+// formatProgressMessage renders Markdown labels but preserves already-rendered UI
+// components, such as ui.NewProgress bars. Parsing their ANSI sequences as Markdown
+// corrupts the escape codes and prints color parameters as visible text.
+func formatProgressMessage(message string) string {
+	if ansi.Strip(message) != message {
+		return message
+	}
+	return ui.FormatInline(message)
 }
 
 // newDotSpinner builds the shared Dot spinner used by every spinner variant here.
@@ -213,8 +224,8 @@ func (m spinnerModel) View() string {
 		return terminal.EscResetLine + ui.FormatSuccess(m.completedMsg) + newline
 	}
 	// Show progress message with spinner.
-	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
-	line := fmt.Sprintf("%s %s", m.spinner.View(), ui.FormatInline(m.progressMsg))
+	// Render Markdown labels while preserving pre-rendered UI components.
+	line := fmt.Sprintf("%s %s", m.spinner.View(), formatProgressMessage(m.progressMsg))
 	return terminal.EscResetLine + clipToWidth(line, m.width)
 }
 
@@ -381,8 +392,8 @@ func (m dynamicSpinnerModel) View() string {
 		return terminal.EscResetLine + ui.FormatSuccess(displayMsg) + newline
 	}
 	// Show progress message with spinner.
-	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
-	line := fmt.Sprintf("%s %s", m.spinner.View(), ui.FormatInline(m.progressMsg))
+	// Render Markdown labels while preserving pre-rendered UI components.
+	line := fmt.Sprintf("%s %s", m.spinner.View(), formatProgressMessage(m.progressMsg))
 	return terminal.EscResetLine + clipToWidth(line, m.width)
 }
 
@@ -593,7 +604,7 @@ func (m manualSpinnerModel) View() string {
 		}
 		return terminal.EscResetLine + ui.FormatError(m.finalMsg) + newline
 	}
-	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
-	line := fmt.Sprintf("%s %s", m.spinner.View(), ui.FormatInline(m.progressMsg))
+	// Render Markdown labels while preserving pre-rendered UI components.
+	line := fmt.Sprintf("%s %s", m.spinner.View(), formatProgressMessage(m.progressMsg))
 	return terminal.EscResetLine + clipToWidth(line, m.width)
 }
