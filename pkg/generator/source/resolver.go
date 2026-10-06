@@ -291,7 +291,7 @@ func resolveRemote(atmosConfig *schema.AtmosConfiguration, name, src string, tim
 	// update would then pin B and diff against the wrong three-way merge
 	// base. Pinning fetchSrc to the pre-resolved SHA makes the single fetch
 	// below and preResolvedRef always agree.
-	fetchSrc, preResolvedRef := pinSubdirGitSource(atmosConfig, src, timeout)
+	fetchSrc, preResolvedRef := pinSubdirGitSource(atmosConfig, name, src, timeout)
 
 	tempDir, err := os.MkdirTemp("", "atmos-scaffold-")
 	if err != nil {
@@ -384,7 +384,7 @@ func resolveFetchedGitRef(dir string) string {
 // back to resolveFetchedGitRef's post-fetch, best-effort resolution in that
 // case (e.g. a non-git source, or a subdir-less git source where tempDir's
 // own .git is directly inspectable).
-func pinSubdirGitSource(atmosConfig *schema.AtmosConfiguration, src string, timeout time.Duration) (string, string) {
+func pinSubdirGitSource(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) (string, string) {
 	defer perf.Track(nil, "source.pinSubdirGitSource")()
 
 	if !vendor.IsGitURI(src) {
@@ -394,7 +394,7 @@ func pinSubdirGitSource(atmosConfig *schema.AtmosConfiguration, src string, time
 	if subdir == "" {
 		return src, ""
 	}
-	ref := resolveSubdirGitRef(atmosConfig, src, timeout)
+	ref := resolveSubdirGitRef(atmosConfig, name, src, timeout)
 	if ref == "" {
 		return src, ""
 	}
@@ -407,7 +407,7 @@ func pinSubdirGitSource(atmosConfig *schema.AtmosConfiguration, src string, time
 // why this is needed. Returns "" if src has no //subdir at all (the caller's
 // direct resolveFetchedGitRef(tempDir) result already reflects reality in
 // that case) or if the re-fetch itself fails.
-func resolveSubdirGitRef(atmosConfig *schema.AtmosConfiguration, src string, timeout time.Duration) string {
+func resolveSubdirGitRef(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) string {
 	rootSrc, subdir := getter.SourceDirSubdir(src)
 	if subdir == "" {
 		return ""
@@ -419,7 +419,10 @@ func resolveSubdirGitRef(atmosConfig *schema.AtmosConfiguration, src string, tim
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
-	if err := fetchRemoteSource(atmosConfig, "gitref-probe", rootSrc, tempDir, timeout); err != nil {
+	// Use the same user-facing template name as the content fetch that
+	// follows (see resolveRemote) rather than an internal step identifier,
+	// since this probe fetch is also visible to the user via its spinner.
+	if err := fetchRemoteSource(atmosConfig, name, rootSrc, tempDir, timeout); err != nil {
 		return ""
 	}
 	return resolveFetchedGitRef(tempDir)

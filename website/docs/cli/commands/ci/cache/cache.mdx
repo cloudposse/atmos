@@ -3,7 +3,7 @@ title: atmos ci cache
 sidebar_label: cache
 sidebar_class_name: command
 id: cache
-description: Manage the CI build cache — restore and save the toolchain and other regenerable artifacts across CI jobs.
+description: "Reduce repeated downloads and setup work in CI by reusing installed tools and other cached artifacts between runs."
 ---
 import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
@@ -13,7 +13,8 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import File from '@site/src/components/File'
 
 <Intro>
-The `atmos ci cache` command group restores a well-known cache directory (the toolchain install path and anything else under the Atmos cache root) at the start of a CI step and saves it back at the end, using the active CI provider's cache store — the same store that `actions/cache` uses. This warm-starts the toolchain and other regenerable artifacts across CI jobs and workflow runs.
+Reduce repeated downloads and setup work in CI by reusing installed tools and other cached artifacts
+between runs. Atmos restores and saves the configured cache through the CI provider.
 </Intro>
 
 <Experimental/>
@@ -26,6 +27,8 @@ The `atmos ci cache` command group restores a well-known cache directory (the to
 </ActionCard>
 
 ## Lifecycle
+
+The cache includes the toolchain install path and other files under the Atmos cache root. Atmos uses the active CI provider's cache store—the same store used by `actions/cache` on GitHub Actions.
 
 The cache lifecycle can run **in a single Atmos invocation** (automatic restore-on-start and save-on-end) or be **spread across CI steps** with the explicit subcommands:
 
