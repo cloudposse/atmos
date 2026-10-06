@@ -11,6 +11,13 @@ on:
     paths:
       - "website/**"
 
+  # Build and run the website prebuild tests against the synthetic merge-queue commit,
+  # so a PR that is green alone can't break the production deploy once combined with
+  # another PR already in the queue. Note: `paths` filters do not apply to merge_group.
+  # The "Website Preview Deploy" workflow ignores these runs (no associated PR number).
+  merge_group:
+    types: [checks_requested]
+
 # These permissions are needed to interact with the GitHub's OIDC Token endpoint
 permissions:
   id-token: write
