@@ -77,6 +77,18 @@ The missing PR semver label was corrected to `patch`. Seven Windows jobs failed
 before startup because GitHub could not allocate hosted runners; these require
 a new run, not changes to the download implementation or runner configuration.
 
+### Visual download progress bar
+
+Interactive artifact downloads now include the shared, theme-aware progress bar
+beside the received bytes, total size, and percentage. The bar tracks bytes read,
+uses up to 24 terminal columns, and shrinks to fit the remaining line width.
+Very narrow terminals and unknown-size downloads retain text progress. Logs keep
+their throttled text messages, and silent installs remain silent.
+
+Regression tests cover empty, half-full, complete, and over-total bars, narrow
+terminals, unknown lengths, and non-interactive logs, including the spinner's
+inline Markdown rendering. Focused artifact tests pass with the race detector.
+
 ## Follow-up
 
 The regular toolchain asset installer uses a separate HTTP client with a

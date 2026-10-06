@@ -7,16 +7,55 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/github"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+func TestArtifactDownloadProgressBar(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		tty        bool
+		width      string
+		downloaded int64
+		total      int64
+		filled     int
+		empty      int
+	}{
+		{name: "start", tty: true, width: "120", total: 100, empty: 24},
+		{name: "half", tty: true, width: "120", downloaded: 50, total: 100, filled: 12, empty: 12},
+		{name: "complete", tty: true, width: "120", downloaded: 100, total: 100, filled: 24},
+		{name: "over total", tty: true, width: "120", downloaded: 110, total: 100, filled: 24},
+		{name: "narrow", tty: true, width: "50", downloaded: 50, total: 100, filled: 4, empty: 4},
+		{name: "too narrow", tty: true, width: "40", downloaded: 50, total: 100},
+		{name: "unknown total", tty: true, width: "120", downloaded: 50},
+		{name: "logs", width: "120", downloaded: 50, total: 100},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("COLUMNS", tt.width)
+			t.Setenv("ATMOS_CAST_RECORDING_WIDTH", "")
+			captureUITestOutput(t, func() {
+				viper.Set("force-tty", tt.tty)
+				message := formatArtifactDownloadProgress("artifact", tt.downloaded, tt.total)
+				// The spinner renders messages as inline Markdown; the bar must survive it.
+				text := ansi.Strip(ui.FormatInline(message))
+				assert.Equal(t, tt.filled, strings.Count(text, "█"))
+				assert.Equal(t, tt.empty, strings.Count(text, "░"))
+				assert.Contains(t, text, "Downloading artifact")
+				assert.NotContains(t, text, "\n")
+			})
+		})
+	}
+}
 
 func TestDownloadPRArtifact_Progress(t *testing.T) {
 	for _, tt := range []struct {

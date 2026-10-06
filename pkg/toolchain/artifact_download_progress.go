@@ -5,13 +5,22 @@ import (
 	"math"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
 	artifactCompletePercent  = 100
 	artifactProgressInterval = 100 * time.Millisecond
 	artifactLogInterval      = 5 * time.Second
+	artifactBarWidth         = 24
+	artifactMinBarWidth      = 6
+	// Reserve the spinner, two spaces, and the final column to prevent line wrapping.
+	artifactProgressMargin = 4
 )
 
 type artifactDownloadOptions struct {
@@ -24,7 +33,16 @@ func formatArtifactDownloadProgress(name string, downloaded, total int64) string
 		return fmt.Sprintf("Downloading %s (%s received)", name, formatBytes(downloaded))
 	}
 	percent := math.Min(artifactCompletePercent, float64(downloaded)/float64(total)*artifactCompletePercent)
-	return fmt.Sprintf("Downloading %s (%s / %s, %.0f%%)", name, formatBytes(downloaded), formatBytes(total), percent)
+	message := fmt.Sprintf("Downloading %s (%s / %s, %.0f%%)", name, formatBytes(downloaded), formatBytes(total), percent)
+	if !term.IsTTYSupportForStdout() {
+		return message
+	}
+	width := terminal.New().Width(terminal.Stderr) - ansi.StringWidth(message) - artifactProgressMargin
+	if width < artifactMinBarWidth {
+		return message
+	}
+	bar := ui.NewProgress(progress.WithWidth(min(artifactBarWidth, width)), progress.WithoutPercentage())
+	return message + " " + bar.ViewAs(percent/artifactCompletePercent)
 }
 
 // newArtifactProgressReporter limits terminal redraws and keeps non-TTY logs
