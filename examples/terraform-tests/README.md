@@ -4,11 +4,16 @@ tags: [Components]
 cast:
   file: /casts/examples/terraform-tests/stack-discovery.cast
   title: atmos terraform tests
+related_docs:
+  - label: "Run Terraform tests"
+    url: /cli/commands/terraform/test
+  - label: "Emulator component configuration"
+    url: /stacks/components/emulator
 ---
 
 ## Notes
 
-This example runs **Terraform tests** (`*.tftest.hcl`) against a **local AWS sandbox** — no AWS account or
+This example runs [**Terraform tests**](https://atmos.tools/cli/commands/terraform/test) (`*.tftest.hcl`) against a **local AWS sandbox** — no AWS account or
 credentials required. The `apply` run blocks in a Terraform test normally create real infrastructure, so
 they usually need a cloud account and spend. Here they run against an
 [Atmos emulator component](https://atmos.tools/cli/commands/emulator/usage): a stack-scoped container that

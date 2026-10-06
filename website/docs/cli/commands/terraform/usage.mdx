@@ -2,6 +2,7 @@
 title: atmos terraform
 sidebar_label: terraform
 sidebar_class_name: command
+description: "Deploy infrastructure with Terraform or OpenTofu using configuration shared across your Atmos stacks."
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
@@ -11,7 +12,9 @@ import ActionCard from '@site/src/components/ActionCard'
 import File from '@site/src/components/File'
 
 <Intro>
-Use these subcommands to interact with Terraform and OpenTofu.
+Deploy infrastructure with Terraform or OpenTofu using configuration shared across your Atmos
+stacks. Atmos resolves each component's variables and backend settings, so you can reuse
+infrastructure code across environments and run it consistently from your terminal or CI.
 </Intro>
 
 <CastPlayer title="atmos terraform --help" src="/casts/screengrabs/atmos-terraform--help.cast" static chrome />

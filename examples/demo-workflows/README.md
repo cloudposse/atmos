@@ -4,6 +4,13 @@ tags: [Automation]
 cast:
   file: /casts/examples/demo-workflows/deploy.cast
   title: atmos workflows
+related_docs:
+  - label: "Run workflows"
+    url: /cli/commands/workflow
+  - label: "Workflow configuration"
+    url: /workflows
+  - label: "CLI Configuration"
+    url: /cli/configuration/workflows
 ---
 
 # Example: Demo Workflows
@@ -14,7 +21,7 @@ Learn more about [Workflows](https://atmos.tools/workflows).
 
 ## What You'll See
 
-- [Workflow definitions](https://atmos.tools/workflows/workflow-manifest) in stack manifests
+- [Workflow definitions](https://atmos.tools/workflows/workflow) in stack manifests
 - Chaining multiple `atmos terraform` commands
 - Parameterized workflows with arguments
 

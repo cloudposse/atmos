@@ -1,0 +1,35 @@
+---
+title: Migrate from Legacy Actions
+description: Replace legacy Terraform GitHub Actions with Atmos native CI commands.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Move Terraform CI features from wrapper actions into Atmos itself. Native commands publish job summaries, outputs, checks, and pull request comments, and can store and verify planfiles between workflow stages.
+</Intro>
+
+## Migration Steps
+
+1. [Set up Atmos](/integrations/github-actions/setup-atmos) in the workflow and pin its version.
+2. Enable the features you need in [CI configuration](/cli/configuration/ci).
+3. Configure [authentication and permissions](/integrations/github-actions/authentication). Review [planfile storage](/ci/planfile-storage) before replacing a workflow that applies stored plans.
+4. Replace wrapper actions with the native equivalents below. Use the [GitHub Actions guides](/integrations/github-actions) for complete workflow examples.
+5. Run a pull request plan and verify its outputs, comments, checks, and stored plan before enabling deployment.
+
+## Native CI Equivalents
+
+| Capability | Legacy action | Native CI replacement |
+| --- | --- | --- |
+| Plan with job summary | `cloudposse/github-action-atmos-terraform-plan` | `atmos terraform plan` (writes to `$GITHUB_STEP_SUMMARY`) |
+| Apply stored planfile | `cloudposse/github-action-atmos-terraform-apply` | `atmos terraform apply` / `atmos terraform deploy` |
+| Affected stacks matrix | `cloudposse/github-action-atmos-affected-stacks` | `atmos describe affected --format=matrix` |
+| Drift detection | `cloudposse/github-action-atmos-terraform-drift-detection` | Scheduled workflow running `atmos terraform plan` |
+| Drift remediation | `cloudposse/github-action-atmos-terraform-drift-remediation` | `atmos terraform deploy` triggered from an issue |
+| Update vendored components | `cloudposse/github-action-atmos-component-updater` | [`atmos vendor update --pull-request`](/cli/commands/vendor/vendor-update) |
+| Planfile storage | `cloudposse/github-action-terraform-plan-storage` (S3/Azure Blob + DynamoDB/CosmosDB) | Built-in [planfile storage](/ci/planfile-storage) (S3, GitHub Artifacts, or local) |
+| Read a setting | `cloudposse/github-action-atmos-get-setting` | `atmos list settings --query` / `atmos describe component --query` |
+| Select components by query | `cloudposse/github-action-atmos-terraform-select-components` | `atmos describe affected --format=matrix` / `atmos list components --query` |
+| Trigger Spacelift stacks | `cloudposse/github-action-atmos-affected-trigger-spacelift` | Native CI (the [Spacelift integration](/deprecated/spacelift) itself is deprecated) |
+
+The [deprecated action documentation](/deprecated/github-actions) remains available for maintaining existing workflows during migration.

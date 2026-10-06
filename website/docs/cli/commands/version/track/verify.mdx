@@ -3,10 +3,15 @@ title: atmos version track verify
 sidebar_position: 120
 sidebar_label: verify
 sidebar_class_name: command
-description: Verify that a version track is locked, current, and applied.
+description: "Check that dependency locks are current under your update policies and that managed project files match those locks."
 ---
+import Intro from '@site/src/components/Intro'
 
-Fail when any configured entry is unlocked, has a policy-eligible update available, or when version-managed files differ from the lock. `verify` is intended as the CI gate for managed versions.
+<Intro>
+Check that dependency locks are current under your update policies and that managed project files
+match those locks. Use this command as a CI gate to catch unlocked dependencies, eligible updates,
+or unapplied version changes.
+</Intro>
 
 Both conditions must hold for `verify` to pass:
 

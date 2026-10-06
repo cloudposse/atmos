@@ -4,15 +4,20 @@ tags: [Automation]
 cast:
   file: /casts/examples/generate-files/component-files.cast
   title: atmos generate files
+related_docs:
+  - label: "Generate Terraform files"
+    url: /cli/commands/terraform/generate/files
+  - label: "File generation configuration"
+    url: /stacks/generate
 ---
 
 # Generate Files
 
-This example demonstrates how to use `atmos terraform generate files` to generate an entire Terraform component from stack configuration.
+This example demonstrates how to use [`atmos terraform generate files`](https://atmos.tools/cli/commands/terraform/generate/files) to generate an entire Terraform component from stack configuration.
 
 ## Overview
 
-The `generate` section in component configuration defines files that Atmos will create. This example generates a complete Terraform component including:
+The [`generate` section](https://atmos.tools/stacks/generate) in component configuration defines files that Atmos will create. This example generates a complete Terraform component including:
 
 - `variables.tf` - Variable definitions
 - `outputs.tf` - Output definitions

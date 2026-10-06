@@ -3,10 +3,16 @@ title: atmos version track lock
 sidebar_position: 70
 sidebar_label: lock
 sidebar_class_name: command
-description: Resolve desired versions and write the lock file.
+description: "Resolve your declared dependency versions and record the results in versions.lock.yaml."
 ---
+import Intro from '@site/src/components/Intro'
 
-Resolve each entry's `desired` expression to a concrete version and write `versions.lock.yaml`. `lock` resolves desired versions as-is; use [`update`](/cli/commands/version/track/update) to advance existing locks within policy.
+<Intro>
+Resolve your declared dependency versions and record the results in `versions.lock.yaml`. Use this
+command to establish concrete version pins before applying them to project files.
+</Intro>
+
+`lock` resolves each entry's `desired` expression as-is; use [`update`](/cli/commands/version/track/update) to advance existing locks within policy.
 
 When an entry's effective policy sets `pin: digest` or `pin: sha`, locking also resolves the immutable identifier: a git commit SHA for GitHub datasources or a `sha256:` manifest digest for OCI registries.
 
