@@ -19,27 +19,30 @@ type overrideRule struct {
 	Repo        string
 	RefPrefix   string
 	LicensePath string
+	// VersionModule overrides the version lookup for package-level license entries.
+	VersionModule string
 }
 
 var repoOverrides = []overrideRule{
-	{"al.essio.dev/pkg/shellescape", "github.com/alessio/shellescape", "", "LICENSE"},
-	{"dario.cat/mergo", "github.com/imdario/mergo", "", "LICENSE"},
-	{"inet.af/netaddr", "github.com/inetaf/netaddr", "", "LICENSE"},
-	{"go4.org/intern", "github.com/go4org/intern", "", "LICENSE"},
-	{"go4.org/netipx", "github.com/go4org/netipx", "", "LICENSE"},
-	{"go4.org/unsafe/assume-no-moving-gc", "github.com/go4org/unsafe-assume-no-moving-gc", "", "LICENSE"},
-	{"cuelang.org/go", "github.com/cue-lang/cue", "", "LICENSE"},
-	{"gopkg.in/ini.v1", "github.com/go-ini/ini", "", "LICENSE"},
-	{"gopkg.in/evanphx/json-patch.v4", "github.com/evanphx/json-patch", "", "LICENSE"},
-	{"gopkg.in/inf.v0", "github.com/go-inf/inf", "", "LICENSE"},
-	{"gopkg.in/op/go-logging.v1", "github.com/op/go-logging", "", "LICENSE"},
-	{"gopkg.in/warnings.v0", "github.com/go-warnings/warnings", "", "LICENSE"},
-	{"gopkg.in/yaml.v2", "github.com/go-yaml/yaml", "", "LICENSE"},
-	{"gopkg.in/yaml.v3", "github.com/go-yaml/yaml", "", "LICENSE"},
-	{"github.com/evanphx/json-patch/v5", "github.com/evanphx/json-patch", "", "v5/LICENSE"},
-	{"github.com/googleapis/gax-go/v2", "github.com/googleapis/gax-go", "", "v2/LICENSE"},
-	{"github.com/blang/semver/v4", "github.com/blang/semver", "", "v4/LICENSE"},
-	{"github.com/aws/aws-sdk-go-v2/internal/endpoints/v2", "github.com/aws/aws-sdk-go-v2", "internal/endpoints", "internal/endpoints/v2/LICENSE.txt"},
+	{"al.essio.dev/pkg/shellescape", "github.com/alessio/shellescape", "", "LICENSE", ""},
+	{"dario.cat/mergo", "github.com/imdario/mergo", "", "LICENSE", ""},
+	{"inet.af/netaddr", "github.com/inetaf/netaddr", "", "LICENSE", ""},
+	{"go4.org/intern", "github.com/go4org/intern", "", "LICENSE", ""},
+	{"go4.org/netipx", "github.com/go4org/netipx", "", "LICENSE", ""},
+	{"go4.org/unsafe/assume-no-moving-gc", "github.com/go4org/unsafe-assume-no-moving-gc", "", "LICENSE", ""},
+	{"cuelang.org/go", "github.com/cue-lang/cue", "", "LICENSE", ""},
+	{"gopkg.in/ini.v1", "github.com/go-ini/ini", "", "LICENSE", ""},
+	{"gopkg.in/evanphx/json-patch.v4", "github.com/evanphx/json-patch", "", "LICENSE", ""},
+	{"gopkg.in/inf.v0", "github.com/go-inf/inf", "", "LICENSE", ""},
+	{"gopkg.in/op/go-logging.v1", "github.com/op/go-logging", "", "LICENSE", ""},
+	{"gopkg.in/warnings.v0", "github.com/go-warnings/warnings", "", "LICENSE", ""},
+	{"gopkg.in/yaml.v2", "github.com/go-yaml/yaml", "", "LICENSE", ""},
+	{"gopkg.in/yaml.v3", "github.com/go-yaml/yaml", "", "LICENSE", ""},
+	{"github.com/evanphx/json-patch/v5", "github.com/evanphx/json-patch", "", "v5/LICENSE", ""},
+	{"github.com/googleapis/gax-go/v2", "github.com/googleapis/gax-go", "", "v2/LICENSE", ""},
+	{"github.com/blang/semver/v4", "github.com/blang/semver", "", "v4/LICENSE", ""},
+	{"github.com/aws/aws-sdk-go-v2/internal/endpoints/v2", "github.com/aws/aws-sdk-go-v2", "internal/endpoints", "internal/endpoints/v2/LICENSE.txt", ""},
+	{"sigs.k8s.io/controller-runtime/pkg", "github.com/kubernetes-sigs/controller-runtime", "", "LICENSE", "sigs.k8s.io/controller-runtime"},
 }
 
 // pseudoVersionRe matches a Go pseudo-version's trailing 12-hex-char commit
@@ -72,7 +75,11 @@ func applyOverrides(entries []LicenseEntry, moduleVersion func(module string) (s
 		if !ok {
 			continue
 		}
-		version, err := moduleVersion(rule.Module)
+		versionModule := rule.Module
+		if rule.VersionModule != "" {
+			versionModule = rule.VersionModule
+		}
+		version, err := moduleVersion(versionModule)
 		if err != nil || version == "" {
 			continue
 		}
