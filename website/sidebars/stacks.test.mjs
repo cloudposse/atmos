@@ -142,6 +142,8 @@ test("shared fields retain canonical pages and use references for repeated leave
   );
   for (const id of ids) assert.ok(docs.has(id), `Unknown document ${id}`);
   for (const id of docs.keys()) {
+    // The docs-only CloudFormation preview becomes navigable with its implementation.
+    if (id === "stacks/components/aws-cloudformation" && !at("components", "aws/cloudformation")) continue;
     if (!["stacks/share-data", "stacks/remote-state"].includes(id))
       assert.ok(ids.has(id), `Unreachable reference ${id}`);
   }
