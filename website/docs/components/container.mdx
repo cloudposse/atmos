@@ -3,20 +3,32 @@ title: Using Containers
 sidebar_position: 7
 sidebar_label: Container
 id: container
-description: Run persistent, stack-scoped container services with the same stack-based configuration used for Terraform and Helmfile. One component is one container, operated by labels.
+description: Run local development services with shared Atmos stack configuration, inherited defaults, secrets, and compositions.
+sidebar_group: component-library
+component_type: container
+component_implementation: Container images and services
 ---
 import Intro from '@site/src/components/Intro'
 import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
-Atmos natively supports **container components** — stack-scoped, persistent containers. One component
-is one service. Atmos owns the image artifact (build/push/pull) and an optional long-running named
-container lifecycle (`up`/`ps`/`logs`/`exec`/`restart`/`stop`/`rm`/`down`), discovered by labels
-derived from the canonical component instance address — not from local state files.
+Run your application's API, database, and background workers locally using the same
+[stack configuration](/stacks) that manages the rest of your infrastructure. Container
+components bring a Docker Compose-style development environment into Atmos, so your
+team can share service definitions, inherit defaults, and inject
+[secrets](/cli/configuration/secrets) into each service.
+
+Group services into a [composition](#compositions) to start, inspect, and stop an
+application together. Containers can also share a stack network with
+[emulators](/components/emulator), letting you develop and test against local cloud
+services before deploying to a real environment.
 </Intro>
 
+Each container component defines one service, including its image, optional build configuration,
+and runtime settings.
+
 For the complete command reference, see the [`atmos container`](/cli/commands/container/usage)
-documentation. To operate a group of fulfilled services together, see
+documentation. To manage several services together, see
 [`atmos composition`](/cli/commands/composition/usage).
 
 This is different from the ephemeral [`type: container` workflow step](/workflows), which is
