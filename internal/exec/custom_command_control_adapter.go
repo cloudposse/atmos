@@ -75,6 +75,8 @@ func newCustomCommandControlExecutor(control *CustomCommandControlContext) *work
 		// Custom commands have no dry-run mode; children always execute.
 		DryRun:                 false,
 		ScriptComponent:        stepPkg.ScriptComponentRef(vars),
+		ScriptFlags:            vars.ScriptFlags(),
+		ScriptArguments:        vars.ScriptArguments(),
 		ResolveComponent:       stepPkg.ScriptComponentResolver(vars),
 		ScriptProcessOverrides: commandEnvOverrides(control),
 		WorkflowDefinition:     workflowDefinition,

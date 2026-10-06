@@ -28,7 +28,7 @@ commands:
       - type: cast
         name: script
         working_directory: ../../.context/cast-fixtures/starlark-script
-        title: One executable file, no extra interpreter
+        title: Custom CLI app with styled Atmos output
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
@@ -41,7 +41,7 @@ commands:
           cast: ../../website/static/casts/examples/starlark-script/summarize.cast
         steps:
           - type: simulate
-            text: "# Atmos is the interpreter; JSON and file access are built in"
+            text: "# A custom CLI app: Atmos supplies the interpreter and styled output"
           - type: simulate
             text: cat summarize.star
           - type: shell
@@ -57,7 +57,7 @@ commands:
       - type: cast
         name: commands
         working_directory: ../../.context/cast-fixtures/starlark-commands
-        title: A custom command with flags and Starlark logic
+        title: Custom command defined in atmos.yaml
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
@@ -70,7 +70,7 @@ commands:
           cast: ../../website/static/casts/examples/starlark-commands/capacity.cast
         steps:
           - type: simulate
-            text: "# YAML defines the CLI; Starlark does the calculation"
+            text: "# A custom command: atmos.yaml registers an Atmos subcommand"
           - type: simulate
             text: cat atmos.yaml
           - type: shell

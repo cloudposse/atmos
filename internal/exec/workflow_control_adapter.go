@@ -30,6 +30,8 @@ func executeWorkflowControlStep(ctx context.Context, control *workflowControlCon
 		InstallTools:        stepPkg.ScriptToolInstaller(&control.atmosConfig),
 		DryRun:              control.dryRun,
 		ScriptComponent:     stepPkg.ScriptComponentRef(vars),
+		ScriptFlags:         vars.ScriptFlags(),
+		ScriptArguments:     vars.ScriptArguments(),
 		ResolveComponent:    stepPkg.ScriptComponentResolver(vars),
 		WorkflowDefinition:  control.workflowDefinition,
 		BasePath:            control.atmosConfig.BasePath,

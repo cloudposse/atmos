@@ -1,0 +1,14 @@
+**Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
+
+# Workflow Error
+
+**Error:** workflow step execution failed: max attempts (1) exceeded, last error: starlark execution failed: s:2:1:
+cannot reassign global x declared at s:1:1
+
+The script step s (interpreter: starlark) failed to execute.
+
+💡 Starlark globals are assigned once. Use a conditional expression (x = a if cond else b) or compute the value in a function (def main(): ... return v then output = main()).
+
+💡 To resume the workflow from this step, run:
+
+ atmos workflow dialect-reassign -f starlark --from-step 's'

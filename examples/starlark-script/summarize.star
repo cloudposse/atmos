@@ -11,8 +11,8 @@ def total_replicas(services):
 
 services = json.decode(fs.read_file(ctx.args[0]))
 for service in services:
-    print("{}: {} replicas".format(service["name"], service["replicas"]))
-print("Total: {} services, {} replicas".format(
+    ui.info("{}: {} replicas".format(service["name"], service["replicas"]))
+ui.success("Total: {} services, {} replicas".format(
     len(services),
     total_replicas(services),
 ))

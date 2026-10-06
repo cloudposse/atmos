@@ -21,6 +21,7 @@ Atmos can print a one-line resource-usage summary — elapsed time, CPU time, an
 - Shown by default after `terraform plan`, `apply`, and `deploy`
 - A final aggregate line summarizes every subprocess spawned during the whole run (e.g. every component plan in a multi-component `--affected` run)
 - Disable the local display with a single setting
+- Standalone Starlark scripts only show the summary when you opt in with `enabled: true`
 - Also appears in the Native CI job summary — a quick way to see what a component actually costs before sizing a runner
 - Never affects the separate Atmos Pro command-execution metadata upload
 </KeyPoints>
@@ -55,8 +56,10 @@ settings:
 
     "Peak memory" here means the largest single process's peak RSS observed during the run (Terraform, OpenTofu, or a provider plugin) — not a simultaneous sum across every concurrently running process. See the note below for what that means when sizing a runner.
 
+    Standalone Starlark scripts run in interpreter mode (`atmos ./deploy.star` or a `#!/usr/bin/env atmos` shebang) are the exception. A script is your own command-line tool, so Atmos does not print the final summary after it runs unless you explicitly set `settings.metrics.enabled: true`. Leaving the setting unset or setting it to `false` keeps the script's output free of Atmos metrics.
+
     - **Type:** `boolean`
-    - **Default:** `true`
+    - **Default:** `true` (`false` for standalone Starlark scripts)
   </dd>
 </dl>
 

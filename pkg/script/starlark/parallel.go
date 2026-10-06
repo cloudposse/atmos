@@ -257,11 +257,15 @@ func taskError(parent, ctx context.Context, t *task, outcome taskOutcome, projec
 	if outcome.last == nil || !errors.Is(outcome.err, outcome.last) {
 		return failWith(errUtils.ErrStarlark, outcome.err, "task %q: %s", t.name, displayPaths(projectRoot, outcome.err.Error()))
 	}
-	message := fmt.Sprintf("task %q: %s", t.name, displayPaths(projectRoot, evalMessage(outcome.last)))
+	message := fmt.Sprintf("task %q: %s", t.name, displayPaths(projectRoot, evalSummary(outcome.last)))
 	if outcome.attempts > 1 {
 		message += fmt.Sprintf(" (after %d attempts)", outcome.attempts)
 	}
-	failed := failWith(errUtils.ErrStarlark, outcome.last, "%s", message)
+	kind := errUtils.ErrStarlark
+	if isRecursionError(outcome.last) {
+		kind = errUtils.ErrStarlarkRecursionLimit
+	}
+	failed := failWith(kind, outcome.last, "%s", message)
 	return withDetail(failed, taskDetail(t, outcome.last, projectRoot))
 }
 

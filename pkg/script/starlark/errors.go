@@ -144,15 +144,29 @@ func fenced(text string) string {
 // deadline errors stay reachable through errors.Is. Paths under projectRoot are shown relative
 // to it (display only).
 func scriptError(ctx context.Context, err error, projectRoot string) error {
-	builder := errUtils.Build(errUtils.ErrStarlark).WithCause(displayError(projectRoot, withContext(ctx, err)))
+	cause := withContext(ctx, err)
+	recursion := isRecursionError(err)
+	if recursion && !errors.Is(err, errUtils.ErrStarlarkRecursionLimit) {
+		cause = recursionFailure(cause)
+	}
+	builder := errUtils.Build(errUtils.ErrStarlark).WithCause(displayError(projectRoot, cause))
 	var eval *starlark.EvalError
 	if errors.As(err, &eval) {
-		builder.WithExplanation(fenced(displayPaths(projectRoot, eval.Backtrace())))
+		builder.WithExplanation(fenced(backtraceText(eval, projectRoot)))
+	}
+	if recursion {
+		builder.WithHint(recursionHint)
 	}
 	if strings.Contains(err.Error(), reassignGlobalMessage) {
 		builder.WithHint(reassignGlobalHint)
 	}
 	return builder.Err()
+}
+
+// backtraceText renders the backtrace of an evaluation error for display: project-relative paths,
+// and long runs of repeated frames collapsed into a single marker line.
+func backtraceText(eval *starlark.EvalError, projectRoot string) string {
+	return collapseBacktrace(displayPaths(projectRoot, eval.Backtrace()))
 }
 
 // pathBoundary matches the character before a path in an error message or backtrace, so a root is
@@ -219,7 +233,7 @@ func evalMessage(err error) string {
 func evalDetail(err error, projectRoot string) string {
 	var eval *starlark.EvalError
 	if errors.As(err, &eval) {
-		return fenced(displayPaths(projectRoot, eval.Backtrace()))
+		return fenced(backtraceText(eval, projectRoot))
 	}
 	return ""
 }

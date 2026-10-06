@@ -1,0 +1,14 @@
+# Base catalog: a hook whose Starlark script comes from a local !include. Atmos records
+# script_source and script_source_sha256 next to the script.
+components:
+  terraform:
+    mock:
+      hooks:
+        starlark-inherit:
+          kind: step
+          type: script
+          events: [before.terraform.plan]
+          on_failure: fail
+          with:
+            interpreter: starlark
+            script: !include scripts/hooks/check.star

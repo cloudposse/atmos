@@ -297,6 +297,22 @@ module.exports = {
         referenceGroup('Automation'),
         {
             type: 'category',
+            label: 'Atmos Automation Language',
+            className: 'sidebar-title',
+            collapsible: true,
+            collapsed: true,
+            link: {type: 'doc', id: 'automation/automation'},
+            items: [
+                {type: 'doc', id: 'automation/language'},
+                {type: 'doc', id: 'automation/standalone-cli-apps'},
+                {type: 'doc', id: 'automation/custom-commands'},
+                {type: 'doc', id: 'automation/workflows'},
+                {type: 'doc', id: 'automation/lifecycle-hooks'},
+                {type: 'doc', id: 'automation/testing'},
+            ]
+        },
+        {
+            type: 'category',
             label: 'Workflows',
             className: 'sidebar-title',
             collapsible: true,

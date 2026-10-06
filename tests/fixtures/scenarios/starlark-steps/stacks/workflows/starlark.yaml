@@ -1,0 +1,236 @@
+workflows:
+  basic:
+    description: Env scoping and a dict output passed to the next step.
+    env:
+      WF_LEVEL: from-workflow
+    steps:
+      - name: calc
+        type: script
+        interpreter: starlark
+        env:
+          STEP_INPUT: from-step
+        script: |
+          print("env keys: %s" % sorted(env.keys()))
+          output = {"declared": env["STEP_INPUT"], "answer": 42}
+      - name: show
+        type: script
+        interpreter: starlark
+        env:
+          PREV: '{{ .steps.calc.value }}'
+        script: |
+          print("next step sees: " + env["PREV"])
+          print("decoded answer: %d" % json.decode(env["PREV"])["answer"])
+
+  output-string:
+    description: A string output is raw, not JSON-quoted.
+    steps:
+      - name: s
+        type: script
+        interpreter: starlark
+        script: |
+          output = "abc"
+      - name: show
+        type: script
+        interpreter: starlark
+        env:
+          PREV: '{{ .steps.s.value }}'
+        script: |
+          print("[" + env["PREV"] + "]")
+
+  dryrun-parallel:
+    description: A Starlark child of a parallel step must not run under --dry-run.
+    steps:
+      - name: group
+        type: parallel
+        steps:
+          - name: child
+            type: script
+            interpreter: starlark
+            script: |
+              fail("the child ran, but it must be skipped under --dry-run")
+
+  template-parallel:
+    description: Templates in script are rendered for sequential steps and parallel children.
+    steps:
+      - name: seq
+        type: script
+        interpreter: starlark
+        script: |
+          print("seq: {{ printf "rendered" }}")
+      - name: group
+        type: parallel
+        steps:
+          - name: child
+            type: script
+            interpreter: starlark
+            script: |
+              print("child: {{ printf "rendered" }}")
+
+  dialect-allowed:
+    description: Top-level for and if are allowed.
+    steps:
+      - name: s
+        type: script
+        interpreter: starlark
+        env:
+          MODE: fast
+        script: |
+          for region in ["us-east-1", "us-west-2"]:
+              print("region " + region)
+          if env["MODE"] == "fast":
+              print("mode is fast")
+
+  dialect-reassign:
+    description: Reassigning a global fails with a hint.
+    steps:
+      - name: s
+        type: script
+        interpreter: starlark
+        script: |
+          x = 1
+          x = 2
+          print(x)
+
+  components-get:
+    description: components.get in a sequential step and in a parallel child.
+    steps:
+      - name: get
+        type: script
+        interpreter: starlark
+        script: |
+          c = components.get("api", "dev", "app")
+          print("seq handle: %s" % c)
+          print("seq vars: " + json.encode(c.vars))
+      - name: group
+        type: parallel
+        steps:
+          - name: child
+            type: script
+            interpreter: starlark
+            script: |
+              c = components.get(name = "api", stack = "dev", type = "app")
+              print("child vars: " + json.encode(c.vars))
+              print("child settings: " + json.encode(c.settings))
+
+  retry-attempts:
+    description: A direct script step retry re-runs the script; each attempt prints a line.
+    steps:
+      - name: flaky
+        type: script
+        interpreter: starlark
+        retry:
+          max_attempts: 3
+          initial_delay: 10ms
+        script: |
+          print("attempt output")
+          fail("always fails")
+
+  exec-missing:
+    description: A failing exec.run is a single-line error.
+    steps:
+      - name: s
+        type: script
+        interpreter: starlark
+        script: |
+          exec.run(["definitely-not-a-real-binary-xyz", "--version"])
+
+  runtime-error:
+    description: A runtime error carries a traceback.
+    steps:
+      - name: my-step
+        type: script
+        interpreter: starlark
+        script: |
+          def inner(d):
+              return d["missing"]
+          def outer():
+              return inner({})
+          outer()
+
+  interpreter-case:
+    description: interpreter is case-sensitive and the error suggests the right spelling.
+    steps:
+      - name: s
+        type: script
+        interpreter: Starlark
+        script: |
+          print("hi")
+
+  wd-missing:
+    description: A missing working_directory fails before the script runs.
+    steps:
+      - name: s
+        type: script
+        interpreter: starlark
+        working_directory: wd/does-not-exist
+        script: |
+          print("must not run")
+
+  include-bare:
+    description: A bare !include path resolves against the project base path, and load() inside the included file resolves against that file.
+    steps:
+      - name: main
+        type: script
+        interpreter: starlark
+        script: !include scripts/main.star
+
+  include-dot:
+    description: A ./ !include path resolves against this manifest, and load() inside the included file resolves against that file.
+    steps:
+      - name: local
+        type: script
+        interpreter: starlark
+        script: !include ./local.star
+
+  include-parallel:
+    description: A child of a parallel step keeps the file its included script came from.
+    steps:
+      - name: group
+        type: parallel
+        steps:
+          - name: child
+            type: script
+            interpreter: starlark
+            script: !include scripts/main.star
+
+  include-traceback:
+    description: A runtime error in an included file names that file in the traceback.
+    steps:
+      - name: boom
+        type: script
+        interpreter: starlark
+        script: !include scripts/boom.star
+
+  inline-load:
+    description: load() in an inline script resolves against the step working_directory.
+    steps:
+      - name: inline
+        type: script
+        interpreter: starlark
+        working_directory: wd/sub
+        script: |
+          load("lib/mod.star", "where")
+          print("inline load: " + where())
+
+  timeout-task:
+    description: A pure Starlark task that never returns is stopped by its timeout.
+    steps:
+      - name: s
+        type: script
+        interpreter: starlark
+        script: |
+          def spin():
+              while True:
+                  pass
+          steps.parallel(tasks=[steps.task(name="spin", function=spin, timeout="200ms")])
+
+  log-levels:
+    description: log.* writes diagnostics to the Atmos logger, never to stdout or the step value.
+    steps:
+      - name: diag
+        type: script
+        interpreter: starlark
+        script: |
+          log.debug("log-debug-marker", component="api")
+          log.info("log-info-marker", attempts=2)
+          print("data-marker")

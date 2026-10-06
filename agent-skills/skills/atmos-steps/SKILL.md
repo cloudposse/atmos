@@ -92,8 +92,8 @@ Important shared fields:
 
 ## Step Types
 
-Use [atmos.tools/workflows/steps/type](https://atmos.tools/workflows/steps/type) and its
-type-specific subpages (e.g. `atmos.tools/workflows/steps/type/shell`) as the canonical
+Use [atmos.tools/steps/type](https://atmos.tools/steps/type) and its
+type-specific subpages (e.g. `atmos.tools/steps/type/shell`) as the canonical
 reference. Current canonical step types include:
 
 - Command and integration: `atmos`, `shell`, `script`, `exec`, `container`,
@@ -199,6 +199,19 @@ steps:
 
 Do not put `command` on a `script` step. The schema requires `interpreter` and
 `script`.
+
+With `interpreter: starlark`, the script runs inside Atmos (no external interpreter) and
+can call Atmos commands directly. Load `atmos-starlark` for the API. Step-specific rules:
+
+- The `script` body (inline or `!include`d) is rendered as a Go template first. A literal
+  `{{` in Starlark source fails; read inputs from `ctx.flags`, `ctx.arguments`, and `env`
+  instead of templating values into source.
+- Script steps default to raw output with no `[step]` or `completed` labels, like shell
+  steps. Set `show: {labels: true}` to restore labels. Valid `output:` modes are `raw`,
+  `log`, `viewport`, and `none`; `capture` is not a mode.
+- `timeout:` on a script step is not enforced. Use `steps.task(..., timeout="30s")` inside
+  the script for time limits.
+- An enabled `container` fails validation for embedded Starlark; set `container: false`.
 
 ## Workdir Steps
 

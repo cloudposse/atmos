@@ -1,0 +1,18 @@
+# Inherits the base hook and overrides only its script with an inline body. Stack inheritance
+# deep-merges the hook, so the base's script_source and script_source_sha256 survive in the merged
+# result, but they describe a script that is no longer there and must not anchor load().
+import:
+  - catalog/hook-base
+
+vars:
+  stage: inherit
+
+components:
+  terraform:
+    mock:
+      hooks:
+        starlark-inherit:
+          with:
+            script: |
+              load("helpers.star", "greet")
+              ui.info("hook inherited override: " + greet("inline"))
