@@ -50,6 +50,7 @@ func TestProtectSourceThroughYAML(t *testing.T) {
 func TestProtectLeavesOtherTagsAndOrdinaryText(t *testing.T) {
 	for _, input := range []string{
 		"value: !literal '!starlark return 1'\n",
+		"value: !literal\n  nested: !starlark |\n    return \"{{ literal }}\"\n",
 		"value: this mentions !starlark in prose\n",
 		"value: no tags\n",
 	} {
