@@ -9,13 +9,22 @@
 }
 
 .navigator :global(.reference-group-label) {
-  margin: 1.25rem 0.5rem 0.5rem;
+  margin: 1.5rem 0.5rem 0.25rem;
   color: var(--navigation-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+/* Keep section titles close to their links; separate groups above the title. */
+.navigator [data-sections] > :global(.menu__list) > :global(li) {
+  margin-top: 0;
+}
+
+.navigator [data-sections] > :global(.menu__list) > :global(li:first-child .reference-group-label) {
+  margin-top: 0.5rem;
 }
 
 /* Let the sticky toolbar cover the scrollport's top edge. Menu padding would
@@ -163,10 +172,9 @@
   width: 100%;
   border: 0;
   background: transparent;
-  font: inherit;
+  font-family: inherit;
   text-align: left;
   cursor: pointer;
-  padding-left: var(--ifm-menu-link-padding-horizontal) !important;
 }
 
 .sectionChevron {
@@ -182,12 +190,13 @@
 }
 
 .navigator :global(.menu__link) {
-  min-height: 36px;
-  padding: 0.45rem 0.75rem;
+  min-height: 32px;
+  padding: 0.25rem 0.5rem;
+  line-height: 1.4;
 }
 
 .navigator :global(.menu__list-item > .menu__link:not(.menu__link--sublist-caret)) {
-  padding-left: 0.75rem;
+  padding-left: 0.5rem;
 }
 
 .navigator :global(.menu__link--active) {
@@ -251,5 +260,11 @@
 @media (prefers-reduced-motion: reduce) {
   .navigator :global(.menu__list) {
     transition: none !important;
+  }
+}
+
+@media (max-width: 996px) {
+  .navigator :global(.menu__link) {
+    min-height: 36px;
   }
 }
