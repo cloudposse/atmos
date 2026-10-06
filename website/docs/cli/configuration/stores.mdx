@@ -220,7 +220,7 @@ stores:
 ```
 </File>
 
-Use `tags` and `expires` when an Azure Policy requires every Key Vault secret to carry tags or an expiration date; without them the policy rejects Atmos writes. Both options only affect writes, so reads, existence checks, listing, and deletion are unchanged. A relative `expires` (such as `90d`) is recalculated each time Atmos writes a secret, so rewriting a secret renews its expiration. A fixed date that is already in the past is accepted, but Atmos logs a warning because Key Vault or your policy may reject it. Invalid values (for example `0d` or `soon`) fail when the store is created.
+Use `tags` and `expires` when an Azure Policy requires every Key Vault secret to carry tags or an expiration date; without them the policy rejects Atmos writes. Both options only affect writes, so reads, existence checks, listing, and deletion are unchanged. A relative `expires` (such as `90d`) is recalculated each time Atmos writes a secret, so rewriting a secret renews its expiration. A fixed date that is already in the past is accepted, but Atmos logs a warning because Key Vault or your policy may reject it. A duration must be at least one second, because Key Vault stores expiration in whole seconds. Invalid values (for example `0d`, `500ms`, or `soon`) fail when the store is created.
 
 Authentication uses the [Azure Default Credential chain](https://learn.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication), which checks environment variables, managed identity, Azure CLI, and other sources.
 

@@ -171,7 +171,7 @@ Legacy type: `azure-key-vault`
 | `insecure_allow_credential_with_http` | bool | No | `false` | Local/test only: permit sending the bearer credential over plain HTTP (does not rewrite the URL like `endpoint_insecure`) |
 | `disable_challenge_resource_verification` | bool | No | `false` | Local/test only: skip Key Vault auth-challenge resource verification when the challenge resource does not match the endpoint host |
 | `tags` | map[string]string | No | -- | Tags applied to every secret Atmos writes (e.g., to satisfy an Azure Policy). Values must be strings |
-| `expires` | string | No | -- | Expiration applied to every secret Atmos writes: an RFC 3339 timestamp (`2027-01-01T00:00:00Z`), a date (`2027-01-01`, midnight UTC), or a duration (`90d`, `2160h`, `720h30m`). A duration is relative to each write and recomputed every time; invalid or non-positive values fail at store creation |
+| `expires` | string | No | -- | Expiration applied to every secret Atmos writes: an RFC 3339 timestamp (`2027-01-01T00:00:00Z`), a date (`2027-01-01`, midnight UTC), or a duration (`90d`, `2160h`, `720h30m`). A duration is relative to each write and recomputed every time; a duration must be at least one second (Key Vault stores whole seconds); invalid values fail at store creation |
 
 ### Authentication
 

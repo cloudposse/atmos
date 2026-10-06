@@ -63,6 +63,9 @@ func TestParseAzureExpires(t *testing.T) {
 		{name: "zero hours", input: "0h", wantErr: storepkg.ErrInvalidExpires},
 		{name: "bare zero", input: "0", wantErr: storepkg.ErrInvalidExpires},
 		{name: "negative duration", input: "-5h", wantErr: storepkg.ErrInvalidExpires},
+		{name: "sub-second duration", input: "500ms", wantErr: storepkg.ErrInvalidExpires},
+		{name: "just under one second", input: "999ms", wantErr: storepkg.ErrInvalidExpires},
+		{name: "one second boundary", input: "1s", wantDur: time.Second},
 		{name: "negative days", input: "-5d", wantErr: storepkg.ErrInvalidExpires},
 		{name: "fractional days", input: "1.5d", wantErr: storepkg.ErrInvalidExpires},
 		{name: "day overflow", input: "99999999999999d", wantErr: storepkg.ErrInvalidExpires},
@@ -92,7 +95,7 @@ func TestParseAzureExpires(t *testing.T) {
 }
 
 func TestNewAzureKeyVaultStore_InvalidExpires(t *testing.T) {
-	for _, input := range []string{"", "soon", "0d", "0h", "-5h"} {
+	for _, input := range []string{"", "soon", "0d", "0h", "-5h", "500ms"} {
 		t.Run("expires="+input, func(t *testing.T) {
 			s, err := NewAzureKeyVaultStore(AzureKeyVaultStoreOptions{
 				VaultURL: "https://test.vault.azure.net",

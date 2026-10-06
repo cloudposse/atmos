@@ -19,7 +19,7 @@ const (
 	// AzureExpiresDaySuffix marks a duration expressed in days (for example "90d").
 	azureExpiresDaySuffix = "d"
 	// AzureExpiresAcceptedForms lists the accepted expires forms for error messages.
-	azureExpiresAcceptedForms = "an RFC 3339 timestamp (2027-01-01T00:00:00Z), a date (2027-01-01), or a positive duration (90d, 2160h, 720h30m)"
+	azureExpiresAcceptedForms = "an RFC 3339 timestamp (2027-01-01T00:00:00Z), a date (2027-01-01), or a duration of at least one second (90d, 2160h, 720h30m)"
 	hoursPerDay               = 24
 	decimalBase               = 10
 	int64Bits                 = 64
@@ -44,7 +44,7 @@ func resolveAzureExpires(expires *string) (*time.Time, time.Duration, error) {
 }
 
 // parseAzureExpires parses the value of the expires option. It returns either a fixed expiry time
-// (RFC 3339 timestamp or YYYY-MM-DD date at midnight UTC) or a positive duration that is applied
+// (RFC 3339 timestamp or YYYY-MM-DD date at midnight UTC) or a duration of at least one second that is applied
 // relative to the time of each write. Durations use Go syntax plus a "d" day suffix (for example "90d").
 func parseAzureExpires(value string) (*time.Time, time.Duration, error) {
 	value = strings.TrimSpace(value)
@@ -61,8 +61,10 @@ func parseAzureExpires(value string) (*time.Time, time.Duration, error) {
 	if !ok {
 		return nil, 0, fmt.Errorf("%w: %q is not %s", store.ErrInvalidExpires, value, azureExpiresAcceptedForms)
 	}
-	if d <= 0 {
-		return nil, 0, fmt.Errorf("%w: duration %q must be positive", store.ErrInvalidExpires, value)
+	// Key Vault stores expiration in whole Unix seconds, so a sub-second duration can collapse to the
+	// current second and leave the new secret already expired.
+	if d < time.Second {
+		return nil, 0, fmt.Errorf("%w: duration %q must be at least one second", store.ErrInvalidExpires, value)
 	}
 
 	return nil, d, nil

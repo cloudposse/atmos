@@ -53,7 +53,7 @@ stores:
 
 Prefer a relative duration for long-lived stores. A fixed date eventually passes, and from then on every new secret is created already expired or is rejected by policy. A relative value never goes stale, and because it's recalculated on each write, rewriting a secret renews its expiration. A fixed date that is already in the past is accepted, but Atmos logs a warning because Key Vault or your policy may reject it.
 
-Invalid values, such as `0d` or `soon`, fail when the store is created rather than on the first write. Tag values must be strings, so quote values like `"true"` or `"5"`.
+A duration must be at least one second, because Key Vault stores expiration in whole seconds. Invalid values, such as `0d`, `500ms`, or `soon`, fail when the store is created rather than on the first write. Tag values must be strings, so quote values like `"true"` or `"5"`.
 
 See the [stores configuration reference](/cli/configuration/stores) for the full list of Azure Key Vault options.
 
