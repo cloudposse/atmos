@@ -1,6 +1,14 @@
+---
+related_docs:
+  - label: "Terraform plan"
+    url: /cli/commands/terraform/plan
+  - label: "Lifecycle hook configuration"
+    url: /stacks/hooks
+---
+
 # `hooks-tflint`
 
-Demonstrates the **`tflint`** hook kind: a `before.terraform.init` hook that
+Demonstrates the [**`tflint`** hook kind](https://atmos.tools/stacks/hooks): a `before.terraform.init` hook that
 lints a component with [tflint](https://github.com/terraform-linters/tflint)
 and renders a SARIF findings summary in the terminal.
 

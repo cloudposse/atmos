@@ -38,7 +38,7 @@ The `provision` block can appear at two levels and is deep-merged across them. L
 
 | Level | Path | Applies To |
 |---|---|---|
-| Toolchain (global default) | `terraform.provision`, `helmfile.provision`, `packer.provision`, `ansible.provision` | Every component of that toolchain in the stacks that import it |
+| Toolchain (global default) | `terraform.provision`, `helm.provision`, `kubernetes.provision` | Every component of that toolchain in the stacks that import it |
 | Component | `components.<type>.<name>.provision` | A single component instance |
 
 ## Schema Summary
@@ -57,7 +57,9 @@ components:
 | Key | Applies To | Documentation |
 |---|---|---|
 | `provision.backend.enabled` | Terraform components only | [Backend Provisioning](/stacks/components/provision/backend) |
-| `provision.workdir.enabled` | Terraform, Helmfile, Packer, Ansible | [Workdir Provisioning](/stacks/components/provision/workdir) |
+| `provision.workdir.enabled` | Terraform; Helmfile, Packer, Helm, and Kubernetes components with a top-level `source` | [Workdir Provisioning](/stacks/components/provision/workdir) |
+
+For components with a `source`, a `metadata.working_directory` or `settings.working_directory` override takes precedence over an isolated workdir. Local components without a `source` support workdir provisioning only for Terraform. See [Workdir Provisioning](/stacks/components/provision/workdir#configuration) for configuration examples and restrictions.
 
 ## Related
 
