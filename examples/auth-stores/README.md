@@ -4,11 +4,18 @@ tags: [Stacks]
 cast:
   file: /casts/examples/auth-stores/identity-backed-stores.cast
   title: atmos auth-backed stores
+related_docs:
+  - label: "Store commands"
+    url: /cli/commands/store/usage
+  - label: "Store configuration"
+    url: /cli/configuration/stores
+  - label: "Authentication configuration"
+    url: /cli/configuration/auth
 ---
 
 # Auth Identity for Stores Example
 
-Demonstrates how stores authenticate using Atmos auth identities instead of the default credential chain.
+Demonstrates how [stores](https://atmos.tools/cli/configuration/stores) authenticate using [Atmos auth identities](https://atmos.tools/cli/configuration/auth) instead of the default credential chain.
 
 Each store references a named identity via the `identity` field. When the store is accessed, Atmos authenticates using the referenced identity and passes the resolved credentials to the cloud SDK.
 
@@ -47,4 +54,4 @@ atmos store get prod/ssm image_tag --stack=prod --component=ecs-service
 
 ## Learn More
 
-See [Stores documentation](https://atmos.tools/core-concepts/stacks/stores/).
+See [Stores documentation](https://atmos.tools/cli/configuration/stores).
