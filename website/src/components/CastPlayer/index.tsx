@@ -432,9 +432,22 @@ function renderAnsi(input: string) {
     segment.cursor ? (
       <span key={index} className={styles.cursor} aria-hidden="true" />
     ) : (
-      <span key={index} style={segment.style}>
-        {renderTerminalText(segment.text)}
-      </span>
+      // Keep line breaks outside the background boxes so each box fills one row.
+      segment.text.split(/(\n)/).map((line, lineIndex) =>
+        line === "\n" ? line : line && (
+          <span
+            key={`${index}-${lineIndex}`}
+            className={
+              segment.style.backgroundColor
+                ? styles.terminalBackground
+                : undefined
+            }
+            style={segment.style}
+          >
+            {renderTerminalText(line)}
+          </span>
+        ),
+      )
     ),
   );
 }
