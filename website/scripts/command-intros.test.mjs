@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL("../docs/cli/commands/", import.meta.url));
 function commandPages(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const file = path.join(directory, entry.name);
-    if (entry.isDirectory()) return commandPages(file);
+    if (entry.isDirectory()) return entry.name === "_partials" ? [] : commandPages(file);
     return /\.mdx?$/.test(entry.name) ? [file] : [];
   });
 }
