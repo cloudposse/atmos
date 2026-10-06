@@ -73,7 +73,7 @@ type artifactProgressReader struct {
 	watchdog   *artifactDownloadWatchdog
 	downloaded int64
 	total      int64
-	report     func(downloaded, total int64)
+	report     func(downloaded, total int64, complete bool)
 }
 
 func (r *artifactProgressReader) Read(p []byte) (int, error) {
@@ -84,7 +84,7 @@ func (r *artifactProgressReader) Read(p []byte) (int, error) {
 		r.watchdog.progress()
 		r.downloaded += int64(n)
 		if r.report != nil {
-			r.report(r.downloaded, r.total)
+			r.report(r.downloaded, r.total, false)
 		}
 	}
 	return n, err

@@ -2,6 +2,7 @@ package toolchain
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -70,6 +71,7 @@ func TestDownloadPRArtifact_Progress(t *testing.T) {
 	}{
 		{name: "prefer HTTP length", contentLength: 3, artifactSize: 100, wantTotal: 3},
 		{name: "fallback to artifact size", contentLength: -1, artifactSize: 3, wantTotal: 3},
+		{name: "underestimated artifact size", contentLength: -1, artifactSize: 1, wantTotal: 1},
 		{name: "unknown length", contentLength: -1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -81,19 +83,22 @@ func TestDownloadPRArtifact_Progress(t *testing.T) {
 			t.Cleanup(func() { http.DefaultTransport = original })
 			synctest.Test(t, func(t *testing.T) {
 				var received []int64
+				var completed []bool
 				path, err := downloadPRArtifactWithOptions(context.Background(), "", &github.PRArtifactInfo{
 					DownloadURL: "https://example.com/artifact.zip",
 					SizeInBytes: tt.artifactSize,
 				}, artifactDownloadOptions{
 					idleTimeout: time.Second,
-					progress: func(downloaded, total int64) {
+					progress: func(downloaded, total int64, complete bool) {
 						received = append(received, downloaded)
+						completed = append(completed, complete)
 						assert.Equal(t, tt.wantTotal, total)
 					},
 				})
 				require.NoError(t, err)
 				defer os.Remove(path)
 				assert.Equal(t, []int64{0, 1, 2, 3, 3}, received, "report bytes during the transfer, not just at completion")
+				assert.Equal(t, []bool{false, false, false, false, true}, completed, "only EOF completes the transfer")
 			})
 		})
 	}
@@ -105,12 +110,12 @@ func TestArtifactProgressReporter_ThrottlesOutput(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			var messages []string
 			report := newArtifactProgressReporter("artifact", func(message string) { messages = append(messages, message) })
-			report(0, 100)
-			report(10, 100)
+			report(0, 100, false)
+			report(10, 100, false)
 			time.Sleep(5 * time.Second)
-			report(50, 100)
-			report(100, 100)
-			report(100, 100)
+			report(50, 100, false)
+			report(100, 100, true)
+			report(100, 100, true)
 			assert.Equal(t, []string{
 				"Downloading artifact (0b / 100b, 0%)",
 				"Downloading artifact (50b / 100b, 50%)",
@@ -119,6 +124,31 @@ func TestArtifactProgressReporter_ThrottlesOutput(t *testing.T) {
 			assert.Equal(t, "Downloading artifact (50b received)", formatArtifactDownloadProgress("artifact", 50, 0))
 		})
 	})
+}
+
+func TestArtifactProgressReporter_ThrottlesEstimatedTotals(t *testing.T) {
+	for _, total := range []int64{0, 10} {
+		t.Run(fmt.Sprintf("total=%d", total), func(t *testing.T) {
+			captureUITestOutput(t, func() {
+				synctest.Test(t, func(t *testing.T) {
+					var messages []string
+					report := newArtifactProgressReporter("artifact", func(message string) { messages = append(messages, message) })
+					report(0, total, false)
+					report(10, total, false)
+					report(20, total, false)
+					report(30, total, false)
+					assert.Len(t, messages, 1, "reaching an estimated total must not bypass throttling")
+					time.Sleep(artifactLogInterval)
+					report(40, total, false)
+					report(50, total, false)
+					assert.Len(t, messages, 2, "ongoing reads still respect the interval")
+					report(50, total, true)
+					require.Len(t, messages, 3, "EOF flushes progress even with no known total")
+					assert.Contains(t, messages[2], "50b")
+				})
+			})
+		})
+	}
 }
 
 func TestDownloadAndInstallArtifactToDir_ProgressAndSilentMode(t *testing.T) {

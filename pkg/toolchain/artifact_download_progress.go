@@ -25,7 +25,8 @@ const (
 
 type artifactDownloadOptions struct {
 	idleTimeout time.Duration
-	progress    func(downloaded, total int64)
+	// complete is true only after the response body has been copied successfully.
+	progress func(downloaded, total int64, complete bool)
 }
 
 func formatArtifactDownloadProgress(name string, downloaded, total int64) string {
@@ -48,15 +49,14 @@ func formatArtifactDownloadProgress(name string, downloaded, total int64) string
 
 // newArtifactProgressReporter limits terminal redraws and keeps non-TTY logs
 // sparse. Progress accounting and the inactivity timer still run on every read.
-func newArtifactProgressReporter(name string, update func(string)) func(int64, int64) {
+func newArtifactProgressReporter(name string, update func(string)) func(int64, int64, bool) {
 	interval := artifactProgressInterval
 	if !term.IsTTYSupportForStdout() {
 		interval = artifactLogInterval
 	}
 	var lastUpdate time.Time
 	var lastMessage string
-	return func(downloaded, total int64) {
-		complete := total > 0 && downloaded >= total
+	return func(downloaded, total int64, complete bool) {
 		if !lastUpdate.IsZero() && time.Since(lastUpdate) < interval && !complete {
 			return
 		}

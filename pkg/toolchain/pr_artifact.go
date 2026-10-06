@@ -331,7 +331,7 @@ func downloadPRArtifactWithOptions(ctx context.Context, token string, info *gith
 	}
 	reader := &artifactProgressReader{reader: resp.Body, watchdog: watchdog, report: opts.progress, total: total}
 	if opts.progress != nil {
-		opts.progress(0, total)
+		opts.progress(0, total, false)
 	}
 	_, err = io.Copy(tempFile, reader)
 	if err != nil {
@@ -339,7 +339,7 @@ func downloadPRArtifactWithOptions(ctx context.Context, token string, info *gith
 	}
 	watchdog.stop()
 	if opts.progress != nil {
-		opts.progress(reader.downloaded, total)
+		opts.progress(reader.downloaded, total, true)
 	}
 
 	if err := tempFile.Close(); err != nil {
