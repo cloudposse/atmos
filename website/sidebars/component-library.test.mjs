@@ -19,12 +19,12 @@ function fixture(t, files) {
 }
 const overview = (type, extra = '') => `---
 title: ${type}
-component_library:
-  type: ${type}
-  label: ${type}
-  position: 1
-  implementation: Example implementation
-  description: Example purpose
+sidebar_group: component-library
+sidebar_label: ${type}
+sidebar_position: 1
+component_type: ${type}
+component_implementation: Example implementation
+description: Example purpose
 ${extra}---
 `;
 
@@ -45,10 +45,10 @@ test('a new overview anywhere in the docs automatically feeds navigation and ove
 test('shared overviews retain canonical routes and nested guides use their own metadata', t => {
   const root = fixture(t, {
     'guides/engine.mdx': overview('engine'),
-    'elsewhere/second.md': '---\nid: stable-id\nsidebar_label: Second\nsidebar_position: 2\ncomponent_library_parent: engine\n---\n',
-    'elsewhere/first.mdx': '---\ntitle: First\nsidebar_position: 1\ncomponent_library_parent: engine\n---\n',
-    'stack/shared.mdx': overview('shared', '  reference: true\nslug: /existing/url\n'),
-    'custom.mdx': overview('custom', '  native: false\n'),
+    'elsewhere/second.md': '---\nid: stable-id\nsidebar_label: Second\nsidebar_position: 2\nsidebar_group: component-library\nsidebar_parent: guides/engine\n---\n',
+    'elsewhere/first.mdx': '---\ntitle: First\nsidebar_position: 1\nsidebar_group: component-library\nsidebar_parent: guides/engine\n---\n',
+    'stack/shared.mdx': overview('shared', 'sidebar_reference: true\nslug: /existing/url\n'),
+    'custom.mdx': '---\ntitle: custom\nsidebar_group: component-library\n---\n',
   });
   const items = componentLibraryItems(root);
   const engine = items.find(item => item.label === 'engine');
@@ -58,22 +58,22 @@ test('shared overviews retain canonical routes and nested guides use their own m
   assert.equal(shared.type, 'link');
   assert.equal(shared.href, '/existing/url');
   assert.equal(shared.customProps.navigationReference, true);
-  assert.equal(items.find(item => item.label === 'custom').customProps.componentType.native, false);
+  assert.equal(items.find(item => item.label === 'custom').customProps.componentType, undefined);
 });
 
 test('invalid, duplicate, and orphaned metadata fails with the source document', t => {
   for (const [files, error] of [
-    [{'bad.mdx': '---\ncomponent_library: true\n---\n'}, /bad.mdx: component_library must be an object/],
+    [{'bad.mdx': '---\ntitle: Bad\nsidebar_group: component-library\ncomponent_type: true\n---\n'}, /bad.mdx: component_type must be a nonempty string/],
     [{'a.mdx': overview('tool'), 'b.mdx': overview('tool')}, /b.mdx: duplicate component type tool/],
-    [{'orphan.mdx': '---\ncomponent_library_parent: missing\n---\n'}, /orphan.mdx: unknown component_library_parent missing/],
-    [{'shared.mdx': overview('shared', '  reference: true\n')}, /shared.mdx: shared component overviews require an absolute slug/],
+    [{'orphan.mdx': '---\ntitle: Orphan\nsidebar_group: component-library\nsidebar_parent: missing\n---\n'}, /orphan.mdx: unknown sidebar_parent missing/],
+    [{'shared.mdx': overview('shared', 'sidebar_reference: true\n')}, /shared.mdx: shared documents require an absolute slug/],
   ]) assert.throws(() => componentLibraryItems(fixture(t, files)), error);
 });
 
 test('the repository index includes all native overviews and preserves Terraform guides', () => {
   const items = componentLibraryItems();
   validateSidebars({components: items});
-  assert.deepEqual(items.filter(item => item.customProps.componentType.native).map(item => item.customProps.componentType.id),
+  assert.deepEqual(items.filter(item => item.customProps.componentType?.native).map(item => item.customProps.componentType.id),
     ['terraform', 'kubernetes', 'helm', 'helmfile', 'packer', 'ansible', 'container', 'emulator']);
   assert.deepEqual(items[0].items.map(item => item.label),
     ['Stack Configuration', 'Root Modules', 'State Backends', 'Workspaces', 'Provider Generation', 'Planfiles', 'Brownfield']);

@@ -24,7 +24,7 @@ export default function ComponentLibraryTypes(): JSX.Element {
         <tbody>
           {types.map(item => (
             <tr key={item.id}>
-              <td><Link to={item.href}>{item.label}</Link></td>
+              <td style={{whiteSpace: 'nowrap'}}><Link to={item.href}>{item.label}</Link></td>
               <td>{item.implementation}</td>
               <td>{item.description}</td>
             </tr>
@@ -37,8 +37,5 @@ export default function ComponentLibraryTypes(): JSX.Element {
 
 export function ComponentLibraryCards(): JSX.Element {
   const {items} = useCurrentSidebarCategory();
-  return <DocCardList items={items.map(item => ({
-    ...item,
-    description: (item.customProps?.componentType as ComponentType).description,
-  }))} />;
+  return <DocCardList items={items} />;
 }
