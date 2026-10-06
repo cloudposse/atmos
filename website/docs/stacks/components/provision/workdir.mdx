@@ -27,13 +27,15 @@ import Note from '@site/src/components/Note'
 
     - **Type:** `boolean`
     - **Default:** `false`
-    - **Applies to:** Terraform, Helmfile, Packer, and Ansible components
+    - **Applies to:** Terraform components, plus Helmfile, Packer, Helm, and Kubernetes components that declare a top-level `source`
   </dd>
 </dl>
 
 ## Configuration
 
-Enable workdir provisioning for any supported toolchain:
+Terraform supports workdir provisioning for local components and components that declare a top-level `source`. Helmfile, Packer, Helm, and Kubernetes require a top-level `source`; enabling workdir provisioning alone does not isolate their local component directories. For components with a `source`, a `metadata.working_directory` or `settings.working_directory` override takes precedence over the isolated workdir.
+
+Enable workdir provisioning for a local Terraform component:
 
 <File title="stacks/catalog/_defaults.yaml">
 ```yaml
@@ -45,14 +47,6 @@ components:
           enabled: true
       vars:
         cidr_block: "10.0.0.0/16"
-
-  helmfile:
-    nginx:
-      provision:
-        workdir:
-          enabled: true
-      vars:
-        replicas: 3
 ```
 </File>
 
@@ -78,19 +72,19 @@ The `.workdir/` directory is created at runtime and should be added to `.gitigno
 
 ## Toolchain-Level Defaults
 
-Apply workdir provisioning to every component of a toolchain:
+Terraform, Helm, and Kubernetes support toolchain-level provisioning defaults. Helm and Kubernetes components must declare a top-level `source` and have no working-directory override to use an isolated workdir. Helmfile and Packer require component-level configuration.
 
 <File title="stacks/orgs/acme/plat/dev/_defaults.yaml">
 ```yaml
 terraform:
   provision:
     workdir:
-      enabled: true   # Every Terraform component in this stack gets an isolated workdir
+      enabled: true   # Default for Terraform components in this stack
 
-helmfile:
+helm:
   provision:
     workdir:
-      enabled: true   # Every Helmfile component runs in its own workdir
+      enabled: true   # Applies to Helm components with source and no working-directory override
 ```
 </File>
 
@@ -114,10 +108,11 @@ components:
 ## Global Defaults
 
 To apply a workdir default across every stack, declare `terraform.provision` (and
-`helmfile.provision`, etc.) in a base stack manifest that all your stacks import - for example a
+`helm.provision` or `kubernetes.provision`) in a base stack manifest that all your stacks import - for example a
 `_defaults.yaml` or a catalog mixin. This is the same place you set global `vars`, `metadata`, and
-`secrets`, and it cascades to every component through normal stack inheritance. Component-level
-`provision.workdir` still overrides it.
+`secrets`, and it cascades to components of those toolchains through normal stack inheritance.
+The source and working-directory restrictions above still apply. Component-level
+`provision.workdir` overrides the inherited default.
 
 <File title="stacks/mixins/provision-workdir.yaml">
 ```yaml
@@ -127,10 +122,10 @@ terraform:
       enabled: true       # Default for every Terraform component that imports this mixin
       ttl: "7d"           # Documents the intended cleanup window for unused workdirs
 
-helmfile:
+helm:
   provision:
     workdir:
-      enabled: true
+      enabled: true       # Applies to Helm components with source and no working-directory override
 ```
 </File>
 
