@@ -104,11 +104,13 @@ This separation allows you to:
 
 ## Component Types
 
-Atmos natively supports six component types:
+Atmos natively supports eight component types:
 
 | Type | Implementation | Description |
 |------|----------------|-------------|
 | **[Terraform/OpenTofu](/components/terraform)** | Terraform root modules | Provision cloud infrastructure |
+| **[Kubernetes](/stacks/components/kubernetes)** | Kubernetes manifests and Kustomize overlays | Render, validate, and deploy Kubernetes resources |
+| **[Helm](/stacks/components/helm)** | Local, repository, or OCI Helm charts | Deploy chart releases with values inherited from stacks |
 | **[Helmfile](/components/helmfile)** | Helmfile configurations | Deploy Helm charts to Kubernetes |
 | **[Packer](/components/packer)** | Packer templates | Build machine images |
 | **[Ansible](/components/ansible)** | Ansible playbooks | Configuration management and automation |
@@ -199,6 +201,8 @@ For more powerful filtering options, consider [describing stacks](/describe/stac
 ## Next Steps
 
 - [Terraform Components](/components/terraform) — Terraform root modules
+- [Kubernetes Components](/stacks/components/kubernetes) — Kubernetes manifests and Kustomize overlays
+- [Helm Components](/stacks/components/helm) — Native Helm chart releases
 - [Helmfile Components](/components/helmfile) — Helmfile configurations
 - [Packer Components](/components/packer) — Packer templates
 - [Ansible Components](/components/ansible) — Ansible playbooks

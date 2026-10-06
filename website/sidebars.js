@@ -307,6 +307,18 @@ module.exports = {
                     ]
                 },
                 {
+                    type: 'link',
+                    label: 'Kubernetes',
+                    href: '/stacks/components/kubernetes',
+                    customProps: {navigationReference: true},
+                },
+                {
+                    type: 'link',
+                    label: 'Helm',
+                    href: '/stacks/components/helm',
+                    customProps: {navigationReference: true},
+                },
+                {
                     type: 'doc',
                     id: 'components/helmfile',
                     label: 'Helmfile',
@@ -351,18 +363,25 @@ module.exports = {
             items: [
                 {
                     type: 'category',
-                    label: 'workflow',
+                    label: 'workflows',
                     collapsed: true,
                     link: {type: 'doc', id: 'workflows/workflows/workflow/index'},
                     items: [
-                        {type: 'doc', id: 'workflows/workflows/workflow/stack', label: 'stack'},
-                        {type: 'doc', id: 'workflows/workflows/workflow/env', label: 'env'},
-                        {type: 'doc', id: 'workflows/workflows/workflow/working-directory', label: 'working_directory'},
-                        {type: 'doc', id: 'workflows/workflows/workflow/dependencies', label: 'dependencies'},
-                        {type: 'doc', id: 'workflows/workflows/workflow/container', label: 'container'},
-                        {type: 'doc', id: 'workflows/workflows/workflow/output', label: 'output'},
-                        {type: 'doc', id: 'workflows/workflows/workflow/show', label: 'show'},
-                        {type: 'link', label: 'steps', href: '/steps'},
+                        {
+                            type: 'category',
+                            label: '<name>',
+                            collapsed: false,
+                            items: [
+                                {type: 'doc', id: 'workflows/workflows/workflow/stack', label: 'stack'},
+                                {type: 'doc', id: 'workflows/workflows/workflow/env', label: 'env'},
+                                {type: 'doc', id: 'workflows/workflows/workflow/working-directory', label: 'working_directory'},
+                                {type: 'doc', id: 'workflows/workflows/workflow/dependencies', label: 'dependencies'},
+                                {type: 'doc', id: 'workflows/workflows/workflow/container', label: 'container'},
+                                {type: 'doc', id: 'workflows/workflows/workflow/output', label: 'output'},
+                                {type: 'doc', id: 'workflows/workflows/workflow/show', label: 'show'},
+                                {type: 'link', label: 'steps', href: '/steps', customProps: {navigationReference: true}},
+                            ],
+                        },
                     ],
                 },
             ]
