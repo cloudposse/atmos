@@ -1,0 +1,95 @@
+---
+title: Authentication & Permissions
+slug: /integrations/github-actions/authentication
+description: Configure GitHub permissions and cloud authentication for Atmos CI workflows.
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Give CI jobs access to the infrastructure and GitHub features they need. Configure cloud authentication with OIDC and grant GitHub permissions for the reporting features your workflows use.
+</Intro>
+
+## Permissions
+
+Atmos's native CI features rely on the standard GitHub Actions permission scopes — grant only what each workflow's triggers require:
+
+| Feature | Permission |
+| --- | --- |
+| Job summaries (`$GITHUB_STEP_SUMMARY`) | none required |
+| Output variables (`$GITHUB_OUTPUT`) | none required |
+| Commit [status checks](/cli/configuration/ci/checks) | `statuses: write` |
+| Check runs (modern Checks API) | `checks: write` |
+| PR comments | `pull-requests: write` |
+| Checkout | `contents: read` |
+| OIDC token issuance | `id-token: write` |
+| SBOM workflow artifact upload | `contents: read`; GitHub Actions runtime credentials (see [SBOM Artifacts](/integrations/github-actions#sbom-artifacts)) |
+
+There is no `comments: write` scope — PR comment writes use `pull-requests: write` (PR comments are issue comments under the hood). If you disable a feature in `atmos.yaml` (e.g. `ci.checks.enabled: false`), you can drop the matching permission.
+
+## Authentication
+
+The shape of the story: **define a CI profile in `atmos.yaml`, point the workflow at it, done.** Atmos exchanges the GitHub OIDC token for cloud credentials transparently — there is no `atmos auth login` step in CI.
+
+**1. Define a `github` [profile](/cli/configuration/profiles).** The profile name is arbitrary; we use `github` to match the [example repos](https://github.com/cloudposse-examples/atmos-native-ci). It holds the `github/oidc` provider plus the identity CI should use:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      region: us-east-1
+  identities:
+    plat-dev/terraform:
+      provider: github-oidc
+      role_arn: arn:aws:iam::111122223333:role/atmos-terraform
+      default: true   # Use this identity unless a component overrides it
+```
+</File>
+
+The IAM role's trust policy must allow GitHub's OIDC issuer for your repo — see [Configuring OpenID Connect in AWS](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services) for the trust-policy template. Other clouds work the same way: see [`azure/oidc`](/cli/configuration/auth/providers) and [`gcp/workload-identity-federation`](/cli/configuration/auth/providers).
+
+**2. Pick how identities are selected.** All three work under the same profile:
+
+<dl>
+  <dt>One identity for everything</dt>
+  <dd>Mark one identity `default: true` (as above), or set the `ATMOS_IDENTITY` env var. Simplest setup — works when CI talks to one cloud account/role.</dd>
+
+  <dt>Per-component identity</dt>
+  <dd>Set `settings.identity` on a component or stack to pick a different identity for that scope. Useful when prod components need a different role than dev.</dd>
+
+  <dt>Inheritance</dt>
+  <dd>Identities flow through the [stack inheritance](/stacks) chain like everything else, so you can set the identity on a base stack and let descendants inherit (or override) it.</dd>
+</dl>
+
+**3. Wire the workflow.** Two pieces: the `id-token: write` permission, and `ATMOS_PROFILE` set to the profile name.
+
+<File title=".github/workflows/apply.yml">
+```yaml
+permissions:
+  id-token: write    # Required for GitHub to mint the OIDC token
+  contents: read
+  statuses: write
+  checks: write
+
+env:
+  ATMOS_PROFILE: github
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - run: atmos terraform deploy vpc -s prod
+```
+</File>
+
+`id-token: write` lets GitHub issue the OIDC JWT; `ATMOS_PROFILE: github` activates the profile defined above. **No `atmos auth login` step is needed** — Atmos exchanges the OIDC token for cloud credentials when it runs the terraform command. (`atmos auth login` exists for interactive/local use; in CI it's redundant.)
+
+For deeper auth reference: [Profiles](/cli/configuration/profiles), [Auth concepts](/stacks/auth), [Providers](/cli/configuration/auth/providers), [Identities](/cli/configuration/auth/identities).
