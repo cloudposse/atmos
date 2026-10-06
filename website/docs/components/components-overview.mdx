@@ -4,13 +4,16 @@ sidebar_position: 0
 sidebar_label: Overview
 sidebar_class_name: hidden
 id: components-overview
-description: Introduction to Atmos components - the building blocks of your infrastructure
+description: Organize reusable infrastructure components into a library and configure their deployments through stacks.
 ---
 import Intro from '@site/src/components/Intro'
+import ComponentLibraryTypes, {ComponentLibraryCards} from '@site/src/components/ComponentLibraryTypes'
 import File from '@site/src/components/File'
 
 <Intro>
-Components are the building blocks of your infrastructure. They are opinionated, reusable units of infrastructure-as-code that solve specific problems—Terraform or OpenTofu root modules, Helm releases, Helmfiles, Kubernetes manifests, Packer templates, Ansible playbooks, containers, or emulators. You can also define [custom component types](/components/custom).
+A **component library** is how you organize the reusable components that make up your infrastructure. It brings together Terraform or OpenTofu root modules, Helm charts, and other [component types](#component-types) so teams can find, maintain, and reuse them across environments.
+
+The library holds the implementations; [stacks](/stacks) configure their deployments. Build your own components or use [vendoring](/vendor) to bring existing components into your library.
 </Intro>
 
 ## What are Components?
@@ -102,16 +105,7 @@ This separation allows you to:
 
 ## Component Types
 
-Atmos natively supports six component types:
-
-| Type | Implementation | Description |
-|------|----------------|-------------|
-| **[Terraform/OpenTofu](/components/terraform)** | Terraform root modules | Provision cloud infrastructure |
-| **[Helmfile](/components/helmfile)** | Helmfile configurations | Deploy Helm charts to Kubernetes |
-| **[Packer](/components/packer)** | Packer templates | Build machine images |
-| **[Ansible](/components/ansible)** | Ansible playbooks | Configuration management and automation |
-| **[Container](/components/container)** | Container images & services | Build and run persistent, stack-scoped containers |
-| **[Emulator](/components/emulator)** | Stack config via `components.emulator.*.driver` (no `components/emulator/` directory) | Run cloud-API, Kubernetes, and backing-service emulators offline |
+<ComponentLibraryTypes />
 
 Each type has its own configuration schema, but they share common patterns for `metadata` and `settings`.
 
@@ -119,7 +113,7 @@ Beyond the native types, you can define **[custom component types](/components/c
 
 ## Directory Structure
 
-Components are stored in your project's `components/` directory:
+Your component library typically lives in your project's `components/` directory, organized by component type. Within each type, group related implementations into folders:
 
 ```
 components/
@@ -196,10 +190,4 @@ For more powerful filtering options, consider [describing stacks](/describe/stac
 
 ## Next Steps
 
-- [Terraform Components](/components/terraform) — Terraform root modules
-- [Helmfile Components](/components/helmfile) — Helmfile configurations
-- [Packer Components](/components/packer) — Packer templates
-- [Ansible Components](/components/ansible) — Ansible playbooks
-- [Custom Component Types](/components/custom) — Bring any tool under stack-based config
-- [Container Components](/components/container) — Build and run persistent, stack-scoped containers
-- [Emulator Components](/components/emulator) — Run cloud-API, Kubernetes, and backing-service emulators offline
+<ComponentLibraryCards />

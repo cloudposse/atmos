@@ -1,0 +1,52 @@
+---
+title: Apply on Merge
+slug: /integrations/github-actions/apply-on-merge
+description: Deploy infrastructure after a change merges. Atmos can compare the new plan against the plan reviewed in the pull request before applying it.
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Deploy infrastructure after a change merges. Atmos can compare the new plan against the plan reviewed in the pull request before applying it.
+</Intro>
+
+Use [Setup Atmos](/integrations/github-actions/setup-atmos) to pin the Atmos container version, enable [native CI reporting](/ci#quick-start), and configure [authentication and permissions](/integrations/github-actions/authentication) for your repository.
+
+## Workflow
+
+<File title=".github/workflows/apply.yml">
+```yaml
+name: Apply
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+  statuses: write
+  checks: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - run: atmos terraform deploy vpc -s prod
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+</File>
+
+`atmos terraform deploy` runs a fresh plan and applies it with `-auto-approve`. When [planfile storage](/ci/planfile-storage) is configured under `components.terraform.planfiles` in `atmos.yaml`, a CI deploy **automatically** downloads the planfile uploaded during the PR run, generates a fresh plan, and performs a semantic comparison before applying (failing on drift by default). The `--verify-plan` flag (or `ATMOS_TERRAFORM_VERIFY_PLAN=true`) is only a per-run override — it forces verification on (and `--verify-plan=false` forces it off), and it **requires planfile storage to be configured**: without it there is no stored plan to verify against, and the deploy errors. You can also run `atmos terraform apply` directly. See [Planfile Storage](/ci/planfile-storage) for details.
+
+:::note
+Storing planfiles in the `github/artifacts` backend requires the runner's artifact credentials,
+which GitHub withholds from `run:` steps. Add the
+[`github-runtime` action](/ci/planfile-storage#using-github-artifacts-in-github-actions) before the
+`plan`/`deploy` steps in the workflows above.
+:::
