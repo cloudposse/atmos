@@ -1,3 +1,11 @@
+---
+related_docs:
+  - label: "Terraform state migrations"
+    url: /cli/commands/terraform/migrate
+  - label: "Lifecycle hook configuration"
+    url: /stacks/hooks
+---
+
 # `hooks-tfmigrate`
 
 Demonstrates the **`tfmigrate`** hook kind. This hook runs a Terraform state

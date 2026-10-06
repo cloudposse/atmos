@@ -7,6 +7,11 @@ description: >-
 cast:
   file: /casts/examples/init/init-basic.cast
   title: atmos init
+related_docs:
+  - label: "Initialize a project"
+    url: /cli/commands/init
+  - label: "Scaffold generation and template configuration"
+    url: /cli/commands/scaffold/generate
 ---
 
 # Example: Init

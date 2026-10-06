@@ -4,11 +4,16 @@ tags: [DX]
 cast:
   file: /casts/examples/devcontainer/config.cast
   title: atmos devcontainer config
+related_docs:
+  - label: "Devcontainer commands"
+    url: /cli/commands/devcontainer/
+  - label: "Devcontainer configuration"
+    url: /cli/configuration/devcontainer
 ---
 
 # Devcontainer Example
 
-This example demonstrates how to configure devcontainers in Atmos as a replacement for the Geodesic shell wrapper.
+This example demonstrates how to configure [devcontainers](https://atmos.tools/cli/configuration/devcontainer) in Atmos as a replacement for the Geodesic shell wrapper.
 
 ## Files
 
