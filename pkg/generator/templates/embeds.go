@@ -51,6 +51,49 @@ type Configuration struct {
 	// pin a reproducible "before" state instead of relying on a ref string
 	// that may name a mutable branch.
 	ResolvedRef string `yaml:"-"`
+	// LocalDir is the real, on-disk directory a remote source (oci://,
+	// git::, https://, s3://) was fetched into (set by resolveOCI/
+	// resolveRemote), valid for the lifetime of the generation run that
+	// fetched it. Source itself gets overwritten with the original remote
+	// reference string right after fetching, for display/provenance
+	// purposes -- see resolveOCI's own comment on that overwrite -- so it
+	// is no longer a real, resolvable path by the time a scaffold.yaml is
+	// re-parsed later in the same run (e.g. by RunSetupForm). LocalDir
+	// preserves the one that still is. Empty for a local-directory or
+	// embedded template, neither of which has a separate fetch directory
+	// distinct from Source. Runtime-only, like ResolvedRef -- excluded
+	// from serialization, and never copied into a persisted project
+	// record. Use IncludeSourceDir, not this field directly, to decide
+	// what a template's own local !include targets resolve against.
+	LocalDir string `yaml:"-"`
+}
+
+// IncludeSourceDir returns the directory a template's own local !include
+// targets should resolve against -- which is deliberately not always
+// Source (see LocalDir's own doc comment for why Source alone can't be
+// trusted for this once a remote template has been fully hydrated, and
+// SourceEmbedded's own doc comment for why the literal "embedded" string
+// must never be treated as a real directory either):
+//   - LocalDir when set (a remote source: Source itself now holds the
+//     original remote reference string, not a real path).
+//   - A fixed, syntactically valid absolute directory that can never
+//     coincidentally exist, for an embedded template (Source holds the
+//     config.SourceEmbedded sentinel, not a real directory) -- so a local
+//     !include target fails cleanly instead of resolving against the
+//     process's CWD.
+//   - Source unchanged otherwise -- a local-directory template, where
+//     Source already is a real, resolvable directory.
+func (c *Configuration) IncludeSourceDir() string {
+	defer perf.Track(nil, "templates.Configuration.IncludeSourceDir")()
+
+	switch {
+	case c.LocalDir != "":
+		return c.LocalDir
+	case c.Source == config.SourceEmbedded:
+		return filepath.Join(os.TempDir(), "atmos-embedded-template-has-no-local-source-dir")
+	default:
+		return c.Source
+	}
 }
 
 // File represents an embedded template file used by the generator.
@@ -257,7 +300,12 @@ func loadConfiguration(fsys fs.FS, templatePath, defaultName, source, excludeRoo
 	// Use path.Join (forward slashes) not filepath.Join for fs.FS paths.
 	scaffoldPath := path.Join(templatePath, "scaffold.yaml") //nolint:forbidigo // fs.FS always uses forward slashes
 	if data, err := fs.ReadFile(fsys, scaffoldPath); err == nil {
-		scaffoldConfig, err := config.LoadScaffoldConfigFromContent(string(data))
+		// configuration.IncludeSourceDir(), not source directly -- source is
+		// the config.SourceEmbedded sentinel ("embedded") for Atmos's own
+		// built-in templates, not a real directory; passing it as-is would
+		// let a local !include target resolve relative to the process's CWD
+		// instead of failing loudly. See IncludeSourceDir's own doc comment.
+		scaffoldConfig, err := config.LoadScaffoldConfigFromContent(string(data), config.WithSourceDir(configuration.IncludeSourceDir()))
 		if err != nil {
 			return nil, errUtils.Build(errUtils.ErrScaffoldLoadConfig).
 				WithCause(err).
