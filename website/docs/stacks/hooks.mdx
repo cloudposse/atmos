@@ -960,12 +960,11 @@ ATMOS_SKIP_HOOKS=true atmos terraform apply vpc -s prod        # via env var
 
 Skipped hooks are logged at `INFO` level so it stays visible in CI
 output. The flag is **per-invocation only** — it doesn't propagate to
-nested commands or workflows. Because hooks only run on terraform
-operations, `--skip-hooks` is a flag of the
-[`atmos terraform`](/cli/commands/terraform/usage) command and all its
-subcommands (`plan`, `apply`, `deploy`, …). The CloudFormation verbs that fire hooks
-(`diff`/`plan`, `apply`/`deploy`, `delete`, `drift detect`, and `drift describe`) accept
-`--skip-hooks` too, with the same semantics.
+nested commands or workflows. Use `--skip-hooks` with
+[`atmos terraform`](/cli/commands/terraform/usage) subcommands (`plan`, `apply`,
+`deploy`, …) and with CloudFormation verbs that fire hooks (`diff`/`plan`,
+`apply`/`deploy`, `delete`, `drift detect`, and `drift describe`). Both command
+families support skipping all hooks or specific hooks by name.
 
 ## Hooks with `--all`
 
