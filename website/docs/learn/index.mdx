@@ -1,0 +1,21 @@
+---
+title: Learn Atmos
+sidebar_label: Overview
+slug: /learn
+description: Find installation guides, core concepts, tutorials, best practices, and troubleshooting help for Atmos.
+---
+
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+import {useDocsSidebar} from '@docusaurus/plugin-content-docs/client'
+
+export function LearningSections() {
+  const sidebar = useDocsSidebar();
+  return <DocCardList items={sidebar.items.filter((item) => item.type === 'category')} />;
+}
+
+<Intro>
+Learn how to organize, configure, and deploy infrastructure with Atmos. Start with installation, explore the core concepts, or follow a tutorial to build your first stack.
+</Intro>
+
+<LearningSections />

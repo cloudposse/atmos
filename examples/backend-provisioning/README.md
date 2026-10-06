@@ -8,6 +8,11 @@ description: >-
 cast:
   file: /casts/examples/backend-provisioning/lifecycle.cast
   title: atmos terraform backend lifecycle
+related_docs:
+  - label: "Terraform backend commands"
+    url: /cli/commands/terraform/terraform-backend
+  - label: "Backend provisioning"
+    url: /stacks/components/provision/backend
 ---
 
 ## Notes
