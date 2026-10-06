@@ -3,6 +3,7 @@ package cli
 
 import (
 	"regexp"
+	"strings"
 
 	"go.starlark.net/starlark"
 
@@ -78,7 +79,7 @@ func flag(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs [
 		"required?", &o.required, "choices?", &o.choices, "env?", &o.env); err != nil {
 		return nil, err
 	}
-	if !inputName.MatchString(o.name) || o.name == "help" {
+	if !inputName.MatchString(o.name) || strings.EqualFold(o.name, "help") {
 		return nil, convert.InvalidArgument("cli.flag: invalid or reserved name %q", o.name)
 	}
 	if !validShorthand(o.shorthand) {

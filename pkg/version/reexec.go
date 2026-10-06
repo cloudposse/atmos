@@ -82,7 +82,10 @@ type ReexecConfig struct {
 	GetEnv         func(string) string
 	SetEnv         func(string, string) error
 	Args           []string
-	Environ        func() []string
+	// ScriptArgs is how many trailing entries of Args belong to a standalone script (its path and
+	// its arguments), or 0 when there is none. They are forwarded unchanged.
+	ScriptArgs int
+	Environ    func() []string
 
 	// PR/SHA version support (injectable for testing).
 	CheckPRCache   PRCacheChecker
@@ -108,7 +111,10 @@ func DefaultReexecConfig() *ReexecConfig {
 		ExecFn:         reexec.Exec,
 		GetEnv:         getEnvWrapper,
 		SetEnv:         os.Setenv,
-		Args:           os.Args,
+		// The original command line, which differs from os.Args when a standalone script run
+		// isolated the script path and its arguments.
+		Args:           reexec.Args(),
+		ScriptArgs:     reexec.ScriptArgs(),
 		Environ:        os.Environ,
 		CheckPRCache:   toolchain.CheckPRCacheStatus,
 		CheckPRUpdate:  toolchain.CheckPRCacheAndUpdate,
@@ -360,8 +366,10 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	// cause the child to re-apply a relative path against the already-changed
 	// cwd. --use-version is dropped so older target binaries don't see an
 	// unknown flag.
-	args := reexec.StripChdirArgs(cfg.Args)
-	args = stripUseVersionFlags(args)
+	// A standalone script's own arguments are never stripped; they follow its path.
+	args := reexec.StripBeforeScript(cfg.Args, cfg.ScriptArgs, func(args []string) []string {
+		return stripUseVersionFlags(reexec.StripChdirArgs(args))
+	})
 
 	if err := cfg.ExecFn(binaryPath, args, cfg.Environ()); err != nil {
 		ui.Errorf("Failed to exec %s: %v", binaryPath, err)

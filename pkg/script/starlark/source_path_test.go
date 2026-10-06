@@ -107,7 +107,7 @@ func TestSourcePathExposesTheScriptFileToTheScript(t *testing.T) {
 
 	inline, err := New().Execute(context.Background(), script.Spec{Name: "step", Source: "output = ctx.script", WorkingDirectory: workDir})
 	require.NoError(t, err)
-	assert.Equal(t, "null", inline.Value)
+	assert.False(t, inline.HasOutput, "None means no output")
 }
 
 // errorDetails joins every explanation attached to err, which is where tracebacks live.

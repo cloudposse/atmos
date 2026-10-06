@@ -252,3 +252,39 @@ func TestCommandWithoutHostParserFailsBeforeMain(t *testing.T) {
 	require.ErrorContains(t, err, "requires a standalone command parser")
 	assert.Empty(t, events)
 }
+
+// Parsed values are keyed case-insensitively, so names that differ only by case would silently
+// lose a value; declaration time is the only place to say so clearly.
+func TestCommandRejectsCaseCollidingNames(t *testing.T) {
+	t.Parallel()
+	for name, declaration := range map[string]string{
+		"flags":                    `flags=[cli.flag("Stage"), cli.flag("stage")]`,
+		"flags in the other order": `flags=[cli.flag("stage"), cli.flag("STAGE")]`,
+		"arguments":                `args=[cli.arg("Service"), cli.arg("service", required=False)]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			parsed := false
+			_, err := executeCLI(`cli.command(run=lambda a, f: None, `+declaration+`)`, func(*starlark.Thread, script.CommandSpec) (script.CommandInput, error) {
+				parsed = true
+				return script.CommandInput{}, nil
+			}, new([]string))
+			require.ErrorIs(t, err, errUtils.ErrStarlarkInvalidArgument)
+			assert.ErrorContains(t, err, "ignoring case")
+			assert.False(t, parsed, "the host parser never sees an ambiguous declaration")
+		})
+	}
+	t.Run("help is reserved regardless of case", func(t *testing.T) {
+		t.Parallel()
+		_, err := executeCLI(`cli.flag("Help")`, nil, new([]string))
+		require.ErrorIs(t, err, errUtils.ErrStarlarkInvalidArgument)
+	})
+	t.Run("distinct names are accepted", func(t *testing.T) {
+		t.Parallel()
+		_, err := executeCLI(`cli.command(run=lambda a, f: None, flags=[cli.flag("stage"), cli.flag("region")], args=[cli.arg("service")])`,
+			func(*starlark.Thread, script.CommandSpec) (script.CommandInput, error) {
+				return script.CommandInput{Help: true}, nil
+			}, new([]string))
+		require.NoError(t, err)
+	})
+}

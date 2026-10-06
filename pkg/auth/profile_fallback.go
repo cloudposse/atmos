@@ -475,12 +475,13 @@ func reExecWithProfile(profileName string, reExecCtx ReExecContext) error {
 	// --chdir / -C was already applied to this process by processEarlyChdirFlag;
 	// stripping it from the child's argv prevents a relative chdir from being
 	// re-applied against the already-changed cwd.
-	origArgs := os.Args
+	origArgs := reexec.Args()
 	newArgs := make([]string, 0, len(origArgs)+6)
 	newArgs = append(newArgs, origArgs[0])
 	newArgs = append(newArgs, profileFlagName, profileName)
 	if len(origArgs) > 1 {
-		newArgs = append(newArgs, reexec.StripChdirArgs(origArgs[1:])...)
+		// A standalone script's own arguments are forwarded unchanged.
+		newArgs = append(newArgs, reexec.StripBeforeScript(origArgs[1:], reexec.ScriptArgs(), reexec.StripChdirArgs)...)
 	}
 
 	// Carry forward component/stack values that were resolved via an

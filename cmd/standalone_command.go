@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/script"
+	"github.com/cloudposse/atmos/pkg/script/standalone"
 )
 
 // standaloneCommandParser adapts native flag definitions to a script-owned CLI.
@@ -28,6 +30,10 @@ func standaloneCommandParser(file *script.File, stdout io.Writer) script.Command
 	if file.Stdin {
 		filename = "stdin"
 	}
+	invoked := file.Invoked
+	if invoked == "" {
+		invoked = filename
+	}
 	return func(ctx context.Context, spec script.CommandSpec) (script.CommandInput, error) {
 		if err := ctx.Err(); err != nil {
 			return script.CommandInput{}, err
@@ -38,21 +44,18 @@ func standaloneCommandParser(file *script.File, stdout io.Writer) script.Command
 		if spec.Name == "" {
 			spec.Name = filename
 		}
-		return parseStandaloneCommand(ctx, &spec, argv, stdout)
+		return parseStandaloneCommand(ctx, &spec, argv, stdout, invoked)
 	}
 }
 
-func parseStandaloneCommand(ctx context.Context, spec *script.CommandSpec, argv []string, stdout io.Writer) (script.CommandInput, error) {
+func parseStandaloneCommand(ctx context.Context, spec *script.CommandSpec, argv []string, stdout io.Writer, invoked string) (script.CommandInput, error) {
 	defer perf.Track(nil, "cmd.parseStandaloneCommand")()
 
 	builder := flags.NewPositionalArgsBuilder()
 	for _, arg := range spec.Args {
 		builder.AddArg(arg)
 	}
-	_, validateArgs, usage := builder.Build()
-	if len(spec.Args) == 0 {
-		validateArgs = cobra.ExactArgs(0)
-	}
+	_, _, usage := builder.Build()
 	cmd := &cobra.Command{
 		Use: strings.TrimSpace(spec.Name + " " + usage), Short: spec.Description,
 		// Execution belongs to the language runtime. Mark the command runnable
@@ -67,17 +70,44 @@ func parseStandaloneCommand(ctx context.Context, spec *script.CommandSpec, argv 
 		parser.Registry().Register(flag)
 	}
 	parser.RegisterFlags(cmd)
+	useDecimalIntegers(cmd, spec.Flags)
+	standalone.AnnotateFlags(cmd.Flags(), spec.Flags)
 	if err := cmd.ParseFlags(argv); err != nil {
-		return script.CommandInput{}, err
+		return script.CommandInput{}, standalone.NewUsageError(cmd, invoked, err)
 	}
 	if help, _ := cmd.Flags().GetBool("help"); help {
 		return script.CommandInput{Help: true}, cmd.Help()
 	}
+	input, err := collectStandaloneInput(cmd, parser, spec, argv)
+	if err != nil {
+		return script.CommandInput{}, standalone.NewUsageError(cmd, invoked, err)
+	}
+	return input, nil
+}
+
+// useDecimalIntegers makes integer flags accept base-10 digits only, as environment values do.
+func useDecimalIntegers(cmd *cobra.Command, definitions []flags.Flag) {
+	defer perf.Track(nil, "cmd.useDecimalIntegers")()
+
+	for _, definition := range definitions {
+		if intFlag, ok := definition.(*flags.IntFlag); ok {
+			cmd.Flags().Lookup(intFlag.Name).Value = standalone.NewDecimalInt(intFlag.Default)
+		}
+	}
+}
+
+// collectStandaloneInput validates the parsed command line and gathers argument and flag values.
+// Every failure here is caused by the user's input rather than by the script.
+func collectStandaloneInput(cmd *cobra.Command, parser *flags.StandardParser, spec *script.CommandSpec, argv []string) (script.CommandInput, error) {
+	defer perf.Track(nil, "cmd.collectStandaloneInput")()
+
+	if err := standalone.CheckBoolPositional(cmd.Flags(), argv); err != nil {
+		return script.CommandInput{}, err
+	}
 	// Here -- ends script flag parsing. It does not introduce arguments for an
-	// external tool, so validate every remaining positional value. A nil command
-	// keeps the native builder's separator-aware validator from discarding them.
+	// external tool, so validate every remaining positional value.
 	positional := cmd.Flags().Args()
-	if err := validateArgs(nil, positional); err != nil {
+	if err := standalone.ValidatePositionals(spec.Args, positional); err != nil {
 		return script.CommandInput{}, err
 	}
 	values, err := resolveStandaloneCommandFlags(parser, cmd, spec.Flags)
@@ -101,6 +131,9 @@ func resolveStandaloneCommandFlags(parser *flags.StandardParser, cmd *cobra.Comm
 	if err := parser.BindFlagsToViper(cmd, values); err != nil {
 		return nil, err
 	}
+	if err := applyStandaloneEnvironment(cmd, values, definitions); err != nil {
+		return nil, err
+	}
 	if err := parser.ValidateFlagValues(cmd); err != nil {
 		return nil, err
 	}
@@ -108,12 +141,7 @@ func resolveStandaloneCommandFlags(parser *flags.StandardParser, cmd *cobra.Comm
 	for _, flag := range definitions {
 		name := flag.GetName()
 		explicit := cmd.Flags().Changed(name)
-		rawEnv, hasEnv := standaloneFlagEnvironment(flag)
-		if !explicit && hasEnv {
-			if err := validateStandaloneFlagEnvironment(cmd, flag, rawEnv); err != nil {
-				return nil, err
-			}
-		}
+		_, hasEnv := standaloneFlagEnvironment(flag)
 		if flag.IsRequired() && !explicit && !hasEnv {
 			continue
 		}
@@ -125,6 +153,7 @@ func resolveStandaloneCommandFlags(parser *flags.StandardParser, cmd *cobra.Comm
 func validateStandaloneCommandSpec(spec *script.CommandSpec) error {
 	defer perf.Track(nil, "cmd.validateStandaloneCommandSpec")()
 
+	// Viper keys are case-insensitive, so names that differ only by case would share one value.
 	names := map[string]bool{"help": true}
 	shorts := map[string]bool{"h": true}
 	for _, flag := range spec.Flags {
@@ -132,13 +161,13 @@ func validateStandaloneCommandSpec(spec *script.CommandSpec) error {
 			return fmt.Errorf("%w: unsupported or nil standalone flag", errUtils.ErrInvalidFlagValue)
 		}
 		name, short := flag.GetName(), flag.GetShorthand()
-		if !validStandaloneFlagName(name) || names[name] {
-			return fmt.Errorf("%w: invalid or duplicate standalone flag %q", errUtils.ErrInvalidFlagValue, name)
+		if !validStandaloneFlagName(name) || names[strings.ToLower(name)] {
+			return fmt.Errorf("%w: invalid or duplicate standalone flag %q (flag names are case-insensitive)", errUtils.ErrInvalidFlagValue, name)
 		}
 		if short != "" && (len(short) != 1 || shorts[short] || strings.ContainsAny(short, "- \t\r\n=")) {
 			return fmt.Errorf("%w: invalid or duplicate shorthand %q", errUtils.ErrInvalidFlagValue, short)
 		}
-		names[name], shorts[short] = true, true
+		names[strings.ToLower(name)], shorts[short] = true, true
 	}
 	return validateStandaloneCommandArgs(spec.Args)
 }
@@ -166,13 +195,13 @@ func validateStandaloneCommandArgs(args []*flags.PositionalArgSpec) error {
 	names := make(map[string]bool, len(args))
 	optional := false
 	for _, arg := range args {
-		if arg == nil || arg.Name == "" || names[arg.Name] {
-			return fmt.Errorf("%w: nil, unnamed, or duplicate standalone argument", errUtils.ErrInvalidPositionalArgs)
+		if arg == nil || arg.Name == "" || names[strings.ToLower(arg.Name)] {
+			return fmt.Errorf("%w: nil, unnamed, or duplicate standalone argument (argument names are case-insensitive)", errUtils.ErrInvalidPositionalArgs)
 		}
 		if optional && arg.Required {
 			return fmt.Errorf("%w: required standalone argument follows an optional argument", errUtils.ErrInvalidPositionalArgs)
 		}
-		names[arg.Name] = true
+		names[strings.ToLower(arg.Name)] = true
 		optional = !arg.Required
 	}
 	return nil
@@ -197,19 +226,46 @@ func standaloneFlagEnvironment(flag flags.Flag) (string, bool) {
 	return "", false
 }
 
-// Viper's typed getters silently turn malformed environment values into zero
-// values. Reuse the registered native flag's conversion before reading them.
-// CLI input was already parsed once and takes precedence over the environment.
-func validateStandaloneFlagEnvironment(cmd *cobra.Command, flag flags.Flag, value string) error {
-	defer perf.Track(nil, "cmd.validateStandaloneFlagEnvironment")()
+// Viper's typed getters silently turn malformed environment values into zero values, split lists
+// on whitespace, and read integers with base prefixes. Environment values for a flag the command
+// line did not set are therefore parsed exactly like command-line values (base-10 integers,
+// comma-separated lists with CSV quoting) and handed to Viper as typed values.
+func applyStandaloneEnvironment(cmd *cobra.Command, values *viper.Viper, definitions []flags.Flag) error {
+	defer perf.Track(nil, "cmd.applyStandaloneEnvironment")()
 
-	switch flag.(type) {
-	case *flags.IntFlag, *flags.BoolFlag:
-		if err := cmd.Flags().Lookup(flag.GetName()).Value.Set(value); err != nil {
-			return fmt.Errorf("%w: invalid environment value for --%s: %w", errUtils.ErrInvalidFlagValue, flag.GetName(), err)
+	for _, flag := range definitions {
+		name := flag.GetName()
+		raw, exists := standaloneFlagEnvironment(flag)
+		if !exists || cmd.Flags().Changed(name) {
+			continue
+		}
+		parsed, err := standaloneEnvironmentValue(cmd, flag, raw)
+		if err != nil {
+			if !errors.Is(err, errUtils.ErrInvalidFlagValue) {
+				err = fmt.Errorf("%w: %w", errUtils.ErrInvalidFlagValue, err)
+			}
+			return fmt.Errorf("invalid environment value for --%s: %w", name, err)
+		}
+		if parsed != nil {
+			values.Set(name, parsed)
 		}
 	}
 	return nil
+}
+
+// standaloneEnvironmentValue parses one environment value. A nil result means Viper's own
+// conversion is already correct for the flag's type.
+func standaloneEnvironmentValue(cmd *cobra.Command, flag flags.Flag, raw string) (any, error) {
+	switch flag.(type) {
+	case *flags.IntFlag:
+		return standalone.ParseDecimalInt(raw)
+	case *flags.StringSliceFlag:
+		return standalone.ParseStringList(raw)
+	case *flags.BoolFlag:
+		return nil, cmd.Flags().Lookup(flag.GetName()).Value.Set(raw)
+	default:
+		return nil, nil
+	}
 }
 
 func standaloneFlagValue(flag flags.Flag, values *viper.Viper) any {

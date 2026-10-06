@@ -26,7 +26,7 @@ cli.arg(name, description = "", required = True)
     <dt>`name`</dt>
     <dd>
         Required. The argument name, which is also its key in the `args` dictionary and its placeholder in the
-        usage line. A name starts with a letter and contains only letters, digits, underscores, and hyphens.
+        usage line. Required arguments appear as `<name>` and optional ones as `[name]`. A name starts with a letter and contains only letters, digits, underscores, and hyphens.
     </dd>
 
     <dt>`description`</dt>
@@ -71,9 +71,11 @@ cli.command(
 - An invalid name fails with an argument error.
 - Declaring a required argument after an optional one fails when `cli.command` runs, because positional arguments
   fill from left to right.
-- Two arguments with the same name fail when `cli.command` runs.
+- Two arguments with the same name fail when `cli.command` runs. Names that differ only by case, such as `Service`
+  and `service`, count as the same name.
 - On the command line, a missing required argument or an extra argument stops the program with a usage error
-  before your functions run.
+  before your functions run. The message names the argument, for example ``missing required argument `<service>` ``,
+  and exits with status 2.
 
 ## Related
 

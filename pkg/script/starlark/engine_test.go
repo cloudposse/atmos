@@ -43,7 +43,8 @@ func TestEngineOutput(t *testing.T) {
 		{"string is raw", `output = "hello"`, `hello`, true},
 		{"empty string is raw", `output = ""`, ``, true},
 		{"encoded string", `output = json.encode("hello")`, `"hello"`, true},
-		{"none", `output = None`, `null`, true},
+		{"none means no output", `output = None`, ``, false},
+		{"none inside a structure is encoded", `output = [None]`, `[null]`, true},
 		{"print only", `print("hello")`, ``, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
