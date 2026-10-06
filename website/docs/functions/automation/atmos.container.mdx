@@ -1,0 +1,139 @@
+---
+title: "atmos.container"
+sidebar_position: 8
+sidebar_label: "atmos.container"
+sidebar_class_name: command
+description: Run an atmos container command, such as build, up, or exec, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.container` function runs `atmos container` through the current Atmos executable. Use it to build,
+    push, start, inspect, and stop container components from automation.
+</Intro>
+
+Also available as `atmos.c`.
+
+## Usage
+
+```python
+atmos.container(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.container("up", "api", flags = {"stack": "local"})` runs `atmos container up api --stack=local`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| `build` | Build the component image from its build configuration. |
+| `push` | Push the component image to its registry. |
+| `pull` | Pull the component image. |
+| `run` | Run the component as a one-shot foreground container. |
+| `up` | Create or start the long-running container. |
+| `start` | Start the existing stopped container. |
+| `stop` | Stop the component container. |
+| `restart` | Restart the component container. |
+| `down` | Stop and remove the component container. |
+| `rm` | Remove the component container. |
+| `exec` | Execute a command in the component container. |
+| `attach` | Attach to the component container's main process. |
+| `logs` | Show logs from container components. |
+| `ps` | Show container components' running state. |
+| `list` | List container components and their running state. Also available as `ls`. |
+
+See the [`atmos container` command reference](/cli/commands/container/usage) for the complete list of subcommands and
+flags.
+
+:::note
+The `attach` subcommand and an interactive `exec` need a terminal. Use `exec` with a command after the `--`
+separator to run non-interactively, and use `run` for one-shot containers. The `up`, `build`, and `run` subcommands
+need a container runtime, either Docker or Podman, on the machine running the script.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `container`, in order: the subcommand and its positional arguments, such as the component name. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). The `stack` key becomes `--stack`
+        (shorthand `s` ) for every subcommand that operates on a stack. Subcommands such as `build`, `up`, `down`
+        , and `logs` also accept `all`, `labels`, and `tags` to select several components at once, and `logs`
+        accepts `follow` and `tail`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Build and push an image
+
+```python
+atmos.container("build", "worker", flags = {"stack": "local"})
+atmos.container("push", "worker", flags = {"stack": "local"})
+```
+
+### Start every container in a stack
+
+```python
+atmos.container("up", flags = {"stack": "local", "all": True})
+```
+
+### Run a command inside a running container
+
+```python
+version = atmos.container(
+    "exec", "api",
+    flags = {"stack": "local"},
+    args = ["--", "nginx", "-v"],
+    output = "capture",
+)
+print(version.stderr.strip())
+```
+
+Everything after the `--` separator goes in `args`. The call runs
+`atmos container exec api --stack=local -- nginx -v`.
+
+### Read the running state
+
+```python
+state = atmos.container("list", flags = {"stack": "local"}, output = "capture")
+print(state.stdout)
+```
+
+The `list` subcommand prints a table intended for people to read.
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos container`](/cli/commands/container/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

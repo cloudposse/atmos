@@ -1,0 +1,99 @@
+---
+title: "atmos.docs"
+sidebar_position: 8
+sidebar_label: "atmos.docs"
+sidebar_class_name: command
+description: Run an atmos docs command, such as generate, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.docs` function runs `atmos docs` through the current Atmos executable. Use it to generate
+    documentation artifacts, such as a README, from the `docs.generate` sections of `atmos.yaml`.
+</Intro>
+
+## Usage
+
+```python
+atmos.docs(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.docs("generate", "readme")` runs `atmos docs generate readme`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`generate`](/cli/commands/docs/generate) | Generate a documentation artifact defined under `docs.generate` in `atmos.yaml`. |
+
+Without a subcommand, the bare call `atmos.docs()` opens the Atmos documentation, and `atmos.docs("vpc")` displays
+the documentation for the `vpc` component. See the [`atmos docs` command reference](/cli/commands/docs/usage) for
+details.
+
+:::note
+Calling `atmos.docs` without a subcommand opens or displays documentation for people to read, so it is rarely useful
+from a script. The `generate` subcommand writes files and works well in automation.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `docs`, in order: the subcommand and its positional arguments, such as the name of the `docs.generate` section to run, or a component name. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). The `generate` subcommand takes no
+        flags of its own beyond the global ones.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Generate a README
+
+```python
+atmos.docs("generate", "readme")
+```
+
+### Regenerate several artifacts
+
+```python
+for artifact in ["readme", "release-notes"]:
+    atmos.docs("generate", artifact)
+```
+
+Each name must match a section under `docs.generate` in `atmos.yaml`.
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos docs`](/cli/commands/docs/usage) documents the command and its subcommands.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

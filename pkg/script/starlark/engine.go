@@ -3,10 +3,7 @@ package starlark
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,7 +77,9 @@ func New(opts ...Option) *Engine {
 	return e
 }
 
-func init() { script.Register("starlark", New()) }
+func init() {
+	script.Register("starlark", New(), script.WithExtensions(".star"), script.WithAtmosShebang())
+}
 
 type session struct {
 	engine  *Engine
@@ -93,8 +92,7 @@ type session struct {
 
 	componentMu sync.Mutex
 	components  map[script.ComponentRef]*componentEntry
-	tools       map[string]string
-	toolDirs    []string
+	tools       *script.Tools
 }
 
 // Execute runs a script and returns its optional top-level output value: a string is
@@ -107,7 +105,7 @@ func (e *Engine) Execute(ctx context.Context, spec script.Spec) (script.Result, 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := prepareSpec(&spec); err != nil {
+	if err := script.PrepareSpec(&spec); err != nil {
 		return script.Result{}, err
 	}
 	s := newSession(ctx, e, &spec)
@@ -117,7 +115,7 @@ func (e *Engine) Execute(ctx context.Context, spec script.Spec) (script.Result, 
 	if err := ctx.Err(); err != nil {
 		return script.Result{}, err
 	}
-	if err := validateWorkingDirectory(spec.WorkingDirectory); err != nil {
+	if err := script.ValidateWorkingDirectory(spec.WorkingDirectory); err != nil {
 		return script.Result{}, scriptError(ctx, err, s.spec.ProjectRoot)
 	}
 	thread, stop := s.thread(ctx, spec.Name, nil)
@@ -136,6 +134,7 @@ func newSession(ctx context.Context, e *Engine, spec *script.Spec) *session {
 	s := &session{
 		engine: e, spec: *spec, ctx: ctx, modules: make(map[string]starlark.StringDict),
 		loading: make(map[string]bool), components: make(map[script.ComponentRef]*componentEntry),
+		tools: script.NewTools(spec.InstallTools),
 	}
 	s.globals = s.predeclared()
 	return s
@@ -170,38 +169,6 @@ func (s *session) output(ctx context.Context, thread *starlark.Thread, globals s
 	return script.Result{Value: string(encoded.(starlark.String)), HasOutput: true}, nil
 }
 
-func prepareSpec(spec *script.Spec) error {
-	if spec.Stdout == nil {
-		spec.Stdout = io.Discard
-	}
-	if spec.Stderr == nil {
-		spec.Stderr = io.Discard
-	}
-	if spec.Name == "" {
-		spec.Name = "<script>"
-	}
-	dir, err := filepath.Abs(spec.WorkingDirectory)
-	if err != nil {
-		return err
-	}
-	spec.WorkingDirectory = dir
-	if spec.ProjectRoot != "" {
-		if spec.ProjectRoot, err = filepath.Abs(spec.ProjectRoot); err != nil {
-			return err
-		}
-	}
-	if spec.SourcePath != "" {
-		if spec.SourcePath, err = filepath.Abs(spec.SourcePath); err != nil {
-			return err
-		}
-		if spec.File == nil {
-			spec.File = &script.File{Path: spec.SourcePath}
-		}
-	}
-	spec.AtmosWorkingDirectory, err = filepath.Abs(spec.AtmosWorkingDirectory)
-	return err
-}
-
 // programName is the filename Starlark records for the entry script. A script read from a file is
 // named by its absolute path, so tracebacks name the real file and load() resolves relative to it;
 // an inline script is named by its step.
@@ -210,23 +177,6 @@ func programName(spec *script.Spec) string {
 		return spec.SourcePath
 	}
 	return spec.Name
-}
-
-// validateWorkingDirectory fails fast, before any code runs, when the directory is unusable.
-func validateWorkingDirectory(dir string) error {
-	info, err := os.Stat(dir)
-	var failed error
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		failed = failWith(errUtils.ErrStarlark, err, "working directory %q does not exist", dir)
-	case err != nil:
-		failed = failWith(errUtils.ErrStarlark, err, "working directory %q is not accessible: %s", dir, err)
-	case !info.IsDir():
-		failed = fail(errUtils.ErrStarlark, "working directory %q is not a directory", dir)
-	default:
-		return nil
-	}
-	return errUtils.Build(failed).WithHint("Check the `working_directory` setting; it must name an existing directory.").Err()
 }
 
 const contextKey = "atmos.starlark.context"
@@ -263,6 +213,9 @@ func stringDict(values map[string]string) *starlark.Dict {
 
 func (s *session) predeclared() starlark.StringDict {
 	return starlark.StringDict{
+		"sum":    starlark.NewBuiltin("sum", numericSum),
+		"round":  starlark.NewBuiltin("round", numericRound),
+		"errors": module("errors", starlark.StringDict{"build": starlark.NewBuiltin("errors.build", buildError)}),
 		"cli": climodule.New(func(t *starlark.Thread, command script.CommandSpec) (script.CommandInput, error) {
 			if s.spec.ParseCommand == nil || t.Local(outputKey) != nil {
 				return script.CommandInput{}, fail(errUtils.ErrStarlarkInvalidArgument, "cli.command is available only in a standalone script's main thread")

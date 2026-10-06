@@ -1,9 +1,10 @@
 # Embedded Starlark runtime
 
-The root package owns engine registration, invocation state, module loading,
-component context, process execution, and parallel task orchestration. Each
-invocation has its own session; parallel tasks share that session's synchronized
-output and component cache.
+The Starlark package owns language bindings, module loading, component handles,
+thread management, and parallel callable isolation. Each invocation has its own
+session; parallel tasks share that session's synchronized output and component
+cache. [The script host](../README.md) owns interpreter registration, invocation
+normalization, process policy, tool pins, and authored error metadata.
 
 Independent language bindings live under `stdlib/`:
 
@@ -30,7 +31,7 @@ remain available; additional named helpers reflect the host's catalog. Explicit
 flag prefixes pass through unchanged. Bare flags use catalog metadata when
 available, otherwise the ordinary long-flag spelling.
 
-Keep operations that depend on invocation state in the engine. Extract bindings
+Keep language-specific operations that depend on invocation state in the engine. Extract bindings
 when they have independent behavior and a small host interface; do not expose the
 session struct or split parallel execution away from its cancellation and output
 lifecycle solely to reduce file counts.

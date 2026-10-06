@@ -1,0 +1,125 @@
+---
+title: "atmos.azure"
+sidebar_position: 8
+sidebar_label: "atmos.azure"
+sidebar_class_name: command
+description: Run an atmos azure command, such as aks update-kubeconfig or acr login, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.azure` function runs `atmos azure` through the current Atmos executable. Use it to configure AKS
+    kubeconfig files and log in to Azure Container Registry from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.azure(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand group, its nested subcommand, and any positional arguments as strings before the keyword
+arguments. The call `atmos.azure("acr", "login", flags = {"identity": "dev"})` runs
+`atmos azure acr login --identity=dev`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`aks update-kubeconfig`](/cli/commands/azure/aks/update-kubeconfig) | Update the kubeconfig for an AKS cluster. |
+| [`aks token`](/cli/commands/azure/azure-aks-token) | Generate an AKS bearer token for kubectl. |
+| [`acr login`](/cli/commands/azure/acr-login) | Log in to Azure Container Registry and write Docker credentials. |
+
+See the [`atmos azure` command reference](/cli/commands/azure/usage) for the complete list of subcommands and flags.
+The [`aks`](/cli/commands/azure/aks) group has its own page.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `azure`, in order: the subcommand group, the
+        nested subcommand, and any positional arguments. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"cluster-name"`
+        becomes `--cluster-name`, and registered shorthands resolve to their long form, so `"i"` resolves to
+        `--identity` and `"r"` to `--registry` for `acr login`. Other flags include `--resource-group`,
+        `--subscription-id`, and `--kubeconfig` for the `aks` commands.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>
+        (Optional) A list or tuple of strings appended after the flags. The `azure` command accepts a `--`
+        separator before arguments meant for the underlying tool.
+    </dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Configure kubectl for an AKS cluster
+
+```python
+atmos.azure(
+    "aks",
+    "update-kubeconfig",
+    flags = {
+        "cluster-name": "dev-aks",
+        "resource-group": "dev-rg",
+        "identity": "dev-admin",
+    },
+)
+```
+
+This runs `atmos azure aks update-kubeconfig --cluster-name=dev-aks --identity=dev-admin --resource-group=dev-rg`.
+
+### Log in to a registry before a build
+
+```python
+atmos.azure("acr", "login", flags = {"identity": "dev-admin", "registry": ["devregistry.azurecr.io"]})
+```
+
+### Handle a missing identity
+
+```python
+result = atmos.azure(
+    "aks",
+    "token",
+    flags = {"cluster-name": "dev-aks", "resource-group": "dev-rg"},
+    output = "capture",
+    check = False,
+)
+if result.exit_code != 0:
+    fail("Could not generate an AKS token:\n" + result.stderr)
+```
+
+Without an identity argument, the command falls back to the default identity and fails when none is configured.
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos azure`](/cli/commands/azure/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

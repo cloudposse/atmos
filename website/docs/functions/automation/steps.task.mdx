@@ -1,0 +1,151 @@
+---
+title: "steps.task"
+sidebar_position: 13
+sidebar_label: "steps.task"
+sidebar_class_name: command
+description: Describe a deferred function call with arguments, a retry policy, and a timeout.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `steps.task` function describes a call without running it. Pass the descriptors to
+    [`steps.parallel`](/functions/automation/steps.parallel), which runs them with a concurrency limit and applies
+    each task's retry policy and timeout.
+</Intro>
+
+## Usage
+
+```python
+steps.task(name, function, args = [], kwargs = {}, retry = None, timeout = "")
+```
+
+## Arguments
+
+<dl>
+    <dt>`name`</dt>
+    <dd>
+        Required. A non-empty label for the task. It prefixes the task's output, identifies it in errors, and must be
+        unique within one `steps.parallel` group.
+    </dd>
+
+    <dt>`function`</dt>
+    <dd>Required. The function to call, such as `deploy`. Pass the function itself, not a call.</dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of positional arguments for the call.</dd>
+
+    <dt>`kwargs`</dt>
+    <dd>(Optional) A dictionary of keyword arguments for the call. Keys must be strings.</dd>
+
+    <dt>`retry`</dt>
+    <dd>
+        (Optional) A dictionary describing the retry policy. See [Retry policy](#retry-policy). Without a policy a task
+        runs once.
+    </dd>
+
+    <dt>`timeout`</dt>
+    <dd>
+        (Optional) A positive duration string such as `"30s"` or `"5m"`. The timeout bounds the whole task, including
+        every attempt and the delays between attempts. A task that exceeds it fails with
+        `task "<name>" timed out after <duration>`.
+    </dd>
+</dl>
+
+## Returns
+
+A task descriptor. It does nothing until it is passed to [`steps.parallel`](/functions/automation/steps.parallel), and the
+group returns the function's return value in the matching position.
+
+## Retry policy
+
+The `retry` dictionary accepts these keys:
+
+<dl>
+    <dt>`max_attempts`</dt>
+    <dd>The most times the function runs. Must be positive.</dd>
+
+    <dt>`backoff_strategy`</dt>
+    <dd>One of `constant`, `linear`, or `exponential`.</dd>
+
+    <dt>`initial_delay`, `max_delay`, `max_elapsed_time`</dt>
+    <dd>Duration strings such as `"2s"`. The initial delay can be zero, the others must be positive.</dd>
+
+    <dt>`multiplier`, `random_jitter`</dt>
+    <dd>Numbers that tune the backoff growth and add randomness to the delay.</dd>
+</dl>
+
+A retry runs the entire function again, including operations that already succeeded inside it, so retry only work that is
+safe to repeat. A handled nonzero exit code from `exec.run(..., check=False)` does not retry: call `fail()` when the
+result should fail the attempt.
+
+Set `max_attempts` or a `timeout` on every task that has a retry policy. A policy without `max_attempts` keeps retrying
+until the task succeeds, its timeout expires, or the script is canceled.
+
+The `conditions` field of the Atmos retry configuration matches subprocess output and does not apply to function tasks;
+using it is an error, as is any key not listed above.
+
+## Errors
+
+- An empty name, a non-callable `function`, non-string `kwargs` keys, an invalid `timeout`, or an invalid `retry`
+  fails with an argument error when `steps.task` is called.
+- A task that still fails after its last attempt is reported with its name, the attempt count, and a traceback.
+
+## Examples
+
+### Pass arguments and a timeout
+
+```python
+def deploy(name, region):
+    return exec.run(["./deploy.sh", name, region], output = "capture").stdout
+
+output = steps.parallel(
+    tasks = [
+        steps.task(name = "api", function = deploy, args = ["api"], kwargs = {"region": "us-east-1"}, timeout = "5m"),
+        steps.task(name = "worker", function = deploy, args = ["worker", "us-west-2"], timeout = "5m"),
+    ],
+)
+```
+
+### Retry a flaky operation
+
+```python
+def fetch_status():
+    return exec.run(["curl", "--fail", "--silent", "https://status.example.com/health"], output = "capture").stdout
+
+output = steps.parallel(
+    tasks = [
+        steps.task(
+            name = "health",
+            function = fetch_status,
+            retry = {"max_attempts": 5, "initial_delay": "2s", "backoff_strategy": "exponential"},
+            timeout = "2m",
+        ),
+    ],
+)
+```
+
+If the command fails twice and then succeeds, the group returns the output of the third attempt.
+
+### One task per component
+
+```python
+def plan(component, stack):
+    return atmos.terraform("plan", component, stack, output = "capture").exit_code
+
+output = steps.parallel(
+    tasks = [
+        steps.task(name = c, function = plan, args = [c, "dev"], retry = {"max_attempts": 2})
+        for c in ["vpc", "eks", "rds"]
+    ],
+    max_concurrency = 2,
+    fail_fast = True,
+)
+```
+
+## Related
+
+- [`steps.parallel`](/functions/automation/steps.parallel) runs tasks concurrently.
+- [`exec.run`](/functions/automation/exec.run) is the usual work inside a task.
+- [Execution model](/automation/reference/execution-model) explains freezing and cancellation.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#parameterized-tasks-retries-and-timeouts)

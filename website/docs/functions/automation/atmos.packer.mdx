@@ -1,0 +1,122 @@
+---
+title: "atmos.packer"
+sidebar_position: 8
+sidebar_label: "atmos.packer"
+sidebar_class_name: command
+description: Run an atmos packer command, such as init or build, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.packer` function runs `atmos packer` through the current Atmos executable. Use it to initialize,
+    validate, inspect, and build machine images for a Packer component from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.packer(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+Also available as `atmos.pk`.
+
+## Subcommands
+
+Pass the subcommand and the component name as strings before the keyword arguments. The call
+`atmos.packer("build", "alpine", flags = {"stack": "alpine"})` runs `atmos packer build alpine --stack=alpine`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`init`](/cli/commands/packer/init) | Initialize Packer according to an HCL template configuration. |
+| [`validate`](/cli/commands/packer/validate) | Validate a Packer template. |
+| [`inspect`](/cli/commands/packer/inspect) | Inspect a Packer configuration. |
+| [`build`](/cli/commands/packer/build) | Build a machine image from a Packer configuration. |
+| [`output`](/cli/commands/packer/output) | Get an output from a Packer manifest. |
+| [`version`](/cli/commands/packer/version) | Show the Packer version. |
+| [`source pull`](/cli/commands/packer/source/pull) | Vendor Packer component source from the source configuration. |
+| [`source list`](/cli/commands/packer/source/list) | List Packer components with source configuration. |
+| [`source describe`](/cli/commands/packer/source/describe) | Show the source configuration for a Packer component. |
+| [`source delete`](/cli/commands/packer/source/delete) | Remove the vendored Packer source directory. |
+
+See the [`atmos packer` command reference](/cli/commands/packer/usage) for the complete list of subcommands and flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `packer`, in order: the subcommand, then the
+        component name. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"stack"` becomes
+        `--stack`, and the registered shorthands `"s"`, `"t"`, and `"q"` resolve to `--stack`, `--template`,
+        and `--query`. The `template` key selects a Packer template, and the `query` key is a YQ expression used by
+        `output`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>
+        (Optional) A list or tuple of strings appended after the flags. Include the double-dash separator
+        (`"--"`) as the first element to hand the remaining values to the native `packer` binary.
+    </dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Initialize, validate, and build an image
+
+```python
+atmos.packer("init", "alpine", flags = {"stack": "alpine"})
+atmos.packer("validate", "alpine", flags = {"stack": "alpine"})
+atmos.packer("build", "alpine", flags = {"stack": "alpine"})
+```
+
+Each call stops the script when Packer exits with an error.
+
+### Read a value from the build manifest
+
+```python
+image = atmos.packer(
+    "output",
+    "alpine",
+    flags = {"stack": "alpine", "query": ".builds[0].artifact_id"},
+    output = "capture",
+)
+ui.info("Built artifact: " + image.stdout.strip())
+```
+
+### Build with a specific template
+
+```python
+atmos.packer("build", "alpine", flags = {"stack": "alpine", "template": "image.pkr.hcl"})
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos packer`](/cli/commands/packer/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

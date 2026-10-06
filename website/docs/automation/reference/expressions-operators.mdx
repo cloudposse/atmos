@@ -1,0 +1,366 @@
+---
+title: Expressions and Operators
+sidebar_label: Expressions and Operators
+sidebar_position: 3
+slug: /automation/reference/expressions-operators
+description: Arithmetic, comparison, membership, boolean, and bitwise operators, conditional expressions, string formatting, indexing, slicing, comprehensions, lambda, and operator precedence in the Atmos Automation Language.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+An expression computes a value. This page covers the operators, conditional
+expressions, string formatting, indexing and slicing, comprehensions, function
+calls, and lambda expressions that the Atmos Automation Language provides, and how
+they group when combined.
+</Intro>
+
+## Arithmetic
+
+| Operator | Meaning | Example | Result |
+| --- | --- | --- | --- |
+| `+` | Addition; concatenation for strings, bytes, lists, and tuples | `1 + 2` | `3` |
+| `-` | Subtraction | `5 - 7` | `-2` |
+| `*` | Multiplication; repetition for strings, lists, and tuples | `"ab" * 2` | `"abab"` |
+| `/` | True division, always a float | `7 / 2` | `3.5` |
+| `//` | Floor division | `-7 // 2` | `-4` |
+| `%` | Remainder; string formatting when the left side is a string | `-7 % 3` | `2` |
+| `-x`, `+x` | Negation and identity | `-(2 + 3)` | `-5` |
+
+Floor division rounds toward negative infinity, and the remainder takes the
+sign of the right operand, so `a == (a // b) * b + a % b` always holds:
+
+```python
+print(7 // 2, -7 // 2, 7 // -2)   # 3 -4 -4
+print(7 % 3, -7 % 3, 7 % -3)      # 1 2 -2
+print(7.5 // 2, 7.5 % 2)          # 3.0 1.5
+print(7 / 2, 6 / 3)               # 3.5 2.0
+```
+
+Mixing an integer and a float produces a float. Division or remainder by zero
+is an error. Both operands must have compatible types: `"a" + 1` and
+`[1] + (2,)` are errors, so convert first with `str()` or `list()`.
+
+The Atmos Automation Language has no exponent operator. For a nonnegative
+integer exponent, multiply in a loop:
+
+```python
+def power(base, exponent):
+    result = 1
+    for _ in range(exponent):
+        result = result * base
+    return result
+
+print(power(2, 10))        # 1024
+print(sum([1, 2, 3]))      # 6
+```
+
+## Bitwise operators
+
+Integers support `&` (and), `|` (or), `^` (xor), `~` (complement), `<<`, and `>>`.
+A negative shift count is an error, and a left shift count must be below 512.
+
+```python
+print(5 & 3, 5 | 3, 5 ^ 3)   # 1 7 6
+print(~5)                    # -6
+print(1 << 10, 1024 >> 3)    # 1024 128
+```
+
+Applied to dictionaries and sets, `|` also merges and unions; see
+[Data Types](/automation/reference/data-types).
+
+## Comparison
+
+The operators `==`, `!=`, `<`, `>`, `<=`, and `>=` return `True` or `False`. Equality compares
+by value across lists, tuples, dictionaries, and sets, and integers equal
+floats with the same value (`1 == 1.0`). Ordering is defined for numbers,
+strings, bytes, and sequences of comparable elements, and comparing values of
+unrelated types, such as `1 < "a"`, is an error.
+
+Comparisons do not chain. Python's `0 < x < 10` is a syntax error here
+(`< does not associate with <`); combine two comparisons with `and`, or add
+parentheses:
+
+```python
+x = 5
+print(0 < x and x < 10)   # True
+print((1 < 2) == True)    # True
+```
+
+## Membership
+
+The operators `in` and `not in` test whether a value occurs in a collection:
+
+| Collection | `x in collection` checks |
+| --- | --- |
+| string | `x` is a substring (the left side must be a string) |
+| list, tuple, range, set | `x` equals an element |
+| dictionary | `x` is a key |
+| bytes | `x` is a subsequence of bytes, or an integer byte value |
+
+```python
+print("an" in "banana")            # True
+print(3 in [1, 2, 3])              # True
+print("region" in {"region": 1})   # True
+print(1 in {"a": 1})               # False
+print("x" not in ["a", "b"])       # True
+```
+
+## Boolean operators
+
+The `and`, `or`, and `not` operators accept any value, using the
+[truthiness rules](/automation/reference/data-types#truthiness). The binary
+operators short-circuit and return one of their operands rather than
+a plain boolean:
+
+- The expression `a or b` returns `a` if `a` is true, otherwise `b`.
+- The expression `a and b` returns `a` if `a` is false, otherwise `b`.
+- The expression `not a` always returns `True` or `False`.
+
+```python
+print(0 or "default")          # default
+print("set" or "default")      # set
+print([] and "never")          # []
+print(1 and 2 and 3)           # 3
+print(not [])                  # True
+```
+
+Use `or` to supply a fallback: `name = ctx.flags.get("name") or "world"`. The
+right operand is evaluated only when needed, so `d and d["key"]` is safe when
+`d` may be empty.
+
+## Conditional expressions
+
+A conditional expression, written `value_if_true if condition else value_if_false`, selects between two values.
+Only the chosen branch is evaluated. Because top-level names can be assigned
+once, a conditional expression is the usual way to choose a value for a
+top-level assignment.
+
+```python
+replicas = 5
+size = "large" if replicas > 3 else "small"
+print(size)   # large
+
+grade = "high" if replicas > 10 else "mid" if replicas > 3 else "low"
+print(grade)  # mid
+```
+
+## String formatting
+
+### Percent operator
+
+The percent operator, written `format_string % values`, fills conversions that begin with `%`. A single value
+supplies one conversion, and a tuple supplies several. A dictionary supplies
+named conversions such as `%(name)s`.
+
+| Conversion | Result |
+| --- | --- |
+| `%s` | `str()` of the value |
+| `%r` | `repr()` of the value |
+| `%d`, `%i` | Integer; a float is truncated, and a string or boolean is an error |
+| `%o`, `%x`, `%X` | Integer in octal or lowercase or uppercase hexadecimal |
+| `%e`, `%E` | Float in exponent notation, such as `1.234500e+03` |
+| `%f` | Float with six decimal places |
+| `%g`, `%G` | Float in the shortest form |
+| `%c` | A character from an integer code point, or a one-character string |
+| `%%` | A literal percent sign |
+
+```python
+print("%s has %d replicas" % ("api", 3))        # api has 3 replicas
+print("%r" % "quoted")                           # "quoted"
+print("%x and %o" % (255, 8))                    # ff and 10
+print("%f" % 1.5)                                # 1.500000
+print("%(svc)s in %(env)s" % {"svc": "api", "env": "prod"})  # api in prod
+print("%d%%" % 50)                               # 50%
+print("%s" % ([1, 2],))                          # [1, 2]
+```
+
+Flags, field widths, and precision (`%5d`, `%-8s`, `%.2f`, `%05d`) are not
+supported and produce an error such as `unknown conversion %5`. To pad a string,
+build the padding explicitly:
+
+```python
+label = "api"
+print(label + " " * (8 - len(label)) + "|")   # api     |
+```
+
+A tuple is always read as the list of values, so wrap a tuple you want to print
+in a one-element tuple, as in the last example above. The number of values must
+match the number of conversions.
+
+### The format method
+
+The method call `"template".format(...)` replaces `{}` placeholders. Placeholders can be
+automatic (`{}`), numbered (`{0}`), or named (`{name}`), and `!r` or `!s`
+selects `repr()` or `str()`. Write `{{` and `}}` for literal braces.
+
+```python
+print("{} is {}".format("api", "up"))          # api is up
+print("{0}-{1}-{0}".format("a", "b"))          # a-b-a
+print("{svc}:{port}".format(svc="api", port=8080))  # api:8080
+print("{!r}".format("x"))                      # "x"
+print("{{literal}} {}".format(1))               # {literal} 1
+```
+
+Format specifications such as `{:>8}` or `{:.2f}`, attribute access such as
+`{x.name}`, and indexing such as `{items[0]}` are not supported. Do the work
+before formatting, for example `"{}".format(x.name)`. Mixing automatic and
+numbered placeholders in one template is an error, and a missing argument is an
+error. Extra positional arguments are ignored.
+
+## Indexing and slicing
+
+The expression `sequence[i]` reads one element of a string, bytes, list, tuple, or range. Indexes
+start at 0, and a negative index counts from the end. An index outside the
+sequence is an error. Likewise, `dictionary[key]` reads a value and is an error for a
+missing key.
+
+```python
+items = ["a", "b", "c", "d"]
+print(items[0], items[-1])      # a d
+print({"k": 1}["k"])            # 1
+```
+
+A slice `sequence[start:stop:step]` returns a new value of the same type.
+Each part is optional. Slice bounds are clamped, so an out-of-range slice
+produces a shorter or empty result instead of an error. A step of zero is an
+error, and a negative step walks backward.
+
+```python
+items = ["a", "b", "c", "d", "e"]
+print(items[1:3])      # ["b", "c"]
+print(items[:2])       # ["a", "b"]
+print(items[-2:])      # ["d", "e"]
+print(items[::2])      # ["a", "c", "e"]
+print(items[::-1])     # ["e", "d", "c", "b", "a"]
+print(items[2:100])    # ["c", "d", "e"]
+print("hello"[1:4])    # ell
+```
+
+Assignment through an index, `items[i] = value` or `d[key] = value`, works on
+lists and dictionaries. Slice assignment is not available; build a new list
+with concatenation instead. See [Statements](/automation/reference/statements#assignment).
+
+## Attribute access and calls
+
+The expression `value.name` reads an attribute or a method. A method is looked up on the value's
+type, so `"abc".upper` is a function bound to the string, and calling it with
+parentheses runs it. Reading an attribute that does not exist is an error.
+
+Call a function with positional arguments, keyword arguments, or both. A `*`
+before an iterable expands it into positional arguments, and `**` before a
+dictionary expands it into keyword arguments:
+
+```python
+def deploy(name, region, replicas = 1):
+    return "{} in {} x{}".format(name, region, replicas)
+
+args = ["api", "us-east-1"]
+options = {"replicas": 3}
+print(deploy("api", "us-east-1"))           # api in us-east-1 x1
+print(deploy(name = "api", region = "eu-west-1"))  # api in eu-west-1 x1
+print(deploy(*args, **options))             # api in us-east-1 x3
+```
+
+In a call, write positional arguments first, then keyword arguments, then
+`*` and `**` expansions. A positional argument after `*args` is a syntax error.
+Supplying the same parameter twice, an unknown keyword, or too few or too many
+arguments is an error. See [Statements](/automation/reference/statements#function-definitions)
+for how parameters are declared.
+
+## Comprehensions
+
+A comprehension builds a list or dictionary from an iterable in one
+expression. It reads `[expression for variable in iterable]`, with optional
+`if` filters and additional `for` clauses.
+
+```python
+numbers = [1, 2, 3, 4, 5, 6]
+print([n * n for n in numbers if n % 2 == 0])     # [4, 16, 36]
+print({n: n * n for n in numbers if n < 4})       # {1: 1, 2: 4, 3: 9}
+print([(x, y) for x in [1, 2] for y in ["a", "b"]])
+# [(1, "a"), (1, "b"), (2, "a"), (2, "b")]
+```
+
+The loop variables can unpack pairs, which is the usual way to transform a
+dictionary:
+
+```python
+services = {"api": 3, "worker": 5}
+print([name for name, count in services.items() if count > 3])  # ["worker"]
+print({name: count * 2 for name, count in services.items()})    # {"api": 6, "worker": 10}
+```
+
+The variables of a comprehension exist only inside it; a name with the same
+spelling outside is untouched. Python's set comprehensions and generator
+expressions have no equivalent here. Wrap a list comprehension in `set(...)`
+to build a set, and pass a list comprehension to `any()` or `all()`.
+
+```python
+print(set([n % 3 for n in range(10)]))   # set([0, 1, 2])
+```
+
+## Lambda expressions
+
+A lambda expression, written `lambda parameters: expression`, creates an anonymous function whose body is a
+single expression. Parameters follow the same rules as `def`, including defaults,
+`*args`, and `**kwargs`.
+
+```python
+double = lambda x: x * 2
+pick = lambda item, key = "name": item[key]
+
+print(double(21))                                  # 42
+print(sorted(["bb", "a", "ccc"], key = lambda s: -len(s)))  # ["ccc", "bb", "a"]
+print(pick({"name": "api"}))                        # api
+```
+
+Use `def` for anything that needs more than one expression, statements, or a
+name in tracebacks.
+
+## Operator precedence
+
+Operators are listed from the loosest binding to the tightest. Operators in the
+same row group from left to right, except where noted.
+
+| Level | Operators |
+| --- | --- |
+| 1 | `lambda` |
+| 2 | `x if cond else y` |
+| 3 | `or` |
+| 4 | `and` |
+| 5 | `not` |
+| 6 | `==` `!=` `<` `>` `<=` `>=` `in` `not in` (cannot be chained) |
+| 7 | `\|` |
+| 8 | `^` |
+| 9 | `&` |
+| 10 | `<<` `>>` |
+| 11 | `+` `-` |
+| 12 | `*` `/` `//` `%` |
+| 13 | unary `+` `-` `~` |
+| 14 | `x[i]` `x[a:b]` `x.name` `f(args)` |
+
+Two consequences differ from some languages:
+
+- The bitwise operators bind more tightly than comparisons, so `5 & 3 == 1` is
+  `(5 & 3) == 1`.
+- The `not` operator binds more loosely than comparison, so `not 1 in [1]` is
+  `not (1 in [1])`.
+
+```python
+print(1 + 2 * 3)           # 7
+print((1 + 2) * 3)         # 9
+print(-3 % 5)              # 2
+print(1 << 2 + 1)          # 8
+print(not 1 == 2)          # True
+print(1 or 0 and 2)        # 1
+```
+
+When in doubt, add parentheses.
+
+## Next steps
+
+- [Data Types](/automation/reference/data-types): the values operators act on.
+- [Statements](/automation/reference/statements): assignment, functions, and control flow.
+- [Built-in Functions](/automation/reference/builtin-functions): `len`, `sorted`, `any`, `all`, and more.
+- [Methods](/automation/reference/methods): string, list, and dictionary methods.

@@ -1,0 +1,122 @@
+---
+title: "atmos.scaffold"
+sidebar_position: 8
+sidebar_label: "atmos.scaffold"
+sidebar_class_name: command
+description: Run an atmos scaffold command, such as generate or list, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.scaffold` function runs `atmos scaffold` through the current Atmos executable. Use it to list
+    templates, validate scaffold manifests, and generate projects or components from templates in automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.scaffold(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.scaffold("list")` runs `atmos scaffold list`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`generate`](/cli/commands/scaffold/generate) | Generate code from a scaffold template. |
+| [`list`](/cli/commands/scaffold/list) | List available scaffold templates. |
+| [`validate`](/cli/commands/scaffold/validate) | Validate scaffold template configuration. |
+
+See the [`atmos scaffold` command reference](/cli/commands/scaffold/usage) for the complete list of subcommands and
+flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `scaffold`, in order: the subcommand and its
+        positional arguments. For `generate`, these are the template and the target directory. Every value must be a
+        string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"dry-run"`
+        becomes `--dry-run`, and registered shorthands such as `"f"` for `--force` resolve to their long form. For
+        `generate`, useful keys include `"set"` (a list of `key=value` strings), `"defaults"`, `"force"`,
+        `"dry-run"`, and `"ref"`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Generate a project without prompting
+
+```python
+atmos.scaffold(
+    "generate",
+    "aws/app",
+    "./my-app",
+    flags = {"defaults": True, "set": ["project_name=my-app"]},
+)
+```
+
+This runs `atmos scaffold generate aws/app ./my-app --defaults --set=project_name=my-app`. The `defaults` flag makes
+the command use field defaults and the `set` values instead of prompting for input.
+
+### Preview the changes first
+
+```python
+preview = atmos.scaffold("generate", "./templates/service", "./services/api", flags = {"dry-run": True}, output = "capture")
+print(preview.stderr)
+```
+
+### Validate scaffold manifests before generating
+
+```python
+result = atmos.scaffold("validate", "./templates/service", output = "capture", check = False)
+if result.exit_code != 0:
+    fail("The scaffold manifest is not valid:\n" + result.stderr)
+ui.success("The scaffold manifest is valid.")
+```
+
+## Notes
+
+:::note
+The `atmos scaffold` command is experimental, so its notice appears on standard error. The `generate` command prompts
+for field values when a terminal is available. In a script, pass `defaults` along with `set` values so the call does
+not wait for input.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos scaffold`](/cli/commands/scaffold/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

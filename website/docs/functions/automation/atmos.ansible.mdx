@@ -1,0 +1,123 @@
+---
+title: "atmos.ansible"
+sidebar_position: 8
+sidebar_label: "atmos.ansible"
+sidebar_class_name: command
+description: Run an atmos ansible command, such as playbook or version, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.ansible` function runs `atmos ansible` through the current Atmos executable. Use it to run Ansible
+    playbooks for components in a stack and to check the installed Ansible version from automation.
+</Intro>
+
+Also available as `atmos.an`.
+
+## Usage
+
+```python
+atmos.ansible(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.ansible("playbook", "webserver", flags = {"stack": "prod"})` runs
+`atmos ansible playbook webserver --stack=prod`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`playbook`](/cli/commands/ansible/playbook) | Run an Ansible playbook for a component in a stack. Also available as `pb`. |
+| [`version`](/cli/commands/ansible/version) | Show the Ansible version, configuration file location, and module search path. |
+
+See the [`atmos ansible` command reference](/cli/commands/ansible/usage) for the complete list of subcommands and
+flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `ansible`, in order: the subcommand and its
+        positional arguments, such as the component for `playbook`. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"stack"` becomes
+        `--stack`, and registered shorthands resolve to their long form, so `"s"` resolves to `--stack`, `"p"` to
+        `--playbook`, and `"i"` to `--inventory`. Other flags include `--dry-run`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>
+        (Optional) A list or tuple of strings appended after the flags. Start the list with `"--"` to pass options
+        straight to `ansible-playbook`, such as `args = ["--", "--check", "--tags", "web"]`.
+    </dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Run a playbook for a component
+
+```python
+atmos.ansible("playbook", "webserver", flags = {"stack": "prod", "playbook": "site.yml"})
+```
+
+This runs `atmos ansible playbook webserver --playbook=site.yml --stack=prod`.
+
+### Preview changes with Ansible check mode
+
+```python
+atmos.ansible(
+    "playbook",
+    "webserver",
+    flags = {"s": "nonprod", "i": "hosts.ini"},
+    args = ["--", "--check", "--diff"],
+)
+```
+
+Atmos passes the options after `--` to `ansible-playbook`.
+
+### Stop a rollout when a host fails
+
+```python
+result = atmos.ansible("playbook", "webserver", flags = {"stack": "prod"}, output = "capture", check = False)
+if result.exit_code != 0:
+    fail("The playbook failed:\n" + result.stderr)
+```
+
+### Report the installed Ansible version
+
+```python
+version = atmos.ansible("version", output = "capture")
+print(version.stdout)
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos ansible`](/cli/commands/ansible/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

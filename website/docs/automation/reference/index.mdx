@@ -1,0 +1,71 @@
+---
+title: Atmos Automation Language Reference
+sidebar_label: Language Reference
+sidebar_position: 0
+id: index
+description: Reference for the syntax, data types, operators, statements, built-in functions, methods, and execution model of Atmos Automation Language, the Starlark-based language embedded in Atmos.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The Atmos Automation Language is based on Starlark, a Python-like language.
+This reference covers its syntax, data types, and execution rules. For a first
+program and instructions to run it, start with [Custom CLI Apps](/automation/standalone-cli-apps).
+</Intro>
+
+## What this reference covers
+
+The language is Starlark with four options that Atmos turns on: control flow such as `if` and `for`
+at the top level of a file, `while` loops, sets through the `set()` function, and recursion.
+Atmos uses `.star` files for standalone scripts. Values such as integers,
+strings, lists, and dictionaries are built into the language. Atmos also supplies
+`sum()` and `round()` for numeric calculations. Functions for
+running commands and reading component configuration are supplied by Atmos.
+
+This reference covers the language. For the Atmos-supplied helpers and values, such as
+`exec.run`, `steps.parallel`, `fs.read_file`, `ctx`, and `output`, see the
+[automation function reference](/functions/automation). For how scripts run in each entry point,
+see the [script step](/steps/type/script) and the overview in
+[Atmos Automation Language](/automation/language).
+
+A first script shows the pieces together:
+
+```python
+def capacity(replicas, workers_per_replica):
+    if replicas < 1:
+        fail("replicas must be positive")
+    return replicas * workers_per_replica
+
+print("Total workers: {}".format(capacity(3, 4)))  # Total workers: 12
+```
+
+## Topics
+
+1. [Lexical Elements](/automation/reference/lexical-elements) covers how source text is read:
+   comments, identifiers, keywords, literals, indentation, and line continuation.
+2. [Data Types](/automation/reference/data-types) covers `None`, booleans, integers, floats,
+   strings, bytes, lists, tuples, dictionaries, sets, functions, and how values compare and
+   convert.
+3. [Expressions and Operators](/automation/reference/expressions-operators) covers operator
+   precedence, comparisons, slicing, comprehensions, conditional expressions, and calls.
+4. [Statements](/automation/reference/statements) covers assignment, `if`, `for`, `while`, `def`,
+   `return`, `load`, and the other statements.
+5. [Built-in Functions](/automation/reference/builtin-functions) lists the universal constants
+   and functions, and maps the names that Atmos adds.
+6. [Methods](/automation/reference/methods) lists the methods of strings, lists, dictionaries,
+   sets, and bytes.
+7. [Execution Model](/automation/reference/execution-model) explains single-assignment globals,
+   frozen values, determinism, errors and tracebacks, recursion, cancellation, module loading,
+   output streams, and dry runs.
+8. [Differences from Python](/automation/reference/differences-from-python) gives Python
+   programmers a practical list of what works differently or is missing.
+
+## Where to go next
+
+- [Atmos Automation Language](/automation/language) introduces the language, why Atmos uses
+  Starlark, and how each entry point supplies inputs.
+- [Automation Functions](/functions/automation) documents every helper and value that Atmos adds,
+  one page each.
+- [Script step](/steps/type/script) describes `type: script` with `interpreter: starlark`,
+  including module paths, working directory, containers, and dry runs.

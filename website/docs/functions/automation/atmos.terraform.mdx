@@ -1,0 +1,142 @@
+---
+title: "atmos.terraform"
+sidebar_position: 5
+sidebar_label: "atmos.terraform"
+sidebar_class_name: command
+description: Run an Atmos Terraform or OpenTofu command for a component and stack from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.terraform` function runs `atmos terraform <command> <component> --stack=<stack>` through the current
+    Atmos executable. Pass the component and stack as strings; Atmos builds the argument list.
+</Intro>
+
+## Usage
+
+```python
+atmos.terraform(
+    command,
+    component,
+    stack,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+The function is also available as `atmos.tf`. The `command` argument accepts any subcommand of
+[`atmos terraform`](/cli/commands/terraform/usage), including [`plan`](/cli/commands/terraform/plan),
+[`apply`](/cli/commands/terraform/apply), [`deploy`](/cli/commands/terraform/deploy), and
+[`output`](/cli/commands/terraform/output).
+
+## Arguments
+
+<dl>
+    <dt>`command`</dt>
+    <dd>Required. The Terraform subcommand, such as `"plan"`, `"apply"`, `"deploy"`, or `"output"`.</dd>
+
+    <dt>`component`</dt>
+    <dd>Required. The component name.</dd>
+
+    <dt>`stack`</dt>
+    <dd>
+        Required. The stack name. Atmos passes it as `--stack=<stack>`, so do not also pass `stack` or `s` in `flags`.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of Atmos and Terraform flags. See [Flag translation](#flag-translation).
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>
+        (Optional) A list or tuple of strings appended after the flags, for literal arguments such as `"--"` and the
+        native Terraform arguments that follow it.
+    </dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) The same process options as [`atmos.run`](/functions/automation/atmos.run#arguments). The call
+        runs from the directory Atmos was started in by default, even when the script runs in a component
+        directory, so configuration discovery stays the same.
+    </dd>
+</dl>
+
+The values of `command`, `component`, and `stack` must be non-empty and must not start with a dash.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`exec.run`](/functions/automation/exec.run#returns).
+
+## Flag translation
+
+See the shared [flag translation rules](/functions/automation/atmos.run#flag-translation).
+Terraform's registered native flags use their single-dash spelling: for example,
+`"detailed-exitcode"` becomes `-detailed-exitcode`. You can also supply the
+spelling explicitly, as in `flags = {"-var": ["region=us-east-1", "az_count=3"]}`.
+
+## Exit code 2 from plan
+
+When the command is `plan` and the flags request `detailed-exitcode`, an exit code of `2` means the plan found
+changes. With `check=True`, `atmos.terraform` accepts it and returns the result instead of raising.
+
+## Examples
+
+### Plan a component
+
+```python
+plan = atmos.terraform("plan", "vpc", "dev", output = "capture")
+print(plan.stdout)
+```
+
+### Detect changes
+
+```python
+result = atmos.terraform(
+    "plan",
+    component = "vpc",
+    stack = "dev",
+    flags = {"detailed-exitcode": True},
+    output = "capture",
+)
+if result.exit_code == 2:
+    ui.warning("vpc in dev has pending changes")
+else:
+    ui.success("vpc in dev is up to date")
+```
+
+### Apply with native Terraform flags
+
+```python
+atmos.terraform(
+    "apply",
+    "vpc",
+    "dev",
+    flags = {"auto-approve": True, "-var": ["region=us-east-1", "az_count=3"]},
+)
+```
+
+### Plan several stacks in parallel
+
+```python
+def plan(stack):
+    return atmos.terraform("plan", "vpc", stack, output = "capture").exit_code
+
+output = steps.parallel(
+    tasks = [steps.task(name = stack, function = plan, args = [stack], timeout = "10m")
+             for stack in ["dev", "staging", "prod"]],
+    max_concurrency = 2,
+)
+```
+
+## Related
+
+- [`atmos.helm`](/functions/automation/atmos.helm) runs the same shape of call for Helm components.
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`components.get`](/functions/automation/components.get) reads a component's resolved configuration.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

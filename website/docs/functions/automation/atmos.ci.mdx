@@ -1,0 +1,137 @@
+---
+title: "atmos.ci"
+sidebar_position: 8
+sidebar_label: "atmos.ci"
+sidebar_class_name: command
+description: Run an atmos ci command, such as status, validate, or cache, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.ci` function runs `atmos ci` through the current Atmos executable. Use it to check CI status, validate
+    GitHub Actions workflow files, and manage the CI build cache from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.ci(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.ci("validate", flags = {"format": "sarif"})` runs `atmos ci validate --format=sarif`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`status`](/cli/commands/ci/status) | Show CI status for the current branch. |
+| [`validate`](/cli/commands/ci/validate) | Validate GitHub Actions workflow files. |
+| [`cache restore`](/cli/commands/ci/cache/restore) | Restore the cache into the well-known cache directory. |
+| [`cache save`](/cli/commands/ci/cache/save) | Save the well-known cache directory to the CI cache. |
+| [`cache list`](/cli/commands/ci/cache/list) | List CI cache entries. |
+| [`cache delete`](/cli/commands/ci/cache/delete) | Delete a CI cache entry by key. |
+| [`cache paths`](/cli/commands/ci/cache/paths) | Print the cache key and paths, for use with `actions/cache`. |
+
+See the [`atmos ci` command reference](/cli/commands/ci) for the complete list of subcommands and flags. The `ci`
+command is experimental, and the [`cache`](/cli/commands/ci/cache) group has its own page. The cache commands save and
+restore content only inside a supported CI provider, such as GitHub Actions. Outside CI they report that the cache is
+unavailable.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `ci`, in order: the subcommand, its nested
+        subcommand, and any positional arguments. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"format"` becomes
+        `--format`, and registered shorthands resolve to their long form, so `"k"` resolves to `--key` for the
+        `cache` commands. Other flags include `--affected`, `--base`, and `--exclude` for `validate`, and
+        `--path` for `cache save`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Validate workflow files
+
+```python
+atmos.ci("validate", flags = {"affected": True, "base": "origin/main"})
+```
+
+This runs `atmos ci validate --affected --base=origin/main` and raises an error when a workflow file is invalid.
+
+### Validate a workflow directory and keep the result
+
+```python
+result = atmos.ci(
+    "validate",
+    flags = {"workflow-path": ".github/workflows", "exclude": ["**/legacy-*.yml"]},
+    output = "capture",
+    check = False,
+)
+if result.exit_code != 0:
+    fail("Workflow validation failed:\n" + result.stderr)
+ui.success("Workflow files are valid.")
+```
+
+The command writes its summary to standard error, so the message to show on failure is in `result.stderr`.
+
+### Save the cache at the end of a job
+
+```python
+atmos.ci("cache", "save", flags = {"key": "toolchain-linux"})
+```
+
+### List cache entries as data
+
+```python
+entries = atmos.ci("cache", "list", flags = {"format": "json"}, output = "capture")
+print(json.decode(entries.stdout))
+```
+
+### Read CI status without failing the script
+
+```python
+status = atmos.ci("status", output = "capture", check = False)
+if status.exit_code != 0:
+    ui.warning("CI status is not available here.")
+```
+
+Some CI providers do not support the status query. The call then exits with an error that the provider does not
+support the operation.
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos ci`](/cli/commands/ci) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

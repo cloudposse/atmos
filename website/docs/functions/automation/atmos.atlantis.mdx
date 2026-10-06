@@ -1,0 +1,117 @@
+---
+title: "atmos.atlantis"
+sidebar_position: 8
+sidebar_label: "atmos.atlantis"
+sidebar_class_name: command
+description: Run an atmos atlantis command, such as generate repo-config, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.atlantis` function runs `atmos atlantis` through the current Atmos executable. Use it to generate the
+    Atlantis repository configuration for your Atmos stacks and components from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.atlantis(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.atlantis("generate", "repo-config")` runs `atmos atlantis generate repo-config`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| `generate` | Generate Atlantis configuration files. |
+| [`generate repo-config`](/cli/commands/atlantis/generate-repo-config) | Generate the repository configuration file that Atlantis needs to manage Terraform projects. |
+
+See the [`atmos atlantis` command reference](/cli/commands/atlantis/usage) for the complete list of subcommands and
+flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `atlantis`, in order: the subcommand and its
+        positional arguments, such as `"generate", "repo-config"`. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as
+        `"config-template"` becomes `--config-template`. Other flags for `generate repo-config` include
+        `--project-template`, `--affected-only`, `--stacks`, `--components`, and `--output-path`. Flags such as
+        `--stacks` take a comma-separated string, so pass `"dev,prod"` rather than a list.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Generate the configuration for selected stacks
+
+```python
+atmos.atlantis(
+    "generate",
+    "repo-config",
+    flags = {
+        "config-template": "config-1",
+        "project-template": "project-1",
+        "stacks": "tenant1-ue2-staging,tenant1-ue2-prod",
+        "output-path": "atlantis.yaml",
+    },
+)
+```
+
+The template names refer to the Atlantis templates defined in `atmos.yaml`.
+
+### Generate projects only for affected components
+
+```python
+atmos.atlantis(
+    "generate",
+    "repo-config",
+    flags = {
+        "config-template": "config-1",
+        "project-template": "project-1",
+        "affected-only": True,
+        "ref": "refs/heads/main",
+        "output-path": "atlantis.yaml",
+    },
+)
+```
+
+This limits the generated projects to the components that changed compared with the `main` branch.
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos atlantis`](/cli/commands/atlantis/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

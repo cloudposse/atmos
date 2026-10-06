@@ -16,9 +16,11 @@ func fileContext(file *script.File) (starlark.Value, starlark.Value) {
 		for _, arg := range file.Args {
 			values = append(values, starlark.String(arg))
 		}
-		location = starlarkstruct.FromStringDict(starlark.String("script"), starlark.StringDict{
-			"path": starlark.String(file.Path), "directory": starlark.String(filepath.Dir(file.Path)),
-		})
+		if !file.Stdin {
+			location = starlarkstruct.FromStringDict(starlark.String("script"), starlark.StringDict{
+				"path": starlark.String(file.Path), "directory": starlark.String(filepath.Dir(file.Path)),
+			})
+		}
 	}
 	args := starlark.NewList(values)
 	args.Freeze()

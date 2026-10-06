@@ -1,0 +1,106 @@
+---
+title: "atmos.toolchain"
+sidebar_position: 7
+sidebar_label: "atmos.toolchain"
+sidebar_class_name: command
+description: Run an Atmos toolchain command, such as install or which, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.toolchain` function runs `atmos toolchain <command> [tool]` through the current Atmos executable.
+    Use it for explicit toolchain operations such as installing a tool or listing what is installed.
+</Intro>
+
+## Usage
+
+```python
+atmos.toolchain(
+    command,
+    tool = "",
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+The `command` argument takes a subcommand of [`atmos toolchain`](/cli/commands/toolchain/usage):
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`install`](/cli/commands/toolchain/install) | Install CLI binaries from the registry. |
+| [`uninstall`](/cli/commands/toolchain/uninstall) | Uninstall a tool or all tools. |
+| [`list`](/cli/commands/toolchain/list) | List configured tools and their installation status. |
+| [`add`](/cli/commands/toolchain/add), [`remove`](/cli/commands/toolchain/remove), [`set`](/cli/commands/toolchain/set) | Edit the `.tool-versions` file. |
+| [`get`](/cli/commands/toolchain/get), [`info`](/cli/commands/toolchain/info), [`which`](/cli/commands/toolchain/which), [`path`](/cli/commands/toolchain/path) | Inspect tools and their paths. |
+| [`update`](/cli/commands/toolchain/update), [`lock`](/cli/commands/toolchain/lock) | Update versions and refresh the lock file. |
+| [`exec`](/cli/commands/toolchain/exec), [`env`](/cli/commands/toolchain/env), [`clean`](/cli/commands/toolchain/clean), [`du`](/cli/commands/toolchain/du) | Run a tool, export its `PATH`, and manage caches. |
+
+## Arguments
+
+<dl>
+    <dt>`command`</dt>
+    <dd>Required. The toolchain subcommand, such as `"install"`, `"uninstall"`, or `"list"`.</dd>
+
+    <dt>`tool`</dt>
+    <dd>
+        (Optional) The tool the command applies to, for example `"jqlang/jq@1.7.1"`. It is placed right after the
+        command.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command flags, translated the same way as for
+        [the command wrappers](/functions/automation/atmos.run#flag-translation).
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) The same process options as [`atmos.run`](/functions/automation/atmos.run#arguments).
+    </dd>
+</dl>
+
+The `command` argument must be non-empty, and neither `command` nor `tool` may start with a dash.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`exec.run`](/functions/automation/exec.run#returns).
+
+The call runs the toolchain command in a separate Atmos process, so it does not change the calling script's `PATH`.
+Use [`dependencies.tools`](/functions/automation/dependencies.tools) when later calls in the script need the tool.
+
+## Examples
+
+### Install a tool
+
+```python
+atmos.toolchain("install", "jqlang/jq@1.7.1")
+```
+
+### List installed tools
+
+```python
+installed = atmos.toolchain("list", output = "capture")
+print(installed.stdout)
+```
+
+### Pass a flag
+
+```python
+atmos.toolchain("list", flags = {"format": "json"}, output = "capture")
+```
+
+## Related
+
+- [`dependencies.tools`](/functions/automation/dependencies.tools) installs tools and adds them to the script's `PATH`.
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos toolchain`](/cli/commands/toolchain/usage) documents every subcommand and flag.

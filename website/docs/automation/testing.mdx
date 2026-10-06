@@ -9,20 +9,25 @@ slug: /automation/testing
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Test steps group checks and report their results through Atmos.
-Use test steps when you want to verify automation logic, command results, or
-services and make failures visible locally and in CI. Write checks in Atmos
-Automation Language or combine other supported step types.
+Test your automation as you develop it, then run the same checks in CI. Check
+shared functions, command behavior, and deployed services so changes to your
+build and release process have tests of their own.
 </Intro>
 
-A `type: test` step groups checks and reports their results as a tree. Each child
-can be a script or another supported step, such as `http`, `shell`, or `atmos`.
-For an Atmos Automation Language check, use an `if` condition and `fail()` to
-report an unmet expectation. A script that finishes successfully passes.
+A `type: test` step runs checks and reports which passed and which failed.
+Each check can be a script, an HTTP request, a shell command, or another supported
+step. Use test steps in workflows, custom commands, and lifecycle hooks. Atmos
+collects the results, shows the output of failed checks, and returns a failing
+exit code when a suite fails.
+
+In a script written in the Atmos Automation Language, use a condition and
+`fail()` to report an unmet expectation. A script that finishes successfully
+passes.
 
 ## Create a test workflow
 
-Start with this `atmos.yaml`:
+With Atmos installed and on your `PATH`, save this as `atmos.yaml`. The first
+example uses only built-in functions and needs no external tools:
 
 ```yaml title="atmos.yaml"
 base_path: .
@@ -67,7 +72,7 @@ workflows:
                       fail("expected {}, got {}".format(expected, actual))
 ```
 
-Run the suite:
+Run from the directory containing `atmos.yaml`:
 
 ```shell
 atmos workflow check -f checks
@@ -127,6 +132,6 @@ policy for suites intended to gate CI.
 Test steps also work inside custom commands and lifecycle hooks. See the
 [test step reference](/steps/type/test) for failure policies, supported
 children, counts, and hook configuration. The
-[language reference](/automation/language) describes output
+[language overview](/automation/language) describes output
 values and process execution; the [test example](/examples/tests) shows a larger
 suite.

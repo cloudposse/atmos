@@ -1,0 +1,121 @@
+---
+title: "atmos.helm"
+sidebar_position: 6
+sidebar_label: "atmos.helm"
+sidebar_class_name: command
+description: Run an Atmos Helm command for a component and stack from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.helm` function runs `atmos helm <command> <component> --stack=<stack>` through the current Atmos
+    executable, so scripts can render, diff, and deploy native Helm components without building command lines by hand.
+</Intro>
+
+## Usage
+
+```python
+atmos.helm(
+    command,
+    component,
+    stack,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+The `command` argument takes a subcommand of [`atmos helm`](/cli/commands/helm/usage):
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`template`](/cli/commands/helm/template) | Render Helm chart manifests. |
+| [`values`](/cli/commands/helm/values) | Show resolved Helm values as formatted YAML. |
+| [`plan`](/cli/commands/helm/plan) | Preview changes an apply would make. |
+| [`diff`](/cli/commands/helm/diff) | Show changes an apply would make. |
+| [`apply`](/cli/commands/helm/apply) | Install or upgrade a Helm release. |
+| [`deploy`](/cli/commands/helm/deploy) | Deploy a Helm release. |
+| [`delete`](/cli/commands/helm/delete) | Uninstall a Helm release. |
+
+The `plugin` and `repo` subcommands manage Helm plugins and repositories rather than a component, so call them with
+[`atmos.run`](/functions/automation/atmos.run), for example `atmos.run(["helm", "repo", "list"])`.
+
+## Arguments
+
+<dl>
+    <dt>`command`</dt>
+    <dd>Required. The Helm subcommand, such as `"template"`, `"diff"`, or `"deploy"`.</dd>
+
+    <dt>`component`</dt>
+    <dd>Required. The component name.</dd>
+
+    <dt>`stack`</dt>
+    <dd>
+        Required. The stack name. Atmos passes it as `--stack=<stack>`, so do not also pass `stack` or `s` in `flags`.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command flags; see the shared
+        [flag translation rules](/functions/automation/atmos.run#flag-translation).
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) The same process options as [`atmos.run`](/functions/automation/atmos.run#arguments).
+    </dd>
+</dl>
+
+The values of `command`, `component`, and `stack` must be non-empty and must not start with a dash.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`exec.run`](/functions/automation/exec.run#returns).
+Unlike `atmos.terraform`, no exit code is treated as a successful result: with `check=True`, any nonzero exit code
+raises.
+
+## Examples
+
+### Render a chart
+
+```python
+rendered = atmos.helm("template", "ingress", "dev", output = "capture")
+print(rendered.stdout)
+```
+
+### Diff before deploying
+
+```python
+diff = atmos.helm("diff", "ingress", "dev", output = "capture")
+print(diff.stdout)
+```
+
+### Deploy to every stack in sequence
+
+```python
+for stack in ["dev", "staging", "prod"]:
+    ui.info("Deploying ingress to " + stack)
+    atmos.helm(
+        "deploy",
+        "ingress",
+        stack,
+        flags = {"namespace": "ingress", "set": ["image.tag=1.2.3"]},
+    )
+```
+
+In the first iteration, Atmos runs `atmos helm deploy ingress --stack=dev --namespace=ingress --set=image.tag=1.2.3`.
+
+## Related
+
+- [`atmos.terraform`](/functions/automation/atmos.terraform) runs Terraform and OpenTofu components.
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

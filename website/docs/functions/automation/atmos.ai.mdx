@@ -1,0 +1,123 @@
+---
+title: "atmos.ai"
+sidebar_position: 8
+sidebar_label: "atmos.ai"
+sidebar_class_name: command
+description: Run an atmos ai command, such as ask or exec, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.ai` function runs `atmos ai` through the current Atmos executable. Use it to ask the Atmos AI assistant
+    a question, run a non-interactive prompt, and manage AI sessions and skills from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.ai(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.ai("ask", "List all stacks")` runs `atmos ai ask "List all stacks"`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`ask`](/cli/commands/ai/ask) | Ask the AI assistant a single question and print the answer. |
+| [`chat`](/cli/commands/ai/chat) | Start an interactive chat session. |
+| [`exec`](/cli/commands/ai/exec) | Run a prompt non-interactively and print the result as text, JSON, or Markdown. |
+| [`sessions`](/cli/commands/ai/sessions) | Manage saved chat sessions with `list`, `clean`, `export`, and `import`. |
+| [`skill`](/cli/commands/ai/skill) | Manage AI skills with `install`, `list`, `uninstall`, and `update`. |
+
+See the [`atmos ai` command reference](/cli/commands/ai/usage) for the complete list of subcommands and flags. The
+`ai` command is experimental.
+
+:::note
+Choose `exec` for scripts. It is built for automation: it takes the prompt as an argument or on standard input,
+writes no interactive interface, and reports failures through exit codes. The `ask` command also works from a script
+and returns the answer as text. The `chat` command opens an interactive interface that needs a terminal, so it is not
+suited to unattended runs. Calls that reach the AI provider need the provider configured in `atmos.yaml` and may incur
+usage costs.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `ai`, in order: the subcommand and its positional
+        arguments, such as the question for `ask` or the prompt for `exec`. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"format"` becomes
+        `--format`, and registered shorthands resolve to their long form, so `"f"` resolves to `--format` for
+        `exec`. Other flags include `--no-tools`, `--session`, and `--include`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Ask a question
+
+```python
+answer = atmos.ai("ask", "Which components are available?", flags = {"no-tools": True}, output = "capture")
+print(answer.stdout)
+```
+
+This runs `atmos ai ask "Which components are available?" --no-tools`.
+
+### Run a prompt and read structured output
+
+```python
+result = atmos.ai("exec", "Validate the stack configuration", flags = {"format": "json"}, output = "capture", check = False)
+if result.exit_code != 0:
+    fail("The AI assistant reported a failure (exit code " + str(result.exit_code) + "):\n" + result.stderr)
+
+report = json.decode(result.stdout)
+if not report["success"]:
+    fail("The prompt did not succeed.")
+ui.success("The AI assistant completed the prompt.")
+```
+
+The `exec` command exits with `1` on an AI error and `2` on a tool execution error, so `check = False` lets the script
+decide how to react.
+
+### Install a skill
+
+```python
+atmos.ai("skill", "install", "atmos-terraform")
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos ai`](/cli/commands/ai/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

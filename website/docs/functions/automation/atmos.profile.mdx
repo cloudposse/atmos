@@ -1,0 +1,106 @@
+---
+title: "atmos.profile"
+sidebar_position: 8
+sidebar_label: "atmos.profile"
+sidebar_class_name: command
+description: Run an atmos profile command, such as list or show, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.profile` function runs `atmos profile` through the current Atmos executable. Use it to discover the
+    configuration profiles available to a project and to read the details of one profile.
+</Intro>
+
+## Usage
+
+```python
+atmos.profile(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and its positional arguments as strings before the keyword arguments. The call
+`atmos.profile("show", "developer")` runs `atmos profile show developer`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`list`](/cli/commands/profile/profile-list) | List available configuration profiles. |
+| [`show`](/cli/commands/profile/profile-show) | Show detailed information about a profile. |
+
+See the [`atmos profile` command reference](/cli/commands/profile/usage) for the complete list of subcommands and
+flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `profile`, in order: the subcommand and its
+        positional arguments, such as the profile name for `show`. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). The key `"format"` becomes `--format`
+        , and the registered shorthand `"f"` resolves to the same flag. The `list` subcommand accepts `table`,
+        `json`, or `yaml`, and `show` accepts `text`, `json`, or `yaml`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### List the profiles as data
+
+```python
+profiles = json.decode(atmos.profile("list", flags = {"format": "json"}, output = "capture").stdout)
+for profile in profiles:
+    print(profile["Name"], profile["Files"])
+```
+
+The JSON output is a list of objects with keys such as `Name`, `Path`, and `Files`.
+
+### Show one profile
+
+```python
+details = atmos.profile("show", "developer", flags = {"format": "yaml"}, output = "capture")
+print(details.stdout)
+```
+
+### Check that a profile exists
+
+```python
+probe = atmos.profile("show", "ci", output = "capture", check = False)
+if probe.exit_code != 0:
+    fail("The ci profile is not available:\n" + probe.stderr)
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos profile`](/cli/commands/profile/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

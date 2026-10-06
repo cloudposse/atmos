@@ -1,0 +1,123 @@
+---
+title: "atmos.store"
+sidebar_position: 8
+sidebar_label: "atmos.store"
+sidebar_class_name: command
+description: Run an atmos store command, such as get, set, delete, or list, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.store` function runs `atmos store` through the current Atmos executable. Use it to read, write,
+    delete, and list values in the store backends configured under `stores:` in `atmos.yaml` from automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.store(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The call
+`atmos.store("get", "app-metadata", "release")` runs `atmos store get app-metadata release`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`get`](/cli/commands/store/get) | Retrieve a value from a store. |
+| [`set`](/cli/commands/store/set) | Write a value to a store (create or update). |
+| [`delete`](/cli/commands/store/delete) | Remove a value from a store. Also available as `rm` and `unset`. |
+| [`list`](/cli/commands/store/list) | List configured store backends, or the key/value pairs stored inside one. |
+
+See the [`atmos store` command reference](/cli/commands/store/usage) for the complete list of subcommands and flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `store`, in order: the subcommand and its
+        positional arguments. These are the store name, the key, and for `set` the value. Every value must be a
+        string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"format"` becomes
+        `--format`, and registered shorthands such as `"s"`, `"c"`, and `"f"` resolve to their long form. Common
+        keys for this command are `"stack"`, `"component"`, `"identity"`, `"format"`, and `"force"`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Write a value to a store
+
+```python
+atmos.store("set", "app-metadata", "release", "v1.4.0")
+```
+
+### Read a value back
+
+```python
+release = atmos.store("get", "app-metadata", "release", flags = {"raw": True}, output = "capture")
+ui.info("Current release: " + release.stdout)
+```
+
+The `raw` flag prints the value with no trailing newline.
+
+### List the configured backends as data
+
+```python
+listing = atmos.store("list", flags = {"format": "json"}, output = "capture")
+if listing.stdout.strip():
+    print(json.decode(listing.stdout))
+else:
+    ui.warning("No stores are configured in atmos.yaml.")
+```
+
+### Delete a key without confirmation
+
+```python
+atmos.store("delete", "app-metadata", "release", flags = {"force": True})
+```
+
+## Notes
+
+:::note
+The `atmos store` command is experimental. The wrappers keep its native behavior, including the experimental notice on
+standard error and authentication through the backend identity. The `delete` subcommand asks for confirmation unless
+`force` is set, so scripts pass `force`. Pass the value to `set` as a positional argument rather than with the `stdin`
+flag.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos store`](/cli/commands/store/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

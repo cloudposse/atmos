@@ -11,9 +11,12 @@ cast:
 
 # A custom CLI app built with Atmos
 
-Use Atmos Automation Language, a Python-like language built on Starlark, to
-summarize a JSON service manifest with one executable file. The `#!/usr/bin/env atmos`
-shebang uses Atmos as the interpreter; no Python or jq installation is needed.
+Build a CLI app that reads a JSON service manifest and reports replica totals.
+The program is written in the Atmos Automation Language, a Python-like language
+based on Starlark. Atmos supplies the interpreter, file access, JSON decoding,
+and terminal output. Run it with
+`atmos ./summarize.star services.json`, or use the `#!/usr/bin/env atmos` shebang
+to execute it directly. This example needs only Atmos.
 
 From this directory, with Atmos on `PATH`:
 

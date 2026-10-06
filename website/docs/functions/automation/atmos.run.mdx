@@ -1,0 +1,166 @@
+---
+title: "atmos.run"
+sidebar_position: 4
+sidebar_label: "atmos.run"
+sidebar_class_name: command
+description: Run any Atmos command, including custom commands, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.run` function invokes the current Atmos executable with an argument list. Use it for any Atmos
+    command, including custom commands from `atmos.yaml` and commands that have no dedicated wrapper.
+</Intro>
+
+## Usage
+
+```python
+atmos.run(argv, working_directory = ..., env = ..., output = "stream", check = True)
+```
+
+## Custom commands and aliases
+
+Besides `atmos.run`, `atmos.terraform`, `atmos.helm`, and `atmos.toolchain`, the `atmos` module has one member for every
+command in the CLI, including aliases and the custom commands defined in `atmos.yaml`. A custom command named
+`capacity` is callable as `atmos.capacity(flags = {"replicas": "3"})`, and the alias `tf` as `atmos.tf(...)`. These
+members follow the [command wrapper signature](#command-wrappers). A command whose name contains
+a hyphen cannot be written as an attribute, so call it with `atmos.run(["my-command", "--flag=value"])` instead.
+
+## Command wrappers
+
+A command wrapper such as `atmos.vendor` builds an argument list and runs it
+through the current Atmos executable:
+
+```python
+atmos.vendor(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+`*positionals` are strings placed immediately after the command name. `flags`
+is a dictionary translated into command-line options using the rules below.
+`args` is a list or tuple of strings appended after the flags, for example
+`args = ["--", "nginx", "-v"]`. These values are passed without shell parsing.
+All options after the positionals are keyword-only.
+
+The wrappers share the [process options](#arguments), [result](#returns), and
+[error behavior](#errors) of `atmos.run`. The `atmos.terraform` and `atmos.helm`
+functions take named `command`, `component`, and `stack` arguments;
+`atmos.toolchain` takes `command` and an optional `tool`. Their individual pages
+document these signatures and any exceptions.
+
+### Flag translation
+
+These rules apply to the wrappers' `flags` dictionaries. With `atmos.run`, pass
+flags as strings in `argv` instead.
+
+- Keys are strings processed in sorted order. A bare key such as `"format"`
+  becomes `--format`. Registered shorthands resolve to their long form for the
+  selected subcommand; registered native flags use their native spelling.
+- A key with a leading dash is passed as written, such as Terraform's `"-var"`.
+- `True` emits the bare flag; `False` emits the flag with `=false`.
+- Strings and integers emit the flag followed by `=value`.
+- A list repeats the flag for each element. If a command expects a comma-separated
+  value, pass one string such as `"dev,prod"`.
+- Unsupported value types, invalid flag names, and keys that translate to the
+  same flag produce argument errors.
+
+For example, `atmos.vendor("pull", flags = {"component": "vpc"})` runs
+`atmos vendor pull --component=vpc`.
+
+## Arguments
+
+<dl>
+    <dt>`argv`</dt>
+    <dd>
+        Required. A list or tuple of strings: the Atmos command line, without the leading `atmos`. The first element
+        must be a non-empty command name. Arguments are passed as written and never go through a shell.
+    </dd>
+
+    <dt>`working_directory`</dt>
+    <dd>
+        (Optional) The directory to run in. Defaults to the directory Atmos was started from, so the child finds the
+        same `atmos.yaml`. A relative path resolves against that directory.
+    </dd>
+
+    <dt>`env`</dt>
+    <dd>
+        (Optional) A dictionary of extra environment variables, with string keys and string values, layered over the
+        inherited execution environment for this call.
+    </dd>
+
+    <dt>`output`</dt>
+    <dd>
+        (Optional) `"stream"` (the default) shows the command's output live and also captures it. The value `"capture"`
+        captures stdout and stderr without showing them.
+    </dd>
+
+    <dt>`check`</dt>
+    <dd>
+        (Optional) Defaults to `True`: a nonzero exit code raises an error. Pass `False` to receive the result and
+        inspect `exit_code` yourself.
+    </dd>
+</dl>
+
+## Returns
+
+A result with three fields: `stdout` and `stderr` (strings) and `exit_code` (an integer). See
+[`exec.run`](/functions/automation/exec.run#returns) for the details that all process-running functions share.
+
+## Errors
+
+- An empty `argv`, an empty command name, or a non-string element fails with an argument error.
+- With `check=True`, a nonzero exit code fails with a message that names the command and exit code and lists the
+  last lines of stderr.
+- A command that cannot start, a canceled run, and a command stopped by a signal always raise, whatever `check`
+  says.
+
+## Examples
+
+### Run a custom command
+
+```python
+atmos.run(["capacity", "--replicas=3"])
+```
+
+### Capture structured output
+
+```python
+result = atmos.run(
+    ["describe", "component", "vpc", "--stack=dev", "--format=json"],
+    output = "capture",
+)
+component = json.decode(result.stdout)
+print(component["vars"]["cidr_block"])
+```
+
+### Handle a failure
+
+```python
+result = atmos.run(["validate", "stacks"], check = False, output = "capture")
+if result.exit_code != 0:
+    ui.warning("Validation failed:\n" + result.stderr)
+```
+
+### Run in parallel
+
+```python
+def validate(stack):
+    atmos.run(["validate", "component", "vpc", "--stack=" + stack])
+
+steps.parallel(functions = [lambda: validate("dev"), lambda: validate("prod")])
+```
+
+## Related
+
+- [`atmos.terraform`](/functions/automation/atmos.terraform) and [`atmos.helm`](/functions/automation/atmos.helm) add structured component arguments.
+- [`atmos.vendor`](/functions/automation/atmos.vendor) and the other [command wrappers](/functions/automation#atmos-command-wrappers) call built-in commands by name.
+- [`exec.run`](/functions/automation/exec.run) runs any other program.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

@@ -1,7 +1,7 @@
 ---
 title: Custom CLI Apps
 sidebar_label: Custom CLI Apps
-description: Build executable tools with Atmos Automation Language, including arguments, typed flags, validation, and generated help.
+description: Give your team one command to build, ship, and deploy locally or in CI with the Atmos Automation Language.
 id: standalone-cli-apps
 slug: /automation/standalone-cli-apps
 ---
@@ -11,31 +11,45 @@ import EmbedFile from '@site/src/components/EmbedFile'
 import CastEmbed from '@site/src/components/CastEmbed'
 
 <Intro>
-A custom CLI app is an executable program built with Atmos Automation Language.
-Use custom CLI apps when you want to give your team a tool with its own arguments,
-flags, validation, and help. Atmos supplies the interpreter and built-in helpers;
-your program supplies the behavior.
+Give your team one command to build, ship, and deploy containers, locally or in
+CI. Write your CLI app in the Atmos Automation Language, a Python-like DSL based
+on Starlark. Save it as a `.star` file and run it with `atmos ./my-tool.star`.
 </Intro>
 
-A custom CLI app is an executable such as `./capacity.star`. Its interface
-lives in the script, declared with `cli.command`. It does not need a custom-command
-entry in `atmos.yaml`. To add a subcommand such as `atmos capacity` instead, use
-[custom commands](/automation/custom-commands).
+A release tool can build an image, push it to your registry, and deploy it using
+your project's Atmos stacks, identities, and toolchain. Commit the tool with your
+project and invoke it from both your terminal and CI. Changes to the release
+process live in one place, and you can exercise them locally before a pipeline runs.
 
-Write the program in Atmos Automation Language: a Python-like language built on
-Starlark and embedded in Atmos. A `.star` file with `#!/usr/bin/env atmos` on its
-first line runs using the Atmos executable on your `PATH`.
+As Bash wrappers grow, you end up maintaining argument parsing, quoting,
+JSON processing, and coordination between background processes. Atmos supplies
+typed inputs, structured values, parallel tasks, and generated help. Put shared
+logic in functions and [test it](/automation/testing), including success and
+failure cases. The same test steps can check command results and deployed services.
+
+Starlark provides functions, loops, and structured data with familiar Python-like
+syntax. The interpreter ships with Atmos, so scripts using its built-ins need no
+separate language runtime. See [why Atmos uses Starlark](/automation/language#why-starlark)
+for the language's design and capabilities.
+
+Install Atmos and put it on your `PATH` before starting. The first two examples
+use only built-in functions; they need no `atmos.yaml`, stacks, Python, or other
+tools. To register a subcommand such as `atmos capacity` in a project's
+configuration, see [custom commands](/automation/custom-commands).
 
 ## Start with an executable script
 
-A small program can read its positional inputs from `ctx.args`. This tested
-example reads a JSON service manifest and calculates replica totals using the
-built-in `fs` and `json` helpers:
+Save this program as `summarize.star`. It reads the input filename from
+`ctx.args`, loads the JSON file, and reports the total number of replicas:
 
 <EmbedFile filePath="examples/starlark-script/summarize.star" language="python" />
 
-Use the example's [service manifest](/examples/starlark-script), then run from
-the directory containing both files:
+Save the input beside it as `services.json`:
+
+<EmbedFile filePath="examples/starlark-script/services.json" language="json" />
+
+Run from the directory containing both files. The shebang on the first line
+selects Atmos as the interpreter:
 
 ```shell
 chmod +x summarize.star
@@ -43,12 +57,12 @@ chmod +x summarize.star
 ```
 
 ```text
-ℹ api: 2 replicas
-ℹ worker: 3 replicas
+▶ api: 2 replicas
+▶ worker: 3 replicas
 ✓ Total: 2 services, 5 replicas
 ```
 
-`ui.info` reports each service; `ui.success` highlights the total. These styled
+The `ui.info` calls report each service, and `ui.success` highlights the total. These styled
 messages use stderr, leaving stdout available for data.
 
 On systems without shebang support, run `atmos ./summarize.star services.json`.
@@ -56,10 +70,52 @@ Input paths passed to `fs.read_file` are relative to your working directory.
 
 <CastEmbed src="/casts/examples/starlark-script/summarize.cast" title="Custom CLI app: ./summarize.star services.json" chrome controls scrubber />
 
+## Read a script from stdin
+
+Use `-` in place of a script filename:
+
+```shell
+atmos - services.json < summarize.star
+atmos - -- services.json < summarize.star
+```
+
+Both commands pass `services.json` to the script. The optional `--` immediately
+following `-` is consumed by Atmos; subsequent arguments and flags belong to the
+script. For a script that declares `cli.command`, `atmos - --help < capacity.star`
+shows that script's help.
+
+Starlark is the default interpreter for stdin. To select it explicitly, put
+`--interpreter` before `-`:
+
+```shell
+atmos --interpreter=starlark - services.json < summarize.star
+```
+
+Pipes and here-documents work too:
+
+```shell
+atmos - foo bar <<'EOF'
+print(ctx.args)
+EOF
+```
+
+```text
+["foo", "bar"]
+```
+
+Atmos reads the source through EOF before executing it. Relative `load()` imports
+and file operations resolve from the working directory. There is no source
+filename, so `ctx.script` is `None`, and tracebacks identify the source as
+`<stdin>`. An unnamed `cli.command` uses `stdin` as its command name.
+
+The `-` marker is required: `atmos < summarize.star` does not select script
+execution. `--interpreter` selects a registered embedded interpreter; it does not
+launch an external interpreter.
+
 ## Declare arguments, flags, and help
 
 When a tool needs a documented interface, declare it with `cli.command`.
-`cli.arg` defines a positional argument; `cli.flag` defines a named option.
+Use `cli.arg` for a positional argument and `cli.flag` for a named option.
 Atmos parses those inputs before calling your program:
 
 <EmbedFile filePath="examples/starlark-script/capacity.star" language="python" />
@@ -68,16 +124,16 @@ Save this example as `capacity.star`, make it executable, and run:
 
 ```shell
 chmod +x capacity.star
-./capacity.star api --replicas 3
+./capacity.star api --replicas=3
 ```
 
 ```text
 ✓ api: 3 replicas x 4 workers = 12 workers
 ```
 
-Omitting `--replicas` uses the declared default of two. `--replicas many` fails
-integer parsing. `--replicas 0` parses as an integer but fails the program's
-positive-count validation.
+Omitting `--replicas` uses the declared default of two. A value such as
+`--replicas=many` fails integer parsing, while `--replicas=0` parses as an integer
+but fails the program's positive-count validation.
 
 Run `./capacity.star --help` to see the required service argument, replica flag,
 and default. Help runs neither the validation callback nor `main`.
@@ -87,18 +143,120 @@ and default. Help runs neither the validation callback nor `main`.
 The `run` and optional `validate` callbacks receive `args` and `flags`
 dictionaries. In this example, `args["service"]` is a string and
 `flags["replicas"]` is already an integer. Use these values directly in your
-program; there is no environment-variable mapping to maintain.
+program.
 
 Flags can declare defaults, choices, and environment bindings. Use a validation
 callback for rules beyond a flag's type, such as a positive count or a relationship
 between two inputs. Keep the work itself in the `run` callback so help and invalid
 invocations do not start it.
 
+## What your program can do
+
+Use Atmos's built-in functions to turn a small script into a tool that coordinates
+your infrastructure. Each capability uses the configuration and execution controls
+already available through Atmos:
+
+<dl>
+  <dt>Build a deployment tool</dt>
+  <dd>
+    Call `atmos.container` to build and publish an image, then `atmos.terraform`
+    or `atmos.helm` to deploy a component. Give the sequence one command-line
+    interface with the inputs and defaults your team needs.
+  </dd>
+
+  <dt>Use your existing stacks and identities</dt>
+  <dd>
+    Read merged variables, settings, and metadata with `components.get`.
+    Calls to `atmos.*` run through the Atmos executable and use the same
+    configuration and authentication as their CLI equivalents.
+    Use [`atmos.auth`](/functions/automation/atmos.auth) to authenticate with a
+    configured identity and run commands in its credential environment.
+  </dd>
+
+  <dt>Declare the tools your app needs</dt>
+  <dd>
+    Pin tool versions with `dependencies.tools`. Atmos installs missing versions
+    and adds them to the script's process environment, making the requested
+    versions available to commands your app starts. Installation may need network access.
+  </dd>
+
+  <dt>Run independent work in parallel</dt>
+  <dd>
+    Use `steps.parallel` to check several stacks or components concurrently.
+    Set a concurrency limit and add retries and timeouts with `steps.task`.
+    Results retain input order, and streamed output identifies the task that produced it.
+  </dd>
+
+  <dt>Read data and call other tools</dt>
+  <dd>
+    Use `fs.read_file`, `json.decode`, and `regex.search` to process files and
+    command results. `exec.run` launches external programs and returns their
+    output and exit code for your script to inspect.
+  </dd>
+
+  <dt>Give operators useful output</dt>
+  <dd>
+    Write progress with `ui.info` and `ui.success`, diagnostics with `log.debug`,
+    and data with `print`. Status goes to stderr, leaving stdout for another tool
+    to consume. When masking is enabled, Atmos masks registered secrets and matches
+    for configured masking patterns in displayed output.
+  </dd>
+
+  <dt>Make failures actionable</dt>
+  <dd>
+    Use [`errors.build`](/functions/automation/errors.build) for errors with
+    explanations, recovery hints, examples, and context. They use Atmos's error
+    formatting and reporting, including Sentry when configured.
+  </dd>
+
+  <dt>Return results other tools can use</dt>
+  <dd>
+    Assign [`output`](/functions/automation/output) to return a string or
+    structured value. Standalone apps write that result to stdout; scripts in
+    workflows, custom commands, and hooks expose it as a step value.
+  </dd>
+</dl>
+
+For example, a release tool can build and publish an image, deploy it with
+Terraform, and report the result. This program assumes your project defines
+container and Terraform components named `api` in the selected stack, with the
+required tools and credentials available:
+
+```python
+#!/usr/bin/env atmos
+def main(args, flags):
+    stack = flags["stack"]
+    ui.info("Releasing api to " + stack)
+
+    atmos.container("build", "api", flags={"stack": stack})
+    atmos.container("push", "api", flags={"stack": stack})
+    atmos.terraform("deploy", "api", stack)
+
+    ui.success("Released api to " + stack)
+
+cli.command(
+    description = "Build, publish, and deploy the API",
+    flags = [cli.flag("stack", shorthand="s", required=True,
+                      description="Stack to release to")],
+    run = main,
+)
+```
+
+Save it as `release.star` and run `atmos ./release.star --stack dev` to execute
+that release sequence. Run `atmos ./release.star --help` to display its interface
+without starting the release.
+
+See the [automation function reference](/functions/automation) for signatures
+and examples, and [secret masking](/cli/configuration/settings/mask) for masking
+configuration. The bundled `atmos-starlark` agent skill documents the language
+and APIs for coding agents; install it with
+[`atmos ai skill install atmos-starlark`](/cli/commands/ai/skill).
+
 ## Continue building
 
 Read the [command declaration reference](/steps/type/script#declaring-a-standalone-command)
 for supported flag types and parsing rules, and the
-[language reference](/automation/language) for helpers,
+[language overview](/automation/language) for helpers,
 module loading, processes, and parallel tasks.
 
 Browse the [complete runnable example](/examples/starlark-script) for both scripts

@@ -38,7 +38,7 @@ Do not set `command` on a `script` step. Use `type: shell` for a real shell comm
 
 ## Atmos Automation Language {#embedded-starlark}
 
-Atmos Automation Language is a Python-like language for automating commands,
+The Atmos Automation Language is a Python-like language for automating commands,
 workflows, and lifecycle hooks. Built on Starlark and embedded in Atmos, it provides
 component context, parallel execution, retries, and timeouts.
 
@@ -864,6 +864,10 @@ hooks:
 Direct Starlark APIs for secret access, store reads/writes, and Terraform
 state/output reads are not available yet. Scripts can consume values resolved
 by existing YAML functions through explicit inputs or component configuration.
+
+Use [`errors.build`](/functions/automation/errors.build) to create script errors
+with the same explanations, hints, examples, context, and exit codes as Atmos's
+own errors. Chain the builder methods and call `.fail()` to raise the error.
 
 Unhandled Starlark errors propagate through Atmos's normal command error path,
 including Sentry capture when configured. Handled failures and retries that

@@ -1,0 +1,85 @@
+---
+title: "ui.warning"
+sidebar_position: 25
+sidebar_label: "ui.warning"
+sidebar_class_name: command
+description: Show a warning message to the person running the program.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ui.warning` function shows a warning message to the person running the program. Use it for a condition that deserves attention but does not stop the script; raise an error with `fail()` when the script cannot continue.
+</Intro>
+
+## Usage
+
+```python
+ui.warning(message)
+```
+
+## Arguments
+
+<dl>
+    <dt>`message`</dt>
+    <dd>
+        Required. The text to show, as a string. It can be passed positionally or as `message = ...`. Passing a
+        value of another type, such as an integer, fails with an argument error, so convert it with `str()` first.
+    </dd>
+</dl>
+
+## Returns
+
+The return value is `None`. The message is a side effect and never becomes the step value.
+
+## Behavior
+
+- The message is written to the status channel (stderr) with Atmos UI formatting: a themed `⚠` marker
+  followed by the text. Colors adapt to the terminal.
+- Standard output is reserved for data, so `ui.warning` never changes what `print` or [`output`](/functions/automation/output)
+  produce, so a program's result can be piped or captured without status lines mixed in.
+- Inside [`steps.parallel`](/functions/automation/steps.parallel) tasks, each message is written as one whole line
+  and prefixed with the task name, such as `[dev] `. Lines from different tasks can arrive in any order but never
+  interleave within a line. A group with a single task writes without a prefix.
+- Secrets that Atmos knows about are masked in the displayed text.
+
+## Examples
+
+### Show a message
+
+```python
+replicas = 1
+if replicas < 2:
+    ui.warning("Only " + str(replicas) + " replica configured; the service has no redundancy")
+
+output = {"replicas": replicas}
+```
+
+```text
+⚠ Only 1 replica configured; the service has no redundancy
+```
+
+### Use it in parallel tasks
+
+```python
+def audit(stack):
+    ui.warning("Drift detected in " + stack)
+
+steps.parallel(tasks = [steps.task(s, audit, args = [s]) for s in ["dev", "prod"]])
+```
+
+```text
+[dev] ⚠ Drift detected in dev
+[prod] ⚠ Drift detected in prod
+```
+
+## Errors
+
+- Calling the function without a message, or with a message that is not a string, fails with an argument error that
+  names `ui.warning`.
+
+## Related
+
+- [`ui.info`](/functions/automation/ui.info) and [`ui.success`](/functions/automation/ui.success) cover the other status levels.
+- [`print`](/functions/automation/print) writes data to stdout, and [`log.info`](/functions/automation/log.info) writes diagnostics to the Atmos log.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#step-output)

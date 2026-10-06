@@ -1,0 +1,412 @@
+---
+title: Methods
+sidebar_label: Methods
+sidebar_position: 6
+description: Reference for the methods of strings, lists, dictionaries, sets, and bytes values in the Atmos Automation Language.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Strings, lists, dictionaries, sets, and bytes values carry methods that you call with dot
+notation, such as `"a,b".split(",")` or `items.append(3)`. This page lists every method with its
+signature, behavior, and an example.
+</Intro>
+
+## Conventions
+
+Methods accept positional arguments only, apart from `str.format`, which also takes keyword
+arguments, and `dict.update`, which takes keyword arguments as new keys. A parameter followed by
+`?` is optional, and `*others` accepts any number of arguments.
+
+Methods that change a value (`append`, `update`, `pop`, and the like) fail on a frozen value with a
+message such as `append: cannot append to frozen list`. Values loaded from another file, and values
+shared with `steps.parallel` tasks, are frozen. See
+[Execution Model](/automation/reference/execution-model#frozen-values). Changing a list or dictionary
+while a `for` loop iterates over it also fails, for example
+`append: cannot append to list during iteration`.
+
+String and bytes methods always return new values, because strings and bytes are immutable.
+Methods that change a list, dictionary, or set in place return `None`, except where they return a
+removed or looked-up element, as `pop` does.
+
+Where a signature shows a default, such as `default=None`, pass the argument by position.
+
+Indexes in `start` and `end` parameters count bytes of the UTF-8 encoding, accept negative
+values from the end of the string, and may be `None` to mean the default.
+
+## String methods
+
+<dl>
+  <dt>`s.capitalize()`</dt>
+  <dd>Copy with the first character in title case and the rest in lowercase.</dd>
+
+  <dt>`s.codepoint_ords()`</dt>
+  <dd>Iterable of the Unicode code points of `s` as integers.</dd>
+
+  <dt>`s.codepoints()`</dt>
+  <dd>Iterable of the characters of `s`, one string per code point.</dd>
+
+  <dt>`s.count(sub, start?, end?)`</dt>
+  <dd>Number of non-overlapping occurrences of `sub`.</dd>
+
+  <dt>`s.elem_ords()`</dt>
+  <dd>Iterable of the UTF-8 bytes of `s` as integers.</dd>
+
+  <dt>`s.elems()`</dt>
+  <dd>Iterable of the UTF-8 bytes of `s`, one single-byte string each.</dd>
+
+  <dt>`s.endswith(suffix, start?, end?)`</dt>
+  <dd>Whether `s` ends with `suffix`, a string or a tuple of strings.</dd>
+
+  <dt>`s.find(sub, start?, end?)`</dt>
+  <dd>Index of the first occurrence of `sub`, or -1.</dd>
+
+  <dt>`s.format(*args, **kwargs)`</dt>
+  <dd>Substitute `{}` replacement fields with the arguments.</dd>
+
+  <dt>`s.index(sub, start?, end?)`</dt>
+  <dd>Like `find`, but fails when `sub` is missing.</dd>
+
+  <dt>`s.isalnum()`</dt>
+  <dd>Whether `s` is non-empty and every character is a letter or digit.</dd>
+
+  <dt>`s.isalpha()`</dt>
+  <dd>Whether `s` is non-empty and every character is a letter.</dd>
+
+  <dt>`s.isdigit()`</dt>
+  <dd>Whether `s` is non-empty and every character is a digit.</dd>
+
+  <dt>`s.islower()`</dt>
+  <dd>Whether `s` has a cased character and no uppercase characters.</dd>
+
+  <dt>`s.isspace()`</dt>
+  <dd>Whether `s` is non-empty and every character is whitespace.</dd>
+
+  <dt>`s.istitle()`</dt>
+  <dd>Whether each word starts with an uppercase character followed by lowercase ones.</dd>
+
+  <dt>`s.isupper()`</dt>
+  <dd>Whether `s` has a cased character and no lowercase characters.</dd>
+
+  <dt>`s.join(iterable)`</dt>
+  <dd>Concatenate the strings of `iterable`, separated by `s`.</dd>
+
+  <dt>`s.lower()`</dt>
+  <dd>Copy converted to lowercase.</dd>
+
+  <dt>`s.lstrip(chars?)`</dt>
+  <dd>Copy without leading whitespace, or without leading characters in `chars`.</dd>
+
+  <dt>`s.partition(sep)`</dt>
+  <dd>Split at the first `sep` into a tuple of three strings.</dd>
+
+  <dt>`s.removeprefix(prefix)`</dt>
+  <dd>Copy without `prefix` when `s` starts with it.</dd>
+
+  <dt>`s.removesuffix(suffix)`</dt>
+  <dd>Copy without `suffix` when `s` ends with it.</dd>
+
+  <dt>`s.replace(old, new, count?)`</dt>
+  <dd>Copy with occurrences of `old` replaced, at most `count` of them.</dd>
+
+  <dt>`s.rfind(sub, start?, end?)`</dt>
+  <dd>Index of the last occurrence of `sub`, or -1.</dd>
+
+  <dt>`s.rindex(sub, start?, end?)`</dt>
+  <dd>Like `rfind`, but fails when `sub` is missing.</dd>
+
+  <dt>`s.rpartition(sep)`</dt>
+  <dd>Split at the last `sep` into a tuple of three strings.</dd>
+
+  <dt>`s.rsplit(sep?, maxsplit?)`</dt>
+  <dd>Split from the right into a list of strings.</dd>
+
+  <dt>`s.rstrip(chars?)`</dt>
+  <dd>Copy without trailing whitespace, or without trailing characters in `chars`.</dd>
+
+  <dt>`s.split(sep?, maxsplit?)`</dt>
+  <dd>Split into a list of strings.</dd>
+
+  <dt>`s.splitlines(keepends?)`</dt>
+  <dd>Split at newlines into a list of lines.</dd>
+
+  <dt>`s.startswith(prefix, start?, end?)`</dt>
+  <dd>Whether `s` starts with `prefix`, a string or a tuple of strings.</dd>
+
+  <dt>`s.strip(chars?)`</dt>
+  <dd>Copy without leading and trailing whitespace, or characters in `chars`.</dd>
+
+  <dt>`s.title()`</dt>
+  <dd>Copy with each word in title case.</dd>
+
+  <dt>`s.upper()`</dt>
+  <dd>Copy converted to uppercase.</dd>
+</dl>
+
+The `codepoints`, `codepoint_ords`, `elems`, and `elem_ords` methods return an iterable value for
+use in a `for` loop or a call to `list()`. Strings are not iterable themselves, so
+`for c in "abc"` fails with `string value is not iterable`; write
+`for c in "abc".codepoints()` instead.
+
+The `strip` family treats `chars` as a set of characters to remove, not as a prefix or suffix.
+Without `count`, `replace` replaces every occurrence. A `split` call without a separator, or with
+`None`, splits on runs of whitespace and discards empty fields, while `split` with a separator
+keeps empty fields. An empty separator fails. The `is...` methods return `False` for an empty
+string.
+
+### Case and character tests
+
+```python
+print("hello world".capitalize(), "HELLO".capitalize())  # Hello world Hello
+print("hello world".title())                              # Hello World
+print("ABC".lower(), "abc".upper())                       # abc ABC
+print("abc1".isalnum(), "abc".isalpha(), "123".isdigit()) # True True True
+print("abc".islower(), "ABC".isupper(), " \t".isspace())  # True True True
+print("Hello World".istitle())                            # True
+```
+
+### Iterating characters and bytes
+
+```python
+print(list("héy".codepoints()))       # ["h", "é", "y"]
+print(list("héy".codepoint_ords()))   # [104, 233, 121]
+print(list("héy".elem_ords()))        # [104, 195, 169, 121]
+print(list("ab".elems()))             # ["a", "b"]
+```
+
+### Searching
+
+```python
+print("banana".count("an"))                  # 2
+print("banana".find("na"), "banana".find("z"))  # 2 -1
+print("banana".index("na"))                  # 2
+print("banana".rfind("a"), "banana".rindex("a"))  # 5 5
+print("file.tf".startswith("file"))          # True
+print("file.tf".startswith(("x", "f")))      # True
+print("file.tf".endswith(".tf"))             # True
+print("file.tf".endswith((".md", ".tf")))    # True
+```
+
+The `find` and `index` methods search `s[start:end]`, so `"banana".find("a", 2)` returns 3.
+
+### Splitting and joining
+
+```python
+print("a b  c".split())                    # ["a", "b", "c"]
+print("a,b,c".split(",", 1))               # ["a", "b,c"]
+print("a,b,c".rsplit(",", 1))              # ["a,b", "c"]
+print("a\nb\n".splitlines())               # ["a", "b"]
+print("a\nb\n".splitlines(True))           # ["a\n", "b\n"]
+print("a=b=c".partition("="))              # ("a", "=", "b=c")
+print("a=b=c".rpartition("="))             # ("a=b", "=", "c")
+print(",".join(["a", "b"]))                # a,b
+```
+
+The `partition` method returns `(s, "", "")` and `rpartition` returns `("", "", s)` when the separator is
+missing.
+
+### Trimming and replacing
+
+```python
+print("  x ".strip() + "|", "--x--".strip("-"))  # x| x
+print("  x ".lstrip() + "|", "xxay".lstrip("x"))  # x | ay
+print("|" + " x  ".rstrip(), "xayy".rstrip("y"))  # | x xa
+print("v1.2".removeprefix("v"), "a.tf".removesuffix(".tf"))  # 1.2 a
+print("aaa".replace("a", "b"), "aaa".replace("a", "b", 2))   # bbb bba
+```
+
+### Formatting
+
+The `format` method replaces each `{}` with the next positional argument, `{0}` with a numbered argument, and
+`{name}` with a keyword argument. The conversion `!r` uses the `repr()` form, and `{{` and `}}`
+write literal braces. Format specifications such as `{:>5}` and attribute or index lookups such as
+`{a.b}` are not supported. The `%` operator offers the conversions `%s`, `%d`, `%i`, `%r`, `%x`,
+`%X`, `%o`, `%e`, `%f`, `%g`, `%c`, and `%%`, with `%(name)s` for dictionary lookups. It has no
+width, precision, or padding modifiers.
+
+```python
+print("{} is {}".format("a", 1))   # a is 1
+print("{name}!".format(name="n"))  # n!
+print("{0}-{0}".format("z"))       # z-z
+print("{!r}".format("q"))          # "q"
+print("%s=%d" % ("n", 3))          # n=3
+```
+
+## List methods
+
+<dl>
+  <dt>`l.append(x)`</dt>
+  <dd>Add `x` to the end of the list.</dd>
+
+  <dt>`l.clear()`</dt>
+  <dd>Remove every element.</dd>
+
+  <dt>`l.extend(iterable)`</dt>
+  <dd>Add every element of `iterable` to the end.</dd>
+
+  <dt>`l.index(x, start?, end?)`</dt>
+  <dd>Index of the first element equal to `x`; fails when none is found.</dd>
+
+  <dt>`l.insert(i, x)`</dt>
+  <dd>Insert `x` before index `i`. Negative `i` counts from the end; out-of-range values clamp to the ends.</dd>
+
+  <dt>`l.pop(i=-1)`</dt>
+  <dd>Remove and return the element at index `i`, by default the last. Fails when `i` is out of range.</dd>
+
+  <dt>`l.remove(x)`</dt>
+  <dd>Remove the first element equal to `x`; fails when none is found.</dd>
+</dl>
+
+All list methods change the list in place. The methods `append`, `clear`, `extend`, `insert`, and `remove`
+return `None`.
+
+```python
+items = [3, 1]
+items.append(2)
+print(items)                    # [3, 1, 2]
+items.extend([9, 8])
+print(items, items.index(9))    # [3, 1, 2, 9, 8] 3
+items.insert(0, 7)
+print(items)                    # [7, 3, 1, 2, 9, 8]
+print(items.pop(), items.pop(0))  # 8 7
+items.remove(1)
+print(items)                    # [3, 2, 9]
+items.clear()
+print(items)                    # []
+```
+
+## Dictionary methods
+
+<dl>
+  <dt>`d.clear()`</dt>
+  <dd>Remove every entry.</dd>
+
+  <dt>`d.get(key, default=None)`</dt>
+  <dd>Value for `key`, or `default` when the key is missing.</dd>
+
+  <dt>`d.items()`</dt>
+  <dd>List of `(key, value)` tuples in insertion order.</dd>
+
+  <dt>`d.keys()`</dt>
+  <dd>List of keys in insertion order.</dd>
+
+  <dt>`d.pop(key, default?)`</dt>
+  <dd>Remove `key` and return its value. Without `default`, a missing key fails.</dd>
+
+  <dt>`d.popitem()`</dt>
+  <dd>Remove and return the first `(key, value)` entry. Fails on an empty dictionary.</dd>
+
+  <dt>`d.setdefault(key, default=None)`</dt>
+  <dd>Return the value for `key`, first adding `default` when the key is missing.</dd>
+
+  <dt>`d.update(pairs?, **kwargs)`</dt>
+  <dd>Add entries from a dictionary or an iterable of pairs, then from keyword arguments.</dd>
+
+  <dt>`d.values()`</dt>
+  <dd>List of values in insertion order.</dd>
+</dl>
+
+Dictionaries keep insertion order. The methods `items`, `keys`, and `values` return new lists, so changing the
+dictionary afterwards does not change them.
+
+```python
+config = {"a": 1, "b": 2}
+print(config.get("a"), config.get("z"), config.get("z", 0))  # 1 None 0
+print(config.items())              # [("a", 1), ("b", 2)]
+print(config.keys(), config.values())  # ["a", "b"] [1, 2]
+print(config.pop("a"), config.pop("zz", None))  # 1 None
+config.update({"c": 3}, e=5)
+print(config)                      # {"b": 2, "c": 3, "e": 5}
+print(config.setdefault("f", 6))   # 6
+print(config.popitem())            # ("b", 2)
+config.clear()
+print(config)                      # {}
+```
+
+## Set methods
+
+<dl>
+  <dt>`s.add(x)`</dt>
+  <dd>Add `x` to the set.</dd>
+
+  <dt>`s.clear()`</dt>
+  <dd>Remove every element.</dd>
+
+  <dt>`s.difference(iterable)`</dt>
+  <dd>New set of the elements not in `iterable`.</dd>
+
+  <dt>`s.discard(x)`</dt>
+  <dd>Remove `x` if present. A missing element is not an error.</dd>
+
+  <dt>`s.intersection(iterable)`</dt>
+  <dd>New set of the elements also in `iterable`.</dd>
+
+  <dt>`s.issubset(iterable)`</dt>
+  <dd>Whether every element of `s` is in `iterable`.</dd>
+
+  <dt>`s.issuperset(iterable)`</dt>
+  <dd>Whether every element of `iterable` is in `s`.</dd>
+
+  <dt>`s.pop()`</dt>
+  <dd>Remove and return the first element in insertion order. Fails on an empty set.</dd>
+
+  <dt>`s.remove(x)`</dt>
+  <dd>Remove `x`; fails when `x` is missing.</dd>
+
+  <dt>`s.symmetric_difference(iterable)`</dt>
+  <dd>New set of the elements in exactly one of `s` and `iterable`.</dd>
+
+  <dt>`s.union(*others)`</dt>
+  <dd>New set of the elements of `s` and of every iterable in `others`.</dd>
+
+  <dt>`s.update(*others)`</dt>
+  <dd>Add every element of each iterable in `others` to `s`.</dd>
+</dl>
+
+Sets hold hashable values, keep insertion order, and also support the operators `|`, `&`, `-`,
+and `^` for union, intersection, difference, and symmetric difference. The methods that take an
+`iterable` accept any iterable, not only a set.
+
+```python
+names = set([1, 2])
+names.add(3)
+print(names)                                  # set([1, 2, 3])
+print(names.difference([1]))                  # set([2, 3])
+print(names.intersection([2, 3, 4]))          # set([2, 3])
+print(names.symmetric_difference([3, 4]))     # set([1, 2, 4])
+print(names.union([5], [6]))                  # set([1, 2, 3, 5, 6])
+print(names.issubset([1, 2, 3, 4]), names.issuperset([1]))  # True True
+names.discard(9)
+names.discard(1)
+print(names)                                  # set([2, 3])
+print(names.pop(), names)                     # 2 set([3])
+names.remove(3)
+names.update([7, 8], [9])
+print(names)                                  # set([7, 8, 9])
+names.clear()
+print(names)                                  # set([])
+```
+
+## Bytes methods
+
+<dl>
+  <dt>`b.elems()`</dt>
+  <dd>Iterable of the bytes of `b` as integers from 0 to 255.</dd>
+</dl>
+
+```python
+data = bytes("abc")
+print(list(data.elems()))  # [97, 98, 99]
+```
+
+Bytes values also support `len`, indexing and slicing (which return `bytes` values), `+`, and
+`in`. The `in` operator accepts an integer or a `bytes` value on its left. The `str()` function
+decodes bytes as UTF-8. See [Data Types](/automation/reference/data-types) for the full list of
+operations.
+
+## Where to go next
+
+For the universal functions such as `len`, `sorted`, and `enumerate`, see
+[Built-in Functions](/automation/reference/builtin-functions). For how frozen values restrict
+mutation, see [Execution Model](/automation/reference/execution-model#frozen-values).

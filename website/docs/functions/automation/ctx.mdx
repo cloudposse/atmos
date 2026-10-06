@@ -1,0 +1,93 @@
+---
+title: "ctx"
+sidebar_position: 32
+sidebar_label: "ctx"
+sidebar_class_name: command
+description: The read-only context a script receives about how and where it runs.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ctx` value describes the situation a script runs in: its raw arguments, its source file, the parsed inputs of a
+    custom command, the component in scope, and the lifecycle hook that triggered it. Every attribute is read-only.
+</Intro>
+
+## Usage
+
+```python
+ctx.args         # list of script arguments
+ctx.script       # source file, or None
+ctx.flags        # dictionary of parsed flags
+ctx.arguments    # dictionary of parsed named arguments
+ctx.component    # component handle, or None
+ctx.hook         # hook details, or None
+ctx.operation    # parent operation details, or None
+```
+
+## Attributes
+
+<dl>
+    <dt>[`ctx.args`](/functions/automation/ctx.args)</dt>
+    <dd>The command-line arguments passed to a standalone script.</dd>
+
+    <dt>[`ctx.script`](/functions/automation/ctx.script)</dt>
+    <dd>The path and directory of the script file, when the script was read from a file.</dd>
+
+    <dt>[`ctx.flags`](/functions/automation/ctx.flags)</dt>
+    <dd>The parsed flags of a custom command, or the flags a workflow supplies.</dd>
+
+    <dt>[`ctx.arguments`](/functions/automation/ctx.arguments)</dt>
+    <dd>The parsed named arguments of a custom command.</dd>
+
+    <dt>[`ctx.component`](/functions/automation/ctx.component)</dt>
+    <dd>The component a custom command or hook is scoped to.</dd>
+
+    <dt>[`ctx.hook`](/functions/automation/ctx.hook)</dt>
+    <dd>The name and event of the lifecycle hook that runs the script.</dd>
+
+    <dt>[`ctx.operation`](/functions/automation/ctx.operation)</dt>
+    <dd>The parent operation, such as `terraform apply`, and its outcome.</dd>
+</dl>
+
+## What each entry point provides
+
+The attributes always exist. What they hold depends on how the script started:
+
+| Entry point | `ctx.args` | `ctx.script` | `ctx.flags` | `ctx.arguments` | `ctx.component` | `ctx.hook`, `ctx.operation` |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Standalone script](/automation/standalone-cli-apps) | Arguments after the script name or stdin marker (`-`) | The script file, or `None` for stdin | Empty | Empty | `None` | `None` |
+| [Custom command](/automation/custom-commands) | Empty | Set when the script comes from a local `!include` | Parsed flags | Parsed arguments | The command's component when it declares `component:`, otherwise `None` | `None` |
+| [Workflow step](/automation/workflows) | Empty | Set when the script comes from a local `!include` | Workflow flags, as strings | Empty | `None` | `None` |
+| [Lifecycle hook](/automation/lifecycle-hooks) | Empty | Set when the script comes from a local `!include` | Empty | Empty | The hook's component, or `None` for an aggregate hook | The hook and the parent operation |
+
+Steps inside `parallel` and `matrix` groups inherit the context of the step that contains them. A standalone program that
+declares its interface with [`cli.command`](/functions/automation/cli.command) receives its parsed inputs as the arguments
+of its entry function instead of through `ctx.flags` and `ctx.arguments`.
+
+## Examples
+
+### Branch on the entry point
+
+```python
+if ctx.hook != None:
+    print("running as the {} hook".format(ctx.hook.event))
+elif len(ctx.args) > 0:
+    print("standalone script with arguments:", ctx.args)
+else:
+    print("workflow or custom command step")
+```
+
+### Read inputs in a custom command
+
+```python
+replicas = int(ctx.flags["replicas"])
+service = ctx.arguments["service"]
+print("{}: {} replicas".format(service, replicas))
+```
+
+## Related
+
+- [`env`](/functions/automation/env) holds the step's declared environment inputs.
+- [`cli.command`](/functions/automation/cli.command) declares a standalone program's interface.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#where-ctxcomponent-is-set)

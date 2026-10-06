@@ -1,0 +1,126 @@
+---
+title: "atmos.pro"
+sidebar_position: 8
+sidebar_label: "atmos.pro"
+sidebar_class_name: command
+description: Run an atmos pro command, such as lock, unlock, or commit, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.pro` function runs `atmos pro` through the current Atmos executable. Use it to lock and unlock stacks in
+    Atmos Pro and to commit changes through the Atmos Pro GitHub App from pipeline automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.pro(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand as a string before the keyword arguments. The call
+`atmos.pro("lock", flags = {"component": "vpc", "stack": "plat-ue2-dev"})` runs
+`atmos pro lock --component=vpc --stack=plat-ue2-dev`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`lock`](/cli/commands/pro/lock) | Lock a stack so no other process can plan or apply it. |
+| [`unlock`](/cli/commands/pro/unlock) | Unlock a stack. |
+| [`commit`](/cli/commands/pro/commit) | Commit changes through the Atmos Pro GitHub App. |
+
+See the [`atmos pro` command reference](/cli/commands/pro/usage) for the complete list of subcommands and flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `pro`, in order: the subcommand. Every value must
+        be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). For `lock` and `unlock`, the keys
+        `"component"` and `"stack"` become `--component` and `--stack`, and shorthands such as `"c"` and `"s"`
+        resolve to the long form. For `lock`, the keys `"ttl"` and `"message"` set the lock duration in seconds and
+        the lock message. For `commit`, the keys `"message"`, `"all"`, `"add"`, and `"comment"` control what is
+        committed.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Hold a lock while a script works
+
+```python
+atmos.pro(
+    "lock",
+    flags = {"component": "vpc", "stack": "plat-ue2-dev", "ttl": 300, "message": "Locked by release script"},
+)
+result = atmos.terraform("deploy", "vpc", "plat-ue2-dev", check = False)
+atmos.pro("unlock", flags = {"component": "vpc", "stack": "plat-ue2-dev"})
+if result.exit_code != 0:
+    fail("Deploy failed with exit code {}.".format(result.exit_code))
+```
+
+Passing `check = False` lets the script release the lock even when the deploy fails, because the language has no `try`/`finally`. The lock lasts 300 seconds, so the script should finish its work or unlock the stack before it expires.
+
+### Commit formatted files
+
+```python
+atmos.pro("commit", flags = {"message": "terraform fmt", "add": "*.tf"})
+```
+
+This runs `atmos pro commit --add=*.tf --message=terraform fmt`, which stages changed Terraform files and creates
+the commit through the Atmos Pro GitHub App, so the commit triggers the next CI run. The Git index selects which paths
+the commit includes, including paths staged before this call; `--add` only limits what this call stages. Atmos Pro
+reads the contents of added and modified files from the working tree, so unstaged edits to an already staged path are
+committed too. Start from a clean index when the commit should contain only the formatted files. The `all` flag (`--all`) instead
+stages every change with `git add -A`, so use it only when the whole working tree belongs in the commit.
+
+### Continue when a stack is already locked
+
+```python
+lock = atmos.pro("lock", flags = {"component": "vpc", "stack": "plat-ue2-dev"}, output = "capture", check = False)
+if lock.exit_code != 0:
+    ui.warning("Could not lock the stack:\n" + lock.stderr)
+```
+
+:::note
+These commands talk to Atmos Pro and are meant for CI pipelines that are connected to it, where authentication comes
+from the pipeline environment. Outside such a pipeline they fail, so run them from automation that already works with
+Atmos Pro.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos pro`](/cli/commands/pro/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

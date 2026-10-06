@@ -1,0 +1,137 @@
+---
+title: "atmos.validate"
+sidebar_position: 8
+sidebar_label: "atmos.validate"
+sidebar_class_name: command
+description: Run an atmos validate command, such as stacks, component, or schema, from a script.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.validate` function runs `atmos validate` through the current Atmos executable. Use it to validate the
+    configuration schema, stack manifests, components, EditorConfig rules, and GitHub Actions workflows, and to turn
+    the result into a pass or fail decision in automation.
+</Intro>
+
+## Usage
+
+```python
+atmos.validate(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+Pass the subcommand and any positional arguments as strings before the keyword arguments. The bare call
+`atmos.validate()` runs `atmos validate`, which validates the configuration schema, stack manifests, EditorConfig
+rules, and GitHub Actions workflows in one pass. The call `atmos.validate("stacks")` runs `atmos validate stacks`.
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`stacks`](/cli/commands/validate/stacks) | Validate stack manifest configurations. |
+| [`component`](/cli/commands/validate/component) | Validate an Atmos component in a stack using JSON Schema or OPA policies. |
+| [`schema`](/cli/commands/validate/schema) | Validate YAML files against JSON schemas defined in `atmos.yaml`. |
+| [`editorconfig`](/cli/commands/validate/editorconfig) | Validate all files against the EditorConfig. |
+| `config` | Validate `atmos.yaml` against its JSON Schema. |
+| `ci` | Validate GitHub Actions workflow files. |
+
+See the [`atmos validate` command reference](/cli/commands/validate/usage) for the complete list of subcommands and
+flags.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `validate`, in order: the subcommand and its
+        positional arguments, such as the component name for `component` or workflow files for `ci`. Every value must
+        be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"format"` becomes
+        `--format`, and registered shorthands such as `"s"` resolve to `--stack`. Common keys are `"affected"`,
+        `"base"`, `"exclude"`, and `"format"`. The `component` subcommand also takes `"stack"`, `"schema-path"`
+        , `"schema-type"`, `"module-paths"`, and `"timeout"`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Validate the whole project
+
+```python
+atmos.validate()
+```
+
+With the default `check=True`, a validation failure raises an error and stops the script.
+
+### Validate one component in a stack
+
+```python
+atmos.validate("component", "station", flags = {"stack": "dev"})
+```
+
+This runs `atmos validate component station --stack=dev`.
+
+### Validate with an OPA policy
+
+```python
+atmos.validate(
+    "component",
+    "vpc",
+    flags = {
+        "stack": "prod",
+        "schema-type": "opa",
+        "schema-path": "vpc/validate-vpc.rego",
+        "timeout": 15,
+    },
+)
+```
+
+### Report problems without stopping
+
+```python
+result = atmos.validate("stacks", output = "capture", check = False)
+if result.exit_code != 0:
+    ui.warning("Stack validation reported problems.")
+    print(result.stderr)
+else:
+    ui.success("Stack validation passed.")
+```
+
+### Validate only what changed
+
+```python
+atmos.validate(flags = {"affected": True, "base": "origin/main"})
+```
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos validate`](/cli/commands/validate/usage) documents every subcommand and flag.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)

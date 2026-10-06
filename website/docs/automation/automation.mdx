@@ -2,7 +2,7 @@
 title: Atmos Automation
 sidebar_position: 1
 sidebar_label: Automation
-description: Build custom CLI apps, extend Atmos with custom subcommands, and automate workflows and lifecycle hooks using Atmos Automation Language.
+description: Build, ship, and deploy containers the same way locally and in CI with testable automation written in the Atmos Automation Language.
 id: automation
 slug: /automation
 ---
@@ -16,16 +16,38 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Build custom CLI apps, extend Atmos with your own subcommands, and automate
-repeatable work. Combine tasks into workflows, test their behavior, and run
-checks automatically with lifecycle hooks. Use Atmos Automation Language to write the logic behind them.
+Build, ship, and deploy containers the same way locally and in CI. The Atmos
+Automation Language gives you a Python-like DSL based on Starlark to write that
+process as reusable, testable code that Atmos executes.
 </Intro>
 
-Your automation lives in your repository and runs through the same Atmos CLI
-locally and in CI. Start with declarative steps that call the tools you already
-use. When a task needs calculations, decisions, or shared functions, add
-Python-like code with Atmos Automation Language, built on Starlark and embedded
-in Atmos.
+Build an image, push it to your registry, and deploy your application through
+one release command. Develop and test that process on your machine, then have
+CI invoke the same command. Your automation uses the stacks, identities, and
+toolchain configured in Atmos, with inputs selecting the target environment.
+
+The DSL puts Atmos's capabilities at your disposal: install pinned tool
+dependencies, assume configured cloud identities, run Atmos commands and external
+tools, and parallelize work with retries and timeouts. Build on the configuration
+and integrations your team already maintains.
+
+Bash scripts accumulate quoting rules, command-output parsing, error handling,
+and background-process management as a release process grows. Atmos provides
+structured command results, reusable functions, parallel tasks, and test steps
+so you can spend that effort on the release logic. Test shared functions, check
+command results, and verify deployed services using the same automation tools.
+
+Save your code in a `.star` file and run it with `atmos ./release.star`.
+The [release example](/automation/standalone-cli-apps#what-your-program-can-do)
+builds and pushes a container image, then runs a Terraform deployment. You can
+also expose your automation as an Atmos subcommand, workflow, or lifecycle hook.
+
+Your tools can offer the same developer experience as Atmos: typed flags and
+generated help, formatted status messages, and errors with explanations and
+recovery hints. Workflow and custom-command steps can prompt for inputs and pass
+their outputs to your scripts. Scripts return structured results that later steps
+can consume. See [prompts and step outputs](/automation/workflows#collect-input-and-pass-results-between-steps)
+and [error builders](/functions/automation/errors.build).
 
 ## Choose what you want to build
 
@@ -39,16 +61,13 @@ in Atmos.
 
 ## Custom CLI apps {#executable-scripts}
 
-Build your own CLI app with Atmos Automation Language. Use custom CLI apps when
-you want to give your team an executable tool with its own arguments, flags,
-validation, and help. Your team runs it directly, such as `./capacity.star`,
-with its interface declared in the program using `cli.command`. Atmos supplies the interpreter and built-in
-helpers. The app lives in an executable `.star` file and needs no command
-registration in `atmos.yaml`.
+Give your team a tool with its own arguments, flags, validation, and help. Write
+it in the Atmos Automation Language and declare its interface with `cli.command`.
+Atmos runs the file directly, as `atmos ./capacity.star` or `./capacity.star`,
+without registering a command in `atmos.yaml`.
 
-Start with a small script, then add a declared interface as it grows.
-Put `#!/usr/bin/env atmos` on the first line of a `.star` file. With Atmos on your
-`PATH`, the file runs directly; there is no separate language runtime to install.
+With Atmos installed and on your `PATH`, save this as `hello.star`. The first
+line selects Atmos as its interpreter; the example needs no stacks or external tools.
 
 <File title="hello.star">
 ```python
@@ -103,8 +122,8 @@ cli.command(
 )
 ```
 
-Run `./replicas.star api --replicas 3`, or `./replicas.star --help` for generated
-usage. Help does not run `main`. Flags support types, defaults, required values,
+Save this as `replicas.star`. Run `atmos ./replicas.star api --replicas 3`, or
+`atmos ./replicas.star --help` for generated usage. Help does not run `main`. Flags support types, defaults, required values,
 and choices; an optional `validate` callback handles checks involving multiple
 inputs. Both callbacks receive parsed dictionaries directly.
 
@@ -245,32 +264,19 @@ a component operation.
 
 ## Atmos Automation Language
 
-Atmos Automation Language is a Python-like language built on Starlark and
-embedded in Atmos. Use Atmos Automation Language when you want to add decisions,
-calculations, or reusable functions to your CLI apps and automation. Your team
-uses the interpreter already included in Atmos.
+The Atmos Automation Language is based on Starlark. Its Python-like syntax gives
+you functions, conditions, loops, and structured data for writing automation.
+The interpreter ships with Atmos, along with functions for reading configuration,
+running commands, and executing tasks in parallel.
 
-Use the language in custom commands, workflow steps, and lifecycle hooks, or
-create an executable script with its own arguments, flags, validation, and help.
-Shared functions let you reuse logic across those entry points.
-
-Configuration selects the language with `interpreter: starlark`, and source
-files use the `.star` extension. It does not run arbitrary Python programs or
-import Python packages.
+Write `.star` files for standalone tools and shared code, or select
+`interpreter: starlark` in a YAML script step. Use `load()` to share functions
+between tools, custom commands, workflows, and hooks.
 
 ### Why Starlark?
 
-Your team needs a shared language for automation, even when its applications
-use different languages. Starlark keeps that language small and familiar:
-Python-like syntax, functions, loops, and structured values, with capabilities
-supplied by Atmos. The benefit is similar to HCL's deliberate focus for
-configuration, applied to programmable automation.
-
-There is less language surface to learn and review, and the interpreter ships
-with Atmos. Pure calculations are repeatable and easy to test; operations that
-read files or run commands still depend on their environment. Read
-[why Atmos uses Starlark](/automation/language#why-starlark) for the design
-choices and their practical limits.
+Read [why Atmos uses Starlark](/automation/language#why-starlark) for the language
+choices and how they make automation easier to learn, share, and review.
 
 ## Use the same automation locally and in CI
 
@@ -287,12 +293,13 @@ CI system while the reusable automation lives alongside your project.
 Atmos adds helpers for files, JSON, regular expressions, processes,
 component lookup, command invocation, task execution, and terminal output.
 `print` emits data; `ui` reports status; `log` emits diagnostics at the configured
-log level. Output streams while scripts run and uses Atmos's secret masking.
+log level. Output streams while scripts run. When masking is enabled, registered secrets
+and matches for configured masking patterns are masked in displayed output.
 
 <ActionCard title="Language and API reference">
     Find syntax, built-in helpers, execution controls, source-path behavior, and
     the current runtime limitations.
     <div>
-      <PrimaryCTA to="/automation/language">Read the Reference</PrimaryCTA>
+      <PrimaryCTA to="/automation/language">Read the Language Overview</PrimaryCTA>
     </div>
 </ActionCard>

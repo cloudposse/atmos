@@ -1,0 +1,97 @@
+---
+title: "atmos.help"
+sidebar_position: 8
+sidebar_label: "atmos.help"
+sidebar_class_name: command
+description: Run atmos help from a script to capture the help text of a command.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos.help` function runs `atmos help` through the current Atmos executable. Use it to capture the help text
+    of Atmos or of one of its commands, for example to include it in a generated document.
+</Intro>
+
+## Usage
+
+```python
+atmos.help(
+    *positionals,
+    flags = {},
+    args = [],
+    working_directory = ...,
+    env = ...,
+    output = "stream",
+    check = True,
+)
+```
+
+## Subcommands
+
+The `help` command has no subcommands of its own. Pass the path of the command you want help for as strings. The call
+`atmos.help()` prints the top-level help, and `atmos.help("terraform", "plan")` runs `atmos help terraform plan` and
+prints the help for `atmos terraform plan`.
+
+The command accepts the standard `--help` flag and the global flags that every Atmos command accepts. See the
+[`atmos help` command reference](/cli/commands/help) for details.
+
+## Arguments
+
+<dl>
+    <dt>`*positionals`</dt>
+    <dd>
+        (Optional) Strings placed on the command line right after `help`, in order: the path of the command to
+        describe. Every value must be a string.
+    </dd>
+
+    <dt>`flags`</dt>
+    <dd>
+        (Optional) A dictionary of command-line options; see
+        [flag translation](/functions/automation/atmos.run#flag-translation). A bare key such as `"no-color"`
+        becomes `--no-color`.
+    </dd>
+
+    <dt>`args`</dt>
+    <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
+
+    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dd>
+        (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
+    </dd>
+</dl>
+
+Options other than the positionals are keyword-only.
+
+## Returns
+
+A result with `stdout`, `stderr`, and `exit_code`. See [`atmos.run`](/functions/automation/atmos.run#returns) for output and error behavior.
+
+## Examples
+
+### Capture the help text of a command
+
+```python
+help_text = atmos.help("list", output = "capture")
+print(help_text.stdout)
+```
+
+### Check the help for several commands
+
+```python
+for name in ["terraform", "helmfile", "packer"]:
+    page = atmos.help(name, output = "capture")
+    print(name + ": " + str(len(page.stdout)) + " characters of help")
+```
+
+:::note
+The help text is written for people. When the script runs without a terminal, the call prints plain help text to
+standard output, which makes it practical for capturing documentation. Scripts that need structured data should call
+the `list` or `describe` commands with `format` set to `json` instead.
+:::
+
+## Related
+
+- [`atmos.run`](/functions/automation/atmos.run) runs any Atmos command from an argument list.
+- [`atmos help`](/cli/commands/help) documents the help command.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script#calling-atmos-commands)
