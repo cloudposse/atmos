@@ -3,10 +3,15 @@ title: atmos version track add
 sidebar_position: 40
 sidebar_label: add
 sidebar_class_name: command
-description: Add a dependency entry to atmos.yaml.
+description: "Bring a dependency under version management by adding it to a track in atmos.yaml."
 ---
+import Intro from '@site/src/components/Intro'
 
-Add a dependency entry to a version track in `atmos.yaml`, preserving comments and formatting.
+<Intro>
+Bring a dependency under version management by adding it to a track in `atmos.yaml`. Define its
+desired version and update policy alongside the rest of your project's dependencies, preserving
+comments and formatting.
+</Intro>
 
 When `--ecosystem` is omitted, Atmos infers it from the package coordinate:
 
