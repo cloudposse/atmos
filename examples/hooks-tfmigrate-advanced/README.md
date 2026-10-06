@@ -1,7 +1,15 @@
+---
+related_docs:
+  - label: "Terraform state migrations"
+    url: /cli/commands/terraform/migrate
+  - label: "Lifecycle hook configuration"
+    url: /stacks/hooks
+---
+
 # `hooks-tfmigrate-advanced`
 
 Extends [`hooks-tfmigrate`](../hooks-tfmigrate/) to cover the rest of tfmigrate's
-migration actions and both explicit hook modes. That example, and this repository's
+[migration actions](https://atmos.tools/cli/commands/terraform/migrate) and both [explicit hook modes](https://atmos.tools/stacks/hooks). That example, and this repository's
 automated tests, do not exercise any of these:
 
 | Component                                    | Action(s) covered                | Path exercised                                  |

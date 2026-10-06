@@ -4,11 +4,18 @@ tags: [Components]
 cast:
   file: /casts/examples/custom-components/script-command.cast
   title: atmos custom component command
+related_docs:
+  - label: "Custom component types"
+    url: /components/custom
+  - label: "Custom command configuration"
+    url: /cli/configuration/commands
+  - label: "Custom Component Types Reference"
+    url: /cli/configuration/commands/component#custom-component-types
 ---
 
 # Custom Components Example
 
-This example demonstrates how to define custom component types in Atmos using custom commands.
+This example demonstrates how to define [custom component types](https://atmos.tools/components/custom) in Atmos using [custom commands](https://atmos.tools/cli/configuration/commands).
 
 ## Overview
 

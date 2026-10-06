@@ -4,15 +4,20 @@ tags: [Kubernetes]
 cast:
   file: /casts/examples/kubernetes/lifecycle.cast
   title: atmos kubernetes lifecycle
+related_docs:
+  - label: "Kubernetes commands"
+    url: /cli/commands/kubernetes/usage
+  - label: "Kubernetes component configuration"
+    url: /stacks/components/kubernetes
 ---
 
 # Example: Kubernetes Components
 
-Deploy Kubernetes manifests with Atmos-native Kubernetes components against a local Kubernetes emulator (k3s).
+Deploy Kubernetes manifests with Atmos-native [Kubernetes components](https://atmos.tools/stacks/components/kubernetes) against a local Kubernetes emulator (k3s).
 
 This example uses `provider: kubectl`, which means kubectl-compatible manifest behavior through the Kubernetes Go SDK. It does not require the `kubectl` binary.
 
-The local cluster is managed by the native **emulator** feature — Atmos starts the k3s container, harvests its kubeconfig, and injects `KUBECONFIG` for you. There is no `docker-compose.yml` and no manual kubeconfig wiring.
+The local cluster is managed by the native [**emulator**](https://atmos.tools/cli/commands/emulator/usage) feature — Atmos starts the k3s container, harvests its kubeconfig, and injects `KUBECONFIG` for you. There is no `docker-compose.yml` and no manual kubeconfig wiring.
 
 ## Try It
 

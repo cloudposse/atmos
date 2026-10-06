@@ -4,8 +4,7 @@ import { FiArrowLeft, FiChevronRight, FiSearch, FiX } from "react-icons/fi";
 import OriginalDocSidebarItems from "@theme-original/DocSidebarItems";
 import type { Props } from "@theme/DocSidebarItems";
 import type { PropSidebarItem } from "@docusaurus/plugin-content-docs";
-import ExperimentalDot from "@site/src/components/ExperimentalDot";
-import { isExperimentalRoute } from "@site/src/data/experimentalRoutes";
+import RouteStatusDot from "@site/src/components/FeatureStatusDot/RouteStatusDot";
 import {
   filterItems,
   findSection,
@@ -161,6 +160,20 @@ export default function SidebarNavigator({
   }
 
   const selected = section === null ? null : prepared[section];
+  const overview = prepared.find(
+    (item) => item.type === "link" && item.customProps?.navigationOverview,
+  );
+  const headingLink =
+    selected?.type === "category"
+      ? selected.href && !selected.linkUnlisted
+        ? selected
+        : undefined
+      : section === null && overview?.type === "link"
+        ? overview
+        : undefined;
+  const headingLabel = selected?.label ||
+    (sidebarName === "cli" && overview?.label) ||
+    `All ${sidebarLabel(sidebarName)}`;
   const mounted = new Set([...visited, ...(section === null ? [] : [section])]);
   return (
     <li ref={rootRef} className={styles.navigator}>
@@ -221,37 +234,35 @@ export default function SidebarNavigator({
         >
           {filtering ? (
             `Matches in ${sidebarLabel(sidebarName)}`
-          ) : selected?.type === "category" &&
-            selected.href &&
-            !selected.linkUnlisted ? (
+          ) : headingLink ? (
             <Link
               className={styles.sectionOverview}
-              to={selected.href}
+              to={headingLink.href}
               aria-current={
-                normalizePath(selected.href) === normalizePath(activePath)
+                normalizePath(headingLink.href) === normalizePath(activePath)
                   ? "page"
                   : undefined
               }
               onClick={() =>
                 navigate({
                   type: "link",
-                  label: selected.label,
-                  href: selected.href!,
+                  label: headingLabel,
+                  href: headingLink.href!,
                 })
               }
             >
-              {selected.label}
-              {isExperimentalRoute(selected.href) && <ExperimentalDot />}
+              {headingLabel}
+              <RouteStatusDot href={headingLink.href} />
             </Link>
           ) : (
-            selected?.label || `All ${sidebarLabel(sidebarName)}`
+            headingLabel
           )}
         </h2>
       </div>
       <div data-sections hidden={filtering || section !== null}>
         <ul className="menu__list">
           {prepared.map((item, index) =>
-            item.type === "category" ? (
+            item.customProps?.navigationOverview ? null : item.type === "category" ? (
               <li key={index} className="menu__list-item">
                 {item.href && !item.linkUnlisted ? (
                   <Link
@@ -273,7 +284,7 @@ export default function SidebarNavigator({
                   >
                     <span>
                       {item.label}
-                      {isExperimentalRoute(item.href) && <ExperimentalDot />}
+                      <RouteStatusDot href={item.href} />
                     </span>
                     <FiChevronRight
                       className={styles.sectionChevron}
