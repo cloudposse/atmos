@@ -1,13 +1,13 @@
 ---
-title: workflow
-sidebar_label: workflow
+title: workflows
+sidebar_label: workflows
 slug: /workflows/workflow
 ---
 
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-A workflow is one named object at `workflows.<name>` inside a [workflow manifest](/workflows). It owns workflow-level defaults and the ordered `steps` array Atmos runs for that workflow.
+The `workflows` section defines the named workflows in a [workflow manifest](/workflows). Each entry at `workflows.<name>` contains its own defaults and the ordered `steps` array Atmos runs for that workflow.
 </Intro>
 
 ```yaml
@@ -31,6 +31,8 @@ workflows:
 ```
 
 ## Fields
+
+These fields belong beneath a workflow name, such as `workflows.deploy`.
 
 <dl>
   <dt>`description`</dt>
