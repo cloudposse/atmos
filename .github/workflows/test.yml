@@ -2019,10 +2019,12 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            get.helm.sh:443
             github.com:443
             raw.githubusercontent.com:443
             rekor.sigstore.dev:443
             release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
             tuf-repo-cdn.sigstore.dev:443
             tuf-repo.github.com:443
             us.i.posthog.com:443
@@ -2037,22 +2039,13 @@ jobs:
         with:
           target: linux
 
-      # Restore the toolchain directory first so the installs below skip
-      # tools already on disk instead of downloading them on every run
-      # (restore-only: the build job's linux leg is this key's writer).
-      - name: Restore the Atmos toolchain cache
-        continue-on-error: true
-        uses: ./actions/cache
+      # The build job already installed and verified the pinned tools. The
+      # shared action skips cached binaries and retries installs on a miss.
+      - name: Set up the CI toolchain
+        uses: ./.github/actions/ci-toolchain
         with:
-          mode: restore-only
-
-      - name: Install OpenTofu and TFLint with Atmos toolchain
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install opentofu/opentofu
-          atmos toolchain install terraform-linters/tflint
-          atmos toolchain env --format=github
+          cache: restore-only
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify OpenTofu and TFLint
         run: |
@@ -2077,10 +2070,12 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            get.helm.sh:443
             github.com:443
             raw.githubusercontent.com:443
             rekor.sigstore.dev:443
             release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
             tuf-repo-cdn.sigstore.dev:443
             tuf-repo.github.com:443
             us.i.posthog.com:443
@@ -2095,22 +2090,13 @@ jobs:
         with:
           target: linux
 
-      # Restore the toolchain directory first so the installs below skip
-      # tools already on disk instead of downloading them on every run
-      # (restore-only: the build job's linux leg is this key's writer).
-      - name: Restore the Atmos toolchain cache
-        continue-on-error: true
-        uses: ./actions/cache
+      # The build job already installed and verified the pinned tools. The
+      # shared action skips cached binaries and retries installs on a miss.
+      - name: Set up the CI toolchain
+        uses: ./.github/actions/ci-toolchain
         with:
-          mode: restore-only
-
-      - name: Install OpenTofu and TFLint with Atmos toolchain
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install opentofu/opentofu
-          atmos toolchain install terraform-linters/tflint
-          atmos toolchain env --format=github
+          cache: restore-only
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run the TFLint hook example
         working-directory: examples/hooks-tflint
