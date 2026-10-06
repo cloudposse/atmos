@@ -22,9 +22,11 @@ type Spec struct {
 	ProjectRoot      string
 	Env              map[string]string
 	Flags, Arguments map[string]any
-	ProcessEnv       []string
-	Stdout, Stderr   io.Writer
-	DryRun           bool
+	// Args holds positional host arguments for embedded invocations.
+	Args           []string
+	ProcessEnv     []string
+	Stdout, Stderr io.Writer
+	DryRun         bool
 	// Parallel marks execution inside a control runner that cannot grant exclusive terminal access.
 	Parallel              bool
 	Component             *ComponentRef

@@ -8,22 +8,25 @@ This addresses two Linear issues:
 - **DEV-263**: Add Input Type to Atmos Workflows
 - **DEV-2969**: Atmos viewports for workflows and subcommands
 
-### Current State
+### Current implementation (2026-10-06)
 
-Atmos workflows currently support only two step types:
-- `atmos` - Execute Atmos CLI commands
-- `shell` - Execute shell commands
+The registry now includes interactive prompts, formatting, status messages,
+terminal controls, command/script execution, HTTP, containers, archives, and
+control/test handlers. The original two-type (`atmos`/`shell`) state described the
+starting point, not the current product.
 
-### After Implementation
+A `type: script` step with `interpreter: starlark` evaluates the Atmos Automation
+Language in-process. Scripts can invoke registered handlers through `steps.run`
+and named `steps.*` functions. [Git hooks](git-hook-steps.md) also use synchronous
+step lists. See [shared API boundaries](automation-sdk.md) and
+[implemented language behavior](starlark-automation-and-command-testing.md).
 
-Workflows will support **25+ step types** across five categories:
-1. **Interactive** - User input prompts (input, choose, confirm, filter, file, write)
-2. **Output** - Display formatting (spin, table, pager, format, join, style, linebreak, log)
-3. **UI Messages** - Status messages (toast, markdown)
-4. **Terminal** - Terminal control and workflow management (alert, title, clear, env, exit)
-5. **Command** - Existing types (atmos, shell)
+Outputs remain strings with typed metadata and named outputs. Starlark step
+results expose a lazy JSON `data` view over `value`; process results expose it over
+raw `stdout` and also retain `stderr` and `exit_code`.
 
-Plus **per-step output modes** for controlling how command output is displayed.
+The sections below retain the original step-type design and examples. The current
+step references and handler validation define supported fields and context requirements.
 
 ## Goals
 
@@ -33,7 +36,7 @@ Plus **per-step output modes** for controlling how command output is displayed.
 4. **Registry Pattern**: Use extensible registry allowing custom step type registration
 5. **Output Modes**: Support per-step output display control (viewport, raw, log, none)
 6. **UI Messages**: Provide native Atmos UI message types (success, info, warn, error, markdown)
-7. **TTY Awareness**: Interactive steps require TTY; fail clearly in CI environments
+7. **TTY Awareness**: Prompts use explicit defaults without a TTY where supported; otherwise fail clearly.
 8. **Testability**: Interface-based design with dependency injection for comprehensive testing
 
 ## Non-Goals
@@ -42,7 +45,7 @@ Plus **per-step output modes** for controlling how command output is displayed.
 2. **External Process Execution**: Step types are native Go, not shelling out to `gum`
 3. **Custom Themes per Step**: Steps use the global Atmos theme, not per-step theming
 4. **Parallel Step Execution**: Out of scope for *this* PRD. Concurrent execution shipped separately via the `parallel`/`matrix` control steps — see [`parallel-workflow-steps.md`](./parallel-workflow-steps.md).
-5. **Conditional Logic**: No if/else branching in workflows (use shell for this)
+5. **A second programming language in YAML**: Use existing workflow conditions or embedded Starlark for procedural branching.
 
 ## Proposed Configuration
 

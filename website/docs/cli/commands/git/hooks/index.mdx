@@ -10,10 +10,14 @@ import DocCardList from '@theme/DocCardList'
 
 <Intro>
 Run your project's checks automatically when developers commit or push. Define Git hooks through
-Atmos workflows and custom commands so the team shares the same checks, tools, and configuration.
+steps, workflows, or custom commands so the team shares the same checks, tools, and configuration.
 </Intro>
 
-Atmos installs small `.git/hooks/*` scripts that delegate to `atmos git hooks run`. Configure hook commands under [`git.hooks`](/cli/configuration/git#local-git-hooks) in `atmos.yaml`; they run through Atmos workflows and custom commands with the project's toolchain, environment, and identity settings.
+Atmos installs small `.git/hooks/*` scripts that delegate to `atmos git hooks run`.
+Configure each hook under [`git.hooks`](/cli/configuration/git#local-git-hooks) in
+`atmos.yaml` with either a command or a sequence of steps.
+[Inline script steps](/cli/configuration/git#inline-script-steps) execute inside Atmos
+and can use the same step library as other automation scripts.
 
 Configure hooks once in `atmos.yaml`:
 

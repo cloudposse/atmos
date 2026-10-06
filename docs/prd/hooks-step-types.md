@@ -2,14 +2,18 @@
 
 ## Status
 
-Implemented (single PR). Depends on the `http` step type PR for the Slack/webhook example to work end-to-end; the bridge itself ships independently of `http`.
+**Last Updated:** 2026-10-06
+
+Implemented in the current codebase: `kind: step` runs one registered step and
+`kind: steps` runs an ordered list. The HTTP and embedded Starlark handlers are
+available. Local Git hooks are a separate host; see [Git-hook steps](git-hook-steps.md).
 
 ## Problem
 
-Atmos has two execution subsystems that don't share capabilities:
+The original gap was between two execution subsystems:
 
 - **Hooks** (`pkg/hooks/`) fire on Terraform lifecycle events (before/after `init`/`plan`/`apply`/`deploy`). A hook's `kind:` selects from a small fixed registry — `store`, `command`, `infracost`, `checkov`, `kics`, `trivy`, `git`. Anything outside that list (notify Slack, run a container, render a formatted summary) means falling back to `kind: command` and hand-rolling a shell invocation.
-- **Step registry** (`pkg/runner/step/`) already offers ~25 rich, self-contained step types (`shell`, `atmos`, `container`, `log`, `format`, `table`, `markdown`, `toast`, `http` once it lands, …) powering workflows and custom commands.
+- **Step registry** (`pkg/runner/step/`) already offers ~25 rich, self-contained step types (`shell`, `atmos`, `container`, `log`, `format`, `table`, `markdown`, `toast`, `http`, `script`, …) powering workflows and custom commands.
 
 Every new "thing a hook should be able to do" has historically meant adding a new hook kind. That doesn't scale and duplicates work the step registry already does.
 
@@ -19,7 +23,7 @@ Let a hook delegate to **any** registered step type, so the entire step library 
 
 ## Design
 
-A new hook kind, `step`, bridges to the step registry.
+The `step` and `steps` hook kinds bridge to the shared step registry.
 
 ```yaml
 hooks:
@@ -42,7 +46,7 @@ hooks:
 - The **envelope** (`kind`, `type`, `events`, `on_failure`, `retry`, `env`) is what the *hook runner* interprets.
 - **`with:`** is what the *step handler* interprets — it decodes into a `schema.WorkflowStep`.
 
-`on_failure` and `retry` live at the envelope because they are wrapper-level policy: the bridge applies them *around* the step handler (`retry.Do` + `ApplyOnFailure`), exactly as `pkg/runner/runner.go` does when running workflow steps. The step itself never sees them.
+`on_failure` and `retry` live at the envelope because they are wrapper-level policy: the bridge applies them *around* the step handler (`retry.Do` + `ApplyOnFailure`), through the shared retry utilities and hook failure policy. The step payload is decoded through the shared schema; the hook envelope supplies its outer policy.
 
 ### Dispatch
 
@@ -74,9 +78,23 @@ The outcome is exposed two ways (both, per design):
 
 `on_failure` (the hook's own failure handling) and `when` (operation-outcome filter) are orthogonal and documented as such.
 
-### No guardrails
+### Embedded scripts and ordered steps
 
-All step types are allowed, including interactive/TTY ones. Steps are responsible for their own headless/CI behavior; Atmos does not second-guess them. (A future change could add an opt-in policy, but v1 ships none.)
+The `kind: steps` form accepts an ordered `with.steps` list and shares step
+outputs between entries. A `type: script` step with `interpreter: starlark`
+executes inside Atmos. Its immutable `ctx.component`, `ctx.hook`, and
+`ctx.operation` describe the lifecycle operation; these are not local Git-hook
+arguments. Included source and `!literal` metadata survive stack inheritance and
+execution-time rendering.
+
+Scripts can call the [shared step library](automation-sdk.md), including prompts,
+HTTP, containers, and output formatting. The script adapter enforces its own
+parallel/terminal restrictions and does not take ownership of workflow background
+jobs. Registered handlers retain their context requirements.
+
+### Handler requirements
+
+The lifecycle bridge delegates registered types, including interactive handlers. Each handler validates its own required context and headless behavior. Direct calls from Starlark additionally enforce the automation adapter's restrictions.
 
 ### Validation
 
@@ -89,7 +107,7 @@ The `hooks` definition (in `stacks/stack-config`, `atmos/manifest`, `config/glob
 
 ## Non-goals
 
-- Adding the `http` step type (separate PR).
+- Reimplementing step handlers in the lifecycle bridge.
 - Step output → hook artifact/Pro upload plumbing beyond a best-effort status `Summary`.
 - Cancellation via the parent Terraform context (the bridge uses `context.Background()`, matching the existing command engine).
 

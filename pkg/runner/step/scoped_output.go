@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"slices"
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -17,6 +18,7 @@ func (v *Variables) Clone() *Variables {
 	defer perf.Track(nil, "step.Variables.Clone")()
 
 	c := *v
+	c.ScriptArgs = slices.Clone(v.ScriptArgs)
 	c.Steps = maps.Clone(v.Steps)
 	c.Env = maps.Clone(v.Env)
 	c.templateEnv = maps.Clone(v.templateEnv)

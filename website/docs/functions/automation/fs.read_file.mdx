@@ -89,7 +89,10 @@ version = fs.read_file(path = "/opt/app/version.txt").strip()
 - A missing or non-string `path` fails with an argument error.
 - A canceled run stops the call with a cancellation error.
 
-The function only reads. Scripts have no file-writing function.
+The function only reads. Scripts have no file-writing function. Use
+[`fs.glob`](/functions/automation/fs.glob), [`fs.stat`](/functions/automation/fs.stat),
+[`fs.exists`](/functions/automation/fs.exists), and
+[`fs.readlink`](/functions/automation/fs.readlink) to inspect files without reading their contents.
 
 ## Related
 

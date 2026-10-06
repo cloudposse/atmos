@@ -2,6 +2,8 @@
 
 **Date:** 2026-10-05
 
+**Last Updated:** 2026-10-06
+
 **Status:** Exploratory proposal — not approved for implementation
 
 Explore whether Atmos should support defining stacks through native Starlark
@@ -18,6 +20,13 @@ The proposal is separate from [Starlark automation and command testing](starlark
 That work embeds scripting in automation and supports standalone executable
 scripts. It does not establish native Starlark stack declarations, discovery, or
 the object model proposed here.
+
+The automation stack now includes a [shared Go service boundary](automation-sdk.md),
+extension-based interpreter registration, decoded list/describe results, and direct
+step-library calls. These can inform a future stack-authoring design, but querying
+existing stacks from automation does not implement native Starlark stack definitions.
+Git-hook scripts are covered separately in [Git-hook steps](git-hook-steps.md).
+
 
 ## Problem Statement
 

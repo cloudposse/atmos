@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
@@ -308,4 +309,34 @@ steps:
 	require.Len(t, result.Steps, 2)
 	assert.Equal(t, "echo simple", result.Steps[0].Command)
 	assert.Equal(t, schema.TaskTypeAtmos, result.Steps[1].Type)
+}
+
+func TestAtmosDecodeHook_GitHookSteps(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(`git:
+  hooks:
+    pre-commit:
+      steps:
+        - name: check
+          type: script
+          interpreter: starlark
+          script: 'print("ok")'
+          timeout: 30s
+          retry:
+            max_attempts: 2
+`)))
+	var result struct {
+		Git schema.GitConfig `mapstructure:"git"`
+	}
+	require.NoError(t, v.Unmarshal(&result, atmosDecodeHook()))
+	tasks := result.Git.Hooks["pre-commit"].Steps
+	require.Len(t, tasks, 1)
+	assert.Equal(t, "starlark", tasks[0].Interpreter)
+	assert.Equal(t, `print("ok")`, tasks[0].Script)
+	assert.Equal(t, 30*time.Second, tasks[0].Timeout)
+	require.NotNil(t, tasks[0].Retry)
+	require.NotNil(t, tasks[0].Retry.MaxAttempts)
+	assert.Equal(t, 2, *tasks[0].Retry.MaxAttempts)
 }

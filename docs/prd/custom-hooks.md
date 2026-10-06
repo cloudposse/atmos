@@ -2,9 +2,22 @@
 
 **Status**: Shipped (core). Atmos ships the kind system, the scanner kinds (`infracost`, `trivy`, `checkov`, `kics`), the generic `command` kind, `--skip-hooks`, dependency auto-install, and workdir compatibility. Only the Atmos Pro upload backend remains outstanding — see Implementation Plan below. Core hook functionality is production-ready as of 2026-07-24.
 
-**Last Updated**: 2026-07-24
+**Last Updated**: 2026-10-06
 
 **Related PRDs**: [Hooks Component Scoping](./hooks-component-scoping.md) | [Tool Dependencies Integration](./tool-dependencies-integration.md) | [Native CI Integration](./native-ci-integration.md) | [CI Summary Templates](./ci-summary-templates.md) | [Run custom step types as component lifecycle hooks](./hooks-step-types.md) (the `kind: step` bridge — new hook capabilities like [`type: archive`](./archive-step.md) ship as step types, not new hook kinds)
+
+## Automation integration
+
+The current kind registry also includes `step` and `steps`, which reuse registered
+step handlers. Embedded Starlark scripts receive component, hook, and operation
+context and can call the shared step library. See [hook step types](hooks-step-types.md)
+and [automation behavior](starlark-automation-and-command-testing.md).
+
+Local Git hooks (`git.hooks` in atmos.yaml) are a different host from component
+lifecycle hooks. They now accept their own inline step lists; see
+[Git-hook steps](git-hook-steps.md). The remaining sections describe the original
+scanner-kind design; they do not imply that generic scripting or HTTP steps are
+still missing.
 
 ## Overview
 
@@ -19,7 +32,7 @@ This is a **minor tweak** to today's hook architecture, not a new subsystem:
 
 ## Problem Statement
 
-Today's `pkg/hooks/` only supports one active kind: `store` (read Terraform outputs into a parameter store). Users who want to run security scanners, cost estimators, or compliance tools against their components currently have to:
+Before this feature, `pkg/hooks/` supported one active kind: `store` (read Terraform outputs into a parameter store). Users who want to run security scanners, cost estimators, or compliance tools against their components currently have to:
 
 1. **Wrap them in GitHub Actions** — Couples the integration to GitHub, duplicates CLI logic, requires bash glue scripts between steps. Doesn't run locally.
 2. **Wrap them in custom commands** — Works, but bypasses the hook lifecycle, doesn't tie into `before/after.terraform.*` events, and can't surface results in a unified Pro UI.

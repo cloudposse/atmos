@@ -53,6 +53,8 @@ type Variables struct {
 	scriptComponentInfo ComponentInfoResolver
 	// ScriptHook supplies host-owned lifecycle facts to embedded script steps.
 	ScriptHook *script.HookContext
+	// ScriptArgs holds positional arguments supplied by the host.
+	ScriptArgs []string
 	// componentWorkingDir is the effective on-disk working directory of the
 	// hook's component (pkg/hooks.ComponentPath's return value), used only to
 	// anchor a bare-relative (non-dot-prefixed) explicit step.WorkingDirectory

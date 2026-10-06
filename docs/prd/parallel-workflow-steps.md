@@ -21,6 +21,24 @@ without dropping into shell glue.
 > [2026-06-25 "Actions steps can now be run in parallel"](https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/)
 > announcement, which formalized the `background` + `wait`/`wait-all`/`cancel` vocabulary we adopt here.
 
+## Automation language integration (2026-10-06)
+
+Embedded Starlark script children are supported by the parallel and matrix
+runners. Their host inputs, output streams, literal-field metadata, and component
+resolvers remain available in each branch.
+
+The language also has function concurrency: `steps.task` describes a call with
+arguments, timeout, and retry policy; `steps.parallel` runs those functions with
+bounded concurrency and input-order results. This is distinct from YAML control
+steps. Use `steps.run("parallel", steps=[...])` to call the registered YAML-style
+handler from a script. Both retain their terminal/context restrictions.
+
+Direct script calls do not create workflow-owned background jobs. `wait`,
+`wait-all`, and `cancel` require the existing background-job context. Local Git
+hook step lists are synchronous hosts and do not introduce another job manager.
+See [automation behavior](starlark-automation-and-command-testing.md) and
+[Git-hook steps](git-hook-steps.md).
+
 ## Problem Statement
 
 Workflows encode the operational knowledge that should not live in someone's shell history: run the
@@ -45,18 +63,18 @@ Infrastructure automation should not force a choice between "simple but slow" an
 4. Make failure behavior part of the workflow contract, not buried in scripts. *(Shipped)*
 5. Fan a single step template across a matrix of axes. *(Shipped)*
 6. Start a step in the background, continue the workflow, and later synchronize on it (`wait`) or
-   tear it down (`cancel`) — enabling long-running local services (emulators, registries, k3s,
-   devcontainers) inside a workflow. *(Proposed)*
+    tear it down (`cancel`) — enabling long-running local services (emulators, registries, k3s,
+    devcontainers) inside a workflow. *(Proposed)*
 
 ## Non-Goals
 
 1. **GitHub Actions `parallel`-as-sugar.** Atmos `parallel` is a structured DAG block, not syntactic
-   sugar for "background a group + wait-all." See [Relationship to GitHub Actions](#relationship-to-github-actions).
+    sugar for "background a group + wait-all." See [Relationship to GitHub Actions](#relationship-to-github-actions).
 2. **A new readiness mechanism.** Container readiness reuses the existing `healthcheck:` +
-   `container.WaitHealthy`; v1 adds no `ready:` field. A non-Docker readiness probe (tcp/http/log) is
-   deferred until the non-container (shell/atmos) background `Runner` lands.
+    `container.WaitHealthy`; v1 adds no `ready:` field. A non-Docker readiness probe (tcp/http/log) is
+    deferred until the non-container (shell/atmos) background `Runner` lands.
 3. **Interactive child steps inside concurrent groups.** Prompts, pagers, spinners, editors, and
-   terminal-owning renderers stay outside concurrent groups for now.
+    terminal-owning renderers stay outside concurrent groups for now.
 4. **Conditional branching.** No if/else in workflows (use `when` / shell).
 
 ---
@@ -67,7 +85,7 @@ Infrastructure automation should not force a choice between "simple but slow" an
 
 The `parallel` step runs its child steps concurrently instead of one after another, with bounded
 concurrency, sibling dependencies, configurable failure behavior, and parent-owned output. Child steps
-must be non-interactive command steps — `shell`, `atmos`, or `sleep`.
+must be non-interactive command steps — `shell`, `script`, `atmos`, or `sleep`.
 
 ```yaml
 steps:
@@ -98,7 +116,7 @@ steps:
 
 ### Fields
 
-- **`steps`** (required) — child steps to run concurrently; each must be `shell`, `atmos`, or `sleep`.
+- **`steps`** (required) — child steps to run concurrently; each must be `shell`, `script`, `atmos`, or `sleep`.
 - **`max_concurrency`** — maximum children running at once. Defaults to unbounded (all eligible
   children start together).
 - **`fail`** — failure behavior for the group (see below).
