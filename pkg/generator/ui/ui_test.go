@@ -193,6 +193,42 @@ func TestResolveTargetPath_NonEmptyTargetPathIsPassthrough(t *testing.T) {
 	assert.True(t, gotUseDefaults)
 }
 
+// TestLoadScaffoldConfigFromEmbeds_RemoteSourceLocalIncludeResolvesAgainstLocalDir
+// proves a remote-fetched template's local !include target resolves
+// against LocalDir (the real, still-alive fetch directory), not Source --
+// which by the time loadScaffoldConfigFromEmbeds runs holds only the
+// display-oriented original remote reference string (e.g. "oci://..."),
+// overwritten by source.Hydrate right after fetching, never a real,
+// resolvable path. Source is deliberately left as a non-path string here
+// to prove IncludeSourceDir is actually being used, not Source directly.
+func TestLoadScaffoldConfigFromEmbeds_RemoteSourceLocalIncludeResolvesAgainstLocalDir(t *testing.T) {
+	ui := createTestUI(t)
+	localDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(localDir, "lib"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(localDir, "lib", "licenses.yaml"), []byte("mit: MIT License\n"), 0o644))
+
+	configuration := &templates.Configuration{
+		Name:     "remote-with-include",
+		Source:   "oci://ghcr.io/example/template:v1.0.0",
+		LocalDir: localDir,
+		Files: []templates.File{{Path: "scaffold.yaml", Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: remote-with-include
+spec:
+  fields:
+    - name: license
+      type: computed
+      value: !include ./lib/licenses.yaml
+`}},
+	}
+
+	scaffoldConfig, err := ui.loadScaffoldConfigFromEmbeds(configuration)
+
+	require.NoError(t, err)
+	require.NotNil(t, scaffoldConfig)
+}
+
 // TestResolvePreCollectedValues_FreshGeneration_StripsComputedFieldValues
 // proves a computed field's own result -- present in preCollectedValues
 // because the temp-dir setup pass that produced it already ran
