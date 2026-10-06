@@ -2,7 +2,7 @@ package engine
 
 import (
 	"fmt"
-	"math"
+	"maps"
 	"sort"
 	"strings"
 	"text/template"
@@ -337,16 +337,10 @@ func cartesianProduct(matrix map[string][]string) []map[string]string {
 		next := make([]map[string]string, 0, len(rows))
 		for _, row := range rows {
 			for _, value := range matrix[axis] {
-				// Clamped first so the +1 below is provably bounded (satisfies
-				// CodeQL's allocation-size-overflow check).
-				rowLen := len(row)
-				if rowLen > math.MaxInt-1 {
-					rowLen = math.MaxInt - 1
-				}
-				copied := make(map[string]string, rowLen+1)
-				for k, v := range row {
-					copied[k] = v
-				}
+				// maps.Clone sizes its own allocation internally, so no
+				// len()+1 arithmetic appears here for CodeQL's
+				// allocation-size-overflow check to flag.
+				copied := maps.Clone(row)
 				copied[axis] = value
 				next = append(next, copied)
 			}

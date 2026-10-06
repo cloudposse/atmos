@@ -233,28 +233,46 @@ func countDifferentLines(base, changed []string) int {
 		return countDifferentLinesApprox(base, changed)
 	}
 
-	// dp[i][j] = length of LCS of base[:i] and changed[:j].
-	// Allocate a (m+1) x (n+1) table.
-	dp := make([][]int, m+1)
+	// dp[i][j] = length of LCS of base[:i+1] and changed[:j+1]. Unlike the
+	// textbook (m+1) x (n+1) table padded with an extra all-zero row/column
+	// for the empty-prefix base case, this is sized exactly m x n -- no
+	// make() here computes its size via m+1/n+1 arithmetic for CodeQL's
+	// allocation-size-overflow check to flag -- with the empty-prefix case
+	// (i == 0 or j == 0) handled explicitly below instead of by padding.
+	dp := make([][]int, m)
 	for i := range dp {
-		dp[i] = make([]int, n+1)
+		dp[i] = make([]int, n)
 	}
 
-	for i := 1; i <= m; i++ {
-		for j := 1; j <= n; j++ {
-			if base[i-1] == changed[j-1] {
-				dp[i][j] = dp[i-1][j-1] + 1
+	for i := 0; i < m; i++ {
+		for j := 0; j < n; j++ {
+			if base[i] == changed[j] {
+				prev := 0
+				if i > 0 && j > 0 {
+					prev = dp[i-1][j-1]
+				}
+				dp[i][j] = prev + 1
 			} else {
-				if dp[i-1][j] > dp[i][j-1] {
-					dp[i][j] = dp[i-1][j]
+				up, left := 0, 0
+				if i > 0 {
+					up = dp[i-1][j]
+				}
+				if j > 0 {
+					left = dp[i][j-1]
+				}
+				if up > left {
+					dp[i][j] = up
 				} else {
-					dp[i][j] = dp[i][j-1]
+					dp[i][j] = left
 				}
 			}
 		}
 	}
 
-	lcsLen := dp[m][n]
+	var lcsLen int
+	if m > 0 && n > 0 {
+		lcsLen = dp[m-1][n-1]
+	}
 	// Lines deleted from base, plus lines inserted in changed.
 	return (m - lcsLen) + (n - lcsLen)
 }
