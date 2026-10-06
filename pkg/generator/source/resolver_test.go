@@ -211,6 +211,28 @@ func TestResolve_OCISuccess(t *testing.T) {
 	assert.True(t, strings.HasPrefix(cfg.ResolvedRef, "sha256:"), "OCI ResolvedRef must be the pulled manifest's digest, got %q", cfg.ResolvedRef)
 }
 
+// TestResolve_OCIPreservesLocalDir proves LocalDir still points at the real,
+// on-disk fetch directory after Source is overwritten to the original oci://
+// reference -- a later re-parse of this template's own scaffold.yaml (e.g.
+// RunSetupForm re-loading it to resolve a local !include target) needs a
+// real path to resolve against, not the oci:// string Source now holds.
+func TestResolve_OCIPreservesLocalDir(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "sample:v1", map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+	src := "oci://" + imageRef
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	defer cleanup()
+
+	require.NotEmpty(t, cfg.LocalDir)
+	assert.NotEqual(t, cfg.Source, cfg.LocalDir, "LocalDir must diverge from the overwritten Source")
+	assert.FileExists(t, filepath.Join(cfg.LocalDir, "scaffold.yaml"), "LocalDir must still point at the real fetch directory, not a stale/removed path")
+	assert.Equal(t, cfg.LocalDir, cfg.IncludeSourceDir(), "IncludeSourceDir must prefer LocalDir once it's set")
+}
+
 // TestResolve_OCIEmptyRegistryFails proves a manifest with zero layers (a
 // real, legitimate registry response, distinct from a network/auth failure)
 // surfaces as a fetch failure rather than succeeding with an empty template.
@@ -638,6 +660,34 @@ func TestResolve_RemoteRecordsOriginalSource(t *testing.T) {
 
 	assert.True(t, hasSampleFile(cfg.Files), "remote archive template files must be loaded")
 	assert.Equal(t, src, cfg.Source, "remote sources must record the original source string, not the ephemeral fetch tempdir")
+}
+
+// TestResolve_RemotePreservesLocalDir mirrors
+// TestResolve_OCIPreservesLocalDir for the go-getter (git/https/s3) fetch
+// path -- resolveOCI and resolveRemote each set LocalDir independently, so
+// each needs its own regression coverage.
+func TestResolve_RemotePreservesLocalDir(t *testing.T) {
+	archive := zipArchive(t, map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/zip")
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+
+	src := server.URL + "/template.zip"
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	defer cleanup()
+
+	require.NotEmpty(t, cfg.LocalDir)
+	assert.NotEqual(t, cfg.Source, cfg.LocalDir, "LocalDir must diverge from the overwritten Source")
+	assert.FileExists(t, filepath.Join(cfg.LocalDir, "scaffold.yaml"), "LocalDir must still point at the real fetch directory, not a stale/removed path")
+	assert.Equal(t, cfg.LocalDir, cfg.IncludeSourceDir(), "IncludeSourceDir must prefer LocalDir once it's set")
 }
 
 // TestResolve_RemoteGitSubdirMissing pins the exact failure mode reported for
