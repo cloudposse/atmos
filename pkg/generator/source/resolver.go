@@ -262,9 +262,15 @@ func resolveOCI(atmosConfig *schema.AtmosConfiguration, name, src string, timeou
 		return nil, noop, err
 	}
 	conf.ResolvedRef = resolvedDigest
-	// tempDir only exists to read files off disk and is removed by cleanup()
-	// once generation finishes; the recorded provenance must be the original
-	// source the caller passed in, not that ephemeral fetch destination.
+	// tempDir is still valid for the rest of this generation run (removed by
+	// cleanup() once it finishes, not before) -- preserved in LocalDir so a
+	// later re-parse of this template's own scaffold.yaml (e.g. by
+	// RunSetupForm) can still resolve a local !include target correctly.
+	// Source itself is overwritten next: the recorded provenance must be
+	// the original source the caller passed in, not that ephemeral fetch
+	// destination, so it's no longer usable for local path resolution
+	// after this point -- see Configuration.IncludeSourceDir.
+	conf.LocalDir = tempDir
 	conf.Source = src
 	return conf, cleanup, nil
 }
@@ -323,9 +329,15 @@ func resolveRemote(atmosConfig *schema.AtmosConfiguration, name, src string, tim
 		// before the fetch above ran.
 		conf.ResolvedRef = preResolvedRef
 	}
-	// tempDir only exists to read files off disk and is removed by cleanup()
-	// once generation finishes; the recorded provenance must be the original
-	// source the caller passed in, not that ephemeral fetch destination.
+	// tempDir is still valid for the rest of this generation run (removed by
+	// cleanup() once it finishes, not before) -- preserved in LocalDir so a
+	// later re-parse of this template's own scaffold.yaml (e.g. by
+	// RunSetupForm) can still resolve a local !include target correctly.
+	// Source itself is overwritten next: the recorded provenance must be
+	// the original source the caller passed in, not that ephemeral fetch
+	// destination, so it's no longer usable for local path resolution
+	// after this point -- see Configuration.IncludeSourceDir.
+	conf.LocalDir = tempDir
 	conf.Source = src
 	return conf, cleanup, nil
 }
