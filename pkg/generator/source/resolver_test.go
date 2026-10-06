@@ -518,7 +518,7 @@ func TestResolveRemote_SubdirGitSourcePinsRefBeforeFetch(t *testing.T) {
 
 	requireGitBinary(t)
 
-	pinnedSrc, ref := pinSubdirGitSource(&schema.AtmosConfiguration{}, src, DefaultFetchTimeout)
+	pinnedSrc, ref := pinSubdirGitSource(&schema.AtmosConfiguration{}, "aws/app", src, DefaultFetchTimeout)
 	require.Regexp(t, `^[0-9a-f]{40}$`, ref, "the commit must be resolved before the content fetch runs")
 	require.Contains(t, pinnedSrc, "ref="+ref, "the content fetch must be pinned to the resolved commit")
 
@@ -547,7 +547,7 @@ func TestResolveRemote_SubdirGitSourcePinsRefBeforeFetch(t *testing.T) {
 // direct resolveFetchedGitRef(tempDir) result already reflects reality for
 // that case, so this must not attempt a redundant re-fetch.
 func TestResolveSubdirGitRef_NoSubdirReturnsEmpty(t *testing.T) {
-	assert.Empty(t, resolveSubdirGitRef(&schema.AtmosConfiguration{}, "git::file:///does/not/matter?ref=main", time.Minute))
+	assert.Empty(t, resolveSubdirGitRef(&schema.AtmosConfiguration{}, "aws/app", "git::file:///does/not/matter?ref=main", time.Minute))
 }
 
 // TestResolveSubdirGitRef_FetchFailurePropagatesEmpty covers the re-fetch
@@ -556,7 +556,7 @@ func TestResolveSubdirGitRef_NoSubdirReturnsEmpty(t *testing.T) {
 func TestResolveSubdirGitRef_FetchFailurePropagatesEmpty(t *testing.T) {
 	src := "git::file:///definitely/not/a/repo//sub?ref=main"
 
-	assert.Empty(t, resolveSubdirGitRef(&schema.AtmosConfiguration{}, src, time.Millisecond))
+	assert.Empty(t, resolveSubdirGitRef(&schema.AtmosConfiguration{}, "aws/app", src, time.Millisecond))
 }
 
 // TestResolve_RemoteGitExcludesGitDirectory reproduces a client-reported bug: fetching a
