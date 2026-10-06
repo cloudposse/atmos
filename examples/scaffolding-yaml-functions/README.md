@@ -1,3 +1,13 @@
+---
+related_docs:
+  - label: "Scaffold generation and template configuration"
+    url: /cli/commands/scaffold/generate
+  - label: "Validate scaffold templates"
+    url: /cli/commands/scaffold/validate
+  - label: "!include YAML function"
+    url: /functions/yaml/include
+---
+
 # Example: Scaffold YAML Functions
 
 Load a shared reference table once from a local file via `!include`, instead of hand-duplicating
