@@ -29,6 +29,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Test verifier error handling
+        run: node --test .github/actions/verify-sha-pinning/offline.test.mjs
+
       # Verifier code and allowlist.json are read from the PR's own head, same
       # as gitleaks/git-secrets read their allowlist config from the diff
       # being scanned — protection against a self-serving allowlist entry (or
