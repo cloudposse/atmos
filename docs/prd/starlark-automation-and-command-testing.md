@@ -640,3 +640,9 @@ replace checks against the current codebase:
 |------|------------|
 | 2026-10-06 | Reconciled the shared SDK, extension registry, stdin execution, step library, structured errors, query defaults and decoded results, process controls, filesystem inspection, and local Git-hook integration. |
 | 2026-10-05 | Reorganized into explicit PRD sections and reconciled implemented inputs, literal fields, output, recursion, command catalog, standalone declarations, global flags, usage errors, and re-execution. Kept unimplemented service and testing APIs separate. |
+
+## Computed YAML values
+
+See [Starlark YAML values](starlark-yaml-values.md) for `!starlark` function
+bodies that return typed configuration from a read-only merged component
+context. This host uses `return`; executable scripts and steps retain `output`.

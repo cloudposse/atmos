@@ -1,6 +1,8 @@
 package function
 
 import (
+	"context"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -8,6 +10,8 @@ import (
 // ExecutionContext provides the runtime context for function execution.
 // It contains all the information a function might need to resolve values.
 type ExecutionContext struct {
+	// EvaluateValue supplies the host's dependency-aware configuration evaluator.
+	EvaluateValue func(context.Context, string) (any, error)
 	// AtmosConfig is the current Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
 

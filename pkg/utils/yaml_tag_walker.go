@@ -9,6 +9,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -302,6 +303,7 @@ func getStackManifestTagPolicy() TagWalkPolicy {
 		stackManifestTagPolicyVal = TagWalkPolicy{
 			Prepare: prepareScriptSource,
 			Handlers: map[string]TagHandler{
+				AtmosYamlFuncStarlark:   handleStarlarkTag,
 				AtmosYamlFuncLiteral:    handleLiteralTag,
 				AtmosYamlFuncAppend:     handleAppendTag,
 				AtmosYamlFuncInclude:    handleIncludeTag,
@@ -311,4 +313,14 @@ func getStackManifestTagPolicy() TagWalkPolicy {
 		}
 	})
 	return stackManifestTagPolicyVal
+}
+
+// handleStarlarkTag defers a scalar body, preserving its source through merging.
+func handleStarlarkTag(ctx TagContext, node *yaml.Node, _ string) (bool, error) {
+	if node.Kind != yaml.ScalarNode {
+		return false, fmt.Errorf("%w: !starlark requires a scalar function body in %s:%d", errUtils.ErrInvalidStackManifest, ctx.File, node.Line)
+	}
+	node.Value = starlarksource.FromNode(node, ctx.File).Encode()
+	node.Tag = "!!str"
+	return true, nil
 }

@@ -1164,8 +1164,8 @@ func TestExecuteTerraformGenerateBackends_ResolvesDeferredMergeContexts(t *testi
 	require.NoError(t, os.MkdirAll(componentDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# vpc component\n"), 0o644))
 
-	// The catalog layer defines the backend and a deferred !labels function at `vars.tags`; the
-	// top-level stack imports it and layers a conflicting literal map at the same path.
+	// The global vars layer defines deferred !labels; the component adds a literal
+	// map at the same path. Its Starlark backend expression reads the merged tags.
 	catalogContent := `
 components:
   terraform:
@@ -1176,11 +1176,10 @@ components:
           region: us-east-1
       backend:
         s3:
-          bucket: test-bucket
+          bucket: !starlark |
+            return ctx.vars["tags"]["org"] + "-bucket"
           key: terraform.tfstate
       backend_type: s3
-      vars:
-        tags: !labels
 `
 	require.NoError(t, os.WriteFile(filepath.Join(catalogDir, "vpc.yaml"), []byte(catalogContent), 0o644))
 
@@ -1189,6 +1188,7 @@ import:
   - catalog/vpc
 vars:
   stage: dev
+  tags: !labels
 components:
   terraform:
     vpc:
@@ -1223,7 +1223,7 @@ components:
 	backendTF := filepath.Join(componentDir, "backend.tf")
 	content, err := os.ReadFile(backendTF)
 	require.NoError(t, err)
-	assert.Contains(t, string(content), "test-bucket")
+	assert.Contains(t, string(content), "acme-bucket")
 }
 
 // TestExecuteTerraformGenerateBackends_ComponentTemplateContextIncludesAuth is a regression test

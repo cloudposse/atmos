@@ -254,7 +254,9 @@ func ExecuteTerraformGenerateVarfiles(
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil, &configAndStacksInfo)
+				configAndStacksInfo.ComponentSection = componentSectionConverted
+				yamlSkip, finishValues := prepareConfigurationValues(atmosConfig, &configAndStacksInfo, nil, nil)
+				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, yamlSkip, &configAndStacksInfo)
 				if err != nil {
 					return err
 				}
@@ -269,6 +271,9 @@ func ExecuteTerraformGenerateVarfiles(
 				// contribution here, the same #2888 data-loss bug the main describe/plan path fixes
 				// via this same call (see internal/exec/utils.go).
 				if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, nil, nil); err != nil {
+					return err
+				}
+				if err := finishValues(); err != nil {
 					return err
 				}
 				componentSection = configAndStacksInfo.ComponentSection

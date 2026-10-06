@@ -1,0 +1,182 @@
+---
+title: "!starlark"
+sidebar_label: "!starlark"
+sidebar_class_name: command
+description: Compute typed configuration values with Starlark and the effective component context.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Compute configuration values with the Atmos Automation Language. Use functions,
+conditions, and loops to derive tags, names, lists, and maps from the component's
+merged configuration.
+</Intro>
+
+## Usage
+
+Write a function body inside a `!starlark` YAML scalar. Use `return` to supply the
+value that replaces it:
+
+```yaml
+vars:
+  stage: dev
+  region: us-east-2
+  resource_tags: !starlark |
+    return {
+        "Environment": ctx.vars["stage"],
+        "Region": ctx.vars["region"],
+        "Owner": ctx.metadata.get("owner", "platform"),
+    }
+```
+
+Atmos evaluates the code after imports, inheritance, and overrides have been
+merged. An inherited expression reads the consuming component's values. For
+example, overriding `stage` to `prod` produces an `Environment` tag of `prod`.
+
+An expression is a scalar during inheritance. A higher-precedence expression
+or concrete value replaces that field; returned dictionaries are not deep-merged
+with lower-precedence values.
+
+The returned dictionary becomes a YAML mapping. Strings, booleans, numbers,
+lists, and `None` also retain their types; `None` becomes YAML `null`.
+
+## Try it
+
+In an Atmos project with a Terraform component named `service`, add this
+component to a stack manifest:
+
+```yaml
+vars:
+  stage: dev
+  region: us-east-2
+
+components:
+  terraform:
+    service:
+      metadata:
+        owner: platform
+      vars:
+        resource_tags: !starlark |
+          return {
+              "Environment": ctx.vars["stage"],
+              "Region": ctx.vars["region"],
+              "Owner": ctx.metadata.get("owner", "platform"),
+          }
+```
+
+Inspect it with your project's stack name:
+
+```shell
+atmos describe component service -s <stack> --format json
+```
+
+The `vars.resource_tags` field contains:
+
+```json
+{
+  "Environment": "dev",
+  "Region": "us-east-2",
+  "Owner": "platform"
+}
+```
+
+## Context
+
+The read-only `ctx` object exposes the effective component configuration.
+Access sections as attributes, then use dictionary indexing or `.get()` for
+values. Mappings also support iteration, `.keys()`, `.values()`, and `.items()`.
+
+<dl>
+<dt><code>ctx.vars</code></dt>
+<dd>Merged component variables, including inherited values and overrides.</dd>
+<dt><code>ctx.metadata</code></dt>
+<dd>Component metadata. Use <code>.get()</code> for optional fields.</dd>
+<dt><code>ctx.settings</code></dt>
+<dd>Merged component settings.</dd>
+<dt><code>ctx.env</code></dt>
+<dd>The component's configured environment mapping. This is not the process environment.</dd>
+<dt><code>ctx.locals</code></dt>
+<dd>Local values available in the component configuration.</dd>
+<dt><code>ctx.stack</code></dt>
+<dd>The stack being evaluated.</dd>
+<dt><code>ctx.component</code></dt>
+<dd>The component instance name when evaluation has a component context.</dd>
+<dt><code>ctx.component_type</code></dt>
+<dd>The component type, such as <code>terraform</code> or <code>helmfile</code>, when available.</dd>
+</dl>
+
+Missing configuration sections are empty mappings. Reading a missing key with
+`ctx.vars["name"]` fails; `ctx.vars.get("name", "default")` supplies a fallback.
+The context and its nested values cannot be modified. Build and return a new
+value instead.
+
+## Computed dependencies
+
+Values are resolved when accessed, so a computed field can depend on another
+computed field regardless of their order in YAML:
+
+```yaml
+vars:
+  replicas: !starlark |
+    return ctx.vars["minimum_replicas"] * 2
+  minimum_replicas: !starlark |
+    return 3 if ctx.vars["stage"] == "prod" else 1
+  stage: prod
+```
+
+Here, `replicas` is `6`. Each field is resolved once per component evaluation.
+A circular dependency fails with the configuration paths involved, rather than
+depending on YAML key order.
+
+Go templates run before YAML functions. Starlark can read rendered values from
+`ctx`; a Go template cannot read the result of a `!starlark` expression in that
+same pass. Source inside `!starlark` is literal: `{{ ... }}` inside a Starlark
+string stays unchanged.
+
+## Functions and results
+
+A block is an implicit function body. It supports local variables, helper
+functions, loops, conditions, and early returns:
+
+```yaml
+vars:
+  stage: dev
+  enabled_regions: [us-east-1, us-east-2]
+  deployment_names: !starlark |
+    def name(region):
+        return "%s-%s" % (ctx.vars["stage"], region)
+
+    return [name(region) for region in ctx.vars["enabled_regions"]]
+```
+
+The evaluator includes Starlark builtins, `sum`, `round`, and the `json` module.
+See the [language overview](/automation/language) for the language's syntax and
+Starlark background.
+
+Return `None`, a boolean, string, finite number, list, or dictionary with string
+keys. Integers must fit a signed or unsigned 64-bit value. An empty list or
+dictionary remains empty. Falling through without a return produces `null`.
+Functions, sets, tuples, non-string dictionary keys, and cyclic collections are
+rejected as return values.
+
+## Evaluation scope
+
+Use `!starlark` in component configuration values within stack manifests. It
+computes values after structural merging; it does not generate imports,
+component names, inheritance rules, or stack identities. It is not supported in
+`atmos.yaml` or scaffold configuration.
+
+This configuration evaluator provides `ctx`, language builtins, and `json`.
+Automation modules such as `exec`, `fs`, and `steps`, and module loading with
+`load()`, are unavailable here. Use [automation scripts](/automation) for
+commands, prompts, and other operations. Existing YAML functions referenced
+through `ctx` retain their own behavior, including any external reads they
+perform.
+
+Each block has a budget of 100,000 interpreter steps. This catches runaway
+loops; it is not a hard memory or CPU limit. Evaluation errors include the
+configuration field and, for source errors, the originating filename and line.
+
+Commands that support `--skip !starlark` preserve the expression without
+evaluating it.
