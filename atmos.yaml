@@ -330,6 +330,37 @@ version:
     enabled: true
     timeout: 1000 # ms
     frequency: 1h
+  lock_file: versions.lock.yaml
+  # Tracks Atmos's own latest GitHub release and stamps it into the Claude
+  # Code plugin manifests via the json file manager (sjson/gjson field
+  # writes, in place -- no template/rendered-output pair to keep in sync).
+  # See #2895.
+  dependencies:
+    atmos:
+      ecosystem: github
+      datasource: github-releases
+      package: cloudposse/atmos
+      desired: latest
+  files:
+    - manager: json
+      paths:
+        - agent-skills/.claude-plugin/plugin.json
+      options:
+        set:
+          - path: version
+            from: atmos
+            format: '{{ trimPrefix "v" .Version }}'
+    - manager: json
+      paths:
+        - .claude-plugin/marketplace.json
+      options:
+        set:
+          - path: version
+            from: atmos
+            format: '{{ trimPrefix "v" .Version }}'
+          - path: plugins.0.version
+            from: atmos
+            format: '{{ trimPrefix "v" .Version }}'
 ai:
   enabled: true
 mcp:
