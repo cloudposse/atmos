@@ -43,6 +43,8 @@ reviews:
     base_branches:
       - "main"
       - "^osterman/starlark-execution-support$"
+      - "^osterman/starlark-runtime$"
+      - "^osterman/starlark-integration-core$"
   tools:
     ast-grep:
       essential_rules: true

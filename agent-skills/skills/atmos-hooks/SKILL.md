@@ -104,6 +104,22 @@ See [atmos-workflows](../atmos-workflows/SKILL.md#conditional-execution-with-whe
 
 ## Hook Kinds
 
+For embedded Starlark script hooks, also read [atmos-starlark](../atmos-starlark/SKILL.md).
+Starlark script steps work in `kind: step`, `kind: steps`, and `type: test` hooks.
+`ctx.component` exposes the current component's read-only vars, settings, metadata,
+and effective working directory. Use settings to control reusable hook behavior.
+`ctx.hook` exposes name/event; `ctx.operation` exposes the parent command and outcome.
+Call `components.get(name, stack, type)` with an explicit stack to read another component.
+A hook `script: !include scripts/x.star` resolves its `load()` calls next to the included file:
+Atmos records that file in a `script_source` key beside the `script`, which `describe component`
+shows, with a `script_source_sha256` fingerprint. Treat both as Atmos-owned provenance and do not
+write them by hand. A child stack that overrides only `script` (for example with an inline body)
+keeps the inherited keys in `describe` output, but Atmos ignores them because the fingerprint no
+longer matches.
+Before-hook results and uncaptured parent streams are `None`. Processes launched
+inside a hook return their own results. `atmos.run`, `atmos.terraform`, and `atmos.helm`
+invoke normal command lifecycles, so avoid re-entering the same hook recursively.
+
 Stack lifecycle hooks support `command`, `store`, `git`, `tflint`, `infracost`, `trivy`, `checkov`,
 `kics`, and the step bridge. The legacy `ci.*` hook kinds still parse but are deprecated no-ops;
 use the current CI provider bindings instead. Use a named kind when Atmos has one; use `command`

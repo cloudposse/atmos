@@ -1,0 +1,33 @@
+base_path: .
+
+stacks:
+  base_path: stacks
+  included_paths: [deploy/**/*]
+  name_template: '{{.vars.stage}}'
+
+components:
+  application:
+    base_path: components/application
+
+commands:
+  - name: release-plan
+    description: Inspect a custom component and its peers with Starlark
+    arguments:
+      - name: component
+        provides: component
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        provides: stack
+        required: true
+    component:
+      type: application
+    steps:
+      - name: plan
+        type: script
+        interpreter: starlark
+        output: raw
+        show:
+          labels: false
+        script: !include scripts/plan.star

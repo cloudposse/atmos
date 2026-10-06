@@ -960,6 +960,13 @@ func executeCustomCommand(
 		return
 	}
 
+	// Reject embedded interpreters (Starlark) under a step-level container before any step runs.
+	// Custom commands have no command-level container, so the ambient container is nil.
+	if err := workflowPkg.ValidateEmbeddedInterpreterSteps(fmt.Sprintf("Custom command `%s`", commandConfig.Name), nil, workflowSteps); err != nil {
+		exitOrRecordDependencyErr(cmd, err, "", "")
+		return
+	}
+
 	// Resolve and run dependencies.commands/dependencies.workflows before any of this
 	// command's own steps, concurrently by default via pkg/taskgraph's DAG scheduler. Skipped
 	// when this command is itself being invoked as someone else's dependency (see
@@ -1329,10 +1336,17 @@ func executeCustomCommand(
 				stepOwnEnv = atmosConfig.CaseMaps.ApplyCase("env", stepOwnEnv)
 			}
 			mergedStepEnv := envpkg.SliceToMap(env)
+			workflowStep.ScriptEnv = map[string]string{}
 			for key, value := range stepOwnEnv {
+				workflowStep.ScriptEnv[key] = value
 				mergedStepEnv[key] = value
 			}
 			workflowStep.Env = mergedStepEnv
+			workflowStep.ScriptProcessOverrides = map[string]string{}
+			for _, entry := range commandConfig.Env {
+				key := strings.TrimSpace(entry.Key)
+				workflowStep.ScriptProcessOverrides[key] = mergedStepEnv[key]
+			}
 			workflowStep.WorkingDirectory = stepWorkDir
 
 			if stack, ok := flagsData["stack"].(string); ok && stack != "" {
@@ -1394,15 +1408,19 @@ func executeCustomCommand(
 					}, func() error {
 						writer := customCommandOutputWriter(&step, commandName)
 						_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
-							return e.ExecuteShellWithWriters(&e.ExecuteShellSpec{
+							// Streaming maskers hold back a possible secret prefix between writes so a
+							// secret split across two pipe reads is still masked; flush once the step ends.
+							masked := ioLayer.NewMaskedStreams(os.Stdin, stdout, stderr)
+							shellErr := e.ExecuteShellWithWriters(&e.ExecuteShellSpec{
 								Context: executionCtx,
 								Command: commandToRun,
 								Name:    commandName,
 								Dir:     stepWorkDir,
 								EnvVars: env,
-								Stdout:  io.MultiWriter(ioLayer.MaskWriter(stdout), stdoutCapture),
-								Stderr:  io.MultiWriter(ioLayer.MaskWriter(stderr), stderrCapture),
+								Stdout:  io.MultiWriter(masked.Stdout, stdoutCapture),
+								Stderr:  io.MultiWriter(masked.Stderr, stderrCapture),
 							})
+							return masked.Finish(shellErr)
 						})
 						return runErr
 					})
@@ -1416,7 +1434,11 @@ func executeCustomCommand(
 				// of wrapping the display command in `sh -lc`.
 				workflowStep := step.ToWorkflowStep()
 				if workflowPkg.StepContainerOverride(&workflowStep) {
-					return runContainerOverrideStep(&workflowStep, process.FormatScriptDisplay(step.Interpreter, step.Script))
+					// Render a templated interpreter first so the container checks see the effective one.
+					if renderErr := workflowPkg.RenderScriptInterpreter(&workflowStep, executor.Variables().Resolve); renderErr != nil {
+						return renderErr
+					}
+					return runContainerOverrideStep(&workflowStep, process.FormatScriptDisplay(workflowStep.Interpreter, step.Script))
 				}
 				return runExtendedStep(workflowStep)
 			case schema.TaskTypeExec:
@@ -1463,6 +1485,7 @@ func executeCustomCommand(
 					BaseEnv:          env,
 					AuthManager:      authManager,
 					Executor:         executor,
+					WorkingDirectory: stepWorkDir,
 				}, &workflowStep)
 			default:
 				// Check if this is an extended step type (input, confirm, choose, etc.).
@@ -1554,6 +1577,7 @@ func configureCustomCommandScannerContext(vars *stepPkg.Variables, atmosConfig *
 	}
 	vars.SetAtmosConfig(atmosConfig)
 	vars.SetToolchainPATH(toolchainPATH)
+	vars.SetScriptComponentInfoResolver(e.ScriptComponentInfoResolver(atmosConfig, authManager))
 	vars.SetComponentInfoResolver(func(_ context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
 		info := schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
@@ -1692,6 +1716,8 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	if err = json.Unmarshal(origJSON, &clone); err != nil {
 		return nil, err
 	}
+	// The JSON round trip drops fields that have no JSON key; restore the script provenance.
+	clone.CopyScriptSources(orig)
 
 	return &clone, nil
 }

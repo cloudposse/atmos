@@ -89,53 +89,71 @@ func (w *OutputModeWriter) executeViewport(cmd *exec.Cmd) (string, string, error
 
 // executeRaw passes output directly to stdout/stderr.
 func (w *OutputModeWriter) executeRaw(cmd *exec.Cmd) (string, string, error) {
-	// Create writers that capture and forward output.
-	var stdout, stderr bytes.Buffer
-
-	// Get I/O context for stream access.
-	ioCtx := iolib.GetContext()
-
-	w.writeStepHeader()
-
-	// Use MultiWriter to both capture and forward output.
-	// Data() returns stdout for pipeable output, UI() returns stderr for human messages.
-	cmd.Stdout = io.MultiWriter(&stdout, ioCtx.Data())
-	cmd.Stderr = io.MultiWriter(&stderr, ioCtx.UI())
-
-	err := cmd.Run()
-	w.writeStepFooter(err)
-	return stdout.String(), stderr.String(), err
+	return w.executeRawWithIO(func(stdout, stderr io.Writer) error {
+		cmd.Stdout, cmd.Stderr = stdout, stderr
+		return cmd.Run()
+	})
 }
 
+// executeRawWithIO forwards output to the data and UI streams while capturing it.
+// Captured output stays raw; only the displayed streams are masked. Each displayed stream goes
+// through a streaming masker so a secret split across two reads is still masked.
 func (w *OutputModeWriter) executeRawWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
 	var stdout, stderr bytes.Buffer
 	ioCtx := iolib.GetContext()
 
+	// Data() returns stdout for pipeable output, UI() returns stderr for human messages.
+	dataOut := iolib.NewStreamingMaskWriter(ioCtx.Data())
+	uiOut := iolib.NewStreamingMaskWriter(ioCtx.UI())
+
 	w.writeStepHeader()
-	err := runner(io.MultiWriter(&stdout, ioCtx.Data()), io.MultiWriter(&stderr, ioCtx.UI()))
+	err := runner(io.MultiWriter(&stdout, dataOut), io.MultiWriter(&stderr, uiOut))
+
+	// Release any held tail before the footer so output stays in order.
+	flushDisplay(dataOut, uiOut)
 	w.writeStepFooter(err)
 	return stdout.String(), stderr.String(), err
 }
 
-// executeLog collects output and prints with step boundaries.
+// flushDisplay flushes streaming maskers. Display errors are not actionable at this point,
+// matching how forwarded output errors are handled elsewhere in this file.
+func flushDisplay(writers ...*iolib.StreamingMaskWriter) {
+	for _, sw := range writers {
+		_ = sw.Flush()
+	}
+}
+
+// executeLog streams output with step boundaries.
+// Complete lines are forwarded as they are produced; only a trailing partial line is held back until the command exits.
 func (w *OutputModeWriter) executeLog(cmd *exec.Cmd) (string, string, error) {
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	w.writeStepHeader()
-
-	err := cmd.Run()
-
-	return w.fallbackToLog(stdout.String(), stderr.String(), err)
+	return w.executeLogWithIO(func(stdout, stderr io.Writer) error {
+		cmd.Stdout, cmd.Stderr = stdout, stderr
+		return cmd.Run()
+	})
 }
 
 func (w *OutputModeWriter) executeLogWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
-	var stdout, stderr bytes.Buffer
+	// One mutex is shared by both streams so forwarded chunks never tear, even when
+	// stdout and stderr are written concurrently from different goroutines.
+	var forwardMu sync.Mutex
+
+	// Forwarded batches go through one streaming masker per stream so a multiline secret that
+	// spans several batches is masked as a whole, exactly like the non-streaming path.
+	dataMask := iolib.NewStreamingMaskWriter(sinkWriter(func(s string) { _ = data.Write(s) }))
+	uiMask := iolib.NewStreamingMaskWriter(sinkWriter(ui.Write))
+	stdout := newLineForwarder(&forwardMu, func(s string) { _, _ = dataMask.Write([]byte(s)) })
+	stderr := newLineForwarder(&forwardMu, func(s string) { _, _ = uiMask.Write([]byte(s)) })
 
 	w.writeStepHeader()
-	err := runner(&stdout, &stderr)
-	return w.fallbackToLog(stdout.String(), stderr.String(), err)
+	err := runner(stdout, stderr)
+
+	// Flush trailing partial lines (no newline) before the footer.
+	stdout.Flush()
+	stderr.Flush()
+	flushDisplay(dataMask, uiMask)
+	w.writeStepFooter(err)
+
+	return stdout.String(), stderr.String(), err
 }
 
 func (w *OutputModeWriter) writeStepHeader() {
@@ -421,4 +439,73 @@ func (w *StreamingOutputWriter) String() string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.output.String()
+}
+
+// sinkWriter adapts a string sink to io.Writer.
+type sinkWriter func(string)
+
+// Write implements io.Writer.
+func (f sinkWriter) Write(p []byte) (int, error) {
+	defer perf.Track(nil, "step.sinkWriter.Write")()
+
+	f(string(p))
+	return len(p), nil
+}
+
+// lineForwarder captures everything written to it and forwards complete lines to a sink immediately.
+// A trailing partial line is held back until Flush is called. The forward mutex may be shared between
+// several forwarders so that writes to different sinks are serialized and never interleave mid-chunk.
+type lineForwarder struct {
+	forwardMu *sync.Mutex
+	forward   func(string)
+	captured  bytes.Buffer
+	partial   []byte
+}
+
+// newLineForwarder creates a lineForwarder that calls forward (under forwardMu) for each batch of complete lines.
+func newLineForwarder(forwardMu *sync.Mutex, forward func(string)) *lineForwarder {
+	return &lineForwarder{forwardMu: forwardMu, forward: forward}
+}
+
+// Write implements io.Writer. It captures p and forwards any newly completed lines.
+func (f *lineForwarder) Write(p []byte) (int, error) {
+	defer perf.Track(nil, "step.lineForwarder.Write")()
+
+	f.forwardMu.Lock()
+	defer f.forwardMu.Unlock()
+
+	f.captured.Write(p)
+	f.partial = append(f.partial, p...)
+
+	idx := bytes.LastIndexByte(f.partial, '\n')
+	if idx < 0 {
+		return len(p), nil
+	}
+	f.forward(string(f.partial[:idx+1]))
+	f.partial = append(f.partial[:0], f.partial[idx+1:]...)
+	return len(p), nil
+}
+
+// Flush forwards any buffered partial line.
+func (f *lineForwarder) Flush() {
+	defer perf.Track(nil, "step.lineForwarder.Flush")()
+
+	f.forwardMu.Lock()
+	defer f.forwardMu.Unlock()
+
+	if len(f.partial) == 0 {
+		return
+	}
+	f.forward(string(f.partial))
+	f.partial = nil
+}
+
+// String returns everything written so far, byte-for-byte.
+func (f *lineForwarder) String() string {
+	defer perf.Track(nil, "step.lineForwarder.String")()
+
+	f.forwardMu.Lock()
+	defer f.forwardMu.Unlock()
+
+	return f.captured.String()
 }

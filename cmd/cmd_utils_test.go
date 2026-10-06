@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
@@ -1494,6 +1495,29 @@ func TestCloneCommand(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCloneCommandKeepsScriptSource verifies the JSON round trip does not lose the loader-set
+// provenance of included scripts, including those of nested group steps and subcommands.
+func TestCloneCommandKeepsScriptSource(t *testing.T) {
+	orig := &schema.Command{
+		Name: "outer",
+		Steps: schema.Tasks{
+			{Name: "main", Type: schema.TaskTypeScript, Script: "x", ScriptSource: "/p/main.star"},
+			{Name: "group", Type: schema.TaskTypeParallel, Steps: []schema.WorkflowStep{
+				{Name: "child", Type: schema.TaskTypeScript, Script: "y", ScriptSource: "/p/child.star"},
+			}},
+		},
+		Commands: []schema.Command{{Name: "inner", Steps: schema.Tasks{{Name: "sub", ScriptSource: "/p/sub.star"}}}},
+	}
+
+	clone, err := cloneCommand(orig)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/p/main.star", clone.Steps[0].ScriptSource)
+	assert.Equal(t, "/p/child.star", clone.Steps[1].Steps[0].ScriptSource)
+	assert.Equal(t, "/p/sub.star", clone.Commands[0].Steps[0].ScriptSource)
+	assert.Equal(t, "/p/main.star", clone.Steps[0].ToWorkflowStep().ScriptSource)
 }
 
 // TestHandleHelpRequest tests the handleHelpRequest function.
@@ -3279,4 +3303,52 @@ func TestStepFreshnessName(t *testing.T) {
 			assert.Equal(t, tt.expected, got)
 		})
 	}
+}
+
+// TestExecuteCustomCommandShellStepMasksSecretSplitAcrossWrites proves a registered secret that a
+// shell step emits across two writes never reaches stdout, in whole or in halves.
+func TestExecuteCustomCommandShellStepMasksSecretSplitAcrossWrites(t *testing.T) {
+	_ = NewTestKit(t)
+	ensureIOInitialized(t)
+
+	const secret = "custom-cmd-split-secret"
+	iolib.Reset()
+	t.Cleanup(iolib.Reset)
+	require.NoError(t, iolib.Initialize())
+	iolib.RegisterSecret(secret)
+
+	workDir := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+	parentCmd := &cobra.Command{Use: "atmos"}
+	commands := []schema.Command{{
+		Name:             "cover-split-secret",
+		Description:      "exercise masking of a secret split across writes",
+		WorkingDirectory: workDir,
+		Steps: []schema.Task{{
+			Name:    "emit",
+			Type:    schema.TaskTypeShell,
+			Command: `printf 'value=custom-cmd-split-'; printf 'secret done\n'`,
+		}},
+	}}
+
+	require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+	customCmd := findSubcommand(parentCmd, "cover-split-secret")
+	require.NotNil(t, customCmd)
+
+	out, err := os.CreateTemp(t.TempDir(), "stdout")
+	require.NoError(t, err)
+	origStdout := os.Stdout
+	os.Stdout = out
+	t.Cleanup(func() { os.Stdout = origStdout })
+
+	customCmd.PreRun(customCmd, nil)
+	customCmd.Run(customCmd, nil)
+	os.Stdout = origStdout
+	require.NoError(t, out.Close())
+
+	got, err := os.ReadFile(out.Name())
+	require.NoError(t, err)
+	assert.NotContains(t, string(got), secret)
+	assert.NotContains(t, string(got), "custom-cmd-split-")
+	assert.Contains(t, string(got), iolib.MaskReplacement)
 }

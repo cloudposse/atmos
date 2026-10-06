@@ -15,6 +15,11 @@ commands:
       GOBIN: '{{ env "PWD" }}/../../.context/bin'
     steps:
       - type: workdir
+        name: starlark-fixture
+        source: fixtures/starlark
+        path: "../../.context/cast-fixtures/starlark"
+        reset: true
+      - type: workdir
         name: concurrent-vendoring-fixture
         source: fixtures/concurrent-vendoring
         path: "../../.context/cast-fixtures/concurrent-vendoring"

@@ -175,6 +175,9 @@ func (s *ContainerSession) ExecShell(ctx context.Context, params *ContainerStepP
 		return errUtils.ErrNilParam
 	}
 	step := params.Step
+	if err := rejectEmbeddedScriptInContainer(step); err != nil {
+		return err
+	}
 	containerWorkDir, err := mapHostWorkDirToContainer(params.HostWorkDir, s.hostWorkspace, defaultString(s.config.Workspace, "/workspace"))
 	if err != nil {
 		return err
@@ -230,6 +233,9 @@ func RunStepContainerOverride(ctx context.Context, params *ContainerStepParams) 
 	}
 	workflowDef := params.WorkflowDef
 	step := params.Step
+	if err := rejectEmbeddedScriptInContainer(step); err != nil {
+		return err
+	}
 	cfg := mergeWorkflowContainer(workflowDef.Container, step.Container)
 	if !cfg.IsEnabled() {
 		return nil

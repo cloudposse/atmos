@@ -74,6 +74,9 @@ const TITLES_MAP = {
 // is the example's section on the index page). A README front matter `tags:`
 // list overrides this map, so new examples can self-categorize.
 const TAGS_MAP = {
+  'starlark-script': ['Automation'],
+  'starlark-commands': ['Automation'],
+  'starlark-hooks': ['Automation'],
   'quick-start-simple': ['Quickstart'],
   'quick-start-advanced': ['Quickstart'],
   'demo-stacks': ['Stacks'],

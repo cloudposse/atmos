@@ -54,6 +54,7 @@ overrides:
 | `LICENSE_GOOS`          | `linux` | Build target `go-licenses`/`go list` scan under |
 | `LICENSE_GOARCH`        | `amd64` | ditto                                            |
 | `LICENSE_CGO_ENABLED`   | `1`     | ditto                                            |
+| `ATMOS_NOTICE_REPO_DESCRIPTION` (optional) | unset | Uses a validated repository description supplied by the CI event without making a GitHub API request. Empty or multiline values fail validation. |
 | `GH_TOKEN` / `GITHUB_TOKEN` (optional) | unset | Authenticates the GitHub API description fetch, avoiding the unauthenticated 60 req/hour rate limit; `GH_TOKEN` takes precedence, matching the `gh` CLI |
 
 ## Tests
