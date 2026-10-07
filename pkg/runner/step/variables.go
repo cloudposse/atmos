@@ -43,9 +43,11 @@ type Variables struct {
 	// ResolveTestStep renders a test leaf with its execution-time hook facts.
 	// It receives the branch-local Variables; implementations must not capture mutable parent state.
 	ResolveTestStep func(*schema.WorkflowStep, *Variables) (*schema.WorkflowStep, error)
-	AtmosConfig     *schema.AtmosConfiguration
-	ToolchainPATH   string
-	componentInfo   ComponentInfoResolver
+	// AWSAuthContext carries the component identity to native AWS steps.
+	AWSAuthContext *schema.AWSAuthContext
+	AtmosConfig    *schema.AtmosConfiguration
+	ToolchainPATH  string
+	componentInfo  ComponentInfoResolver
 	// componentWorkingDir is the effective on-disk working directory of the
 	// hook's component (pkg/hooks.ComponentPath's return value), used only to
 	// anchor a bare-relative (non-dot-prefixed) explicit step.WorkingDirectory

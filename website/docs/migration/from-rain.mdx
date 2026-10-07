@@ -347,14 +347,14 @@ not replace `rain pkg` or `aws cloudformation package`, which can upload assets
 referenced by a template.
 
 Atmos can build Lambda archives with the [`archive` step](/steps/type/archive).
-Run it in a CloudFormation lifecycle hook, then upload with a shell step using
-the AWS CLI or an existing upload script. See the
+Run it in a CloudFormation lifecycle hook, then upload with the
+[`aws/s3` step](/steps/type/aws/s3). See the
 [asset-packaging hook example](/stacks/components/aws-cloudformation#asset-packaging-hooks).
 
 For nested templates, upload the template files and set their `TemplateURL`
 references explicitly. S3 delivery targets handle the parent template upload;
-they do not discover local assets or rewrite references. There is currently
-no dedicated S3 upload step.
+they do not discover local assets or rewrite references. The `aws/s3` step
+uploads explicitly selected files and directories without rewriting templates.
 
 ## Additional Workflows {#run-when-youre-ready}
 

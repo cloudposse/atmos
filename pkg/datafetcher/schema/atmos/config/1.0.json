@@ -10408,7 +10408,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local directory/file for archive and aws/s3 steps (string only)."
         },
         "reset": {
           "anyOf": [
@@ -11198,6 +11198,39 @@
           ],
           "description": "Workflow container override or false to run on host."
         },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Region selects the AWS region for an aws/s3 upload step."
+        },
+        "content_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ContentType overrides the detected MIME type for an aws/s3 upload step."
+        },
+        "cache_control": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "CacheControl sets the Cache-Control header for an aws/s3 upload step."
+        },
         "format": {
           "anyOf": [
             {
@@ -11218,7 +11251,7 @@
               "type": "null"
             }
           ],
-          "description": "Pack: archive file to write. Extract: directory to extract into."
+          "description": "Archive output/extraction path, or aws/s3 destination URI."
         },
         "subpath": {
           "anyOf": [
@@ -15768,7 +15801,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local directory/file for archive and aws/s3 steps (string only)."
         },
         "reset": {
           "anyOf": [
@@ -16599,6 +16632,39 @@
           ],
           "description": "Run the emulator without persistence for this step (emulator step type)."
         },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Region selects the AWS region for an aws/s3 upload step."
+        },
+        "content_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ContentType overrides the detected MIME type for an aws/s3 upload step."
+        },
+        "cache_control": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "CacheControl sets the Cache-Control header for an aws/s3 upload step."
+        },
         "format": {
           "anyOf": [
             {
@@ -16619,7 +16685,7 @@
               "type": "null"
             }
           ],
-          "description": "Pack: archive file to write. Extract: directory to extract into."
+          "description": "Archive output/extraction path, or aws/s3 destination URI."
         },
         "subpath": {
           "anyOf": [

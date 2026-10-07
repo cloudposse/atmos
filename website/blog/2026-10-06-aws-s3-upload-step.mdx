@@ -1,0 +1,54 @@
+---
+slug: aws-s3-upload-step
+title: Upload Artifacts with the Native AWS S3 Step
+authors: [osterman]
+tags: [feature]
+---
+
+Packaging a Lambda archive is only part of a deployment: the archive must also
+reach S3. The new [`aws/s3` step](/steps/type/aws/s3) uploads files and directories
+from workflows, custom commands, and component hooks, and skips unchanged objects.
+
+<!--truncate-->
+
+## The Problem
+
+Artifact uploads often need an AWS CLI command alongside an
+[`archive` step](/steps/type/archive). Those scripts must handle credentials,
+content types, and repeated uploads themselves.
+
+## The Fix
+
+Use `type: aws/s3` to upload through the step runner. Atmos compares SHA-256
+metadata, object size, and delivery headers before uploading. Files that already
+match stay untouched, and files removed locally are retained in S3.
+
+## How to Use It
+
+```yaml
+steps:
+  - name: package
+    type: archive
+    source: src/
+    destination: handler.zip
+    mtime: epoch
+  - name: upload
+    type: aws/s3
+    source: '{{ .steps.package.value }}'
+    destination: s3://acme-artifacts/lambda/v1/handler.zip
+    region: us-east-1
+```
+
+Create the bucket first and grant the caller permission to inspect and upload
+objects. For a directory, set `source: dist/` and a destination prefix. Configure
+`cache_control` when publishing assets with caching headers.
+
+CloudFormation hooks can now package and upload local assets without a shell
+upload command. See the [complete hook example](/stacks/components/aws-cloudformation#asset-packaging-hooks).
+Template references remain explicit; use a new key per release so CloudFormation
+can detect the artifact change.
+
+## Get Involved
+
+Read the [step reference](/steps/type/aws/s3) for credentials, outputs, and limits.
+Report problems or share use cases in [GitHub discussions](https://github.com/cloudposse/atmos/discussions).

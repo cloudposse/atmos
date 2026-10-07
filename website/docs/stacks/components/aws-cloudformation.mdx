@@ -335,8 +335,8 @@ template: |
 
 Use the [`archive` step](/steps/type/archive) in a
 [`kind: steps` hook](/stacks/hooks#kind-steps-run-ordered-steps) to package local
-code, followed by a shell step that uploads it. The example below requires the
-AWS CLI and an existing S3 bucket accessible to the hook's credentials.
+code, followed by an [`aws/s3` step](/steps/type/aws/s3) to upload it. The example
+requires an existing S3 bucket accessible to the component's credentials.
 
 Add these fields to the CloudFormation component. Its template must declare
 `ArtifactBucket` and `ArtifactKey` parameters and use them for the Lambda
@@ -354,16 +354,15 @@ hooks:
     events: [before.aws/cloudformation.diff, before.aws/cloudformation.apply]
     kind: steps
     on_failure: fail
-    env:
-      ARTIFACT_BUCKET: "{{ .vars.artifact_bucket }}"
-      ARTIFACT_KEY: "{{ .vars.artifact_key }}"
     with:
       - type: archive
         source: src/
         destination: handler.zip
         mtime: epoch
-      - type: shell
-        command: aws s3 cp handler.zip "s3://${ARTIFACT_BUCKET}/${ARTIFACT_KEY}"
+      - type: aws/s3
+        source: handler.zip
+        destination: "s3://{{ .vars.artifact_bucket }}/{{ .vars.artifact_key }}"
+        region: us-east-1
 ```
 
 Enable Go templating in `atmos.yaml` for the expressions above. Relative paths
@@ -375,10 +374,10 @@ builds and uploads the archive. Dry-run skips hooks. Named changeset creation
 and execution do not fire these events; run packaging as a workflow step before
 creating a changeset in that workflow.
 
-Hooks use component credentials; an S3 delivery target's identity does not
-automatically authenticate a shell upload. Set up the hook's credentials for
-the artifact bucket. Atmos has no dedicated S3 upload step and does not rewrite
-local asset references automatically.
+The upload uses the component's resolved AWS identity. An S3 delivery target's
+identity applies to template delivery, so grant the component identity access
+to the artifact bucket as well. Unchanged artifacts are skipped; template asset
+references must still be configured explicitly.
 
 ## Source Provisioning
 

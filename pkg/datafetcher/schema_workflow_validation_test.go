@@ -144,6 +144,7 @@ func TestManifestSchema_WorkflowStepTypeFields(t *testing.T) {
 		"container run":              {"type": "container", "action": "run", "provider": "docker", "with": map[string]any{"image": "alpine", "command": "echo hi"}},
 		"container async background": {"type": "container", "action": "run", "background": true, "with": map[string]any{"image": "alpine"}},
 		"style string background":    {"type": "style", "content": "hi", "background": "236"},
+		"aws/s3 upload":              {"type": "aws/s3", "source": "handler.zip", "destination": "s3://artifacts/handler.zip", "region": "us-east-1", "content_type": "application/zip", "cache_control": "no-cache"},
 		"emulator":                   {"type": "emulator", "component": "aws", "action": "up", "ephemeral": true},
 		"junit files":                {"type": "junit", "files": []any{"reports/*.xml"}},
 		"require tools/dirs":         {"type": "require", "tools": []any{"kubectl"}, "dirs": []any{"."}, "hint": "install it"},

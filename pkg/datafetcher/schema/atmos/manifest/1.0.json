@@ -4183,7 +4183,7 @@
         },
         "action": {
           "type": "string",
-          "description": "Step-type-specific verb: build, push, run, or inspect for type: container; create, extract, update, or replace for type: archive; write for type: store."
+          "description": "Step-type-specific verb: build, push, run, or inspect for type: container; create, extract, update, or replace for type: archive; upload for type: aws/s3; write for type: store."
         },
         "with": {
           "type": "object",
@@ -4214,13 +4214,25 @@
           "type": "boolean",
           "description": "Run the emulator without persistence for this step (emulator step type)."
         },
+        "region": {
+          "type": "string",
+          "description": "AWS region for an aws/s3 upload step. Uses the resolved identity or AWS SDK configuration when omitted."
+        },
+        "content_type": {
+          "type": "string",
+          "description": "MIME type override for an aws/s3 upload step. Detected per file when omitted."
+        },
+        "cache_control": {
+          "type": "string",
+          "description": "Cache-Control header for objects uploaded by an aws/s3 step."
+        },
         "format": {
           "type": "string",
           "description": "Archive format for the archive step type: zip, tar, tgz, tar.bz2, or tar.xz; inferred from destination/source extension when omitted."
         },
         "destination": {
           "type": "string",
-          "description": "Archive step type: archive file to write when packing, or directory to extract into when extracting."
+          "description": "Archive step: file to write or extraction directory. aws/s3 step: s3://bucket/key or s3://bucket/prefix/ upload destination."
         },
         "subpath": {
           "type": "string",
