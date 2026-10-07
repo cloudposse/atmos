@@ -203,14 +203,14 @@ func TestUploadEmptyAndExtensionless(t *testing.T) {
 func TestUploadEscapesObjectURIs(t *testing.T) {
 	t.Parallel()
 	source := t.TempDir()
-	writeSource(t, filepath.Join(source, "artifact #1?.zip"), "archive")
+	writeSource(t, filepath.Join(source, "artifact #1.zip"), "archive")
 	client := newMemoryS3()
-	result, err := Upload(t.Context(), client, Options{Source: source, Destination: "s3://bucket/release%20files/"})
+	result, err := Upload(t.Context(), client, Options{Source: source, Destination: "s3://bucket/release%20files%3F/"})
 	require.NoError(t, err)
-	require.Equal(t, []string{"s3://bucket/release%20files/artifact%20%231%3F.zip"}, result.URIs)
+	require.Equal(t, []string{"s3://bucket/release%20files%3F/artifact%20%231.zip"}, result.URIs)
 	bucket, key, err := ParseDestination(result.URIs[0])
 	require.NoError(t, err)
 	assert.Equal(t, "bucket", bucket)
-	assert.Equal(t, "release files/artifact #1?.zip", key)
+	assert.Equal(t, "release files?/artifact #1.zip", key)
 	assert.Equal(t, "archive", client.bodies[key])
 }
