@@ -45,9 +45,10 @@ The script body is rendered as a Go template before Starlark runs. This applies 
 | `parallel`/`matrix` child | Inherited from parent | Inherited | Empty | Inherited, with `components.get` |
 
 `env` holds only the step's declared `env` (resolved), not the ambient process environment.
-`ctx.script` is `None` in script steps; it exists only for standalone scripts. Child
-processes started with `exec.run`, `component.exec`, or `atmos.*` still inherit the effective
-process environment, plus per-call `env={...}` overrides.
+`ctx.script` exposes `.path` and `.directory` for file-backed included steps and standalone
+scripts; it is `None` for inline steps. Child processes started with `exec.run`,
+`component.exec`, or `atmos.*` still inherit the effective process environment, plus
+per-call `env={...}` overrides.
 
 A workflow has no component in scope: `ctx.component.stack` fails because `ctx.component` is `None`.
 Resolve one explicitly with `components.get("vpc", "dev", "terraform")`.
