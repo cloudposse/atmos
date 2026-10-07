@@ -1,0 +1,66 @@
+---
+title: "ci.path"
+sidebar_position: 25.5
+sidebar_label: "ci.path"
+sidebar_class_name: command
+description: Prepend a directory to PATH for later steps.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ci.path` function prepends a directory to `PATH` for the steps that run after the current one. Locally, it
+    prints the matching `export` line.
+</Intro>
+
+## Usage
+
+```python
+ci.path(dir)
+```
+
+## Arguments
+
+<dl>
+    <dt>`dir`</dt>
+    <dd>Required. The directory to add, as a string. Use an absolute path so later steps resolve it from any working directory.</dd>
+</dl>
+
+## Returns
+
+The return value is `None`.
+
+## Behavior
+
+- On GitHub Actions, the directory is written to the path file that the runner reads between steps. It does not
+  change the `PATH` of the script that calls it.
+- Locally, the call prints `export PATH='dir':"$PATH"` on stderr. When `ATMOS_CI_PATH` names a file, the directory is
+  appended to that file, one per line.
+- In CI the call is gated by [`ci.output.enabled`](/cli/configuration/ci/output), which also gates `ci.output` and
+  `ci.env`. When it is off, the call warns, renders locally, and the script continues. See
+  [gating](/functions/automation/ci#gating).
+
+## Examples
+
+### Add a tool directory
+
+```python
+ci.path(fs.resolve("~/.local/bin"))
+```
+
+### Add a freshly built binary
+
+```python
+exec.run(["go", "build", "-o", "build/atmos", "."])
+ci.path(fs.resolve("build"))
+```
+
+## Errors
+
+- A missing or non-string `dir` fails with an argument error that names `ci.path`.
+- A failure to write the path file fails the script. A gated-off call never fails.
+
+## Related
+
+- [`ci`](/functions/automation/ci) describes the module and the shared behavior rules.
+- [`ci.env`](/functions/automation/ci.env) exports an environment variable, and [`fs.resolve`](/functions/automation/fs.resolve) makes a path absolute.

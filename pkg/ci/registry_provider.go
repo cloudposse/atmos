@@ -71,6 +71,11 @@ func DetectOrError() (provider.Provider, error) {
 	return p, nil
 }
 
+// GenericProviderName is the registry name of the generic provider: the local renderer on a
+// workstation and the fallback for unknown CI under --ci. Callers compare provider names
+// against it instead of importing the provider package, which would register it as a side effect.
+const GenericProviderName = "generic"
+
 // ResolveProvider returns the detected CI provider, or the generic provider when none
 // is detected. Unlike Detect, it never returns nil once generic is registered: generic is
 // the local renderer on a workstation and the fallback for unknown CI under --ci.
@@ -81,7 +86,7 @@ func ResolveProvider() provider.Provider {
 		return p
 	}
 
-	generic, err := Get("generic")
+	generic, err := Get(GenericProviderName)
 	if err != nil {
 		log.Debug("No CI platform detected and generic provider is not registered", "error", err)
 		return nil

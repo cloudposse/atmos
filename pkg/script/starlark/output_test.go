@@ -19,10 +19,20 @@ import (
 
 func executeWithStreams(t *testing.T, source string, opts ...Option) (stdout, stderr string, err error) {
 	t.Helper()
+	return executeSpec(t, script.Spec{Source: source}, opts...)
+}
+
+// executeSpec runs spec with captured streams, defaulting its name to test.star.
+//
+//nolint:gocritic // Take the invocation by value so tests can pass literals and the caller's copy stays untouched.
+func executeSpec(t *testing.T, spec script.Spec, opts ...Option) (stdout, stderr string, err error) {
+	t.Helper()
 	var out, errOut bytes.Buffer
-	_, err = New(opts...).Execute(context.Background(), script.Spec{
-		Name: "test.star", Source: source, Stdout: &out, Stderr: &errOut,
-	})
+	if spec.Name == "" {
+		spec.Name = "test.star"
+	}
+	spec.Stdout, spec.Stderr = &out, &errOut
+	_, err = New(opts...).Execute(context.Background(), spec)
 	return out.String(), errOut.String(), err
 }
 

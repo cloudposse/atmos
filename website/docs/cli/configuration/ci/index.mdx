@@ -170,6 +170,10 @@ GitHub Actions workflow linting is available through [`atmos ci validate`](/cli/
 | `GITHUB_REPOSITORY` | Repository name in `owner/repo` format |
 | `GITHUB_SHA` | Current commit SHA |
 
+## Reporting from scripts
+
+Scripts written in the [Atmos Automation Language](/automation/language) report into CI through the [`ci` module](/functions/automation/ci). The module writes job summaries, step outputs, environment exports, annotations, pull request comments, commit statuses, log groups, and SARIF uploads, and the same `ci.*.enabled` flags that gate Atmos's native reporting gate these calls. When no CI provider is detected, the calls render on your terminal instead.
+
 ## Related
 
 - [Native CI Overview](/ci) - Feature overview and quick start
