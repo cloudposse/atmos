@@ -365,8 +365,9 @@ How the targets interact:
   published, rewritten template references S3 URIs), then publishes to the repository.
 - **`kind: aws/s3` selected directly** (`--target artifacts`): publish-only — upload the packaged
   template + assets and stop, no deploy. This is CloudFormation's packaging flow: it can rewrite
-  nested template and asset references before uploading them. The generic `publish` step handles
-  arbitrary local files separately and does not rewrite CloudFormation templates.
+  nested template and asset references before uploading them. The generic `publish` step is
+  independent of CloudFormation and can upload arbitrary local files to S3 from any workflow,
+  custom command, or component hook.
 - A packaged deploy with **no `kind: aws/s3` target declared** fails with an actionable hint (add the
   target, or see [Artifact Bucket Provisioning](#artifact-bucket-provisioning-backend) for
   provisioning the bucket). Small templates that fit inline need no `kind: aws/s3` target at all.
@@ -394,21 +395,13 @@ waiting for any part of that framework. Three rules keep the two from contradict
     redesign.
 2. **No vocabulary squatting**: this component type introduces no `artifact:`/`repositories:`
     config namespace, no CloudFormation-specific `publish`/`mirror`/`pull` verbs, and no artifact-kind
-    registry of its own. General file publishing uses `website/docs/steps/type/publish.mdx`.
-    Its packaging destination is declared inline on the `kind: aws/s3` provision target
-    (`bucket`/`prefix`) — the target-kind string deliberately matches the artifacts PRD's `aws/s3`
+    registry of its own. Its packaging destination is declared inline on the `kind: aws/s3`
+    provision target (`bucket`/`prefix`) — the target-kind string deliberately matches the artifacts PRD's `aws/s3`
     repository kind and the stores `aws/ssm`-style vocabulary — with an optional
     `repository: <name>` reference added only after `artifact.repositories` exists.
 3. **Deferred integrations stay deferred**: a possible `cloudformation/template` artifact kind
     could let air-gap bundles carry CloudFormation deployments alongside images, tool packages, and
     vendored sources. It is not required by this PRD's phases.
-
-**OCI and the `publish` step.** OCI is already a supported *source* for CloudFormation's JIT
-`source:` provisioning. For publishing local files, Atmos now has a generic `type: publish` step
-with `aws/s3` and `git` targets. If publishing to an OCI registry is needed, extend that step with
-an OCI-capable target rather than introducing a CloudFormation-specific `kind: artifact` delivery
-target. An OCI-hosted bundle would be for transfer or later consumption; a CloudFormation deploy
-still needs the S3 packaging flow above when its template or assets require uploaded URLs.
 
 ### Artifact Bucket Provisioning (`backend`)
 
@@ -1385,4 +1378,4 @@ would need its own PRD evaluating whether an SDK-native or shell-out design fits
 | 2026-08-24 | Auth section upgraded: primary SDK seam is `pkg/aws/identity.LoadConfigWithAuth` (the `cmd/aws/*` pattern, in-process, emulator/FIPS-aware) superseding the helm env seam for client construction; component `auth:` confirmed generically plumbed; per-target `ProvisionTarget.Auth` overrides enable cross-account deploy-vs-bucket identities; `role_arn` clarified as the CloudFormation service role, not caller credentials |
 | 2026-09-09 | Phase 5 added: Native CI Integration — `pkg/ci/plugins/cloudformation` plugin registers `aws/cloudformation` alongside Terraform/Helmfile/Kubernetes/Helm; compact job summaries for `diff`/`apply`/`delete`/`drift detect`/`drift describe` at the Kubernetes/Helmfile tier; new `drift-detect`/`drift-describe` hook events; changeset/stack-set CI events and Atmos Pro drift-status upload recorded as unscheduled future work |
 | 2026-10-02 | Templating instead of `generate` (final decision): CloudFormation rejects `generate:` (component, type-level, `overrides`) with an error and never receives the root-level Terraform `generate:`; no local workdir provisioning (`provision.workdir.enabled` applies only to JIT `source:` downloads and errors without one); `auto_generate_files` removed; inline `stack_policy.body` added; rationale and 2026-10-02 field-test evidence recorded in [Templating Instead of `generate`](#templating-instead-of-generate); `path:` examples corrected and schema field parity (`path`/`locals`) required |
-| 2026-10-07 | Reconciled the future OCI publishing idea with the implemented `type: publish` step: OCI is currently a source; registry output would extend the generic step instead of adding a CloudFormation delivery target. |
+| 2026-10-07 | Removed the proposed CloudFormation-specific artifact delivery target; clarified that the generic `publish` step is available independently to workflows, custom commands, and component hooks. |

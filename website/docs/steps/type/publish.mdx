@@ -10,6 +10,10 @@ import Intro from '@site/src/components/Intro'
 Publish local files to an Amazon S3 or Git target. Unchanged files are skipped, and destination-only files are retained.
 </Intro>
 
+The `publish` step is independent of component type. Use it in a workflow,
+custom command, or any component hook that needs to publish files. The target
+determines where those files go.
+
 ## Usage
 
 ```yaml
