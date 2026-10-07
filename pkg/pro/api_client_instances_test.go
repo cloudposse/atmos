@@ -19,6 +19,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
+func TestUploadInstances_ByteLimits(t *testing.T) {
+	t.Parallel()
+	testUploadByteLimits(t, true)
+}
+
 func TestUploadInstances(t *testing.T) {
 	t.Parallel()
 

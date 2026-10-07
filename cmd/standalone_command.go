@@ -101,6 +101,13 @@ func resolveStandaloneCommandFlags(parser *flags.StandardParser, cmd *cobra.Comm
 	if err := parser.BindFlagsToViper(cmd, values); err != nil {
 		return nil, err
 	}
+	for _, flag := range definitions {
+		if rawEnv, hasEnv := standaloneFlagEnvironment(flag); hasEnv && !cmd.Flags().Changed(flag.GetName()) {
+			if err := validateStandaloneFlagEnvironment(values, cmd, flag, rawEnv); err != nil {
+				return nil, err
+			}
+		}
+	}
 	if err := parser.ValidateFlagValues(cmd); err != nil {
 		return nil, err
 	}
@@ -108,12 +115,7 @@ func resolveStandaloneCommandFlags(parser *flags.StandardParser, cmd *cobra.Comm
 	for _, flag := range definitions {
 		name := flag.GetName()
 		explicit := cmd.Flags().Changed(name)
-		rawEnv, hasEnv := standaloneFlagEnvironment(flag)
-		if !explicit && hasEnv {
-			if err := validateStandaloneFlagEnvironment(cmd, flag, rawEnv); err != nil {
-				return nil, err
-			}
-		}
+		_, hasEnv := standaloneFlagEnvironment(flag)
 		if flag.IsRequired() && !explicit && !hasEnv {
 			continue
 		}
@@ -200,14 +202,27 @@ func standaloneFlagEnvironment(flag flags.Flag) (string, bool) {
 // Viper's typed getters silently turn malformed environment values into zero
 // values. Reuse the registered native flag's conversion before reading them.
 // CLI input was already parsed once and takes precedence over the environment.
-func validateStandaloneFlagEnvironment(cmd *cobra.Command, flag flags.Flag, value string) error {
+func validateStandaloneFlagEnvironment(values *viper.Viper, cmd *cobra.Command, flag flags.Flag, value string) error {
 	defer perf.Track(nil, "cmd.validateStandaloneFlagEnvironment")()
 
 	switch flag.(type) {
-	case *flags.IntFlag, *flags.BoolFlag:
-		if err := cmd.Flags().Lookup(flag.GetName()).Value.Set(value); err != nil {
-			return fmt.Errorf("%w: invalid environment value for --%s: %w", errUtils.ErrInvalidFlagValue, flag.GetName(), err)
+	case *flags.StringSliceFlag:
+		if !strings.Contains(value, ",") {
+			return nil // Preserve Viper's whitespace-separated environment syntax.
 		}
+	case *flags.IntFlag, *flags.BoolFlag:
+	default:
+		return nil
+	}
+	if err := cmd.Flags().Lookup(flag.GetName()).Value.Set(value); err != nil {
+		return fmt.Errorf("%w: invalid environment value for --%s: %w", errUtils.ErrInvalidFlagValue, flag.GetName(), err)
+	}
+	if _, isSlice := flag.(*flags.StringSliceFlag); isSlice {
+		parsed, err := cmd.Flags().GetStringSlice(flag.GetName())
+		if err != nil {
+			return err
+		}
+		values.Set(flag.GetName(), parsed)
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"strings"
 	"sync"
 
 	"go.starlark.net/starlark"
@@ -130,7 +131,8 @@ func flagDeclarations(spec *script.CommandSpec, flagValues starlark.Value) error
 		if !ok || d.flag == nil {
 			return convert.InvalidArgument("cli.command: flags must contain cli.flag declarations")
 		}
-		name, short := d.flag.GetName(), d.flag.GetShorthand()
+		// Native flag values use Viper, whose keys are case-insensitive.
+		name, short := strings.ToLower(d.flag.GetName()), d.flag.GetShorthand()
 		if names[name] || (short != "" && shorthands[short]) {
 			return convert.InvalidArgument("cli.command: flag names and shorthands must be unique")
 		}

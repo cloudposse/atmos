@@ -40,6 +40,7 @@ type StandardFlagParser struct {
 	cmd                  *cobra.Command // Command for manual flag parsing
 	viper                *viper.Viper   // Viper instance for precedence handling
 	viperPrefix          string
+	viperKeys            map[string]string            // Flag name -> explicit Viper key override
 	validValues          map[string][]string          // Valid values for flags (flag name -> valid values)
 	validationMsgs       map[string]string            // Custom validation error messages (flag name -> message)
 	parsedFlags          *pflag.FlagSet               // Combined FlagSet used in last Parse() call (for Changed checks)
@@ -76,6 +77,7 @@ func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 	return &StandardFlagParser{
 		registry:             config.registry,
 		viperPrefix:          config.viperPrefix,
+		viperKeys:            config.viperKeys,
 		validValues:          make(map[string][]string),
 		validationMsgs:       make(map[string]string),
 		flagPrompts:          config.flagPrompts,
@@ -996,8 +998,12 @@ func ValidateValue(name, value string, validValues []string, kind ValueKind) err
 }
 
 // getViperKey returns the Viper key for a flag name.
-// If a prefix is set, it's prepended to the flag name.
+// An explicit per-flag override (WithViperKey) wins; otherwise, if a prefix is set,
+// it's prepended to the flag name.
 func (p *StandardFlagParser) getViperKey(flagName string) string {
+	if key, ok := p.viperKeys[flagName]; ok && key != "" {
+		return key
+	}
 	if p.viperPrefix != "" {
 		return p.viperPrefix + "." + flagName
 	}

@@ -1,5 +1,9 @@
 .navigator {
-  --navigation-muted: color-mix(in srgb, var(--ifm-font-color-base) 70%, var(--ifm-background-surface-color));
+  --navigation-muted: color-mix(
+    in srgb,
+    var(--ifm-font-color-base) 70%,
+    var(--ifm-background-surface-color)
+  );
   margin: 0;
   padding: 0;
 }
@@ -23,7 +27,10 @@
   margin-top: 0;
 }
 
-.navigator [data-sections] > :global(.menu__list) > :global(li:first-child .reference-group-label) {
+.navigator
+  [data-sections]
+  > :global(.menu__list)
+  > :global(li:first-child .reference-group-label) {
   margin-top: 0.5rem;
 }
 
@@ -47,9 +54,14 @@
   height: 36px;
   gap: 0.5rem;
   padding: 0 0.625rem;
-  border: 1px solid color-mix(in srgb, var(--ifm-font-color-base) 16%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--ifm-font-color-base) 16%, transparent);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--ifm-font-color-base) 3%, var(--ifm-background-surface-color));
+  background: color-mix(
+    in srgb,
+    var(--ifm-font-color-base) 3%,
+    var(--ifm-background-surface-color)
+  );
   color: var(--ifm-color-content-secondary);
 }
 
@@ -195,7 +207,8 @@
   line-height: 1.4;
 }
 
-.navigator :global(.menu__list-item > .menu__link:not(.menu__link--sublist-caret)) {
+.navigator
+  :global(.menu__list-item > .menu__link:not(.menu__link--sublist-caret)) {
   padding-left: 0.5rem;
 }
 
@@ -217,7 +230,8 @@
 .navigator :global(.menu__list .menu__list) {
   margin: 0.25rem 0 0.25rem 0.75rem;
   padding-left: 0.5rem;
-  border-left: 1px solid color-mix(in srgb, var(--ifm-font-color-base) 12%, transparent);
+  border-left: 1px solid
+    color-mix(in srgb, var(--ifm-font-color-base) 12%, transparent);
 }
 
 .results > :global(.menu__list) > :global(li) {
@@ -226,7 +240,7 @@
   margin-top: 0.75rem !important;
 }
 
-.results > :global(.menu__list) > :global(li > div > a.menu__link) {
+.results > :global(.menu__list) > :global(li > div > .menu__link) {
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.06em;
@@ -267,4 +281,23 @@
   .navigator :global(.menu__link) {
     min-height: 36px;
   }
+}
+
+.navigator button:global(.menu__link) {
+  border: 0;
+  background: transparent;
+  color: var(--ifm-menu-color);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+
+.navigator :global(.menu__link--sublist) > span {
+  overflow-wrap: anywhere;
+}
+
+/* The default primary blue falls below 4.5:1 on the dark active-row surface. */
+:global([data-theme="dark"]) .navigator :global(.menu__link--active) {
+  color: var(--ifm-color-primary-light);
 }

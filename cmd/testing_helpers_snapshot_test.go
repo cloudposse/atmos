@@ -5,6 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestSnapshotRootCmdState(t *testing.T) {
@@ -260,4 +263,20 @@ func TestSnapshotRestoreCycle(t *testing.T) {
 
 	logsLevel, _ := RootCmd.PersistentFlags().GetString("logs-level")
 	assert.Equal(t, "Trace", logsLevel, "Should restore logs-level")
+}
+
+// TestTestKitRestoresLoggerLevel verifies that logger setup in one command test
+// does not add debug command text to the next test's captured subprocess output.
+func TestTestKitRestoresLoggerLevel(t *testing.T) {
+	_ = NewTestKit(t)
+	originalLevel := log.GetLevel()
+	t.Cleanup(func() { log.SetLevel(originalLevel) })
+	log.SetLevel(log.WarnLevel)
+	t.Run("trace command", func(t *testing.T) {
+		_ = NewTestKit(t)
+		SetupLogger(&schema.AtmosConfiguration{Logs: schema.Logs{Level: "Trace", File: "/dev/stderr"}})
+		assert.Equal(t, log.TraceLevel, log.GetLevel())
+	})
+	assert.Equal(t, log.WarnLevel, log.GetLevel(), "TestKit must restore the previous logger level")
+	t.Run("quiet command", TestCustomCommandShellOutputNoneSuppressesOutput)
 }

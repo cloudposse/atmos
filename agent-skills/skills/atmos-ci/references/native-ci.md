@@ -199,6 +199,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}
+      count: ${{ steps.affected.outputs.count }}
     steps:
       - uses: actions/checkout@v6
       - id: affected
@@ -206,7 +207,7 @@ jobs:
 
   plan:
     needs: affected
-    if: ${{ needs.affected.outputs.matrix != '' }}
+    if: ${{ needs.affected.outputs.count != '0' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
@@ -234,6 +235,67 @@ jobs:
 
 Use `deploy` in automation when you want a fresh plan followed by apply with auto-approve. Use
 manual gates or GitHub environments for production.
+
+## Keeping Privileged Components Out of CI
+
+Label every component `ci: auto` in the stack defaults, override with `ci: manual` on privileged
+instances (`iam`, `aws-teams`, `tfstate-backend`), and filter the matrix. Labels match positively
+only, so a default plus an override replaces a negation.
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix --labels=ci=auto
+```
+
+`--labels` (match ALL `key=value`/`key:value` pairs, env `ATMOS_LABELS`) and `--tags` (match ANY tag,
+env `ATMOS_TAGS`) filter every output format. Matching is case-sensitive, duplicate label keys are last-wins,
+and a component without `metadata` never matches. On the command line they are rejected with `--upload`; a
+selector that only comes from a job-level `ATMOS_TAGS`/`ATMOS_LABELS` is ignored with a warning instead.
+
+`atmos terraform plan --affected --labels=ci=auto` selects the same components, also with
+`--include-dependents`: non-matching dependents are skipped and their matching dependents still run in order.
+With `--include-dependents`, `describe affected` removes a non-matching affected component and reports its
+matching dependents as top-level entries with `affected: dependent`. Add `--flatten` (env
+`ATMOS_DESCRIBE_AFFECTED_FLATTEN`, requires `--include-dependents`, not with `--upload`) to lift every remaining
+dependent into the top-level list, which is how a matrix runs dependents too:
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix --include-dependents --flatten --labels=ci=auto
+```
+
+A job-level `ATMOS_TAGS`/`ATMOS_LABELS` applies to every `describe affected` and multi-component
+`atmos terraform` step in the job, so set them per step when a job mixes those commands. An empty matrix is
+`{"include":[]}`, never an empty string: guard downstream jobs with the `count` output
+(`needs.affected.outputs.count != '0'`). Add an OPA policy through
+`settings.validation` as a backstop; it fails the job instead of skipping it:
+
+```rego
+package atmos
+
+errors[message] {
+  input.process_env.GITHUB_ACTIONS == "true"
+  input.metadata.labels.ci == "manual"
+  message := sprintf("%s is a privileged component and can't run in CI", [input.atmos_component])
+}
+```
+
+The policy's `schema_path` (for example `ci/privileged-component.rego`) is resolved relative to
+`schemas.opa.base_path`, which must be set in `atmos.yaml`. Without it Atmos fails with
+`the file '...' does not exist for schema type 'opa'`:
+
+```yaml
+schemas:
+  opa:
+    base_path: "stacks/schemas/opa"
+```
+
+An empty `--labels=` or `--tags=` (or an empty `ATMOS_LABELS`/`ATMOS_TAGS`) applies no filter and
+selects everything, so fail fast on an empty workflow variable: `--labels="ci=${CI_LABEL:?}"`.
+Simple Go templates in `metadata.labels` and `metadata.tags` are rendered before selection by default. With
+templates disabled, or with `--process-templates=false`, the raw `'{{ ... }}'` text is compared and matches
+neither `ci=auto` nor `ci=manual`. Deleted components are filtered the same way, using their `metadata` from
+the base ref, and `--exclude-locked` also drops deleted components that were locked in the base ref.
 
 ## Deploy All Instances
 

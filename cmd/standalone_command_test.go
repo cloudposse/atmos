@@ -311,3 +311,45 @@ func TestStandaloneCommandEnvironmentBindingOrder(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, input.Flags["count"])
 }
+
+func TestStandaloneCommandStringSliceEnvironment(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		choices []string
+		argv    []string
+		want    []string
+		wantErr string
+	}{
+		{name: "comma enum", value: "blue,green", choices: []string{"blue", "green"}, want: []string{"blue", "green"}},
+		{name: "whitespace enum", value: "blue green", choices: []string{"blue", "green"}, want: []string{"blue", "green"}},
+		{name: "comma list", value: "blue,green", want: []string{"blue", "green"}},
+		{name: "CSV quoted comma", value: `"blue,green",red`, choices: []string{"blue,green", "red"}, want: []string{"blue,green", "red"}},
+		{name: "CSV whitespace", value: `"blue sky", green`, choices: []string{"blue sky", " green"}, want: []string{"blue sky", " green"}},
+		{name: "invalid enum", value: "blue,red", choices: []string{"blue", "green"}, wantErr: "red"},
+		{name: "malformed CSV", value: `"blue,green`, wantErr: "environment value for --tags"},
+		{name: "explicit flags bypass malformed env", value: `"blue,green`, choices: []string{"red", "green"}, argv: []string{"--tags=red", "--tags=green"}, want: []string{"red", "green"}},
+		{name: "explicit flags override valid env", value: "blue,green", argv: []string{"--tags=red"}, want: []string{"red"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("STANDALONE_CSV_TAGS", test.value)
+			defaultValue := "default"
+			if len(test.choices) > 0 {
+				defaultValue = test.choices[0]
+			}
+			var stdout bytes.Buffer
+			spec := script.CommandSpec{Flags: []flags.Flag{
+				&flags.StringSliceFlag{Name: "tags", Default: []string{defaultValue}, EnvVars: []string{"STANDALONE_CSV_TAGS"}, ValidValues: test.choices},
+			}}
+			input, err := standaloneCommandParser(&script.File{Path: "env.star", Args: test.argv}, &stdout)(t.Context(), spec)
+			if test.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), test.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, test.want, input.Flags["tags"])
+		})
+	}
+}
