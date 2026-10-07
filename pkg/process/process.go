@@ -97,7 +97,9 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 		result.ExitCode = -1
 		return result
 	}
-	cmd := exec.CommandContext(ctx, command, spec.Args...)
+	executionCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cmd := exec.CommandContext(executionCtx, command, spec.Args...)
 	cmd.Args[0] = spec.Command
 	applyWindowsCmdExeQuoting(cmd, spec.Command, spec.Args)
 	cmd.Dir = spec.Dir
@@ -119,7 +121,7 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	}
 	result.Started = true
 	result.StartedAt = time.Now()
-	group.started()
+	group.started(cancel)
 
 	err = group.tolerateWaitDelay(ctx, cmd.Wait())
 	group.finished()

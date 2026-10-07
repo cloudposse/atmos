@@ -15,10 +15,10 @@ A terminal Ctrl-C hides the problem because the terminal signals the whole foreg
 
 ## Changes
 
-- `pkg/process/process_group.go`: new `childGroup` helper applied to every command started by `DefaultRunner.Run` and `RunScript`. It tracks live children in a mutex-protected registry and installs a single exit cleanup with `signals.RegisterExitCleanup`. The cleanup sends SIGTERM to every live child tree, waits up to 2 seconds, then sends SIGKILL to survivors. `main.go` already runs exit cleanups before `os.Exit`, so no `main.go` change was needed.
+- `pkg/process/process_group.go`: new `childGroup` helper applied to every command started by `DefaultRunner.Run` and `RunScript`. It registers each invocation's cancellation callback and completion channel by entry identity, independently of reusable process IDs. A single exit cleanup cancels every invocation before waiting for completion within a shared five-second budget. The existing command cancellation path owns group termination and escalation. `main.go` already runs exit cleanups before `os.Exit`, so no `main.go` change was needed.
 - `pkg/process/process_unix.go`: sets `SysProcAttr.Setpgid`, installs `cmd.Cancel` (SIGTERM to the group, falling back to `Process.Kill`, then waits for the group to exit and sends SIGKILL to survivors after the grace period), and the signalling helpers.
-- `pkg/process/process_windows.go`: no-op group handling so the package keeps compiling. Windows still terminates only the direct child.
-- Terminal exception: a child whose stdin is a real terminal is not moved into a new process group, because a background group that reads or configures the terminal is stopped by SIGTTIN/SIGTTOU (editors, prompts, browser login flows). Such children are still tracked, and the exit cleanup signals the direct child.
+- `pkg/process/process_windows.go`: process groups remain disabled on Windows. Exit cleanup uses command-context cancellation and Go's original process handle to terminate only the direct child, without looking up its numeric PID again.
+- Terminal exception: a child whose stdin is a real terminal is not moved into a new process group, because a background group that reads or configures the terminal is stopped by SIGTTIN/SIGTTOU (editors, prompts, browser login flows). Such children are still tracked; exit cleanup cancels only the direct child through its original process handle.
 - `cmd.WaitDelay` is 2 seconds for grouped children. A successful exit that only trips `exec.ErrWaitDelay` (a backgrounded grandchild holding an output pipe) is treated as success instead of a failure; previously `Wait` would have hung until that grandchild exited.
 - Cancellation cleanup completes before `Wait` returns. A grandchild that ignores SIGTERM is still killed after the grace period even if its parent exits immediately and the grandchild holds no output pipes. Cleanup stops when the process group disappears and leaves no delayed signal timer behind.
 - `Run` post-wait result handling moved into `recordWaitOutcome` to stay under the function-length limit; behavior is unchanged.
@@ -35,6 +35,15 @@ A terminal Ctrl-C hides the problem because the terminal signals the whole foreg
   parent and grandchild readiness before the deadline, then assert real
   `context.DeadlineExceeded`, process termination, and registry cleanup.
   A slow-parent helper deliberately takes longer than the former 750ms budget.
+
+- Review correction: exit cleanup no longer holds a PID snapshot for delayed
+  signaling. Stale entries can only cancel their original execution context,
+  and removing one registration cannot remove another with the same numeric
+  PID. Cleanup still waits for escalation against a SIGTERM-ignoring grandchild
+  after its leader exits. The caller's context still determines `Result.Canceled`.
+- Unix process-group cancellation still uses numeric PGIDs. Probing and signaling
+  a group is not an atomic identity operation; this change removes the global
+  stale-registration signaling path without claiming to eliminate that OS limit.
 
 ## Validation
 
@@ -58,6 +67,14 @@ A terminal Ctrl-C hides the problem because the terminal signals the whole foreg
   on helper readiness and did not need this change. The full process/signals
   tests passed with race detection and shuffled order after the fix; Windows
   amd64 test cross-compilation and vet passed.
+
+- Review-correction regressions passed with race detection: stale-registration
+  removal and cancellation leave a replacement helper alive to exit successfully;
+  all callbacks run before a bounded wait; exit cleanup kills a stubborn
+  grandchild after leader exit; and both `Run` and `RunScript` reap direct children.
+  The complete process/signals race run with shuffled order passed, with local
+  package coverage of 94.6% and 100%. Windows amd64 compilation and vet, lint,
+  and fix-record validation passed.
 
 ## Follow-ups
 

@@ -76,7 +76,9 @@ func RunScript(ctx context.Context, spec *ScriptSpec, stdout, stderr io.Writer) 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	cmd := NewScriptCommand(ctx, spec)
+	executionCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cmd := NewScriptCommand(executionCtx, spec)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
@@ -87,7 +89,7 @@ func RunScript(ctx context.Context, spec *ScriptSpec, stdout, stderr io.Writer) 
 		// Start failures keep the historical ErrProcessWaitFailed wrapping from cmd.Run.
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessWaitFailed, err)
 	}
-	group.started()
+	group.started(cancel)
 	err := group.tolerateWaitDelay(ctx, cmd.Wait())
 	group.finished()
 	if err != nil {
