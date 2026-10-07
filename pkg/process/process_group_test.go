@@ -37,6 +37,8 @@ const (
 	modeStubbornChild  = "stubborn-child"
 	// Mode sleep records its pid and sleeps.
 	modeSleep = "sleep"
+	// Mode input waits for stdin to close before exiting successfully.
+	modeInput = "input"
 	// Mode detach spawns a grandchild that inherits stdout and keeps running,
 	// then exits 0 immediately.
 	modeDetach = "detach"
@@ -70,6 +72,9 @@ func runProcessHelper(mode string) {
 	case modeSleep:
 		writePIDFile(dir, "child")
 		time.Sleep(helperSleep)
+	case modeInput:
+		writePIDFile(dir, "child")
+		_, _ = io.Copy(io.Discard, os.Stdin)
 	case modeDetach:
 		spawnGrandchild(modeSleep, true)
 	}
@@ -285,22 +290,86 @@ func TestExitCleanupKillsRegisteredDirectChild(t *testing.T) {
 
 func TestExitCleanupKillsRegisteredProcessTrees(t *testing.T) {
 	skipOnWindows(t)
-	dir := t.TempDir()
-	killAtCleanup(t, dir, "parent", "child")
+	for _, mode := range []string{modeParent, modeStubbornParent} {
+		t.Run(mode, func(t *testing.T) {
+			dir := t.TempDir()
+			killAtCleanup(t, dir, "parent", "child")
 
-	done := runAsync(context.Background(), ptr(helperSpec(t, modeParent, dir, nil)))
-	parent := waitForPID(t, dir, "parent")
-	child := waitForPID(t, dir, "child")
+			done := runAsync(context.Background(), ptr(helperSpec(t, mode, dir, nil)))
+			parent := waitForPID(t, dir, "parent")
+			child := waitForPID(t, dir, "child")
+			require.Eventually(t, func() bool { return len(liveChildren()) == 1 }, pidWait, 10*time.Millisecond)
+
+			// This is the same entry point main's signal handler uses. The stubborn
+			// grandchild must still be killed after its leader exits on SIGTERM.
+			signals.RunExitCleanups()
+
+			requireGone(t, parent, "child process")
+			requireGone(t, child, "grandchild process")
+			res := awaitRun(t, done)
+			assert.False(t, res.Success())
+			assert.Empty(t, liveChildren())
+		})
+	}
+}
+
+func TestExitCleanupStaleRegistrationLeavesReplacementRunning(t *testing.T) {
+	dir := t.TempDir()
+	input, release, err := os.Pipe()
+	require.NoError(t, err)
+	defer input.Close()
+	defer release.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	spec := helperSpec(t, modeInput, dir, nil)
+	spec.Streams.Stdin = input
+	done := runAsync(ctx, &spec)
+	pid := waitForPID(t, dir, "child")
 	require.Eventually(t, func() bool { return len(liveChildren()) == 1 }, pidWait, 10*time.Millisecond)
 
-	// This is the same entry point main's signal handler uses.
-	signals.RunExitCleanups()
+	// Simulate a completed invocation's stale registration after its numeric
+	// PID is reused. Removing or canceling it must leave the real child alone.
+	completedCtx, completedCancel := context.WithCancel(context.Background())
+	defer completedCancel()
+	stale := registerChild(pid, runtime.GOOS != "windows", completedCancel)
+	unregisterChild(stale)
+	require.Len(t, liveChildren(), 1, "stale removal must preserve the replacement registration")
+	cancelChildren([]*childProc{stale}, childExitCleanupWait)
+	require.ErrorIs(t, completedCtx.Err(), context.Canceled)
 
-	requireGone(t, parent, "child process")
-	requireGone(t, child, "grandchild process")
+	// Closing stdin lets the replacement prove it survived cleanup by exiting 0.
+	require.NoError(t, release.Close())
 	res := awaitRun(t, done)
-	assert.False(t, res.Success())
-	assert.Empty(t, liveChildren())
+	require.True(t, res.Success(), "stale cleanup terminated the replacement: %v", res.Err)
+	assert.Empty(t, liveChildren(), "the replacement must keep its own registration")
+}
+
+func TestExitCleanupCancelsAllChildrenBeforeBoundedWait(t *testing.T) {
+	firstCtx, firstCancel := context.WithCancel(context.Background())
+	secondCtx, secondCancel := context.WithCancel(context.Background())
+	first := registerChild(1, false, firstCancel)
+	second := registerChild(2, false, secondCancel)
+	t.Cleanup(func() {
+		firstCancel()
+		secondCancel()
+		unregisterChild(first)
+		unregisterChild(second)
+	})
+
+	// Neither invocation reports completion. Shutdown must still cancel both
+	// and return within its shared budget instead of waiting indefinitely.
+	done := make(chan struct{})
+	go func() {
+		cancelChildren([]*childProc{first, second}, time.Millisecond)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(goneWait):
+		t.Fatal("exit cleanup exceeded its bounded wait")
+	}
+	assert.ErrorIs(t, firstCtx.Err(), context.Canceled)
+	assert.ErrorIs(t, secondCtx.Err(), context.Canceled)
 }
 
 func TestRun_TerminalStdinChildIsNotMovedToNewProcessGroup(t *testing.T) {

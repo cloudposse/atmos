@@ -16,13 +16,17 @@ import (
 
 // childShutdownGrace is how long a signalled child process tree gets to exit
 // after SIGTERM before it is killed outright. It is used both as exec.Cmd's
-// WaitDelay (context cancellation, e.g. a step timeout) and as the grace period
-// of the exit cleanup that runs when Atmos itself receives SIGINT/SIGTERM.
+// WaitDelay and the context-cancellation grace period, including cancellation
+// from the exit cleanup when Atmos receives SIGINT/SIGTERM.
 const childShutdownGrace = 2 * time.Second
 
-// childPollInterval is how often the exit cleanup re-checks whether signalled
+// childPollInterval is how often cancellation re-checks whether signalled
 // children are gone while waiting out childShutdownGrace.
 const childPollInterval = 25 * time.Millisecond
+
+// childExitCleanupWait covers cancellation escalation, output-pipe WaitDelay,
+// and scheduling headroom without letting shutdown wait indefinitely.
+const childExitCleanupWait = 2*childShutdownGrace + time.Second
 
 // stdinIsTerminal reports whether the stdin handed to a child is a real
 // terminal. It is a variable so tests can stub the check.
@@ -50,7 +54,7 @@ type childGroup struct {
 	cmd     *exec.Cmd
 	grouped bool
 	once    sync.Once
-	pid     int
+	child   *childProc
 }
 
 // newChildGroup prepares cmd (before Start) so its process tree can be
@@ -72,20 +76,19 @@ func newChildGroup(cmd *exec.Cmd) *childGroup {
 
 // started registers the running child with the exit-cleanup registry.
 // It must be called after a successful cmd.Start().
-func (g *childGroup) started() {
+func (g *childGroup) started(cancel context.CancelFunc) {
 	if g.cmd.Process == nil {
 		return
 	}
-	g.pid = g.cmd.Process.Pid
-	registerChild(g.pid, g.grouped)
+	g.child = registerChild(g.cmd.Process.Pid, g.grouped, cancel)
 }
 
 // finished unregisters the child after its cancellation cleanup has completed.
 // It must be called once cmd.Wait() has returned; it is idempotent.
 func (g *childGroup) finished() {
 	g.once.Do(func() {
-		if g.pid != 0 {
-			unregisterChild(g.pid)
+		if g.child != nil {
+			unregisterChild(g.child)
 		}
 	})
 }
@@ -104,74 +107,77 @@ func (g *childGroup) tolerateWaitDelay(ctx context.Context, err error) error {
 	return err
 }
 
-// childProc identifies a live child in the registry.
+// childProc identifies one invocation, independently of its reusable process ID.
+// Cancellation belongs to that invocation; done closes after Wait and cleanup finish.
 type childProc struct {
 	pid     int
 	grouped bool
+	cancel  context.CancelFunc
+	done    chan struct{}
 }
 
 var (
 	childrenMu  sync.Mutex
-	children    = map[int]childProc{}
+	children    = map[*childProc]struct{}{}
 	cleanupOnce sync.Once
 )
 
-// registerChild records a live child and installs the exit cleanup once.
-func registerChild(pid int, grouped bool) {
+// registerChild records a live invocation and installs the exit cleanup once.
+func registerChild(pid int, grouped bool, cancel context.CancelFunc) *childProc {
 	cleanupOnce.Do(func() {
 		// The cleanup lives for the whole process, so the deregister function is unused.
 		_ = signals.RegisterExitCleanup(killAllChildren)
 	})
+	child := &childProc{pid: pid, grouped: grouped, cancel: cancel, done: make(chan struct{})}
 	childrenMu.Lock()
-	children[pid] = childProc{pid: pid, grouped: grouped}
+	children[child] = struct{}{}
 	childrenMu.Unlock()
+	return child
 }
 
-// unregisterChild removes a child that has been waited on.
-func unregisterChild(pid int) {
-	childrenMu.Lock()
-	delete(children, pid)
-	childrenMu.Unlock()
-}
-
-// liveChildren returns a snapshot of the registered children.
-func liveChildren() []childProc {
+// unregisterChild completes the exact invocation that has been waited on.
+func unregisterChild(child *childProc) {
 	childrenMu.Lock()
 	defer childrenMu.Unlock()
-	out := make([]childProc, 0, len(children))
-	for _, c := range children {
-		out = append(out, c)
+	if _, ok := children[child]; ok {
+		delete(children, child)
+		close(child.done)
+	}
+}
+
+// liveChildren returns a snapshot of the registered invocations.
+func liveChildren() []*childProc {
+	childrenMu.Lock()
+	defer childrenMu.Unlock()
+	out := make([]*childProc, 0, len(children))
+	for child := range children {
+		out = append(out, child)
 	}
 	return out
 }
 
-// killAllChildren is the exit cleanup run by the main signal handler before
-// the process exits: it SIGTERMs every live child tree, waits up to
-// childShutdownGrace for them to go away, then SIGKILLs the survivors.
+// killAllChildren runs the same cancellation path as a caller's context deadline.
+// Snapshots contain invocation callbacks instead of PID-based signaling operations.
 func killAllChildren() {
-	procs := liveChildren()
+	cancelChildren(liveChildren(), childExitCleanupWait)
+}
+
+// cancelChildren cancels every invocation before waiting, using one shared budget.
+// Cmd.Cancel owns group escalation, so a reaped leader cannot drop its descendants.
+func cancelChildren(procs []*childProc, wait time.Duration) {
 	if len(procs) == 0 {
 		return
 	}
-	for _, c := range procs {
-		_ = terminateChild(c.pid, c.grouped)
+	for _, child := range procs {
+		child.cancel()
 	}
-	deadline := time.Now().Add(childShutdownGrace)
-	for time.Now().Before(deadline) && anyChildAlive(procs) {
-		time.Sleep(childPollInterval)
-	}
-	for _, c := range procs {
-		if childAlive(c.pid, c.grouped) {
-			_ = killChild(c.pid, c.grouped)
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	for _, child := range procs {
+		select {
+		case <-child.done:
+		case <-timer.C:
+			return
 		}
 	}
-}
-
-func anyChildAlive(procs []childProc) bool {
-	for _, c := range procs {
-		if childAlive(c.pid, c.grouped) {
-			return true
-		}
-	}
-	return false
 }

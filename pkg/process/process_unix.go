@@ -53,10 +53,6 @@ func signalChild(pid int, grouped bool, sig syscall.Signal) error {
 	return syscall.Kill(pid, sig)
 }
 
-func terminateChild(pid int, grouped bool) error {
-	return signalChild(pid, grouped, syscall.SIGTERM)
-}
-
 func killChild(pid int, grouped bool) error {
 	return signalChild(pid, grouped, syscall.SIGKILL)
 }
@@ -68,7 +64,8 @@ func childAlive(pid int, grouped bool) bool {
 
 // finishGroupCancellation gives the signalled group time to exit before killing
 // survivors. It returns as soon as the group disappears and leaves no delayed
-// signal behind after Cmd.Wait completes. The leader may exit before children
+// signal behind after Cmd.Wait completes. Unix group signaling uses numeric PGIDs;
+// probing and signaling a group cannot provide an atomic identity guarantee. The leader may exit before children
 // that ignore SIGTERM, so its Wait result cannot decide whether cleanup is done.
 func finishGroupCancellation(pid int) {
 	deadline := time.Now().Add(childShutdownGrace)
