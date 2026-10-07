@@ -169,6 +169,9 @@ func uploadObject(ctx context.Context, client Client, bucket string, obj object,
 }
 
 func prepareReader(ctx context.Context, file io.ReadSeeker, bucket string, obj object, opts Options) (*s3.PutObjectInput, error) {
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
 	hash := sha256.New()
 	if _, err := io.Copy(hash, &contextReader{ctx: ctx, reader: file}); err != nil {
 		return nil, err

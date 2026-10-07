@@ -7,7 +7,7 @@ components:
         - CAPABILITY_IAM
       parameters:
         ArtifactBucket: "{{ .vars.artifact_bucket }}"
-        ArtifactKey: 'lambda/{{ env.Getenv "ATMOS_DEMO_RELEASE" "v1" }}/handler.zip'
+        ArtifactKey: 'lambda/{{ .vars.release }}/handler.zip'
       settings:
         aws_cloudformation:
           region: us-east-1

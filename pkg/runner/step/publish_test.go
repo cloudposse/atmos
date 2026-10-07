@@ -116,6 +116,28 @@ func TestPublishDryRunValidation(t *testing.T) {
 	assert.NoDirExists(t, workdir)
 }
 
+func TestPublishNamedTargetUsesComponentScope(t *testing.T) {
+	t.Parallel()
+	source := filepath.Join(t.TempDir(), "artifact.txt")
+	require.NoError(t, os.WriteFile(source, []byte("data"), 0o600))
+	vars := NewVariables()
+	vars.PublishInfo = &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "example",
+		Stack:            "test",
+		ComponentSection: map[string]any{"provision": map[string]any{"targets": map[string]any{
+			"artifacts": map[string]any{"kind": "aws/s3", "bucket": "bucket", "region": "us-east-1"},
+		}}},
+	}
+	handler, ok := Get("publish")
+	require.True(t, ok)
+	result, err := handler.Execute(t.Context(), &schema.WorkflowStep{Source: source, Target: "artifacts", DryRun: true}, vars)
+	require.NoError(t, err)
+	assert.True(t, result.Skipped)
+	assert.Equal(t, "artifacts", result.Value)
+	_, err = handler.Execute(t.Context(), &schema.WorkflowStep{Source: source, Target: "missing", DryRun: true}, vars)
+	require.Error(t, err)
+}
+
 func TestPublishTargetRoundTrips(t *testing.T) {
 	t.Parallel()
 	for _, target := range []any{"assets", map[string]any{"kind": "aws/s3", "bucket": "bucket", "region": "us-east-1"}} {

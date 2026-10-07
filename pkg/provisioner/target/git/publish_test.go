@@ -80,6 +80,34 @@ func TestPublishRejectsDirectoryCollision(t *testing.T) {
 	assert.DirExists(t, filepath.Join(root, "output", "artifact"))
 }
 
+func TestPublishRejectsUnsafeFileAndTargetPaths(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	_, err := writePublishFile(root, "output", target.PublishFile{Name: "../outside"})
+	require.ErrorIs(t, err, errUtils.ErrPublishSource)
+	_, err = writePublishFile(root, "../outside", target.PublishFile{Name: "artifact"})
+	require.Error(t, err)
+	assert.NoFileExists(t, filepath.Join(filepath.Dir(root), "outside", "artifact"))
+}
+
+func TestPublishEmptyFilesDoesNotCreateCommit(t *testing.T) {
+	isolatedGitEnv(t)
+	root := t.TempDir()
+	bare := seedBareRepo(t, root)
+	initial := gitCmd(t, bare, "rev-parse", "main")
+	in := &target.PublishInput{
+		AtmosConfig: &schema.AtmosConfiguration{Git: schema.GitConfig{Repositories: map[string]schema.GitRepository{
+			"deployments": {URI: bare, Branch: "main", Workdir: filepath.Join(root, "workdir")},
+		}}},
+		TargetConfig: map[string]any{"kind": "git", "repository": "deployments", "path": "output"},
+	}
+	result, err := (&gitProvisioner{}).Publish(t.Context(), in)
+	require.NoError(t, err)
+	assert.Empty(t, result.Locations)
+	assert.Zero(t, result.Changed)
+	assert.Equal(t, initial, gitCmd(t, bare, "rev-parse", "main"))
+}
+
 func TestPublishRejectsMalformedGitSettings(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

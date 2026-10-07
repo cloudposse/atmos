@@ -144,11 +144,27 @@ func TestUploadRejectsSourcesBeforeWrites(t *testing.T) {
 	writeSource(t, filepath.Join(source, "a.txt"), "a")
 	require.NoError(t, os.Symlink(filepath.Join(source, "a.txt"), filepath.Join(source, "z-link")))
 	client := newMemoryS3()
-	_, err := Upload(t.Context(), client, Options{Source: source, Destination: "s3://bucket/"})
+	_, err := Upload(t.Context(), client, Options{Source: filepath.Join(source, "z-link"), Destination: "s3://bucket/"})
+	require.ErrorIs(t, err, errUtils.ErrS3UploadSource)
+	_, err = Upload(t.Context(), client, Options{Source: source, Destination: "s3://bucket/"})
 	require.ErrorIs(t, err, errUtils.ErrS3UploadSource)
 	assert.Zero(t, client.writes)
 	_, err = Upload(t.Context(), client, Options{Source: filepath.Join(source, "missing"), Destination: "s3://bucket/"})
 	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestUploadRejectsOversizeRegularFileBeforeWrites(t *testing.T) {
+	t.Parallel()
+	source := filepath.Join(t.TempDir(), "large.bin")
+	require.NoError(t, os.WriteFile(source, nil, 0o600))
+	if err := os.Truncate(source, maxObjectSize+1); err != nil {
+		t.Skipf("filesystem cannot create a sparse 5 GiB file: %v", err)
+	}
+	client := newMemoryS3()
+	_, err := Upload(t.Context(), client, Options{Source: source, Destination: "s3://bucket/"})
+	require.ErrorIs(t, err, errUtils.ErrS3UploadSource)
+	assert.Zero(t, client.reads)
+	assert.Zero(t, client.writes)
 }
 
 func TestParseDestination(t *testing.T) {
@@ -164,6 +180,10 @@ func TestParseDestination(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "bucket", bucket)
 	assert.Equal(t, "a b/#.zip", key)
+	client := newMemoryS3()
+	_, err = Upload(t.Context(), client, Options{Source: "unused", Destination: "https://bucket/key"})
+	require.ErrorIs(t, err, errUtils.ErrS3UploadDestination)
+	assert.Zero(t, client.reads)
 }
 
 func TestUploadEmptyAndExtensionless(t *testing.T) {

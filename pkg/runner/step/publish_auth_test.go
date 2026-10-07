@@ -100,3 +100,25 @@ func TestPublishAuthPreservesValidationAndPrompt(t *testing.T) {
 	assert.Equal(t, cfg.IdentityFlagSelectValue, prepared.TargetConfig["auth"].(map[string]any)["identity"])
 	assert.Empty(t, options.TargetConfig, "preparing auth must not mutate caller's target")
 }
+
+func TestPublishAuthOptionsUseRequestedComponentIdentity(t *testing.T) {
+	t.Parallel()
+	requested := "caller"
+	vars := NewVariables()
+	vars.PublishInfo = &schema.ConfigAndStacksInfo{RequestedIdentity: &requested}
+	options := publishAuthOptions(&schema.WorkflowStep{}, vars, "artifacts", map[string]any{"kind": "aws/s3"})
+	assert.Equal(t, requested, options.RequestedIdentity)
+	options = publishAuthOptions(&schema.WorkflowStep{Identity: "step-identity"}, vars, "artifacts", map[string]any{"kind": "aws/s3"})
+	assert.Equal(t, "step-identity", options.RequestedIdentity)
+}
+
+func TestPublishGitWithoutIdentityUsesRepositoryDefaults(t *testing.T) {
+	t.Parallel()
+	config := &schema.AtmosConfiguration{Git: schema.GitConfig{Repositories: map[string]schema.GitRepository{
+		"deployment": {URI: "https://example.com/repo.git"},
+	}}}
+	in := &target.PublishInput{AtmosConfig: config, TargetConfig: map[string]any{"kind": "git", "repository": "deployment"}}
+	options := &auth.TargetAuthOptions{AtmosConfig: config}
+	require.NoError(t, ensureGitPublishIdentity(in, options, &schema.ConfigAndStacksInfo{}))
+	assert.Nil(t, in.EnvProvider)
+}

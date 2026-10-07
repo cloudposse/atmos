@@ -82,8 +82,9 @@ steps:
 
 Git clones or updates the configured repository, writes files below `path`,
 then commits and pushes changes scoped to that path. An unchanged run creates
-no commit and performs no push. Files remain byte-for-byte intact, including
-archives and YAML files. Publishing does not combine YAML documents.
+no new commit and performs no push unless it retries an unpushed commit from a
+prior run. Files remain byte-for-byte intact, including archives and YAML
+files. Publishing does not combine YAML documents.
 
 ### Use a Component's Named Target
 

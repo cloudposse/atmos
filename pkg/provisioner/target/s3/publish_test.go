@@ -1,10 +1,13 @@
 package s3
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -14,6 +17,64 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 )
+
+func TestPublishUploadsThenSkipsMatchingS3Object(t *testing.T) {
+	t.Parallel()
+	source := filepath.Join(t.TempDir(), "artifact.txt")
+	require.NoError(t, os.WriteFile(source, []byte("artifact content"), 0o600))
+	files, err := target.LocalPublishFiles(source, "")
+	require.NoError(t, err)
+	var mu sync.Mutex
+	var body, digest, contentType string
+	var puts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		assert.Equal(t, "/artifacts/releases/artifact.txt", r.URL.Path)
+		switch r.Method {
+		case http.MethodHead:
+			if digest == "" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.Header().Set("X-Amz-Meta-Atmos-Sha256", digest)
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			w.Header().Set("Content-Type", contentType)
+		case http.MethodPut:
+			data, readErr := io.ReadAll(r.Body)
+			if readErr != nil {
+				t.Error(readErr)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			body = string(data)
+			digest = r.Header.Get("X-Amz-Meta-Atmos-Sha256")
+			contentType = r.Header.Get("Content-Type")
+			puts++
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	defer server.Close()
+	in := &target.PublishInput{
+		TargetConfig: map[string]any{"bucket": "artifacts", "region": "us-east-1", "prefix": "releases"},
+		Files:        files,
+		Env:          map[string]string{"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test", "AWS_ENDPOINT_URL_S3": server.URL},
+	}
+	first, err := (&publisher{}).Publish(t.Context(), in)
+	require.NoError(t, err)
+	assert.Equal(t, 1, first.Changed)
+	assert.Equal(t, []string{"s3://artifacts/releases/artifact.txt"}, first.Locations)
+	assert.Equal(t, "releases/artifact.txt", first.Metadata["key"])
+	second, err := (&publisher{}).Publish(t.Context(), in)
+	require.NoError(t, err)
+	assert.Equal(t, 1, second.Unchanged)
+	assert.Equal(t, 0, second.Changed)
+	mu.Lock()
+	assert.Equal(t, "artifact content", body)
+	assert.Equal(t, 1, puts)
+	mu.Unlock()
+}
 
 func TestValidatePublishFiles(t *testing.T) {
 	t.Parallel()

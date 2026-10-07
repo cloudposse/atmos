@@ -1,6 +1,7 @@
 package target
 
 import (
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,6 +10,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type fakeFilePublisher struct{ fakeProvisioner }
+
+func (f *fakeFilePublisher) ValidatePublish(*PublishInput) error { return nil }
+func (f *fakeFilePublisher) Publish(context.Context, *PublishInput) (*PublishResult, error) {
+	return &PublishResult{}, nil
+}
 
 func TestLocalPublishFiles(t *testing.T) {
 	t.Parallel()
@@ -28,6 +36,12 @@ func TestLocalPublishFiles(t *testing.T) {
 		assert.Equal(t, []byte{0, 255, 1}, data)
 	}
 	file := filepath.Join(root, "sub", "a.zip")
+	unnamed, err := LocalPublishFiles(file, "")
+	require.NoError(t, err)
+	assert.Equal(t, "a.zip", unnamed[0].Name)
+	prefixed, err := LocalPublishFiles(file, "releases/")
+	require.NoError(t, err)
+	assert.Equal(t, "releases/a.zip", prefixed[0].Name)
 	for _, invalid := range []string{".", "./", "prefix/./artifact", "../escape", "/absolute", "C:/windows", "back\\slash", ".git/config"} {
 		_, err := LocalPublishFiles(file, invalid)
 		require.Error(t, err, invalid)
@@ -38,6 +52,11 @@ func TestLocalPublishFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(file, []byte("changed"), 0o600))
 	_, err = files[0].Open()
 	require.Error(t, err, "detect replaced or resized source")
+	require.NoError(t, os.Remove(file))
+	_, err = prefixed[0].Open()
+	require.ErrorIs(t, err, os.ErrNotExist)
+	_, err = LocalPublishFiles(file, "")
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestLocalPublishRejectsSymlinks(t *testing.T) {
@@ -64,4 +83,9 @@ func TestPublishNeverFallsBackToDeployment(t *testing.T) {
 	assert.Zero(t, provisioner.delivered)
 	_, err = Publisher("publish-test-unknown")
 	require.Error(t, err)
+	capable := &fakeFilePublisher{}
+	Register("publish-test-capable", capable)
+	found, err := Publisher("publish-test-capable")
+	require.NoError(t, err)
+	assert.Same(t, capable, found)
 }
