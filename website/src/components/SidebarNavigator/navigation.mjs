@@ -10,7 +10,9 @@ export function findSection(items, activePath) {
   function score(item) {
     const own =
       item.href && normalizePath(item.href) === path
-        ? item.type === "category" || item.docId
+        ? !item.customProps?.yamlReference &&
+          !item.customProps?.navigationReference &&
+          (item.type === "category" || item.docId)
           ? 2
           : 1
         : 0;

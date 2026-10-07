@@ -7,11 +7,18 @@ import type { PropSidebarItem } from "@docusaurus/plugin-content-docs";
 import RouteStatusDot from "@site/src/components/FeatureStatusDot/RouteStatusDot";
 import {
   filterItems,
-  findSection,
   normalizePath,
   prepareItems,
   sidebarLabel,
 } from "./navigation.mjs";
+import {
+  entryId,
+  identifyItems,
+  initialNavigation,
+  locationUrl,
+} from "./state.mjs";
+import { NavigationContext, useNavigationStore } from "./context";
+import { useLocation } from "@docusaurus/router";
 import styles from "./styles.module.css";
 
 type NavigatorProps = Props & { sidebarName: string };
@@ -23,21 +30,23 @@ export default function SidebarNavigator({
   onItemClick,
   sidebarName,
 }: NavigatorProps): JSX.Element {
+  const location = useLocation();
+  const identified = useMemo(() => identifyItems(items), [items]);
   const prepared = useMemo(
-    () => prepareItems(items, activePath),
-    [items, activePath],
+    () => prepareItems(identified, activePath),
+    [identified, activePath],
   );
-  const destination = findSection(prepared, activePath);
-  const [view, setView] = useState<{ path: string; section: number | null }>({
-    path: activePath,
-    section: destination,
-  });
-  const [visited, setVisited] = useState<number[]>(
-    destination === null ? [] : [destination],
+  const { store, snapshot } = useNavigationStore(identified, sidebarName);
+  const current =
+    snapshot?.sidebar === sidebarName && snapshot.url === locationUrl(location)
+      ? snapshot
+      : initialNavigation(identified, sidebarName, locationUrl(location));
+  const sectionIndex = prepared.findIndex(
+    (item) => entryId(item) === current.section,
   );
+  const section = sectionIndex < 0 ? null : sectionIndex;
   const [query, setQuery] = useState("");
-  const section = view.path === activePath ? view.section : destination;
-  const filtering = view.path === activePath && query.trim().length > 0;
+  const filtering = query.trim().length > 0;
   const results = useMemo(
     () => filterItems(prepared, query),
     [prepared, query],
@@ -74,38 +83,64 @@ export default function SidebarNavigator({
     return () => animation?.cancel();
   }, [section, filtering]);
 
-  useEffect(() => {
-    setView({ path: activePath, section: destination });
-    setQuery("");
-    if (destination !== null)
-      setVisited((previous) =>
-        previous.includes(destination) ? previous : [...previous, destination],
-      );
-  }, [activePath, destination]);
+  useEffect(() => setQuery(""), [location.key]);
 
-  // Only reveal the active link in the visible menu. Never scroll the article
-  // or move the reader away from a filter or the all-sections view.
+  // Each menu has its own scroll offset. A hidden desktop menu must not overwrite
+  // the mobile drawer's saved position (or vice versa).
+  const scrollKey = current.section || "index";
+  const scrollPosition = useRef(current.scroll[scrollKey] || 0);
+  scrollPosition.current = current.scroll[scrollKey] || 0;
+  useEffect(() => {
+    const menu = rootRef.current?.closest<HTMLElement>(".menu");
+    if (!menu) return;
+    menu.scrollTop = filtering ? 0 : scrollPosition.current;
+    const saveScroll = () => {
+      if (!menu.getClientRects().length || filtering) return;
+      const saved = store.getSnapshot();
+      if (
+        !saved ||
+        (saved.section || "index") !== scrollKey ||
+        saved.scroll[scrollKey] === menu.scrollTop
+      )
+        return;
+      store.update(
+        {
+          scroll: { ...saved.scroll, [scrollKey]: menu.scrollTop },
+        },
+        false,
+      );
+    };
+    menu.addEventListener("scroll", saveScroll, { passive: true });
+    return () => menu.removeEventListener("scroll", saveScroll);
+  }, [store, scrollKey, location.key, filtering]);
+
+  // Reveal only after navigation, not when clearing a filter or restoring a menu.
+  const lastRevealed = useRef<string>();
   useEffect(() => {
     if (filtering || section === null) return;
+    const target = `${location.key}/${current.entry}/${section}`;
+    if (lastRevealed.current === target) return;
+    lastRevealed.current = target;
     const timer = window.setTimeout(() => {
       const panel = rootRef.current?.querySelector<HTMLElement>(
         `[data-section="${section}"]`,
       );
       const active = panel?.querySelector<HTMLElement>('[aria-current="page"]');
       const menu = rootRef.current?.closest<HTMLElement>(".menu");
-      if (!active || !menu || active.getClientRects().length === 0) return;
+      if (!active || !menu || !active.getClientRects().length) return;
       const linkRect = active.getBoundingClientRect();
       const menuRect = menu.getBoundingClientRect();
       const toolbarHeight =
         rootRef.current?.querySelector<HTMLElement>(`.${styles.toolbar}`)
           ?.offsetHeight || 0;
-      const top = menuRect.top + toolbarHeight;
-      if (linkRect.top < top || linkRect.bottom > menuRect.bottom) {
-        menu.scrollTop += linkRect.top - top - 8;
-      }
-    }, 180);
+      const top = menuRect.top + toolbarHeight + 8;
+      const bottom = menuRect.bottom - 8;
+      if (linkRect.top < top) menu.scrollTop += linkRect.top - top;
+      else if (linkRect.bottom > bottom)
+        menu.scrollTop += linkRect.bottom - bottom;
+    }, 200);
     return () => window.clearTimeout(timer);
-  }, [activePath, section, filtering]);
+  }, [location.key, current.entry, section, filtering]);
 
   /** Announce a menu change after React renders its heading, without scrolling. */
   function focusHeading() {
@@ -114,48 +149,29 @@ export default function SidebarNavigator({
     );
   }
 
-  /** Reveal a section's saved menu without dismissing the mobile drawer. */
+  /** Selecting from the index starts a fresh navigation trail. */
   function selectSection(index: number) {
-    setView({ path: activePath, section: index });
-    setVisited((previous) =>
-      previous.includes(index) ? previous : [...previous, index],
-    );
+    const item = prepared[index];
+    store.update({ section: entryId(item), entry: entryId(item), trail: [] });
     setQuery("");
-    const menu = rootRef.current?.closest<HTMLElement>(".menu");
-    if (menu) menu.scrollTop = 0;
     focusHeading();
   }
 
-  /** Restore the section list without navigating away from the current article. */
   function returnToSections() {
-    setView({ path: activePath, section: null });
+    store.update({ section: null, trail: [] });
     setQuery("");
-    const menu = rootRef.current?.closest<HTMLElement>(".menu");
-    if (menu) menu.scrollTop = 0;
     focusHeading();
   }
 
-  /** Clear filtering and dismiss the drawer for article links, but not toggles. */
+  // Docusaurus' leaf callback omits the event. Capture modifiers before it fires
+  // so opening a new tab never changes this tab's navigation or mobile drawer.
+  const modifiedClick = useRef(false);
   function navigate(item: PropSidebarItem) {
-    // Native category toggles also invoke this callback. Only article navigation
-    // should close the mobile drawer or clear the filter.
-    const followsLink =
-      item.type === "link" ||
-      (item.type === "category" &&
-        item.href &&
-        normalizePath(item.href) !== normalizePath(activePath));
-    if (!followsLink) return;
+    if (modifiedClick.current || !("href" in item) || !item.href) return;
+    const url = new URL(item.href, window.location.href);
+    if (url.origin !== window.location.origin) return;
     setQuery("");
-    if ("href" in item && item.href) {
-      const targetSection = findSection(prepared, item.href);
-      setView({ path: activePath, section: targetSection });
-      if (targetSection !== null)
-        setVisited((previous) =>
-          previous.includes(targetSection)
-            ? previous
-            : [...previous, targetSection],
-        );
-    }
+    store.intend(url.pathname + url.search + url.hash, entryId(item));
     onItemClick?.(item);
   }
 
@@ -171,197 +187,243 @@ export default function SidebarNavigator({
       : section === null && overview?.type === "link"
         ? overview
         : undefined;
-  const headingLabel = selected?.label ||
+  const headingLabel =
+    selected?.label ||
     (sidebarName === "cli" && overview?.label) ||
     `All ${sidebarLabel(sidebarName)}`;
-  const mounted = new Set([...visited, ...(section === null ? [] : [section])]);
+  const navigation = {
+    entry: current.entry,
+    expanded: current.expanded,
+    filtering: false,
+    toggle: (id: string, expanded: boolean) =>
+      store.update({ expanded: { ...current.expanded, [id]: expanded } }),
+  };
   return (
-    <li ref={rootRef} className={styles.navigator}>
-      <div className={styles.toolbar}>
-        <label className={styles.srOnly} htmlFor={inputId}>
-          Filter navigation
-        </label>
-        <div className={styles.filterRow}>
-          <FiSearch
-            className={styles.searchIcon}
-            size={16}
-            aria-hidden="true"
-          />
-          <input
-            ref={inputRef}
-            id={inputId}
-            type="search"
-            value={query}
-            placeholder="Filter sidebar..."
-            autoComplete="off"
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && query) {
-                event.preventDefault();
-                event.stopPropagation();
-                setQuery("");
-              }
-            }}
-          />
-          {query && (
+    <NavigationContext.Provider value={navigation}>
+      <li
+        ref={rootRef}
+        className={styles.navigator}
+        onClickCapture={(event) => {
+          modifiedClick.current =
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey;
+        }}
+      >
+        <div className={styles.toolbar}>
+          <label className={styles.srOnly} htmlFor={inputId}>
+            Filter navigation
+          </label>
+          <div className={styles.filterRow}>
+            <FiSearch
+              className={styles.searchIcon}
+              size={16}
+              aria-hidden="true"
+            />
+            <input
+              ref={inputRef}
+              id={inputId}
+              type="search"
+              value={query}
+              placeholder="Filter sidebar..."
+              autoComplete="off"
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && query) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setQuery("");
+                }
+              }}
+            />
+            {query && (
+              <button
+                className={styles.clear}
+                type="button"
+                aria-label="Clear navigation filter"
+                onClick={() => {
+                  setQuery("");
+                  inputRef.current?.focus();
+                }}
+              >
+                <FiX size={14} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          {!filtering && section !== null && current.trail.length > 0 && (
             <button
-              className={styles.clear}
               type="button"
-              aria-label="Clear navigation filter"
+              className={styles.back}
               onClick={() => {
-                setQuery("");
-                inputRef.current?.focus();
+                store.back();
+                focusHeading();
               }}
             >
-              <FiX size={14} aria-hidden="true" />
+              <FiArrowLeft size={16} aria-hidden="true" />
+              Back to{" "}
+              {
+                prepared.find(
+                  (item) =>
+                    entryId(item) ===
+                    current.trail[current.trail.length - 1].section,
+                )?.label
+              }
             </button>
           )}
-        </div>
-        {!filtering && section !== null && (
-          <button
-            type="button"
-            className={styles.back}
-            onClick={returnToSections}
-          >
-            <FiArrowLeft size={16} aria-hidden="true" />
-            All {sidebarLabel(sidebarName)}
-          </button>
-        )}
-        <h2
-          ref={headingRef}
-          tabIndex={-1}
-          className={filtering ? styles.srOnly : styles.heading}
-        >
-          {filtering ? (
-            `Matches in ${sidebarLabel(sidebarName)}`
-          ) : headingLink ? (
-            <Link
-              className={styles.sectionOverview}
-              to={headingLink.href}
-              aria-current={
-                normalizePath(headingLink.href) === normalizePath(activePath)
-                  ? "page"
-                  : undefined
-              }
-              onClick={() =>
-                navigate({
-                  type: "link",
-                  label: headingLabel,
-                  href: headingLink.href!,
-                })
-              }
+          {!filtering && section !== null && (
+            <button
+              type="button"
+              className={styles.back}
+              onClick={returnToSections}
             >
-              {headingLabel}
-              <RouteStatusDot href={headingLink.href} />
-            </Link>
-          ) : (
-            headingLabel
+              <FiArrowLeft size={16} aria-hidden="true" />
+              All {sidebarLabel(sidebarName)}
+            </button>
           )}
-        </h2>
-      </div>
-      <div data-sections hidden={filtering || section !== null}>
-        <ul className="menu__list">
-          {prepared.map((item, index) =>
-            item.customProps?.navigationOverview ? null : item.type === "category" ? (
-              <li key={index} className="menu__list-item">
-                {item.href && !item.linkUnlisted ? (
-                  <Link
-                    className={`menu__link ${styles.sectionLink}`}
-                    to={item.href}
-                    onClick={(event) => {
-                      if (
-                        event.button !== 0 ||
-                        event.metaKey ||
-                        event.ctrlKey ||
-                        event.shiftKey ||
-                        event.altKey
-                      )
-                        return;
-                      selectSection(index);
-                      // Load the overview through Link, but keep the drawer open
-                      // so the selected section's local menu remains available.
-                    }}
-                  >
-                    <span>
-                      {item.label}
-                      <RouteStatusDot href={item.href} />
-                    </span>
-                    <FiChevronRight
-                      className={styles.sectionChevron}
-                      size={16}
-                      aria-hidden="true"
-                    />
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    className={`menu__link ${styles.sectionLink}`}
-                    onClick={() => selectSection(index)}
-                  >
-                    <span>{item.label}</span>
-                    <FiChevronRight
-                      className={styles.sectionChevron}
-                      size={16}
-                      aria-hidden="true"
-                    />
-                  </button>
-                )}
-              </li>
-            ) : (
-              <OriginalDocSidebarItems
-                key={index}
-                items={[item]}
-                activePath={activePath}
-                level={2}
-                onItemClick={navigate}
-              />
-            ),
-          )}
-        </ul>
-      </div>
-      {prepared.map((item, index) =>
-        item.type === "category" && mounted.has(index) ? (
-          <div
-            key={index}
-            data-section={index}
-            hidden={filtering || section !== index}
+          <h2
+            ref={headingRef}
+            tabIndex={-1}
+            className={filtering ? styles.srOnly : styles.heading}
           >
-            <ul className="menu__list">
-              <OriginalDocSidebarItems
-                items={item.items}
-                activePath={activePath}
-                level={2}
-                onItemClick={navigate}
-              />
-            </ul>
-          </div>
-        ) : null,
-      )}
-      {filtering && (
-        <div className={styles.results}>
-          <p className={styles.srOnly} role="status">
-            {results.length
-              ? "Matching navigation entries below."
-              : "No matching navigation entries."}
-          </p>
-          {results.length ? (
-            <ul className="menu__list">
-              <OriginalDocSidebarItems
-                key={query}
-                items={results}
-                activePath={activePath}
-                level={2}
-                onItemClick={navigate}
-              />
-            </ul>
-          ) : (
-            <p className={styles.empty}>
-              No matching pages. Try another term or use the site search to
-              search page contents.
-            </p>
-          )}
+            {filtering ? (
+              `Matches in ${sidebarLabel(sidebarName)}`
+            ) : headingLink ? (
+              <Link
+                className={styles.sectionOverview}
+                to={headingLink.href}
+                aria-current={
+                  normalizePath(headingLink.href) === normalizePath(activePath)
+                    ? "page"
+                    : undefined
+                }
+                onClick={() =>
+                  navigate({
+                    type: "link",
+                    label: headingLabel,
+                    href: headingLink.href!,
+                    customProps: headingLink.customProps,
+                  })
+                }
+              >
+                {headingLabel}
+                <RouteStatusDot href={headingLink.href} />
+              </Link>
+            ) : (
+              headingLabel
+            )}
+          </h2>
         </div>
-      )}
-    </li>
+        <div data-sections hidden={filtering || section !== null}>
+          <ul className="menu__list">
+            {prepared.map((item, index) =>
+              item.customProps?.navigationOverview ? null : item.type ===
+                "category" ? (
+                <li key={index} className="menu__list-item">
+                  {item.href && !item.linkUnlisted ? (
+                    <Link
+                      className={`menu__link ${styles.sectionLink}`}
+                      to={item.href}
+                      onClick={(event) => {
+                        if (
+                          event.button !== 0 ||
+                          event.metaKey ||
+                          event.ctrlKey ||
+                          event.shiftKey ||
+                          event.altKey
+                        )
+                          return;
+                        selectSection(index);
+                        // Load the overview through Link, but keep the drawer open
+                        // so the selected section's local menu remains available.
+                      }}
+                    >
+                      <span>
+                        {item.label}
+                        <RouteStatusDot href={item.href} />
+                      </span>
+                      <FiChevronRight
+                        className={styles.sectionChevron}
+                        size={16}
+                        aria-hidden="true"
+                      />
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`menu__link ${styles.sectionLink}`}
+                      onClick={() => selectSection(index)}
+                    >
+                      <span>{item.label}</span>
+                      <FiChevronRight
+                        className={styles.sectionChevron}
+                        size={16}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  )}
+                </li>
+              ) : (
+                <OriginalDocSidebarItems
+                  key={index}
+                  items={[item]}
+                  activePath={activePath}
+                  level={2}
+                  onItemClick={navigate}
+                />
+              ),
+            )}
+          </ul>
+        </div>
+        {prepared.map((item, index) =>
+          item.type === "category" && section === index ? (
+            <div
+              key={index}
+              data-section={index}
+              hidden={filtering || section !== index}
+            >
+              <ul className="menu__list">
+                <OriginalDocSidebarItems
+                  items={item.items}
+                  activePath={activePath}
+                  level={2}
+                  onItemClick={navigate}
+                />
+              </ul>
+            </div>
+          ) : null,
+        )}
+        {filtering && (
+          <NavigationContext.Provider
+            value={{ ...navigation, filtering: true }}
+          >
+            <div className={styles.results}>
+              <p className={styles.srOnly} role="status">
+                {results.length
+                  ? "Matching navigation entries below."
+                  : "No matching navigation entries."}
+              </p>
+              {results.length ? (
+                <ul className="menu__list">
+                  <OriginalDocSidebarItems
+                    key={query}
+                    items={results}
+                    activePath={activePath}
+                    level={2}
+                    onItemClick={navigate}
+                  />
+                </ul>
+              ) : (
+                <p className={styles.empty}>
+                  No matching pages. Try another term or use the site search to
+                  search page contents.
+                </p>
+              )}
+            </div>
+          </NavigationContext.Provider>
+        )}
+      </li>
+    </NavigationContext.Provider>
   );
 }
