@@ -576,6 +576,31 @@ func validateFilePathPatterns(scaffoldConfig *ScaffoldConfig) error {
 	return nil
 }
 
+// validateFileDelimiters statically confirms every spec.files[] entry that
+// declares delimiters declares exactly two non-empty strings. The JSON Schema
+// (minItems/maxItems) already enforces the count; this adds the non-empty
+// check the schema can't express, because FileSpec.ResolveDelimiters would
+// otherwise silently ignore a pair with an empty side and fall back to the
+// scaffold-wide delimiters.
+func validateFileDelimiters(scaffoldConfig *ScaffoldConfig) error {
+	for i := range scaffoldConfig.Spec.Files {
+		file := &scaffoldConfig.Spec.Files[i]
+		if file.Delimiters == nil {
+			continue
+		}
+		if len(file.Delimiters) == 2 && file.Delimiters[0] != "" && file.Delimiters[1] != "" {
+			continue
+		}
+		return errUtils.Build(errUtils.ErrScaffoldFileDelimitersInvalid).
+			WithExplanationf("Invalid delimiters for spec.files[] entry `%s`", file.Path).
+			WithHint("Use exactly two non-empty strings, for example `[\"[[\", \"]]\"]`").
+			WithContext("file_path", file.Path).
+			WithExitCode(2).
+			Err()
+	}
+	return nil
+}
+
 // validateFileMatrix statically validates each spec.files[] entry's matrix
 // configuration: target is required when matrix is set, and every axis is
 // either a non-empty literal list or an `answers.`-prefixed dot-path
@@ -585,12 +610,14 @@ func validateFilePathPatterns(scaffoldConfig *ScaffoldConfig) error {
 // plus the one constraint schema can't express: the `answers.` prefix
 // requirement.
 func validateFileMatrix(scaffoldConfig *ScaffoldConfig) error {
-	delimiters := defaultDelimiters(scaffoldConfig.Spec.Delimiters)
+	specDelimiters := defaultDelimiters(scaffoldConfig.Spec.Delimiters)
 	for i := range scaffoldConfig.Spec.Files {
 		file := &scaffoldConfig.Spec.Files[i]
 		if len(file.Matrix) == 0 {
 			continue
 		}
+		// An entry's own delimiters (if any) govern its matrix axis expressions.
+		delimiters := file.ResolveDelimiters(specDelimiters)
 		if file.Target == "" {
 			return fmt.Errorf("%w: file %q", errUtils.ErrScaffoldMatrixTargetRequired, file.Path)
 		}

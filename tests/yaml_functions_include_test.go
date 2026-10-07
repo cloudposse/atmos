@@ -11,7 +11,6 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
@@ -22,13 +21,9 @@ func mockRemoteIncludes(t *testing.T) {
 	require.NoError(t, err)
 
 	mock := httpmock.NewGitHubMockServer(t)
-	mock.RegisterFile("tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml", string(remoteFixture))
-
-	oldClient := utils.TestHTTPClient
-	utils.TestHTTPClient = mock.HTTPClient()
-	t.Cleanup(func() {
-		utils.TestHTTPClient = oldClient
-	})
+	mock.RegisterRawFile("cloudposse", "atmos", "main",
+		"tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml", string(remoteFixture))
+	t.Setenv("ATMOS_TEST_GITHUB_MOCK_URL", mock.URL())
 }
 
 // TestYAMLFunctionInclude tests the !include YAML function with various file types.

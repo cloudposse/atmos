@@ -432,7 +432,7 @@ tests:
       - "inherit"
     expect:
       stdout:
-        - 'hook inherited override: '
+        - '(?m)^\s*load\("helpers\.star", "greet"\)\r?\n\s*ui\.info\("hook inherited override: " \+ greet\("inline"\)\)\r?$'
         - 'script_source: scripts/hooks/check\.star'
         - 'script_source_sha256: '
       exit_code: 0

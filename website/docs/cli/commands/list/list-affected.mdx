@@ -52,6 +52,22 @@ atmos list affected --ref refs/heads/main
 atmos list affected --sha abc123def456
 ```
 
+Narrow the results by component tags or labels:
+```shell
+# Components tagged `production` or `tier-1`
+atmos list affected --tags=production,tier-1
+
+# Components labeled `ci: auto`
+atmos list affected --labels=ci=auto
+```
+
+Tags match any supplied tag; labels match all supplied `key=value` or `key:value` pairs. See the
+[shared matching rules](/cli/commands/describe/affected#selector-matching-rules) for case sensitivity, missing metadata,
+and deleted components.
+
+This command reads `ATMOS_COMPONENT_TAGS` and `ATMOS_COMPONENT_LABELS`, independently of the `ATMOS_TAGS` and
+`ATMOS_LABELS` variables used by `describe affected` and Terraform.
+
 Output in different formats:
 ```shell
 # JSON format
@@ -134,10 +150,16 @@ atmos list affected --repo-path /tmp/target-repo
   <dd>Filter results to a specific stack.<br/>Environment variable: `ATMOS_STACK`</dd>
 
   <dt>`--include-dependents`</dt>
-  <dd>Include dependent components as separate rows with depth indicators.<br/>Environment variable: `ATMOS_AFFECTED_INCLUDE_DEPENDENTS`</dd>
+  <dd>Include dependents as separate rows with depth indicators and reason `dependent`. Tags and labels filter these rows while retaining matching descendants of excluded components; see [dependent filtering](/cli/commands/describe/affected#filtering-and-flattening-dependents).<br/>Environment variable: `ATMOS_AFFECTED_INCLUDE_DEPENDENTS`</dd>
 
   <dt>`--exclude-locked`</dt>
-  <dd>Exclude components with `metadata.locked: true` from results.<br/>Environment variable: `ATMOS_AFFECTED_EXCLUDE_LOCKED`</dd>
+  <dd>Exclude components with `metadata.locked: true` from results, including deleted components that were locked in the base ref.<br/>Environment variable: `ATMOS_AFFECTED_EXCLUDE_LOCKED`</dd>
+
+  <dt>`--tags`</dt>
+  <dd>Keep only components whose [`metadata.tags`](/stacks/components/component-metadata#tags) contain **any** of the given comma-separated tags (e.g., `--tags=production,tier-1`).<br/>Environment variable: `ATMOS_COMPONENT_TAGS`</dd>
+
+  <dt>`--labels`</dt>
+  <dd>Keep only components whose [`metadata.labels`](/stacks/components/component-metadata#labels) contain **all** of the given comma-separated `key=value` or `key:value` pairs (e.g., `--labels=ci=auto`). When combined with `--tags`, a component must satisfy both.<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
 
   <dt>`--repo-path`</dt>
   <dd>Path to already-cloned target repository. Conflicts with `--ref`, `--sha`, `--ssh-key`, and `--ssh-key-password`.<br/>Environment variable: `ATMOS_AFFECTED_REPO_PATH`</dd>

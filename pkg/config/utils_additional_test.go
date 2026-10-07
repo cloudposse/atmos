@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -1149,4 +1150,79 @@ func TestSetSettingsConfig(t *testing.T) {
 	err := setSettingsConfig(config, configAndStacks)
 	assert.NoError(t, err)
 	assert.Equal(t, "append", config.Settings.ListMergeStrategy)
+}
+
+// TestSetSchemaDirs_NilSchemasMap verifies the schema directory flags work when the loaded atmos.yaml has no
+// `schemas:` section, which leaves the Schemas map nil. A raw map assignment would panic with
+// "assignment to entry in nil map".
+func TestSetSchemaDirs_NilSchemasMap(t *testing.T) {
+	t.Parallel()
+
+	config := &schema.AtmosConfiguration{}
+	require.Nil(t, config.Schemas)
+
+	configAndStacks := &schema.ConfigAndStacksInfo{
+		JsonSchemaDir:           "/schemas/json",
+		OpaDir:                  "/schemas/opa",
+		CueDir:                  "/schemas/cue",
+		AtmosManifestJsonSchema: "/schemas/atmos.json",
+	}
+
+	require.NotPanics(t, func() {
+		require.NoError(t, setSchemaDirs(config, configAndStacks))
+	})
+
+	assert.Equal(t, schema.ResourcePath{BasePath: "/schemas/json"}, config.Schemas["jsonschema"])
+	assert.Equal(t, schema.ResourcePath{BasePath: "/schemas/opa"}, config.Schemas["opa"])
+	assert.Equal(t, schema.ResourcePath{BasePath: "/schemas/cue"}, config.Schemas["cue"])
+	assert.Equal(t, schema.SchemaRegistry{Manifest: "/schemas/atmos.json"}, config.Schemas["atmos"])
+}
+
+// TestProcessEnvVars_SchemasNilMap verifies the ATMOS_SCHEMAS_* environment variables work when the loaded
+// atmos.yaml has no `schemas:` section, and that values already present for other keys are preserved.
+func TestProcessEnvVars_SchemasNilMap(t *testing.T) {
+	tests := []struct {
+		name    string
+		initial map[string]any
+		want    map[string]any
+	}{
+		{
+			name:    "nil Schemas map",
+			initial: nil,
+			want: map[string]any{
+				"jsonschema": schema.ResourcePath{BasePath: "/env/json"},
+				"opa":        schema.ResourcePath{BasePath: "/env/opa"},
+				"cue":        schema.ResourcePath{BasePath: "/env/cue"},
+				"atmos":      schema.SchemaRegistry{Manifest: "/env/atmos.json"},
+			},
+		},
+		{
+			name:    "existing Schemas entries for other keys are preserved",
+			initial: map[string]any{"custom": schema.ResourcePath{BasePath: "/keep"}},
+			want: map[string]any{
+				"custom":     schema.ResourcePath{BasePath: "/keep"},
+				"jsonschema": schema.ResourcePath{BasePath: "/env/json"},
+				"opa":        schema.ResourcePath{BasePath: "/env/opa"},
+				"cue":        schema.ResourcePath{BasePath: "/env/cue"},
+				"atmos":      schema.SchemaRegistry{Manifest: "/env/atmos.json"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH", "/env/json")
+			t.Setenv("ATMOS_SCHEMAS_OPA_BASE_PATH", "/env/opa")
+			t.Setenv("ATMOS_SCHEMAS_CUE_BASE_PATH", "/env/cue")
+			t.Setenv("ATMOS_SCHEMAS_ATMOS_MANIFEST", "/env/atmos.json")
+
+			config := &schema.AtmosConfiguration{Schemas: tt.initial}
+
+			require.NotPanics(t, func() {
+				require.NoError(t, processEnvVars(config))
+			})
+
+			assert.Equal(t, tt.want, config.Schemas)
+		})
+	}
 }

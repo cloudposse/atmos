@@ -87,7 +87,7 @@ steps:
 ## PR Comments
 
 On pull requests, the action posts a sticky comment (updated in place):
-- **Failure**: Warning table listing every unpinned reference and drift mismatch, with forensic details
+- **Failure**: Warning table showing up to 20 unresolved or invalid references, with shortened details and a link to the complete action log
 - **Resolved**: Updated to show all references covered (SHA-pinned) and all tag-pins verified
 
 No comment is posted on clean PRs that have never had a violation.
@@ -104,7 +104,26 @@ uses: owner/repo[/sub]@<tag-or-branch>          → unpinned — the coverage ga
 
 Handles sub-actions and reusable workflow calls (`owner/repo/sub@sha # tag`), tag comments with or without a leading `v` (e.g. `# 0.1.1`), and both annotated and lightweight git tags.
 
+## Rate limits and diagnostic size
+
+When GitHub returns HTTP 403 with `x-ratelimit-remaining: 0`, the verifier stops
+new tag lookups for that run. Previously verified tags remain cached; unresolved
+references fail verification. A later run can retry after the quota resets.
+
+The verification step writes complete results to a temporary JSON file. The
+comment step reads that file instead of passing the payload through an environment
+variable, which can exceed the runner's process-launch limit during widespread
+failures. PR comments bound both row count and field length.
+
 ## Local testing
+
+Run the actual action scripts against mocked GitHub responses without network access:
+
+```bash
+node --test .github/actions/verify-sha-pinning/offline.test.mjs
+```
+
+The existing live API smoke test is also available:
 
 ```bash
 GITHUB_TOKEN=$(gh auth token) node .github/actions/verify-sha-pinning/test.mjs
