@@ -196,7 +196,7 @@ export default function SidebarNavigator({
     expanded: current.expanded,
     filtering: false,
     toggle: (id: string, expanded: boolean) =>
-      store.update({ expanded: { ...current.expanded, [id]: expanded } }),
+      store.setExpanded(identified, sidebarName, id, expanded),
   };
   return (
     <NavigationContext.Provider value={navigation}>

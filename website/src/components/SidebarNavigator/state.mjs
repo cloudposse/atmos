@@ -1,6 +1,7 @@
 import { findSection, normalizePath } from "./navigation.mjs";
 
 export const historyStateKey = "atmosSidebar";
+/** Read an occurrence's tree identity, which remains stable when filtering. */
 export const entryId = (item) => item.customProps?.navigationId;
 const reference = (item) =>
   item.customProps?.yamlReference || item.customProps?.navigationReference;
@@ -21,10 +22,12 @@ export function identifyItems(items, parent = "") {
   });
 }
 
+/** Walk entries in sidebar order, retaining each occurrence of a shared URL. */
 export function flattenItems(items) {
   return items.flatMap((item) => [item, ...flattenItems(item.items || [])]);
 }
 
+/** Resolve an explicit occurrence first, then fall back to a canonical link. */
 export function findEntry(items, url, preferred) {
   const matches = flattenItems(items).filter(
     (item) => item.href && normalizePath(item.href) === normalizePath(url),
@@ -36,6 +39,7 @@ export function findEntry(items, url, preferred) {
   );
 }
 
+/** Create canonical navigation for a direct arrival without a return trail. */
 export function initialNavigation(items, sidebar, url) {
   const sectionIndex = findSection(items, url);
   const section = sectionIndex === null ? null : entryId(items[sectionIndex]);
@@ -55,6 +59,7 @@ export function initialNavigation(items, sidebar, url) {
   });
 }
 
+/** Open the selected entry's ancestors without closing unrelated branches. */
 function expandEntry(state) {
   const expanded = { ...state.expanded };
   const parts = state.entry?.split("/") || [];
@@ -63,6 +68,7 @@ function expandEntry(state) {
   return { ...state, expanded };
 }
 
+/** Reject saved context belonging to another URL, sidebar, or obsolete tree. */
 export function validNavigation(state, items, sidebar, url) {
   if (
     !state ||
@@ -135,6 +141,7 @@ export function transitionNavigation(previous, items, sidebar, url, intent) {
   });
 }
 
+/** Suppress URL-based highlighting outside the selected occurrence's branch. */
 export function activeEntryPath(item, activePath, selected) {
   if (!selected) return activePath;
   const id = entryId(item);
@@ -143,6 +150,7 @@ export function activeEntryPath(item, activePath, selected) {
     : "";
 }
 
+/** Include query and fragment when identifying a browser history destination. */
 export const locationUrl = (location) =>
   location.pathname + (location.search || "") + (location.hash || "");
 
@@ -158,12 +166,14 @@ export function createNavigationStore(history, persistence) {
   const listeners = new Set();
   const entries = new Map();
   const emit = () => listeners.forEach((listener) => listener());
+  /** Cache immediately, debouncing native history writes only for scroll updates. */
   function save(persist = true) {
     entries.set(location.key, snapshot);
     clearTimeout(persistTimer);
     if (persist) persistence?.write?.(snapshot);
     else persistTimer = setTimeout(() => persistence?.write?.(snapshot), 150);
   }
+  /** Restore a visited history entry or derive context for a new destination. */
   function arrive(next, action) {
     location = next;
     const url = locationUrl(next);
@@ -189,8 +199,9 @@ export function createNavigationStore(history, persistence) {
     save();
     emit();
   }
-  return {
+  const store = {
     getSnapshot: () => snapshot,
+    /** Share one router listener across desktop and mobile subscribers. */
     subscribe(listener) {
       listeners.add(listener);
       if (!unlisten) unlisten = history.listen(arrive);
@@ -203,6 +214,7 @@ export function createNavigationStore(history, persistence) {
         }
       };
     },
+    /** Initialize the current route from saved history or canonical navigation. */
     register(nextItems, nextSidebar) {
       items = nextItems;
       sidebar = nextSidebar;
@@ -220,12 +232,24 @@ export function createNavigationStore(history, persistence) {
       save();
       emit();
     },
+    /** Persist a partial snapshot, optionally avoiding scroll-driven rerenders. */
     update(patch, notify = true) {
       if (!snapshot) return;
       snapshot = { ...snapshot, ...patch };
       save(notify);
       if (notify) emit();
     },
+    /** Apply even pre-effect toggles to the current route's latest expansion map. */
+    setExpanded(nextItems, nextSidebar, id, expanded) {
+      if (
+        snapshot?.sidebar !== nextSidebar ||
+        snapshot.url !== locationUrl(history.location)
+      ) {
+        store.register(nextItems, nextSidebar);
+      }
+      store.update({ expanded: { ...snapshot.expanded, [id]: expanded } });
+    },
+    /** Remember clicked aliases, including switches between identical URLs. */
     intend(url, entry) {
       intent = { url, entry };
       if (snapshot?.url === url) {
@@ -235,6 +259,7 @@ export function createNavigationStore(history, persistence) {
         emit();
       }
     },
+    /** Restore the previous section's article and state while shortening the trail. */
     back() {
       if (!snapshot?.trail.length) return;
       const frame = snapshot.trail[snapshot.trail.length - 1];
@@ -243,4 +268,5 @@ export function createNavigationStore(history, persistence) {
       });
     },
   };
+  return store;
 }

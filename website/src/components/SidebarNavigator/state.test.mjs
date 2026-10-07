@@ -289,6 +289,67 @@ test("scroll snapshots are saved without rerendering menu subscribers", () => {
   assert.equal(store.getSnapshot().scroll[entryId(tree[0])], 240);
 });
 
+test("early category toggles initialize the store and survive later registration", () => {
+  for (const restoreHistory of [false, true]) {
+    const history = mockHistory();
+    const source = {
+      ...workflow(),
+      expanded: { ...workflow().expanded, [entryId(tree[2])]: true },
+      scroll: { [entryId(tree[0])]: 80 },
+    };
+    if (restoreHistory) history.location.state = { [historyStateKey]: source };
+    let persisted;
+    const store = createNavigationStore(history, {
+      write: (state) => (persisted = state),
+    });
+    assert.equal(store.getSnapshot(), null);
+
+    // Hydration can deliver this click before the hook's passive registration.
+    store.setExpanded(tree, "cli", entryId(tree[0]), false);
+    const afterClick = store.getSnapshot();
+    assert.equal(afterClick.expanded[entryId(tree[0])], false);
+    assert.deepEqual(persisted, afterClick);
+    if (restoreHistory) {
+      assert.equal(afterClick.expanded[entryId(tree[2])], true);
+      assert.deepEqual(afterClick.scroll, source.scroll);
+    }
+
+    store.register(tree, "cli");
+    assert.deepEqual(store.getSnapshot(), afterClick);
+  }
+});
+
+test("successive category toggles merge with the latest expansion state", () => {
+  const store = createNavigationStore(mockHistory());
+  store.register(tree, "cli");
+  store.setExpanded(tree, "cli", entryId(tree[1]), true);
+  store.setExpanded(tree, "cli", entryId(tree[2]), true);
+  assert.equal(store.getSnapshot().expanded[entryId(tree[1])], true);
+  assert.equal(store.getSnapshot().expanded[entryId(tree[2])], true);
+});
+
+test("early toggles register the destination when the route or sidebar changed", () => {
+  const history = mockHistory();
+  const store = createNavigationStore(history);
+  store.register(tree, "cli");
+
+  // No subscription yet: the history changed before the hook's effects ran.
+  history.push("/stacks/components/terraform");
+  store.setExpanded(tree, "cli", entryId(named), true);
+  assert.equal(store.getSnapshot().url, "/stacks/components/terraform");
+  assert.equal(store.getSnapshot().section, entryId(tree[2]));
+  assert.equal(store.getSnapshot().expanded[entryId(named)], true);
+
+  const learn = identifyItems([
+    category("Learn", "/learn", [link("Install", "/install")]),
+  ]);
+  history.push("/learn");
+  store.setExpanded(learn, "docs", entryId(learn[0]), false);
+  assert.equal(store.getSnapshot().url, "/learn");
+  assert.equal(store.getSnapshot().sidebar, "docs");
+  assert.deepEqual(store.getSnapshot().expanded, { [entryId(learn[0])]: false });
+});
+
 test("native anchor navigation preserves the selected alias and collapsed branches", () => {
   const history = mockHistory();
   const store = createNavigationStore(history);

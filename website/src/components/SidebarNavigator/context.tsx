@@ -22,6 +22,7 @@ export const useNavigationContext = () => useContext(NavigationContext);
 const stores = new WeakMap<object, ReturnType<typeof createNavigationStore>>();
 const serverSnapshot = () => null;
 
+/** Share history-backed navigation while using canonical markup during hydration. */
 export function useNavigationStore(items, sidebar: string) {
   const history = useHistory();
   const store = useMemo(() => {
