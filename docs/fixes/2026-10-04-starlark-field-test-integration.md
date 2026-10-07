@@ -44,6 +44,10 @@ The following exact commands ran in a disposable copy of `tests/fixtures/scenari
 
 ## Validation
 
+- Matched the VHS artifact-download action's version comment to its existing
+  v8.0.1 SHA. GitHub's tag API confirms the exact release commit; the moving v8
+  tag no longer identifies that pinned release. The executed action is unchanged.
+
 - Reproduced hook environment/directory, composed include, and per-call environment failures twice before fixing them. Real CLI repetitions pass after the changes, including component subprocesses in direct and parallel custom-command steps.
 - Fresh binary: standalone shebang and symlink invocation preserve script arguments, physical import paths, and caller cwd; `atmos.version()` uses the live command catalog.
 - Fresh binary: sequential, parallel, matrix, and test workflows perform no marker writes under dry-run and create their expected markers when executed.
