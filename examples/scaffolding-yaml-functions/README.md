@@ -4,6 +4,8 @@ related_docs:
     url: /cli/commands/scaffold/generate
   - label: "Loading external data with !include and other YAML functions"
     url: /cli/commands/scaffold/generate#loading-external-data-with-include-and-other-yaml-functions
+  - label: "Validate scaffold templates"
+    url: /cli/commands/scaffold/validate
   - label: "!include YAML function"
     url: /functions/yaml/include
 ---
