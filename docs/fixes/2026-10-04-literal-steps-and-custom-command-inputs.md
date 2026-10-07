@@ -58,6 +58,10 @@ All of these now behave as declared.
   integer flags, optional arguments, and a consistent `replicas.star` example.
   Agent skills were updated to match.
 
+- Review correction (2026-10-06, PR #3275): Clarify that script templates can substitute resolved expressions or fail on
+  malformed or unresolved expressions, while a lone `}}` remains ordinary text.
+  Explain that `!literal` prevents unintended substitution and template errors.
+
 ## Validation
 
 - `go build ./...` passed.
@@ -78,6 +82,11 @@ All of these now behave as declared.
   That was wrong: `.steps.<name>.value` already renders JSON text, and the shell
   stripped the quotes in the test. A test now pins the JSON-text contract and the
   script reference documents quoting.
+
+- Review correction validation (2026-10-06): Checked script-body handling in `ScriptHandler` and `ResolveStepField`.
+  The documentation patch applies cleanly to PR #3275 and passes
+  `git diff --check`. The consolidated website build is handled with the
+  complete stack.
 
 ## Follow-ups
 

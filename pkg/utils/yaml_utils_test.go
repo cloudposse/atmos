@@ -1579,6 +1579,24 @@ value: 123`
 }
 
 func TestUnmarshalYAMLFromNode(t *testing.T) {
+	t.Run("expands configured key delimiters before resolving tags", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		cfg.Settings.YAML.KeyDelimiter = "."
+		dir := t.TempDir()
+		path := filepath.Join(dir, "body.txt")
+		require.NoError(t, os.WriteFile(path, []byte("included"), 0o600))
+		input := "a.b: 1\na.script: !include.raw " + filepath.ToSlash(path) + "\n"
+		var node yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte(input), &node))
+		got, err := UnmarshalYAMLFromNode[map[string]any](cfg, &node, "manifest.yaml")
+		require.NoError(t, err)
+		want := map[string]any{"a": map[string]any{"b": 1, "script": "included"}}
+		assert.Equal(t, want, got)
+		fromFile, err := UnmarshalYAMLFromFile[map[string]any](cfg, input, "manifest.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, fromFile, got)
+	})
+
 	t.Run("decodes a parsed node and resolves include tags", func(t *testing.T) {
 		dir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "body.txt"), []byte("included"), 0o600))
