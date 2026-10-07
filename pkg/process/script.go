@@ -73,10 +73,24 @@ func RunScript(ctx context.Context, spec *ScriptSpec, stdout, stderr io.Writer) 
 	if spec.DryRun {
 		return nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	cmd := NewScriptCommand(ctx, spec)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	if err := cmd.Run(); err != nil {
+
+	// Terminate the interpreter's whole process tree on cancellation or when
+	// Atmos is signalled (see childGroup).
+	group := newChildGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		// Start failures keep the historical ErrProcessWaitFailed wrapping from cmd.Run.
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessWaitFailed, err)
+	}
+	group.started()
+	err := group.tolerateWaitDelay(ctx, cmd.Wait())
+	group.finished()
+	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessWaitFailed, err)
 	}
 	return nil

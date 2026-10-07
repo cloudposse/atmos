@@ -23,6 +23,12 @@ func TestMain(m *testing.M) {
 	if os.Getenv("_ATMOS_TEST_EXIT_ZERO") == "1" {
 		os.Exit(0)
 	}
+	// If _ATMOS_TEST_PROCESS_MODE is set, act as a helper child for the process
+	// group tests (see process_group_test.go) instead of running tests.
+	if mode := os.Getenv(helperModeEnv); mode != "" {
+		runProcessHelper(mode)
+		os.Exit(0)
+	}
 	os.Exit(m.Run())
 }
 
