@@ -38,13 +38,16 @@ var authLoginCmd = &cobra.Command{
 	RunE:               executeAuthLoginCommand,
 }
 
+// init registers the auth login flags and the namespaced --tags Viper key, then attaches the command to the auth parent.
 func init() {
 	defer perf.Track(nil, "auth.login.init")()
 
 	// Create parser with login-specific flags.
 	loginParser = flags.NewStandardParser(
 		flags.WithStringFlag("provider", "p", "", "Provider name to authenticate with (for SSO auto-provisioning)"),
-		flags.WithStringFlag("tags", "", "", "Select an identity by tags (comma-separated, matches any): --tags=production,admin"),
+		flags.WithStringFlag(tagsFlagName, "", "", "Select an identity by tags (comma-separated, matches any): --tags=production,admin"),
+		flags.WithEnvVars(tagsFlagName, envAuthTags),
+		flags.WithViperKey(tagsFlagName, authTagsViperKey),
 		flags.WithBoolFlag("webflow", "", false, "Force a fresh browser login for an aws/user identity"),
 	)
 
@@ -162,7 +165,7 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 	// If --tags was provided (and no explicit --identity), select by tag match instead
 	// of falling through to the default-identity resolution below.
 	if identityName == "" {
-		if filterTags := parseCommaSeparatedNames(viper.GetString(tagsKey)); len(filterTags) > 0 {
+		if filterTags := parseCommaSeparatedNames(viper.GetString(authTagsViperKey)); len(filterTags) > 0 {
 			selected, err := selectIdentityByTags(authManager, filterTags)
 			if err != nil {
 				return nil, false, err

@@ -7,7 +7,7 @@ artifacts:
     source:
       declared: ../../components/terraform/mock
       resolved: ../../components/terraform/mock
-      digest: sha256:c0d2b5553ed57ce0793e459ac39e4842b9b5484558274fd2f49fa583f95d1ec5
+      digest: sha256:7dd1eb5fae66d554895f969c1ee913805eb76c1db4df20d1b250997e3f014de5
     files:
       - path: README.md
         type: file
@@ -28,7 +28,7 @@ artifacts:
     source:
       declared: ../../components/terraform/mock
       resolved: ../../components/terraform/mock
-      digest: sha256:3e6ad337a182893c7e05c9bc91890aa40b801cc2043e2225fa4616e40e21c6da
+      digest: sha256:7dd1eb5fae66d554895f969c1ee913805eb76c1db4df20d1b250997e3f014de5
     files:
       - path: README.md
         type: file

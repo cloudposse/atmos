@@ -1,0 +1,59 @@
+---
+slug: pro-upload-byte-packing
+title: "Reliable Atmos Pro Uploads for Large Repositories"
+authors: [osterman]
+tags: [bugfix, atmos-pro]
+---
+Large infrastructure repositories can contain a few components with much larger
+settings than the rest. Grouping uploads by component count could still produce
+an oversized request and fail with HTTP 413. Atmos now sizes affected-stack and
+instances upload batches by their actual serialized bytes and recovers with
+smaller requests when the server rejects a batch.
+
+<!--truncate-->
+
+## The Problem
+
+An average component size cannot predict the size of a batch containing several
+large components. A rejected request could also return plain text, which appeared
+as an unexpected API response format instead of identifying the size limit.
+
+## The Fix
+
+The [Atmos Pro upload configuration](/cli/configuration/settings/pro) now defaults
+to a 3 MiB request budget, down from 4 MiB, leaving more room below the server limit.
+Uploads preserve component order and account for the request metadata as well as
+the component data.
+
+If an affected-stack or instances upload receives HTTP 413, Atmos restarts the
+complete batch with a smaller budget, up to three times. A component that is too
+large even by itself produces an error naming its stack, component, and serialized
+size, with guidance to reduce the uploaded data. Small uploads keep their existing
+single-request behavior, and no server change is required for these two upload paths.
+
+## How to Use It
+
+Continue running [affected-stack uploads](/cli/commands/describe/affected) or
+[instances uploads](/cli/commands/list/list-instances) as before:
+
+```shell
+atmos describe affected --upload
+atmos list instances --upload
+```
+
+No configuration change is required. An explicit positive
+`settings.pro.max_payload_bytes` still controls the initial request budget;
+automatic recovery only reduces it for the current upload. Omitted or nonpositive
+values now select 3 MiB, regardless of an edition pin, because this is a runtime
+fallback rather than a stored configuration default.
+
+The shared threshold also moves execution metadata to its existing out-of-band
+upload path sooner. Large execution-data objects still require the coordinated
+protocol work described in [issue #3313](https://github.com/cloudposse/atmos/issues/3313);
+this release makes their HTTP 413 errors clear but does not add multipart object
+uploads.
+
+## Get Involved
+
+Report upload failures in [GitHub issues](https://github.com/cloudposse/atmos/issues),
+including the Atmos version and error message with sensitive data removed.

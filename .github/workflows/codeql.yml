@@ -69,7 +69,7 @@ jobs:
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           languages: ${{ matrix.language }}
           # If you wish to specify custom queries, you can do so here or in a config file.
@@ -82,7 +82,7 @@ jobs:
       # Autobuild attempts to build any compiled languages (C/C++, C#, Go, Java, or Swift).
       # If this step fails, then you should remove it and run the build manually (see below)
       - name: Autobuild
-        uses: github/codeql-action/autobuild@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/autobuild@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
 
       # ℹ️ Command-line programs to run using the OS shell.
       # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
@@ -95,7 +95,7 @@ jobs:
       #     ./location_of_script_within_repo/buildscript.sh
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           category: "/language:${{matrix.language}}"
           # The merge queue's ephemeral gh-readonly-queue/... ref is deleted as
@@ -217,11 +217,14 @@ jobs:
           # (govulncheck's SSA construction parallelizes via goroutines, which
           # -p doesn't govern) while nearly tripling run time.
           GOMEMLIMIT: "32GiB"
-        run: govulncheck -format sarif ./... > govulncheck.sarif
+        # The target also removes exact duplicate stacks from the report: the
+        # SARIF schema requires them to be unique and the upload rejects the
+        # report otherwise. See internal/ci/vulncheck.
+        run: go tool mage ci:vulncheck govulncheck.sarif
 
       - name: Upload SARIF file
         if: always()
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
@@ -268,7 +271,7 @@ jobs:
 
       - name: Upload SARIF to code-scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: semgrep.sarif
           category: semgrep
@@ -412,7 +415,7 @@ jobs:
         # option here either: it would leave the native "CodeQL" code-scanning
         # required check without this SARIF's contribution.
         if: always()
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: golangci-lint.sarif
           ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}

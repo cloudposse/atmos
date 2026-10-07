@@ -10,27 +10,21 @@ import (
 
 // preprocessGitHookSteps uses the step-aware decoder before generic preprocessing
 // discards YAML tags. This preserves !literal fields and included script origins.
-// Decoded hooks are removed from the remaining document so functions run only once.
-func preprocessGitHookSteps(content []byte, v *viper.Viper, sourceFile string) ([]byte, error) {
-	var root goyaml.Node
-	if err := goyaml.Unmarshal(content, &root); err != nil {
-		return nil, err
-	}
+// Decoded hooks are removed from the remaining tree so functions run only once.
+// Keep the tree intact instead of serializing it: settings can reference anchors in a decoded hook.
+func preprocessGitHookSteps(root *goyaml.Node, v *viper.Viper, sourceFile string) error {
 	if len(root.Content) == 0 {
-		return content, nil
+		return nil
 	}
 	gitNode := mappingValueNode(root.Content[0], "git")
 	if gitNode == nil || gitNode.Kind != goyaml.MappingNode {
-		return content, nil
+		return nil
 	}
 	hooks := mappingValueNode(gitNode, "hooks")
 	if hooks == nil || hooks.Kind != goyaml.MappingNode {
-		return content, nil
+		return nil
 	}
-	if err := decodeGitHookSteps(hooks, v, sourceFile); err != nil {
-		return nil, err
-	}
-	return goyaml.Marshal(&root)
+	return decodeGitHookSteps(hooks, v, sourceFile)
 }
 
 func decodeGitHookSteps(hooks *goyaml.Node, v *viper.Viper, sourceFile string) error {

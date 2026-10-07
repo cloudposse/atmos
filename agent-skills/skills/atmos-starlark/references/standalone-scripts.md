@@ -3,21 +3,21 @@
 A standalone script is a `.star` file (or an executable with an Atmos shebang) that Atmos
 runs directly as its own command-line tool. This is "interpreter mode". See also
 [Custom CLI apps](https://atmos.tools/automation/standalone-cli-apps) and the
-[function reference](https://atmos.tools/functions/automation/cli.command).
+[language overview](https://atmos.tools/automation/language).
 
 ## Running a script
 
 ```shell
+./deploy vpc --stack=dev               # Executable with an Atmos shebang.
 atmos ./deploy.star vpc --stack=dev    # Explicit path.
 atmos deploy.star vpc --stack=dev      # A .star file needs no ./ prefix.
-./deploy vpc --stack=dev               # Executable with an Atmos shebang.
 ```
 
 Rules:
 
 - `.star` files: any first argument ending in `.star` selects script mode. The file must
-  exist and be a regular file. Only `.star` names can produce a script error (a `.star`
-  directory fails with "must be a regular file").
+  exist and be a regular file. Missing `.star` paths and `.star` directories fail during
+  script selection. Extensionless scripts can also produce errors when run.
 - Extensionless files: the path must contain a separator (`./deploy`, `/opt/tools/deploy`)
   and the first line must be an Atmos shebang. A bare name such as `atmos deploy` is still a
   normal Atmos command lookup and fails as an unknown command. A path that is not a script (an
@@ -35,7 +35,7 @@ Rules:
   whose last element is `atmos` (`#!/usr/local/bin/atmos`). Other forms are not detected.
   `atmos` must be on `PATH` for the `env` forms.
 - Symlinks are resolved before running. `ctx.script.path` is the real file, and `load()`
-  resolves relative to the real file's directory, so a symlink on `PATH` can load its
+  resolves relative to the target file's directory, so the target file can load its
   sibling modules.
 - Atmos global flags go between `atmos` and the script path, as `--flag=value` or
   `--flag value`: `atmos --chdir=x deploy.star`, `atmos --logs-level Debug ./deploy.star`. The

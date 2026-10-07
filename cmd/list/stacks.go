@@ -100,8 +100,8 @@ func parseStacksOptions(cmd *cobra.Command, v *viper.Viper) *StacksOptions {
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		ErrorMode:        v.GetString("error-mode"),
-		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
-		LabelsRaw:        v.GetString("labels"),
+		Tags:             tags.ParseTagsFlag(v.GetString(tagsViperKey)),
+		LabelsRaw:        v.GetString(labelsViperKey),
 	}
 }
 
