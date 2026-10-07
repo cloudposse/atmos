@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -593,6 +594,23 @@ func (c *armPIMClient) listPolicyAssignments(ctx context.Context) ([]armPolicyAs
 	return items, nil
 }
 
+// addUnit converts val of the given unit into nanoseconds and accumulates it into total,
+// guarding against values that exceed or overflow the time.Duration range.
+func addUnit(total time.Duration, val float64, unit time.Duration) (time.Duration, error) {
+	if val < 0 || math.IsNaN(val) || math.IsInf(val, 0) {
+		return 0, errors.New("invalid ISO-8601 duration: value must be non-negative")
+	}
+	ns := val * float64(unit)
+	if ns < 0 || ns > float64(math.MaxInt64) || float64(total)+ns > float64(math.MaxInt64) {
+		return 0, errors.New("ISO-8601 duration overflows time.Duration")
+	}
+	added := time.Duration(ns)
+	if added < 0 || math.MaxInt64-added < total {
+		return 0, errors.New("ISO-8601 duration overflows time.Duration")
+	}
+	return total + added, nil
+}
+
 // parseISO8601Duration parses an ISO-8601 duration string into a time.Duration.
 // It supports day (D), hour (H), minute (M), and second (S) designators, as well as
 // week (W), month (M), and year (Y).
@@ -635,7 +653,10 @@ func parseISO8601Duration(s string) (time.Duration, error) {
 				if err != nil || cur == "" {
 					return 0, fmt.Errorf("invalid ISO-8601 duration: bad year in %q", datePart)
 				}
-				total += time.Duration(val * 365 * 24 * float64(time.Hour))
+				total, err = addUnit(total, val, 365*24*time.Hour)
+				if err != nil {
+					return 0, err
+				}
 				cur = ""
 				foundDesignator = true
 			case r == 'M' || r == 'm':
@@ -643,7 +664,10 @@ func parseISO8601Duration(s string) (time.Duration, error) {
 				if err != nil || cur == "" {
 					return 0, fmt.Errorf("invalid ISO-8601 duration: bad month in %q", datePart)
 				}
-				total += time.Duration(val * 30 * 24 * float64(time.Hour))
+				total, err = addUnit(total, val, 30*24*time.Hour)
+				if err != nil {
+					return 0, err
+				}
 				cur = ""
 				foundDesignator = true
 			case r == 'W' || r == 'w':
@@ -651,7 +675,10 @@ func parseISO8601Duration(s string) (time.Duration, error) {
 				if err != nil || cur == "" {
 					return 0, fmt.Errorf("invalid ISO-8601 duration: bad week in %q", datePart)
 				}
-				total += time.Duration(val * 7 * 24 * float64(time.Hour))
+				total, err = addUnit(total, val, 7*24*time.Hour)
+				if err != nil {
+					return 0, err
+				}
 				cur = ""
 				foundDesignator = true
 			case r == 'D' || r == 'd':
@@ -659,7 +686,10 @@ func parseISO8601Duration(s string) (time.Duration, error) {
 				if err != nil || cur == "" {
 					return 0, fmt.Errorf("invalid ISO-8601 duration: bad day in %q", datePart)
 				}
-				total += time.Duration(val * 24 * float64(time.Hour))
+				total, err = addUnit(total, val, 24*time.Hour)
+				if err != nil {
+					return 0, err
+				}
 				cur = ""
 				foundDesignator = true
 			default:
@@ -682,7 +712,10 @@ func parseISO8601Duration(s string) (time.Duration, error) {
 				if err != nil || cur == "" {
 					return 0, fmt.Errorf("invalid ISO-8601 duration: bad hour in %q", timePart)
 				}
-				total += time.Duration(val * float64(time.Hour))
+				total, err = addUnit(total, val, time.Hour)
+				if err != nil {
+					return 0, err
+				}
 				cur = ""
 				foundDesignator = true
 			case r == 'M' || r == 'm':
@@ -690,7 +723,10 @@ func parseISO8601Duration(s string) (time.Duration, error) {
 				if err != nil || cur == "" {
 					return 0, fmt.Errorf("invalid ISO-8601 duration: bad minute in %q", timePart)
 				}
-				total += time.Duration(val * float64(time.Minute))
+				total, err = addUnit(total, val, time.Minute)
+				if err != nil {
+					return 0, err
+				}
 				cur = ""
 				foundDesignator = true
 			case r == 'S' || r == 's':
@@ -698,7 +734,10 @@ func parseISO8601Duration(s string) (time.Duration, error) {
 				if err != nil || cur == "" {
 					return 0, fmt.Errorf("invalid ISO-8601 duration: bad second in %q", timePart)
 				}
-				total += time.Duration(val * float64(time.Second))
+				total, err = addUnit(total, val, time.Second)
+				if err != nil {
+					return 0, err
+				}
 				cur = ""
 				foundDesignator = true
 			default:

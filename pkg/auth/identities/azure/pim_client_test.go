@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"testing"
@@ -705,6 +706,37 @@ func TestARMPIMClient_PolicyMaxDuration_ConflictingTargetIgnoredEvenWithMatching
 	assert.Equal(t, 2*time.Hour, maxDuration)
 }
 
+func TestARMPIMClient_PolicyMaxDuration_OverflowDurationReturnsError(t *testing.T) {
+	body := `{
+		"value": [
+			{
+				"name": "assignment-1",
+				"properties": {
+					"roleDefinitionId": "` + testRoleDefID + `",
+					"effectiveRules": [
+						{
+							"id": "Expiration_EndUser_Assignment",
+							"ruleType": "RoleManagementPolicyExpirationRule",
+							"maximumDuration": "P300Y",
+							"target": {"caller": "EndUser", "level": "Assignment"}
+						}
+					]
+				}
+			}
+		]
+	}`
+
+	doer := &fakeDoer{handler: func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, body), nil
+	}}
+	c := newClientWithDoer(doer)
+
+	_, _, err := c.PolicyMaxDuration(context.Background(), testRoleDefID)
+	require.ErrorIs(t, err, errUtils.ErrAzurePIMRequestFailed)
+	assert.Contains(t, err.Error(), "parsing policy maximumDuration")
+	assert.Contains(t, err.Error(), "overflows")
+}
+
 func TestParseISO8601Duration(t *testing.T) {
 	validTests := []struct {
 		in   string
@@ -718,6 +750,7 @@ func TestParseISO8601Duration(t *testing.T) {
 		{"PT1H30M15S", 1*time.Hour + 30*time.Minute + 15*time.Second},
 		{"P1D", 24 * time.Hour},
 		{"P1DT8H", 32 * time.Hour},
+		{"P1DT1H", 25 * time.Hour},
 		{"P2W", 14 * 24 * time.Hour},
 		{"P1Y", 365 * 24 * time.Hour},
 		{"P2Y", 2 * 365 * 24 * time.Hour},
@@ -729,9 +762,12 @@ func TestParseISO8601Duration(t *testing.T) {
 		{"PT0.5H", 30 * time.Minute},
 		{"PT0.5M", 30 * time.Second},
 		{"PT0.5S", 500 * time.Millisecond},
+		{"PT0.1S", 100 * time.Millisecond},
 		{"PT0S", 0},
+		{"P0D", 0},
 		{"pt8h", 8 * time.Hour},
 		{"P90D", 90 * 24 * time.Hour},
+		{"P292Y", 292 * 365 * 24 * time.Hour},
 	}
 	for _, tt := range validTests {
 		t.Run(tt.in, func(t *testing.T) {
@@ -765,6 +801,18 @@ func TestParseISO8601Duration(t *testing.T) {
 		"PT1H2",
 		"PT1X",
 		"PT!",
+		"P300Y",
+		"P293Y",
+		"P1000Y",
+		"P1000000000000Y",
+		"P4000M",
+		"P20000W",
+		"P110000D",
+		"PT3000000H",
+		"PT160000000M",
+		"PT10000000000S",
+		"PT9223372036854775808S",
+		"P292YT10000H",
 	}
 	for _, in := range invalidTests {
 		t.Run("invalid_"+in, func(t *testing.T) {
@@ -772,6 +820,46 @@ func TestParseISO8601Duration(t *testing.T) {
 			assert.Error(t, err)
 		})
 	}
+}
+
+func TestAddUnit(t *testing.T) {
+	// Normal additions.
+	d, err := addUnit(0, 5, time.Hour)
+	require.NoError(t, err)
+	assert.Equal(t, 5*time.Hour, d)
+
+	d, err = addUnit(5*time.Hour, 30, time.Minute)
+	require.NoError(t, err)
+	assert.Equal(t, 5*time.Hour+30*time.Minute, d)
+
+	// Negative, NaN, Inf values.
+	_, err = addUnit(0, -1, time.Hour)
+	assert.Error(t, err)
+
+	_, err = addUnit(0, math.NaN(), time.Hour)
+	assert.Error(t, err)
+
+	_, err = addUnit(0, math.Inf(1), time.Hour)
+	assert.Error(t, err)
+
+	_, err = addUnit(0, math.Inf(-1), time.Hour)
+	assert.Error(t, err)
+
+	// Single unit overflow (e.g. 300 years).
+	_, err = addUnit(0, 300, 365*24*time.Hour)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "overflows")
+
+	// Floating point overflow beyond float64(math.MaxInt64).
+	_, err = addUnit(0, float64(math.MaxInt64)*2, time.Nanosecond)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "overflows")
+
+	// Accumulation overflow: initial total + new unit exceeds math.MaxInt64.
+	total := 292 * 365 * 24 * time.Hour
+	_, err = addUnit(total, 10000, time.Hour)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "overflows")
 }
 
 func TestIsActivationExpirationRule(t *testing.T) {
