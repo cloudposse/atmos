@@ -167,6 +167,10 @@ computes values after structural merging; it does not generate imports,
 component names, inheritance rules, or stack identities. It is not supported in
 `atmos.yaml` or scaffold configuration.
 
+The selector fields `metadata.tags` and `metadata.labels` reject `!starlark`.
+They determine component selection before full evaluation, while context reads
+can resolve dependencies that require authentication or execute commands.
+
 This configuration evaluator provides `ctx`, language builtins, and `json`.
 Automation modules such as `exec`, `fs`, and `steps`, and module loading with
 `load()`, are unavailable here. Use [automation scripts](/automation) for

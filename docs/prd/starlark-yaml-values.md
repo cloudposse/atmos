@@ -106,6 +106,10 @@ Starlark for that dependency. Import paths, stack discovery, inheritance selecto
 and other fields consumed before component evaluation are also outside this
 post-merge feature.
 
+`metadata.tags` and `metadata.labels` reject `!starlark` values. These fields
+drive component selection before full evaluation, while Starlark context reads
+can resolve dependencies that require authentication or execute commands.
+
 ## Host Capabilities
 
 The evaluator uses the Atmos Starlark dialect and standard pure built-ins,
