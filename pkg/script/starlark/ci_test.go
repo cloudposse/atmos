@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	cockroach "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,6 +46,14 @@ func initCIFormatter(t *testing.T) {
 	})
 }
 
+// executeCI runs a script against the given Spec and returns its streams with ANSI escapes
+// stripped: CI runners advertise color support, and the assertions compare plain text.
+func executeCI(t *testing.T, spec *script.Spec, opts ...Option) (stdout, stderr string, err error) {
+	t.Helper()
+	stdout, stderr, err = executeSpec(t, *spec, opts...)
+	return ansi.Strip(stdout), ansi.Strip(stderr), err
+}
+
 // newCIMock returns a Reporter mock whose WithOutput returns the mock itself.
 func newCIMock(t *testing.T) *MockReporter {
 	t.Helper()
@@ -57,7 +66,7 @@ func newCIMock(t *testing.T) *MockReporter {
 // runCI executes source against the mock reporter.
 func runCI(t *testing.T, m *MockReporter, source string) (stdout, stderr string, err error) {
 	t.Helper()
-	return executeSpec(t, script.Spec{CI: m, Source: source})
+	return executeCI(t, &script.Spec{CI: m, Source: source})
 }
 
 // useGenericOnly isolates the registry so the real reporter renders through the generic provider.
@@ -236,7 +245,7 @@ func TestCIGateWarnsWhenRenderedLocally(t *testing.T) {
 			t.Parallel()
 			m := newCIMock(t)
 			tc.expect(m, ci.Receipt{Provider: "generic", Local: true, Gate: tc.gate})
-			_, stderr, err := executeSpec(t, script.Spec{CI: m, Source: tc.source}, WithReadFile(func(string) ([]byte, error) { return []byte("{}"), nil }))
+			_, stderr, err := executeCI(t, &script.Spec{CI: m, Source: tc.source}, WithReadFile(func(string) ([]byte, error) { return []byte("{}"), nil }))
 			require.NoError(t, err)
 			assert.Contains(t, stderr, tc.want)
 		})
@@ -244,7 +253,7 @@ func TestCIGateWarnsWhenRenderedLocally(t *testing.T) {
 			t.Parallel()
 			m := newCIMock(t)
 			tc.expect(m, ci.Receipt{Provider: "generic", Local: true})
-			_, stderr, err := executeSpec(t, script.Spec{CI: m, Source: tc.source}, WithReadFile(func(string) ([]byte, error) { return []byte("{}"), nil }))
+			_, stderr, err := executeCI(t, &script.Spec{CI: m, Source: tc.source}, WithReadFile(func(string) ([]byte, error) { return []byte("{}"), nil }))
 			require.NoError(t, err)
 			assert.Empty(t, stderr)
 		})
@@ -401,7 +410,7 @@ func TestCISARIFReadsThroughEngineFileReader(t *testing.T) {
 	m.EXPECT().SARIF(gomock.Any(), ci.SARIFReport{Body: []byte(`{"runs":[]}`), Category: "tf"}).Return(ci.Receipt{}, nil)
 	m.EXPECT().SARIF(gomock.Any(), ci.SARIFReport{Body: []byte(`{"runs":[]}`), Category: ""}).Return(ci.Receipt{}, nil)
 	absolute := filepath.Join(dir, "abs", "r.sarif")
-	_, _, err := executeSpec(t, script.Spec{CI: m, WorkingDirectory: dir, Source: `ci.sarif("out/r.sarif", category="tf")
+	_, _, err := executeCI(t, &script.Spec{CI: m, WorkingDirectory: dir, Source: `ci.sarif("out/r.sarif", category="tf")
 ci.sarif(` + `"` + strings.ReplaceAll(absolute, `\`, `\\`) + `"` + `)`}, reader)
 	require.NoError(t, err)
 	assert.Equal(t, []string{filepath.Join(dir, "out", "r.sarif"), absolute}, read)
@@ -409,7 +418,7 @@ ci.sarif(` + `"` + strings.ReplaceAll(absolute, `\`, `\\`) + `"` + `)`}, reader)
 
 func TestCISARIFReadFailure(t *testing.T) {
 	t.Parallel()
-	_, _, err := executeSpec(t, script.Spec{CI: newCIMock(t), Source: `ci.sarif("missing.sarif")`},
+	_, _, err := executeCI(t, &script.Spec{CI: newCIMock(t), Source: `ci.sarif("missing.sarif")`},
 		WithReadFile(func(string) ([]byte, error) { return nil, os.ErrNotExist }))
 	require.ErrorIs(t, err, errUtils.ErrStarlark)
 	require.ErrorIs(t, err, os.ErrNotExist)
@@ -512,14 +521,14 @@ func TestCIMainThreadOutputIsUnprefixed(t *testing.T) {
 
 func TestCIWithRealReporterRunsLocallyWhenNoReporterIsSupplied(t *testing.T) {
 	useGenericOnly(t)
-	stdout, _, err := executeSpec(t, script.Spec{Source: `print(ci.context.provider, ci.context.local)`})
+	stdout, _, err := executeCI(t, &script.Spec{Source: `print(ci.context.provider, ci.context.local)`})
 	require.NoError(t, err)
 	assert.Equal(t, "generic True\n", stdout)
 }
 
 func TestCIRendersLocallyThroughGenericProvider(t *testing.T) {
 	useGenericOnly(t)
-	stdout, stderr, err := executeSpec(t, script.Spec{Source: `ci.summary("# Hi there")
+	stdout, stderr, err := executeCI(t, &script.Spec{Source: `ci.summary("# Hi there")
 c = ci.comment("comment body", key="k")
 ci.output("a", "b")
 print(c.id, c.created, repr(c.url))
