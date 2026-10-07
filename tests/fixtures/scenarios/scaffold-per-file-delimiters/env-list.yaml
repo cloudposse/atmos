@@ -1,0 +1,2 @@
+# atmos:template
+environment: "[[ .matrix.environment ]]"

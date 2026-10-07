@@ -30,7 +30,7 @@ func ProcessTagRoot(input string) (string, error) {
 
 	defaultValue := strings.TrimSpace(trimTagPrefix(input, YAMLFuncRepoRoot, YAMLFuncRoot))
 
-	rootPath, err := GetRoot()
+	rootPath, err := cachedRootTag()
 	if err != nil {
 		if defaultValue != "" {
 			log.Debug("failed to resolve Git root, returning default value", "error", err)

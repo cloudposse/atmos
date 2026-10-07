@@ -709,35 +709,28 @@ func (h *Hooks) resolveDeps(atmosConfig *schema.AtmosConfiguration, info *schema
 	return deps, nil
 }
 
-// installDeps installs missing tools and updates h.toolchainPATH to
-// point at the installed pinned versions. No-op when deps is empty.
+// installDeps installs the hooks' explicit tool dependencies and updates
+// h.toolchainPATH to point at the pinned versions. Tools from the project's
+// .tool-versions manifest join the PATH only if they are already installed;
+// hooks never download manifest tools, and explicit dependencies win by identity.
 func (h *Hooks) installDeps(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, deps map[string]string) error {
-	if len(deps) == 0 {
-		return nil
+	if len(deps) > 0 {
+		log.Debug(
+			"Installing hook dependencies",
+			"component", info.ComponentFromArg,
+			"stack", info.Stack,
+			"tools", deps,
+		)
 	}
-	log.Debug(
-		"Installing hook dependencies",
-		"component", info.ComponentFromArg,
-		"stack", info.Stack,
-		"tools", deps,
-	)
-	installer := dependencies.NewInstaller(atmosConfig)
-	if err := installer.EnsureTools(deps); err != nil {
+	env, err := dependencies.ForDependencies(atmosConfig, deps)
+	if err != nil {
 		return errUtils.Build(errUtils.ErrToolInstall).
 			WithCause(err).
 			WithExplanationf("Failed to install dependencies for hooks on component %q", info.ComponentFromArg).
 			WithHint("Run `atmos toolchain install <tool>@<version>` manually to diagnose").
 			Err()
 	}
-
-	path, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrPathResolution).
-			WithCause(err).
-			WithExplanation("Failed to build toolchain PATH after installing hook dependencies").
-			Err()
-	}
-	h.toolchainPATH = path
+	h.toolchainPATH = env.PATH()
 	return nil
 }
 

@@ -641,6 +641,7 @@ func TestHandleConfigInitError(t *testing.T) {
 		args        []string
 		expectError bool
 		expectNil   bool
+		wantIs      error
 	}{
 		{
 			name:      "version command with error returns nil",
@@ -703,6 +704,20 @@ func TestHandleConfigInitError(t *testing.T) {
 			expectError: true,
 		},
 		{
+			name:        "invalid logs color is fatal for version",
+			initErr:     fmt.Errorf("wrapped: %w", errUtils.ErrInvalidLogsColor),
+			wantIs:      errUtils.ErrInvalidLogsColor,
+			args:        []string{"atmos", "version"},
+			expectError: true,
+		},
+		{
+			name:        "invalid logs color is fatal for help",
+			initErr:     fmt.Errorf("wrapped: %w", errUtils.ErrInvalidLogsColor),
+			wantIs:      errUtils.ErrInvalidLogsColor,
+			args:        []string{"atmos", "--help"},
+			expectError: true,
+		},
+		{
 			name:        "other errors returned as-is",
 			initErr:     errors.New("some other error"),
 			args:        []string{"atmos", "terraform", "plan"},
@@ -718,6 +733,8 @@ func TestHandleConfigInitError(t *testing.T) {
 			switch {
 			case tt.expectNil:
 				assert.Nil(t, err)
+			case tt.wantIs != nil:
+				assert.ErrorIs(t, err, tt.wantIs)
 			case tt.expectError:
 				assert.Error(t, err)
 			default:

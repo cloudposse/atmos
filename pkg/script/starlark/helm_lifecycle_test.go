@@ -244,11 +244,15 @@ func TestHelmLifecycleAdditionalChecks(t *testing.T) {
 			replies: []lifecycleReply{{command: prefix + "-n lifecycle-dag get configmap dag-dependent-dependency-observed -o json", stdout: `{"data":{"ready":"true"}}`}},
 		},
 		{
-			name: "release progress", function: "assert_release_progress", call: `assert_release_progress("apply", "oss-ingress", "Applied Helm release")`,
+			name: "release progress", function: "assert_release_progress", call: `assert_release_progress("apply", "oss-ingress", "Applied Helm release", "oss-ingress", "helm-oss")`,
 			replies: []lifecycleReply{{command: "helm apply oss-ingress -s dev --identity local-k3s", stderr: "Applied Helm release oss-ingress in helm-oss"}},
 		},
 		{
-			name: "missing progress", function: "assert_release_progress", call: `assert_release_progress("delete", "oss-ingress", "Deleted Helm release")`, wantErr: true,
+			name: "custom release progress", function: "assert_release_progress", call: `assert_release_progress("apply", "edge", "Applied Helm release", "edge-public", "networking")`,
+			replies: []lifecycleReply{{command: "helm apply edge -s dev --identity local-k3s", stderr: "Applied Helm release edge-public in networking"}},
+		},
+		{
+			name: "missing progress", function: "assert_release_progress", call: `assert_release_progress("delete", "oss-ingress", "Deleted Helm release", "oss-ingress", "helm-oss")`, wantErr: true,
 			replies: []lifecycleReply{{command: "helm delete oss-ingress -s dev --identity local-k3s", stdout: "done"}},
 		},
 		{

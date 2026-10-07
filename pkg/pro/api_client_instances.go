@@ -55,7 +55,10 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 			chunkDTO.BatchTotal = &batch.BatchTotal
 		}
 		return c.sendInstancesRequest(endpoint, chunkDTO)
-	})
+	}, withItemDescription(func(index int) string {
+		item := dto.Instances[index]
+		return fmt.Sprintf("stack %q component %q", item.Stack, item.Component)
+	}))
 }
 
 // sendInstancesRequest sends a single instances upload request.

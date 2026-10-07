@@ -29,9 +29,7 @@ This command applies Terraform changes to your infrastructure. You can:
 - Apply a specific planfile using `--planfile <path>`
 - Auto-approve changes using `-auto-approve`
 
-:::tip
 For automated deployments, consider using `atmos terraform deploy` which automatically includes `-auto-approve`.
-:::
 
 :::note
 `apply` does **not** download stored planfiles or run
@@ -541,7 +539,10 @@ atmos terraform apply --affected --tags production
 
 ### Include Dependencies and Dependents
 
-Selector flags choose the seed set; `--include-dependencies` and `--include-dependents` expand it through the dependency graph. Expanded components are applied even when they do not match the selectors — they are prerequisites (or dependents) of what was selected. Prerequisites can live in other stacks, so `--include-dependencies` with `-s dev` legitimately applies prerequisite components outside the `dev` stack:
+`--include-dependencies` adds prerequisites even when they do not match the selectors or belong to another stack.
+`--include-dependents` honors `--tags` and `--labels`, retaining matching descendants of excluded components in dependency
+order. See [Terraform selection flags](/cli/commands/terraform/usage#flags) for full semantics.
+For example, `--include-dependencies` with `-s dev` can include prerequisites outside `dev`:
 
 ```shell
 # Apply dev-labeled components plus everything they depend on
@@ -636,9 +637,7 @@ components:
     auto_generate_backend_file: true
 ```
 
-:::info
 See [Terraform Planfiles](/components/terraform/planfiles) for a comprehensive guide on working with planfiles in Atmos.
-:::
 
 :::note
 The `atmos terraform apply` command supports all native `terraform apply` options described in [Terraform apply options](https://developer.hashicorp.com/terraform/cli/commands/apply#apply-options), except that planfile arguments should use `--from-plan` or `--planfile` flags instead of being passed directly.
