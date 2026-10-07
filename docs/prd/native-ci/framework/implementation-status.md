@@ -331,6 +331,9 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | | Shared comment validation in `internal/provider/comment.go` | | Done | |
 | | `ATMOS_CI_GITHUB_API_URL` / `GITHUB_API_URL` API base URL support (GHES) | | Done | |
 | | `ghtest` fake GitHub API + Actions env fixture (`pkg/ci/providers/github/ghtest`) | | Done | |
+| | `templates.RenderReport` (`pkg/ci/templates/report.go`): renders a script report template from `ci.templates.base_path` or an absolute path, wrapping `ErrCITemplateNotFound` when the file is missing | | Done | |
+| | `Reporter.RenderSummary` / `Reporter.RenderComment`: explicit name, else `ci.summary.template` / `ci.comments.template`; `ErrCITemplateNotFound` when neither is set | | Done | |
+| | Starlark `ci.summary(markdown, template, data)` and `ci.comment(body, key, behavior, pr, template, data)`: `template=` or `data=` with a configured default renders the text; literal text and a template are mutually exclusive | | Done | |
 | **—** | Documentation | — | **Done** | 100% |
 | | Archive old GitHub Actions docs (deprecation tip added) | | Done | |
 | | Write new CI integration docs (ci.mdx expanded) | | Done | |

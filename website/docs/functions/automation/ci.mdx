@@ -70,14 +70,15 @@ you read it, so scripts that never read it pay nothing.
 
     <dt>`elevated`</dt>
     <dd>
-        A boolean that is `True` under the elevated `pull_request_target` and `workflow_run` events. See the
-        [fork gate](#fork-gate).
+        A boolean that is `True` under the elevated `pull_request_target` and `workflow_run` events. Elevated events run
+        with a privileged token. See the [fork gate](#fork-gate).
     </dd>
 
     <dt>`pr`</dt>
     <dd>
-        A struct with `number`, `head`, `base`, and `url` for the current pull request, or `None` when the run is not
-        for a pull request.
+        A struct with `number`, `head`, `base`, `url`, and `fork` for the current pull request, or `None` when the run is
+        not for a pull request. `fork` is a boolean that is `True` when the pull request head lives in a fork of the
+        base repository.
     </dd>
 </dl>
 
@@ -118,10 +119,11 @@ list of keys.
 
 ## Fork gate
 
-Under `pull_request_target` and `workflow_run`, the workflow runs with a privileged token while the code may come
-from a fork. In that situation `ci.comment` and `ci.check` do not post unless the
-[`ci.allow_unsafe_fork_execution`](/cli/configuration/ci) key is `true`. They warn and render locally instead. Read `ci.context.elevated` to find out
-whether a script is in that situation, and skip work that only makes sense when posting is allowed.
+Under `pull_request_target` and `workflow_run`, comments and checks are held only when the pull request comes from a
+fork (`ci.context.pr.fork`), unless [`ci.allow_unsafe_fork_execution`](/cli/configuration/ci) is set. A held call warns
+and renders locally instead. A pull request from the same repository posts normally, even under these events. Read
+`ci.context.elevated` and `ci.context.pr.fork` to find out whether a script is in that situation, and skip work that only
+makes sense when posting is allowed.
 
 ## Masking
 

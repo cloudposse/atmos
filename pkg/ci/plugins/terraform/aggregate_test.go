@@ -327,6 +327,7 @@ func TestOnAfterTerraformAggregateWritesGitHubOutputFiles(t *testing.T) {
 	ctx := newAggregateHookContext()
 	ctx.Config = &schema.AtmosConfiguration{
 		CI: schema.CIConfig{
+			Enabled: true,
 			Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
 			Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
 		},
@@ -431,6 +432,7 @@ You can apply this plan to save these new output values to the Terraform state, 
 func newAggregateTestConfig() *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{
 		CI: schema.CIConfig{
+			Enabled: true,
 			Summary: schema.CISummaryConfig{
 				Enabled: boolPtr(true),
 			},

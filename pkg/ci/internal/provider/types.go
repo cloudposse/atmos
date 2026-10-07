@@ -266,4 +266,7 @@ type PRInfo struct {
 
 	// URL is the PR URL.
 	URL string
+
+	// Fork reports whether the pull request head lives in a fork of the base repository.
+	Fork bool
 }

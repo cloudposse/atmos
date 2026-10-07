@@ -9,7 +9,6 @@ import (
 	ci "github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 //go:embed templates/*.md
@@ -49,7 +48,7 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 func (p *Plugin) onAfterOperation(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "helmfileci.Plugin.onAfterOperation")()
 
-	if !isSummaryEnabled(ctx.Config) {
+	if !ci.SummaryEnabled(ctx.Config) {
 		return nil
 	}
 
@@ -122,16 +121,6 @@ func helmfileTemplateName(command string) string {
 	default:
 		return command
 	}
-}
-
-func isSummaryEnabled(cfg *schema.AtmosConfiguration) bool {
-	if cfg == nil {
-		return true
-	}
-	if cfg.CI.Summary.Enabled == nil {
-		return true
-	}
-	return *cfg.CI.Summary.Enabled
 }
 
 func title(command string) string {

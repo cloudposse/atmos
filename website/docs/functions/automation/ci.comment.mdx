@@ -16,14 +16,17 @@ import Intro from '@site/src/components/Intro'
 ## Usage
 
 ```python
-ci.comment(body, key = "", behavior = "upsert", pr = 0)
+ci.comment(body = "", key = "", behavior = "upsert", pr = 0, template = "", data = None)
 ```
 
 ## Arguments
 
 <dl>
     <dt>`body`</dt>
-    <dd>Required. The comment text, as Markdown in a string.</dd>
+    <dd>
+        The comment text, as Markdown in a string. Required unless `template` or `data` is given, and it cannot be
+        combined with them.
+    </dd>
 
     <dt>`key`</dt>
     <dd>
@@ -40,7 +43,35 @@ ci.comment(body, key = "", behavior = "upsert", pr = 0)
 
     <dt>`pr`</dt>
     <dd>(Optional) The pull request number to comment on, as an integer. It defaults to the current pull request.</dd>
+
+    <dt>`template`</dt>
+    <dd>
+        (Optional) The name of a [template file](#templates) to render into the comment body, instead of passing
+        `body`. It is a file name under [`ci.templates.base_path`](/cli/configuration/ci/templates), or an absolute
+        path.
+    </dd>
+
+    <dt>`data`</dt>
+    <dd>
+        (Optional) A dict that becomes the template context. Keys are read in the template as `.key`. Passing `data`
+        without `template` renders the template that [`ci.comments.template`](/cli/configuration/ci/comments) names.
+    </dd>
 </dl>
+
+## Templates
+
+A script can keep the layout of a comment in a template file and pass only the values:
+
+- An explicit `template=` is used when given.
+- Otherwise, a call that passes `data` renders the template that [`ci.comments.template`](/cli/configuration/ci/comments)
+  names. A call with neither `template` nor `data` posts `body` as written.
+- The name is resolved against [`ci.templates.base_path`](/cli/configuration/ci/templates). When no file has exactly
+  that name, the name with a `.md` suffix is tried.
+- Templates use Go template syntax with the same functions as the built-in plan templates. The `data` dict is the
+  template context.
+- The `key`, `behavior`, and `pr` arguments work the same with a rendered body.
+
+See [script report templates](/cli/configuration/ci/templates#script-report-templates) for the configuration.
 
 ## Returns
 
@@ -65,8 +96,9 @@ A struct that describes the comment:
 - The body is masked before it leaves the process.
 - Comments are opt-in. In CI the call is gated by [`ci.comments.enabled`](/cli/configuration/ci/comments), which is
   off by default. When it is off, the call warns, renders locally, and the script continues.
-- Under `pull_request_target` and `workflow_run`, the comment is not posted unless `ci.allow_unsafe_fork_execution`
-  is `true`. The call warns and renders locally instead. See the [fork gate](/functions/automation/ci#fork-gate).
+- Under `pull_request_target` and `workflow_run`, the comment is held only when the pull request comes from a fork
+  (`ci.context.pr.fork`), unless `ci.allow_unsafe_fork_execution` is `true`. A held call warns and renders locally
+  instead. See the [fork gate](/functions/automation/ci#fork-gate).
 
 ## Examples
 
@@ -91,11 +123,26 @@ ui.info("Posted " + result.url)
 ci.comment("Rebased onto main.", behavior = "create")
 ```
 
+### Render a comment from a template
+
+```text title=".atmos/ci/templates/release.md"
+### Release {{ .version }}
+
+Deployed to {{ .stack }}.
+```
+
+```python
+ci.comment(template = "release.md", data = {"version": "1.4.0", "stack": "prod"}, key = "release")
+```
+
 ## Errors
 
 - An API error, a missing token, or a pull request number that does not exist fails the script. See
   [errors](/functions/automation/ci#errors).
 - An unknown `behavior` fails with an argument error that names `ci.comment`.
+- Passing `body` together with `template` or `data`, a `data` value that is not a dict, or `data` without any template
+  to render fails with an argument error.
+- A template that does not exist, or that fails to render, fails the script.
 
 ## Related
 

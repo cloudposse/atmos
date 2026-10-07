@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ansi"
+	ci "github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -99,7 +100,7 @@ func (p *Plugin) onAfterTerraformAggregate(ctx *plugin.HookContext) error {
 func (p *Plugin) onBeforeTerraformAggregate(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeTerraformAggregate")()
 
-	if !isCheckEnabled(ctx.Config) {
+	if !ci.ChecksEnabled(ctx.Config) {
 		return nil
 	}
 
@@ -131,13 +132,13 @@ func normalizeTerraformPlanPending(value any) (schema.TerraformPlanCIPendingSet,
 
 // writeAggregateArtifacts serializes all CI provider side effects for an aggregate run.
 func (p *Plugin) writeAggregateArtifacts(ctx *plugin.HookContext, aggregate *terraformPlanAggregate) error {
-	if isSummaryEnabled(ctx.Config) {
+	if ci.SummaryEnabled(ctx.Config) {
 		if err := p.writeAggregateSummary(ctx, aggregate.Markdown); err != nil {
 			log.Warn("CI aggregate summary failed", "error", err)
 		}
 	}
 
-	if isOutputEnabled(ctx.Config) {
+	if ci.OutputEnabled(ctx.Config) {
 		if err := p.writeAggregateOutputs(ctx, aggregate); err != nil {
 			log.Warn("CI aggregate output failed", "error", err)
 		}
@@ -147,11 +148,11 @@ func (p *Plugin) writeAggregateArtifacts(ctx *plugin.HookContext, aggregate *ter
 		return err
 	}
 
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		p.updateAggregateCheckRuns(ctx, aggregate)
 	}
 
-	if isCommentsEnabled(ctx.Config) {
+	if ci.CommentsEnabled(ctx.Config) {
 		if err := p.postAggregateComment(ctx, aggregate.Markdown); err != nil {
 			logCommentError("CI aggregate PR comment skipped", err)
 		}

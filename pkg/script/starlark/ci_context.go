@@ -32,7 +32,8 @@ func (s *session) ciContextValue() starlark.Value {
 	return s.ciCtxValue
 }
 
-// contextValue converts the run context. `local` is true when the generic fallback provider
+// contextValue converts the run context. `pr.fork` is true when the pull request head lives in a
+// fork of the base repository, the condition under which elevated events hold comments and checks. `local` is true when the generic fallback provider
 // supplied the context, meaning no CI provider was detected and writes render locally. It does not
 // reflect configuration switches: a detected provider whose switch is off still reports false, and
 // the write itself warns when it is rendered locally.
@@ -44,6 +45,7 @@ func contextValue(c *ci.Context) starlark.Value {
 			"head":   starlark.String(c.PullRequest.HeadRef),
 			"base":   starlark.String(c.PullRequest.BaseRef),
 			"url":    starlark.String(c.PullRequest.URL),
+			"fork":   starlark.Bool(c.PullRequest.Fork),
 		})
 	}
 	return frozenStruct("context", starlark.StringDict{

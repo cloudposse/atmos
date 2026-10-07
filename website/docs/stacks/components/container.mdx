@@ -148,6 +148,24 @@ Each instance is named and labeled from its canonical address `<stack>/container
 
 Containers in the same stack automatically join a shared network and can resolve each other by a `<stack>-<component>` DNS alias, with no configuration required — see [Networking](/components/container#networking).
 
+## CI Reporting
+
+When [CI](/cli/configuration/ci) is enabled, `atmos container build` and `atmos container push` write a summary for each image to the job summary: the tag, digest, image ID, runtime settings, environment variables, labels, and layers. Each summary is also posted to one pull request comment per image, updated in place on later runs, when `ci.comments.enabled` is on.
+
+To change the Markdown, point `ci.templates.container.image` at a template file under `ci.templates.base_path`:
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  templates:
+    base_path: ".atmos/ci/templates"
+    container:
+      image: "image.md"
+```
+</File>
+
+See [CI templates](/cli/configuration/ci/templates) for the template syntax and the data available to the image template.
+
 ## Related
 
 - [Using Containers](/components/container) — Conceptual overview and command walkthrough

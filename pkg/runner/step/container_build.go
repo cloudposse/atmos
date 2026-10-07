@@ -83,7 +83,7 @@ func (h *ContainerHandler) executeBuild(ctx context.Context, step *schema.Workfl
 			stepResult.WithMetadata("image_id", info.ID).
 				WithMetadata("repo_tags", info.RepoTags).
 				WithMetadata("repo_digests", info.RepoDigests)
-			writeContainerImageSummary(vars.AtmosConfig, info, container.ImageSummaryOptions{Image: image})
+			writeContainerImageSummary(ctx, vars.AtmosConfig, info, container.ImageSummaryOptions{Image: image})
 		} else if inspectErr != nil {
 			log.Debug("container step: failed to inspect built image for CI summary", "image", image, "error", inspectErr)
 		}

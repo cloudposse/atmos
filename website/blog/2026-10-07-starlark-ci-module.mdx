@@ -95,6 +95,23 @@ On GitHub Actions, give the job `pull-requests: write` and set
 `ci.comments.enabled: true`. The [`ci` reference](/functions/automation/ci)
 covers every call, the gating rules, and the local rendering.
 
+## Templates, image comments, and fork pull requests {#templates-and-images}
+
+Reports that several scripts share do not have to be assembled from strings. Pass
+`template="plan.md"` and `data={...}` to `ci.summary` or `ci.comment` and Atmos renders the
+file from `ci.templates.base_path` with the same template engine the built-in plan summaries
+use. Set `ci.summary.template` or `ci.comments.template` once and a call that passes only
+`data` picks the configured file.
+
+Container builds and pushes already wrote an image summary to the job. They now go through
+the same path, so with `ci.comments.enabled` on, each image also gets one pull request
+comment that later runs update in place, and the Markdown can be replaced with
+`ci.templates.container.image`.
+
+The hold on comments and checks under `pull_request_target` and `workflow_run` applies only
+when the pull request comes from a fork. A same-repository pull request on those events posts
+normally, and a script can read `ci.context.pr.fork` to decide for itself.
+
 ## Get Involved
 
 Try moving the reporting lines of one pipeline step into a script, and

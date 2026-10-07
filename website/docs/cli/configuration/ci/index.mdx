@@ -154,6 +154,7 @@ GitHub Actions workflow linting is available through [`atmos ci validate`](/cli/
 | `ATMOS_CI_GROUPS_MODE` | Override `ci.groups.mode` (`auto`/`invocation`/`off`) |
 | `ATMOS_CI_GITHUB_API_URL` | Override the GitHub REST API base URL used by the GitHub CI provider (for example, GitHub Enterprise Server: `https://github.example.com/api/v3`). Takes precedence over `GITHUB_API_URL`. An invalid URL is an error. |
 | `ATMOS_CI_PR` | Pull request number for the generic provider (positive integer). Used when comments or checks target a PR outside GitHub Actions. |
+| `ATMOS_CI_PR_FORK` | Whether the pull request head lives in a fork, for the generic provider (`true` or `false`). Comments and checks are held on elevated events only for fork pull requests. |
 | `ATMOS_CI_BASE_REF` | Base branch for the generic provider. Also read when resolving the base commit for affected detection. |
 | `ATMOS_CI_EVENT` | Event name for the generic provider (for example, `push` or `pull_request`) |
 | `ATMOS_CI_RUN_ID` | Run or job ID for the generic provider. Falls back to `CI_JOB_ID`, then `BUILD_ID`. |

@@ -57,7 +57,7 @@ func TestPluginOnAfterOperation(t *testing.T) {
 	disabled := false
 	writer := &fakeWriter{}
 	require.NoError(t, p.onAfterOperation(&plugin.HookContext{
-		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Summary: schema.CISummaryConfig{Enabled: &disabled}}},
+		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true, Summary: schema.CISummaryConfig{Enabled: &disabled}}},
 		Provider:       fakeProvider{writer: writer},
 		TemplateLoader: templates.NewLoader(nil),
 		Command:        "apply",
@@ -66,6 +66,7 @@ func TestPluginOnAfterOperation(t *testing.T) {
 
 	// Nil output writer -> no-op.
 	require.NoError(t, p.onAfterOperation(&plugin.HookContext{
+		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider:       fakeProvider{},
 		TemplateLoader: templates.NewLoader(nil),
 		Command:        "apply",
@@ -74,6 +75,7 @@ func TestPluginOnAfterOperation(t *testing.T) {
 	// An empty command resolves to an empty template name -> no-op.
 	writer = &fakeWriter{}
 	require.NoError(t, p.onAfterOperation(&plugin.HookContext{
+		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider:       fakeProvider{writer: writer},
 		TemplateLoader: templates.NewLoader(nil),
 		Command:        "",
@@ -83,6 +85,7 @@ func TestPluginOnAfterOperation(t *testing.T) {
 	// Enabled with a known command renders and writes the summary.
 	writer = &fakeWriter{}
 	require.NoError(t, p.onAfterOperation(&plugin.HookContext{
+		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider:       fakeProvider{writer: writer},
 		TemplateLoader: templates.NewLoader(nil),
 		Command:        "apply",
@@ -94,7 +97,7 @@ func TestPluginOnAfterOperation(t *testing.T) {
 	// An explicit summary template name overrides the command default.
 	writer = &fakeWriter{}
 	require.NoError(t, p.onAfterOperation(&plugin.HookContext{
-		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Summary: schema.CISummaryConfig{Template: "diff"}}},
+		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true, Summary: schema.CISummaryConfig{Template: "diff"}}},
 		Provider:       fakeProvider{writer: writer},
 		TemplateLoader: templates.NewLoader(nil),
 		Command:        "apply",
@@ -105,21 +108,14 @@ func TestPluginOnAfterOperation(t *testing.T) {
 	// A write failure propagates.
 	sentinel := errors.New("write failed")
 	require.ErrorIs(t, p.onAfterOperation(&plugin.HookContext{
+		Config:         &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider:       fakeProvider{writer: &fakeWriter{err: sentinel}},
 		TemplateLoader: templates.NewLoader(nil),
 		Command:        "apply",
 	}), sentinel)
 }
 
-func TestIsSummaryEnabledAndTitle(t *testing.T) {
-	assert.True(t, isSummaryEnabled(nil))
-	assert.True(t, isSummaryEnabled(&schema.AtmosConfiguration{}))
-
-	disabled := false
-	assert.False(t, isSummaryEnabled(&schema.AtmosConfiguration{
-		CI: schema.CIConfig{Summary: schema.CISummaryConfig{Enabled: &disabled}},
-	}))
-
+func TestTitle(t *testing.T) {
 	assert.Equal(t, "Helmfile", title(""))
 	assert.Equal(t, "Apply", title("apply"))
 }

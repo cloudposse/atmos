@@ -283,13 +283,7 @@ func TestExecuteBuild_WritesCISummaryWhenEnabled(t *testing.T) {
 		"build": map[string]any{"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}},
 	}
 	withStubsConfig(t, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, section, nil, rt)
-	var summaries []string
-	prev := writeComponentStepSummary
-	writeComponentStepSummary = func(content string) error {
-		summaries = append(summaries, content)
-		return nil
-	}
-	t.Cleanup(func() { writeComponentStepSummary = prev })
+	reporter, summaries, comments := useMockReporter(t, ctrl)
 
 	gomock.InOrder(
 		rt.EXPECT().Build(gomock.Any(), gomock.Any()).Return(nil),
@@ -299,11 +293,15 @@ func TestExecuteBuild_WritesCISummaryWhenEnabled(t *testing.T) {
 			RepoDigests: []string{"img@sha256:digest"},
 		}, nil),
 	)
+	expectSummaryAndComment(reporter, summaries, comments, nil)
 
 	require.NoError(t, ExecuteBuild(context.Background(), infoFor("api")))
-	require.Len(t, summaries, 1)
-	assert.Contains(t, summaries[0], "## 🐳 img:1")
-	assert.Contains(t, summaries[0], "| Digest | `sha256:digest` |")
+	require.Len(t, *summaries, 1)
+	assert.Contains(t, (*summaries)[0], "## 🐳 img:1")
+	assert.Contains(t, (*summaries)[0], "| Digest | `sha256:digest` |")
+	require.Len(t, *comments, 1)
+	assert.Equal(t, "container:image:img:1", (*comments)[0].Key)
+	assert.Equal(t, (*summaries)[0], (*comments)[0].Body)
 }
 
 func TestExecuteBuild_SkipsCISummaryWhenDisabled(t *testing.T) {
@@ -322,6 +320,8 @@ func TestExecuteBuild_SkipsCISummaryWhenDisabled(t *testing.T) {
 			},
 		},
 	}, section, nil, rt)
+	// The mock has no expectations, so any reporter call fails the test.
+	useMockReporter(t, ctrl)
 
 	rt.EXPECT().Build(gomock.Any(), gomock.Any()).Return(nil)
 
@@ -329,54 +329,27 @@ func TestExecuteBuild_SkipsCISummaryWhenDisabled(t *testing.T) {
 }
 
 func TestWriteImageSummarySkipsWhenCIUnavailable(t *testing.T) {
-	prev := writeComponentStepSummary
-	called := false
-	writeComponentStepSummary = func(string) error {
-		called = true
-		return nil
-	}
-	t.Cleanup(func() { writeComponentStepSummary = prev })
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	// The mock has no expectations, so any reporter call fails the test.
+	useMockReporter(t, ctrl)
 
-	writeImageSummary(nil, &ctr.ImageInfo{RepoTags: []string{"img:1"}}, ctr.ImageSummaryOptions{Image: "img:1"})
-	writeImageSummary(&schema.AtmosConfiguration{}, &ctr.ImageInfo{RepoTags: []string{"img:1"}}, ctr.ImageSummaryOptions{Image: "img:1"})
-	writeImageSummary(&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, nil, ctr.ImageSummaryOptions{Image: "img:1"})
-
-	assert.False(t, called)
-}
-
-func TestWriteImageSummaryIgnoresWriteError(t *testing.T) {
-	prev := writeComponentStepSummary
-	writeComponentStepSummary = func(string) error {
-		return assert.AnError
-	}
-	t.Cleanup(func() { writeComponentStepSummary = prev })
-
-	assert.NotPanics(t, func() {
-		writeImageSummary(
-			&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
-			&ctr.ImageInfo{RepoTags: []string{"img:1"}},
-			ctr.ImageSummaryOptions{Image: "img:1"},
-		)
-	})
+	ctx := context.Background()
+	writeImageSummary(ctx, nil, &ctr.ImageInfo{RepoTags: []string{"img:1"}}, ctr.ImageSummaryOptions{Image: "img:1"})
+	writeImageSummary(ctx, &schema.AtmosConfiguration{}, &ctr.ImageInfo{RepoTags: []string{"img:1"}}, ctr.ImageSummaryOptions{Image: "img:1"})
+	writeImageSummary(ctx, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, nil, ctr.ImageSummaryOptions{Image: "img:1"})
 }
 
 func TestInspectAndWriteImageSummarySkipsInspectFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	rt := NewMockRuntime(ctrl)
-	prev := writeComponentStepSummary
-	called := false
-	writeComponentStepSummary = func(string) error {
-		called = true
-		return nil
-	}
-	t.Cleanup(func() { writeComponentStepSummary = prev })
+	// The mock has no expectations, so any reporter call fails the test.
+	useMockReporter(t, ctrl)
 
 	rt.EXPECT().ImageInspect(gomock.Any(), "img:1").Return(nil, assert.AnError)
 
 	inspectAndWriteImageSummary(context.Background(), rt, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, "img:1", "sha256:digest")
-
-	assert.False(t, called)
 }
 
 func TestExecutePush_CallsRuntime(t *testing.T) {
