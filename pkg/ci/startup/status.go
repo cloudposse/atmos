@@ -97,7 +97,10 @@ func printStatusLines(atmosConfig *schema.AtmosConfiguration) {
 		ui.Warning(msg)
 
 		// Also surface this as a real GitHub Actions annotation (not just a
-		// console line) so it shows up in the PR Checks/Files UI.
+		// console line) so it shows up in the PR Checks/Files UI. The annotation
+		// is written to stderr (the UI channel), not stdout (the data channel),
+		// so it never pollutes the JSON/YAML that downstream consumers capture
+		// from stdout. See pkg/ci/providers/github/annotations.go and #3309.
 		_ = github.NewProvider().Annotate([]provider.Annotation{{
 			Level:   provider.AnnotationWarning,
 			Title:   "Deprecated GitHub Action",
