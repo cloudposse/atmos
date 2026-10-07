@@ -174,7 +174,8 @@ provision:
     - **Valid values:** `global` or `account-regional`, as defined by Amazon S3. See
       [Namespaces for general purpose buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html).
     - **Default:** unset (the parameter is omitted from the request, so S3 uses its default namespace)
-    - **Applies to:** `s3` backends only (other backend types ignore it)
+    - **Applies to:** `s3` backends only. Stack manifest validation rejects it when `backend_type` is set to a different
+      backend type, and other backend types ignore it at runtime.
   </dd>
 </dl>
 
