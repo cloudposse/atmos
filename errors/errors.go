@@ -1487,6 +1487,9 @@ var (
 	ErrCICommentListFailed        = errors.New("failed to list PR comments")
 	ErrCICommentUpdateFailed      = errors.New("failed to update PR comment")
 	ErrCICommentNotFound          = errors.New("PR comment not found")
+	ErrCIEnvWriteFailed           = errors.New("failed to write CI environment file")
+	ErrCIMaskFailed               = errors.New("failed to register CI mask value")
+	ErrCIPullRequestUnknown       = errors.New("CI pull request number is unknown")
 	ErrGitHubTokenNotFound        = errors.New("GitHub token not found")
 
 	// Planfile storage errors.

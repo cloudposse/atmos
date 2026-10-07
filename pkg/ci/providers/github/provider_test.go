@@ -108,6 +108,34 @@ func TestProvider_Context(t *testing.T) {
 	})
 }
 
+func TestProvider_Context_RunURL(t *testing.T) {
+	tests := []struct {
+		name       string
+		serverURL  string
+		repository string
+		runID      string
+		want       string
+	}{
+		{name: "all parts present", serverURL: "https://github.com", repository: "owner/repo", runID: "12345", want: "https://github.com/owner/repo/actions/runs/12345"},
+		{name: "enterprise server host honored", serverURL: "https://ghe.example.com", repository: "owner/repo", runID: "7", want: "https://ghe.example.com/owner/repo/actions/runs/7"},
+		{name: "missing server URL", serverURL: "", repository: "owner/repo", runID: "12345", want: ""},
+		{name: "missing repository", serverURL: "https://github.com", repository: "", runID: "12345", want: ""},
+		{name: "missing run ID", serverURL: "https://github.com", repository: "owner/repo", runID: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GITHUB_SERVER_URL", tt.serverURL)
+			t.Setenv("GITHUB_REPOSITORY", tt.repository)
+			t.Setenv("GITHUB_RUN_ID", tt.runID)
+
+			ctx, err := NewProvider().Context()
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, ctx.RunURL)
+		})
+	}
+}
+
 func TestResolveGitSHA(t *testing.T) {
 	t.Run("prefers git HEAD over GITHUB_SHA", func(t *testing.T) {
 		t.Setenv("GITHUB_SHA", "env-sha-value")

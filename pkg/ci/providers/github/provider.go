@@ -113,6 +113,8 @@ func (p *Provider) Context() (*provider.Context, error) {
 		ctx.CloneURL = ctx.ServerURL + "/" + ctx.Repository + ".git"
 	}
 
+	ctx.RunURL = runURL(ctx.Repository, ctx.RunID)
+
 	// Set branch name (prefer GITHUB_HEAD_REF for PRs, fall back to GITHUB_REF_NAME).
 	branch := os.Getenv("GITHUB_HEAD_REF") // PR head branch.
 	if branch == "" {
@@ -131,6 +133,18 @@ func (p *Provider) Context() (*provider.Context, error) {
 	ctx.ElevatedEvent = ctx.EventName == "pull_request_target" || ctx.EventName == "workflow_run"
 
 	return ctx, nil
+}
+
+// runURL composes the GitHub Actions run URL from the server URL, repository,
+// and run ID. The presence check on the raw GITHUB_SERVER_URL env var (rather
+// than RepoEndpoints, which always resolves to a default) is what detects "not
+// running in GitHub Actions"; the actual host value comes from RepoEndpoints so
+// a GitHub Enterprise Server host is honored. It returns "" when any part is missing.
+func runURL(repository, runID string) string {
+	if os.Getenv("GITHUB_SERVER_URL") == "" || repository == "" || runID == "" {
+		return ""
+	}
+	return ghtoken.RepoEndpoints().ServerURL + "/" + repository + "/actions/runs/" + runID
 }
 
 // resolveGitSHA returns the current commit SHA by first trying git HEAD,

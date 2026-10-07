@@ -649,11 +649,7 @@ func ciEnabled(ctx *ExecContext) bool {
 // ciSummaryEnabled reports whether the job step summary should be written.
 // Defaults to true (nil) when ci.enabled, matching ci.summary's default.
 func ciSummaryEnabled(ctx *ExecContext) bool {
-	if !ciEnabled(ctx) {
-		return false
-	}
-	e := ctx.AtmosConfig.CI.Summary.Enabled
-	return e == nil || *e
+	return ctx != nil && ci.SummaryEnabled(ctx.AtmosConfig)
 }
 
 // ciAnnotationsEnabled reports whether inline annotations should be emitted.

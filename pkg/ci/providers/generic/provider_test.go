@@ -88,9 +88,7 @@ func TestOutputWriter(t *testing.T) {
 
 		content, err := os.ReadFile(outputFile)
 		require.NoError(t, err)
-		assert.Contains(t, string(content), "multiline<<EOF")
-		assert.Contains(t, string(content), "line1\nline2\nline3")
-		assert.Contains(t, string(content), "EOF")
+		assert.Equal(t, "multiline<<ATMOS_EOF_multiline\nline1\nline2\nline3\nATMOS_EOF_multiline\n", string(content))
 	})
 
 	t.Run("WriteSummary to file", func(t *testing.T) {

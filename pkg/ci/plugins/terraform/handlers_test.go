@@ -2521,3 +2521,59 @@ func TestOnAfterPlan_CommentRespectsCreateBehavior(t *testing.T) {
 	require.Len(t, mp.commentCalls, 1)
 	assert.Equal(t, provider.CommentBehaviorCreate, mp.commentCalls[0].Behavior)
 }
+
+func TestRunURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		hookCtx *plugin.HookContext
+		want    string
+	}{
+		{name: "nil hook context", hookCtx: nil, want: ""},
+		{name: "nil CI context", hookCtx: &plugin.HookContext{}, want: ""},
+		{name: "empty run URL", hookCtx: &plugin.HookContext{CICtx: &provider.Context{}}, want: ""},
+		{
+			name:    "populated",
+			hookCtx: &plugin.HookContext{CICtx: &provider.Context{RunURL: "https://github.com/owner/repo/actions/runs/1"}},
+			want:    "https://github.com/owner/repo/actions/runs/1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, runURL(tt.hookCtx))
+		})
+	}
+}
+
+// TestCreateCheckRun_DetailsURLFromCIContext verifies the check run's details
+// URL comes from the CI context's RunURL, and is empty when no CI context exists.
+func TestCreateCheckRun_DetailsURLFromCIContext(t *testing.T) {
+	const url = "https://github.com/owner/repo/actions/runs/9"
+	tests := []struct {
+		name  string
+		ciCtx *provider.Context
+		want  string
+	}{
+		{name: "populated run URL", ciCtx: &provider.Context{RunURL: url}, want: url},
+		{name: "nil CI context", ciCtx: nil, want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Plugin{}
+			mp := newMockProvider()
+
+			ctx := &plugin.HookContext{
+				Config:   &schema.AtmosConfiguration{},
+				Provider: mp,
+				CICtx:    tt.ciCtx,
+				Command:  "plan",
+				Info:     &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+			}
+
+			require.NoError(t, p.createCheckRun(ctx))
+			require.Len(t, mp.checkRunCalls, 1)
+			assert.Equal(t, tt.want, mp.checkRunCalls[0].DetailsURL)
+		})
+	}
+}

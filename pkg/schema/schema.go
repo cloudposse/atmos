@@ -1436,7 +1436,8 @@ type CIChecksStatusesConfig struct {
 // GitHub: PR comments, GitLab: MR notes.
 //
 // Enabled is *bool so callers can distinguish "unset" (nil, default applies)
-// from explicit false. Default is true when omitted; see `isCommentsEnabled`.
+// from explicit false. Comments are opt-in: nil is treated as false (disabled);
+// see `ci.CommentsEnabled`.
 type CICommentsConfig struct {
 	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert

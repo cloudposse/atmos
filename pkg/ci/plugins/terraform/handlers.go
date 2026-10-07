@@ -16,7 +16,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -685,7 +684,7 @@ func (p *Plugin) createCheckRun(ctx *plugin.HookContext) error {
 		Name:       name,
 		Status:     provider.CheckRunStateInProgress,
 		Title:      fmt.Sprintf("%s in progress...", ctx.Command),
-		DetailsURL: getGitHubActionsRunURL(),
+		DetailsURL: runURL(ctx),
 	}
 
 	if ctx.CICtx != nil {
@@ -729,7 +728,7 @@ func (p *Plugin) updateCheckRun(ctx *plugin.HookContext, result *plugin.OutputRe
 			Name:       name,
 			Status:     status,
 			Title:      buildStatusDescription(ctx.Command, result),
-			DetailsURL: getGitHubActionsRunURL(),
+			DetailsURL: runURL(ctx),
 		}
 
 		if ctx.CICtx != nil {
@@ -793,7 +792,7 @@ func (p *Plugin) createPerOperationStatuses(ctx *plugin.HookContext, result *plu
 			Name:       opName,
 			Status:     provider.CheckRunStateSuccess,
 			Title:      formatResourceCount(op.count),
-			DetailsURL: getGitHubActionsRunURL(),
+			DetailsURL: runURL(ctx),
 		}
 
 		if ctx.CICtx != nil {
@@ -1090,19 +1089,15 @@ func formatResourceCount(count int) string {
 	return fmt.Sprintf("%d resources", count)
 }
 
-// getGitHubActionsRunURL constructs the GitHub Actions run URL from environment variables.
-// The presence check on the raw GITHUB_SERVER_URL env var (rather than RepoEndpoints, which
-// always resolves to a default) is what detects "not running in GitHub Actions"; the actual
-// host value comes from RepoEndpoints so a GitHub Enterprise Server host is honored.
-func getGitHubActionsRunURL() string {
-	repo := os.Getenv("GITHUB_REPOSITORY")
-	runID := os.Getenv("GITHUB_RUN_ID")
-
-	if os.Getenv("GITHUB_SERVER_URL") == "" || repo == "" || runID == "" {
+// runURL returns the CI run URL carried by the hook context's CI context.
+// It returns an empty string when the hook context or its CI context is nil
+// (buildHookContext leaves CICtx nil when the CI context cannot be resolved)
+// or when the provider cannot determine a run URL.
+func runURL(hookCtx *plugin.HookContext) string {
+	if hookCtx == nil || hookCtx.CICtx == nil {
 		return ""
 	}
-
-	return ghtoken.RepoEndpoints().ServerURL + "/" + repo + "/actions/runs/" + runID
+	return hookCtx.CICtx.RunURL
 }
 
 // logCheckRunError logs check run errors at an appropriate level.

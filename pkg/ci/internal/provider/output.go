@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -50,7 +50,7 @@ func NewFileOutputWriter(outputPath, summaryPath string) *FileOutputWriter {
 }
 
 // WriteOutput writes a key-value pair to the output file.
-// Format: key=value (single line) or key<<EOF\nvalue\nEOF (multiline).
+// Format: key=value (single line) or key<<ATMOS_EOF_key\nvalue\nATMOS_EOF_key (multiline).
 func (w *FileOutputWriter) WriteOutput(key, value string) error {
 	defer perf.Track(nil, "provider.FileOutputWriter.WriteOutput")()
 
@@ -58,28 +58,7 @@ func (w *FileOutputWriter) WriteOutput(key, value string) error {
 		return nil
 	}
 
-	f, err := os.OpenFile(w.OutputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, outputFilePermissions)
-	if err != nil {
-		return fmt.Errorf("%w: failed to open output file: %w", errUtils.ErrCIOutputWriteFailed, err)
-	}
-	defer f.Close()
-
-	// Use heredoc format for multiline values.
-	if strings.Contains(value, "\n") {
-		delimiter := "EOF"
-		// Ensure delimiter doesn't appear in value.
-		for strings.Contains(value, delimiter) {
-			delimiter += "_"
-		}
-		_, err = fmt.Fprintf(f, "%s<<%s\n%s\n%s\n", key, delimiter, value, delimiter)
-	} else {
-		_, err = fmt.Fprintf(f, "%s=%s\n", key, value)
-	}
-
-	if err != nil {
-		return fmt.Errorf("%w: failed to write output: %w", errUtils.ErrCIOutputWriteFailed, err)
-	}
-	return nil
+	return AppendFile(w.OutputPath, ghactions.FormatValue(key, value), errUtils.ErrCIOutputWriteFailed)
 }
 
 // WriteSummary appends content to the job summary file.
@@ -90,15 +69,22 @@ func (w *FileOutputWriter) WriteSummary(content string) error {
 		return nil
 	}
 
-	f, err := os.OpenFile(w.SummaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, outputFilePermissions)
+	return AppendFile(w.SummaryPath, MaskPublishedContent(content), errUtils.ErrCISummaryWriteFailed)
+}
+
+// AppendFile appends content to the file at path, creating it when needed. Open and
+// write failures are wrapped in sentinel so callers get the right CI error kind.
+func AppendFile(path, content string, sentinel error) error {
+	defer perf.Track(nil, "provider.AppendFile")()
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, outputFilePermissions)
 	if err != nil {
-		return fmt.Errorf("%w: failed to open summary file: %w", errUtils.ErrCISummaryWriteFailed, err)
+		return fmt.Errorf("%w: failed to open %s: %w", sentinel, path, err)
 	}
 	defer f.Close()
 
-	_, err = f.WriteString(MaskPublishedContent(content))
-	if err != nil {
-		return fmt.Errorf("%w: failed to write summary: %w", errUtils.ErrCISummaryWriteFailed, err)
+	if _, err := f.WriteString(content); err != nil {
+		return fmt.Errorf("%w: failed to write %s: %w", sentinel, path, err)
 	}
 	return nil
 }
