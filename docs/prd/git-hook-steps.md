@@ -5,7 +5,7 @@
 **Status:** Implemented in the current PR stack; this does not identify a released version.
 
 **Related:** [Git operations](git-ops.md), [automation language](starlark-automation-and-command-testing.md),
-[automation SDK](automation-sdk.md), [component lifecycle hook steps](hooks-step-types.md).
+[Atmos SDK](atmos-sdk.md), [component lifecycle hook steps](hooks-step-types.md).
 
 ## Problem
 

@@ -1514,7 +1514,7 @@ project directory; pass collected answers with templated `env` values such as
 `NAME: '{{ .Answers.name }}'`. Scripts can call the step library and fail generation
 with a structured error. This does not add stack/component context to scaffold hooks.
 The scaffold hook regression test exercises answers, filesystem access, step calls,
-and script failure propagation. See [the automation SDK](automation-sdk.md).
+and script failure propagation. See [the Atmos SDK](atmos-sdk.md).
 
 Future: `command`/`store`/`git` scaffold hook kinds, once/if there's a real
 need to run them outside a stack/component context.

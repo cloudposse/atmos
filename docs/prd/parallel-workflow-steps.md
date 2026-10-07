@@ -210,7 +210,7 @@ steps:
   `MaxConcurrency`, `Matrix`, `Fail`. Structured output is `ParallelOutputConfig` (`Mode`, `Order`,
   `ShowSummary`, `Prefix`) and failure is `ParallelFailConfig` (`Mode`, `MaxFailures`).
 - **Validation** — `pkg/schema/task_validate.go`: `validateConcurrentChild` enforces the
-  non-interactive `shell`/`atmos`/`sleep` constraint; `validateNeedsGraph` detects cycles.
+  non-interactive `shell`/`atmos`/`script`/`sleep` constraint; `validateNeedsGraph` detects cycles.
 
 ---
 
