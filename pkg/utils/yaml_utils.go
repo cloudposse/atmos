@@ -889,6 +889,9 @@ func UnmarshalYAMLFromNode[T any](atmosConfig *schema.AtmosConfiguration, node *
 	if atmosConfig == nil {
 		return *new(T), ErrNilAtmosConfig
 	}
+	if atmosConfig.Settings.YAML.KeyDelimiter != "" {
+		expand.KeyDelimiters(node, atmosConfig.Settings.YAML.KeyDelimiter)
+	}
 	return decodeYAMLNode[T](atmosConfig, node, file)
 }
 
