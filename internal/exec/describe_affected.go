@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
@@ -24,9 +25,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// affectedLabelsSource names both places a describe affected --labels value can come from,
+// for error messages that cannot tell which one supplied it.
+const affectedLabelsSource = "--labels (or ATMOS_LABELS)"
 
 var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--base', '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 
@@ -55,13 +61,20 @@ type DescribeAffectedCmdArgs struct {
 	ProcessYamlFunctions        bool
 	Skip                        []string
 	ExcludeLocked               bool
-	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
-	AuthDisabled                bool             // True when --identity=false (or alias) explicitly disables authentication; routes stack resolution to ExecuteDescribeStacksWithAuthDisabled.
-	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
-	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
-	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
-	ErrorMode                   string           // How to handle recoverable errors: "strict" (default), "warn", or "silent".
-	Cmd                         *cobra.Command   // The invoking Cobra command, used to derive Flags for the exec-metadata sync capture (proexec.FlagsFromCommand).
+	Tags                        []string          // Keep only components whose `metadata.tags` contain any of these (from --tags).
+	LabelsRaw                   string            // Raw --labels value (comma-separated key=value pairs).
+	Labels                      map[string]string // Parsed --labels: keep only components whose `metadata.labels` contain all of these.
+	TagsEnvVar                  string            // Environment variable that supplied Tags (for example ATMOS_TAGS); empty when Tags came from the command line or are unset.
+	LabelsEnvVar                string            // Environment variable that supplied Labels; empty when Labels came from the command line or are unset.
+	Flatten                     bool              // Lift every dependent into the top-level list as `affected: dependent` (from --flatten); requires IncludeDependents.
+	FlattenEnvVar               string            // Environment variable that supplied Flatten; empty when it came from the command line or is unset.
+	AuthManager                 auth.AuthManager  // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled                bool              // True when --identity=false (or alias) explicitly disables authentication; routes stack resolution to ExecuteDescribeStacksWithAuthDisabled.
+	HeadSHAOverride             string            // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
+	CIEventType                 string            // CI event type (e.g., "pull_request", "push") for upload validation.
+	TargetBranch                string            // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
+	ErrorMode                   string            // How to handle recoverable errors: "strict" (default), "warn", or "silent".
+	Cmd                         *cobra.Command    // The invoking Cobra command, used to derive Flags for the exec-metadata sync capture (proexec.FlagsFromCommand).
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -80,7 +93,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
-		excludeLocked bool,
+		filter AffectedFilter,
 		authManager auth.AuthManager,
 		authDisabled bool,
 		errOptions DescribeStacksErrorOptions,
@@ -97,7 +110,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
-		excludeLocked bool,
+		filter AffectedFilter,
 		authManager auth.AuthManager,
 		authDisabled bool,
 		errOptions DescribeStacksErrorOptions,
@@ -113,7 +126,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
-		excludeLocked bool,
+		filter AffectedFilter,
 		authManager auth.AuthManager,
 		authDisabled bool,
 		errOptions DescribeStacksErrorOptions,
@@ -129,6 +142,13 @@ type describeAffectedExec struct {
 		authManager auth.AuthManager,
 		authDisabled bool,
 		errOptions DescribeStacksErrorOptions,
+	) error
+	// addDependentsToAffectedWithFilter is used instead of addDependentsToAffected when the `--tags` /
+	// `--labels` selectors are set, because it records each dependent's metadata for the pruning step.
+	addDependentsToAffectedWithFilter func(
+		atmosConfig *schema.AtmosConfiguration,
+		affected *[]schema.Affected,
+		opts *dependentsOptions,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -152,6 +172,7 @@ func NewDescribeAffectedExec(
 		executeDescribeAffectedWithTargetRefClone:    ExecuteDescribeAffectedWithTargetRefCloneWithOptions,
 		executeDescribeAffectedWithTargetRefCheckout: ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions,
 		addDependentsToAffected:                      addDependentsToAffected,
+		addDependentsToAffectedWithFilter:            addDependentsToAffectedWithFilter,
 		printOrWriteToFile:                           printOrWriteToFile,
 		IsTTYSupportForStdout:                        term.IsTTYSupportForStdout,
 		pageCreator:                                  pager.New(),
@@ -184,17 +205,131 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	// describe.error_mode, else "warn".
 	result.ErrorMode = ResolveErrorMode(result.ErrorMode, atmosConfig.Describe.ErrorMode)
 
-	if result.Format != "yaml" && result.Format != "json" && result.Format != "matrix" {
-		return DescribeAffectedCmdArgs{}, ErrInvalidFormat
-	}
-	if result.RepoPath != "" && (result.Base != "" || result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
-		return DescribeAffectedCmdArgs{}, ErrRepoPathConflict
-	}
-	if result.ErrorMode != "strict" && result.ErrorMode != "warn" && result.ErrorMode != "silent" {
-		return DescribeAffectedCmdArgs{}, fmt.Errorf("%w: %q", ErrInvalidErrorMode, result.ErrorMode)
+	if err := validateDescribeAffectedArgs(&result); err != nil {
+		return DescribeAffectedCmdArgs{}, err
 	}
 
 	return result, nil
+}
+
+// validateDescribeAffectedArgs checks the parsed `describe affected` arguments for values and
+// combinations that cannot be honored, and normalizes the --tags / --labels / --flatten values.
+func validateDescribeAffectedArgs(a *DescribeAffectedCmdArgs) error {
+	if err := validateDescribeAffectedBasics(a); err != nil {
+		return err
+	}
+	if err := resolveAffectedSelectors(a); err != nil {
+		return err
+	}
+	return resolveAffectedFlatten(a)
+}
+
+// validateDescribeAffectedBasics checks the output format, the repo-path combination, and the error mode.
+func validateDescribeAffectedBasics(a *DescribeAffectedCmdArgs) error {
+	switch a.Format {
+	case "yaml", "json", "matrix":
+	default:
+		return ErrInvalidFormat
+	}
+	if a.RepoPath != "" && hasGitComparisonFlags(a) {
+		return ErrRepoPathConflict
+	}
+	switch a.ErrorMode {
+	case "strict", "warn", "silent":
+	default:
+		return fmt.Errorf("%w: %q", ErrInvalidErrorMode, a.ErrorMode)
+	}
+	return nil
+}
+
+// hasGitComparisonFlags reports whether any flag that selects a Git comparison target was set,
+// which cannot be combined with --repo-path.
+func hasGitComparisonFlags(a *DescribeAffectedCmdArgs) bool {
+	return a.Base != "" || a.Ref != "" || a.SHA != "" || a.SSHKeyPath != "" || a.SSHKeyPassword != ""
+}
+
+// resolveAffectedSelectors normalizes the --tags and --labels selectors and rejects combinations
+// that cannot be honored. The Atmos Pro upload is intentionally unfiltered, so a selector alongside
+// --upload would filter the printed output while silently uploading everything.
+//
+// A selector that came from an environment variable (ATMOS_TAGS / ATMOS_LABELS) is ambient rather
+// than a request for this run, so with --upload it is dropped with a warning; only a selector typed
+// on the command line is an error.
+func resolveAffectedSelectors(a *DescribeAffectedCmdArgs) error {
+	a.Tags = tags.ParseTagsFlag(strings.Join(a.Tags, ","))
+
+	labels, err := tags.ParseLabelsFlagFrom(a.LabelsRaw, affectedLabelsSource)
+	if err != nil {
+		return err
+	}
+	a.Labels = labels
+
+	if !a.Upload {
+		return nil
+	}
+
+	if len(a.Tags) > 0 && a.TagsEnvVar != "" {
+		ui.Warningf("Ignoring %s: --upload always uploads the unfiltered affected set", a.TagsEnvVar)
+		a.Tags = nil
+	}
+	if len(a.Labels) > 0 && a.LabelsEnvVar != "" {
+		ui.Warningf("Ignoring %s: --upload always uploads the unfiltered affected set", a.LabelsEnvVar)
+		a.Labels = nil
+		a.LabelsRaw = ""
+	}
+
+	if len(a.Tags) > 0 || len(a.Labels) > 0 {
+		return errUtils.Build(fmt.Errorf("%w: --tags/--labels is not supported with --upload (the upload is always unfiltered)", errUtils.ErrInvalidFlag)).
+			WithHint("Run `atmos describe affected --upload` without selectors, and apply --tags/--labels in a separate `describe affected` step for the matrix.").
+			WithHint("To override selectors supplied through ATMOS_TAGS/ATMOS_LABELS for this run, pass --tags= --labels=.").
+			Err()
+	}
+	return nil
+}
+
+// resolveAffectedFlatten rejects --flatten combinations that cannot be honored. Flattening lifts
+// dependents into the top-level list, so it needs --include-dependents, and the Atmos Pro upload is
+// always the unflattened affected set. Upload is checked first because it forces IncludeDependents on.
+//
+// A flatten request that came from ATMOS_DESCRIBE_AFFECTED_FLATTEN is ambient rather than a request
+// for this run, so it is dropped with a warning instead of failing the command.
+func resolveAffectedFlatten(a *DescribeAffectedCmdArgs) error {
+	if !a.Flatten {
+		return nil
+	}
+
+	switch {
+	case a.Upload && a.FlattenEnvVar != "":
+		ui.Warningf("Ignoring %s: --upload always uploads the unflattened affected set", a.FlattenEnvVar)
+		a.Flatten = false
+	case a.Upload:
+		return errUtils.Build(fmt.Errorf("%w: --flatten is not supported with --upload (the upload is always the unflattened affected set)", errUtils.ErrInvalidFlag)).
+			WithHint("Run `atmos describe affected --upload` without --flatten, and use --flatten in a separate `describe affected` step for the matrix.").
+			Err()
+	case !a.IncludeDependents && a.FlattenEnvVar != "":
+		ui.Warningf("Ignoring %s: --flatten requires --include-dependents", a.FlattenEnvVar)
+		a.Flatten = false
+	case !a.IncludeDependents:
+		return errUtils.Build(fmt.Errorf("%w: --flatten requires --include-dependents", errUtils.ErrInvalidFlag)).
+			WithHint("Add --include-dependents so there are dependents to lift into the top-level list.").
+			Err()
+	}
+	return nil
+}
+
+// affectedFilter builds the component filter applied while computing the affected set.
+func (a *DescribeAffectedCmdArgs) affectedFilter() AffectedFilter {
+	return AffectedFilter{ExcludeLocked: a.ExcludeLocked, Tags: a.Tags, Labels: a.Labels}
+}
+
+// findAffectedFilter builds the filter handed to the strategy that computes the affected set. With
+// `--include-dependents` and `--tags` / `--labels`, the selectors are deferred: a component that fails
+// them can still have matching dependents, which are only known once the dependents are resolved, so
+// the selectors are applied afterward by applySelectorsToAffectedForest.
+func (a *DescribeAffectedCmdArgs) findAffectedFilter() AffectedFilter {
+	f := a.affectedFilter()
+	f.DeferSelectors = a.IncludeDependents && f.hasSelectors()
+	return f
 }
 
 // SetDescribeAffectedFlagValueInCliArgs sets the flag values in CLI arguments.
@@ -223,6 +358,9 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"query":                          &describe.Query,
 		"verbose":                        &describe.Verbose,
 		"exclude-locked":                 &describe.ExcludeLocked,
+		"tags":                           &describe.Tags,
+		"labels":                         &describe.LabelsRaw,
+		"flatten":                        &describe.Flatten,
 		"error-mode":                     &describe.ErrorMode,
 	}
 
@@ -279,6 +417,13 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 	if describe.Format == "" {
 		describe.Format = "json"
 	}
+
+	// Record which values came from environment variables rather than the command line, so the
+	// validation can warn about an ambient value instead of failing on it. The lookups are nil-safe
+	// because not every command that reuses this reader registers these flags.
+	describe.TagsEnvVar, _ = flagsPkg.FlagValueFromEnv(flags.Lookup("tags"))
+	describe.LabelsEnvVar, _ = flagsPkg.FlagValueFromEnv(flags.Lookup("labels"))
+	describe.FlattenEnvVar, _ = flagsPkg.FlagValueFromEnv(flags.Lookup("flatten"))
 }
 
 // includeDependentsFlagValue reads the include-dependents flag as a boolean
@@ -429,7 +574,7 @@ func (d *describeAffectedExec) resolveAffectedStacks(a *DescribeAffectedCmdArgs,
 			a.ProcessTemplates,
 			a.ProcessYamlFunctions,
 			a.Skip,
-			a.ExcludeLocked,
+			a.findAffectedFilter(),
 			a.AuthManager,
 			a.AuthDisabled,
 			errOptions,
@@ -447,7 +592,7 @@ func (d *describeAffectedExec) resolveAffectedStacks(a *DescribeAffectedCmdArgs,
 			a.ProcessTemplates,
 			a.ProcessYamlFunctions,
 			a.Skip,
-			a.ExcludeLocked,
+			a.findAffectedFilter(),
 			a.AuthManager,
 			a.AuthDisabled,
 			errOptions,
@@ -464,7 +609,7 @@ func (d *describeAffectedExec) resolveAffectedStacks(a *DescribeAffectedCmdArgs,
 			a.ProcessTemplates,
 			a.ProcessYamlFunctions,
 			a.Skip,
-			a.ExcludeLocked,
+			a.findAffectedFilter(),
 			a.AuthManager,
 			a.AuthDisabled,
 			errOptions,
@@ -498,9 +643,21 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) ([]schem
 	}
 	affected := resolution.Affected
 
-	// Add dependent components and stacks for each affected component.
+	// Add dependent components and stacks for each affected component, then apply the
+	// `--tags` / `--labels` selectors to them and, with `--flatten`, lift them into the top-level list.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled, errOptions)
+		err = finalizeAffectedDependents(a.CLIConfig, &affected, &AffectedDependentsOptions{
+			IncludeSettings:      a.IncludeSettings,
+			ProcessTemplates:     a.ProcessTemplates,
+			ProcessYamlFunctions: a.ProcessYamlFunctions,
+			Skip:                 a.Skip,
+			OnlyInStack:          a.Stack,
+			AuthManager:          a.AuthManager,
+			AuthDisabled:         a.AuthDisabled,
+			ErrOptions:           errOptions,
+			Filter:               a.affectedFilter(),
+			Flatten:              a.Flatten,
+		}, dependentsResolvers{plain: d.addDependentsToAffected, withFilter: d.addDependentsToAffectedWithFilter})
 		if err != nil {
 			return nil, err
 		}
@@ -518,6 +675,86 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) ([]schem
 
 	PrintErrorModeSummary(a.ErrorMode, collector)
 	return affected, nil
+}
+
+// AffectedDependentsOptions configures FinalizeAffectedDependents.
+type AffectedDependentsOptions struct {
+	IncludeSettings      bool
+	ProcessTemplates     bool
+	ProcessYamlFunctions bool
+	Skip                 []string
+	OnlyInStack          string
+	AuthManager          auth.AuthManager
+	AuthDisabled         bool
+	ErrOptions           DescribeStacksErrorOptions
+	// Filter holds the `--tags` / `--labels` selectors. When it has selectors they are applied to the
+	// affected list and its dependents after the dependents are resolved, so the affected list must have
+	// been computed with the selectors deferred (AffectedFilter.DeferSelectors).
+	Filter AffectedFilter
+	// Flatten lifts every dependent into the top-level list as an entry with the reason "dependent".
+	Flatten bool
+}
+
+// dependentsResolvers are the two ways to resolve dependents; they are injectable so tests can stub the
+// stack resolution behind them.
+type dependentsResolvers struct {
+	plain      func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings, processTemplates, processYamlFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) error
+	withFilter func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, opts *dependentsOptions) error
+}
+
+// FinalizeAffectedDependents resolves the (nested) dependents of every affected component and shapes the
+// result: with `--tags` / `--labels` selectors it prunes the dependents by them, keeps only the matching
+// top-level components, and promotes the matching dependents of a dropped component; with Flatten it then
+// lifts all remaining dependents into the top-level list. It is the single path shared by
+// `describe affected --include-dependents` and `list affected --include-dependents`.
+func FinalizeAffectedDependents(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, opts *AffectedDependentsOptions) error {
+	defer perf.Track(atmosConfig, "exec.FinalizeAffectedDependents")()
+
+	return finalizeAffectedDependents(atmosConfig, affected, opts, dependentsResolvers{
+		plain:      addDependentsToAffected,
+		withFilter: addDependentsToAffectedWithFilter,
+	})
+}
+
+// finalizeAffectedDependents is FinalizeAffectedDependents with injectable dependents resolution.
+func finalizeAffectedDependents(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, opts *AffectedDependentsOptions, resolve dependentsResolvers) error {
+	if len(*affected) == 0 {
+		return nil
+	}
+
+	// With `--tags` / `--labels`, dependents are resolved together with their metadata so the nested lists and
+	// the top-level list can be pruned by the same selectors. `--exclude-locked` with `--flatten` needs the
+	// metadata too, to drop locked dependents when they are lifted. Otherwise the original path is used unchanged.
+	if opts.Filter.hasSelectors() || (opts.Filter.ExcludeLocked && opts.Flatten) {
+		depOpts := &dependentsOptions{
+			IncludeSettings:      opts.IncludeSettings,
+			ProcessTemplates:     opts.ProcessTemplates,
+			ProcessYamlFunctions: opts.ProcessYamlFunctions,
+			Skip:                 opts.Skip,
+			OnlyInStack:          opts.OnlyInStack,
+			AuthManager:          opts.AuthManager,
+			AuthDisabled:         opts.AuthDisabled,
+			ErrOptions:           opts.ErrOptions,
+			Filter:               opts.Filter,
+			RecordMetadata:       opts.Filter.ExcludeLocked && opts.Flatten,
+		}
+		if err := resolve.withFilter(atmosConfig, affected, depOpts); err != nil {
+			return err
+		}
+		// Does nothing without selectors. The dependent metadata is kept until after flattening, so
+		// `--exclude-locked` can still see which dependents are locked when they are lifted.
+		*affected = applySelectorsToAffectedForestKeepMetadata(*affected, opts.Filter, depOpts.stacks)
+	} else if err := resolve.plain(atmosConfig, affected, opts.IncludeSettings, opts.ProcessTemplates, opts.ProcessYamlFunctions, opts.Skip, opts.OnlyInStack, opts.AuthManager, opts.AuthDisabled, opts.ErrOptions); err != nil {
+		return err
+	}
+
+	if opts.Flatten {
+		*affected = flattenAffectedDependents(*affected, opts.Filter)
+	}
+
+	// The metadata recorded for selector matching and locked detection is transient and never part of the output.
+	clearAffectedDependentMetadata(*affected)
+	return nil
 }
 
 func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {

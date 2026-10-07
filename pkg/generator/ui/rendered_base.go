@@ -164,6 +164,10 @@ func (ui *InitUI) renderPristineBaseFiles(args *renderPristineBaseFilesArgs) err
 			continue
 		}
 
+		// processFileEntry resolves each file's own spec.files[].delimiters
+		// (from the OLD scaffold config's specs) on top of activeDelimiters,
+		// exactly as the real run does, so the pristine base is rendered with
+		// the same delimiters the old generation used.
 		spec := fileSpecs[file.Path]
 		_, _, _, entryErr := ui.processFileEntry(file, spec, args.tempDir, true, false, args.oldScaffoldConfig, args.mergedOldValues, activeDelimiters, seenRenderedPaths, matrixExpansions)
 		if entryErr != nil {

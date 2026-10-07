@@ -111,7 +111,7 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		DeployRunInit:           v.GetBool("deploy-run-init"),
 		Query:                   v.GetString("query"),
 		Components:              v.GetStringSlice("components"),
-		Tags:                    v.GetStringSlice("tags"),
+		Tags:                    tags.ParseTagsFlag(strings.Join(v.GetStringSlice("tags"), ",")),
 		All:                     v.GetBool("all"),
 		Affected:                v.GetBool("affected"),
 		MaxConcurrency:          v.GetInt("max-concurrency"),
@@ -124,7 +124,7 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		UI:                      v.GetBool("ui"),
 	}
 
-	labels, err := tags.ParseLabelsFlag(v.GetString("labels"))
+	labels, err := tags.ParseLabelsFlagFrom(v.GetString("labels"), "--labels (or ATMOS_LABELS)")
 	if err != nil {
 		return nil, err
 	}

@@ -86,6 +86,48 @@ spec:
 Use CEL operators such as `&&`, `||`, and `!` for compound conditions. The map form
 `{all: ...}`, `{any: ...}`, or `{not: ...}` is not accepted in scaffold manifests.
 
+### Template Delimiters
+
+Template files use `{{ }}` by default. A template that also generates files with template syntax
+of their own, such as a Helm chart or a GitHub Actions workflow, can choose different delimiters
+so those expressions pass through untouched. Set a template-wide pair with `spec.delimiters`, and
+override it for specific files with `delimiters` on a `spec.files` entry. Each pair is exactly two
+non-empty strings: the left and the right delimiter.
+
+```yaml title="scaffold.yaml"
+spec:
+  delimiters: ["{{", "}}"]          # template-wide default (optional)
+  files:
+    - path: "charts/**"             # Helm templates use {{ }} themselves
+      delimiters: ["[[", "]]"]
+    - path: ".github/workflows/*.yml.tmpl"
+      delimiters: ["<<", ">>"]      # keeps ${{ github.sha }} literal
+```
+
+With this manifest, a chart template can mix both syntaxes. Atmos fills in the `[[ ]]` expression
+and leaves Helm's `{{ }}` expression for Helm to render later:
+
+```yaml title="charts/app/templates/deployment.yaml"
+# atmos:template
+name: [[ .Config.name ]]
+image: "{{ .Values.image }}"
+```
+
+The delimiters for a file are chosen in this order:
+
+1. The `delimiters` of the matching `spec.files` entry. When several entries match the same file,
+   the last matching entry wins, the same rule as `path` and `when`.
+2. `spec.delimiters`.
+3. `{{` and `}}`.
+
+For `atmos init`, the delimiters the command passes in take the place of `spec.delimiters`.
+
+A file's delimiters apply to everything Atmos renders for that file: its content, its path, its
+`target`, and any `matrix` axis written as a Go template expression. The `when` condition is a CEL
+expression and never uses delimiters. Only templated files are rendered, which means files ending
+in `.tmpl` or marked with an `atmos:template` comment; every other file is copied as written. The
+generated `README` is not a `spec.files` entry and always uses `spec.delimiters`.
+
 ## Generation Hooks
 
 Scaffold hooks run around generation at `before.scaffold.generate` and
