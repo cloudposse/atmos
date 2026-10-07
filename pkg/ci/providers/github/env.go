@@ -13,7 +13,7 @@ import (
 var _ provider.EnvExporter = (*Provider)(nil)
 
 // WriteEnv appends key=value to the file named by GITHUB_ENV so later workflow
-// steps see the variable. Multiline values use a collision-safe heredoc. It never
+// steps see the variable. Multiline values use a heredoc. It never
 // falls back to stdout: without GITHUB_ENV the export cannot take effect, so it
 // returns an error instead of silently dropping it.
 func (p *Provider) WriteEnv(key, value string) error {
@@ -23,7 +23,7 @@ func (p *Provider) WriteEnv(key, value string) error {
 	if path == "" {
 		return fmt.Errorf("%w: GITHUB_ENV is not set", errUtils.ErrCIEnvWriteFailed)
 	}
-	return provider.AppendFile(path, ghactions.FormatValue(key, value), errUtils.ErrCIEnvWriteFailed)
+	return provider.AppendFile(path, provider.FormatOutputLine(key, value), errUtils.ErrCIEnvWriteFailed)
 }
 
 // AddPath appends dir to the file named by GITHUB_PATH so later workflow steps

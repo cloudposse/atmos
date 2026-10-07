@@ -7,7 +7,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
-	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -23,7 +22,7 @@ func (p *Provider) WriteEnv(key, value string) error {
 	defer perf.Track(nil, "generic.Provider.WriteEnv")()
 
 	if path := os.Getenv("ATMOS_CI_ENV"); path != "" {
-		return provider.AppendFile(path, ghactions.FormatValue(key, value), errUtils.ErrCIEnvWriteFailed)
+		return provider.AppendFile(path, provider.FormatOutputLine(key, value), errUtils.ErrCIEnvWriteFailed)
 	}
 
 	p.out().Writef("export %s=%s\n", key, shellescape.Quote(value))

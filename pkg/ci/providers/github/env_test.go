@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 )
 
 func TestProvider_WriteEnv(t *testing.T) {
@@ -23,9 +22,7 @@ func TestProvider_WriteEnv(t *testing.T) {
 
 		got, err := os.ReadFile(envFile)
 		require.NoError(t, err)
-		assert.Equal(t, ghactions.FormatValue("A", "1")+ghactions.FormatValue("B", "x\ny"), string(got))
-		assert.Contains(t, string(got), "A=1\n")
-		assert.Contains(t, string(got), "B<<ATMOS_EOF_B\nx\ny\nATMOS_EOF_B\n")
+		assert.Equal(t, "A=1\nB<<EOF\nx\ny\nEOF\n", string(got))
 	})
 
 	t.Run("unset GITHUB_ENV fails without creating a file", func(t *testing.T) {

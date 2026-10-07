@@ -2477,7 +2477,7 @@
         }
       },
       "type": "object",
-      "description": "CICommentsConfig configures PR/MR comment integration.\nGitHub: PR comments, GitLab: MR notes.\n\nEnabled is *bool so callers can distinguish \"unset\" (nil, default applies)\nfrom explicit false. Default is true when omitted; see `isCommentsEnabled`."
+      "description": "CICommentsConfig configures PR/MR comment integration.\nGitHub: PR comments, GitLab: MR notes.\n\nEnabled is *bool so callers can distinguish \"unset\" (nil, default applies)\nfrom explicit false. Comments are opt-in: nil is treated as false (disabled);\nsee `ci.CommentsEnabled`."
     },
     "CIConfig": {
       "properties": {

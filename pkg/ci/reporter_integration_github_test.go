@@ -143,7 +143,7 @@ func TestReporter_GitHubWrites(t *testing.T) {
 
 		out := ghtest.ReadFile(t, h.env.Output)
 		assert.Contains(t, out, "k=v\n")
-		assert.Contains(t, out, "k2<<ATMOS_EOF_k2\nline1\nline2\nATMOS_EOF_k2\n")
+		assert.Contains(t, out, "k2<<EOF\nline1\nline2\nEOF\n")
 	})
 
 	t.Run("env and path", func(t *testing.T) {

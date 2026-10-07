@@ -35,6 +35,8 @@ func (s *captureStreams) RawError() stdio.Writer  { return s.stderr }
 func initIO(t *testing.T) *bytes.Buffer {
 	t.Helper()
 
+	// CI runners advertise color support; the assertions compare plain text.
+	t.Setenv("NO_COLOR", "1")
 	stdout := &bytes.Buffer{}
 	ioCtx, err := atmosio.NewContext(atmosio.WithStreams(&captureStreams{stdout: stdout, stderr: &bytes.Buffer{}}))
 	require.NoError(t, err)

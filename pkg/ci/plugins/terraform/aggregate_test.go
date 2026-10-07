@@ -340,7 +340,7 @@ func TestOnAfterTerraformAggregateWritesGitHubOutputFiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(outputData), "has_changes=true")
 	assert.Contains(t, string(outputData), "exit_code=1")
-	assert.Contains(t, string(outputData), "summary<<ATMOS_EOF_summary")
+	assert.Contains(t, string(outputData), "summary<<EOF")
 
 	summaryData, err := os.ReadFile(summaryFile)
 	require.NoError(t, err)

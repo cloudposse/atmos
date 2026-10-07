@@ -30,6 +30,11 @@ func TestReportingGates(t *testing.T) {
 }
 
 func TestModeEnabledFromFlag(t *testing.T) {
+	// The external test files in this package register real providers at init; an empty
+	// registry keeps IsCI() false on a CI runner so only the flag decides.
+	restore := SwapRegistryForTest()
+	t.Cleanup(restore)
+
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("ci", false, "")
 	assert.False(t, ModeEnabled(cmd))
