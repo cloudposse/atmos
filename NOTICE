@@ -787,7 +787,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - sigs.k8s.io/controller-runtime/pkg
     License: Apache-2.0
-    URL: Unknown
+    URL: https://github.com/kubernetes-sigs/controller-runtime/blob/v0.24.1/LICENSE
 
   - sigs.k8s.io/json
     License: Apache-2.0
