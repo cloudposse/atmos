@@ -54,27 +54,27 @@ func TestIncludeScriptSource_RecordsLocalInclude(t *testing.T) {
 	}{
 		{
 			name: "bare path resolves against the base path and is stored relative",
-			yaml: "with:\n  interpreter: starlark\n  script: !include scripts/hook.star\n",
+			yaml: "type: script\nwith:\n  interpreter: starlark\n  script: !include scripts/hook.star\n",
 			want: "scripts/hook.star",
 		},
 		{
 			name: "include.raw is recorded too",
-			yaml: "with:\n  interpreter: starlark\n  script: !include.raw scripts/hooks/check.star\n",
+			yaml: "type: script\nwith:\n  interpreter: starlark\n  script: !include.raw scripts/hooks/check.star\n",
 			want: "scripts/hooks/check.star",
 		},
 		{
 			name: "path relative to the manifest",
-			yaml: "with:\n  interpreter: starlark\n  script: !include ./local.star\n",
+			yaml: "type: script\nwith:\n  interpreter: starlark\n  script: !include ./local.star\n",
 			want: "stacks/deploy/local.star",
 		},
 		{
 			name: "file outside the base path is recorded absolute",
-			yaml: "with:\n  interpreter: starlark\n  script: !include " + outside + "\n",
+			yaml: "type: script\nwith:\n  interpreter: starlark\n  script: !include " + outside + "\n",
 			want: outside,
 		},
 		{
 			name: "an include-derived value replaces a hand-written script_source",
-			yaml: "with:\n  interpreter: starlark\n  script_source: hand/written.star\n  script: !include scripts/hook.star\n",
+			yaml: "type: script\nwith:\n  interpreter: starlark\n  script_source: hand/written.star\n  script: !include scripts/hook.star\n",
 			want: "scripts/hook.star",
 		},
 	}
@@ -95,7 +95,7 @@ func TestIncludeScriptSource_RecordsLocalInclude(t *testing.T) {
 func TestIncludeScriptSource_StepsList(t *testing.T) {
 	cfg, manifest := scriptSourceProject(t)
 	out, err := UnmarshalYAMLFromFile[map[string]any](cfg,
-		"with:\n"+
+		"type: script\nwith:\n"+
 			"  - type: script\n    interpreter: starlark\n    script: !include scripts/hook.star\n"+
 			"  - type: script\n    interpreter: starlark\n    script: print('inline')\n"+
 			"  - type: script\n    interpreter: starlark\n    script: !include scripts/hooks/check.star\n",
@@ -132,11 +132,13 @@ func TestIncludeScriptSource_NotRecorded(t *testing.T) {
 		name string
 		yaml string
 	}{
-		{"inline script", "with:\n  interpreter: starlark\n  script: print('inline')\n"},
-		{"remote include", "with:\n  interpreter: starlark\n  script: !include https://example.com/x.star\n"},
-		{"include with a yq query", "with:\n  interpreter: starlark\n  script: !include scripts/data.yaml .body\n"},
-		{"mapping without an interpreter", "with:\n  script: !include scripts/hook.star\n"},
-		{"include under a different key", "with:\n  interpreter: starlark\n  command: !include scripts/hook.star\n"},
+		{"inline script", "type: script\nwith:\n  interpreter: starlark\n  script: print('inline')\n"},
+		{"remote include", "type: script\nwith:\n  interpreter: starlark\n  script: !include https://example.com/x.star\n"},
+		{"include with a yq query", "type: script\nwith:\n  interpreter: starlark\n  script: !include scripts/data.yaml .body\n"},
+		{"mapping without an interpreter", "type: script\nwith:\n  script: !include scripts/hook.star\n"},
+		{"mapping without a script type", "with:\n  interpreter: starlark\n  script: !include.raw scripts/hook.star\n"},
+		{"payload of another hook type", "type: shell\nwith:\n  interpreter: starlark\n  script: !include.raw scripts/hook.star\n"},
+		{"include under a different key", "type: script\nwith:\n  interpreter: starlark\n  command: !include scripts/hook.star\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -150,6 +152,51 @@ func TestIncludeScriptSource_NotRecorded(t *testing.T) {
 	}
 }
 
+func TestIncludeScriptSource_PreservesStackData(t *testing.T) {
+	cfg, manifest := scriptSourceProject(t)
+	for _, section := range []string{"vars", "settings", "env", "metadata", "backend"} {
+		t.Run(section, func(t *testing.T) {
+			for _, stepType := range []string{"", "    type: script\n"} {
+				input := section + ":\n  bootstrap:\n" + stepType +
+					"    interpreter: starlark\n    script: !include.raw scripts/hook.star\n"
+				got, err := UnmarshalYAMLFromFile[map[string]any](cfg, input, manifest)
+				require.NoError(t, err)
+				data := got[section].(map[string]any)["bootstrap"].(map[string]any)
+				want := map[string]any{"interpreter": "starlark", "script": "print('hook')\n"}
+				if stepType != "" {
+					want["type"] = "script"
+				}
+				assert.Equal(t, want, data, "stack data must retain exactly its declared fields")
+			}
+		})
+	}
+}
+
+func TestIncludeScriptSource_PreservesAppendedData(t *testing.T) {
+	cfg, manifest := scriptSourceProject(t)
+	for _, section := range []string{"vars", "settings", "metadata"} {
+		t.Run(section, func(t *testing.T) {
+			input := section + ": !append\n  - type: script\n    interpreter: starlark\n    script: !include.raw scripts/hook.star\n"
+			got, err := UnmarshalYAMLFromFile[map[string]any](cfg, input, manifest)
+			require.NoError(t, err)
+			want := map[string]any{AppendTagMetadataKey: []any{map[string]any{
+				"type": "script", "interpreter": "starlark", "script": "print('hook')\n",
+			}}}
+			assert.Equal(t, want, got[section], "append rewriting must preserve the data-section context")
+		})
+	}
+	t.Run("appended script steps retain provenance", func(t *testing.T) {
+		input := "steps: !append\n  - type: script\n    interpreter: starlark\n    script: !include.raw scripts/hook.star\n"
+		got, err := UnmarshalYAMLFromFile[map[string]any](cfg, input, manifest)
+		require.NoError(t, err)
+		want := map[string]any{AppendTagMetadataKey: []any{map[string]any{
+			"type": "script", "interpreter": "starlark", "script": "print('hook')\n",
+			ScriptSourceKey: "scripts/hook.star", ScriptSourceSHA256Key: ScriptSourceHash("print('hook')\n"),
+		}}}
+		assert.Equal(t, want, got["steps"])
+	})
+}
+
 // The fingerprint is the hex SHA-256 of the exact bytes of the included file, for !include and
 // !include.raw alike.
 func TestIncludeScriptSource_HashMatchesIncludedContent(t *testing.T) {
@@ -159,7 +206,7 @@ func TestIncludeScriptSource_HashMatchesIncludedContent(t *testing.T) {
 
 	for _, tag := range []string{"!include", "!include.raw"} {
 		t.Run(tag, func(t *testing.T) {
-			with := decodeScriptStep(t, cfg, manifest, "with:\n  interpreter: starlark\n  script: "+tag+" scripts/hook.star\n")
+			with := decodeScriptStep(t, cfg, manifest, "type: script\nwith:\n  interpreter: starlark\n  script: "+tag+" scripts/hook.star\n")
 			assert.Equal(t, content, with["script"])
 			assert.Equal(t, hex.EncodeToString(want[:]), with[ScriptSourceSHA256Key])
 		})
@@ -171,7 +218,7 @@ func TestIncludeScriptSource_HashMatchesIncludedContent(t *testing.T) {
 func TestIncludeScriptSource_RemovesHandWrittenKeysForRemoteInclude(t *testing.T) {
 	cfg, manifest := scriptSourceProject(t)
 	with := decodeScriptStep(t, cfg, manifest,
-		"with:\n  interpreter: starlark\n  script_source: hand/written.star\n  script_source_sha256: abc\n"+
+		"type: script\nwith:\n  interpreter: starlark\n  script_source: hand/written.star\n  script_source_sha256: abc\n"+
 			"  script: !include scripts/data.yaml .body\n")
 	assert.NotContains(t, with, ScriptSourceKey)
 	assert.NotContains(t, with, ScriptSourceSHA256Key)
