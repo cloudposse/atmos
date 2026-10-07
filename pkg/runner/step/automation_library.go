@@ -93,7 +93,9 @@ func (l *AutomationLibrary) runStep(ctx context.Context, step *schema.WorkflowSt
 	l.rememberEnvironment(before)
 
 	if err != nil {
-		return nil, err
+		// Some handlers return only the process exit code after cancellation (notably
+		// Windows shell commands). Keep the owning context's cause reachable as well.
+		return nil, errors.Join(ctx.Err(), err)
 	}
 	if result == nil {
 		return &automation.StepResult{}, nil

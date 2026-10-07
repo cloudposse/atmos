@@ -46,3 +46,16 @@ A field test of `git.hooks.<name>.steps` found these problems:
 
 - `pkg/runner/step/automation_library.go` reports a step timeout as a bare `context deadline exceeded` for steps run through `RunSteps`. The hook path now maps it to `ErrStepTimeout`, but converting it inside the automation library would fix every caller.
 - The Starlark `env` global holds only the step's declared `env:` mapping, not values set by earlier `type: env` steps. Child processes and templates see them. Whether the global should reflect them belongs with the Starlark context work.
+
+## Windows timeout classification
+
+The shared step library now retains its execution context error alongside a failed
+handler's error. On Windows, the shell interpreter can return only a subprocess
+exit code when a deadline kills the command. Preserving `context.DeadlineExceeded`
+lets Git hooks report the step's configured timeout. Parent cancellation remains
+cancellation, ordinary exit codes stay reachable, and successful handler results
+are unchanged.
+
+A generated handler mock reproduces a bare exit-code error after the step deadline,
+parent cancellation, and parent deadline. All three lost their context cause before
+the fix. Tests also cover normal exit failures and successful results.
