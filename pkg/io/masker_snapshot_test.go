@@ -175,11 +175,21 @@ func TestMasker_HoldbackLen_DisabledAndLineBoundary(t *testing.T) {
 	assert.Equal(t, len("supers"), m.HoldbackLen("done\npartial supers", false), "literals stay protected without line hold")
 }
 
-func TestMasker_HoldbackLen_PatternHoldIsBounded(t *testing.T) {
+func TestMasker_HoldbackLen_PatternHoldKeepsWholeLine(t *testing.T) {
 	m := newMasker(&Config{})
 	require.NoError(t, m.RegisterPattern(`Bearer [A-Za-z0-9]+`))
-	longLine := strings.Repeat("x", maxPatternHold*3)
-	assert.Equal(t, maxPatternHold, m.HoldbackLen(longLine, true), "memory for newline-free output stays bounded")
+	longLine := "Bearer " + strings.Repeat("x", 12*1024)
+	assert.Equal(t, len(longLine), m.HoldbackLen(longLine, true), "a regex secret must not lose its prefix")
+	assert.Equal(t, len(longLine), m.HoldbackLen("done\n"+longLine, true), "completed lines can still be emitted")
+	assert.Zero(t, m.HoldbackLen(longLine+"\n", true), "completed regex secrets can be masked together")
+}
+
+func TestMasker_HoldbackLen_LiteralsDoNotHoldUnrelatedLongLines(t *testing.T) {
+	m := newMasker(&Config{})
+	m.RegisterValue("secret-value")
+	longLine := strings.Repeat("x", 12*1024)
+	assert.Zero(t, m.HoldbackLen(longLine, true), "literal-only masking emits unrelated output immediately")
+	assert.Equal(t, len("secret-"), m.HoldbackLen(longLine+"secret-", true), "only a possible literal prefix is held")
 }
 
 func TestMasker_HoldbackLen_MultilineAndIndentedRenderings(t *testing.T) {

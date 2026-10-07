@@ -172,7 +172,7 @@ func TestFetchWithMetadataContextRateWaitCancellation(t *testing.T) {
 				factory.EXPECT().NewClient(gomock.Any(), gomock.Any(), "dest", ClientModeFile).Return(client, nil)
 				client.EXPECT().Get().Return(nil)
 			}
-			_, err := NewFileDownloader(factory).(ContextFileDownloader).FetchWithMetadataContext(ctx, "https://raw.githubusercontent.com/org/repo/main/file", "dest", ClientModeFile, time.Minute)
+			_, err := NewFileDownloader(factory).(ContextFileDownloader).FetchWithMetadataContext(ctx, "https://github.com/org/repo/archive/main.zip", "dest", ClientModeFile, time.Minute)
 			if interrupted {
 				require.ErrorIs(t, err, context.Canceled)
 			} else {

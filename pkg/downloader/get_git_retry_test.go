@@ -235,16 +235,16 @@ func TestIsGitHubHTTPURL(t *testing.T) {
 		url      string
 		expected bool
 	}{
-		// Raw GitHub content URLs (should detect).
+		// Raw GitHub content URLs do not use the REST API core quota.
 		{
 			name:     "raw githubusercontent file",
 			url:      "https://raw.githubusercontent.com/cloudposse/terraform-aws-vpc/main/README.md",
-			expected: true,
+			expected: false,
 		},
 		{
 			name:     "raw githubusercontent with ref",
 			url:      "https://raw.githubusercontent.com/org/repo/v1.0.0/file.yaml",
-			expected: true,
+			expected: false,
 		},
 
 		// GitHub archive URLs (should detect).
@@ -309,7 +309,7 @@ func TestIsGitHubHTTPURL(t *testing.T) {
 		{
 			name:     "uppercase raw githubusercontent",
 			url:      "HTTPS://RAW.GITHUBUSERCONTENT.COM/org/repo/main/file.yaml",
-			expected: true,
+			expected: false,
 		},
 
 		// Host substring appearing only in path or query must not be misclassified

@@ -240,6 +240,7 @@ func getGlamourGoldmark(renderer *glamour.TermRenderer) goldmark.Markdown {
 // TestCustomRendererWritesNothingToStdout, which guards this reasoning
 // against a future glamour upgrade.
 func (r *CustomRenderer) Render(content string) (string, error) {
+	content = StripFrontmatter(content)
 	rendered, err := r.glamour.Render(content)
 	if err != nil {
 		return rendered, err

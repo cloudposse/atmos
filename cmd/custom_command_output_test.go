@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -15,6 +16,10 @@ func TestCustomCommandShellViewport(t *testing.T) {
 	for _, live := range []bool{false, true} {
 		t.Run(fmt.Sprint(live), func(t *testing.T) {
 			_ = NewTestKit(t)
+			// Direct command.Run skips logger setup; isolate exact output from earlier tests.
+			originalLevel := log.GetLevel()
+			log.SetLevel(log.WarnLevel)
+			t.Cleanup(func() { log.SetLevel(originalLevel) })
 			// Other tests reset Viper, discarding the binding registered by init.
 			require.NoError(t, viper.BindEnv("force-tty", "ATMOS_FORCE_TTY"))
 			// Scope terminal overrides to the subtest; Viper overrides outlive TestKit.
@@ -41,4 +46,14 @@ func TestCustomCommandShellViewport(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCustomCommandShellViewport_InheritedDebug checks output assertions after a preceding
+// command test has enabled debug logging, and verifies the original level is restored.
+func TestCustomCommandShellViewport_InheritedDebug(t *testing.T) {
+	originalLevel := log.GetLevel()
+	t.Cleanup(func() { log.SetLevel(originalLevel) })
+	log.SetLevel(log.DebugLevel)
+	t.Run("viewport", TestCustomCommandShellViewport)
+	assert.Equal(t, log.DebugLevel, log.GetLevel())
 }

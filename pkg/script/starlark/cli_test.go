@@ -209,3 +209,37 @@ func TestCommandContextRejectsUnsupportedHostInputTypes(t *testing.T) {
 		})
 	}
 }
+
+func TestStandaloneCommandGuardedOutput(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, body, value string
+		help, hasOutput   bool
+	}{
+		{name: "help", body: `fail("main must not run")`, help: true},
+		{name: "None", body: "return None"},
+		{name: "structured result", body: `return {"count": 2}`, hasOutput: true, value: `{"count":2}`},
+		{name: "false result", body: "return False", hasOutput: true, value: "false"},
+		{name: "zero result", body: "return 0", hasOutput: true, value: "0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := New().Execute(t.Context(), script.Spec{
+				File: &script.File{Path: filepath.Join(t.TempDir(), "main.star")},
+				ParseCommand: func(context.Context, script.CommandSpec) (script.CommandInput, error) {
+					return script.CommandInput{Help: tc.help}, nil
+				},
+				Source: "def main(args, flags):\n    " + tc.body + `
+result = cli.command(run=main)
+if result != None:
+    output = result
+`,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tc.hasOutput, result.HasOutput)
+			if tc.hasOutput {
+				assert.JSONEq(t, tc.value, result.Value)
+			}
+		})
+	}
+}

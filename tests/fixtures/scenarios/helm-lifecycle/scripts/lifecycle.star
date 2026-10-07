@@ -106,11 +106,11 @@ def assert_dependency_ready():
     if observed["data"].get("ready") != "true":
         fail("dependent did not observe the ready foundation Deployment")
 
-def assert_release_progress(operation, component, message):
+def assert_release_progress(operation, component, message, release, namespace):
     result = cli(["helm", operation, component, "-s", "dev", "--identity", "local-k3s"])
     text = regex.replace(r"\x1b\[[0-9;]*m", "", result.stdout + "\n" + result.stderr)
     start = 0
-    for needle in [message, "oss-ingress", "helm-oss"]:
+    for needle in [message, release, namespace]:
         position = text.find(needle, start)
         if position < 0:
             fail("{} did not report release progress: {}".format(operation, text))

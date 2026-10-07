@@ -159,10 +159,11 @@ reach the script as values, not as text:
 
 ```yaml
 commands:
-  - name: deploy-all
-    description: Deploy components in parallel
+  - name: deploy-one
+    description: Deploy one component
     arguments:
       - name: group
+        required: true
     flags:
       - name: dry-run
         type: bool
@@ -189,41 +190,3 @@ commands:
 - `cli.command`, `cli.arg`, and `cli.flag` are only for standalone scripts
   (`atmos ./tool.star`); declare the command interface in YAML here.
 - Script steps default to raw output with no step labels; `show: {labels: true}` restores them.
-  `output:` must be `raw`, `log`, `viewport`, or `none`; any other value (such as `capture`) fails
-  before the step runs.
-- A `timeout:` on a script, shell, or atmos step is enforced: the step is canceled and fails with
-  `step timed out`. Per-task limits inside a script still use `steps.task(..., timeout="30s")`.
-- Atmos renders only the values declared under the step's `env:` as templates. The ambient process
-  environment reaches the script and its child processes verbatim, so an inherited
-  `FOO='{{ bad'` is harmless. In `ctx`-side Starlark, `env` holds only the step's own `env:`
-  entries, not command-level `env:` entries.
-- Sprig and Gomplate functions work the same in sequential steps and in `parallel`/`matrix`
-  children.
-- A script step's dict or list `output` reaches later steps as JSON text
-  (`{{ .steps.<name>.value }}` is `{"n":3}`), never Go map syntax. Single-quote it in shell
-  commands (`echo '{{ .steps.x.value }}'`) because JSON contains double quotes.
-- A template error names the step and field, and the source file for an `!include`d script, with
-  a hint to tag the field `!literal` when the body contains `{{`.
-
-## Routing
-
-| Need | Skill |
-|---|---|
-| Complete command schema and examples | [references/command-syntax.md](references/command-syntax.md) |
-| Reusable multi-step orchestration | `atmos-workflows` |
-| Shared step fields and step types | `atmos-steps` |
-| Embedded Starlark, parallel function calls, and standalone `atmos ./tool.star` CLI apps | `atmos-starlark` |
-| Smoke tests, integration tests, and test groups | `atmos-tests` |
-| Tool versions and PATH behavior | `atmos-toolchain` |
-| Auth providers, identities, assume role/root, OIDC | `atmos-auth` |
-| Components and component inheritance | `atmos-components` |
-| Go templates and YAML functions | `atmos-templates`, `atmos-yaml-functions` |
-
-## Guardrails
-
-- Do not override built-in commands unless the user explicitly wants that behavior.
-- Do not hide complex business logic inside inline YAML shell blocks. Move it to a checked-in script
-  or use native step types.
-- Do not use custom commands for long-lived reusable orchestration when an Atmos workflow is a
-  better fit.
-- Keep command names stable; they become user-facing CLI API.

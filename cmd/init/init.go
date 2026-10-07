@@ -23,14 +23,24 @@ import (
 	"github.com/cloudposse/atmos/pkg/hooks"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 // initCmd represents the init command.
 var initCmd = &cobra.Command{
-	Use:   "init [template] [target]",
-	Short: "Initialize a new Atmos project from a template",
-	Long: `Initialize a new Atmos project from built-in templates.
+	Use:   "init [source] [target]",
+	Short: "Initialize a new Atmos project from a template or source directory",
+	Long: `Initialize a new Atmos project from a template or source directory.
+
+Copy an example without a scaffold configuration:
+  atmos init github.com/cloudposse/atmos//examples/quick-start-simple
+
+Relative source paths use init.repository (github.com/cloudposse/atmos
+by default). The default examples/<path> alias selects main. Official examples
+are copied verbatim; other sources use scaffold.yaml when present, or copy when
+absent. Use --copy to bypass scaffold processing. Copies default their target
+to the source directory name and display its README when complete.
 
 This command helps you quickly scaffold a new Atmos project with
 best-practice configurations and directory structures.
@@ -47,9 +57,10 @@ Available templates:
 Run "atmos scaffold list" to see all templates, including remote ones.
 
 If no template is specified, an interactive selection will be shown.
-If no target directory is specified, you will be prompted for one.`,
+For scaffold templates, an omitted target directory is prompted interactively.`,
 	Args: cobra.MaximumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer SetAtmosConfig(nil)
 		template := ""
 		target := ""
 
@@ -64,6 +75,14 @@ If no target directory is specified, you will be prompted for one.`,
 		if err := initParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
+		atmosConfig, err := applyInitDefaults(v)
+		if err != nil {
+			return err
+		}
+		if v.GetInt("depth") < 0 {
+			return copyOptionError("init.depth and --depth must be zero or greater")
+		}
+		atmosConfig.Init.Depth = v.GetInt("depth")
 
 		// Reject an invalid --update-strategy/--merge-driver/--merge-strategy value
 		// before doing any work; BindFlagsToViper alone doesn't enforce the
@@ -101,33 +120,6 @@ If no target directory is specified, you will be prompted for one.`,
 				WithExitCode(2).
 				Err()
 		}
-		// Only pre-resolve here when target is already the real, final
-		// target directory (i.e. it was given positionally). When target is
-		// "" the interactive flow still has to prompt for one -- see
-		// resolveInteractiveInitBaseRef, which resolves the base ref itself
-		// once the actual directory is known. Resolving against "" here
-		// would read .atmos/init/metadata.yaml from the wrong (empty/cwd)
-		// path and permanently overwrite baseRef with "HEAD", discarding any
-		// pin at the directory the user goes on to pick.
-		//
-		// Skipped entirely under rendered: this resolution (and its "HEAD"
-		// fallback) is tracked-mode-specific bookkeeping for the target's
-		// own git history. Its result flows through to SaveProjectRecord's
-		// spec.baseRef -- the same project-record field ResolveRenderedBase
-		// uses (spec.renderedRef) to tell whether a project was last
-		// managed with tracked or rendered. Running this under rendered
-		// would populate spec.baseRef with a value meaningless for that
-		// strategy, corrupting that distinction.
-		if update && target != "" && updateStrategy != "rendered" {
-			if err := source.CheckNotSwitchedFromRendered(target); err != nil {
-				return err
-			}
-			resolvedBaseRef, err := defaultBaseRef(baseRef, target)
-			if err != nil {
-				return err
-			}
-			baseRef = resolvedBaseRef
-		}
 		sourceOverride := v.GetString("source-override")
 		ref := v.GetString("ref")
 		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
@@ -155,7 +147,11 @@ If no target directory is specified, you will be prompted for one.`,
 		}
 
 		return executeInit(cmd.Context(), &initOptions{
+			progress:        startupProgress,
 			templateName:    template,
+			atmosConfig:     atmosConfig,
+			copy:            v.GetBool("copy"),
+			copyUnsupported: explicitScaffoldFlags(cmd, v),
 			targetDir:       target,
 			interactive:     interactive,
 			force:           force,
@@ -177,9 +173,13 @@ If no target directory is specified, you will be prompted for one.`,
 
 var initParser *flags.StandardParser
 
-func init() {
+func newInitParser() *flags.StandardParser {
 	// Create StandardParser for init command flags with ATMOS_INIT_* env vars.
-	initParser = flags.NewStandardParser(
+	return flags.NewStandardParser(
+		flags.WithIntFlag("depth", "", 1, "Git history depth for initialization (0 fetches full history)"),
+		flags.WithEnvVars("depth", "ATMOS_INIT_DEPTH"),
+		flags.WithBoolFlag("copy", "", false, "Copy source files verbatim without processing scaffold configuration or templates"),
+		flags.WithEnvVars("copy", "ATMOS_INIT_COPY"),
 		flags.WithBoolFlag("force", "f", false, "Overwrite existing files"),
 		flags.WithBoolFlag("update", "", false, "Update an existing target directory via a 3-way merge instead of failing"),
 		flags.WithStringFlag("base-ref", "", "", "Git ref in the target directory to use as the 3-way merge base (used with --update; defaults to HEAD)"),
@@ -219,6 +219,10 @@ func init() {
 		flags.WithEnvVars("recreate-deleted", "ATMOS_INIT_RECREATE_DELETED"),
 		flags.WithEnvVars("skip-hooks", "ATMOS_INIT_SKIP_HOOKS"),
 	)
+}
+
+func init() {
+	initParser = newInitParser()
 
 	// Register flags on the command.
 	initParser.RegisterFlags(initCmd)
@@ -296,6 +300,10 @@ func parseSetFlag(flag string) (string, string, error) {
 
 // initOptions holds configuration for the init operation.
 type initOptions struct {
+	progress        Progress
+	atmosConfig     *schema.AtmosConfiguration
+	copy            bool
+	copyUnsupported []string
 	templateName    string
 	targetDir       string
 	interactive     bool
@@ -316,7 +324,9 @@ type initOptions struct {
 
 // executeInit initializes a new Atmos project from a template.
 // This logic was moved from internal/exec/init.go to keep command logic in cmd/.
-func executeInit(_ context.Context, opts *initOptions) error {
+func executeInit(ctx context.Context, opts *initOptions) error {
+	defer opts.stopProgress()
+	opts.updateProgress("Preparing source")
 	// Convert to absolute path if provided.
 	opts.targetDir = resolveTargetDir(opts.targetDir)
 
@@ -326,6 +336,58 @@ func executeInit(_ context.Context, opts *initOptions) error {
 		return err
 	}
 
+	configs, err := loadInitTemplateConfigs(opts.sourceOverride)
+	if err != nil {
+		return err
+	}
+
+	if err := normalizeInitArgument(opts, configs); err != nil {
+		return err
+	}
+
+	// Select the template.
+	if opts.templateName == "" {
+		opts.stopProgress()
+	}
+	selectedConfig, err := selectTemplate(opts.templateName, opts.interactive, initUI, configs, opts.ref)
+	if err != nil {
+		return err
+	}
+
+	if err := preflightInitTarget(opts, selectedConfig.Source); err != nil {
+		return err
+	}
+
+	prepared, err := prepareInitSource(opts, &selectedConfig, configs)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrInitialization, err)
+	}
+	defer prepared.cleanup()
+	if prepared.copy {
+		return runCopyInit(ctx, opts, prepared)
+	}
+
+	opts.stopProgress()
+	return runScaffoldInit(initUI, &selectedConfig, opts)
+}
+
+// runScaffoldInit configures merge history only for scaffold generation.
+func runScaffoldInit(initUI InitUI, selectedConfig *templates.Configuration, opts *initOptions) error {
+	var err error
+	// Resolve update history only after source selection determines that this
+	// is scaffold generation. Copy mode must never consult merge metadata.
+	// An omitted target is resolved later by the interactive flow, not against
+	// the current directory. Rendered updates use the recorded source revision
+	// instead of target Git history and must not populate the tracked base ref.
+	if opts.update && opts.targetDir != "" && opts.updateStrategy != "rendered" {
+		if err := source.CheckNotSwitchedFromRendered(opts.targetDir); err != nil {
+			return err
+		}
+		opts.baseRef, err = defaultBaseRef(opts.baseRef, opts.targetDir)
+		if err != nil {
+			return err
+		}
+	}
 	renderedBaseCleanup, err := configureInitMergeSettings(initUI, opts)
 	if renderedBaseCleanup != nil {
 		defer renderedBaseCleanup()
@@ -334,30 +396,11 @@ func executeInit(_ context.Context, opts *initOptions) error {
 		return err
 	}
 
-	configs, err := loadInitTemplateConfigs(opts.sourceOverride)
+	finalTargetDir, err := runInitExecution(initUI, selectedConfig, opts)
 	if err != nil {
 		return err
 	}
-
-	// Select the template.
-	selectedConfig, err := selectTemplate(opts.templateName, opts.interactive, initUI, configs, opts.ref)
-	if err != nil {
-		return err
-	}
-
-	// Hydrate catalog/remote stubs into a full template before generating.
-	// cleanup removes any temporary download directory after generation.
-	cleanup, err := source.Hydrate(&selectedConfig, opts.sourceOverride)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrInitialization, err)
-	}
-	defer cleanup()
-
-	finalTargetDir, err := runInitExecution(initUI, &selectedConfig, opts)
-	if err != nil {
-		return err
-	}
-	return maybeInitGeneratedProjectGit(finalTargetDir, &selectedConfig, opts)
+	return maybeInitGeneratedProjectGit(finalTargetDir, selectedConfig, opts)
 }
 
 // loadInitTemplateConfigs returns the available built-in template
