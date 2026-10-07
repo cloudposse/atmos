@@ -12,9 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-git/go-git/v5"
-	"github.com/hashicorp/go-getter"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
@@ -46,6 +43,7 @@ func IsTemplateSource(value string) bool {
 		vendor.IsOCIURI(value) ||
 		vendor.IsS3URI(value) ||
 		vendor.IsGitURI(value) ||
+		vendor.IsNonGitHTTPURI(value) ||
 		vendor.HasLocalPathPrefix(value)
 }
 
@@ -100,7 +98,7 @@ func replaceRef(src, ref string) string {
 
 // pinRenderedRef re-expresses src as a request to fetch exactly renderedRef
 // -- a resolved commit SHA for git sources, an OCI manifest digest for OCI
-// sources (see resolveFetchedGitRef/resolveOCI's respective capture) --
+// sources (see fetchRemoteSource/fetchOCI's respective capture) --
 // overriding whatever mutable ref src's own tag/branch currently names. Git
 // sources go through replaceRef, not WithRef: WithRef intentionally leaves
 // an existing ?ref= alone (that's the sugar for --ref not clobbering an
@@ -152,7 +150,7 @@ const UnpinnedRenderedRefMarker = "unpinned"
 
 // IsPinnableSource reports whether src is a source kind for which Resolve
 // records an immutable ResolvedRef (a git:: commit SHA or an oci:// manifest
-// digest -- see resolveFetchedGitRef/resolveSubdirGitRef and resolveOCI's
+// digest -- see fetchRemoteSource and fetchOCI's
 // respective captures). Local paths, file://, s3::, and plain http(s)
 // archive sources have no equivalent immutable identity to pin to, so
 // Resolve legitimately leaves ResolvedRef empty for them; this distinguishes
@@ -173,36 +171,26 @@ func IsPinnableSource(src string) bool {
 func Resolve(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) (*templates.Configuration, func(), error) {
 	defer perf.Track(nil, "source.Resolve")()
 
-	noop := func() {}
-	if timeout <= 0 {
-		timeout = DefaultFetchTimeout
+	directory, cleanup, err := FetchDirectory(atmosConfig, name, src, timeout)
+	if err != nil {
+		return nil, cleanup, err
 	}
-
-	// Local sources (relative/absolute path or file://) load directly, no fetch.
-	if vendor.IsFileURI(src) || vendor.IsLocalPath(src) {
-		conf, err := resolveLocal(name, src)
-		return conf, noop, err
+	conf, err := directory.LoadScaffold(name, src)
+	if err != nil {
+		cleanup()
+		return nil, func() {}, err
 	}
-
-	// OCI sources pull directly via pkg/oci -- OCI isn't a go-getter scheme
-	// (see pkg/provisioner/source/vendor.go's downloadOCISource, which this
-	// mirrors), so it's handled before the go-getter branch below.
-	if vendor.IsOCIURI(src) {
-		return resolveOCI(atmosConfig, name, src, timeout)
-	}
-
-	// Remote sources: download into a temp dir via go-getter, then load.
-	return resolveRemote(atmosConfig, name, src, timeout)
+	return conf, cleanup, nil
 }
 
-// resolveOCI pulls a scaffold template from an oci:// registry reference
-// into a temporary directory and loads its configuration. Mirrors
-// resolveRemote's temp-dir/cleanup/provenance shape, but fetches via
+// fetchOCI pulls a source directory from an oci:// registry reference
+// into a temporary directory without interpreting its contents. Mirrors
+// fetchRemoteDirectory's temp-dir/cleanup/provenance shape, but fetches via
 // pkg/oci.ProcessImage (the same primitive atmos vendor pull and JIT
 // component-source provisioning already use) instead of go-getter, since
 // OCI registries aren't a go-getter scheme. The returned cleanup function
 // removes the temporary directory.
-func resolveOCI(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) (*templates.Configuration, func(), error) {
+func fetchOCI(atmosConfig *schema.AtmosConfiguration, src string, timeout time.Duration) (*Directory, func(), error) {
 	noop := func() {}
 
 	tempDir, err := os.MkdirTemp("", "atmos-scaffold-")
@@ -228,8 +216,7 @@ func resolveOCI(atmosConfig *schema.AtmosConfiguration, name, src string, timeou
 	// second, potentially different manifest a tag happened to point to by
 	// the time a separate post-fetch resolution ran. Best-effort: a
 	// resolution failure here falls back to fetching imageRef directly
-	// (today's pre-fix behavior, mirroring resolveFetchedGitRef's own
-	// best-effort git-side resolution), since it only feeds rendered mode's
+	// (mirroring the best-effort Git provenance capture), since it only feeds rendered mode's
 	// optional pinning, never the fetch itself.
 	fetchRef := imageRef
 	resolvedDigest := ""
@@ -252,46 +239,14 @@ func resolveOCI(atmosConfig *schema.AtmosConfiguration, name, src string, timeou
 			Err()
 	}
 
-	conf, err := templates.LoadConfigurationFromDir(name, tempDir)
-	if err != nil {
-		cleanup()
-		return nil, noop, err
-	}
-	if err := requireScaffoldConfig(conf, src); err != nil {
-		cleanup()
-		return nil, noop, err
-	}
-	conf.ResolvedRef = resolvedDigest
-	// tempDir is still valid for the rest of this generation run (removed by
-	// cleanup() once it finishes, not before) -- preserved in LocalDir so a
-	// later re-parse of this template's own scaffold.yaml (e.g. by
-	// RunSetupForm) can still resolve a local !include target correctly.
-	// Source itself is overwritten next: the recorded provenance must be
-	// the original source the caller passed in, not that ephemeral fetch
-	// destination, so it's no longer usable for local path resolution
-	// after this point -- see Configuration.IncludeSourceDir.
-	conf.LocalDir = tempDir
-	conf.Source = src
-	return conf, cleanup, nil
+	return &Directory{Path: tempDir, ResolvedRef: resolvedDigest}, cleanup, nil
 }
 
-// resolveRemote fetches a remote scaffold source (git/https/s3, via
-// go-getter) into a temporary directory and loads its configuration. The
+// fetchRemoteDirectory fetches a remote source (git/https/s3, via
+// go-getter) into a temporary directory without interpreting its contents. The
 // returned cleanup function removes the temporary directory.
-func resolveRemote(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) (*templates.Configuration, func(), error) {
+func fetchRemoteDirectory(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration, options *fetchOptions) (*Directory, func(), error) {
 	noop := func() {}
-
-	// For a //subdir git source, resolve and pin the commit *before* the
-	// content fetch below, rather than after it (see pinSubdirGitSource's
-	// doc comment). Resolving afterward via a second, separate fetch let a
-	// mutable ref (a moving branch/tag) select a different commit for that
-	// second fetch than the one the first, content-bearing fetch already
-	// used, so the generated files could come from commit A while
-	// conf.ResolvedRef recorded commit B -- a later --update-strategy=rendered
-	// update would then pin B and diff against the wrong three-way merge
-	// base. Pinning fetchSrc to the pre-resolved SHA makes the single fetch
-	// below and preResolvedRef always agree.
-	fetchSrc, preResolvedRef := pinSubdirGitSource(atmosConfig, name, src, timeout)
 
 	tempDir, err := os.MkdirTemp("", "atmos-scaffold-")
 	if err != nil {
@@ -303,146 +258,33 @@ func resolveRemote(atmosConfig *schema.AtmosConfiguration, name, src string, tim
 	}
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
 
-	if err := fetchRemoteSource(atmosConfig, name, fetchSrc, tempDir, timeout); err != nil {
-		cleanup()
-		return nil, noop, err
-	}
-
-	conf, err := templates.LoadConfigurationFromDir(name, tempDir)
+	metadata, err := options.fetchRemoteSource(atmosConfig, name, src, tempDir, timeout)
 	if err != nil {
 		cleanup()
 		return nil, noop, err
 	}
-	if err := requireScaffoldConfig(conf, src); err != nil {
-		cleanup()
-		return nil, noop, err
-	}
-	// Resolve while tempDir (and its .git, if src was a git:: source with no
-	// //subdir) still exists -- cleanup() below removes it once generation
-	// finishes.
-	conf.ResolvedRef = resolveFetchedGitRef(tempDir)
-	if conf.ResolvedRef == "" {
-		// Either src wasn't a git source at all, or it was a //subdir git
-		// source whose fetch never leaves a usable .git in tempDir (see
-		// pinSubdirGitSource's doc comment) -- fall back to whatever commit
-		// pinSubdirGitSource already resolved, and pinned fetchSrc to,
-		// before the fetch above ran.
-		conf.ResolvedRef = preResolvedRef
-	}
-	// tempDir is still valid for the rest of this generation run (removed by
-	// cleanup() once it finishes, not before) -- preserved in LocalDir so a
-	// later re-parse of this template's own scaffold.yaml (e.g. by
-	// RunSetupForm) can still resolve a local !include target correctly.
-	// Source itself is overwritten next: the recorded provenance must be
-	// the original source the caller passed in, not that ephemeral fetch
-	// destination, so it's no longer usable for local path resolution
-	// after this point -- see Configuration.IncludeSourceDir.
-	conf.LocalDir = tempDir
-	conf.Source = src
-	return conf, cleanup, nil
-}
 
-// resolveFetchedGitRef returns the commit SHA checked out at dir, or "" if
-// dir isn't a git working tree (src wasn't a git:: source, e.g. oci/s3/http).
-// Best-effort: any resolution failure is treated the same as "not a git
-// source" rather than failing the whole fetch, since the result only feeds
-// --update-strategy=rendered's optional commit-pinning, never the fetch
-// itself.
-func resolveFetchedGitRef(dir string) string {
-	repo, err := git.PlainOpen(dir)
-	if err != nil {
-		return ""
-	}
-	head, err := repo.Head()
-	if err != nil {
-		return ""
-	}
-	return head.Hash().String()
-}
-
-// pinSubdirGitSource resolves and pins the commit for a //subdir git source
-// *before* resolveRemote's own content fetch runs, so that fetch and the
-// commit recorded in conf.ResolvedRef can never split across two different
-// commits of a mutable ref. This matters because go-getter's git fetch for a
-// //subdir source clones the full repository into its own internal temp
-// location first, then copies only the subdir's content into the
-// destination -- see pkg/downloader/get_git.go's doc comment -- so the
-// destination itself never gets a usable .git directory for
-// resolveFetchedGitRef to inspect afterward. Resolving post-fetch therefore
-// requires a second, separate fetch of the same ref; if that ref is mutable
-// (a moving branch/tag), the second fetch can select a different commit
-// than the first one already used for content, silently mismatching the
-// two.
-//
-// Resolving first instead -- via resolveSubdirGitRef -- and then pinning
-// fetchSrc to that exact SHA (via replaceRef) makes the single content fetch
-// that follows always land on the very commit being recorded.
-//
-// Returns the (possibly re-pinned) source to fetch and the commit SHA it was
-// pinned to. If src isn't a git source, has no //subdir, or the resolution
-// itself fails, returns src unchanged and an empty ref -- the caller falls
-// back to resolveFetchedGitRef's post-fetch, best-effort resolution in that
-// case (e.g. a non-git source, or a subdir-less git source where tempDir's
-// own .git is directly inspectable).
-func pinSubdirGitSource(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) (string, string) {
-	defer perf.Track(nil, "source.pinSubdirGitSource")()
-
-	if !vendor.IsGitURI(src) {
-		return src, ""
-	}
-	_, subdir := getter.SourceDirSubdir(src)
-	if subdir == "" {
-		return src, ""
-	}
-	ref := resolveSubdirGitRef(atmosConfig, name, src, timeout)
-	if ref == "" {
-		return src, ""
-	}
-	return replaceRef(src, ref), ref
-}
-
-// resolveSubdirGitRef re-fetches src's git ref without its //subdir suffix
-// into a throwaway temp directory, purely to resolve the commit checked out
-// there via resolveFetchedGitRef -- see pinSubdirGitSource's call site for
-// why this is needed. Returns "" if src has no //subdir at all (the caller's
-// direct resolveFetchedGitRef(tempDir) result already reflects reality in
-// that case) or if the re-fetch itself fails.
-func resolveSubdirGitRef(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) string {
-	rootSrc, subdir := getter.SourceDirSubdir(src)
-	if subdir == "" {
-		return ""
-	}
-
-	tempDir, err := os.MkdirTemp("", "atmos-scaffold-gitref-")
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
-
-	// Use the same user-facing template name as the content fetch that
-	// follows (see resolveRemote) rather than an internal step identifier,
-	// since this probe fetch is also visible to the user via its spinner.
-	if err := fetchRemoteSource(atmosConfig, name, rootSrc, tempDir, timeout); err != nil {
-		return ""
-	}
-	return resolveFetchedGitRef(tempDir)
+	return &Directory{Path: tempDir, ResolvedRef: metadata.GitCommit}, cleanup, nil
 }
 
 // fetchRemoteSource downloads src into destDir via go-getter, showing a
 // spinner while the download runs.
-func fetchRemoteSource(atmosConfig *schema.AtmosConfiguration, name, src, destDir string, timeout time.Duration) error {
+func (options *fetchOptions) fetchRemoteSource(atmosConfig *schema.AtmosConfiguration, name, src, destDir string, timeout time.Duration) (downloader.FetchMetadata, error) {
 	normalized := vendor.NormalizeURI(src)
 	// Keep the spinner message short: the full go-getter URL (subdir + ref)
 	// can be long enough to wrap across terminal rows, which breaks
 	// bubbletea's in-place redraw and makes the spinner scroll a new line
 	// per tick instead of overwriting.
-	progressMsg := fmt.Sprintf("Fetching scaffold template `%s`", name)
-	completedMsg := fmt.Sprintf("Fetched scaffold template `%s`", name)
-	fetchErr := spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
-		return downloader.NewGoGetterDownloader(atmosConfig).Fetch(normalized, destDir, downloader.ClientModeDir, timeout)
+	progressMsg := fmt.Sprintf("Fetching source `%s`", name)
+	completedMsg := fmt.Sprintf("Fetched source `%s`", name)
+	var metadata downloader.FetchMetadata
+	fetchErr := options.run(progressMsg, completedMsg, func() error {
+		var err error
+		metadata, err = downloader.NewGoGetterDownloader(atmosConfig).FetchWithMetadata(normalized, destDir, downloader.ClientModeDir, timeout)
+		return err
 	})
 	if fetchErr != nil {
-		return errUtils.Build(errUtils.ErrScaffoldFetchSource).
+		return downloader.FetchMetadata{}, errUtils.Build(errUtils.ErrScaffoldFetchSource).
 			WithCause(fetchErr).
 			WithExplanationf("Failed to fetch scaffold template from `%s`", src).
 			WithHint("Check the source URL and your network connection").
@@ -451,19 +293,16 @@ func fetchRemoteSource(atmosConfig *schema.AtmosConfiguration, name, src, destDi
 			WithExitCode(1).
 			Err()
 	}
-	return nil
+	return metadata, nil
 }
 
-func resolveLocal(name, src string) (*templates.Configuration, error) {
-	path := strings.TrimPrefix(src, "file://")
-	conf, err := templates.LoadConfigurationFromDir(name, path)
-	if err != nil {
-		return nil, err
+// run leaves a shared indicator running for the next initialization step.
+func (options *fetchOptions) run(message, completed string, operation func() error) error {
+	if options.progress == nil {
+		return spinner.ExecWithSpinner(message, completed, operation)
 	}
-	if err := requireScaffoldConfig(conf, src); err != nil {
-		return nil, err
-	}
-	return conf, nil
+	options.progress.Update(message)
+	return operation()
 }
 
 func requireScaffoldConfig(conf *templates.Configuration, src string) error {

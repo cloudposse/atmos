@@ -29,7 +29,15 @@ Move Terraform CI features from wrapper actions into Atmos itself. Native comman
 | Update vendored components | `cloudposse/github-action-atmos-component-updater` | [`atmos vendor update --pull-request`](/cli/commands/vendor/vendor-update) |
 | Planfile storage | `cloudposse/github-action-terraform-plan-storage` (S3/Azure Blob + DynamoDB/CosmosDB) | Built-in [planfile storage](/ci/planfile-storage) (S3, GitHub Artifacts, or local) |
 | Read a setting | `cloudposse/github-action-atmos-get-setting` | `atmos list settings --query` / `atmos describe component --query` |
-| Select components by query | `cloudposse/github-action-atmos-terraform-select-components` | `atmos describe affected --format=matrix` / `atmos list components --query` |
+| Select components by query | `cloudposse/github-action-atmos-terraform-select-components` | `atmos describe affected --format=matrix` / `atmos list components --query`; narrow with [`--tags` and `--labels`](/cli/commands/describe/affected#filtering-by-tags-and-labels) |
 | Trigger Spacelift stacks | `cloudposse/github-action-atmos-affected-trigger-spacelift` | Native CI (the [Spacelift integration](/deprecated/spacelift) itself is deprecated) |
+
+### Opting Components Out of CI
+
+Native CI does not read the legacy Atmos GitHub Actions setting `settings.github.actions_enabled`. Instead, set a default
+label such as `ci: auto`, override it on excluded components, and build the matrix with
+`atmos describe affected --format=matrix --labels=ci:auto`. See
+[Choosing which components run in CI](/ci#keeping-privileged-components-out-of-ci) for components requiring different
+credentials, manual execution, or network access.
 
 The [deprecated action documentation](/deprecated/github-actions) remains available for maintaining existing workflows during migration.

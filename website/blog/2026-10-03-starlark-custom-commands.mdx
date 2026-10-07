@@ -120,7 +120,7 @@ identify their event with `ctx.hook`, and inspect the parent result through
 `ctx.operation`. Use `atmos.terraform("plan", component="vpc", stack="dev")` or
 `atmos.helm(...)` for component operations. Other built-in commands are available
 as functions too: `atmos.scaffold("generate", "template", "target")`, `atmos.vendor("pull")`,
-`atmos.list("components")`, `atmos.describe("stacks")`, and `atmos.config("get", "base_path")`.
+`atmos.list("components")`, `atmos.describe("stacks")`, and `atmos.config("get", args=["base_path"])`.
 Use `atmos.run([...])` for any custom command. These calls share process capture, cancellation, and task retry behavior.
 Before-hook results and uncaptured parent streams are explicitly `None`.
 

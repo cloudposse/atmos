@@ -93,6 +93,10 @@ jobs:
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
+            raw.githubusercontent.com:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -142,7 +146,9 @@ jobs:
 
     services:
       floci:
-        image: floci/floci@sha256:d2ecc8035822b23b8587a56eab15edd825f41d3fb80d93e8e66680410beddc08 # 1.5.23
+        image: floci/floci@sha256:4e451c39c7bb88e3cd4f87e8fc0c25d5b47695a51185d521e2241fa00486e8eb # 1.5.23
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         ports:
           - 4566:4566
 
@@ -171,6 +177,9 @@ jobs:
             raw.githubusercontent.com:443
             tuf-repo-cdn.sigstore.dev:443
             rekor.sigstore.dev:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -229,7 +238,9 @@ jobs:
 
     services:
       floci:
-        image: floci/floci@sha256:d2ecc8035822b23b8587a56eab15edd825f41d3fb80d93e8e66680410beddc08 # 1.5.23
+        image: floci/floci@sha256:4e451c39c7bb88e3cd4f87e8fc0c25d5b47695a51185d521e2241fa00486e8eb # 1.5.23
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
         ports:
           - 4566:4566
 
@@ -254,6 +265,9 @@ jobs:
             raw.githubusercontent.com:443
             tuf-repo-cdn.sigstore.dev:443
             rekor.sigstore.dev:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -330,6 +344,9 @@ jobs:
             raw.githubusercontent.com:443
             tuf-repo-cdn.sigstore.dev:443
             rekor.sigstore.dev:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

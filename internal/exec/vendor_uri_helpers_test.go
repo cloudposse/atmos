@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -24,7 +25,7 @@ func TestHasLocalPathPrefix(t *testing.T) {
 		{
 			name:     "absolute windows path",
 			uri:      "C:\\Users\\components",
-			expected: false, // Not a Unix absolute path
+			expected: runtime.GOOS == "windows", // Drive paths are absolute on Windows.
 		},
 		// Relative paths
 		{
