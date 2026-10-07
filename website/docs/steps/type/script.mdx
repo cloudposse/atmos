@@ -228,6 +228,7 @@ output = main()
 ```
 
 To carry changing state, mutate a dictionary or list instead of rebinding a name.
+An indexed update such as `state["n"] += 1` mutates the dictionary and keeps `state` bound to the same object.
 Mutate it before handing it to `steps.parallel`, because everything reachable from a
 parallel task becomes immutable at dispatch:
 
