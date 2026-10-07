@@ -16,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
@@ -96,6 +97,12 @@ type session struct {
 	componentMu sync.Mutex
 	components  map[script.ComponentRef]*componentEntry
 	tools       *script.Tools
+
+	// ciReporter backs the ci module. It is never nil: hosts without a CI reporter get the
+	// local-only one. ciCtxValue caches the lazily resolved ci.context.
+	ciReporter ci.Reporter
+	ciCtxOnce  sync.Once
+	ciCtxValue starlark.Value
 }
 
 // Execute runs a script and returns its optional top-level output value: a string is
@@ -139,6 +146,10 @@ func newSession(ctx context.Context, e *Engine, spec *script.Spec) *session {
 		engine: e, spec: *spec, ctx: ctx, modules: make(map[string]starlark.StringDict),
 		loading: make(map[string]bool), components: make(map[script.ComponentRef]*componentEntry),
 		tools: script.NewTools(spec.InstallTools),
+	}
+	s.ciReporter = spec.CI
+	if s.ciReporter == nil {
+		s.ciReporter = ci.NewReporter(nil)
 	}
 	s.globals = s.predeclared()
 	return s
@@ -252,6 +263,7 @@ func (s *session) predeclared() starlark.StringDict {
 		"steps":        s.stepsModule(),
 		"exec":         module("exec", starlark.StringDict{"run": starlark.NewBuiltin("exec.run", s.exec)}),
 		"log":          module("log", s.logMembers()),
+		"ci":           s.ciModule(),
 	}
 }
 

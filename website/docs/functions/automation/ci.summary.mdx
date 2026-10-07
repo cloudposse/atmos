@@ -1,0 +1,71 @@
+---
+title: "ci.summary"
+sidebar_position: 25.5
+sidebar_label: "ci.summary"
+sidebar_class_name: command
+description: Append Markdown to the CI job summary.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ci.summary` function appends Markdown to the job summary of the current run. Locally, it renders the Markdown
+    as formatted text on stderr.
+</Intro>
+
+## Usage
+
+```python
+ci.summary(markdown)
+```
+
+## Arguments
+
+<dl>
+    <dt>`markdown`</dt>
+    <dd>
+        Required. The Markdown to append, as a string. Each call adds to the summary rather than replacing it, so a
+        script can build the summary in several steps.
+    </dd>
+</dl>
+
+## Returns
+
+The return value is `None`.
+
+## Behavior
+
+- On GitHub Actions, the text is appended to the job summary file that the runner provides. The summary appears on
+  the run page.
+- Locally, the Markdown is rendered as terminal Markdown on stderr.
+- The text is masked before it leaves the process, so secrets that Atmos knows about do not reach the summary.
+- In CI the call is gated by [`ci.summary.enabled`](/cli/configuration/ci/summary). When it is off, the call warns,
+  renders locally, and the script continues. See [gating](/functions/automation/ci#gating).
+
+## Examples
+
+### Report a short result
+
+```python
+ci.summary("## Deploy\n\nDeployed **api** to `prod` in 42 seconds.")
+```
+
+### Build a table
+
+```python
+rows = ["| Stack | Result |", "| --- | --- |"]
+for stack, result in {"dev": "ok", "prod": "ok"}.items():
+    rows.append("| " + stack + " | " + result + " |")
+ci.summary("\n".join(rows))
+```
+
+## Errors
+
+- A missing or non-string `markdown` fails with an argument error that names `ci.summary`.
+- A failure to write the summary fails the script. A gated-off call never fails.
+
+## Related
+
+- [`ci`](/functions/automation/ci) describes the module and the shared behavior rules.
+- [CI job summaries](/cli/configuration/ci/summary) configures the native summaries that Atmos writes for commands.
+- [`ci.comment`](/functions/automation/ci.comment) posts Markdown to the pull request instead.

@@ -1,0 +1,104 @@
+---
+title: "ci.comment"
+sidebar_position: 25.5
+sidebar_label: "ci.comment"
+sidebar_class_name: command
+description: Create or update a pull request comment.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ci.comment` function posts a comment on a pull request. Give the comment a key and later runs update the same
+    comment instead of adding a new one each time. Locally, the comment is previewed on stderr and never posted.
+</Intro>
+
+## Usage
+
+```python
+ci.comment(body, key = "", behavior = "upsert", pr = 0)
+```
+
+## Arguments
+
+<dl>
+    <dt>`body`</dt>
+    <dd>Required. The comment text, as Markdown in a string.</dd>
+
+    <dt>`key`</dt>
+    <dd>
+        (Optional) A stable name for the comment. The comment carries a hidden marker built from the key, which later
+        runs use to find it. Without a key, the call always creates a new comment.
+    </dd>
+
+    <dt>`behavior`</dt>
+    <dd>
+        (Optional) What to do when a comment with the key already exists. The value `"upsert"` (the default) updates it
+        and creates one when none exists, `"create"` always adds a new comment, and `"update"` only changes a comment
+        that already exists.
+    </dd>
+
+    <dt>`pr`</dt>
+    <dd>(Optional) The pull request number to comment on, as an integer. It defaults to the current pull request.</dd>
+</dl>
+
+## Returns
+
+A struct that describes the comment:
+
+<dl>
+    <dt>`id`</dt>
+    <dd>The identifier of the comment.</dd>
+
+    <dt>`url`</dt>
+    <dd>A link to the comment, as a string. It is empty when the comment was only previewed locally.</dd>
+
+    <dt>`created`</dt>
+    <dd>A boolean that is `True` when the call created a new comment and `False` when it updated one.</dd>
+</dl>
+
+## Behavior
+
+- In CI, the comment is posted to the pull request through the provider's API. Posting needs `pull-requests: write` on
+  GitHub Actions.
+- Locally, the comment is previewed on stderr and never posted. The returned `url` is empty.
+- The body is masked before it leaves the process.
+- Comments are opt-in. In CI the call is gated by [`ci.comments.enabled`](/cli/configuration/ci/comments), which is
+  off by default. When it is off, the call warns, renders locally, and the script continues.
+- Under `pull_request_target` and `workflow_run`, the comment is not posted unless `ci.allow_unsafe_fork_execution`
+  is `true`. The call warns and renders locally instead. See the [fork gate](/functions/automation/ci#fork-gate).
+
+## Examples
+
+### Keep one comment up to date
+
+```python
+ci.comment("### Plan\n\n3 to add, 1 to change, 0 to destroy.", key = "plan")
+```
+
+Every run updates the same comment, so the pull request never collects a stack of stale ones.
+
+### Post to a specific pull request
+
+```python
+result = ci.comment("Released in v1.4.0.", pr = 214)
+ui.info("Posted " + result.url)
+```
+
+### Always add a new comment
+
+```python
+ci.comment("Rebased onto main.", behavior = "create")
+```
+
+## Errors
+
+- An API error, a missing token, or a pull request number that does not exist fails the script. See
+  [errors](/functions/automation/ci#errors).
+- An unknown `behavior` fails with an argument error that names `ci.comment`.
+
+## Related
+
+- [`ci`](/functions/automation/ci) describes the module and the shared behavior rules.
+- [CI pull request comments](/cli/configuration/ci/comments) configures the native comments that Atmos posts for commands.
+- [`ci.summary`](/functions/automation/ci.summary) writes to the job summary, which needs no pull request.

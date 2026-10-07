@@ -1,0 +1,74 @@
+---
+title: "ci.sarif"
+sidebar_position: 25.5
+sidebar_label: "ci.sarif"
+sidebar_class_name: command
+description: Upload a SARIF file to Code Scanning.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `ci.sarif` function uploads a SARIF file to Code Scanning, so findings from your own tools appear as alerts on
+    the pull request. Locally, it prints one line that says the file was not uploaded.
+</Intro>
+
+## Usage
+
+```python
+ci.sarif(path, category = "")
+```
+
+## Arguments
+
+<dl>
+    <dt>`path`</dt>
+    <dd>Required. The path of the SARIF file, as a string. A relative path resolves against the script's working directory.</dd>
+
+    <dt>`category`</dt>
+    <dd>
+        (Optional) A name that separates results from different tools or components, as a string. Uploads that share a
+        category replace each other, and uploads in different categories coexist.
+    </dd>
+</dl>
+
+## Returns
+
+The return value is `None`.
+
+## Behavior
+
+- In CI, the file is uploaded to the repository's Code Scanning. The job needs `security-events: write`. Code
+  Scanning is free on public repositories and requires GitHub Advanced Security on private ones.
+- Locally, the call prints one line that names the file and says it was not uploaded.
+- The file is sent exactly as written, so it is not masked. Keep secrets out of the report.
+- In CI the call is gated by `ci.results.enabled`. When it is off, the call warns, renders locally, and the script
+  continues. See [gating](/functions/automation/ci#gating) and the [CI configuration](/cli/configuration/ci).
+
+## Examples
+
+### Upload a scanner report
+
+```python
+exec.run(["trivy", "config", "--format=sarif", "--output=trivy.sarif", "."])
+ci.sarif("trivy.sarif", category = "trivy")
+```
+
+### Upload one report per component
+
+```python
+for component in ["vpc", "eks"]:
+    report = "build/" + component + ".sarif"
+    exec.run(["checkov", "--directory=components/terraform/" + component, "--output=sarif", "--output-file-path=build"])
+    ci.sarif(report, category = "checkov-" + component)
+```
+
+## Errors
+
+- A missing or non-string `path`, or a file that does not exist, fails the script.
+- An API error or a missing permission fails the script. A gated-off call never fails.
+
+## Related
+
+- [`ci`](/functions/automation/ci) describes the module and the shared behavior rules.
+- [`ci.annotate`](/functions/automation/ci.annotate) marks individual lines without Code Scanning.
