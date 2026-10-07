@@ -335,6 +335,11 @@
   "git": {
     "list": {}
   },
+  "init": {
+    "repository": "github.com/cloudposse/atmos",
+    "depth": 1,
+    "git": true
+  },
   "profiles": {},
   "metadata": {},
   "list": {

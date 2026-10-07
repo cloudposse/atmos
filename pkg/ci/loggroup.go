@@ -101,8 +101,9 @@ func dimensionActive(mode string, dim Dimension) bool {
 }
 
 // grouper returns the detected provider's log-group capability, or (nil, false)
-// when no grouping-capable provider is active or a parent Atmos process already
-// has grouping open (env sentinel).
+// when no grouping-capable provider is active, a parent Atmos process already
+// has grouping open (env sentinel), or the provider suppresses grouping for
+// this run (e.g. a legacy GitHub Action whose stdout must stay pure JSON).
 func grouper(atmosConfig *schema.AtmosConfiguration) (provider.LogGrouper, bool) {
 	if resolveGroupMode(atmosConfig) == GroupModeOff {
 		return nil, false
@@ -115,11 +116,26 @@ func grouper(atmosConfig *schema.AtmosConfiguration) (provider.LogGrouper, bool)
 	if p == nil {
 		return nil, false
 	}
+	// The provider may require grouping to be disabled for this run so stdout
+	// stays free of CI workflow-command metadata (see LogGroupingSuppressor).
+	if groupingSuppressed(p) {
+		return nil, false
+	}
 	lg, ok := p.(provider.LogGrouper)
 	if !ok {
 		return nil, false
 	}
 	return lg, true
+}
+
+// groupingSuppressed reports whether the detected provider requires log
+// grouping to be disabled for the current run. Providers signal this by
+// implementing provider.LogGroupingSuppressor; the canonical case is a
+// deprecated GitHub Action that parses the atmos process's stdout as JSON, so a
+// `::group::` marker there would corrupt it. Annotations are unaffected.
+func groupingSuppressed(p provider.Provider) bool {
+	s, ok := p.(provider.LogGroupingSuppressor)
+	return ok && s.SuppressLogGrouping()
 }
 
 // GroupingEnabled reports whether CI log grouping is available for this run in

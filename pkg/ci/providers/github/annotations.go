@@ -5,23 +5,38 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Annotate implements provider.Annotator by emitting one GitHub Actions
 // workflow annotation command per finding. GitHub renders these inline on the
 // pull request diff (and in the run's annotations list) — the "non-CodeQL" path
-// that needs no GitHub Advanced Security. Workflow commands are written to
-// stdout (the data channel) because the runner parses them from the step log
-// stream.
+// that needs no GitHub Advanced Security.
+//
+// Workflow commands are written to stderr (the UI channel) via pkg/ui, NOT to
+// stdout (the data channel). The GitHub Actions runner parses workflow commands
+// from the step's combined log stream, which captures both stdout and stderr,
+// so annotations still render when written to stderr. Writing them to stdout
+// would corrupt the structured data (JSON/YAML) that downstream consumers read
+// from stdout — for example, legacy actions like
+// cloudposse/github-action-atmos-get-settings capture the stdout of
+// `atmos describe ...` and parse it as JSON, which fails on a stray
+// `::warning ...` line. See issue #3309 and
+// docs/fixes/2026-10-07-ci-legacy-action-stdout-pollution.md.
+//
+// Unlike log-group markers — whose `::group::`/`::endgroup::` must bracket
+// stdout content and therefore cannot move to stderr (the runner does not
+// guarantee ordering across the two streams) — annotations are standalone and
+// render correctly from stderr. Writes go through pkg/ui, which routes to
+// stderr with secret masking and logs (does not return) any write failure,
+// matching the fire-and-forget contract of every other UI-channel write in
+// Atmos; a dropped diagnostic annotation is never worth failing the command.
 func (p *Provider) Annotate(annotations []provider.Annotation) error {
 	defer perf.Track(nil, "github.Provider.Annotate")()
 
 	for i := range annotations {
-		if err := data.Writeln(formatAnnotation(&annotations[i])); err != nil {
-			return err
-		}
+		ui.Writeln(formatAnnotation(&annotations[i]))
 	}
 	return nil
 }

@@ -242,14 +242,14 @@ func TestScriptSourceHasNoYAMLOrJSONKey(t *testing.T) {
 }
 
 func TestLiteralFieldsSurviveStepConversion(t *testing.T) {
-	task := Task{Name: "t", Script: "x", LiteralFields: []string{"script", "env.GREETING"}}
+	task := Task{Name: "t", Script: "x", LiteralFields: []string{"script", "env.GREETING", "ambient_env.Foo"}}
 	step := task.ToWorkflowStep()
-	assert.Equal(t, []string{"script", "env.GREETING"}, step.LiteralFields)
-	assert.Equal(t, []string{"script", "env.GREETING"}, TaskFromWorkflowStep(&step).LiteralFields)
+	assert.Equal(t, []string{"script", "env.GREETING", "ambient_env.Foo"}, step.LiteralFields)
+	assert.Equal(t, []string{"script", "env.GREETING", "ambient_env.Foo"}, TaskFromWorkflowStep(&step).LiteralFields)
 }
 
 func TestIsLiteral(t *testing.T) {
-	step := WorkflowStep{LiteralFields: []string{"script", "env.Greeting"}}
+	step := WorkflowStep{LiteralFields: []string{"script", "env.Greeting", "ambient_env.Foo"}}
 	task := Task{LiteralFields: []string{"command"}}
 
 	tests := []struct {
@@ -263,6 +263,8 @@ func TestIsLiteral(t *testing.T) {
 		{"env exact case", step.IsLiteralEnv("Greeting"), true},
 		{"env case-insensitive", step.IsLiteralEnv("GREETING"), true},
 		{"env other name", step.IsLiteralEnv("OTHER"), false},
+		{"ambient exact case", step.IsLiteralEnv("Foo"), true},
+		{"ambient other case", step.IsLiteralEnv("FOO"), false},
 		{"task command", task.IsLiteral("command"), true},
 		{"task script not marked", task.IsLiteral("script"), false},
 		{"zero step", (&WorkflowStep{}).IsLiteral("script"), false},
@@ -271,5 +273,17 @@ func TestIsLiteral(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.wants, tt.got)
 		})
+	}
+}
+
+func TestRuntimeLiteralMarkersAreNotSerialized(t *testing.T) {
+	step := WorkflowStep{Name: "s", LiteralFields: []string{"env.DECLARED", "ambient_env.Ambient"}}
+	encodedJSON, err := json.Marshal(step)
+	require.NoError(t, err)
+	encodedYAML, err := yaml.Marshal(step)
+	require.NoError(t, err)
+	for _, encoded := range [][]byte{encodedJSON, encodedYAML} {
+		assert.NotContains(t, string(encoded), "ambient_env")
+		assert.NotContains(t, string(encoded), "literal_fields")
 	}
 }

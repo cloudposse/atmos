@@ -2,7 +2,6 @@ package step
 
 import (
 	"maps"
-	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -15,7 +14,8 @@ import (
 // stray "{{" in an inherited variable can neither fail the step nor be evaluated as a template.
 //
 // The declared map is the step's own `env:` as written, before rendering. The step's existing
-// literal markers for its declared entries are kept.
+// literal markers for its declared entries are kept. Ambient names use exact-case markers:
+// Unix can have both FOO and foo, and marking ambient FOO must not suppress rendering foo.
 func ApplyAmbientEnv(step *schema.WorkflowStep, ambient, declared map[string]string) {
 	defer perf.Track(nil, "step.ApplyAmbientEnv")()
 
@@ -27,24 +27,10 @@ func ApplyAmbientEnv(step *schema.WorkflowStep, ambient, declared map[string]str
 	literal := make([]string, 0, len(step.LiteralFields))
 	literal = append(literal, step.LiteralFields...)
 	for key := range ambient {
-		if hasEnvKey(declared, key) {
+		if _, declaredHere := declared[key]; declaredHere {
 			continue
 		}
-		literal = append(literal, schema.LiteralFieldEnvPrefix+key)
+		literal = append(literal, schema.LiteralFieldAmbientEnvPrefix+key)
 	}
 	step.LiteralFields = literal
-}
-
-// hasEnvKey reports whether env declares key. Keys match case-insensitively because
-// configuration loading can change the case of map keys.
-func hasEnvKey(env map[string]string, key string) bool {
-	if _, ok := env[key]; ok {
-		return true
-	}
-	for candidate := range env {
-		if strings.EqualFold(candidate, key) {
-			return true
-		}
-	}
-	return false
 }

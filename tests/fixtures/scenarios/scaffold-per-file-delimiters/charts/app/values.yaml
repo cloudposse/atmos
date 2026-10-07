@@ -1,0 +1,9 @@
+# atmos:template
+# Default values for [[ .Config.name ]].
+replicaCount: 1
+image: nginx:1.27
+service:
+  name: [[ .Config.name ]]
+  port: 80
+ingress:
+  enabled: false

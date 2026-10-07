@@ -176,7 +176,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 	}
 	result := ""
 	if r.shouldRenderStyled(terminal.Stdout) {
-		result, err = out.Render(content)
+		result, err = out.Render(StripFrontmatter(content))
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout
 		result, err = r.RenderAsciiWithoutWordWrap(content)
@@ -195,7 +195,7 @@ func (r *Renderer) Render(content string) (string, error) {
 	var rendered string
 	var err error
 	if r.shouldRenderStyled(terminal.Stdout) {
-		rendered, err = r.renderer.Render(content)
+		rendered, err = r.renderer.Render(StripFrontmatter(content))
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout.
 		rendered, err = r.RenderAscii(content)
@@ -252,6 +252,7 @@ func newASCIIRenderer(width uint) (*glamour.TermRenderer, error) {
 }
 
 func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
+	content = StripFrontmatter(content)
 	renderer, err := newASCIIRenderer(0)
 	if err != nil {
 		return "", err
@@ -267,6 +268,7 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {
+	content = StripFrontmatter(content)
 	renderer, err := newASCIIRenderer(r.width)
 	if err != nil {
 		return "", err

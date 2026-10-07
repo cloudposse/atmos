@@ -55,6 +55,7 @@ jobs:
       image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}
+      count: ${{ steps.affected.outputs.count }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -65,7 +66,7 @@ jobs:
 
   deploy:
     needs: affected
-    if: ${{ needs.affected.outputs.matrix != '' }}
+    if: ${{ needs.affected.outputs.count != '0' }}
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
@@ -80,6 +81,8 @@ jobs:
           STACK: ${{ matrix.stack }}
         run: atmos terraform deploy "$COMPONENT" -s "$STACK"
 ```
+
+An empty result is the matrix `{"include":[]}`, never an empty string, so the `deploy` job guards on the `count` output that Atmos writes next to `matrix` instead of comparing the matrix with `''`.
 
 The explicit `--output-file` flag still works if you need it (writing to an arbitrary path, non-GitHub CI providers, etc.) — explicit always wins over auto-detection.
 
