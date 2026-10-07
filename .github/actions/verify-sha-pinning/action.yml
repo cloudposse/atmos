@@ -121,11 +121,17 @@ runs:
           const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
           async function withRetries(operation, label, maxAttempts = 3) {
+            if (rateLimitError) throw rateLimitError;
             let lastErr;
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
               try {
                 return await operation();
               } catch (err) {
+                // Quota exhaustion applies to every endpoint, including mismatch diagnostics.
+                if (err.status === 403 && err.response?.headers?.['x-ratelimit-remaining'] === '0') {
+                  rateLimitError = err;
+                  throw err;
+                }
                 if (nonRetryableStatuses.has(err.status)) {
                   throw err;
                 }
@@ -261,18 +267,8 @@ runs:
                 throw new Error(`Tag "${tag}" not found in ${owner}/${repo}`);
               }
               if (err.status === 403) {
-                // A rate-limit 403 isn't a per-repo access-block condition —
-                // it means this token is out of budget for every remaining
-                // lookup, allowlisted repo or not. Let it fail loudly instead
-                // of being silently absorbed by one repo's allowlist entry.
-                // Detected via the documented x-ratelimit-remaining response
-                // header (a structured API signal), never by inspecting the
-                // error's message text.
-                const rateLimitRemaining = err.response?.headers?.['x-ratelimit-remaining'];
-                if (rateLimitRemaining === '0') {
-                  rateLimitError = err;
-                  throw err;
-                }
+                // Quota failures stay hard errors even for allowlisted repositories.
+                if (err === rateLimitError) throw err;
                 throw new AccessBlockedError(
                   `API access blocked (403) resolving tag "${tag}" in ${owner}/${repo}: ${err.message}`,
                   err
@@ -294,6 +290,7 @@ runs:
               );
               details.existsInRepo = true;
             } catch (err) {
+              if (err === rateLimitError) throw err;
               details.existsInRepo = (err.status !== 404 && err.status !== 422);
             }
 
@@ -309,7 +306,8 @@ runs:
                 details.matchingTags = tags
                   .filter(t => t.commit.sha === pinnedSha)
                   .map(t => t.name);
-              } catch {
+              } catch (err) {
+                if (err === rateLimitError) throw err;
                 // Non-fatal — we still have the existence check
               }
             }
@@ -505,8 +503,8 @@ runs:
           function renderRows(rs) {
             const visible = rs.slice(0, 20).map(r => ({
               ...r,
-              action: r.action.slice(0, 200),
-              file: r.file.slice(0, 200),
+              action: String(r.action ?? '').slice(0, 200),
+              file: String(r.file ?? '').slice(0, 200),
               detail: (r.detail || '').replaceAll('|', '&#124;').replaceAll('\n', ' ').slice(0, 300),
             }));
             const rows = visible.map(r => {

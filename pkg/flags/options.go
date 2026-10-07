@@ -21,7 +21,8 @@ type Option func(*parserConfig)
 // This is an internal type used by the Options pattern.
 type parserConfig struct {
 	registry    *FlagRegistry
-	viperPrefix string // Prefix for Viper keys (optional)
+	viperPrefix string            // Prefix for Viper keys (optional)
+	viperKeys   map[string]string // Flag name -> explicit Viper key override (optional).
 
 	// Interactive prompt configuration.
 	flagPrompts          map[string]*flagPromptConfig // Flag name -> prompt config for required flags
@@ -383,6 +384,34 @@ func WithViperPrefix(prefix string) Option {
 
 	return func(cfg *parserConfig) {
 		cfg.viperPrefix = prefix
+	}
+}
+
+// WithViperKey overrides the Viper key used for a single flag.
+//
+// By default a flag is stored under its own name (or under "<prefix>.<name>" when
+// WithViperPrefix is used). A bare key such as "tags" or "labels" is exposed to
+// Viper's AutomaticEnv() lookup, which resolves ATMOS_<KEY> before explicitly bound
+// environment variables. A job-level ATMOS_TAGS or ATMOS_LABELS would therefore leak into
+// every command that reads those keys. Namespacing the key (for example "list.tags")
+// keeps the flag isolated and lets WithEnvVars bind the command-specific variable.
+//
+// The override applies to every bind and read path (environment binding, pflag binding,
+// defaults, IsSet, and Parse()). Parse() results are still keyed by the flag name.
+//
+// Example:
+//
+//	WithStringFlag("tags", "", "", "Filter by tags"),
+//	WithEnvVars("tags", "ATMOS_COMPONENT_TAGS"),
+//	WithViperKey("tags", "list.tags"),
+func WithViperKey(flagName, viperKey string) Option {
+	defer perf.Track(nil, "flags.WithViperKey")()
+
+	return func(cfg *parserConfig) {
+		if cfg.viperKeys == nil {
+			cfg.viperKeys = make(map[string]string)
+		}
+		cfg.viperKeys[flagName] = viperKey
 	}
 }
 

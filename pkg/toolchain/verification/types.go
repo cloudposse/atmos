@@ -73,8 +73,9 @@ type Result struct {
 
 // Verifier verifies downloaded tool assets.
 type Verifier struct {
-	Downloader Downloader
-	Runner     CommandRunner
+	Downloader                  Downloader
+	Runner                      CommandRunner
+	publicAttestationDownloader Downloader
 }
 
 // PolicyFromConfig returns a fully defaulted verification policy.

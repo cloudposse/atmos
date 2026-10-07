@@ -26,9 +26,22 @@ func ParseTagsFlag(input string) []string {
 	return result
 }
 
+// labelsFlagSource is the default source name used in --labels parse errors.
+const labelsFlagSource = "--labels"
+
 // ParseLabelsFlag parses a comma-separated key=value (or key:value) list into a map[string]string.
+// Duplicate keys are last-wins. Errors name the "--labels" flag as their source.
 func ParseLabelsFlag(input string) (map[string]string, error) {
 	defer perf.Track(nil, "tags.ParseLabelsFlag")()
+
+	return ParseLabelsFlagFrom(input, labelsFlagSource)
+}
+
+// ParseLabelsFlagFrom parses a comma-separated key=value (or key:value) list into a map[string]string.
+// The source names where the value came from (for example "--labels (or ATMOS_LABELS)") and is
+// included in the error message when a pair is malformed. Duplicate keys are last-wins.
+func ParseLabelsFlagFrom(input, source string) (map[string]string, error) {
+	defer perf.Track(nil, "tags.ParseLabelsFlagFrom")()
 
 	if input == "" {
 		return nil, nil
@@ -40,9 +53,11 @@ func ParseLabelsFlag(input string) (map[string]string, error) {
 		if pair == "" {
 			continue
 		}
-		key, value, err := splitLabelPair(pair)
-		if err != nil {
-			return nil, err
+		key, value, ok := splitLabelPair(pair)
+		if !ok {
+			return nil, errUtils.Build(fmt.Errorf("%w: invalid label %q for %s, expected key=value or key:value", errUtils.ErrInvalidFlag, pair, source)).
+				WithHint("Pass comma-separated key=value (or key:value) pairs, for example --labels=ci=auto,team=platform").
+				Err()
 		}
 		result[key] = value
 	}
@@ -52,16 +67,17 @@ func ParseLabelsFlag(input string) (map[string]string, error) {
 // splitLabelPair splits a single "key=value" or "key:value" pair on whichever
 // separator (= or :) occurs first in the string, so a value that itself
 // contains the other separator is preserved verbatim (e.g. "key:val=ue" ->
-// {"key": "val=ue"}; "key=val:ue" -> {"key": "val:ue"}).
-func splitLabelPair(pair string) (string, string, error) {
+// {"key": "val=ue"}; "key=val:ue" -> {"key": "val:ue"}). It reports false when
+// the pair has no separator or an empty key.
+func splitLabelPair(pair string) (string, string, bool) {
 	sepIdx := strings.IndexAny(pair, "=:")
 	if sepIdx == -1 {
-		return "", "", fmt.Errorf("%w: invalid label %q, expected key=value or key:value", errUtils.ErrInvalidFlag, pair)
+		return "", "", false
 	}
 
 	key := strings.TrimSpace(pair[:sepIdx])
 	if key == "" {
-		return "", "", fmt.Errorf("%w: invalid label %q, expected key=value or key:value", errUtils.ErrInvalidFlag, pair)
+		return "", "", false
 	}
-	return key, strings.TrimSpace(pair[sepIdx+1:]), nil
+	return key, strings.TrimSpace(pair[sepIdx+1:]), true
 }

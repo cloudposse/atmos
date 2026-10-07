@@ -6,10 +6,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// FetchMetadata is best-effort HTTP cache metadata captured during a fetch, for provenance only.
-// It is never treated as a stronger identity than a real digest/checksum -- see ResolvedArtifact's
-// own doc comment ("Cache metadata deliberately has no role in integrity verification").
+// FetchMetadata records provenance from the download itself.
+// HTTP cache headers are hints, not integrity checks; GitCommit identifies the checked-out content.
 type FetchMetadata struct {
+	GitCommit    string
 	ETag         string
 	LastModified string
 }

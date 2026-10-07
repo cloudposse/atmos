@@ -102,12 +102,87 @@ func TestPreprocessGitHookStepsOtherForms(t *testing.T) {
 			v := viper.New()
 			v.SetConfigType("yaml")
 			require.NoError(t, v.ReadConfig(strings.NewReader(content)))
-			_, err := preprocessGitHookSteps([]byte(content), v, "")
+			err := preprocessAtmosYamlFuncExceptCommands([]byte(content), v, "")
 			require.NoError(t, err)
 		})
 	}
 	for _, content := range []string{"[invalid", "git: {hooks: {pre-commit: {steps: [{script: !include.raw ./missing.star}]}}}"} {
-		_, err := preprocessGitHookSteps([]byte(content), viper.New(), filepath.Join(t.TempDir(), "atmos.yaml"))
+		err := preprocessAtmosYamlFuncExceptCommands([]byte(content), viper.New(), filepath.Join(t.TempDir(), "atmos.yaml"))
 		require.Error(t, err)
+	}
+}
+
+func TestConfigAnchorsAcrossCommandsGitHooksAndSettings(t *testing.T) {
+	tests := []struct{ name, content string }{
+		{"command anchors used by hooks", `commands:
+  - name: &command_name shared-command
+    steps:
+      - command: echo command
+git:
+  hooks:
+    pre-commit:
+      steps:
+        - name: &hook_name shared-hook
+          type: shell
+          command: *command_name
+        - name: included
+          type: script
+          script: !include.raw ./hook.star
+          env:
+            MESSAGE: !literal '{{ untouched }}'
+settings:
+  command_name: *command_name
+  hook_name: *hook_name
+  enabled: !env ATMOS_TEST_ANCHOR_SETTING
+`},
+		{"hook anchors used by commands", `git:
+  hooks:
+    pre-commit:
+      steps:
+        - name: &hook_name shared-hook
+          type: shell
+          command: &command_name shared-command
+        - name: included
+          type: script
+          script: !include.raw ./hook.star
+          env:
+            MESSAGE: !literal '{{ untouched }}'
+commands:
+  - name: *command_name
+    steps:
+      - command: echo command
+settings:
+  command_name: *command_name
+  hook_name: *hook_name
+  enabled: !env ATMOS_TEST_ANCHOR_SETTING
+`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_BASE_PATH", "")
+			t.Setenv("ATMOS_TEST_ANCHOR_SETTING", "resolved-setting")
+			dir := t.TempDir()
+			file := filepath.Join(dir, "atmos.yaml")
+			writeTestFile(t, file, tt.content)
+			writeTestFile(t, filepath.Join(dir, "hook.star"), "print(ctx.args)\n")
+			v := viper.New()
+			v.SetConfigType("yaml")
+			require.NoError(t, mergeConfigFile(file, v))
+			assert.Equal(t, "shared-command", v.GetString("settings.command_name"))
+			assert.Equal(t, "shared-hook", v.GetString("settings.hook_name"))
+			assert.Equal(t, "resolved-setting", v.GetString("settings.enabled"))
+			commands := v.Get("commands").([]any)
+			require.Len(t, commands, 1)
+			assert.Equal(t, "shared-command", commands[0].(map[string]any)["name"])
+			hook := v.Get("git.hooks.pre-commit").(map[string]any)
+			steps := hook["steps"].([]any)
+			require.Len(t, steps, 2)
+			assert.Equal(t, "shared-hook", steps[0].(map[string]any)["name"])
+			assert.Equal(t, "shared-command", steps[0].(map[string]any)["command"])
+			script := steps[1].(map[string]any)
+			assert.Equal(t, "print(ctx.args)\n", script["script"])
+			assert.Equal(t, filepath.Join(dir, "hook.star"), script["script_source"])
+			assert.Contains(t, script["literal_fields"], "env.MESSAGE")
+		})
 	}
 }

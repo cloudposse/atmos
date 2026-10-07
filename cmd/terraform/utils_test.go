@@ -761,6 +761,7 @@ func TestHasNonAffectedMultiFlags(t *testing.T) {
 	}
 }
 
+// TestIsMultiComponentInvocationUsesViperValues verifies that multi-component detection reads the all, affected, components, and query values from Viper.
 func TestIsMultiComponentInvocationUsesViperValues(t *testing.T) {
 	v := viper.GetViper()
 	t.Cleanup(func() {
@@ -780,7 +781,7 @@ func TestIsMultiComponentInvocationUsesViperValues(t *testing.T) {
 	cmd.Flags().StringSlice("components", nil, "")
 	cmd.Flags().String("query", "", "")
 
-	assert.True(t, isMultiComponentInvocation(cmd))
+	assert.True(t, isMultiComponentInvocation(cmd, nil))
 }
 
 // TestHasSingleComponentFlags tests the hasSingleComponentFlags function.

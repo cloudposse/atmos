@@ -1,0 +1,36 @@
+import:
+  - mixins/region/us-west-2
+  - mixins/stage/network
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: mock
+        tags: [foundation]
+        labels:
+          ci: manual
+          team: network
+    tgw/hub:
+      metadata:
+        component: mock
+        tags: [network, tier-1]
+        labels:
+          ci: auto
+          team: network
+      vars:
+        foo: hub
+        name: new-name
+      dependencies:
+        components:
+          - name: vpc
+    tgw/attachment:
+      metadata:
+        component: mock
+        tags: [network]
+        labels:
+          ci: auto
+      dependencies:
+        components:
+          - name: vpc
+          - name: tgw/hub

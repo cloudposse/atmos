@@ -165,7 +165,7 @@ func preResolveInteractiveSelection(cmd_ *cobra.Command, args []string) error {
 
 	// Multi-component invocations (--all/--affected/--components/--query) have no single
 	// component/stack to select; leave them to the normal flow.
-	if isMultiComponentInvocation(cmd_) {
+	if isMultiComponentInvocation(cmd_, args) {
 		return nil
 	}
 
@@ -188,19 +188,64 @@ func preResolveInteractiveSelection(cmd_ *cobra.Command, args []string) error {
 // isMultiComponentInvocation reports whether any multi-component flag is set.
 // It checks explicit Cobra flags first, then Viper for env/config-driven values,
 // because this runs in PreRunE before applyOptionsToInfo has populated info.
-func isMultiComponentInvocation(cmd_ *cobra.Command) bool {
+//
+// Selectors that arrive only through the environment (ATMOS_TAGS / ATMOS_LABELS) never turn a
+// command that names a component into a multi-component invocation: a job-level export must not
+// override an explicit component argument. An explicit --tags/--labels on the command line still
+// does, so the conflict with the component argument is reported to the user.
+func isMultiComponentInvocation(cmd_ *cobra.Command, args []string) bool {
 	for _, name := range multiComponentFlagNames {
 		if f := cmd_.Flags().Lookup(name); f != nil && f.Changed {
 			return true
 		}
 	}
 	v := viper.GetViper()
-	return v.GetBool("all") ||
+	if v.GetBool("all") ||
 		v.GetBool("affected") ||
 		len(v.GetStringSlice("components")) > 0 ||
-		v.GetString("query") != "" ||
-		len(v.GetStringSlice("tags")) > 0 ||
-		v.GetString("labels") != ""
+		v.GetString("query") != "" {
+		return true
+	}
+	if hasComponentArgument(cmd_.Name(), args) {
+		return false
+	}
+	return len(v.GetStringSlice("tags")) > 0 || v.GetString("labels") != ""
+}
+
+// hasComponentArgument reports whether the terraform subcommand and its positional args name a
+// component. Compound commands (providers, state, workspace) take a sub-subcommand first, so
+// "providers lock" has no component while "providers lock vpc" does.
+func hasComponentArgument(subCommand string, args []string) bool {
+	withSubCommand := append([]string{subCommand}, args...)
+	if isCompoundTerraformCommandWithoutComponent(withSubCommand) {
+		return false
+	}
+	return len(withSubCommand) >= 2
+}
+
+// dropEnvOnlySelectorsForComponent ignores --tags/--labels selectors that came only from the
+// environment (ATMOS_TAGS / ATMOS_LABELS) when a component argument was given. Those variables are
+// commonly exported for a whole CI job and would otherwise turn `atmos terraform plan vpc -s dev`
+// into a conflicting multi-component invocation. A selector set explicitly on the command line is
+// kept, so combining it with a component argument still fails in shared.CheckTerraformFlags.
+func dropEnvOnlySelectorsForComponent(cmd_ *cobra.Command, info *schema.ConfigAndStacksInfo, opts *TerraformRunOptions) {
+	if info.ComponentFromArg == "" {
+		return
+	}
+	if len(opts.Tags) > 0 && !flagChanged(cmd_, "tags") {
+		log.Debug("Ignoring ATMOS_TAGS because a component argument was given", "component", info.ComponentFromArg, "tags", opts.Tags)
+		opts.Tags = nil
+	}
+	if len(opts.Labels) > 0 && !flagChanged(cmd_, "labels") {
+		log.Debug("Ignoring ATMOS_LABELS because a component argument was given", "component", info.ComponentFromArg, "labels", opts.Labels)
+		opts.Labels = nil
+	}
+}
+
+// flagChanged reports whether the named flag was set explicitly on the command line.
+func flagChanged(cmd_ *cobra.Command, name string) bool {
+	f := cmd_.Flags().Lookup(name)
+	return f != nil && f.Changed
 }
 
 // applyPreResolvedComponent injects the interactively-selected component into info
@@ -1458,6 +1503,10 @@ func executeAffectedCommand(ctx context.Context, parentCmd *cobra.Command, args 
 	a.IncludeSettings = false
 	a.Upload = false
 	a.OutputFile = ""
+	// `terraform --affected` applies --tags/--labels itself, after the affected set (and any
+	// dependents) is computed, so the describe-affected selectors must not pre-filter it.
+	a.Tags = nil
+	a.Labels = nil
 
 	return e.ExecuteTerraformAffectedWithContext(ctx, &a, info)
 }
@@ -1599,6 +1648,9 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	if insertedMultiComponentPlaceholder {
 		info.ComponentFromArg = ""
 	}
+
+	// A component argument wins over selectors that came only from ATMOS_TAGS / ATMOS_LABELS.
+	dropEnvOnlySelectorsForComponent(actualCmd, &info, opts)
 
 	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
 	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
