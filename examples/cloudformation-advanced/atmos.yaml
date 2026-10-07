@@ -1,0 +1,33 @@
+base_path: ./
+
+components:
+  aws/cloudformation:
+    base_path: components/cloudformation
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - deploy/**/*
+  name_template: "{{ .vars.stage }}"
+
+templates:
+  settings:
+    enabled: true
+    gomplate:
+      enabled: true
+
+logs:
+  level: Info
+
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: advanced/aws
+      default: true
+
+commands:
+  - name: test
+    description: Build, publish, deploy, and verify two Lambda releases in Floci
+    steps:
+      - python3 scripts/test.py

@@ -54,6 +54,11 @@ steps:
 The [`archive` step's timestamp settings](/steps/type/archive#reproducible-archives)
 produce reproducible archives, allowing unchanged builds to skip the upload.
 
+The [advanced CloudFormation example](/examples/cloudformation-advanced) runs the
+complete pipeline locally with Floci: build and test a Lambda application,
+archive and publish it, deploy it, and validate its HTTP response with an
+`after.apply` hook. It also checks unchanged uploads and a second release.
+
 ### Publish to Git
 
 Configure a [managed Git repository](/cli/configuration/git), then select it in the target:

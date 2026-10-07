@@ -382,6 +382,11 @@ identity applies to template delivery, so grant the component identity access
 to the artifact bucket as well. Unchanged artifacts are skipped; template asset
 references must still be configured explicitly.
 
+For a runnable build, test, publish, and deploy pipeline, see the
+[advanced CloudFormation example](/examples/cloudformation-advanced). Its
+`after.aws/cloudformation.apply` hook uses the [`http` step](/steps/type/http)
+to verify the deployed Lambda's response in Floci.
+
 ## Source Provisioning
 
 Use `source` to download a template or component directory before an operation

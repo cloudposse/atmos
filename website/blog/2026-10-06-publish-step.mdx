@@ -51,6 +51,11 @@ upload command. See the [complete hook example](/stacks/components/aws-cloudform
 Template references remain explicit; use a new key per release so CloudFormation
 can detect the artifact change.
 
+Try the [advanced CloudFormation example](/examples/cloudformation-advanced) to
+run the complete pipeline in Floci. Its hooks build and test a Lambda, archive
+and publish the code, then validate the deployed function with an
+[`http` step](/steps/type/http).
+
 Git targets use the same step:
 
 ```yaml

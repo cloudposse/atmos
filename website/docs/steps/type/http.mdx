@@ -105,6 +105,11 @@ steps:
       initial_delay: 2s
 ```
 
+For HTTP validation after deployment, see the
+[advanced CloudFormation example](/examples/cloudformation-advanced). Its
+`after.aws/cloudformation.apply` hook checks the deployed Lambda's status code
+and response body, and fails the command if either is unexpected.
+
 ## Result
 
 The response body becomes the step's value, and useful details land in metadata (see [outputs](/steps/outputs)):

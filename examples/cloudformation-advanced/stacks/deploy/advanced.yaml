@@ -1,0 +1,9 @@
+import:
+  - catalog/emulator
+  - catalog/artifacts
+  - catalog/app
+
+vars:
+  stage: advanced
+  artifact_bucket: atmos-cfn-advanced-artifacts-local
+  release: !env ATMOS_DEMO_RELEASE "v1"
