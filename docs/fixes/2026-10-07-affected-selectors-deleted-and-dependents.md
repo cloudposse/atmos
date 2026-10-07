@@ -44,7 +44,9 @@ Two other items from the same pass turned out to be wrong or by design and were 
 
 ## Follow-ups
 
-Two items surfaced during this work that this change does not touch. Per the project rule that issues are opened only with explicit authorization, no issue exists yet; each is waiting on that decision, so this section is incomplete until the issue numbers are filled in.
+None.
 
-- Setting `ATMOS_SCHEMAS_OPA_BASE_PATH` when `atmos.yaml` has no `schemas:` block panics with `assignment to entry in nil map` (`pkg/config/utils.go`, where `atmosConfig.Schemas["opa"]` is assigned). This predates this branch.
-- The generated screengrabs for `atmos describe affected --help` and `atmos list affected --help` are stale after the two new flags and need regenerating with the repo's casts workflow.
+Two items found during the same pass were fixed in this pull request rather than deferred:
+
+- Setting `ATMOS_SCHEMAS_OPA_BASE_PATH` (or `ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH`, `ATMOS_SCHEMAS_CUE_BASE_PATH`, `ATMOS_SCHEMAS_ATMOS_MANIFEST`, or the matching `--schemas-*` flags) when `atmos.yaml` has no `schemas:` block panicked with `assignment to entry in nil map`. This predates the selectors work. `AtmosConfiguration` already had a nil-safe `SetSchemaRegistry` setter, but the eight write sites in `pkg/config/utils.go` still assigned into the map directly. A new `SetResourcePath` setter now covers the `jsonschema`, `opa` and `cue` entries, and all eight sites use the nil-safe setters. Regression tests fail with the original panic before the change and pass after it, and the original `validate component` run with the environment variable no longer crashes.
+- The `atmos describe affected --help` and `atmos list affected --help` screengrabs were stale after the new flags. Only those two casts were regenerated, with `atmos --chdir=demo/casts casts generate screengrabs cli --filter "<command>"`, and the manifest's own validation passed.
