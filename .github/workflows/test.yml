@@ -953,13 +953,10 @@ jobs:
     # (above) gives more total cores across the matrix than one big runner
     # would, without paying for oversized single instances.
     runs-on: ubuntu-latest
-    # Each shard now runs roughly 1/4 of the package list rather than the
-    # unsharded ~27-minute-plus suite, but every shard still pays the same
-    # fixed per-job overhead (checkout, toolchain installs, apt-get, cache
-    # restore) that used to be amortized over one long-running job -- so this
-    # is generous headroom above that fraction, not a straight 75÷4 division
-    # (the acceptance shard matrix above budgets the same way).
-    timeout-minutes: 30
+    # Cache misses can spend most of 30 minutes compiling before these shards
+    # finish testing. Keep the Go test timeouts, but allow compilation, setup,
+    # and the race tests to complete within the job's overall budget.
+    timeout-minutes: 60
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1202,7 +1199,7 @@ jobs:
       - name: Upload coverage report to Codecov
         timeout-minutes: 10
         continue-on-error: true
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
@@ -1277,7 +1274,7 @@ jobs:
       # file -- evicting the PR from the queue for a result nobody consumes.
       # The same commit was already scanned on the PR run.
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         if: always() && github.event_name != 'merge_group'
         with:
           # Path to SARIF file relative to the root of the repository
@@ -1300,7 +1297,7 @@ jobs:
 
       - name: Upload Trivy config scan results
         if: always() && github.event_name != 'merge_group'
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
@@ -1390,7 +1387,7 @@ jobs:
     services:
       floci:
         # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
-        image: floci/floci@sha256:d2ecc8035822b23b8587a56eab15edd825f41d3fb80d93e8e66680410beddc08 # 1.5.23
+        image: floci/floci@sha256:4e451c39c7bb88e3cd4f87e8fc0c25d5b47695a51185d521e2241fa00486e8eb # 1.5.23
         ports:
           - 4566:4566
       floci-gcp:

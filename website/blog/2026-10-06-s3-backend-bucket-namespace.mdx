@@ -1,0 +1,49 @@
+---
+slug: s3-backend-bucket-namespace
+title: "Choose the S3 Bucket Namespace When Atmos Provisions Your State Backend"
+authors: [osterman]
+tags: [feature]
+---
+
+Every S3 bucket name has historically lived in one namespace shared by all AWS customers. The name you want for your Terraform state bucket may already belong to someone else, and when you delete a bucket, its name goes back into the shared pool where anyone can claim it. Amazon S3 now offers an account-scoped namespace that fixes both problems: bucket names in it are reserved to your account and cannot collide with anyone else's, now or after the bucket is deleted. Atmos could not request that namespace when it created a state bucket, so teams that want it had to create the bucket by hand before Atmos could take over.
+
+<!--truncate-->
+
+## The Problem
+
+State buckets are long-lived and every deployment depends on them, so a name collision or a lost name hurts more here than almost anywhere else. The usual workaround is to bake an account ID and region into the name and hope nobody else picks the same one, but a convention only lowers the odds. Nothing stops another account from creating a bucket with that name, including after you delete yours. The account-scoped namespace removes the question, and organizations can go further and require it with an IAM or service control policy that checks the `s3:x-amz-bucket-namespace` condition key.
+
+[Backend provisioning](/stacks/components/provision/backend) exists to remove the chicken-and-egg problem of needing a state bucket before you can deploy the component that manages it. The S3 provisioner created buckets in the default namespace and had no way to request another one. S3 selects a namespace with a parameter on the bucket creation request, and a well-formed name is not enough. Anyone who wanted account-scoped state buckets, or whose policy demanded them, was back to a separate bootstrap step.
+
+## The Fix
+
+The S3 provisioner now accepts an optional `bucket_namespace` setting under `provision.backend`. When it is set, Atmos sends it as the `BucketNamespace` parameter of the S3 `CreateBucket` call. When it is not set, nothing changes: existing configurations behave exactly as before.
+
+The setting lives next to `enabled`, not under `backend`, so it never appears in the generated Terraform backend configuration. Atmos validates the value before it contacts AWS. The valid values are `global` and `account-regional`, as defined by Amazon S3, and any other value fails with the list of valid values.
+
+## How to Use It
+
+Set the namespace and use a bucket name that follows the S3 naming rules for that namespace. Atmos uses the name exactly as written, including names produced by Atmos templates:
+
+```yaml
+components:
+  terraform:
+    example:
+      backend_type: s3
+      backend:
+        s3:
+          bucket: example-tfstate-111122223333-us-east-1-an
+          region: us-east-1
+          key: terraform.tfstate
+          use_lockfile: true
+      provision:
+        backend:
+          enabled: true
+          bucket_namespace: account-regional
+```
+
+Both automatic provisioning on `terraform init` and `atmos terraform backend create` honor the setting. See the [Bucket Namespace](/stacks/components/provision/backend#bucket-namespace) reference for details and the [S3 namespaces documentation](https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html) for the naming rules.
+
+## Get Involved
+
+Tell us how you provision your state backends in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions), or open an issue if the provisioner is missing a setting you need.

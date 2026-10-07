@@ -494,6 +494,25 @@ deterministically, not just caught after a collision happens mid-run.
 `when:`, declare a second, more specific entry after the broad one instead, per the precedence
 rule above.
 
+## Template Delimiters
+
+A `spec.files` entry can set `delimiters` to a two-element list, overriding `spec.delimiters` for
+every file it matches. The pair applies to the file's content, its discovered path, `target:`, and
+Go-template `matrix:` axis expressions, so the same entry can combine all of them:
+
+```yaml title="scaffold.yaml"
+spec:
+  files:
+    - path: deploy.yaml
+      delimiters: ["[[", "]]"]
+      target: "deploy/[[ .matrix.environment ]].yaml"
+      matrix:
+        environment: '[[ collectKeys answers.environments ]]'
+```
+
+See [Template Delimiters](/cli/commands/scaffold/usage#template-delimiters) for the precedence
+rules and a Helm and GitHub Actions example.
+
 ## Generation Hooks
 
 Generation hooks run after answers are validated and before or after files are written:

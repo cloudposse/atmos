@@ -1,10 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goyaml "go.yaml.in/yaml/v3"
@@ -334,4 +336,52 @@ commands:
 	require.Contains(t, byName, "kept")
 	require.Len(t, byName["kept"].Steps, 1)
 	assert.NotEmpty(t, byName["kept"].Steps[0].ScriptSource)
+}
+
+func TestPreprocessExceptCommandsPreservesAnchors(t *testing.T) {
+	content := []byte(`commands:
+  - name: &command_name shared-name
+    description: &metadata
+      label: anchored-label
+    steps:
+      - command: !env ATMOS_TEST_ANCHOR_COMMAND
+settings:
+  name: *command_name
+  metadata: *metadata
+  enabled: !env ATMOS_TEST_ANCHOR_SETTING
+`)
+	t.Setenv("ATMOS_TEST_ANCHOR_SETTING", "resolved")
+	v := viper.New()
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(bytes.NewReader(content)))
+	require.NoError(t, preprocessAtmosYamlFuncExceptCommands(content, v, "atmos.yaml"))
+	assert.Equal(t, "shared-name", v.GetString("settings.name"))
+	assert.Equal(t, "anchored-label", v.GetString("settings.metadata.label"))
+	assert.Equal(t, "resolved", v.GetString("settings.enabled"))
+	commands := v.Get("commands").([]any)
+	command := commands[0].(map[string]any)
+	steps := command["steps"].([]any)
+	assert.Equal(t, "ATMOS_TEST_ANCHOR_COMMAND", steps[0].(map[string]any)["command"], "excluded commands are not evaluated")
+}
+
+func TestMergeConfigFilePreservesCommandAnchors(t *testing.T) {
+	t.Setenv("ATMOS_TEST_ANCHORED_COMMAND", "command-value")
+	t.Setenv("ATMOS_TEST_ANCHORED_SETTING", "setting-value")
+	file := filepath.Join(t.TempDir(), "atmos.yaml")
+	writeTestFile(t, file, `commands:
+  - name: &shared_name anchored-command
+    steps:
+      - command: !env ATMOS_TEST_ANCHORED_COMMAND
+settings:
+  name: *shared_name
+  value: !env ATMOS_TEST_ANCHORED_SETTING
+`)
+	v := viper.New()
+	v.SetConfigType("yaml")
+	require.NoError(t, mergeConfigFile(file, v))
+	assert.Equal(t, "anchored-command", v.GetString("settings.name"))
+	assert.Equal(t, "setting-value", v.GetString("settings.value"))
+	commands := v.Get("commands").([]any)
+	steps := commands[0].(map[string]any)["steps"].([]any)
+	assert.Equal(t, "command-value", steps[0].(map[string]any)["command"])
 }

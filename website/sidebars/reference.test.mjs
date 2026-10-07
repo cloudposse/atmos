@@ -88,3 +88,10 @@ test('automation guides belong to Reference automation and keep a single languag
   const functions = sidebars.cli.find(item => item.label === 'Functions');
   assert.ok(functions.items.some(item => item.link?.id === 'functions/automation/index'));
 });
+
+test('the workflow name placeholder opens its naming guide', () => {
+  const workflows = sidebars.cli.find(item => item.label === 'Workflows');
+  const name = workflows.items[0].items.find(item => item.label === '<name>');
+  assert.equal(name.link.id, 'workflows/name');
+  assert.ok(name.items.some(item => item.label === 'steps'));
+});

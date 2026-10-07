@@ -1043,6 +1043,55 @@ func TestFilterTerraformGraphSelectionTagsFilterExcludesNonMatchingSeed(t *testi
 	require.False(t, ok, "a selected node failing the tags filter must be excluded from the seed")
 }
 
+// TestFilterTerraformGraphSelectionTagsWithDependents verifies the dependents
+// closure on the --affected/precomputed-selection path: a selected node failing
+// tags is not kept, but its tag-matching dependents are, and non-matching
+// dependents are skipped with ordering contracted around them.
+func TestFilterTerraformGraphSelectionTagsWithDependents(t *testing.T) {
+	component := func(tag string, dependsOn string) map[string]any {
+		section := map[string]any{
+			cfg.MetadataSectionName: map[string]any{
+				"component": "mock",
+				"tags":      []any{tag},
+			},
+			"vars": map[string]any{},
+		}
+		if dependsOn != "" {
+			section[cfg.SettingsSectionName] = map[string]any{
+				"depends_on": map[string]any{"1": map[string]any{"component": dependsOn}},
+			}
+		}
+		return section
+	}
+	graph, err := BuildTerraformGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"vpc":      component("network", ""),
+					"database": component("data", "vpc"),
+					"app":      component("app", "database"),
+					"worker":   component("app", "vpc"),
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	filtered, err := FilterTerraformGraph(nil, graph, &schema.ConfigAndStacksInfo{Tags: []string{"app"}}, &TerraformSelection{
+		NodeIDs:           []string{"vpc-dev"},
+		IncludeDependents: true,
+	})
+	require.NoError(t, err)
+
+	ids := make([]string, 0, filtered.Size())
+	for id := range filtered.Nodes {
+		ids = append(ids, id)
+	}
+	require.ElementsMatch(t, []string{"app-dev", "worker-dev"}, ids, "the non-matching seed and the non-matching intermediate must be dropped")
+	require.Empty(t, filtered.Nodes["app-dev"].Dependencies, "the dropped intermediates are contracted down to the dropped seed, which is also dropped")
+	require.ElementsMatch(t, []string{"app-dev", "worker-dev"}, filtered.Roots)
+}
+
 func TestFilterTerraformGraphSelectionEdgeCases(t *testing.T) {
 	graph, err := BuildTerraformGraph(terraformAdapterTestStacks())
 	require.NoError(t, err)

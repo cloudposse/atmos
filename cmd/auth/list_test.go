@@ -561,7 +561,7 @@ func TestParseFilterFlags(t *testing.T) {
 	t.Run("--tags with comma list parses names", func(t *testing.T) {
 		viper.Reset()
 		t.Cleanup(viper.Reset)
-		viper.Set(tagsKey, "production, admin")
+		viper.Set(authTagsViperKey, "production, admin")
 
 		cmd := newCmd()
 		require.NoError(t, cmd.Flags().Set("tags", "production, admin"))
@@ -574,7 +574,7 @@ func TestParseFilterFlags(t *testing.T) {
 	t.Run("--tags composes with --providers rather than erroring", func(t *testing.T) {
 		viper.Reset()
 		t.Cleanup(viper.Reset)
-		viper.Set(tagsKey, "production")
+		viper.Set(authTagsViperKey, "production")
 		viper.Set(providersKey, "p1")
 
 		cmd := newCmd()

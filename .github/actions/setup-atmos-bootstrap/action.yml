@@ -1,44 +1,16 @@
-name: "Set up Atmos bootstrap with retry"
-description: "Installs the released Atmos CLI with bounded retries for transient GitHub Releases failures"
+name: "Set up pinned Atmos bootstrap"
+description: "Installs a checksum-verified release binary without using GitHub's release-list API"
 
 inputs:
   atmos-version:
-    description: "Atmos version to install for bootstrapping repository-local Atmos Build commands"
+    description: "Exact Atmos release version used to bootstrap repository-local build commands"
     required: true
 
 runs:
   using: composite
   steps:
-    - id: install-atmos-first-attempt
-      name: Set up Atmos (attempt 1 of 3)
-      continue-on-error: true
-      uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
-      with:
-        atmos-version: ${{ inputs.atmos-version }}
-        install-wrapper: false
-
-    - name: Wait before retry
-      if: steps.install-atmos-first-attempt.outcome == 'failure'
+    - name: Install pinned Atmos release
       shell: bash
-      run: sleep 5
-
-    - id: install-atmos-second-attempt
-      name: Set up Atmos (attempt 2 of 3)
-      if: steps.install-atmos-first-attempt.outcome == 'failure'
-      continue-on-error: true
-      uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
-      with:
-        atmos-version: ${{ inputs.atmos-version }}
-        install-wrapper: false
-
-    - name: Wait before final retry
-      if: steps.install-atmos-second-attempt.outcome == 'failure'
-      shell: bash
-      run: sleep 15
-
-    - name: Set up Atmos (attempt 3 of 3)
-      if: steps.install-atmos-second-attempt.outcome == 'failure'
-      uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
-      with:
-        atmos-version: ${{ inputs.atmos-version }}
-        install-wrapper: false
+      env:
+        ATMOS_BOOTSTRAP_VERSION: ${{ inputs.atmos-version }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/install-atmos-bootstrap.mjs"

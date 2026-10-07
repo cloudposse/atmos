@@ -58,6 +58,15 @@ runs:
 
           const workflowDir = process.env.WORKFLOW_DIR;
           const tagShaCache = new Map();
+          let rateLimitError;
+
+          // Keep potentially large diagnostics out of process environment variables.
+          function writeResults(results) {
+            const dir = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, 'sha-pin-verification-'));
+            const file = path.join(dir, 'results.json');
+            fs.writeFileSync(file, JSON.stringify(results));
+            core.setOutput('results_file', file);
+          }
           const nonRetryableStatuses = new Set([400, 401, 403, 404, 422]);
 
           // A non-empty string, trimmed.
@@ -142,7 +151,7 @@ runs:
             core.setOutput('unpinned_count', 0);
             core.setOutput('allowlisted_count', 0);
             core.setOutput('status', 'pass');
-            core.setOutput('results_json', '[]');
+            writeResults([]);
             return;
           }
 
@@ -194,7 +203,7 @@ runs:
             core.setOutput('unpinned_count', 0);
             core.setOutput('allowlisted_count', 0);
             core.setOutput('status', 'pass');
-            core.setOutput('results_json', '[]');
+            writeResults([]);
             return;
           }
 
@@ -206,6 +215,9 @@ runs:
             if (tagShaCache.has(cacheKey)) {
               return tagShaCache.get(cacheKey);
             }
+            // An exhausted installation token cannot resolve any further tags.
+            // Cached successes remain usable; unresolved references still fail.
+            if (rateLimitError) throw rateLimitError;
 
             try {
               const ref = await withRetries(
@@ -258,6 +270,7 @@ runs:
                 // error's message text.
                 const rateLimitRemaining = err.response?.headers?.['x-ratelimit-remaining'];
                 if (rateLimitRemaining === '0') {
+                  rateLimitError = err;
                   throw err;
                 }
                 throw new AccessBlockedError(
@@ -416,7 +429,7 @@ runs:
           core.setOutput('unpinned_count', unpinned);
           core.setOutput('allowlisted_count', allowlisted);
           core.setOutput('status', (failed > 0 || unpinned > 0) ? 'fail' : 'pass');
-          core.setOutput('results_json', JSON.stringify(results));
+          writeResults(results);
 
           if (failed > 0 || unpinned > 0) {
             core.setFailed(
@@ -427,10 +440,10 @@ runs:
           }
 
     - name: Post or update PR comment
-      if: always() && github.event_name == 'pull_request'
+      if: always() && github.event_name == 'pull_request' && steps.verify.outputs.results_file != ''
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
-        RESULTS_JSON: ${{ steps.verify.outputs.results_json }}
+        RESULTS_FILE: ${{ steps.verify.outputs.results_file }}
         VERIFIED_COUNT: ${{ steps.verify.outputs.verified_count }}
         FAILED_COUNT: ${{ steps.verify.outputs.failed_count }}
         UNPINNED_COUNT: ${{ steps.verify.outputs.unpinned_count }}
@@ -467,7 +480,7 @@ runs:
             return;
           }
 
-          const results = JSON.parse(process.env.RESULTS_JSON || '[]');
+          const results = JSON.parse(require('fs').readFileSync(process.env.RESULTS_FILE, 'utf8'));
           const verified = parseInt(process.env.VERIFIED_COUNT || '0', 10);
           const failed = parseInt(process.env.FAILED_COUNT || '0', 10);
           const unpinned = parseInt(process.env.UNPINNED_COUNT || '0', 10);
@@ -490,7 +503,13 @@ runs:
           // Shared row renderer — used by both the failure table and the
           // allowlisted-only warning table below, so the two stay in sync.
           function renderRows(rs) {
-            return rs.map(r => {
+            const visible = rs.slice(0, 20).map(r => ({
+              ...r,
+              action: r.action.slice(0, 200),
+              file: r.file.slice(0, 200),
+              detail: (r.detail || '').replaceAll('|', '&#124;').replaceAll('\n', ' ').slice(0, 300),
+            }));
+            const rows = visible.map(r => {
               const loc = `\`${r.file}:${r.line}\``;
               if (r.status === 'verified') {
                 return `| \`${r.action}\` | ${loc} | ✅ Verified | |`;
@@ -506,6 +525,7 @@ runs:
               }
               return `| \`${r.action}\` | ${loc} | ❌ ${r.status === 'error' ? 'Error' : 'Mismatch'} | ${r.detail || ''} |`;
             }).join('\n');
+            return rows + (rs.length > visible.length ? `\n\nShowing ${visible.length} of ${rs.length} references; see the action run for all results.` : '');
           }
 
           const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
@@ -520,7 +540,7 @@ runs:
 
           | Action | Location | Status | Details |
           |--------|----------|--------|---------|
-          ${renderRows(results)}
+          ${renderRows(results.filter(r => ['error', 'mismatch', 'unpinned'].includes(r.status)))}
 
           See the [action run](${runUrl}) for full details.`;
           } else if (total === 0) {

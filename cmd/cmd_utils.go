@@ -35,6 +35,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	pkgFlags "github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/installer"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -49,6 +50,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/taskgraph/adapters"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/upgrade"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 	workflowPkg "github.com/cloudposse/atmos/pkg/workflow"
@@ -1973,7 +1975,12 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 
 	// If the versions differ, print the update message
 	if latestVersion != currentVersion {
-		u.PrintMessageToUpgradeToAtmosLatestRelease(latestVersion)
+		root := atmosConfig.Toolchain.InstallPath
+		if root != "" && !filepath.IsAbs(root) {
+			root = filepath.Join(atmosConfig.BasePathAbsolute, root)
+		}
+		installation := installer.Detect(context.Background(), installer.WithNativeRoots(root))
+		upgrade.PrintNotice(version.Version, latestVersion, installation.UpgradeHint(latestVersion))
 	}
 
 	// Update the cache to mark the current timestamp
