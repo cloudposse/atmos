@@ -261,7 +261,7 @@ current schema.
   when subprocess metrics were available. Explicit `true` and `false` retain their
   meaning. The stored default is unchanged, so this command-specific interpretation
   ships independently of edition pins while `KindBehavior` resolution is unavailable.
-  See PR `LOCAL_PR_NUMBER_PENDING` and
+  See [PR #3295](https://github.com/cloudposse/atmos/pull/3295) and
   [the migration section](git-hook-steps.md#migration-and-editions).
 
   **Not gatable:** the auth credential realm isolation change (2026-02-10,
