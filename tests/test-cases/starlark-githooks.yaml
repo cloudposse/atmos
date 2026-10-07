@@ -1,0 +1,108 @@
+# yaml-language-server: $schema=schema.json
+# Git hooks defined with git.hooks.<name>.steps. None of these cases depends on the working
+# directory: `atmos git hooks run` resolves the repository root, which for this fixture is the
+# enclosing checkout, so cwd-sensitive checks (file size limits) are covered by unit tests in
+# pkg/git/hooks and by a manual throwaway-repo run instead.
+tests:
+  - name: starlark githooks env step values reach later steps
+    enabled: true
+    snapshot: false
+    description: type env step values reach shell children, Starlark exec.run children, templates, and declared env.
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, env-share]
+    expect:
+      exit_code: 0
+      stdout:
+        - 'shell child: SHARED_VAR=from-env-step; template: from-env-step'
+        - 'script child: SHARED_VAR=from-env-step'
+        - 'declared env V = from-env-step'
+
+  - name: starlark githooks mixed steps share env and outputs
+    enabled: true
+    snapshot: false
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, mixed]
+    expect:
+      exit_code: 0
+      stdout:
+        - 'MIXED_VAR=from-env-step'
+        - 'COMP = vpc'
+      stderr:
+        - !not 'Total for this invocation'
+
+  - name: starlark githooks error names the hook for exclusive command and steps
+    enabled: true
+    snapshot: false
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, broken-both]
+    expect:
+      exit_code: 1
+      stderr:
+        - 'git hook "broken-both"'
+        - 'invalid configuration'
+
+  - name: starlark githooks error names the hook for an unknown step type
+    enabled: true
+    snapshot: false
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, broken-typo]
+    expect:
+      exit_code: 1
+      stderr:
+        - 'git hook "broken-typo"'
+        - 'unknown step type: starlark'
+
+  - name: starlark githooks error names the hook for duplicate step names
+    enabled: true
+    snapshot: false
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, broken-dup]
+    expect:
+      exit_code: 1
+      stderr:
+        - 'git hook "broken-dup"'
+        - 'duplicate step name'
+
+  - name: starlark githooks step timeout is reported as a step timeout
+    enabled: true
+    snapshot: false
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, timeout-shell]
+    expect:
+      exit_code: 1
+      stderr:
+        - 'git hook "timeout-shell"'
+        - 'step timed out'
+        - 'did not finish within its timeout of 1s'
+
+  - name: starlark githooks run preserves the failing step exit code
+    enabled: true
+    snapshot: false
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, broken-shell-fail]
+    expect:
+      exit_code: 7
+      stdout:
+        - 'before-fail'
+      stderr:
+        - 'git hook "broken-shell-fail"'
+
+  - name: starlark githooks unknown hook lists the configured hooks
+    enabled: true
+    snapshot: false
+    workdir: "fixtures/scenarios/starlark-githooks/"
+    command: atmos
+    args: [git, hooks, run, nonexistent]
+    expect:
+      exit_code: 2
+      stderr:
+        - 'git hook not configured'
+        - 'Hook "nonexistent" is not configured'
+        - 'Configured hooks:'

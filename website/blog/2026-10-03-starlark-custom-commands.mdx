@@ -130,7 +130,7 @@ vars:
     return {
         "Environment": ctx.vars["stage"],
         "Region": ctx.vars["region"],
-        "Owner": ctx.metadata.get("owner", "platform"),
+        "Owner": ctx.settings.get("owner", "platform"),
     }
 ```
 

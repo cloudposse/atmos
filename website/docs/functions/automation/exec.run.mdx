@@ -114,6 +114,10 @@ With `check=False`, inspect `exit_code` before reading `data` if the command may
 - An empty list, a non-list `argv`, or a non-string element fails with an argument error.
 - With `check=True`, a nonzero exit code raises an error that names the command and the exit code, and shows the last
   lines of stderr.
+- A call that exceeds `timeout` fails with an error that names the command and the timeout duration.
+- Reading `data` when `stdout` is empty or is not valid JSON fails with an error that says `result.data` requires valid
+  JSON on stdout, and suggests reading `result.stdout` instead. Reading `stdout`, `stderr`, or `exit_code` never fails
+  for this reason.
 - A program that cannot start, such as a missing command or a nonexistent directory, always raises, whatever `check`
   says. A canceled run and a program stopped by a signal raise as well.
 - A handled nonzero exit does not trigger a [`steps.task`](/functions/automation/steps.task) retry. Call `fail()`

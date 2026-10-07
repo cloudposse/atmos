@@ -43,6 +43,7 @@ Documentation: [Language reference](https://atmos.tools/automation/language),
 | Custom command step | `atmos <name>` (command declared in `atmos.yaml`) | `ctx.flags` (string, bool, and `int` types preserved), `ctx.arguments` (an omitted optional argument is `""`). `ctx.args` is empty; arguments after `--` are not exposed to scripts. |
 | Workflow step | `atmos workflow <name>` | `ctx.flags` (string map). `env` holds only the step's declared `env`. |
 | Hook step | lifecycle event (`kind: step`, `kind: steps`, `type: test`) | `ctx.component`, `ctx.hook`, `ctx.operation`. |
+| Git hook step | `git.hooks.<name>.steps` run by the installed Git shim | `ctx.args` holds the hook's arguments from Git, such as the commit message path for `commit-msg`. |
 
 Details for each entry point:
 
@@ -112,9 +113,14 @@ workflows:
 - Top-level `output`: a string is emitted raw, any other value is JSON-encoded, and a value
   that cannot be encoded (such as a function) fails the script. Without `output`, captured
   stdout is the step value.
-- Never invent `components.list`, `commands.run`, `steps.run`, a file-write API, or direct
-  secret, store, or Terraform state/output builtins. They do not exist. Resolved YAML
-  inputs and component configuration can carry values from those services.
+- `steps.run(type, **fields)` and the `steps.<type>(...)` library call any registered step
+  handler (see [steps.run](https://atmos.tools/functions/automation/steps.run)); they exist,
+  and `steps.input` and `steps.choose` prompt. Also available: `fs.read_file`, `fs.glob`,
+  `fs.stat`, `fs.exists`, `fs.readlink`, `errors.build(...)` (a builder ending in `.fail()`),
+  `json.indent`, and `json.encode_indent`. Never invent `components.list`, `commands.run`,
+  a file-write API, or direct secret, store, or Terraform state/output builtins. They do
+  not exist. Resolved YAML inputs and component configuration can carry values from those
+  services.
 - Starlark-specific failures include the traceback; unhandled script errors propagate to
   Atmos's configured error reporting.
 
@@ -130,8 +136,11 @@ workflows:
   and `atmos.helm(...)` take structured component arguments. Prefer `deploy` over `apply`
   in non-interactive scripts.
 - Wrappers run the current Atmos binary as a subprocess and return a process result
-  (`.stdout`, `.stderr`, `.exit_code`), not parsed data. Use `--format=json` flags plus
-  `json.decode(result.stdout)` to read structured output.
+  (`.stdout`, `.stderr`, `.exit_code`, and `.data`, the lazily decoded JSON of stdout).
+  The `atmos.list`, `atmos.describe`, `atmos.config("get")`, `atmos.stack("get")`, and
+  `atmos.stack("config", "get")` wrappers default to JSON and captured output, so read `.data`
+  directly. For other wrappers, pass `--format=json` flags and read `.data` or
+  `json.decode(result.stdout)`.
 - Default working directory is the directory Atmos was invoked from, not the script or
   component directory.
 
@@ -198,8 +207,9 @@ Retry repeats the entire function. Make its side effects repeatable or place the
 retry around a narrower function. Use existing retry keys such as `max_attempts`,
 `initial_delay`, `backoff_strategy`, and `max_delay`; `delay` is not a valid key.
 Provide `max_attempts` or a task timeout: an explicit policy without an attempt
-limit retries until success, timeout, or cancellation. Output-regex `conditions` are
-not supported. A task timeout failure reads `task "<name>" timed out after <duration>`.
+limit retries until success, timeout, or cancellation. Output-regex `conditions` do not
+apply to function tasks; they work on `exec.run(..., retry={...})`, where they match the
+failed attempt's output. A task timeout failure reads `task "<name>" timed out after <duration>`.
 
 Use `steps.task(..., timeout="30s")` for per-task limits. A `timeout:` on the YAML script step
 is enforced: the interpreter and its subprocesses are canceled and the step fails with
@@ -222,9 +232,12 @@ exec.run(["jq", "--version"])
 The existing dependency installer installs missing tools and scopes `PATH` to the
 invocation. Declare dependencies in the main thread before parallel tasks; declarations
 inside branches are rejected. Repeated identical pins are cached and conflicting
-versions fail. `atmos.toolchain("install", "jq@1.7.1")` runs an explicit toolchain
-command, returns the usual process result, and does not change the calling script's
-`PATH`. Use `dependencies.tools` when later operations need the tool on `PATH`. There
+versions fail. `atmos.toolchain("install", "jqlang/jq@1.7.1")` runs an explicit toolchain
+command like the CLI: it pins the tool in the project's `.tool-versions`, after which every
+Atmos command in that project installs it automatically. It returns the usual process result
+and does not change the calling script's `PATH`. Use `dependencies.tools` for a script-scoped
+pin that puts the tool on `PATH`. Spell tools `owner/name`; a short name such as `jq` fails
+when it matches more than one package. There
 is no `atmos.toolchain.install` nested API. See `atmos-toolchain` for registries.
 
 ## Files, modules, and testing

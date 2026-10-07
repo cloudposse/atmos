@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=schema.json
+tests:
+  - name: starlark standalone script flag after the path does not enable color
+    description: A script's own --force-color is not an Atmos global flag, so it must not switch Atmos color on.
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [./capacity.star, api, --force-color]
+    expect:
+      exit_code: 2
+      stderr:
+        - 'unknown flag: --force-color'
+        - !not '\x1b\['
+
+  - name: starlark standalone global flag before the path still applies
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [--force-color, ./capacity.star, api]
+    expect:
+      exit_code: 0
+      stderr:
+        - '\x1b\['
+        - 'workers'
+
+  - name: starlark standalone profile with a space before the path is ambiguous
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [--profile, dev, ./capacity.star, api]
+    expect:
+      exit_code: 2
+      stderr:
+        - 'before a script path is ambiguous'
+        - '--profile=dev'
+
+  - name: starlark standalone identity with a space before the path is ambiguous
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [--identity, dev, ./capacity.star, api]
+    expect:
+      exit_code: 2
+      stderr:
+        - '--identity=dev'
+
+  - name: starlark standalone unknown leading flag is named
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [--bogus, ./capacity.star, api]
+    expect:
+      exit_code: 2
+      stderr:
+        - 'unknown flag "--bogus"'
+        - !not 'Unknown command'
+
+  - name: starlark standalone help lists arguments and drops the extension
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [./capacity.star, --help]
+    expect:
+      exit_code: 0
+      stdout:
+        - 'Arguments:'
+        - '<service>\s+Service name'
+        - 'capacity <service> \[flags\]'
+        - !not 'capacity\.star <service>'
+
+  - name: starlark standalone integer flag out of range
+    enabled: true
+    snapshot: false
+    workdir: ../examples/starlark-script
+    command: atmos
+    args: [./capacity.star, api, --replicas, "99999999999999999999"]
+    expect:
+      exit_code: 2
+      stderr:
+        - 'out of range for a 64-bit'
+        - !not 'invalid value for flag'

@@ -55,14 +55,14 @@ The script body is rendered as a Go template before Starlark runs. This applies 
 | Custom command | Typed: string, bool, and `type: int` flags as integers | Named command arguments (strings); an omitted optional argument without a default is `""` | Empty; trailing args after `--` are not exposed | The command's `component:` (lazy), else `None` |
 | Workflow | String map that always has `stack` (for example `{"stack": ""}`) | Empty | Empty | `None`; use `components.get(name, stack, type)` |
 | Hook | Not part of the hook contract | Empty | Empty | The hook's component, plus `ctx.hook` and `ctx.operation` |
+| Git hook (`git.hooks.<name>.steps`) | Not part of the hook contract | Empty | The arguments Git passes to the hook, such as the commit message path for `commit-msg` | `None` |
 | `parallel`/`matrix` child | Inherited from parent | Inherited | Empty | Inherited, with `components.get` |
 
 `env` holds only the step's declared `env` (resolved), not the ambient process environment. In a
 custom command it holds only the step's own `env:` entries, not command-level `env:` entries.
-`ctx.script` exposes `.path` and `.directory` for file-backed included steps and standalone
-scripts; it is `None` for inline steps. Child processes started with `exec.run`,
-`component.exec`, or `atmos.*` still inherit the effective process environment, plus
-per-call `env={...}` overrides.
+`ctx.script` is set for standalone scripts and for script steps included through a local `!include`; it is `None` for inline step scripts. Child
+processes started with `exec.run`, `component.exec`, or `atmos.*` still inherit the effective
+process environment, plus per-call `env={...}` overrides.
 
 A workflow has no component in scope: `ctx.component.stack` fails because `ctx.component` is `None`.
 Resolve one explicitly with `components.get("vpc", "dev", "terraform")`.

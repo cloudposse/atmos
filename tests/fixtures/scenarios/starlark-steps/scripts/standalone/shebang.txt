@@ -1,0 +1,2 @@
+#!/usr/bin/env atmos
+print("shebang in txt", ctx.args)

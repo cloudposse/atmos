@@ -130,6 +130,161 @@ commands:
             interpreter: starlark
             script: !include scripts/main.star
 
+  # ---------------------------------------------------------------------------------------------
+  # Field-test (ft-) commands. Each one probes a documented-but-easy-to-misuse behavior.
+  # ---------------------------------------------------------------------------------------------
+  - name: ft-out
+    description: step output modes, including a templated output value
+    flags:
+      - name: mode
+        description: Output mode used in the templated step
+        default: none
+    steps:
+      - name: templated
+        type: script
+        interpreter: starlark
+        output: '{{ .Flags.mode }}'
+        script: |
+          print("templated-output-line (mode={{ .Flags.mode }})")
+      - name: literal-none
+        type: script
+        interpreter: starlark
+        output: none
+        script: |
+          print("literal-none-line (should be hidden)")
+
+  - name: ft-out-upper
+    description: output RAW (upper case) is rejected
+    steps:
+      - name: upper
+        type: script
+        interpreter: starlark
+        output: RAW
+        script: |
+          print("upper-raw-line")
+
+  - name: ft-out-capture
+    description: output capture is not a step output mode
+    steps:
+      - name: capture
+        type: script
+        interpreter: starlark
+        output: capture
+        script: |
+          print("capture-line")
+
+  - name: ft-out-all
+    description: output all is not a step output mode
+    steps:
+      - name: all
+        type: script
+        interpreter: starlark
+        output: all
+        script: |
+          print("all-line")
+
+  - name: ft-literal
+    description: "!literal on script, env value, timeout, working_directory"
+    steps:
+      - name: script-literal
+        type: script
+        interpreter: starlark
+        script: !literal |
+          print("{{ not a template }}")
+          print("{} is {}".format("vpc", "ok"))
+          print("{{ .vars.stage }}")
+      - name: env-value-literal
+        type: script
+        interpreter: starlark
+        env:
+          A: !literal '{{x}}'
+          B: 'plain-{{ printf "b" }}'
+        script: |
+          print("A=" + env["A"] + " B=" + env["B"])
+      - name: timeout-literal
+        type: script
+        interpreter: starlark
+        timeout: !literal 1s
+        script: |
+          print("timeout literal ok")
+      - name: wd-literal
+        type: script
+        interpreter: starlark
+        working_directory: !literal 'wd/lit/{{x}}'
+        script: |
+          print("wd marker: " + fs.read_file("marker.txt").strip())
+      - name: interpreter-literal
+        type: script
+        interpreter: !literal starlark
+        script: |
+          print("interpreter literal ok")
+
+  - name: ft-literal-missing
+    description: Same body as ft-literal script-literal but WITHOUT !literal (template error expected)
+    steps:
+      - name: script-not-literal
+        type: script
+        interpreter: starlark
+        script: |
+          print("{{ not a template }}")
+
+  - name: ft-literal-env-map
+    description: "!literal on the whole env map (documented no-op)"
+    steps:
+      - name: env-map
+        type: script
+        interpreter: starlark
+        env: !literal
+          A: '{{x}}'
+        script: |
+          print("A=" + env["A"])
+
+  - name: ft-literal-include-braces
+    description: An included script containing {{ not a template }} (docs say included scripts are still rendered)
+    steps:
+      - name: inc
+        type: script
+        interpreter: starlark
+        script: !include scripts/ft/has-braces.star
+
+  - name: ft-literal-include-template
+    description: An included script with a real template is rendered
+    steps:
+      - name: inc
+        type: script
+        interpreter: starlark
+        script: !include scripts/ft/has-template.star
+
+  - name: ft-literal-include-raw
+    description: "!include.raw of a script with braces (does it skip rendering?)"
+    steps:
+      - name: inc
+        type: script
+        interpreter: starlark
+        script: !include.raw scripts/ft/has-braces.star
+
+  - name: ft-load-braces
+    description: load() of a module whose body has {{ }} (is the module rendered?)
+    steps:
+      - name: s
+        type: script
+        interpreter: starlark
+        script: !literal |
+          load("scripts/ft/lib-braces.star", "hello")
+          print(hello())
+
+  - name: ft-timeout
+    description: step timeout kills the interpreter and its subprocess
+    steps:
+      - name: slow
+        type: script
+        interpreter: starlark
+        timeout: 1s
+        script: |
+          ui.info("starting sleep")
+          exec.run(["sleep", "5.37"])
+          print("must not reach here")
+
   - name: ft-retry-renamed
     description: retry key `delay` was renamed to `initial_delay`
     steps:
@@ -141,3 +296,230 @@ commands:
           delay: 1s
         script: |
           fail("always")
+
+  - name: ft-retry-flaky
+    description: retry with initial_delay; fails on attempts 1 and 2, passes on 3
+    flags:
+      - name: counter
+        description: counter file path
+        required: true
+    steps:
+      - name: flaky
+        type: script
+        interpreter: starlark
+        retry:
+          max_attempts: 3
+          initial_delay: 100ms
+        script: |
+          def attempt():
+              path = ctx.flags["counter"]
+              n = 0
+              if fs.exists(path):
+                  n = int(fs.read_file(path).strip())
+              n += 1
+              exec.run(["sh", "-c", "echo %d > %s" % (n, path)])
+              print("attempt", n)
+              if n < 3:
+                  fail("attempt %d failed" % n)
+              print("succeeded on attempt", n)
+          attempt()
+
+  - name: ft-atmos
+    description: "Run one atmos.* wrapper case by name (see scripts/ft/atmos-cases.star)"
+    arguments:
+      - name: case
+        description: Case name
+        required: true
+      - name: extra
+        description: Optional extra value (for example a counter file path)
+    steps:
+      - name: case
+        type: script
+        interpreter: starlark
+        script: !include scripts/ft/atmos-cases.star
+
+  - name: ft-steps
+    description: "Run one steps.* library case by name (see scripts/ft/steps-cases.star)"
+    arguments:
+      - name: case
+        description: Case name
+        required: true
+      - name: extra
+        description: Optional extra value (for example a URL)
+    steps:
+      - name: case
+        type: script
+        interpreter: starlark
+        script: !include scripts/ft/steps-cases.star
+
+  - name: ft-interp-python
+    description: interpreter python3 (present on this machine)
+    steps:
+      - name: py
+        type: script
+        interpreter: python3
+        script: |
+          import sys
+          print("python ok", sys.version_info[0])
+
+  - name: ft-interp-missing
+    description: interpreter that does not exist
+    steps:
+      - name: py
+        type: script
+        interpreter: python9-not-installed
+        script: |
+          print("must not run")
+
+  - name: ft-interp-python-container-false
+    description: python script step with container false but no container configured
+    steps:
+      - name: py
+        type: script
+        interpreter: python3
+        container: false
+        script: |
+          print("container false ok")
+
+  - name: ft-wait-all-typo
+    description: steps.wait-all (hyphen) is a Starlark subtraction, not the step
+    steps:
+      - name: typo
+        type: script
+        interpreter: starlark
+        script: |
+          steps.wait-all()
+
+  - name: ft-flags
+    description: flag and argument typing and defaults
+    arguments:
+      - name: req
+        description: Required positional
+        required: true
+      - name: opt
+        description: Optional positional with no default
+    flags:
+      - name: count
+        type: int
+        default: 2
+        description: An int flag with a default
+      - name: dry-run
+        type: bool
+        description: A bool flag with no default
+      - name: label
+        type: string
+        default: "2"
+        description: A string flag whose default looks like a number
+      - name: tag
+        description: A plain string flag with no default
+    steps:
+      - name: show
+        type: script
+        interpreter: starlark
+        script: |
+          print("flags=" + json.encode(ctx.flags))
+          print("arguments=" + json.encode(ctx.arguments))
+          print("dry-run in flags: %s" % ("dry-run" in ctx.flags))
+          print("types: count=%s dry-run=%s label=%s tag=%s opt=%s" % (
+              type(ctx.flags["count"]), type(ctx.flags.get("dry-run")), type(ctx.flags["label"]),
+              type(ctx.flags.get("tag")), type(ctx.arguments["opt"])))
+
+  - name: ft-doc-steps-pass
+    description: "steps.run.mdx 'Pass results between calls' example, verbatim (no !literal)"
+    steps:
+      - name: doc
+        type: script
+        interpreter: starlark
+        script: |
+          joined = steps.join(
+              name = "services",
+              options = ["api", "worker"],
+              separator = ",",
+              outputs = {"names": "{{ .value }}"},
+          )
+          print(joined.outputs["names"])
+
+          summary = steps.join(content = "Services: {{ .steps.services.outputs.names }}")
+          print(summary.value)
+
+  - name: ft-doc-steps-pass-literal
+    description: "Same example with script: !literal"
+    steps:
+      - name: doc
+        type: script
+        interpreter: starlark
+        script: !literal |
+          joined = steps.join(
+              name = "services",
+              options = ["api", "worker"],
+              separator = ",",
+              outputs = {"names": "{{ .value }}"},
+          )
+          print(joined.outputs["names"])
+
+          summary = steps.join(content = "Services: {{ .steps.services.outputs.names }}")
+          print(summary.value)
+
+  - name: ft-doc-capacity
+    description: ctx.flags.mdx capacity example, verbatim
+    flags:
+      - name: replicas
+        type: string
+        default: "2"
+    steps:
+      - name: capacity
+        type: script
+        interpreter: starlark
+        script: |
+          replicas = int(ctx.flags["replicas"])
+          if replicas < 1:
+              fail("replicas must be positive")
+          ui.success("{} workers".format(replicas * 4))
+
+  - name: ft-doc-report
+    description: script.mdx literal-script example, verbatim
+    steps:
+      - name: report
+        type: script
+        interpreter: starlark
+        script: !literal |
+          row = {"name": "vpc", "status": "ok"}
+          print("{} is {}".format(row["name"], row["status"]))
+          print("Atmos templates look like {{ .vars.stage }}")
+
+  - name: ft-doc-py-check
+    description: script.mdx opening python3 example, verbatim
+    steps:
+      - name: check generated files
+        type: script
+        interpreter: python3
+        working_directory: .
+        script: |
+          from pathlib import Path
+          if not Path("generated/config.yaml").exists():
+              raise SystemExit("missing generated config")
+
+  - name: ft-doc-log
+    description: script.mdx log example
+    steps:
+      - name: deploy
+        type: script
+        interpreter: starlark
+        script: |
+          log.debug("resolved component", component="api", attempts=2)
+          log.warn("falling back to the default region", region="us-east-2")
+
+  # Step-field rendering and validation (WP4): a templated timeout must not break config loading.
+  - name: ft-timeout-templated
+    description: A templated step timeout rendered from a flag when the step runs
+    flags:
+      - name: t
+        description: Step timeout
+        default: 2s
+    steps:
+      - name: templated
+        type: script
+        interpreter: starlark
+        timeout: '{{ .Flags.t }}'
+        script: |
+          print("ok")

@@ -1,0 +1,16 @@
+# Rename to .yaml (or copy) and import from a throwaway stack to use; kept as .example because every file under stacks/ is scanned and this one breaks project-wide commands.
+# Load-time failures: a non-scalar !starlark node. Import from a throwaway stack (see
+# computed-errors.yaml); loading this file fails EVERY command in the project.
+components:
+  terraform:
+    e-nonscalar-map:
+      metadata: {component: mock}
+      vars:
+        x: !starlark
+          a: 1
+          b: 2
+    e-nonscalar-seq:
+      metadata: {component: mock}
+      vars:
+        x: !starlark
+          - return 1

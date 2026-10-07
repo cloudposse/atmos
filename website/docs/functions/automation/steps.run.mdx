@@ -92,18 +92,27 @@ fields without accessing `data`.
 Use ordinary variables to pass results to the next operation. Named steps also
 publish their results to subsequent step templates in the same script thread:
 
-```python
-joined = steps.join(
-    name = "services",
-    options = ["api", "worker"],
-    separator = ",",
-    outputs = {"names": "{{ .value }}"},
-)
-print(joined.outputs["names"])
+```yaml
+steps:
+  - name: report
+    type: script
+    interpreter: starlark
+    script: !literal |
+      joined = steps.join(
+          name = "services",
+          options = ["api", "worker"],
+          separator = ",",
+          outputs = {"names": "{{ .value }}"},
+      )
+      print(joined.outputs["names"])
 
-summary = steps.join(content = "Services: {{ .steps.services.outputs.names }}")
-print(summary.value)
+      summary = steps.join(content = "Services: {{ .steps.services.outputs.names }}")
+      print(summary.value)
 ```
+
+Atmos renders Go templates in `script:` before the interpreter runs, so a `{{ .value }}`
+meant for the step library must be protected with [`!literal`](/functions/yaml/literal).
+Without it, Atmos renders the template first and the expression no longer reaches the script.
 
 Omitting `name` uses the step type as its name; another call with that name
 replaces its stored result. Assign the script's top-level `output` to publish a

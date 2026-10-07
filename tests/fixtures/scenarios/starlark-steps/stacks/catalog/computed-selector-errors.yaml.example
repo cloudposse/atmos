@@ -1,0 +1,18 @@
+# Rename to .yaml (or copy) and import from a throwaway stack to use; kept as .example because every file under stacks/ is scanned and this one breaks project-wide commands.
+# metadata.tags / metadata.labels reject !starlark. Rejected at stack discovery, so importing
+# this fails every stack-wide command; import from a throwaway stack only.
+components:
+  terraform:
+    e-tags:
+      metadata:
+        component: mock
+        tags: !starlark return ["a", "b"]
+      vars:
+        message: tags
+    e-labels:
+      metadata:
+        component: mock
+        labels: !starlark |
+          return {"a": "b"}
+      vars:
+        message: labels

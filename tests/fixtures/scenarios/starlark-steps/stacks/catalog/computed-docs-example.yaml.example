@@ -1,0 +1,18 @@
+# Rename to .yaml (or copy) and import from a throwaway stack to use; kept as .example because every file under stacks/ is scanned and this one breaks project-wide commands.
+# The docs "Try it" example verbatim (website/docs/functions/yaml/starlark.mdx). It uses
+# metadata.owner, which the manifest schema rejects (metadata is a closed object), so
+# `atmos validate stacks` / `describe stacks` fail when this is imported. Import it from a
+# throwaway stack:  import: [catalog/computed-docs-example]  and  vars: {stage: dev, region: us-east-2}
+components:
+  terraform:
+    service:
+      metadata:
+        component: mock
+        owner: platform
+      vars:
+        resource_tags: !starlark |
+          return {
+              "Environment": ctx.vars["stage"],
+              "Region": ctx.vars["region"],
+              "Owner": ctx.metadata.get("owner", "platform"),
+          }
