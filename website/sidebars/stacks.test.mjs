@@ -219,3 +219,12 @@ test("explicit references retain descriptive titles for sidebar filtering", () =
     "stacks/components/mocks",
   );
 });
+
+test("every component name placeholder opens the naming guide", () => {
+  for (const kind of at("components").items) {
+    const name = at("components", kind.label, "<name>");
+    assert.equal(name.link.id, "stacks/components/name");
+    assert.equal(name.collapsible, true);
+    assert.ok(name.items.length > 0);
+  }
+});
