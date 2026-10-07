@@ -96,9 +96,12 @@ more depth. If a name is not listed here, check that page before concluding it d
   Use `json.indent(text, prefix=, indent=)` to pretty-print JSON text, and `json.encode_indent(value)`
   to encode and format in one call.
 - `fs.read_file(path)`: read a local file as a string (relative to the step working
-  directory, also inside loaded functions; absolute paths accepted). There is no write API.
+  directory, also inside loaded functions; absolute paths accepted; a leading `~` expands to the home
+  directory in every `fs.*` call). There is no write API.
   Use `fs.glob(pattern)`, `fs.stat(path)`, `fs.exists(path)`, and `fs.readlink(path)` to inspect the
-  filesystem.
+  filesystem. `fs.resolve(path)` returns the absolute path (tilde expanded, relative paths joined to the
+  working directory, cleaned) without touching the filesystem, so use it instead of hand-rolled
+  `~` and absolute-path checks.
 - `errors.build(message)`: error builder with `.with_title`, `.with_explanation`, `.with_hint`,
   `.with_example`, `.with_context`, `.with_exit_code`, and a final `.fail()`.
 - `regex.search(pattern, text)`: boolean match anywhere. `regex.findall(pattern, text)`:

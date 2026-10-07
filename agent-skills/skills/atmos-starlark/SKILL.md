@@ -116,7 +116,7 @@ workflows:
 - `steps.run(type, **fields)` and the `steps.<type>(...)` library call any registered step
   handler (see [steps.run](https://atmos.tools/functions/automation/steps.run)); they exist,
   and `steps.input` and `steps.choose` prompt. Also available: `fs.read_file`, `fs.glob`,
-  `fs.stat`, `fs.exists`, `fs.readlink`, `errors.build(...)` (a builder ending in `.fail()`),
+  `fs.stat`, `fs.exists`, `fs.readlink`, `fs.resolve` (absolute path; every `fs.*` call accepts a leading `~`), `errors.build(...)` (a builder ending in `.fail()`),
   `json.indent`, and `json.encode_indent`. Never invent `components.list`, `commands.run`,
   a file-write API, or direct secret, store, or Terraform state/output builtins. They do
   not exist. Resolved YAML inputs and component configuration can carry values from those

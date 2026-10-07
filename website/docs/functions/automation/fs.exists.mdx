@@ -29,10 +29,11 @@ if not fs.exists("config.json"):
     errors.build("Missing config.json").with_hint("Create the project configuration.").fail()
 ```
 
-Relative paths resolve against the script's working directory, including when
-called from a loaded module. Absolute paths are used as given. These functions
+A leading `~` expands to the home directory. Relative paths resolve against the
+script's working directory, including when called from a loaded module. Absolute
+paths are used as given. These functions
 inspect the local filesystem; they do not isolate access to the repository.
 Calls honor cancellation before and after the filesystem operation.
 
-See [reading files](/functions/automation/fs.read_file) and
+See [reading files](/functions/automation/fs.read_file), [`fs.resolve`](/functions/automation/fs.resolve), and
 [Git hooks](/cli/configuration/git#local-git-hooks).

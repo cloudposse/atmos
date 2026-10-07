@@ -2,11 +2,9 @@ package emulator
 
 import (
 	"path"
-	"path/filepath"
-	"strings"
 
-	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/container"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -29,7 +27,7 @@ func convertEmulatorMounts(mounts []schema.ContainerMount) []container.Mount {
 		}
 		result = append(result, container.Mount{
 			Type:     mountType,
-			Source:   expandHome(mount.Source),
+			Source:   filesystem.ExpandHome(mount.Source),
 			Target:   mount.Target,
 			ReadOnly: mount.ReadOnly,
 		})
@@ -76,23 +74,4 @@ func resolveMounts(spec *Spec, stack, name string) ([]container.Mount, error) {
 		return nil, err
 	}
 	return append(mounts, container.Mount{Type: defaultMountType, Source: hostDir, Target: dataDir}), nil
-}
-
-// expandHome expands a leading `~` (or `~/`) in a path to the user's home
-// directory, returning the path unchanged on any error or when it has no `~`.
-func expandHome(path string) string {
-	if path == "" || path[0] != '~' {
-		return path
-	}
-	home, err := homedir.Dir()
-	if err != nil {
-		return path
-	}
-	if path == "~" {
-		return home
-	}
-	if strings.HasPrefix(path, "~/") {
-		return filepath.Join(home, path[2:])
-	}
-	return path
 }
