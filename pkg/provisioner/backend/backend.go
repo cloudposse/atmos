@@ -16,11 +16,13 @@ type ProvisionResult struct {
 }
 
 // BackendCreateFunc is a function that creates a Terraform backend.
+// Optional settings are supplied through CreateOption values; backend types ignore options that do not apply.
 type BackendCreateFunc func(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	backendConfig map[string]any,
 	authContext *schema.AuthContext,
+	opts ...CreateOption,
 ) (*ProvisionResult, error)
 
 // BackendDeleteFunc is a function that deletes a Terraform backend.
@@ -246,6 +248,31 @@ func ProvisionBackend(
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrCreateNotImplemented, backendType)
 	}
 
+	// Read optional create settings from provision.backend (not from the generated backend config).
+	opts, err := createOptionsFromProvision(backend)
+	if err != nil {
+		return nil, err
+	}
+
 	// Execute create function.
-	return createFunc(ctx, atmosConfig, backendConfig, authContext)
+	return createFunc(ctx, atmosConfig, backendConfig, authContext, opts...)
+}
+
+// createOptionsFromProvision builds create options from the provision.backend section.
+// Only the type of bucket_namespace is checked here; the S3 provisioner validates the value.
+func createOptionsFromProvision(provisionBackend map[string]any) ([]CreateOption, error) {
+	raw, present := provisionBackend["bucket_namespace"]
+	if !present || raw == nil {
+		return nil, nil
+	}
+
+	namespace, ok := raw.(string)
+	if !ok {
+		return nil, errUtils.Build(errUtils.ErrInvalidBucketNamespace).
+			WithExplanationf("Got value of type %T", raw).
+			WithHint("Set 'provision.backend.bucket_namespace' to a string").
+			Err()
+	}
+
+	return []CreateOption{WithBucketNamespace(namespace)}, nil
 }
