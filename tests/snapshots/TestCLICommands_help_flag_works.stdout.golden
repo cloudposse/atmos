@@ -46,7 +46,7 @@ BUILT-IN COMMANDS
       helm [command] [EXPERIMENTAL]          Manage native Helm components
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments
       help                                   Help about any command
-      init [EXPERIMENTAL]                    Initialize a new Atmos project from a template
+      init [EXPERIMENTAL]                    Initialize a new Atmos project from a template or source directory
       kubernetes [command] [EXPERIMENTAL]    Manage Kubernetes-native components
       list [command]                         List available stacks and components
       lsp [command] [EXPERIMENTAL]           Language Server Protocol commands

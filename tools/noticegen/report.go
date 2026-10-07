@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"fmt"
 	"os"
@@ -37,10 +38,23 @@ var goInstallSleep = time.Sleep
 var runGoInstall = defaultRunGoInstall
 
 func defaultRunGoInstall(module string) error {
-	cmd := exec.Command("go", "install", module) // #nosec G204 -- module is a controlled default/env knob, not user input.
+	return runGoInstallWithTimeout(module, 3*time.Minute)
+}
+
+// Bound each attempt so a stalled download reaches the existing retry loop
+// instead of consuming the entire CI job timeout.
+func runGoInstallWithTimeout(module string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "go", "install", module) // #nosec G204 -- module is a controlled default/env knob, not user input.
+	cmd.WaitDelay = 5 * time.Second
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		return fmt.Errorf("go install %s: %w", module, ctx.Err())
+	}
+	return err
 }
 
 // licenseEnv is the GOOS/GOARCH/CGO_ENABLED triple go-licenses and `go

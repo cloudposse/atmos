@@ -60,7 +60,7 @@ func (f AtmosFuncs) Store(store string, stack string, component string, key stri
 	defer perf.Track(nil, "exec.AtmosFuncs.Store")()
 
 	if authdeferred.IsDeferred(f.atmosConfig.AuthManager) {
-		return storedeferred.LookupStore(f.atmosConfig, f.configAndStacksInfo, storedeferred.StoreOptions{Name: store, Stack: stack, Component: component, Key: key})
+		return deferredStoreFunc(f.atmosConfig, f.configAndStacksInfo, storedeferred.StoreOptions{Name: store, Stack: stack, Component: component, Key: key})
 	}
 	return storeFunc(f.atmosConfig, store, stack, component, key)
 }

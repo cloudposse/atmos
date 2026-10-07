@@ -1,0 +1,52 @@
+---
+slug: log-color-controls
+title: Plain Logs Without Losing Terminal Color
+authors: [osterman]
+tags: [feature, bugfix]
+---
+
+Comparing debug logs is harder when ANSI color escapes appear in the files, even after you ask for plain output. Atmos now consistently honors global color opt-outs and adds an independent [log color setting](/cli/configuration/logs), so you can save plain logs while keeping your terminal UI colored.
+
+<!-- truncate -->
+
+## The Problem
+
+As reported in [issue #3342](https://github.com/cloudposse/atmos/issues/3342), `--no-color` could still produce colored debug logs in GitHub Actions. Forced color could also override the flag. In our reproduction, 19 of 20 log lines contained ANSI escapes despite the explicit opt-out.
+
+## The Fix
+
+The [`--no-color` flag](/cli/global-flags) and a nonempty `NO_COLOR` environment variable now take precedence throughout startup, logging, and UI output, including when color is forced. GitHub Actions still gets color by default because it supports it.
+
+The new boolean `logs.color` setting controls Atmos log color independently:
+
+- `true` (the default) uses color when available, following existing terminal and CI detection.
+- `false` removes ANSI escapes from logs, including preformatted log messages.
+
+Use the existing `--force-color` or `ATMOS_FORCE_COLOR=true` controls to force color when log color is enabled. Global color opt-outs always win.
+
+## How to Use It
+
+Disable log color in your project configuration:
+
+```yaml title="atmos.yaml"
+logs:
+  color: false
+```
+
+Or save a plain debug log for one invocation while retaining terminal UI colors:
+
+```shell
+atmos --logs-level=debug --logs-file=/tmp/atmos.log --logs-color=false version
+```
+
+You can also set `ATMOS_LOGS_COLOR=false`. The command-line flag takes precedence over the environment variable, which takes precedence over configuration. These controls affect Atmos logs; child-process output keeps its own color settings.
+
+To disable color throughout Atmos, including its UI, use:
+
+```shell
+atmos --logs-level=debug --logs-file=/tmp/atmos.log --no-color version
+```
+
+## Get Involved
+
+See the [logging documentation](/cli/configuration/logs) for configuration details. If you encounter another color opt-out regression, [open an issue](https://github.com/cloudposse/atmos/issues/new/choose) with your command and terminal or CI environment.

@@ -379,13 +379,14 @@ var (
 	ErrGitArtifactRead             = errors.New("failed to read provision artifact")
 
 	// I/O and output errors.
-	ErrBuildIOConfig  = errors.New("failed to build I/O config")
-	ErrUnknownStream  = errors.New("unknown I/O stream")
-	ErrWriteToStream  = errors.New("failed to write to stream")
-	ErrMaskingContent = errors.New("failed to mask content")
-	ErrHeadLookup     = errors.New("HEAD not found")
-	ErrInvalidFormat  = errors.New("invalid format")
-	ErrOutputFormat   = errors.New("output format error")
+	ErrBuildIOConfig        = errors.New("failed to build I/O config")
+	ErrUnknownStream        = errors.New("unknown I/O stream")
+	ErrWriteToStream        = errors.New("failed to write to stream")
+	ErrMaskingContent       = errors.New("failed to mask content")
+	ErrUnboundedMaskPattern = errors.New("mask patterns that can match carriage returns or newlines must have a finite maximum match length")
+	ErrHeadLookup           = errors.New("HEAD not found")
+	ErrInvalidFormat        = errors.New("invalid format")
+	ErrOutputFormat         = errors.New("output format error")
 
 	// File operation errors.
 	ErrRefusingToDeleteSymlink = ErrRefuseDeleteSymbolicLink
@@ -422,6 +423,17 @@ var (
 	ErrDependencyResolution = errors.New("dependency resolution failed")
 	ErrToolInstall          = errors.New("tool installation failed")
 
+	// ErrToolVersionsConflict reports .tool-versions entries that identify the same
+	// tool (for example `tofu` and `opentofu/opentofu`) but pin different versions.
+	ErrToolVersionsConflict = errors.New("conflicting .tool-versions entries for the same tool")
+
+	// ErrInvalidToolchainInstall reports an unknown toolchain.install policy.
+	ErrInvalidToolchainInstall = errors.New("invalid toolchain.install (expected never, declared, auto, or always)")
+
+	// ErrToolNotInstalled reports an explicit dependency that is not installed while
+	// toolchain.install is never, which forbids installing it.
+	ErrToolNotInstalled = errors.New("required tool is not installed and toolchain.install is never")
+
 	// Helm plugin errors.
 	ErrInvalidHelmPluginSpec = errors.New("invalid helm plugin specification")
 	ErrHelmPluginInstall     = errors.New("helm plugin installation failed")
@@ -440,6 +452,7 @@ var (
 	ErrLatestFileNotFound                 = errors.New("latest version file not found")
 	ErrRegistryNotReachable               = errors.New("registry not reachable")
 	ErrToolNotInRegistry                  = errors.New("tool not in registry")
+	ErrToolRegistryIndexUnavailable       = errors.New("tool registry index unavailable")
 	ErrToolPlatformNotSupported           = errors.New("tool does not support this platform")
 	ErrAliasNotFound                      = errors.New("alias not found")
 	ErrBinaryNotExecutable                = errors.New("binary not executable")
@@ -834,6 +847,7 @@ var (
 	ErrFailedToGetGitHubOIDCToken   = errors.New("failed to get GitHub OIDC token")
 	ErrFailedToUploadInstances      = errors.New("failed to upload instances")
 	ErrFailedToUploadInstanceStatus = errors.New("failed to upload instance status")
+	ErrPayloadTooLarge              = errors.New("request exceeded the Atmos Pro body size limit")
 	ErrUploadRetryExhausted         = errors.New("upload failed after all retries")
 	ErrTokenRefreshFailed           = errors.New("failed to refresh API token")
 	ErrFailedToUnmarshalAPIResponse = errors.New("failed to unmarshal API response")
@@ -980,7 +994,8 @@ var (
 	ErrCacheDir       = errors.New("cache directory creation failed")
 
 	// Logger errors.
-	ErrInvalidLogLevel = errors.New("invalid log level")
+	ErrInvalidLogLevel  = errors.New("invalid log level")
+	ErrInvalidLogsColor = errors.New("invalid logs color")
 
 	// File operation errors.
 	ErrCopyFile            = errors.New("failed to copy file")
@@ -1216,27 +1231,29 @@ var (
 	ErrGitPullRequestNotSupported = errors.New("git pull request publishing is not supported by the cli provider")
 
 	// Backend provisioning errors.
-	ErrBucketRequired            = errors.New("backend.bucket is required")
-	ErrRegionRequired            = errors.New("backend.region is required")
-	ErrBackendNotFound           = errors.New("backend configuration not found")
-	ErrProvisioningNotConfigured = errors.New("provisioning not configured")
-	ErrCreateNotImplemented      = errors.New("create not implemented for backend type")
-	ErrDeleteNotImplemented      = errors.New("delete not implemented for backend type")
-	ErrProvisionerFailed         = errors.New("provisioner failed")
-	ErrLoadAWSConfig             = errors.New("failed to load AWS config")
-	ErrCheckBucketExist          = errors.New("failed to check bucket existence")
-	ErrCreateBucket              = errors.New("failed to create bucket")
-	ErrApplyBucketDefaults       = errors.New("failed to apply bucket defaults")
-	ErrEnableVersioning          = errors.New("failed to enable versioning")
-	ErrEnableEncryption          = errors.New("failed to enable encryption")
-	ErrBlockPublicAccess         = errors.New("failed to block public access")
-	ErrApplyTags                 = errors.New("failed to apply tags")
-	ErrForceRequired             = errors.New("--force flag required for backend deletion")
-	ErrBucketNotEmpty            = errors.New("bucket contains objects and cannot be deleted")
-	ErrStateFilesExist           = errors.New("bucket contains terraform state files")
-	ErrDeleteObjects             = errors.New("failed to delete objects from bucket")
-	ErrDeleteBucket              = errors.New("failed to delete bucket")
-	ErrListObjects               = errors.New("failed to list bucket objects")
+	ErrBucketRequired             = errors.New("backend.bucket is required")
+	ErrRegionRequired             = errors.New("backend.region is required")
+	ErrBackendNotFound            = errors.New("backend configuration not found")
+	ErrProvisioningNotConfigured  = errors.New("provisioning not configured")
+	ErrCreateNotImplemented       = errors.New("create not implemented for backend type")
+	ErrInvalidBucketNamespace     = errors.New("provision.backend.bucket_namespace must be a string")
+	ErrUnsupportedBucketNamespace = errors.New("unsupported provision.backend.bucket_namespace value")
+	ErrDeleteNotImplemented       = errors.New("delete not implemented for backend type")
+	ErrProvisionerFailed          = errors.New("provisioner failed")
+	ErrLoadAWSConfig              = errors.New("failed to load AWS config")
+	ErrCheckBucketExist           = errors.New("failed to check bucket existence")
+	ErrCreateBucket               = errors.New("failed to create bucket")
+	ErrApplyBucketDefaults        = errors.New("failed to apply bucket defaults")
+	ErrEnableVersioning           = errors.New("failed to enable versioning")
+	ErrEnableEncryption           = errors.New("failed to enable encryption")
+	ErrBlockPublicAccess          = errors.New("failed to block public access")
+	ErrApplyTags                  = errors.New("failed to apply tags")
+	ErrForceRequired              = errors.New("--force flag required for backend deletion")
+	ErrBucketNotEmpty             = errors.New("bucket contains objects and cannot be deleted")
+	ErrStateFilesExist            = errors.New("bucket contains terraform state files")
+	ErrDeleteObjects              = errors.New("failed to delete objects from bucket")
+	ErrDeleteBucket               = errors.New("failed to delete bucket")
+	ErrListObjects                = errors.New("failed to list bucket objects")
 
 	// Azure (azurerm) backend provisioning errors.
 	ErrResourceGroupRequired     = errors.New("backend.resource_group_name is required for azurerm backend provisioning")
@@ -1367,6 +1384,7 @@ var (
 	ErrScaffoldMatrixTargetMissingFileContext = errors.New("matrix target must reference .file.Path or .file.RelPath when its path matches more than one file")
 	ErrScaffoldComputedFieldInvalid           = errors.New("computed field is misconfigured")
 	ErrScaffoldComputedFieldNotSettable       = errors.New("computed field cannot be set")
+	ErrScaffoldFileDelimitersInvalid          = errors.New("spec.files[].delimiters must be exactly two non-empty strings")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

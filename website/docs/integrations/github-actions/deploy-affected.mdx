@@ -36,6 +36,7 @@ jobs:
       image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}
+      count: ${{ steps.affected.outputs.count }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -46,7 +47,7 @@ jobs:
 
   deploy:
     needs: affected
-    if: ${{ needs.affected.outputs.matrix != '' }}
+    if: ${{ needs.affected.outputs.count != '0' }}
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
@@ -63,4 +64,10 @@ jobs:
 ```
 </File>
 
-The `affected` job emits a matrix of `{component, stack}` pairs; the `deploy` job spreads across them in parallel.
+The `affected` job outputs a matrix of `{component, stack}` pairs and a `count`. The `deploy` job checks `count != '0'`
+to skip empty matrices (`{"include":[]}`). With `ci.enabled: true`, Atmos writes these outputs to `$GITHUB_OUTPUT`
+automatically; otherwise, pass `--output-file="$GITHUB_OUTPUT"`.
+
+Add `--labels=ci:auto` to select components labeled for this workflow. See
+[Choosing which components run in CI](/ci#keeping-privileged-components-out-of-ci) for components needing different
+permissions or network connectivity.

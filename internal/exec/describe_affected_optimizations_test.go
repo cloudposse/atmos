@@ -1748,6 +1748,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 	})
 }
 
+// TestProcessHelmfileComponentsIndexed verifies indexed processing of helmfile components when detecting affected components.
 func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 	t.Parallel()
 
@@ -1824,9 +1825,9 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 			atmosConfig,
 			filesIndex,
 			patternCache,
-			false, // includeSpaceliftAdminStacks
-			false, // includeSettings
-			false, // excludeLocked
+			false,                                // includeSpaceliftAdminStacks
+			false,                                // includeSettings
+			AffectedFilter{ExcludeLocked: false}, // excludeLocked
 		)
 
 		require.NoError(t, err)
@@ -1892,7 +1893,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -1951,7 +1952,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -1961,6 +1962,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 	})
 }
 
+// TestProcessPackerComponentsIndexed verifies indexed processing of packer components when detecting affected components.
 func TestProcessPackerComponentsIndexed(t *testing.T) {
 	t.Parallel()
 
@@ -2037,7 +2039,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2097,7 +2099,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2142,7 +2144,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2633,6 +2635,7 @@ module "storage" {
 	})
 }
 
+// TestProcessStackAffected_EdgeCases verifies that invalid or missing stack and components sections yield no affected components.
 func TestProcessStackAffected_EdgeCases(t *testing.T) {
 	t.Parallel()
 
@@ -2665,7 +2668,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2689,7 +2692,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2713,7 +2716,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2745,7 +2748,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)

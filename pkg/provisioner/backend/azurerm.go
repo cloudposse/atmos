@@ -157,6 +157,7 @@ func CreateAzurermBackend(
 	atmosConfig *schema.AtmosConfiguration,
 	backendConfig map[string]any,
 	authContext *schema.AuthContext,
+	_ ...CreateOption,
 ) (*ProvisionResult, error) {
 	defer perf.Track(atmosConfig, "backend.CreateAzurermBackend")()
 

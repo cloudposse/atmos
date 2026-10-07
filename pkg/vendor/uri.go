@@ -101,7 +101,7 @@ func IsS3URI(uri string) bool {
 
 // HasLocalPathPrefix checks if the URI starts with local path prefixes.
 func HasLocalPathPrefix(uri string) bool {
-	return strings.HasPrefix(uri, "/") || strings.HasPrefix(uri, "./") || strings.HasPrefix(uri, "../")
+	return filepath.IsAbs(uri) || strings.HasPrefix(uri, "/") || strings.HasPrefix(uri, "./") || strings.HasPrefix(uri, "../")
 }
 
 // HasSchemeSeparator checks if the URI contains a scheme separator.

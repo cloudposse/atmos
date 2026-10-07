@@ -22,6 +22,7 @@ import (
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -3408,4 +3409,45 @@ func TestExecuteCustomCommandShellStepMasksSecretSplitAcrossWrites(t *testing.T)
 	assert.NotContains(t, string(got), secret)
 	assert.NotContains(t, string(got), "custom-cmd-split-")
 	assert.Contains(t, string(got), iolib.MaskReplacement)
+}
+
+func TestCustomCommandScriptComponentReceivesResolvedStepEnv(t *testing.T) {
+	for _, parallel := range []bool{false, true} {
+		t.Run(fmt.Sprintf("parallel=%v", parallel), func(t *testing.T) {
+			NewTestKit(t)
+			t.Setenv("ATMOS_CLI_CONFIG_PATH", "../examples/custom-components")
+			t.Setenv("ATMOS_BASE_PATH", "../examples/custom-components")
+			t.Setenv("ATMOS_TEST_STEP_SOURCE", "resolved-step")
+			t.Setenv("ATMOS_TEST_STEP_VALUE", "ambient-default")
+			t.Setenv("APP_VERSION", "ambient-version")
+			config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			require.NoError(t, err)
+			executable, err := os.Executable()
+			require.NoError(t, err)
+			output := filepath.Join(t.TempDir(), "env.txt")
+			step := schema.Task{
+				Name: "capture", Type: "script", Interpreter: "starlark",
+				Env: map[string]string{"ATMOS_TEST_STEP_VALUE": "{{ .Env.ATMOS_TEST_STEP_SOURCE }}"},
+				Script: fmt.Sprintf(`if env["ATMOS_TEST_STEP_VALUE"] != "resolved-step":
+    fail("script env was not resolved")
+component = components.get("deploy-app", "dev", "script")
+component.exec([%q], env = {"_ATMOS_TEST_DUMP_ENV": %q})`, executable, output),
+			}
+			if parallel {
+				step = schema.Task{Type: schema.TaskTypeParallel, Steps: []schema.WorkflowStep{step.ToWorkflowStep()}}
+			}
+			command := &schema.Command{
+				Name:  "step-env-component-child",
+				Env:   []schema.CommandEnv{{Key: "ATMOS_TEST_STEP_VALUE", Value: "command-default"}},
+				Steps: schema.Tasks{step},
+			}
+			exited := registerAndRunCustomCommand(t, &config, command)
+			require.False(t, exited)
+			result, err := os.ReadFile(output)
+			require.NoError(t, err)
+			childEnv := envpkg.SliceToMap(strings.Split(string(result), "\n"))
+			assert.Equal(t, "resolved-step", childEnv["ATMOS_TEST_STEP_VALUE"])
+			assert.Equal(t, "1.0.0", childEnv["APP_VERSION"], "the child runs with the resolved component environment")
+		})
+	}
 }

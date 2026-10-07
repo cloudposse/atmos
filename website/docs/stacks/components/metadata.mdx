@@ -287,7 +287,7 @@ The `custom` section is inherited from base components when `stacks.inherit.meta
 
 ### `tags`
 
-A list of tags used to select this component with the `--tags` flag on commands like [`atmos list components`](/cli/commands/list/components), `atmos terraform plan/apply/deploy`, and the native Kubernetes/Helm/container commands:
+A list of tags used to select this component with the `--tags` flag on commands like [`atmos list components`](/cli/commands/list/components), [`atmos list affected`](/cli/commands/list/affected), [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels), `atmos terraform plan/apply/deploy`, and the native Kubernetes/Helm/container commands:
 
 ```yaml
 components:
@@ -300,6 +300,8 @@ components:
 ```
 
 `--tags` matches **any** of the given tags (OR semantics). For example, `atmos terraform apply --tags production,tier-1` applies components tagged `production` **or** `tier-1`.
+
+Matching is case-sensitive. Components without `metadata.tags` do not match a tag selector.
 
 `tags` can also be set as a [global default](#global-stack-wide-metadata).
 
@@ -318,6 +320,14 @@ components:
 ```
 
 `--labels` matches **all** of the given `key=value` pairs (AND semantics). For example, `atmos terraform apply --labels cost-center=platform,compliance=sox` only applies components whose `metadata.labels` contain both `cost-center: platform` **and** `compliance: sox`.
+
+The `--labels` flag is available on the same commands as `--tags`:
+
+- [`atmos list components`](/cli/commands/list/components) and [`atmos list affected`](/cli/commands/list/affected)
+- [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels), including `--format=matrix` for CI job matrices
+- `atmos terraform plan/apply/deploy` and the native Kubernetes/Helm/container commands
+
+Label keys and values are case-sensitive; components without `metadata.labels` do not match. Both `key=value` and `key:value` syntax are accepted. Use shared defaults and overrides to express exclusions, as in [CI component selection](/ci#keeping-privileged-components-out-of-ci).
 
 `labels` can also be set as a [global default](#global-stack-wide-metadata).
 

@@ -142,6 +142,8 @@ func TestInvalidDeclarationsNeverReachHost(t *testing.T) {
 		{"nonsequence flags", `cli.command(main, flags=1)`, "list or tuple"},
 		{"wrong flag declaration", `cli.command(main, flags=[cli.arg("target")])`, "cli.flag declarations"},
 		{"duplicate flags", `cli.command(main, flags=[cli.flag("target"), cli.flag("target")])`, "must be unique"},
+		{"case-only duplicate flags", `cli.command(main, flags=[cli.flag("Target"), cli.flag("target")])`, "must be unique"},
+		{"case-only duplicate flags reversed", `cli.command(main, flags=[cli.flag("target"), cli.flag("TARGET")])`, "must be unique"},
 		{"duplicate shorthand", `cli.command(main, flags=[cli.flag("first", shorthand="f"), cli.flag("second", shorthand="f")])`, "must be unique"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -287,4 +289,24 @@ func TestCommandRejectsCaseCollidingNames(t *testing.T) {
 			}, new([]string))
 		require.NoError(t, err)
 	})
+}
+
+func TestCommandPreservesFlagNamesAndCaseSensitiveShorthands(t *testing.T) {
+	t.Parallel()
+	var events []string
+	_, err := executeCLI(`
+def main(args, flags):
+    emit("run")
+cli.command(main, flags=[cli.flag("Format", shorthand="f"), cli.flag("Output", shorthand="F")])
+`, func(_ *starlark.Thread, spec script.CommandSpec) (script.CommandInput, error) {
+		events = append(events, "parse")
+		require.Len(t, spec.Flags, 2)
+		assert.Equal(t, "Format", spec.Flags[0].GetName())
+		assert.Equal(t, "f", spec.Flags[0].GetShorthand())
+		assert.Equal(t, "Output", spec.Flags[1].GetName())
+		assert.Equal(t, "F", spec.Flags[1].GetShorthand())
+		return script.CommandInput{}, nil
+	}, &events)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"parse", "run"}, events)
 }

@@ -64,6 +64,10 @@ jobs:
             storage.googleapis.com:443
             cplive-plat-ue2-dev-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
             cloudfront.amazonaws.com:443
+            raw.githubusercontent.com:443
+            go.dev:443
+            golang.org:443
+            dl.google.com:443
 
       - name: Start deployment
         uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1
@@ -85,7 +89,7 @@ jobs:
 
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.IAM_ROLE_ARN }}

@@ -80,11 +80,12 @@ type Masker interface {
 	RegisterSecret(secret string)
 
 	// RegisterPattern registers a regex pattern to mask.
-	// Returns error if pattern is invalid.
+	// Returns an error for invalid patterns or unbounded matches that can cross lines.
 	RegisterPattern(pattern string) error
 
 	// RegisterRegex registers a compiled regex pattern to mask.
-	RegisterRegex(pattern *regexp.Regexp)
+	// Returns an error for unbounded matches that can cross lines.
+	RegisterRegex(pattern *regexp.Regexp) error
 
 	// RegisterAWSAccessKey registers an AWS access key and attempts to mask the paired secret key.
 	RegisterAWSAccessKey(accessKeyID string)

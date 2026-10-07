@@ -3,7 +3,6 @@ package step
 import (
 	"context"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -461,29 +460,35 @@ func TestHTTPHandler_TemplateResolution(t *testing.T) {
 	assert.JSONEq(t, `{"sha":"deadbeef"}`, gotBody)
 }
 
-// TestHTTPHandler_TransportError verifies an unreachable endpoint fails (no panic).
+// TestHTTPHandler_TransportError verifies a connection closed without a response fails.
 func TestHTTPHandler_TransportError(t *testing.T) {
 	t.Parallel()
 
-	// Bind an ephemeral port, then close it so the address deterministically refuses
-	// connections (relying on a fixed low port like :1 is not portable across runners).
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	closedAddr := ln.Addr().String()
-	require.NoError(t, ln.Close())
+	// Keep the listener owned until execution completes so another parallel test
+	// cannot acquire the address and answer this request successfully.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		conn, _, err := http.NewResponseController(w).Hijack()
+		if !assert.NoError(t, err) {
+			return
+		}
+		assert.NoError(t, conn.Close())
+	}))
+	defer server.Close()
 
 	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:    "down",
 		Type:    "http",
-		URL:     "http://" + closedAddr, // Just-released port: refuses connections.
-		Timeout: "200ms",
+		URL:     server.URL,
+		Timeout: "5s",
 	}
 	require.NoError(t, handler.Validate(step))
 
-	_, err = handler.Execute(context.Background(), step, NewVariables())
+	result, err := handler.Execute(context.Background(), step, NewVariables())
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrHTTPStepRequestFailed)
+	assert.ErrorIs(t, err, io.EOF, "the server must close the connection before an HTTP response")
+	assert.Nil(t, result, "transport failures must not produce a successful response")
 }
 
 // TestHTTPHandler_WebhookAlias verifies the "webhook" alias resolves to the http

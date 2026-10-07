@@ -29,7 +29,7 @@ func findAffectedParallel(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stackToFilter string,
-	excludeLocked bool,
+	filter AffectedFilter,
 	gitRepoRoot string,
 ) ([]schema.Affected, error) {
 	defer perf.Track(atmosConfig, "exec.findAffectedParallel")()
@@ -69,7 +69,7 @@ func findAffectedParallel(
 				patternCache,
 				includeSpaceliftAdminStacks,
 				includeSettings,
-				excludeLocked,
+				filter,
 			)
 
 			results <- stackAffectedResult{
@@ -100,6 +100,7 @@ func findAffectedParallel(
 		currentStacks,
 		atmosConfig,
 		stackToFilter,
+		filter,
 	)
 	if err != nil {
 		return nil, err
@@ -123,7 +124,7 @@ func processStackAffected(
 	patternCache *componentPathPatternCache,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
-	excludeLocked bool,
+	filter AffectedFilter,
 ) ([]schema.Affected, error) {
 	var affected []schema.Affected
 
@@ -149,7 +150,7 @@ func processStackAffected(
 			patternCache,
 			includeSpaceliftAdminStacks,
 			includeSettings,
-			excludeLocked,
+			filter,
 		)
 		if err != nil {
 			return nil, err
@@ -176,7 +177,7 @@ func processStackAffected(
 			patternCache,
 			includeSpaceliftAdminStacks,
 			includeSettings,
-			excludeLocked,
+			filter,
 		)
 		if err != nil {
 			return nil, err
@@ -196,7 +197,7 @@ func processStackAffected(
 			patternCache,
 			includeSpaceliftAdminStacks,
 			includeSettings,
-			excludeLocked,
+			filter,
 		)
 		if err != nil {
 			return nil, err
@@ -216,7 +217,7 @@ func processStackAffected(
 			patternCache,
 			includeSpaceliftAdminStacks,
 			includeSettings,
-			excludeLocked,
+			filter,
 		)
 		if err != nil {
 			return nil, err

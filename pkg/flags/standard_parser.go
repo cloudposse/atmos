@@ -208,6 +208,7 @@ func (p *StandardParser) buildStandardOptions(parsedConfig *ParsedConfig, compon
 			ConfigPath:      GetStringSlice(parsedConfig.Flags, "config-path"),
 			LogsLevel:       GetString(parsedConfig.Flags, "logs-level"),
 			LogsFile:        GetString(parsedConfig.Flags, "logs-file"),
+			LogsColor:       GetBool(parsedConfig.Flags, "logs-color"),
 			NoColor:         GetBool(parsedConfig.Flags, "no-color"),
 			ForceColor:      GetBool(parsedConfig.Flags, "force-color"),
 			ForceTTY:        GetBool(parsedConfig.Flags, "force-tty"),
