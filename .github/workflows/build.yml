@@ -26,7 +26,7 @@ jobs:
       id-token: write
       contents: write
       pull-requests: write
-    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@4e05ff6c113efa9322288cedbc7c8950c22616cc # main
+    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@281621d6f2e63a883ea884559ffdbb4895c1bd98 # main
     # `secrets: inherit`, not an explicit map: shared-release-branches.yml doesn't declare a
     # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
     # (this job only triggers on `release`/`workflow_dispatch`, not `pull_request`, so the
@@ -169,7 +169,7 @@ jobs:
 
       - name: "Upload Trivy scan results to code-scanning"
         if: always()
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: trivy-results.sarif
 
