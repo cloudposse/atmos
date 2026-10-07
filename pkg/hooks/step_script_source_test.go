@@ -3,6 +3,7 @@ package hooks
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,18 +43,36 @@ func scriptSourceFixture(t *testing.T) (*schema.AtmosConfiguration, string) {
 	return cfg, filepath.Join(base, "stacks", "dev.yaml")
 }
 
-// hookSection decodes a stack manifest snippet exactly like stack processing does (so !include
-// records script_source) and returns the value of its `with` key.
+// hookSection decodes a full component-hook manifest so the loader sees the hook kind and type
+// before processing !include, then returns the hook's `with` payload.
 func hookSection(t *testing.T, cfg *schema.AtmosConfiguration, manifest, text string) any {
 	t.Helper()
+	text = "components:\n  terraform:\n    mock:\n      hooks:\n        check:\n          " +
+		strings.ReplaceAll(strings.TrimSuffix(text, "\n"), "\n", "\n          ") + "\n"
 	out, err := utils.UnmarshalYAMLFromFile[map[string]any](cfg, text, manifest)
 	require.NoError(t, err)
-	return out["with"]
+	components := out["components"].(map[string]any)["terraform"].(map[string]any)
+	hooks := components["mock"].(map[string]any)["hooks"].(map[string]any)
+	return hooks["check"].(map[string]any)["with"]
+}
+
+func TestHookScriptSource_PreservesOrdinaryWithData(t *testing.T) {
+	cfg, manifest := scriptSourceFixture(t)
+	for _, section := range []string{"vars", "settings", "env", "metadata"} {
+		t.Run(section, func(t *testing.T) {
+			text := section + ":\n  bootstrap:\n    kind: step\n    type: script\n    with:\n" +
+				"      interpreter: starlark\n      script: !include scripts/hooks/check.star\n"
+			out, err := utils.UnmarshalYAMLFromFile[map[string]any](cfg, text, manifest)
+			require.NoError(t, err)
+			data := out[section].(map[string]any)["bootstrap"].(map[string]any)
+			assert.Equal(t, map[string]any{"interpreter": "starlark", "script": hookScript}, data["with"])
+		})
+	}
 }
 
 func TestStepHookScriptSource_LoadResolvesNextToIncludedFile(t *testing.T) {
 	cfg, manifest := scriptSourceFixture(t)
-	with := hookSection(t, cfg, manifest, "with:\n  interpreter: starlark\n  output: none\n  script: !include scripts/hooks/check.star\n")
+	with := hookSection(t, cfg, manifest, "kind: step\ntype: script\nwith:\n  interpreter: starlark\n  output: none\n  script: !include scripts/hooks/check.star\n")
 	require.Contains(t, with, utils.ScriptSourceKey)
 
 	ctx := stepExecContext(&Hook{Kind: stepKindName, Type: "script", OnFailure: OnFailureFail, With: with})
@@ -65,7 +84,7 @@ func TestStepHookScriptSource_LoadResolvesNextToIncludedFile(t *testing.T) {
 
 func TestStepHookScriptSource_WithoutProvenanceLoadsFromWorkingDirectory(t *testing.T) {
 	cfg, manifest := scriptSourceFixture(t)
-	with, ok := hookSection(t, cfg, manifest, "with:\n  interpreter: starlark\n  output: none\n  script: !include scripts/hooks/check.star\n").(map[string]any)
+	with, ok := hookSection(t, cfg, manifest, "kind: step\ntype: script\nwith:\n  interpreter: starlark\n  output: none\n  script: !include scripts/hooks/check.star\n").(map[string]any)
 	require.True(t, ok)
 	// Negative path: with the recorded source removed the script resolves load() against the
 	// working directory and finds the decoy.
@@ -89,7 +108,7 @@ if marker != "other-dir":
 `), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(other, "lib", "util.star"), []byte(`marker = "other-dir"`+"\n"), 0o600))
 
-	with := hookSection(t, cfg, manifest, "with:\n"+
+	with := hookSection(t, cfg, manifest, "kind: steps\nwith:\n"+
 		"  - type: script\n    interpreter: starlark\n    output: none\n    script: !include scripts/hooks/check.star\n"+
 		"  - type: script\n    interpreter: starlark\n    output: none\n    script: !include scripts/other/second.star\n"+
 		"  - type: script\n    interpreter: starlark\n    output: none\n    script: print('inline')\n")
@@ -106,7 +125,7 @@ func TestWorkflowStepFromHookPayload_ScriptSource(t *testing.T) {
 	absolute := filepath.Join(cfg.BasePath, "scripts", "hooks", "check.star")
 
 	t.Run("recorded relative path becomes absolute and is not a step parameter", func(t *testing.T) {
-		with := hookSection(t, cfg, manifest, "with:\n  interpreter: starlark\n  script: !include scripts/hooks/check.star\n")
+		with := hookSection(t, cfg, manifest, "kind: step\ntype: script\nwith:\n  interpreter: starlark\n  script: !include scripts/hooks/check.star\n")
 		ctx := stepExecContext(&Hook{Kind: stepKindName, Type: "script", With: with})
 		ctx.AtmosConfig = cfg
 
@@ -118,7 +137,7 @@ func TestWorkflowStepFromHookPayload_ScriptSource(t *testing.T) {
 	})
 
 	t.Run("inline script has no source", func(t *testing.T) {
-		with := hookSection(t, cfg, manifest, "with:\n  interpreter: starlark\n  script: print('inline')\n")
+		with := hookSection(t, cfg, manifest, "kind: step\ntype: script\nwith:\n  interpreter: starlark\n  script: print('inline')\n")
 		ctx := stepExecContext(&Hook{Kind: stepKindName, Type: "script", With: with})
 		ctx.AtmosConfig = cfg
 
@@ -153,7 +172,7 @@ func TestWorkflowStepFromHookPayload_ScriptSource(t *testing.T) {
 	})
 
 	t.Run("child steps of a group keep their own source", func(t *testing.T) {
-		with := hookSection(t, cfg, manifest, "with:\n  steps:\n"+
+		with := hookSection(t, cfg, manifest, "kind: step\ntype: parallel\nwith:\n  steps:\n"+
 			"    - type: script\n      interpreter: starlark\n      script: !include scripts/hooks/check.star\n"+
 			"    - type: script\n      interpreter: starlark\n      script: print('inline')\n")
 		ctx := stepExecContext(&Hook{Kind: stepKindName, Type: "parallel", With: with})
@@ -173,7 +192,7 @@ func TestWorkflowStepFromHookPayload_ScriptSource(t *testing.T) {
 // they do during stack inheritance.
 func staleProvenanceWith(t *testing.T, cfg *schema.AtmosConfiguration, manifest, childScript string) map[string]any {
 	t.Helper()
-	base := hookSection(t, cfg, manifest, "with:\n  interpreter: starlark\n  output: none\n  script: !include scripts/hooks/check.star\n")
+	base := hookSection(t, cfg, manifest, "kind: step\ntype: script\nwith:\n  interpreter: starlark\n  output: none\n  script: !include scripts/hooks/check.star\n")
 	baseWith, ok := base.(map[string]any)
 	require.True(t, ok)
 	require.Contains(t, baseWith, utils.ScriptSourceKey)
@@ -247,7 +266,7 @@ if marker != "included-dir":
 if "{{ printf "%s" "rendered" }}" != "rendered":
     fail("template was not rendered")
 `), 0o600))
-	with := hookSection(t, cfg, manifest, "with:\n  interpreter: starlark\n  output: none\n  script: !include scripts/hooks/templated.star\n")
+	with := hookSection(t, cfg, manifest, "kind: step\ntype: script\nwith:\n  interpreter: starlark\n  output: none\n  script: !include scripts/hooks/templated.star\n")
 
 	ctx := stepExecContext(&Hook{Kind: stepKindName, Type: "script", OnFailure: OnFailureFail, With: with})
 	ctx.AtmosConfig = cfg
@@ -278,7 +297,7 @@ func TestWithoutScriptSource_StripsBothKeys(t *testing.T) {
 func TestStepHookScriptSource_AcceptsYAMLv2MapShape(t *testing.T) {
 	cfg, manifest := scriptSourceFixture(t)
 	absolute := filepath.Join(cfg.BasePath, "scripts", "hooks", "check.star")
-	with, ok := hookSection(t, cfg, manifest, "with:\n  interpreter: starlark\n  script: !include scripts/hooks/check.star\n").(map[string]any)
+	with, ok := hookSection(t, cfg, manifest, "kind: step\ntype: script\nwith:\n  interpreter: starlark\n  script: !include scripts/hooks/check.star\n").(map[string]any)
 	require.True(t, ok)
 
 	v2With := map[any]any{}
