@@ -17,6 +17,10 @@ remaining branches therefore needed manual review requests.
 List each actual stack base explicitly in the review configuration. Keep the
 existing review rules, required change-request workflow, and draft policy.
 
+Also merge the current main branch, retaining its scaffold navigation links and
+the YAML-function guide anchor from this stack. This resolves the README
+conflict that prevented pull-request checks from starting.
+
 ## Validation
 
 - Compared the allowlist with the base branches reported by GitHub for all ten PRs.
