@@ -495,7 +495,10 @@ atmos terraform plan --affected --tags production
 
 ### Include Dependencies and Dependents
 
-Selector flags choose the seed set; `--include-dependencies` and `--include-dependents` expand it through the dependency graph. Expanded components are planned even when they do not match the selectors — they are prerequisites (or dependents) of what was selected. Prerequisites can live in other stacks, so `--include-dependencies` with `-s dev` legitimately plans prerequisite components outside the `dev` stack:
+`--include-dependencies` adds prerequisites even when they do not match the selectors or belong to another stack.
+`--include-dependents` honors `--tags` and `--labels`, retaining matching descendants of excluded components in dependency
+order. See [Terraform selection flags](/cli/commands/terraform/usage#flags) for full semantics.
+For example, `--include-dependencies` with `-s dev` can include prerequisites outside `dev`:
 
 ```shell
 # Plan dev-labeled components plus everything they depend on

@@ -307,7 +307,7 @@ items.push(
             category(
               "<name>",
               keys.map((key) => field(key, kind, "component")),
-              undefined,
+              "stacks/components/name",
               "Component instance",
             ),
           ],

@@ -68,3 +68,10 @@ test('Native CI retains historical workflow anchors with links to focused guides
   assert.match(source, /\/integrations\/github-actions\/plan-on-pull-request/);
   assert.match(source, /\/integrations\/github-actions\/authentication#permissions/);
 });
+
+test('the workflow name placeholder opens its naming guide', () => {
+  const workflows = sidebars.cli.find(item => item.label === 'Workflows');
+  const name = workflows.items[0].items.find(item => item.label === '<name>');
+  assert.equal(name.link.id, 'workflows/name');
+  assert.ok(name.items.some(item => item.label === 'steps'));
+});

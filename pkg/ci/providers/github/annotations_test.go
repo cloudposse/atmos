@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestFormatAnnotation(t *testing.T) {
@@ -78,42 +79,63 @@ func (ts *testStreams) Error() stdio.Writer     { return ts.stderr }
 func (ts *testStreams) RawOutput() stdio.Writer { return ts.stdout }
 func (ts *testStreams) RawError() stdio.Writer  { return ts.stderr }
 
-// errWriter fails every write, standing in for a broken output stream.
+// errWriter fails every write, standing in for a broken output stream. Shared
+// with other tests in this package (e.g. log_group_test.go).
 type errWriter struct{}
 
 func (errWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
 
-func TestProvider_Annotate_WritesOneLinePerFinding(t *testing.T) {
-	stdout := &bytes.Buffer{}
-	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: stdout, stderr: &bytes.Buffer{}}
+// initCapture wires the data channel (stdout) and the UI formatter (stderr) to
+// separate captured buffers sharing a single io.Context, so a test can assert
+// exactly which channel each annotation line lands on. NO_COLOR forces plain
+// text so the workflow-command lines are matched byte-for-byte regardless of
+// the host's own color-support detection (CI runners are detected as
+// color-capable even when writing to a buffer).
+func initCapture(t *testing.T) (stdout, stderr *bytes.Buffer) {
+	t.Helper()
+	t.Setenv("NO_COLOR", "1")
+
+	stdout = &bytes.Buffer{}
+	stderr = &bytes.Buffer{}
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: stdout, stderr: stderr}
 	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
 	require.NoError(t, err)
 	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+
+	return stdout, stderr
+}
+
+// Annotations must be written to stderr (the UI channel), one workflow command
+// per finding, so the GitHub runner still renders them while stdout (the data
+// channel) stays pristine for downstream JSON/YAML consumers. Regression guard
+// for #3309.
+func TestProvider_Annotate_WritesOneLinePerFindingToStderr(t *testing.T) {
+	stdout, stderr := initCapture(t)
 
 	p := NewProvider()
-	err = p.Annotate([]provider.Annotation{
+	err := p.Annotate([]provider.Annotation{
 		{Path: "a.tf", StartLine: 1, Level: provider.AnnotationError, Title: "R1", Message: "first"},
 		{Path: "b.tf", StartLine: 2, Level: provider.AnnotationWarning, Title: "R2", Message: "second"},
 	})
 	require.NoError(t, err)
 
-	lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")
+	lines := strings.Split(strings.TrimRight(stderr.String(), "\n"), "\n")
 	require.Len(t, lines, 2)
 	assert.Equal(t, "::error file=a.tf,line=1,title=R1::first", lines[0])
 	assert.Equal(t, "::warning file=b.tf,line=2,title=R2::second", lines[1])
+
+	// The data channel (stdout) must carry none of the annotation output.
+	assert.Empty(t, stdout.String(), "annotations must not pollute stdout (the data channel)")
 }
 
-// A write failure on the annotation stream surfaces as an error rather than
-// being silently dropped.
-func TestProvider_Annotate_WriteErrorPropagates(t *testing.T) {
-	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: errWriter{}, stderr: &bytes.Buffer{}}
-	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
-	require.NoError(t, err)
-	data.InitWriter(ioCtx)
+// A nil/empty annotation slice writes nothing and does not error.
+func TestProvider_Annotate_NoAnnotations(t *testing.T) {
+	stdout, stderr := initCapture(t)
 
 	p := NewProvider()
-	err = p.Annotate([]provider.Annotation{
-		{Path: "a.tf", StartLine: 1, Level: provider.AnnotationError, Title: "R1", Message: "first"},
-	})
-	require.Error(t, err)
+	require.NoError(t, p.Annotate(nil))
+
+	assert.Empty(t, stdout.String())
+	assert.Empty(t, stderr.String())
 }

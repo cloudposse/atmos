@@ -45,6 +45,12 @@ reviews:
       - "^osterman/starlark-execution-support$"
       - "^osterman/starlark-runtime$"
       - "^osterman/starlark-integration-core$"
+      - "^osterman/starlark-interpreter-step$"
+      - "^osterman/starlark-language-reference$"
+      - "^osterman/starlark-literal-script$"
+      - "^osterman/starlark-interpreter-fixes$"
+      - "^osterman/aal-step-library$"
+      - "^osterman/git-hook-script-steps$"
   tools:
     ast-grep:
       essential_rules: true

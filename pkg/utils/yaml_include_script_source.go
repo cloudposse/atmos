@@ -39,9 +39,8 @@ const (
 //
 // The check is deliberately cheap and the tag comparison runs first (the generic include path is
 // performance critical): the value must be the value of a mapping key named `script`, and the
-// mapping must also hold an `interpreter` key, which every script step requires. The second
-// condition keeps unrelated mappings (for example a Terraform variable that happens to be called
-// `script`) free of the internal key.
+// mapping must also hold an `interpreter` key, which every script step requires. The caller checks
+// the step type and location first so plain stack data never receives internal provenance keys.
 func isScriptInclude(mapping *yaml.Node, index int, tag string) bool {
 	if tag != AtmosYamlFuncInclude && tag != AtmosYamlFuncIncludeRaw {
 		return false
@@ -213,6 +212,9 @@ func scriptSourceBasePath(atmosConfig *schema.AtmosConfiguration) string {
 // its node, then records the evaluated content fingerprint after the walk.
 // Only the stack policy installs this callback; scaffold manifests are unaffected.
 func prepareScriptSource(ctx TagContext, node *yaml.Node) func() {
+	if ctx.dataSection || !isScriptSourceStep(ctx.parent, node) {
+		return nil
+	}
 	for i, value := range node.Content {
 		tag := strings.TrimSpace(value.Tag)
 		if !isScriptInclude(node, i, tag) {
@@ -222,4 +224,40 @@ func prepareScriptSource(ctx TagContext, node *yaml.Node) func() {
 		return func() { applyScriptSource(node, source, scriptNodeHash(value)) }
 	}
 	return nil
+}
+
+// isScriptSourceStep accepts a typed script step or the payload of a typed script hook.
+func isScriptSourceStep(parent, node *yaml.Node) bool {
+	if node.Kind != yaml.MappingNode {
+		return false
+	}
+	if stepType := scriptSourceMappingValue(node, "type"); stepType != nil && stepType.Value == "script" {
+		return true
+	}
+	stepType := scriptSourceMappingValue(parent, "type")
+	return stepType != nil && stepType.Value == "script" && scriptSourceMappingValue(parent, "with") == node
+}
+
+func scriptSourceMappingValue(node *yaml.Node, key string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
+		}
+	}
+	return nil
+}
+
+// isScriptSourceDataValue identifies plain data by its mapping key before tag handlers rewrite it.
+func isScriptSourceDataValue(parent *yaml.Node, index int) bool {
+	if parent.Kind != yaml.MappingNode || index%2 != 1 {
+		return false
+	}
+	switch parent.Content[index-1].Value {
+	case "vars", "settings", "env", "metadata", "mocks", "locals", "secrets", "backend", "providers":
+		return true
+	}
+	return false
 }
