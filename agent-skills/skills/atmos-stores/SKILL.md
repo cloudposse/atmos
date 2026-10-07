@@ -135,7 +135,7 @@ stores:
       vault_url: "https://my-keyvault.vault.azure.net/"  # Required
       prefix: myapp               # Optional
       stack_delimiter: "-"         # Optional: default is "-"
-      tags:                        # Optional: tags on every secret written
+      labels:                      # Optional: applied as Azure Key Vault secret tags
         managed-by: atmos
       expires: 90d                 # Optional: 90d, 2160h, 2027-01-01, or RFC 3339
 ```

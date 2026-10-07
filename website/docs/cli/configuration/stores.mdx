@@ -206,8 +206,8 @@ stores:
       without_authentication: true
       # Optional: permit sending the credential over plain http (does not rewrite the URL like endpoint_insecure)
       insecure_allow_credential_with_http: true
-      # Optional: tags applied to every secret Atmos writes (values must be strings)
-      tags:
+      # Optional: labels applied as Azure Key Vault secret tags (values must be strings)
+      labels:
         managed-by: atmos
         environment: prod
       # Optional: expiration applied to every secret Atmos writes. Accepts a duration
@@ -220,7 +220,7 @@ stores:
 ```
 </File>
 
-Use `tags` and `expires` when an Azure Policy requires every Key Vault secret to carry tags or an expiration date; without them the policy rejects Atmos writes. Both options only affect writes, so reads, existence checks, listing, and deletion are unchanged. A relative `expires` (such as `90d`) is recalculated each time Atmos writes a secret, so rewriting a secret renews its expiration. A fixed date that is already in the past is accepted, but Atmos logs a warning because Key Vault or your policy may reject it. A duration must be at least one second, because Key Vault stores expiration in whole seconds. Invalid values (for example `0d`, `500ms`, or `soon`) fail when the store is created.
+Labels are applied as Azure Key Vault secret tags. Use `labels` and `expires` when an Azure Policy requires every Key Vault secret to carry tags or an expiration date; without them the policy rejects Atmos writes. Both options only affect writes, so reads, existence checks, listing, and deletion are unchanged. A relative `expires` (such as `90d`) is recalculated each time Atmos writes a secret, so rewriting a secret renews its expiration. A fixed date that is already in the past is accepted, but Atmos logs a warning because Key Vault or your policy may reject it. A duration must be at least one second, because Key Vault stores expiration in whole seconds. Invalid values (for example `0d`, `500ms`, or `soon`) fail when the store is created.
 
 Authentication uses the [Azure Default Credential chain](https://learn.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication), which checks environment variables, managed identity, Azure CLI, and other sources.
 

@@ -59,7 +59,7 @@ type AzureKeyVaultStore struct {
 	secret         bool
 
 	// Secret attributes applied to every write (see azure_keyvault_expires.go).
-	// tags is nil when no tags are configured. At most one of expiresAt and expiresIn is set.
+	// tags is nil when no labels are configured. At most one of expiresAt and expiresIn is set.
 	tags      map[string]*string
 	expiresAt *time.Time
 	expiresIn time.Duration
@@ -81,8 +81,8 @@ type AzureKeyVaultStoreOptions struct {
 	InsecureAllowCredentialWithHTTP      bool    `mapstructure:"insecure_allow_credential_with_http"`
 	EndpointInsecure                     bool    `mapstructure:"endpoint_insecure"`
 
-	// Tags are applied to every secret Atmos writes.
-	Tags map[string]string `mapstructure:"tags"`
+	// Labels are applied as Azure Key Vault secret tags on every write.
+	Labels map[string]string `mapstructure:"labels"`
 	// Expires sets the expiration of every secret Atmos writes. It is either an absolute RFC 3339
 	// timestamp (or a YYYY-MM-DD date, midnight UTC) or a duration such as "90d" or "2160h" that is
 	// applied relative to the time of each write.
@@ -144,7 +144,7 @@ func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName strin
 		clientOptions:  clientOptions,
 		withoutAuth:    options.WithoutAuthentication,
 		identityName:   identityName,
-		tags:           azureTagsToPointers(options.Tags),
+		tags:           azureLabelsToTags(options.Labels),
 		expiresAt:      expiresAt,
 		expiresIn:      expiresIn,
 	}

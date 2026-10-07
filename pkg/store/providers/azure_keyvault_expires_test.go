@@ -14,7 +14,7 @@ import (
 
 // Compile-time sentinels so a rename of the option or SDK fields these tests rely on fails the build.
 var (
-	_ = AzureKeyVaultStoreOptions{Tags: map[string]string{}, Expires: new(string)}
+	_ = AzureKeyVaultStoreOptions{Labels: map[string]string{}, Expires: new(string)}
 	_ = azsecrets.SetSecretParameters{Tags: map[string]*string{}, SecretAttributes: &azsecrets.SecretAttributes{}}
 )
 
@@ -120,7 +120,7 @@ func TestNewAzureKeyVaultStore_PastExpiresAccepted(t *testing.T) {
 	assert.Equal(t, 2000, akv.expiresAt.Year())
 }
 
-func TestAzureKeyVaultStore_Set_TagsAndFixedExpires(t *testing.T) {
+func TestAzureKeyVaultStore_Set_LabelsAndFixedExpires(t *testing.T) {
 	want := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	tests := []struct {
@@ -134,7 +134,7 @@ func TestAzureKeyVaultStore_Set_TagsAndFixedExpires(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s, captured := azureTestStoreWithOptions(t, AzureKeyVaultStoreOptions{
-				Tags:    map[string]string{"managed-by": "atmos", "environment": "prod"},
+				Labels:  map[string]string{"managed-by": "atmos", "environment": "prod"},
 				Expires: ptrTo(tt.expires),
 			})
 
@@ -195,13 +195,13 @@ func TestAzureKeyVaultStore_Set_RelativeExpiresRecomputed(t *testing.T) {
 	}
 }
 
-func TestAzureKeyVaultStore_Set_NoTagsNoExpires(t *testing.T) {
+func TestAzureKeyVaultStore_Set_NoLabelsNoExpires(t *testing.T) {
 	tests := []struct {
 		name string
 		opts AzureKeyVaultStoreOptions
 	}{
 		{name: "unset", opts: AzureKeyVaultStoreOptions{}},
-		{name: "empty tags map", opts: AzureKeyVaultStoreOptions{Tags: map[string]string{}}},
+		{name: "empty labels map", opts: AzureKeyVaultStoreOptions{Labels: map[string]string{}}},
 	}
 
 	for _, tt := range tests {
@@ -216,9 +216,9 @@ func TestAzureKeyVaultStore_Set_NoTagsNoExpires(t *testing.T) {
 	}
 }
 
-func TestAzureKeyVaultStore_Set_TagsOnlyAndExpiresOnly(t *testing.T) {
-	t.Run("tags only", func(t *testing.T) {
-		s, captured := azureTestStoreWithOptions(t, AzureKeyVaultStoreOptions{Tags: map[string]string{"a": "b"}})
+func TestAzureKeyVaultStore_Set_LabelsOnlyAndExpiresOnly(t *testing.T) {
+	t.Run("labels only", func(t *testing.T) {
+		s, captured := azureTestStoreWithOptions(t, AzureKeyVaultStoreOptions{Labels: map[string]string{"a": "b"}})
 		require.NoError(t, s.Set("", "", "secret", "value"))
 		require.Len(t, *captured, 1)
 		require.Len(t, (*captured)[0].Tags, 1)
@@ -235,13 +235,13 @@ func TestAzureKeyVaultStore_Set_TagsOnlyAndExpiresOnly(t *testing.T) {
 	})
 }
 
-func TestAzureKeyVaultStore_TagsMutationIsolation(t *testing.T) {
+func TestAzureKeyVaultStore_LabelsMutationIsolation(t *testing.T) {
 	t.Run("options map mutated after construction", func(t *testing.T) {
-		tags := map[string]string{"managed-by": "atmos"}
-		s, captured := azureTestStoreWithOptions(t, AzureKeyVaultStoreOptions{Tags: tags})
+		labels := map[string]string{"managed-by": "atmos"}
+		s, captured := azureTestStoreWithOptions(t, AzureKeyVaultStoreOptions{Labels: labels})
 
-		tags["managed-by"] = "someone-else"
-		tags["injected"] = "yes"
+		labels["managed-by"] = "someone-else"
+		labels["injected"] = "yes"
 
 		require.NoError(t, s.Set("dev", "app", "secret", "value"))
 		require.Len(t, *captured, 1)
@@ -250,7 +250,7 @@ func TestAzureKeyVaultStore_TagsMutationIsolation(t *testing.T) {
 	})
 
 	t.Run("params mutated by the sdk after write", func(t *testing.T) {
-		s, captured := azureTestStoreWithOptions(t, AzureKeyVaultStoreOptions{Tags: map[string]string{"managed-by": "atmos"}})
+		s, captured := azureTestStoreWithOptions(t, AzureKeyVaultStoreOptions{Labels: map[string]string{"managed-by": "atmos"}})
 
 		require.NoError(t, s.Set("dev", "app", "secret", "one"))
 		require.Len(t, *captured, 1)
@@ -264,13 +264,13 @@ func TestAzureKeyVaultStore_TagsMutationIsolation(t *testing.T) {
 	})
 }
 
-func TestBuildAzureKeyVaultStore_TagsAndExpiresFromConfig(t *testing.T) {
+func TestBuildAzureKeyVaultStore_LabelsAndExpiresFromConfig(t *testing.T) {
 	s, err := buildAzureKeyVaultStore("prod/azure", storepkg.StoreConfig{
 		Kind:     storepkg.KindAzureKeyVault,
 		Identity: "test-identity",
 		Options: map[string]interface{}{
 			"vault_url": "https://test.vault.azure.net",
-			"tags": map[string]interface{}{
+			"labels": map[string]interface{}{
 				"managed-by":  "atmos",
 				"environment": "prod",
 			},
@@ -300,13 +300,13 @@ func TestBuildAzureKeyVaultStore_InvalidExpiresFromConfig(t *testing.T) {
 	require.ErrorIs(t, err, storepkg.ErrInvalidExpires)
 }
 
-func TestBuildAzureKeyVaultStore_NonStringTagValueRejected(t *testing.T) {
+func TestBuildAzureKeyVaultStore_NonStringLabelValueRejected(t *testing.T) {
 	_, err := buildAzureKeyVaultStore("prod/azure", storepkg.StoreConfig{
 		Kind:     storepkg.KindAzureKeyVault,
 		Identity: "test-identity",
 		Options: map[string]interface{}{
 			"vault_url": "https://test.vault.azure.net",
-			"tags":      map[string]interface{}{"count": []string{"x"}},
+			"labels":    map[string]interface{}{"count": []string{"x"}},
 		},
 	})
 	require.ErrorIs(t, err, storepkg.ErrParseAzureKeyVaultOptions)

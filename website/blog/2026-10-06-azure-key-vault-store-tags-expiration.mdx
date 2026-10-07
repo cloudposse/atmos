@@ -1,13 +1,13 @@
 ---
 slug: azure-key-vault-store-tags-expiration
-title: "Tags and expiration dates for Azure Key Vault store secrets"
+title: "Labels and expiration dates for Azure Key Vault store secrets"
 authors: [osterman]
 tags: [feature, enhancement]
 ---
 
 Many organizations enforce an Azure Policy that rejects any Key Vault secret created without an expiration date and a set of tags. It is a sensible governance rule, and it blocks every write that doesn't comply. Until now, that ruled out using Azure Key Vault as an Atmos store in those environments: Atmos wrote the secret value and nothing else, so the policy denied the request.
 
-The Azure Key Vault store now accepts `tags` and `expires` options, and applies them to every secret Atmos writes.
+The Azure Key Vault store now accepts `labels` and `expires` options, and applies them to every secret Atmos writes.
 
 <!--truncate-->
 
@@ -21,7 +21,7 @@ The only workaround was to pre-create every secret outside Atmos with the right 
 
 Two new options on the store apply metadata at write time:
 
-- `tags` sets key-value tags on every secret Atmos writes.
+- `labels` sets key-value metadata on every secret Atmos writes. Labels are applied as Azure Key Vault secret tags.
 - `expires` sets the expiration. It accepts either a duration or a specific date, so you don't need separate fields for each style.
 
 Reads, existence checks, listing, and deletion are unchanged, and stores that set neither option behave exactly as before.
@@ -36,7 +36,7 @@ stores:
     kind: azure/keyvault
     options:
       vault_url: "https://my-keyvault.vault.azure.net/"
-      tags:
+      labels:
         managed-by: atmos
         environment: prod
       expires: 90d
@@ -53,7 +53,7 @@ stores:
 
 Prefer a relative duration for long-lived stores. A fixed date eventually passes, and from then on every new secret is created already expired or is rejected by policy. A relative value never goes stale, and because it's recalculated on each write, rewriting a secret renews its expiration. A fixed date that is already in the past is accepted, but Atmos logs a warning because Key Vault or your policy may reject it.
 
-A duration must be at least one second, because Key Vault stores expiration in whole seconds. Invalid values, such as `0d`, `500ms`, or `soon`, fail when the store is created rather than on the first write. Tag values must be strings, so quote values like `"true"` or `"5"`.
+A duration must be at least one second, because Key Vault stores expiration in whole seconds. Invalid values, such as `0d`, `500ms`, or `soon`, fail when the store is created rather than on the first write. Label values must be strings, so quote values like `"true"` or `"5"`.
 
 See the [stores configuration reference](/cli/configuration/stores) for the full list of Azure Key Vault options.
 

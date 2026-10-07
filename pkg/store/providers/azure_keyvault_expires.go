@@ -88,22 +88,22 @@ func parseAzureDuration(value string) (time.Duration, bool) {
 	return d, true
 }
 
-// azureTagsToPointers converts configured tags to the pointer map the Azure SDK expects.
-// It returns nil when no tags are configured, and never aliases the caller's map.
-func azureTagsToPointers(tags map[string]string) map[string]*string {
-	if len(tags) == 0 {
+// azureLabelsToTags converts configured labels to the tags pointer map the Azure SDK expects.
+// It returns nil when no labels are configured, and never aliases the caller's map.
+func azureLabelsToTags(labels map[string]string) map[string]*string {
+	if len(labels) == 0 {
 		return nil
 	}
 
-	out := make(map[string]*string, len(tags))
-	for k, v := range tags {
+	out := make(map[string]*string, len(labels))
+	for k, v := range labels {
 		out[k] = &v
 	}
 
 	return out
 }
 
-// secretParameters builds the SetSecret parameters for value, applying the configured tags and expiry.
+// secretParameters builds the SetSecret parameters for value, applying the configured labels as Azure tags and the expiry.
 // Tags are copied on every call so the SDK can never mutate store state, and a relative expiry is
 // recomputed from the current time so it does not go stale.
 func (s *AzureKeyVaultStore) secretParameters(value *string) azsecrets.SetSecretParameters {
