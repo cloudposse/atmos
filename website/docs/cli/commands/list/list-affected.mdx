@@ -52,6 +52,19 @@ atmos list affected --ref refs/heads/main
 atmos list affected --sha abc123def456
 ```
 
+Narrow the results by component tags or labels:
+```shell
+# Components tagged `production` or `tier-1`
+atmos list affected --tags=production,tier-1
+
+# Components labeled `ci: auto`
+atmos list affected --labels=ci=auto
+```
+
+The selectors use the same matching rules as [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels): `--tags` matches any tag, `--labels` matches all of the given pairs, and matching is positive only.
+
+Deleted components (`deleted: true`, including every component of a deleted stack) are filtered the same way, using their `metadata` from the base ref.
+
 Output in different formats:
 ```shell
 # JSON format
@@ -138,6 +151,12 @@ atmos list affected --repo-path /tmp/target-repo
 
   <dt>`--exclude-locked`</dt>
   <dd>Exclude components with `metadata.locked: true` from results.<br/>Environment variable: `ATMOS_AFFECTED_EXCLUDE_LOCKED`</dd>
+
+  <dt>`--tags`</dt>
+  <dd>Keep only components whose [`metadata.tags`](/stacks/components/component-metadata#tags) contain **any** of the given comma-separated tags (e.g., `--tags=production,tier-1`).<br/>Environment variable: `ATMOS_COMPONENT_TAGS`</dd>
+
+  <dt>`--labels`</dt>
+  <dd>Keep only components whose [`metadata.labels`](/stacks/components/component-metadata#labels) contain **all** of the given comma-separated `key=value` or `key:value` pairs (e.g., `--labels=ci=auto`). When combined with `--tags`, a component must satisfy both.<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
 
   <dt>`--repo-path`</dt>
   <dd>Path to already-cloned target repository. Conflicts with `--ref`, `--sha`, `--ssh-key`, and `--ssh-key-password`.<br/>Environment variable: `ATMOS_AFFECTED_REPO_PATH`</dd>

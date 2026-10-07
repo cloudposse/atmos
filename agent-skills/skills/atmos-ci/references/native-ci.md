@@ -260,6 +260,23 @@ errors[message] {
 }
 ```
 
+The policy's `schema_path` (for example `ci/privileged-component.rego`) is resolved relative to
+`schemas.opa.base_path`, which must be set in `atmos.yaml`. Without it Atmos fails with
+`the file '...' does not exist for schema type 'opa'`:
+
+```yaml
+schemas:
+  opa:
+    base_path: "stacks/schemas/opa"
+```
+
+An empty `--labels=` or `--tags=` (or an empty `ATMOS_LABELS`/`ATMOS_TAGS`) applies no filter and
+selects everything, so fail fast on an empty workflow variable: `--labels="ci=${CI_LABEL:?}"`.
+Simple Go templates in `metadata.labels` and `metadata.tags` are rendered before selection when
+`templates.settings.enabled` is `true`. With templates disabled, or with `--process-templates=false`, the raw
+`'{{ ... }}'` text is compared and matches neither `ci=auto` nor `ci=manual`. Deleted components are filtered
+the same way, using their `metadata` from the base ref.
+
 ## Deploy All Instances
 
 ```yaml

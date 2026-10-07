@@ -100,6 +100,7 @@ func findAffectedParallel(
 		currentStacks,
 		atmosConfig,
 		stackToFilter,
+		filter,
 	)
 	if err != nil {
 		return nil, err

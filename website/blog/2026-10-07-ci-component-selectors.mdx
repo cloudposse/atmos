@@ -66,6 +66,8 @@ In a workflow, that is a one-flag change to the job that produces the matrix:
 
 The privileged components get their own workflow, with its own role and its own approvals, that selects them with `--labels=ci=manual`. Tags work the same way when you would rather select by a list, for example `--tags=production,tier-1`. The full flag reference is on the [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels) page.
 
+Two details are worth knowing before you wire this into a workflow. An empty selector value applies no filter, so `--labels=` or an empty `ATMOS_LABELS` selects every affected component, exactly as if you had left the flag off. If the label comes from a workflow variable, fail fast on an empty value with shell parameter expansion, for example `--labels="ci=${CI_LABEL:?}"`. Labels and tags can use simple Go templates, which Atmos renders before it selects as long as `templates.settings.enabled` is `true`. If templates are turned off, or you pass `--process-templates=false`, a templated label keeps its raw text and matches neither `ci=auto` nor `ci=manual`, so the component runs in neither workflow.
+
 ### Add a Backstop with OPA
 
 A selector keeps a job from starting, but it cannot stop someone from running the command some other way, such as a hand-written workflow or a copied command line. An [OPA policy](/validation/opa) attached to the privileged component closes that gap by refusing to run it when it detects CI.
@@ -94,6 +96,16 @@ components:
             schema_path: "ci/privileged-component.rego"
             description: Block privileged components from running in CI
 ```
+
+The policy file is found through `schemas.opa.base_path`, so set it in `atmos.yaml`. The `schema_path` above is resolved relative to that directory, and without the setting Atmos reports that the file does not exist for schema type `opa`.
+
+```yaml title="atmos.yaml"
+schemas:
+  opa:
+    base_path: "stacks/schemas/opa"
+```
+
+See [OPA validation](/validation/opa#configure-component-validation) for the full configuration.
 
 The policy fails the job rather than skipping it, so treat it as a safety net. The matrix selector is what keeps the job from starting in the first place, and the policy makes sure a mistake elsewhere surfaces as a clear error instead of an apply.
 

@@ -537,6 +537,9 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) ([]schem
 		if err != nil {
 			return nil, err
 		}
+
+		// Apply `--tags` / `--labels` to the nested dependents too (a no-op without selectors).
+		filterAffectedDependents(&affected, a.affectedFilter())
 	}
 
 	// Strip unnecessary fields when uploading to Atmos Pro to reduce payload size

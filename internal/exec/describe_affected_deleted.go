@@ -30,11 +30,16 @@ var deletableComponentTypes = []string{
 // detectDeletedComponents detects components and stacks that exist in BASE (remoteStacks)
 // but have been deleted in HEAD (currentStacks).
 // This enables CI/CD pipelines to identify resources that need terraform destroy.
+//
+// The `--tags` / `--labels` selectors in the filter are evaluated against the deleted component's
+// metadata as it was in BASE, because a deleted component no longer has any metadata in HEAD.
+// `ExcludeLocked` is intentionally not applied to deleted components.
 func detectDeletedComponents(
 	remoteStacks *map[string]any,
 	currentStacks *map[string]any,
 	atmosConfig *schema.AtmosConfiguration,
 	stackToFilter string,
+	filter AffectedFilter,
 ) ([]schema.Affected, error) {
 	defer perf.Track(atmosConfig, "exec.detectDeletedComponents")()
 
@@ -66,6 +71,7 @@ func detectDeletedComponents(
 				stackName,
 				remoteComponentsSection,
 				atmosConfig,
+				filter,
 			)
 			deleted = append(deleted, stackDeleted...)
 		} else {
@@ -75,6 +81,7 @@ func detectDeletedComponents(
 				remoteComponentsSection,
 				currentStackSection,
 				atmosConfig,
+				filter,
 			)
 			if err != nil {
 				return nil, err
@@ -92,6 +99,7 @@ func processDeletedStack(
 	stackName string,
 	remoteComponentsSection map[string]any,
 	atmosConfig *schema.AtmosConfiguration,
+	filter AffectedFilter,
 ) []schema.Affected {
 	defer perf.Track(atmosConfig, "exec.processDeletedStack")()
 
@@ -101,6 +109,7 @@ func processDeletedStack(
 		atmosConfig,
 		affectedReasonDeletedStack,
 		deletionTypeStack,
+		filter,
 	)
 }
 
@@ -112,6 +121,7 @@ func processAllComponentsAsDeleted(
 	atmosConfig *schema.AtmosConfiguration,
 	affectedReason string,
 	deletionType string,
+	filter AffectedFilter,
 ) []schema.Affected {
 	var deleted []schema.Affected
 
@@ -130,6 +140,11 @@ func processAllComponentsAsDeleted(
 
 			// Skip abstract components - they are not provisioned.
 			if isAbstractComponent(componentSection) {
+				continue
+			}
+
+			// Skip components that do not match the `--tags` / `--labels` selectors (using their BASE metadata).
+			if !deletedComponentMatchesSelectors(componentSection, filter) {
 				continue
 			}
 
@@ -158,6 +173,7 @@ func processDeletedComponentsInStack(
 	remoteComponentsSection map[string]any,
 	currentStackSection any,
 	atmosConfig *schema.AtmosConfiguration,
+	filter AffectedFilter,
 ) ([]schema.Affected, error) {
 	defer perf.Track(atmosConfig, "exec.processDeletedComponentsInStack")()
 
@@ -176,6 +192,7 @@ func processDeletedComponentsInStack(
 			atmosConfig,
 			affectedReasonDeleted,
 			deletionTypeComponent,
+			filter,
 		), nil
 	}
 
@@ -209,6 +226,11 @@ func processDeletedComponentsInStack(
 				}
 			}
 
+			// Skip components that do not match the `--tags` / `--labels` selectors (using their BASE metadata).
+			if !deletedComponentMatchesSelectors(componentSection, filter) {
+				continue
+			}
+
 			// Component was deleted.
 			affected := createDeletedAffectedItem(&deletedItemParams{
 				componentName:    componentName,
@@ -224,6 +246,23 @@ func processDeletedComponentsInStack(
 	}
 
 	return deleted, nil
+}
+
+// deletedComponentMatchesSelectors reports whether a deleted component satisfies the `--tags` / `--labels`
+// selectors of the filter. The component section is the one from BASE, since the component no longer
+// exists in HEAD. Without selectors every deleted component matches; with selectors a component that has
+// no metadata section cannot match (the same rule the added/modified path applies).
+func deletedComponentMatchesSelectors(componentSection map[string]any, filter AffectedFilter) bool {
+	if !filter.hasSelectors() {
+		return true
+	}
+
+	metadataSection, ok := componentSection[sectionNameMetadata].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	return filter.matchesSelectors(metadataSection)
 }
 
 // isAbstractComponent checks if a component has metadata.type = "abstract".

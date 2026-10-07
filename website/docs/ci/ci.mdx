@@ -136,6 +136,20 @@ Run the privileged components from a separate workflow, with its own role and ap
 Labels match positively only. There is no "not labeled" selector, which is why every component gets a default value and the
 privileged ones override it.
 
+:::caution
+An empty selector value applies no filter, the same as leaving the flag off, so `--labels=` or an empty `ATMOS_LABELS`
+selects every affected component. When a workflow passes the label from a variable, fail fast if the variable is empty,
+for example `--labels="ci=${CI_LABEL:?}"`, or validate the variable in an earlier step. The OPA policy below exists for
+exactly this kind of mistake.
+:::
+
+:::note
+Simple Go templates in `metadata.labels` and `metadata.tags` are rendered before the selector runs, as long as
+[templates are enabled](/templates) with `templates.settings.enabled: true`. When templates are disabled, or when
+`--process-templates=false` is passed, the raw `'{{ ... }}'` text is compared instead. It matches neither `ci=auto` nor
+`ci=manual`, so the component runs in neither workflow.
+:::
+
 As a backstop, attach an [OPA policy](/validation/opa) to the privileged component so it fails if it runs in CI anyway:
 
 <File title="stacks/schemas/opa/ci/privileged-component.rego">
@@ -163,6 +177,20 @@ components:
             description: Block privileged components from running in CI
 ```
 </File>
+
+The policy file is found through `schemas.opa.base_path`, so set it in `atmos.yaml`. The `schema_path` above is resolved
+relative to that directory. Without a `schemas.opa.base_path`, Atmos cannot find the file and the validation fails with an error
+that the file does not exist for schema type `opa`:
+
+<File title="atmos.yaml">
+```yaml
+schemas:
+  opa:
+    base_path: "stacks/schemas/opa"
+```
+</File>
+
+Refer to [OPA validation](/validation/opa#configure-component-validation) for more on `schemas.opa.base_path`.
 
 :::note
 The policy fails the job. It does not skip it. The matrix selector is what keeps the job from starting in the first place, and

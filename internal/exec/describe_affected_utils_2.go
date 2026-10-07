@@ -680,6 +680,7 @@ func addDependentsToAffected(
 		}
 
 		if len(deps) > 0 {
+			attachDependentMetadata(deps, stacks)
 			a.Dependents = deps
 			err = addDependentsToDependents(
 				atmosConfig,
@@ -739,6 +740,7 @@ func addDependentsToDependents(
 		}
 
 		if len(deps) > 0 {
+			attachDependentMetadata(deps, stacks)
 			d.Dependents = deps
 			err = addDependentsToDependents(
 				atmosConfig,
@@ -760,6 +762,69 @@ func addDependentsToDependents(
 	}
 
 	return nil
+}
+
+// attachDependentMetadata records each dependent's `metadata` section (looked up from the already-resolved
+// stacks) so the `--tags` / `--labels` selectors can be applied to dependents afterward.
+// A dependent that cannot be found, or has no metadata section, keeps a nil Metadata.
+func attachDependentMetadata(dependents []schema.Dependent, stacks map[string]any) {
+	for i := range dependents {
+		componentSection, _ := findComponentSectionInCachedStacksWithType(stacks, dependents[i].Stack, dependents[i].Component)
+		if metadataSection, ok := componentSection[sectionNameMetadata].(map[string]any); ok {
+			dependents[i].Metadata = metadataSection
+		}
+	}
+}
+
+// filterAffectedDependents applies the `--tags` / `--labels` selectors to the (nested) dependents of every
+// affected component and then recomputes `included_in_dependents` for the pruned trees.
+// It does nothing when the filter has no selectors, so `ExcludeLocked` never changes dependents.
+func filterAffectedDependents(affected *[]schema.Affected, filter AffectedFilter) {
+	if !filter.hasSelectors() {
+		return
+	}
+
+	for i := range *affected {
+		a := &(*affected)[i]
+		a.Dependents = pruneDependentsBySelectors(a.Dependents, filter)
+	}
+
+	processIncludedInDependencies(affected)
+}
+
+// pruneDependentsBySelectors removes the dependents whose metadata does not satisfy the selectors.
+// Dependents are hierarchical, so a dependent that is removed does not hide its own matching dependents:
+// those are promoted to the removed dependent's parent (de-duplicated by stack slug) rather than lost.
+// A dependent without a metadata section cannot match a selector and is removed.
+func pruneDependentsBySelectors(dependents []schema.Dependent, filter AffectedFilter) []schema.Dependent {
+	if len(dependents) == 0 {
+		return dependents
+	}
+
+	kept := make([]schema.Dependent, 0, len(dependents))
+	seen := make(map[string]struct{}, len(dependents))
+	appendUnique := func(d schema.Dependent) {
+		if _, dup := seen[d.StackSlug]; dup {
+			return
+		}
+		seen[d.StackSlug] = struct{}{}
+		kept = append(kept, d)
+	}
+
+	for i := range dependents {
+		d := dependents[i]
+		d.Dependents = pruneDependentsBySelectors(d.Dependents, filter)
+		if filter.matchesSelectors(d.Metadata) {
+			appendUnique(d)
+			continue
+		}
+		for j := range d.Dependents {
+			appendUnique(d.Dependents[j])
+		}
+	}
+
+	sortDependentsByStackSlug(kept)
+	return kept
 }
 
 func processIncludedInDependencies(affected *[]schema.Affected) {

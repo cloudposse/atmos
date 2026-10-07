@@ -1252,6 +1252,23 @@ The filters apply to every output format, including `--format=matrix`, so the sa
 document and the GitHub Actions job matrix. The existing exclusions are unchanged: abstract components, disabled
 components (`metadata.enabled: false`), and, with `--exclude-locked`, locked components are never reported.
 
+Deleted components (`deleted: true`, including every component of a deleted stack) are filtered the same way. Because the
+component no longer exists in `HEAD`, the selector is evaluated against its `metadata` as it was in the base ref.
+
+With `--include-dependents`, the selectors also apply to the nested `dependents` lists. A dependent that does not match is removed. If a removed dependent has dependents of its own that do match, they are kept and moved up to the nearest dependent that remains, so an affected component that satisfies the selector is not lost because something between it and the changed component was filtered out.
+
+Simple Go templates in `metadata.tags` and `metadata.labels` are rendered before the selector runs, as long as
+[templates are enabled](/templates) with `templates.settings.enabled: true`. With templates disabled, or with
+`--process-templates=false`, the raw `'{{ ... }}'` text is compared. It matches neither `ci=auto` nor `ci=manual`, so the
+component is selected by neither workflow.
+
+:::caution
+An empty value applies no filter, the same as leaving the flag off. `--labels=`, `--tags=`, or an empty `ATMOS_LABELS` or
+`ATMOS_TAGS` selects every affected component. When a workflow passes the value from a variable, fail fast if the variable
+is empty, for example `--labels="ci=${CI_LABEL:?}"`, or validate the variable in an earlier step. An
+[OPA policy on the privileged components](/ci#keeping-privileged-components-out-of-ci) is the backstop for exactly this case.
+:::
+
 ```shell
 # Only components tagged `production` or `tier-1`
 atmos describe affected --tags=production,tier-1

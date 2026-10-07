@@ -260,6 +260,20 @@ atmos terraform plan --affected --labels=ci=auto
 - Backstop: an OPA policy in `settings.validation` (rule head `errors[message]` in `package atmos`)
   that checks `input.process_env.GITHUB_ACTIONS == "true"` and `input.metadata.labels.ci == "manual"`.
   The policy fails the job rather than skipping it; the matrix selector is what keeps the job from starting.
+  `schema_path` is resolved relative to `schemas.opa.base_path`, which must be set in `atmos.yaml`
+  (otherwise: `the file '...' does not exist for schema type 'opa'`):
+
+  ```yaml
+  schemas:
+    opa:
+      base_path: "stacks/schemas/opa"
+  ```
+- An empty `--labels=`/`--tags=` (or empty `ATMOS_LABELS`/`ATMOS_TAGS`) applies no filter and selects everything.
+  When passing a workflow variable, fail fast: `--labels="ci=${CI_LABEL:?}"`.
+- Simple Go templates in `metadata.labels` and `metadata.tags` are rendered before selection when
+  `templates.settings.enabled` is `true`. With templates disabled, or with `--process-templates=false`, the raw
+  `'{{ ... }}'` text is compared, so it matches neither `ci=auto` nor `ci=manual`.
+- Deleted components are filtered the same way, using their `metadata` from the base ref.
 
 For full examples, read [references/native-ci.md](references/native-ci.md).
 
