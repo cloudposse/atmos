@@ -65,6 +65,13 @@ func autoProvisionBackend(
 		return nil // Backend type not supported for auto-provisioning - skip.
 	}
 
+	// Read and validate the optional create settings before the existence check, so a bad value
+	// fails here instead of being skipped when the backend already exists.
+	createOpts, err := backend.CreateOptionsFromComponent(componentConfig, backendType)
+	if err != nil {
+		return err
+	}
+
 	// Check if backend already exists.
 	exists, err := backend.BackendExists(ctx, atmosConfig, backendType, backendConfig, authContext)
 	if err != nil {
@@ -94,7 +101,7 @@ func autoProvisionBackend(
 		defer cancel()
 
 		var createErr error
-		result, createErr = createFunc(ctx, atmosConfig, backendConfig, authContext)
+		result, createErr = createFunc(ctx, atmosConfig, backendConfig, authContext, createOpts...)
 		if createErr != nil {
 			return fmt.Errorf("failed to provision %s backend: %w", backendType, createErr)
 		}

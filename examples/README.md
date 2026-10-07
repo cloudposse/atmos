@@ -12,15 +12,20 @@
 
 To play with these demos locally, start by [installing `atmos`](https://atmos.tools/install).
 
-Then, clone this repo and [try out the demos](https://github.com/cloudposse/atmos/tree/main/examples).
+Initialize an example directly from GitHub, then follow its README:
 
 ```shell
-# Clone this repo
-git clone git@github.com:cloudposse/atmos.git
-
-# Try the examples: https://github.com/cloudposse/atmos/tree/main/examples
-cd examples/
+atmos init github.com/cloudposse/atmos//examples/quick-start-simple
+cd quick-start-simple
+atmos list stacks
 ```
+
+Replace `quick-start-simple` with another [example directory](https://github.com/cloudposse/atmos/tree/main/examples).
+The `//` separates the repository from the directory. No scaffold configuration is required.
+`atmos init examples/quick-start-simple` uses `init.repository`, which defaults to the official repository at `main`;
+use `--ref` to select another revision or a second positional argument to choose the target directory.
+Atmos displays the example's README after copying. Some examples require additional tools or
+credentials, as described in their README.
 
 ## Demos
 

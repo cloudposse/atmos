@@ -1,0 +1,56 @@
+---
+title: Workflow names
+sidebar_label: <name>
+description: Choose a workflow name and run it using an explicit workflow file when needed.
+slug: /workflows/name
+---
+
+import Intro from '@site/src/components/Intro';
+
+<Intro>
+`<name>` is a placeholder for a workflow name you choose, such as `deploy` or
+`plan-all`. It is the YAML map key beneath `workflows`, not a literal key with
+angle brackets or an additional `name:` field.
+</Intro>
+
+```yaml
+# workflows/release.yaml
+workflows:
+  plan-all:
+    description: Plan the network and application
+    steps:
+      - command: terraform plan vpc
+      - command: terraform plan app
+```
+
+Run the workflow using its exact name:
+
+```shell
+atmos workflow plan-all --file release -s tenant1-ue2-dev
+```
+
+## Naming recommendations
+
+Prefer descriptive lowercase names with hyphens, usually starting with a verb:
+`deploy`, `plan-all`, `validate-stacks`, or `rotate-credentials`. Keep names stable
+so scripts and other workflows can refer to them reliably. Avoid spaces and
+shell-sensitive characters to simplify CLI usage.
+
+Lowercase and hyphens are recommendations, not an exclusive schema requirement;
+uppercase letters, underscores, and periods are also accepted. Avoid `name` and
+`description`: the workflow map's schema reserves those keys for string metadata.
+
+## Names and files
+
+Names are case-sensitive. Workflow names identify entries within a manifest's `workflows` map. Two entries
+in that map need distinct names. Different files may use the same workflow name.
+
+When a name is unique, Atmos can discover the workflow and you can omit `--file`.
+Use `--file` when the name occurs in multiple files or when a script should select
+a particular file explicitly. Files are resolved under the configured
+[`workflows.base_path`](/cli/configuration/workflows).
+
+For [`dependencies.workflows`](/workflows/dependencies), a plain workflow name
+refers to the same file. A cross-file dependency must also specify `file`.
+Workflow names are separate from the optional names of individual
+[steps](/steps) inside the workflow.

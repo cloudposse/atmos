@@ -14,6 +14,11 @@ const (
 	// LiteralFieldEnvPrefix prefixes the name of an individual env value in LiteralFields, for
 	// example "env.GREETING".
 	LiteralFieldEnvPrefix = "env."
+
+	// LiteralFieldAmbientEnvPrefix identifies an already-rendered ambient environment value.
+	// Unlike declared !literal markers, these runtime-only names retain exact casing so
+	// separate Unix variables such as FOO and foo can have independent rendering policies.
+	LiteralFieldAmbientEnvPrefix = "ambient_env."
 )
 
 // IsLiteral reports whether the named step field ("script", "command", "interpreter",
@@ -49,10 +54,14 @@ func (step *WorkflowStep) SplitLiteralEnv(env map[string]string) (render, litera
 	return render, literal
 }
 
-// IsLiteralEnvName reports whether fields marks the env value with the given name as literal. The
-// name is matched case-insensitively because configuration loading can change the case of map keys.
+// IsLiteralEnvName reports whether fields marks the env value with the given name as literal.
+// Declared names match case-insensitively because configuration loading can change map-key case.
+// Runtime ambient markers match exactly; they never pass through configuration normalization.
 func IsLiteralEnvName(fields []string, name string) bool {
 	for _, field := range fields {
+		if envName, ok := strings.CutPrefix(field, LiteralFieldAmbientEnvPrefix); ok && envName == name {
+			return true
+		}
 		if envName, ok := strings.CutPrefix(field, LiteralFieldEnvPrefix); ok && strings.EqualFold(envName, name) {
 			return true
 		}

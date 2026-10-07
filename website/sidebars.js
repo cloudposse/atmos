@@ -345,6 +345,8 @@ module.exports = {
                         {
                             type: 'category',
                             label: '<name>',
+                            link: {type: 'doc', id: 'workflows/name'},
+                            customProps: {title: 'Workflow names'},
                             collapsed: false,
                             items: [
                                 {type: 'doc', id: 'workflows/workflows/workflow/stack', label: 'stack'},

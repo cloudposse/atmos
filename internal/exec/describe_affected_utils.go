@@ -90,6 +90,7 @@ func rebaseConfigPathsOntoWorktree(atmosConfig *schema.AtmosConfiguration, local
 	return nil
 }
 
+// executeDescribeAffected describes the stacks at HEAD and at the BASE checkout and returns the affected components along with both repository heads.
 func executeDescribeAffected(
 	atmosConfig *schema.AtmosConfiguration,
 	localRepoFileSystemPath string,
@@ -102,7 +103,7 @@ func executeDescribeAffected(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
-	excludeLocked bool,
+	filter AffectedFilter,
 	authManager auth.AuthManager,
 	authDisabled bool,
 	errOptions DescribeStacksErrorOptions,
@@ -319,7 +320,7 @@ func executeDescribeAffected(
 		includeSpaceliftAdminStacks,
 		includeSettings,
 		stack,
-		excludeLocked,
+		filter,
 		localRepoFileSystemPathAbs,
 	)
 	if err != nil {
@@ -341,7 +342,7 @@ func findAffected(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stackToFilter string,
-	excludeLocked bool,
+	filter AffectedFilter,
 	gitRepoRoot string,
 ) ([]schema.Affected, error) {
 	// Use parallel implementation for significant performance improvement (40-60% faster).
@@ -353,7 +354,7 @@ func findAffected(
 		includeSpaceliftAdminStacks,
 		includeSettings,
 		stackToFilter,
-		excludeLocked,
+		filter,
 		gitRepoRoot,
 	)
 }
