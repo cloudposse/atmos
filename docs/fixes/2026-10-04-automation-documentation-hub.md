@@ -66,6 +66,11 @@ understand what they could automate and choose a starting point.
 - Review correction (2026-10-06, PR #3261): Clarify that an indexed update such as `state["n"] += 1` mutates the
   dictionary while preserving the binding of `state`, matching the example.
 
+- Review correction (2026-10-07, PR #3261): Document `ctx.script` for file-backed
+  included steps in both agent-skill references, keeping inline steps as `None`.
+  Move `dependencies.tools` into the standalone example's `main` callback so
+  requesting `--help` does not install tools.
+
 ## Validation
 
 - The “Why Starlark?” update passed the production website build and all nine
@@ -122,6 +127,12 @@ understand what they could automate and choose a starting point.
   The documentation patch applies cleanly to PR #3261 and passes
   `git diff --check`. This wording-only correction did not rerun interpreter
   tests; the consolidated website build is handled with the complete stack.
+
+- Review correction validation (2026-10-07): Existing Starlark tests for
+  included-file context and help/dry-run side effects passed. Agent-skill
+  structure, frontmatter, size, code-fence, and JSON checks passed.
+  `atmos lint --changed`, `go build -p 2 ./...`, and the production website
+  build passed.
 
 ## Follow-ups
 

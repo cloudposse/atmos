@@ -56,9 +56,9 @@ Standalone tool with typed inputs:
 
 ```python
 #!/usr/bin/env atmos
-dependencies.tools("jqlang/jq", "1.7.1")
 
 def main(args, flags):
+    dependencies.tools("jqlang/jq", "1.7.1")
     for stack in flags["stack"]:
         atmos.terraform("deploy", args["component"], stack)
         ui.success("deployed " + args["component"] + " to " + stack)

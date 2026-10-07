@@ -10,7 +10,8 @@ more depth. If a name is not listed here, it does not exist.
 - `ctx.flags`, `ctx.arguments`: immutable parsed inputs for script steps. Custom command
   string and bool flags keep their types; workflow flags are strings. In standalone scripts
   both are empty; use the `cli.command` callback instead.
-- `ctx.script`: `.path` and `.directory` of the physical file (standalone only; `None` in steps).
+- `ctx.script`: `.path` and `.directory` of the physical file for standalone scripts and
+  file-backed included script steps; `None` for inline steps.
 - `ctx.component`, `ctx.hook`, `ctx.operation`: see the entry-point table in `SKILL.md`.
 - `env`: immutable dict of the step's explicit `env` inputs.
 
