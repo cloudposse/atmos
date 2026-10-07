@@ -24,6 +24,12 @@ A terminal Ctrl-C hides the problem because the terminal signals the whole foreg
 - `Run` post-wait result handling moved into `recordWaitOutcome` to stay under the function-length limit; behavior is unchanged.
 - Shell sessions (`RunShellSession`, PTY or attached) are unchanged: the PTY path already calls `Setsid`, and these sessions own the terminal.
 
+- Add a portable direct-child exit-cleanup regression test. It waits for the Go
+  helper to start and register, invokes `signals.RunExitCleanups()` while the
+  context remains active, and requires an unsuccessful reaped process and an
+  empty child registry. The test runs on Windows as well as Unix and does not
+  use a platform-specific process-liveness stub.
+
 ## Validation
 
 - `go test ./pkg/process/... ./pkg/signals/... -race -count=1` passes.
@@ -31,6 +37,13 @@ A terminal Ctrl-C hides the problem because the terminal signals the whole foreg
 - `go build ./...` and `GOOS=windows go vet ./pkg/process/` pass.
 - New tests in `pkg/process/process_group_test.go` use the test-binary re-exec pattern (gate added to the existing `TestMain`): context cancel and deadline kill child and grandchild, including a SIGTERM-ignoring grandchild whose parent exits first; `signals.RunExitCleanups()` kills registered trees; a stubbed terminal stdin leaves the child in the original process group while a non-terminal stdin makes it lead its own group; a detached output-holding grandchild does not hang or fail an exit-0 command. Grandchild assertions skip on Windows with a stated reason.
 - Manual check with a built binary and `exec.run(["sleep","31"])` in a `.star` script: `kill -TERM` (143) and `kill -INT` (130) on Atmos now leave no `sleep 31` process behind.
+
+- The portable direct-child test passed on macOS. The complete process and
+  signals package tests passed with race detection and shuffled order: process
+  coverage was 94.2%, signals coverage was 100%. Windows amd64 test
+  cross-compilation and `go vet` passed; Windows execution remains a CI check.
+  These local coverage figures cover the touched packages' own tests, not
+  full-suite coverage or Windows-only statements; CI Codecov is authoritative.
 
 ## Follow-ups
 

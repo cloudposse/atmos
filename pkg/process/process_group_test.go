@@ -232,6 +232,41 @@ func TestRun_ContextDeadlineKillsGrandchildren(t *testing.T) {
 	requireGone(t, waitForPID(t, dir, "child"), "grandchild process")
 }
 
+// Direct-child cleanup is guaranteed on every platform, including Windows.
+// A completed Run proves the child was reaped without a platform-specific liveness probe.
+func TestExitCleanupKillsRegisteredDirectChild(t *testing.T) {
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := runAsync(ctx, ptr(helperSpec(t, modeSleep, dir, nil)))
+	finished := false
+	t.Cleanup(func() {
+		cancel()
+		if !finished {
+			awaitRun(t, done)
+		}
+	})
+
+	pid := waitForPID(t, dir, "child")
+	require.Eventually(t, func() bool {
+		registered := liveChildren()
+		return len(registered) == 1 && registered[0].pid == pid
+	}, pidWait, 10*time.Millisecond, "running helper must be registered for exit cleanup")
+
+	// Keep the context active so cancellation cannot make a broken exit cleanup pass.
+	signals.RunExitCleanups()
+	res := awaitRun(t, done)
+	finished = true
+
+	require.NoError(t, ctx.Err())
+	assert.True(t, res.Started)
+	assert.False(t, res.Canceled)
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, res.Err, &exitErr, "exit cleanup must terminate the running child")
+	assert.NotZero(t, res.ExitCode)
+	assert.True(t, exitErr.Exited() || res.Signaled)
+	assert.Empty(t, liveChildren(), "the reaped child must be unregistered")
+}
+
 func TestExitCleanupKillsRegisteredProcessTrees(t *testing.T) {
 	skipOnWindows(t)
 	dir := t.TempDir()
