@@ -3,12 +3,15 @@ package step
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestAutomationLibraryGoAPI(t *testing.T) {
@@ -77,4 +80,77 @@ func TestAutomationLibraryNestingGuard(t *testing.T) {
 	vars.automationParallel = true
 	err = NewAutomationLibrary(vars, nil).Validate(&automation.StepCall{Type: "input", Configuration: map[string]any{"prompt": "nested", "default": "no"}})
 	require.ErrorContains(t, err, "exclusive terminal")
+}
+
+func TestAutomationLibraryPreservesContextOnHandlerExit(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		ownTimeout     string
+		parentDeadline bool
+		cancelParent   bool
+		waitForContext bool
+		succeed        bool
+		wantContext    error
+	}{
+		{name: "step deadline", ownTimeout: "10ms", waitForContext: true, wantContext: context.DeadlineExceeded},
+		{name: "parent cancellation", cancelParent: true, wantContext: context.Canceled},
+		{name: "parent deadline", parentDeadline: true, waitForContext: true, wantContext: context.DeadlineExceeded},
+		{name: "ordinary exit"},
+		{name: "success", succeed: true},
+		{name: "successful handler after parent cancellation", cancelParent: true, succeed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tc.parentDeadline {
+				var deadlineCancel context.CancelFunc
+				ctx, deadlineCancel = context.WithTimeout(ctx, time.Second)
+				defer deadlineCancel()
+			}
+			handler := NewMockStepHandler(gomock.NewController(t))
+			const handlerName = "context-exit-test"
+			handler.EXPECT().GetName().Return(handlerName).AnyTimes()
+			handler.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
+			handler.EXPECT().RequiresTTY().Return(false).AnyTimes()
+			handler.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(stepCtx context.Context, _ *schema.WorkflowStep, _ *Variables) (*StepResult, error) {
+					if tc.cancelParent {
+						cancel()
+					}
+					if tc.waitForContext {
+						<-stepCtx.Done()
+					}
+					if tc.succeed {
+						return NewStepResult("completed"), nil
+					}
+					// Windows shell interpreters can return only an exit code after cancellation.
+					return nil, errUtils.ExitCodeError{Code: 7}
+				},
+			)
+			Register(handler)
+			t.Cleanup(func() {
+				registry.mu.Lock()
+				defer registry.mu.Unlock()
+				delete(registry.handlers, handlerName)
+			})
+			call := &automation.StepCall{Type: handlerName, Configuration: map[string]any{"timeout": tc.ownTimeout}}
+			result, err := NewAutomationLibrary(nil, nil).Run(ctx, call)
+			if tc.succeed {
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				assert.Equal(t, "completed", result.Value)
+				return
+			}
+			require.Error(t, err)
+			var exitErr errUtils.ExitCodeError
+			require.ErrorAs(t, err, &exitErr)
+			assert.Equal(t, 7, exitErr.Code)
+			if tc.wantContext != nil {
+				assert.ErrorIs(t, err, tc.wantContext)
+			} else {
+				assert.NotErrorIs(t, err, context.Canceled)
+				assert.NotErrorIs(t, err, context.DeadlineExceeded)
+			}
+		})
+	}
 }
