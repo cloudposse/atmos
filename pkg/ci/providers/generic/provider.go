@@ -15,7 +15,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/git"
-	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -198,8 +197,8 @@ func (w *OutputWriter) WriteOutput(key, value string) error {
 	defer perf.Track(nil, "generic.OutputWriter.WriteOutput")()
 
 	if w.outputFile != "" {
-		// Write to file in GitHub Actions format (collision-safe heredoc for multiline values).
-		return provider.AppendFile(w.outputFile, ghactions.FormatValue(key, value), errUtils.ErrCIOutputWriteFailed)
+		// Write to file in GitHub Actions format (heredoc for multiline values).
+		return provider.AppendFile(w.outputFile, provider.FormatOutputLine(key, value), errUtils.ErrCIOutputWriteFailed)
 	}
 
 	// No output file configured - render the output locally as a plain key=value line, even

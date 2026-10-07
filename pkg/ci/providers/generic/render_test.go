@@ -22,6 +22,8 @@ var renderInitOnce sync.Once
 // newBoundProvider returns a provider rendering into the returned buffer with an initialised formatter.
 func newBoundProvider(t *testing.T) (*Provider, *bytes.Buffer) {
 	t.Helper()
+	// CI runners advertise color support; the assertions compare plain text.
+	t.Setenv("NO_COLOR", "1")
 	renderInitOnce.Do(func() {
 		ioCtx, err := atmosio.NewContext()
 		require.NoError(t, err)
@@ -234,7 +236,7 @@ func TestEnvExporter(t *testing.T) {
 
 		got, err := os.ReadFile(envFile)
 		require.NoError(t, err)
-		assert.Equal(t, "FOO=bar\nMULTI<<ATMOS_EOF_MULTI\na\nb\nATMOS_EOF_MULTI\n", string(got))
+		assert.Equal(t, "FOO=bar\nMULTI<<EOF\na\nb\nEOF\n", string(got))
 		got, err = os.ReadFile(pathFile)
 		require.NoError(t, err)
 		assert.Equal(t, "/opt/tool/bin\n", string(got))
@@ -268,10 +270,10 @@ func TestOutputWriter_Rendering(t *testing.T) {
 	t.Run("WriteOutput heredoc avoids delimiter collision", func(t *testing.T) {
 		file := filepath.Join(t.TempDir(), "out")
 		w := &OutputWriter{outputFile: file}
-		require.NoError(t, w.WriteOutput("K", "x\nATMOS_EOF_K\ny"))
+		require.NoError(t, w.WriteOutput("K", "x\nEOF\ny"))
 		got, err := os.ReadFile(file)
 		require.NoError(t, err)
-		assert.Equal(t, "K<<ATMOS_EOF_K_0\nx\nATMOS_EOF_K\ny\nATMOS_EOF_K_0\n", string(got))
+		assert.Equal(t, "K<<EOF_\nx\nEOF\ny\nEOF_\n", string(got))
 	})
 
 	t.Run("WriteOutput unwritable file returns sentinel", func(t *testing.T) {

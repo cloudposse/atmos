@@ -60,8 +60,8 @@ func TestFileOutputWriter_WriteOutput_Multiline(t *testing.T) {
 	content, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
 
-	// Should use heredoc format with the ATMOS_EOF_<key> delimiter.
-	assert.Equal(t, "mykey<<ATMOS_EOF_mykey\nline1\nline2\nline3\nATMOS_EOF_mykey\n", string(content))
+	// Should use heredoc format with the EOF delimiter.
+	assert.Equal(t, "mykey<<EOF\nline1\nline2\nline3\nEOF\n", string(content))
 }
 
 func TestFileOutputWriter_WriteOutput_MultilineWithEOFInContent(t *testing.T) {
@@ -70,14 +70,14 @@ func TestFileOutputWriter_WriteOutput_MultilineWithEOFInContent(t *testing.T) {
 
 	writer := &FileOutputWriter{OutputPath: outputPath}
 	// Content contains the default delimiter, so it should be changed.
-	err := writer.WriteOutput("mykey", "line1\nATMOS_EOF_mykey\nline2")
+	err := writer.WriteOutput("mykey", "line1\nEOF\nline2")
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
 
-	// Content contains ATMOS_EOF_mykey, so the delimiter gets a numeric suffix.
-	assert.Equal(t, "mykey<<ATMOS_EOF_mykey_0\nline1\nATMOS_EOF_mykey\nline2\nATMOS_EOF_mykey_0\n", string(content))
+	// Content contains EOF, so the delimiter gets an underscore suffix.
+	assert.Equal(t, "mykey<<EOF_\nline1\nEOF\nline2\nEOF_\n", string(content))
 }
 
 func TestFileOutputWriter_WriteOutput_MultipleWrites(t *testing.T) {
@@ -336,4 +336,24 @@ func TestAppendFile(t *testing.T) {
 			assert.ErrorIs(t, err, sentinel)
 		}
 	})
+}
+
+func TestFormatOutputLine(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+		want  string
+	}{
+		{"single line", "k", "v", "k=v\n"},
+		{"empty value", "k", "", "k=\n"},
+		{"multiline", "k", "a\nb", "k<<EOF\na\nb\nEOF\n"},
+		{"collision", "k", "a\nEOF\nb", "k<<EOF_\na\nEOF\nb\nEOF_\n"},
+		{"double collision", "k", "a\nEOF\nEOF_\nb", "k<<EOF__\na\nEOF\nEOF_\nb\nEOF__\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, FormatOutputLine(tt.key, tt.value))
+		})
+	}
 }

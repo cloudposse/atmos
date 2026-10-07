@@ -4,15 +4,21 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const (
 	// outputFilePermissions is the file permission mode for CI output files.
 	outputFilePermissions = 0o644
+
+	// The base delimiter for multiline values in CI output files.
+	heredocDelimiter = "EOF"
+
+	// The terminator for each line written to CI output files.
+	newline = "\n"
 )
 
 // NoopOutputWriter is an OutputWriter that does nothing.
@@ -50,7 +56,7 @@ func NewFileOutputWriter(outputPath, summaryPath string) *FileOutputWriter {
 }
 
 // WriteOutput writes a key-value pair to the output file.
-// Format: key=value (single line) or key<<ATMOS_EOF_key\nvalue\nATMOS_EOF_key (multiline).
+// Format: key=value (single line) or key<<EOF\nvalue\nEOF (multiline).
 func (w *FileOutputWriter) WriteOutput(key, value string) error {
 	defer perf.Track(nil, "provider.FileOutputWriter.WriteOutput")()
 
@@ -58,7 +64,25 @@ func (w *FileOutputWriter) WriteOutput(key, value string) error {
 		return nil
 	}
 
-	return AppendFile(w.OutputPath, ghactions.FormatValue(key, value), errUtils.ErrCIOutputWriteFailed)
+	return AppendFile(w.OutputPath, FormatOutputLine(key, value), errUtils.ErrCIOutputWriteFailed)
+}
+
+// FormatOutputLine renders key=value for CI output files. Multiline values use a heredoc
+// whose delimiter is EOF, extended with underscores until it no longer appears in the value.
+// The GitHub Actions runner accepts any delimiter; this scheme is kept because pipelines
+// and golden tests parse it.
+func FormatOutputLine(key, value string) string {
+	defer perf.Track(nil, "provider.FormatOutputLine")()
+
+	if !strings.Contains(value, newline) {
+		return key + "=" + value + newline
+	}
+
+	delimiter := heredocDelimiter
+	for strings.Contains(value, delimiter) {
+		delimiter += "_"
+	}
+	return key + "<<" + delimiter + newline + value + newline + delimiter + newline
 }
 
 // WriteSummary appends content to the job summary file.
