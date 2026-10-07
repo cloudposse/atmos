@@ -1,8 +1,12 @@
 ---
 related_docs:
-  - label: Scaffold YAML functions
+  - label: "Scaffold generation and template configuration"
+    url: /cli/commands/scaffold/generate
+  - label: "Validate scaffold templates"
+    url: /cli/commands/scaffold/validate
+  - label: "Load external data in scaffolds"
     url: /cli/commands/scaffold/generate#loading-external-data-with-include-and-other-yaml-functions
-  - label: Include external data
+  - label: "!include YAML function"
     url: /functions/yaml/include
 ---
 
