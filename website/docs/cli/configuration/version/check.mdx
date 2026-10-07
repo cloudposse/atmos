@@ -132,6 +132,20 @@ atmos version --check
 
 This bypasses the frequency setting and checks the [Atmos releases](https://github.com/cloudposse/atmos/releases) page on GitHub for the latest version.
 
+## Upgrade Notifications
+
+When a newer release is available, Atmos suggests an upgrade method based on the running executable's installation location and local package ownership. For example, an Atmos binary installed through Homebrew receives `brew upgrade atmos`. Having Homebrew installed does not change the suggestion for an Atmos binary managed by mise or another installer.
+
+Detection supports Homebrew, DEB, RPM, APK, Scoop, mise, asdf, aqua, Nix, Go installations, and Atmos's native version manager. It respects custom installation roots and resolves executable symlinks. Native installations selected through `version.use` receive native version-manager guidance.
+
+For DEB, RPM, and APK installations, package ownership does **not** establish whether the package came from a repository. The notification presents repository upgrade commands conditionally and also links to the releases page for downloading and installing a newer package directly.
+
+For version managers, the notification includes any required configuration step: installing a newer binary may not change the version selected by `.tool-versions`, mise or aqua configuration, or an Atmos version pin. Nix installations receive guidance to update their controlling configuration or input.
+
+If Atmos cannot identify its installation, it links to the [installation instructions](/install) without suggesting a command. If a recognized manager is unavailable on `PATH`, it provides written guidance instead. Detection uses local, read-only checks with a one-second command deadline; it does not refresh package indexes or install anything.
+
+These hints appear in automatic notifications and `atmos version --check`. The configured check frequency is unchanged; there is no additional delay based on a release's age. A release announced on GitHub may not yet be available through a third-party package repository.
+
 ## Environment Variables
 
 <dl>
