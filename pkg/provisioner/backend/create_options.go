@@ -23,6 +23,14 @@ func WithBucketNamespace(namespace string) CreateOption {
 	}
 }
 
+// BucketNamespaceForTesting returns the bucket namespace carried by a list of create options.
+// Tests outside this package use it to assert which options a create function received.
+func BucketNamespaceForTesting(opts ...CreateOption) string {
+	defer perf.Track(nil, "backend.BucketNamespaceForTesting")()
+
+	return applyCreateOptions(opts).bucketNamespace
+}
+
 // applyCreateOptions resolves a list of options into a createOptions value.
 func applyCreateOptions(opts []CreateOption) createOptions {
 	var o createOptions

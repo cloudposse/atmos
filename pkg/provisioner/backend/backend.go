@@ -249,7 +249,7 @@ func ProvisionBackend(
 	}
 
 	// Read optional create settings from provision.backend (not from the generated backend config).
-	opts, err := createOptionsFromProvision(backend)
+	opts, err := CreateOptionsFromComponent(componentConfig, backendType)
 	if err != nil {
 		return nil, err
 	}
@@ -258,9 +258,23 @@ func ProvisionBackend(
 	return createFunc(ctx, atmosConfig, backendConfig, authContext, opts...)
 }
 
-// createOptionsFromProvision builds create options from the provision.backend section.
-// Only the type of bucket_namespace is checked here; the S3 provisioner validates the value.
-func createOptionsFromProvision(provisionBackend map[string]any) ([]CreateOption, error) {
+// CreateOptionsFromComponent builds the create options for a component's backend from its
+// provision.backend section. Every caller that invokes a BackendCreateFunc, including the
+// automatic provisioning that runs on terraform init, uses it so the options stay consistent.
+//
+// Settings that apply to a single backend type are read only for that type, so an unrelated
+// backend ignores them even when the value is malformed. The values are checked here, before
+// any existence check or AWS call, so a bad value fails fast.
+func CreateOptionsFromComponent(componentConfig map[string]any, backendType string) ([]CreateOption, error) {
+	defer perf.Track(nil, "backend.CreateOptionsFromComponent")()
+
+	if backendType != backendTypeS3 {
+		return nil, nil
+	}
+
+	provision, _ := componentConfig["provision"].(map[string]any)
+	provisionBackend, _ := provision["backend"].(map[string]any)
+
 	raw, present := provisionBackend["bucket_namespace"]
 	if !present || raw == nil {
 		return nil, nil
@@ -272,6 +286,10 @@ func createOptionsFromProvision(provisionBackend map[string]any) ([]CreateOption
 			WithExplanationf("Got value of type %T", raw).
 			WithHint("Set 'provision.backend.bucket_namespace' to a string").
 			Err()
+	}
+
+	if err := validateBucketNamespace(namespace); err != nil {
+		return nil, err
 	}
 
 	return []CreateOption{WithBucketNamespace(namespace)}, nil

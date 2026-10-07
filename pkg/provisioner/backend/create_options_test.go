@@ -199,10 +199,16 @@ func TestProvisionBackend_BucketNamespace(t *testing.T) {
 			wantNamespace:  "",
 		},
 		{
-			name:           "string forwarded verbatim",
-			provisionBlock: map[string]any{"enabled": true, "bucket_namespace": "opaque-value"},
+			name:           "SDK-defined value forwarded verbatim",
+			provisionBlock: map[string]any{"enabled": true, "bucket_namespace": string(types.BucketNamespaceAccountRegional)},
 			wantCalled:     true,
-			wantNamespace:  "opaque-value",
+			wantNamespace:  string(types.BucketNamespaceAccountRegional),
+		},
+		{
+			name:           "unsupported value returns sentinel and skips create",
+			provisionBlock: map[string]any{"enabled": true, "bucket_namespace": "opaque-value"},
+			wantCalled:     false,
+			wantErr:        errUtils.ErrUnsupportedBucketNamespace,
 		},
 		{
 			name:           "non-string returns sentinel and skips create",
@@ -260,23 +266,70 @@ func TestProvisionBackend_BucketNamespace(t *testing.T) {
 }
 
 func TestProvisionBackend_BucketNamespaceIgnoredByNonS3Backend(t *testing.T) {
-	resetBackendRegistry()
+	// Neither a string nor a malformed value may stop a non-S3 backend from being created.
+	for name, namespace := range map[string]any{"string": "opaque-value", "non-string": 42} {
+		t.Run(name, func(t *testing.T) {
+			resetBackendRegistry()
 
-	called := false
-	RegisterBackendCreate("azurerm", func(_ context.Context, _ *schema.AtmosConfiguration, _ map[string]any, _ *schema.AuthContext, _ ...CreateOption) (*ProvisionResult, error) {
-		called = true
-		return &ProvisionResult{}, nil
-	})
+			called := false
+			RegisterBackendCreate("azurerm", func(_ context.Context, _ *schema.AtmosConfiguration, _ map[string]any, _ *schema.AuthContext, opts ...CreateOption) (*ProvisionResult, error) {
+				called = true
+				assert.Empty(t, applyCreateOptions(opts).bucketNamespace)
+				return &ProvisionResult{}, nil
+			})
 
-	componentConfig := map[string]any{
-		"backend_type": "azurerm",
-		"backend":      map[string]any{"storage_account_name": "acct"},
-		"provision": map[string]any{
-			"backend": map[string]any{"enabled": true, "bucket_namespace": "opaque-value"},
-		},
+			componentConfig := map[string]any{
+				"backend_type": "azurerm",
+				"backend":      map[string]any{"storage_account_name": "acct"},
+				"provision": map[string]any{
+					"backend": map[string]any{"enabled": true, "bucket_namespace": namespace},
+				},
+			}
+
+			_, err := ProvisionBackend(context.Background(), &schema.AtmosConfiguration{}, componentConfig, nil)
+			require.NoError(t, err)
+			assert.True(t, called)
+		})
+	}
+}
+
+func TestCreateOptionsFromComponent(t *testing.T) {
+	sdkValue := string(types.BucketNamespaceAccountRegional)
+
+	tests := []struct {
+		name          string
+		backendType   string
+		provision     any
+		wantNamespace string
+		wantErr       error
+	}{
+		{name: "s3 with SDK value", backendType: "s3", provision: map[string]any{"backend": map[string]any{"bucket_namespace": sdkValue}}, wantNamespace: sdkValue},
+		{name: "s3 without provision section", backendType: "s3", provision: nil},
+		{name: "s3 with provision but no backend section", backendType: "s3", provision: map[string]any{}},
+		{name: "s3 with nil value", backendType: "s3", provision: map[string]any{"backend": map[string]any{"bucket_namespace": nil}}},
+		{name: "s3 with unsupported value", backendType: "s3", provision: map[string]any{"backend": map[string]any{"bucket_namespace": "opaque-value"}}, wantErr: errUtils.ErrUnsupportedBucketNamespace},
+		{name: "s3 with non-string value", backendType: "s3", provision: map[string]any{"backend": map[string]any{"bucket_namespace": 42}}, wantErr: errUtils.ErrInvalidBucketNamespace},
+		// Negative path: other backend types never read the setting, so even a bad value is ignored.
+		{name: "azurerm ignores SDK value", backendType: "azurerm", provision: map[string]any{"backend": map[string]any{"bucket_namespace": sdkValue}}},
+		{name: "azurerm ignores non-string value", backendType: "azurerm", provision: map[string]any{"backend": map[string]any{"bucket_namespace": 42}}},
 	}
 
-	_, err := ProvisionBackend(context.Background(), &schema.AtmosConfiguration{}, componentConfig, nil)
-	require.NoError(t, err)
-	assert.True(t, called)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			componentConfig := map[string]any{}
+			if tt.provision != nil {
+				componentConfig["provision"] = tt.provision
+			}
+
+			opts, err := CreateOptionsFromComponent(componentConfig, tt.backendType)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				assert.Nil(t, opts)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantNamespace, applyCreateOptions(opts).bucketNamespace)
+		})
+	}
 }
