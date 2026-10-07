@@ -1,0 +1,168 @@
+import:
+  - mixins/region/us-east-1
+  - mixins/stage/network
+
+components:
+  terraform:
+
+    # Foundation: privileged, locked, never meant for automated CI.
+    vpc:
+      metadata:
+        component: mock
+        locked: true
+        tags: [foundation]
+        labels:
+          ci: manual
+          team: network
+
+    # Modified (BASE has an extra `vars.name`). Automated.
+    tgw/hub:
+      metadata:
+        component: mock
+        tags: [network, tier-1]
+        labels:
+          ci: auto
+          team: network
+      vars:
+        foo: hub
+        name: new-name
+      dependencies:
+        components:
+          - name: vpc
+            stack: "{{ .vars.environment }}-{{ .vars.stage }}"
+
+    # Unchanged; dependent of vpc and tgw/hub. Automated.
+    tgw/attachment:
+      metadata:
+        component: mock
+        tags: [network]
+        labels:
+          ci: auto
+      dependencies:
+        components:
+          - name: vpc
+          - name: tgw/hub
+
+    # Hypothesis 1: privileged component MODIFIED in HEAD; `app` (automated) depends on it.
+    iam:
+      metadata:
+        component: mock
+        tags: [security]
+        labels:
+          ci: manual
+      vars:
+        foo: iam
+    app:
+      metadata:
+        component: mock
+        tags: [workload]
+        labels:
+          ci: auto
+      dependencies:
+        components:
+          - name: iam
+
+    # Hypothesis 9: chain base(auto) <- middle(manual) <- leaf(auto); `chain/base` modified.
+    chain/base:
+      metadata:
+        component: mock
+        labels:
+          ci: auto
+      vars:
+        foo: base
+    chain/middle:
+      metadata:
+        component: mock
+        labels:
+          ci: manual
+      dependencies:
+        components:
+          - name: chain/base
+    chain/leaf:
+      metadata:
+        component: mock
+        labels:
+          ci: auto
+      dependencies:
+        components:
+          - name: chain/middle
+
+    # Hypothesis 5: metadata shape confusion. All modified in HEAD (vars.foo).
+    shape/bare-metadata:
+      metadata:
+        component: mock
+      vars:
+        foo: original
+    shape/aws-tags-only:
+      metadata:
+        component: mock
+      vars:
+        foo: original
+        tags:
+          team: eks
+          ci: auto
+    # Component named after the real folder, so no metadata section at all.
+    mock:
+      vars:
+        foo: original
+
+    # Hypothesis 6: templated label (renders to "auto" when templates are enabled).
+    templated:
+      metadata:
+        component: mock
+        labels:
+          ci: '{{ .settings.ci_mode | default "auto" }}'
+      vars:
+        foo: original
+
+    # Hypothesis 8: label flips between BASE and HEAD; vars identical on both sides.
+    flip/to-auto:
+      metadata:
+        component: mock
+        labels:
+          ci: manual
+    flip/to-manual:
+      metadata:
+        component: mock
+        labels:
+          ci: auto
+
+    # Hypothesis 15: abstract / disabled components carrying a matching label (modified).
+    abstract-auto:
+      metadata:
+        component: mock
+        type: abstract
+        labels:
+          ci: auto
+      vars:
+        foo: original
+    disabled-auto:
+      metadata:
+        component: mock
+        enabled: false
+        labels:
+          ci: auto
+      vars:
+        foo: original
+
+    # Deleted in HEAD (hypothesis 7).
+    audit:
+      metadata:
+        component: mock
+        tags: [security]
+        labels:
+          ci: auto
+    legacy-locked:
+      metadata:
+        component: mock
+        locked: true
+        labels:
+          ci: auto
+    old-manual:
+      metadata:
+        component: mock
+        labels:
+          ci: manual
+    deleted-no-metadata-label:
+      metadata:
+        component: mock

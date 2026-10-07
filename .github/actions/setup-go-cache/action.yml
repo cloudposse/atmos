@@ -104,8 +104,11 @@ runs:
     - name: Pin Go's cache locations (Linux/macOS)
       if: runner.os != 'Windows'
       shell: bash
+      env:
+        # Passed via env, not interpolated into the script, so the input can't inject shell code.
+        CACHE_MODE: ${{ inputs.cache }}
       run: |
-        if [ "${{ inputs.cache }}" = "race-plan" ]; then
+        if [ "$CACHE_MODE" = "race-plan" ]; then
           echo "GOCACHE=$RUNNER_TEMP/race-plan-go-build" >> "$GITHUB_ENV"
         else
           echo "GOCACHE=$HOME/.cache/go-build" >> "$GITHUB_ENV"
