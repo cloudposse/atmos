@@ -496,6 +496,61 @@ func TestExecute(t *testing.T) {
 	})
 }
 
+func TestDetectPlatform(t *testing.T) {
+	t.Run("forced with no detected provider returns registered generic", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&mockProvider{name: "generic", detected: false})
+
+		p := detectPlatform(true)
+		if assert.NotNil(t, p) {
+			assert.Equal(t, "generic", p.Name())
+		}
+	})
+
+	t.Run("forced prefers detected provider over generic", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&mockProvider{name: "generic", detected: false})
+		Register(&mockProvider{name: "detected", detected: true})
+
+		p := detectPlatform(true)
+		if assert.NotNil(t, p) {
+			assert.Equal(t, "detected", p.Name())
+		}
+	})
+
+	t.Run("forced with no generic registered returns nil", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		assert.Nil(t, detectPlatform(true))
+	})
+
+	t.Run("not forced with no detected provider returns nil even when generic is registered", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&mockProvider{name: "generic", detected: false})
+
+		assert.Nil(t, detectPlatform(false))
+	})
+
+	t.Run("not forced returns detected provider", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&mockProvider{name: "detected", detected: true})
+
+		p := detectPlatform(false)
+		if assert.NotNil(t, p) {
+			assert.Equal(t, "detected", p.Name())
+		}
+	})
+}
+
 func TestExtractComponentType(t *testing.T) {
 	tests := []struct {
 		event    string

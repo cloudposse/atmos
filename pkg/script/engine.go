@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/ci"
 )
 
 // Spec describes one invocation. Env is explicit script input; ProcessEnv is
@@ -36,8 +37,14 @@ type Spec struct {
 	AtmosWorkingDirectory string
 	File                  *File
 	InstallTools          ToolInstaller
-	ParseCommand          CommandParser
-	Steps                 automation.StepLibrary
+	// CI reports into the active CI provider (summaries, comments, checks, outputs) and
+	// renders locally when none is detected. Hosts construct it with ci.NewReporter from
+	// the invocation's Atmos configuration; nil means a local-only reporter.
+	// pkg/ci must never import pkg/script, pkg/runner, or pkg/workflow, or this field
+	// would create an import cycle.
+	CI           ci.Reporter
+	ParseCommand CommandParser
+	Steps        automation.StepLibrary
 }
 
 // ToolInstaller provisions pinned tools and returns their executable directories.

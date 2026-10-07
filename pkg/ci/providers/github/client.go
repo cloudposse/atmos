@@ -3,8 +3,11 @@ package github
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/google/go-github/v59/github"
 	"golang.org/x/oauth2"
@@ -27,6 +30,12 @@ type Client struct {
 // unlike GITHUB_TOKEN, pushes/PRs authenticated with it trigger downstream
 // GitHub Actions workflows, since it isn't subject to GitHub's anti-recursion
 // restriction on the default Actions token.
+//
+// API base URL precedence: ATMOS_CI_GITHUB_API_URL (explicit override) >
+// GITHUB_API_URL (exported natively by GitHub Actions, and set to the
+// enterprise API URL on GitHub Enterprise Server runners) > the public
+// https://api.github.com default. An unparsable value returns an error wrapping
+// ErrInvalidURL rather than silently sending the token to the wrong host.
 func NewClient() (*Client, error) {
 	defer perf.Track(nil, "github.NewClient")()
 
@@ -45,7 +54,62 @@ func NewClient() (*Client, error) {
 		return nil, errUtils.ErrGitHubTokenNotFound
 	}
 
-	return NewClientWithToken(token), nil
+	client := NewClientWithToken(token)
+	if err := client.applyAPIURLFromEnv(); err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+// applyAPIURLFromEnv points the underlying go-github client at the API base URL
+// from ATMOS_CI_GITHUB_API_URL or GITHUB_API_URL. It is a no-op when neither is set.
+func (c *Client) applyAPIURLFromEnv() error {
+	envName, raw := lookupAPIURLEnv()
+	if raw == "" {
+		return nil
+	}
+
+	baseURL, err := parseAPIBaseURL(raw)
+	if err != nil {
+		return fmt.Errorf("%w: %s=%q: %w", errUtils.ErrInvalidURL, envName, raw, err)
+	}
+
+	c.client.BaseURL = baseURL
+	c.client.UploadURL = baseURL
+
+	return nil
+}
+
+// lookupAPIURLEnv returns the name and value of the first non-empty API URL variable.
+func lookupAPIURLEnv() (string, string) {
+	// ATMOS_CI_GITHUB_API_URL and GITHUB_API_URL are external CI environment
+	// variables (GITHUB_API_URL is exported by the Actions runner), not Atmos
+	// configuration keys, so os.Getenv is appropriate here.
+	for _, name := range []string{"ATMOS_CI_GITHUB_API_URL", "GITHUB_API_URL"} {
+		if value := os.Getenv(name); value != "" {
+			return name, value
+		}
+	}
+
+	return "", ""
+}
+
+// parseAPIBaseURL parses raw as an absolute http(s) URL and ensures the trailing
+// slash that go-github requires on BaseURL.
+func parseAPIBaseURL(raw string) (*url.URL, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return nil, fmt.Errorf("%w: must be an absolute http(s) URL", errUtils.ErrInvalidURL)
+	}
+	if !strings.HasSuffix(parsed.Path, "/") {
+		parsed.Path += "/"
+	}
+
+	return parsed, nil
 }
 
 // NewClientWithToken creates a new GitHub API client with the given token.

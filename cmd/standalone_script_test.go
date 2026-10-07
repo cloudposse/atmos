@@ -283,3 +283,32 @@ func setStandaloneTestStdin(t *testing.T, source string) {
 	os.Stdin = input
 	t.Cleanup(func() { os.Stdin = previous; _ = input.Close(); iolib.Reset() })
 }
+
+// ciRecordingEngine is an embedded interpreter that records the Spec each standalone invocation receives.
+type ciRecordingEngine struct {
+	specs []script.Spec
+}
+
+//nolint:gocritic // The signature is fixed by script.Engine.
+func (e *ciRecordingEngine) Execute(_ context.Context, spec script.Spec) (script.Result, error) {
+	e.specs = append(e.specs, spec)
+	return script.Result{}, nil
+}
+
+func TestStandaloneScriptInjectsCIReporter(t *testing.T) {
+	NewTestKit(t)
+	engine := &ciRecordingEngine{}
+	script.Register("standalone-ci-test", engine)
+	command := &cobra.Command{}
+	command.SetContext(t.Context())
+
+	iolib.Reset()
+	require.NoError(t, iolib.Initialize())
+	data.InitWriter(iolib.GetContext())
+	path := filepath.Join(t.TempDir(), "ci.star")
+	require.NoError(t, os.WriteFile(path, []byte("ignored"), 0o600))
+	require.NoError(t, runStandaloneScript(command, &script.File{Path: path, Interpreter: "standalone-ci-test"}))
+
+	require.Len(t, engine.specs, 1)
+	assert.NotNil(t, engine.specs[0].CI)
+}

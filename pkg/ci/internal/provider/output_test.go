@@ -5,9 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 )
 
 func TestNoopOutputWriter_WriteOutput(t *testing.T) {
@@ -58,10 +60,8 @@ func TestFileOutputWriter_WriteOutput_Multiline(t *testing.T) {
 	content, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
 
-	// Should use heredoc format.
-	assert.Contains(t, string(content), "mykey<<EOF")
-	assert.Contains(t, string(content), "line1\nline2\nline3")
-	assert.Contains(t, string(content), "EOF\n")
+	// Should use heredoc format with the ATMOS_EOF_<key> delimiter.
+	assert.Equal(t, "mykey<<ATMOS_EOF_mykey\nline1\nline2\nline3\nATMOS_EOF_mykey\n", string(content))
 }
 
 func TestFileOutputWriter_WriteOutput_MultilineWithEOFInContent(t *testing.T) {
@@ -69,17 +69,15 @@ func TestFileOutputWriter_WriteOutput_MultilineWithEOFInContent(t *testing.T) {
 	outputPath := filepath.Join(tmpDir, "output.txt")
 
 	writer := &FileOutputWriter{OutputPath: outputPath}
-	// Content contains "EOF", so delimiter should be changed.
-	err := writer.WriteOutput("mykey", "line1\nEOF\nline2")
+	// Content contains the default delimiter, so it should be changed.
+	err := writer.WriteOutput("mykey", "line1\nATMOS_EOF_mykey\nline2")
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
 
-	// Should use modified delimiter (EOF_).
-	assert.Contains(t, string(content), "mykey<<EOF_")
-	assert.Contains(t, string(content), "line1\nEOF\nline2")
-	assert.Contains(t, string(content), "EOF_\n")
+	// Content contains ATMOS_EOF_mykey, so the delimiter gets a numeric suffix.
+	assert.Equal(t, "mykey<<ATMOS_EOF_mykey_0\nline1\nATMOS_EOF_mykey\nline2\nATMOS_EOF_mykey_0\n", string(content))
 }
 
 func TestFileOutputWriter_WriteOutput_MultipleWrites(t *testing.T) {
@@ -305,4 +303,37 @@ func TestApplyOutputOptions_Struct(t *testing.T) {
 	assert.Equal(t, 0, opts.ExitCode)
 	assert.True(t, opts.Success)
 	assert.Equal(t, "value", opts.Outputs["key"])
+}
+
+func TestAppendFile(t *testing.T) {
+	t.Run("creates the file when missing", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "new.txt")
+		require.NoError(t, AppendFile(path, "first\n", errUtils.ErrCIOutputWriteFailed))
+
+		content, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, "first\n", string(content))
+	})
+
+	t.Run("appends to existing content", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "existing.txt")
+		require.NoError(t, os.WriteFile(path, []byte("one\n"), 0o644))
+		require.NoError(t, AppendFile(path, "two\n", errUtils.ErrCIOutputWriteFailed))
+		require.NoError(t, AppendFile(path, "three\n", errUtils.ErrCIOutputWriteFailed))
+
+		content, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, "one\ntwo\nthree\n", string(content))
+	})
+
+	t.Run("wraps the sentinel when the path is unwritable", func(t *testing.T) {
+		// A path under a non-existent directory cannot be opened.
+		path := filepath.Join(t.TempDir(), "missing-dir", "file.txt")
+
+		for _, sentinel := range []error{errUtils.ErrCIOutputWriteFailed, errUtils.ErrCISummaryWriteFailed} {
+			err := AppendFile(path, "x", sentinel)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, sentinel)
+		}
+	})
 }

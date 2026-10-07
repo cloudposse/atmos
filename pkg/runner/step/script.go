@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
@@ -123,6 +124,7 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 				Steps:        NewAutomationLibrary(vars, workflow),
 				Parallel:     vars.automationParallel,
 				InstallTools: ScriptToolInstaller(vars.AtmosConfig),
+				CI:           ci.NewReporter(vars.AtmosConfig),
 				Name:         step.Name, Source: invocation.script, WorkingDirectory: invocation.workDir,
 				SourcePath: step.ScriptSource, ProjectRoot: scriptProjectRoot(vars),
 				Env: resolved, ProcessEnv: env, Stdout: stdout, Stderr: stderr, DryRun: step.DryRun,
