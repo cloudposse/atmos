@@ -185,6 +185,12 @@ func ExecuteTerraformGenerateVarfiles(
 					}
 				}
 
+				// A computed name is not final yet. Keep derived metadata from being
+				// interpreted as another Starlark program during value evaluation.
+				if containsStarlark(stackName) {
+					stackName = stackFileName
+				}
+
 				configAndStacksInfo.Context = context
 				configAndStacksInfo.Stack = stackName
 				configAndStacksInfo.ComponentSection["atmos_component"] = componentName
@@ -197,6 +203,9 @@ func ExecuteTerraformGenerateVarfiles(
 				workspace, err := BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 				if err != nil {
 					return err
+				}
+				if containsStarlark(workspace) {
+					workspace = strings.ReplaceAll(stackFileName, "/", "-")
 				}
 				componentSection["workspace"] = workspace
 				configAndStacksInfo.ComponentSection["workspace"] = workspace
@@ -276,6 +285,16 @@ func ExecuteTerraformGenerateVarfiles(
 				if err := finishValues(); err != nil {
 					return err
 				}
+				if err := refreshTerraformGeneratorContext(atmosConfig, &configAndStacksInfo, stackFileName); err != nil {
+					return err
+				}
+				context = configAndStacksInfo.Context
+				stackName = configAndStacksInfo.Stack
+				workspace, err = BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
+				if err != nil {
+					return err
+				}
+				configAndStacksInfo.ComponentSection["workspace"] = workspace
 				componentSection = configAndStacksInfo.ComponentSection
 
 				if i, ok := componentSection[cfg.VarsSectionName].(map[string]any); ok {

@@ -52,8 +52,8 @@ atmos git hooks run commit-msg .git/COMMIT_EDITMSG
 
 - Loads the Atmos configuration for the current repository and selects the hook's `command` or `steps`.
 - Runs `steps` in order through the registered step library. Embedded Starlark runs inside Atmos; a failed step stops the hook. Hook arguments are available as `ctx.args`.
-- Executes the configured command through the shared workflow/command dispatch, inheriting toolchain `PATH`, environment, and identity behavior.
-- Forwards hook arguments **and stdin** — hooks such as `pre-push` and `pre-receive` receive their input on stdin, not argv.
+- Runs `command` hooks through the shared shell runner with the inherited process environment, including `PATH`. Prepare any tools or identity credentials before invoking the hook.
+- Forwards hook arguments **and stdin** to `command` hooks — hooks such as `pre-push` and `pre-receive` receive their input on stdin, not argv. For `steps` hooks, stdin handling depends on the step type.
 - Propagates the command's exit code, so a failing hook command blocks the Git operation exactly as a hand-written hook would.
 - Fails with a clear error listing the configured hooks when `<hook-name>` is not configured under `git.hooks`.
 

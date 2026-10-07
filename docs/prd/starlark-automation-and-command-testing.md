@@ -8,7 +8,7 @@ process execution controls, and Git-hook scripts are implemented in the current
 PR stack. Direct service modules and test-file discovery remain proposed. This
 status does not identify a released version.
 
-**Related:** [Shared automation SDK](automation-sdk.md), [Git-hook steps](git-hook-steps.md),
+**Related:** [Atmos SDK](atmos-sdk.md), [Git-hook steps](git-hook-steps.md),
 [native stack definitions (exploratory)](starlark-stack-definitions.md).
 
 ## Problem Statement

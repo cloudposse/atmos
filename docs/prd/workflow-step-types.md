@@ -18,7 +18,7 @@ starting point, not the current product.
 A `type: script` step with `interpreter: starlark` evaluates the Atmos Automation
 Language in-process. Scripts can invoke registered handlers through `steps.run`
 and named `steps.*` functions. [Git hooks](git-hook-steps.md) also use synchronous
-step lists. See [shared API boundaries](automation-sdk.md) and
+step lists. See [shared API boundaries](atmos-sdk.md) and
 [implemented language behavior](starlark-automation-and-command-testing.md).
 
 Outputs remain strings with typed metadata and named outputs. Starlark step

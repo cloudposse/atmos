@@ -87,7 +87,7 @@ executes inside Atmos. Its immutable `ctx.component`, `ctx.hook`, and
 arguments. Included source and `!literal` metadata survive stack inheritance and
 execution-time rendering.
 
-Scripts can call the [shared step library](automation-sdk.md), including prompts,
+Scripts can call the [shared step library](atmos-sdk.md), including prompts,
 HTTP, containers, and output formatting. The script adapter enforces its own
 parallel/terminal restrictions and does not take ownership of workflow background
 jobs. Registered handlers retain their context requirements.

@@ -21,7 +21,7 @@ That work embeds scripting in automation and supports standalone executable
 scripts. It does not establish native Starlark stack declarations, discovery, or
 the object model proposed here.
 
-The automation stack now includes a [shared Go service boundary](automation-sdk.md),
+The automation stack now includes a [shared Go service boundary](atmos-sdk.md),
 extension-based interpreter registration, decoded list/describe results, and direct
 step-library calls. These can inform a future stack-authoring design, but querying
 existing stacks from automation does not implement native Starlark stack definitions.

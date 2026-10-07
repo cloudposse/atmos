@@ -53,9 +53,11 @@ reaches the interpreter and its child processes exactly as it is, so a variable 
 
 ### Keep braces out of template rendering {#literal-script}
 
-Atmos renders the script body as a Go template before the interpreter runs, so a script that
-contains `{{` or `}}` fails with a template error. Tag the body with
-[`!literal`](/functions/yaml/literal) to run it exactly as written:
+Atmos renders the script body as a Go template before the interpreter runs. Expressions such as
+`{{ .vars.stage }}` can be replaced with their values, while malformed or unresolved expressions
+can cause template errors. A lone `}}` is ordinary text. Tag the body with
+[`!literal`](/functions/yaml/literal) to prevent unintended substitution and template errors and
+run it exactly as written:
 
 ```yaml
 steps:
@@ -226,6 +228,7 @@ output = main()
 ```
 
 To carry changing state, mutate a dictionary or list instead of rebinding a name.
+An indexed update such as `state["n"] += 1` mutates the dictionary and keeps `state` bound to the same object.
 Mutate it before handing it to `steps.parallel`, because everything reachable from a
 parallel task becomes immutable at dispatch:
 
