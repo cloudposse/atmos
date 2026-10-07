@@ -615,25 +615,66 @@ func addDependentsToAffected(
 	authDisabled bool,
 	errOptions DescribeStacksErrorOptions,
 ) error {
+	return addDependentsToAffectedWithFilter(atmosConfig, affected, &dependentsOptions{
+		IncludeSettings:      includeSettings,
+		ProcessTemplates:     processTemplates,
+		ProcessYamlFunctions: processYamlFunctions,
+		Skip:                 skip,
+		OnlyInStack:          onlyInStack,
+		AuthManager:          authManager,
+		AuthDisabled:         authDisabled,
+		ErrOptions:           errOptions,
+	})
+}
+
+// dependentsOptions bundles the settings shared by every dependents-resolution step.
+type dependentsOptions struct {
+	IncludeSettings      bool
+	ProcessTemplates     bool
+	ProcessYamlFunctions bool
+	Skip                 []string
+	OnlyInStack          string
+	AuthManager          auth.AuthManager
+	AuthDisabled         bool
+	ErrOptions           DescribeStacksErrorOptions
+	// Filter holds the `--tags` / `--labels` selectors. When it has selectors, each dependent's `metadata`
+	// is recorded as the dependents are resolved so the nested lists can be pruned afterward.
+	Filter AffectedFilter
+
+	// stacks and depIdx are resolved once by addDependentsToAffectedWithFilter and shared by every step.
+	stacks map[string]any
+	depIdx dependencyIndex
+}
+
+// addDependentsToAffectedWithFilter is addDependentsToAffected plus the `--tags` / `--labels` selectors.
+// The stacks are already loaded when the dependents are resolved, so recording each dependent's metadata
+// needs no second stack resolution. Without selectors it behaves exactly like addDependentsToAffected and
+// leaves the dependents untouched.
+func addDependentsToAffectedWithFilter(
+	atmosConfig *schema.AtmosConfiguration,
+	affected *[]schema.Affected,
+	opts *dependentsOptions,
+) error {
 	// Resolve all stacks once and build a reverse dependency index — these are the expensive
 	// operations (~1s for large infras). Previously ExecuteDescribeStacks was called inside
 	// ExecuteDescribeDependents for every affected component, causing O(N) full resolutions
 	// (e.g., 2,422 × ~1s = 40+ minutes). The dependency index further eliminates the
 	// O(stacks × components) scan per affected item.
-	stacks, err := ExecuteDescribeStacksWithOptions(
+	var err error
+	opts.stacks, err = ExecuteDescribeStacksWithOptions(
 		atmosConfig,
-		onlyInStack,
+		opts.OnlyInStack,
 		nil,
 		nil,
 		nil,
 		false,
-		processTemplates,
-		processYamlFunctions,
+		opts.ProcessTemplates,
+		opts.ProcessYamlFunctions,
 		false,
-		skip,
-		authManager,
-		authDisabled,
-		errOptions,
+		opts.Skip,
+		opts.AuthManager,
+		opts.AuthDisabled,
+		opts.ErrOptions,
 	)
 	if err != nil {
 		return err
@@ -641,7 +682,7 @@ func addDependentsToAffected(
 
 	// Build the reverse dependency index once from the cached stacks.
 	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
-	depIdx, err := buildDependencyIndexWithError(stacks, leftDelim)
+	opts.depIdx, err = buildDependencyIndexWithError(opts.stacks, leftDelim)
 	if err != nil {
 		return err
 	}
@@ -657,47 +698,12 @@ func addDependentsToAffected(
 		}
 
 		// Skip if `onlyInStack` is specified and the affected component is not in the specified stack.
-		if onlyInStack != "" && a.Stack != onlyInStack {
+		if opts.OnlyInStack != "" && a.Stack != opts.OnlyInStack {
 			continue
 		}
 
-		deps, err := ExecuteDescribeDependents(
-			atmosConfig,
-			&DescribeDependentsArgs{
-				Component:            a.Component,
-				Stack:                a.Stack,
-				IncludeSettings:      includeSettings,
-				ProcessTemplates:     processTemplates,
-				ProcessYamlFunctions: processYamlFunctions,
-				Skip:                 skip,
-				OnlyInStack:          onlyInStack,
-				Stacks:               stacks,
-				DepIndex:             depIdx,
-			},
-		)
-		if err != nil {
+		if err := addDependentsToAffectedItem(atmosConfig, a, opts); err != nil {
 			return err
-		}
-
-		if len(deps) > 0 {
-			attachDependentMetadata(deps, stacks)
-			a.Dependents = deps
-			err = addDependentsToDependents(
-				atmosConfig,
-				&deps,
-				includeSettings,
-				processTemplates,
-				processYamlFunctions,
-				skip,
-				onlyInStack,
-				stacks,
-				depIdx,
-			)
-			if err != nil {
-				return err
-			}
-		} else {
-			a.Dependents = []schema.Dependent{}
 		}
 	}
 
@@ -705,59 +711,81 @@ func addDependentsToAffected(
 	return nil
 }
 
+// addDependentsToAffectedItem resolves the (nested) dependents of one affected component from the
+// pre-computed stacks and reverse dependency index.
+func addDependentsToAffectedItem(
+	atmosConfig *schema.AtmosConfiguration,
+	a *schema.Affected,
+	opts *dependentsOptions,
+) error {
+	deps, err := describeDependentsFor(atmosConfig, a.Component, a.Stack, opts)
+	if err != nil {
+		return err
+	}
+
+	if len(deps) == 0 {
+		a.Dependents = []schema.Dependent{}
+		return nil
+	}
+
+	if opts.Filter.hasSelectors() {
+		attachDependentMetadata(deps, opts.stacks)
+	}
+	a.Dependents = deps
+
+	return addDependentsToDependents(atmosConfig, &deps, opts)
+}
+
+// describeDependentsFor returns the direct dependents of a component from the pre-computed stacks and index.
+func describeDependentsFor(
+	atmosConfig *schema.AtmosConfiguration,
+	component string,
+	stack string,
+	opts *dependentsOptions,
+) ([]schema.Dependent, error) {
+	return ExecuteDescribeDependents(
+		atmosConfig,
+		&DescribeDependentsArgs{
+			Component:            component,
+			Stack:                stack,
+			IncludeSettings:      opts.IncludeSettings,
+			ProcessTemplates:     opts.ProcessTemplates,
+			ProcessYamlFunctions: opts.ProcessYamlFunctions,
+			Skip:                 opts.Skip,
+			OnlyInStack:          opts.OnlyInStack,
+			Stacks:               opts.stacks,
+			DepIndex:             opts.depIdx,
+		},
+	)
+}
+
 // addDependentsToDependents recursively adds dependent components and stacks to each dependent component.
 // The stacks and depIdx parameters are pre-computed and shared across all calls.
 func addDependentsToDependents(
 	atmosConfig *schema.AtmosConfiguration,
 	dependents *[]schema.Dependent,
-	includeSettings bool,
-	processTemplates bool,
-	processYamlFunctions bool,
-	skip []string,
-	onlyInStack string,
-	stacks map[string]any,
-	depIdx dependencyIndex,
+	opts *dependentsOptions,
 ) error {
 	for i := 0; i < len(*dependents); i++ {
 		d := &(*dependents)[i]
 
-		deps, err := ExecuteDescribeDependents(
-			atmosConfig,
-			&DescribeDependentsArgs{
-				Component:            d.Component,
-				Stack:                d.Stack,
-				IncludeSettings:      includeSettings,
-				ProcessTemplates:     processTemplates,
-				ProcessYamlFunctions: processYamlFunctions,
-				Skip:                 skip,
-				OnlyInStack:          onlyInStack,
-				Stacks:               stacks,
-				DepIndex:             depIdx,
-			},
-		)
+		deps, err := describeDependentsFor(atmosConfig, d.Component, d.Stack, opts)
 		if err != nil {
 			return err
 		}
 
-		if len(deps) > 0 {
-			attachDependentMetadata(deps, stacks)
-			d.Dependents = deps
-			err = addDependentsToDependents(
-				atmosConfig,
-				&deps,
-				includeSettings,
-				processTemplates,
-				processYamlFunctions,
-				skip,
-				onlyInStack,
-				stacks,
-				depIdx,
-			)
-			if err != nil {
-				return err
-			}
-		} else {
+		if len(deps) == 0 {
 			d.Dependents = []schema.Dependent{}
+			continue
+		}
+
+		if opts.Filter.hasSelectors() {
+			attachDependentMetadata(deps, opts.stacks)
+		}
+		d.Dependents = deps
+
+		if err := addDependentsToDependents(atmosConfig, &deps, opts); err != nil {
+			return err
 		}
 	}
 
@@ -787,9 +815,19 @@ func filterAffectedDependents(affected *[]schema.Affected, filter AffectedFilter
 	for i := range *affected {
 		a := &(*affected)[i]
 		a.Dependents = pruneDependentsBySelectors(a.Dependents, filter)
+		clearDependentMetadata(a.Dependents)
 	}
 
 	processIncludedInDependencies(affected)
+}
+
+// clearDependentMetadata drops the transient `metadata` recorded on dependents for selector matching, so
+// the pruned result has the same shape as one produced without selectors.
+func clearDependentMetadata(dependents []schema.Dependent) {
+	for i := range dependents {
+		dependents[i].Metadata = nil
+		clearDependentMetadata(dependents[i].Dependents)
+	}
 }
 
 // pruneDependentsBySelectors removes the dependents whose metadata does not satisfy the selectors.

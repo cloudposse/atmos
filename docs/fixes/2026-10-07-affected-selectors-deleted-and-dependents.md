@@ -19,6 +19,7 @@ Two other items from the same pass turned out to be wrong or by design and were 
 
 - `detectDeletedComponents` and its helpers take an `AffectedFilter`. A deleted component is matched against its `metadata` as it was in the base ref, with the same rules as the live path (tags match any, labels match all, and a component with no `metadata` is excluded when a selector is set). `ExcludeLocked` still does not apply to deleted items.
 - `filterAffectedDependents` runs after dependents are added and prunes the nested tree recursively. A matching descendant of a removed dependent is promoted to the nearest remaining ancestor, so an affected `ci: auto` component is not lost. `included_in_dependents` is recomputed. `schema.Dependent` gained a non-serialized `Metadata` field, filled from the already-loaded stacks, to support this.
+- Each dependent's `metadata` is recorded only when a selector is set. `addDependentsToAffected` keeps its signature and behavior and delegates to `addDependentsToAffectedWithFilter`, which `Execute` uses when `--tags` or `--labels` is present, and the transient `Metadata` is cleared after pruning. The first version recorded it unconditionally, which added a populated field to every dependent and failed the whole-struct comparisons in `TestDescribeAffectedWithDependents`, `...WithoutTemplates` and `...FilteredByStack` on CI.
 - `terraform --affected` is unchanged: it never reaches this code and still clears `Tags` and `Labels` before describing.
 - Tests: deleted component, deleted stack and empty-stack cases, tags and labels, `ExcludeLocked`, `deletion_type` preserved, recursive dependents pruning and promotion, `included_in_dependents`, end-to-end matrix and dependents runs, and `errors.Is(err, ErrInvalidFlag)` for the `--upload` rejection.
 - Docs, blog post and the `atmos-ci` agent skill:
@@ -40,6 +41,7 @@ Two other items from the same pass turned out to be wrong or by design and were 
   - `atmos list affected --labels=ci=auto` returns `dev/vpc` and the deleted `prod/vpc`.
   - `terraform plan --affected --labels=ci=auto --dry-run` plans only `vpc`.
 - Website build passes. The only warning is a pre-existing broken anchor on `/cli/commands/scaffold/validate`.
+- The `TestDescribeAffectedWithDependents*` tests skip inside a git worktree because go-git rejects the `worktreeconfig` extension, so they only run in a normal clone. They failed on CI for the first version of the dependents change, and they were reproduced and verified in a local clone: the committed version fails and the fix passes, along with the rest of the affected tests (157 pass, 3 skip).
 - Not run: the gomonkey-based `TestGetAffectedComponents`, which is skipped on darwin/arm64, so it is covered only by CI. `list affected --include-dependents` was not run live.
 
 ## Follow-ups

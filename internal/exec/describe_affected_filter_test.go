@@ -780,11 +780,19 @@ func TestExecute_IncludeDependents_SelectorsPruneDependents(t *testing.T) {
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{{Component: "vpc", Stack: "dev", StackSlug: "dev-vpc"}}, nil, nil, "", nil
 	}
-	d.addDependentsToAffected = func(_ *schema.AtmosConfiguration, affected *[]schema.Affected, _, _, _ bool, _ []string, _ string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) error {
+	setDependents := func(affected *[]schema.Affected) {
 		(*affected)[0].Dependents = []schema.Dependent{
 			dependentFixture("iam", "manual"),
 			dependentFixture("app", "auto"),
 		}
+	}
+	// Without selectors Execute uses addDependentsToAffected; with selectors it uses the variant that records metadata.
+	d.addDependentsToAffected = func(_ *schema.AtmosConfiguration, affected *[]schema.Affected, _, _, _ bool, _ []string, _ string, _ auth.AuthManager, _ bool, _ DescribeStacksErrorOptions) error {
+		setDependents(affected)
+		return nil
+	}
+	d.addDependentsToAffectedWithFilter = func(_ *schema.AtmosConfiguration, affected *[]schema.Affected, _ *dependentsOptions) error {
+		setDependents(affected)
 		return nil
 	}
 

@@ -135,6 +135,13 @@ type describeAffectedExec struct {
 		authDisabled bool,
 		errOptions DescribeStacksErrorOptions,
 	) error
+	// addDependentsToAffectedWithFilter is used instead of addDependentsToAffected when the `--tags` /
+	// `--labels` selectors are set, because it records each dependent's metadata for the pruning step.
+	addDependentsToAffectedWithFilter func(
+		atmosConfig *schema.AtmosConfiguration,
+		affected *[]schema.Affected,
+		opts *dependentsOptions,
+	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
 		format string,
@@ -157,6 +164,7 @@ func NewDescribeAffectedExec(
 		executeDescribeAffectedWithTargetRefClone:    ExecuteDescribeAffectedWithTargetRefCloneWithOptions,
 		executeDescribeAffectedWithTargetRefCheckout: ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions,
 		addDependentsToAffected:                      addDependentsToAffected,
+		addDependentsToAffectedWithFilter:            addDependentsToAffectedWithFilter,
 		printOrWriteToFile:                           printOrWriteToFile,
 		IsTTYSupportForStdout:                        term.IsTTYSupportForStdout,
 		pageCreator:                                  pager.New(),
@@ -533,13 +541,29 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) ([]schem
 
 	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled, errOptions)
+		// With `--tags` / `--labels`, dependents are resolved together with their metadata so the nested lists can
+		// be pruned by the same selectors; without selectors the original path is used unchanged.
+		filter := a.affectedFilter()
+		if filter.hasSelectors() {
+			err = d.addDependentsToAffectedWithFilter(a.CLIConfig, &affected, &dependentsOptions{
+				IncludeSettings:      a.IncludeSettings,
+				ProcessTemplates:     a.ProcessTemplates,
+				ProcessYamlFunctions: a.ProcessYamlFunctions,
+				Skip:                 a.Skip,
+				OnlyInStack:          a.Stack,
+				AuthManager:          a.AuthManager,
+				AuthDisabled:         a.AuthDisabled,
+				ErrOptions:           errOptions,
+				Filter:               filter,
+			})
+		} else {
+			err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled, errOptions)
+		}
 		if err != nil {
 			return nil, err
 		}
 
-		// Apply `--tags` / `--labels` to the nested dependents too (a no-op without selectors).
-		filterAffectedDependents(&affected, a.affectedFilter())
+		filterAffectedDependents(&affected, filter)
 	}
 
 	// Strip unnecessary fields when uploading to Atmos Pro to reduce payload size
