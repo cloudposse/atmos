@@ -37,6 +37,7 @@ jobs:
       image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     outputs:
       matrix: ${{ steps.list.outputs.matrix }}
+      count: ${{ steps.list.outputs.count }}
     steps:
       - uses: actions/checkout@v6
 
@@ -45,7 +46,7 @@ jobs:
 
   deploy:
     needs: inventory
-    if: ${{ needs.inventory.outputs.matrix != '' }}
+    if: ${{ needs.inventory.outputs.count != '0' }}
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}

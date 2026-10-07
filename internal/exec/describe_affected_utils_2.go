@@ -615,25 +615,69 @@ func addDependentsToAffected(
 	authDisabled bool,
 	errOptions DescribeStacksErrorOptions,
 ) error {
+	return addDependentsToAffectedWithFilter(atmosConfig, affected, &dependentsOptions{
+		IncludeSettings:      includeSettings,
+		ProcessTemplates:     processTemplates,
+		ProcessYamlFunctions: processYamlFunctions,
+		Skip:                 skip,
+		OnlyInStack:          onlyInStack,
+		AuthManager:          authManager,
+		AuthDisabled:         authDisabled,
+		ErrOptions:           errOptions,
+	})
+}
+
+// dependentsOptions bundles the settings shared by every dependents-resolution step.
+type dependentsOptions struct {
+	IncludeSettings      bool
+	ProcessTemplates     bool
+	ProcessYamlFunctions bool
+	Skip                 []string
+	OnlyInStack          string
+	AuthManager          auth.AuthManager
+	AuthDisabled         bool
+	ErrOptions           DescribeStacksErrorOptions
+	// Filter holds the `--tags` / `--labels` selectors. When it has selectors, each dependent's `metadata`
+	// is recorded as the dependents are resolved so the nested lists can be pruned afterward.
+	Filter AffectedFilter
+	// RecordMetadata records each dependent's `metadata` even without selectors. `--exclude-locked` with
+	// `--flatten` needs it to tell which lifted dependents are locked.
+	RecordMetadata bool
+
+	// stacks and depIdx are resolved once by addDependentsToAffectedWithFilter and shared by every step.
+	stacks map[string]any
+	depIdx dependencyIndex
+}
+
+// addDependentsToAffectedWithFilter is addDependentsToAffected plus the `--tags` / `--labels` selectors.
+// The stacks are already loaded when the dependents are resolved, so recording each dependent's metadata
+// needs no second stack resolution. Without selectors it behaves exactly like addDependentsToAffected and
+// leaves the dependents untouched.
+func addDependentsToAffectedWithFilter(
+	atmosConfig *schema.AtmosConfiguration,
+	affected *[]schema.Affected,
+	opts *dependentsOptions,
+) error {
 	// Resolve all stacks once and build a reverse dependency index — these are the expensive
 	// operations (~1s for large infras). Previously ExecuteDescribeStacks was called inside
 	// ExecuteDescribeDependents for every affected component, causing O(N) full resolutions
 	// (e.g., 2,422 × ~1s = 40+ minutes). The dependency index further eliminates the
 	// O(stacks × components) scan per affected item.
-	stacks, err := ExecuteDescribeStacksWithOptions(
+	var err error
+	opts.stacks, err = ExecuteDescribeStacksWithOptions(
 		atmosConfig,
-		onlyInStack,
+		opts.OnlyInStack,
 		nil,
 		nil,
 		nil,
 		false,
-		processTemplates,
-		processYamlFunctions,
+		opts.ProcessTemplates,
+		opts.ProcessYamlFunctions,
 		false,
-		skip,
-		authManager,
-		authDisabled,
-		errOptions,
+		opts.Skip,
+		opts.AuthManager,
+		opts.AuthDisabled,
+		opts.ErrOptions,
 	)
 	if err != nil {
 		return err
@@ -641,7 +685,7 @@ func addDependentsToAffected(
 
 	// Build the reverse dependency index once from the cached stacks.
 	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
-	depIdx, err := buildDependencyIndexWithError(stacks, leftDelim)
+	opts.depIdx, err = buildDependencyIndexWithError(opts.stacks, leftDelim)
 	if err != nil {
 		return err
 	}
@@ -657,46 +701,12 @@ func addDependentsToAffected(
 		}
 
 		// Skip if `onlyInStack` is specified and the affected component is not in the specified stack.
-		if onlyInStack != "" && a.Stack != onlyInStack {
+		if opts.OnlyInStack != "" && a.Stack != opts.OnlyInStack {
 			continue
 		}
 
-		deps, err := ExecuteDescribeDependents(
-			atmosConfig,
-			&DescribeDependentsArgs{
-				Component:            a.Component,
-				Stack:                a.Stack,
-				IncludeSettings:      includeSettings,
-				ProcessTemplates:     processTemplates,
-				ProcessYamlFunctions: processYamlFunctions,
-				Skip:                 skip,
-				OnlyInStack:          onlyInStack,
-				Stacks:               stacks,
-				DepIndex:             depIdx,
-			},
-		)
-		if err != nil {
+		if err := addDependentsToAffectedItem(atmosConfig, a, opts); err != nil {
 			return err
-		}
-
-		if len(deps) > 0 {
-			a.Dependents = deps
-			err = addDependentsToDependents(
-				atmosConfig,
-				&deps,
-				includeSettings,
-				processTemplates,
-				processYamlFunctions,
-				skip,
-				onlyInStack,
-				stacks,
-				depIdx,
-			)
-			if err != nil {
-				return err
-			}
-		} else {
-			a.Dependents = []schema.Dependent{}
 		}
 	}
 
@@ -704,62 +714,355 @@ func addDependentsToAffected(
 	return nil
 }
 
+// needsDependentMetadata reports whether each resolved dependent must record its `metadata` section:
+// to apply the `--tags` / `--labels` selectors, or to honour `--exclude-locked` when dependents are lifted.
+func (o *dependentsOptions) needsDependentMetadata() bool {
+	return o.Filter.hasSelectors() || o.RecordMetadata
+}
+
+// isExcludedLockedDependent reports whether the dependent is locked (`metadata.locked: true`) and the filter
+// excludes locked components. It needs the metadata recorded by attachDependentMetadata; a dependent
+// without recorded metadata is never reported as locked.
+func (f AffectedFilter) isExcludedLockedDependent(d *schema.Dependent) bool {
+	return f.ExcludeLocked && d.Metadata != nil && isComponentLocked(d.Metadata)
+}
+
+// addDependentsToAffectedItem resolves the (nested) dependents of one affected component from the
+// pre-computed stacks and reverse dependency index.
+func addDependentsToAffectedItem(
+	atmosConfig *schema.AtmosConfiguration,
+	a *schema.Affected,
+	opts *dependentsOptions,
+) error {
+	deps, err := describeDependentsFor(atmosConfig, a.Component, a.Stack, opts)
+	if err != nil {
+		return err
+	}
+
+	if len(deps) == 0 {
+		a.Dependents = []schema.Dependent{}
+		return nil
+	}
+
+	if opts.needsDependentMetadata() {
+		attachDependentMetadata(deps, opts.stacks)
+	}
+	a.Dependents = deps
+
+	return addDependentsToDependents(atmosConfig, &deps, opts)
+}
+
+// describeDependentsFor returns the direct dependents of a component from the pre-computed stacks and index.
+func describeDependentsFor(
+	atmosConfig *schema.AtmosConfiguration,
+	component string,
+	stack string,
+	opts *dependentsOptions,
+) ([]schema.Dependent, error) {
+	return ExecuteDescribeDependents(
+		atmosConfig,
+		&DescribeDependentsArgs{
+			Component:            component,
+			Stack:                stack,
+			IncludeSettings:      opts.IncludeSettings,
+			ProcessTemplates:     opts.ProcessTemplates,
+			ProcessYamlFunctions: opts.ProcessYamlFunctions,
+			Skip:                 opts.Skip,
+			OnlyInStack:          opts.OnlyInStack,
+			Stacks:               opts.stacks,
+			DepIndex:             opts.depIdx,
+		},
+	)
+}
+
 // addDependentsToDependents recursively adds dependent components and stacks to each dependent component.
 // The stacks and depIdx parameters are pre-computed and shared across all calls.
 func addDependentsToDependents(
 	atmosConfig *schema.AtmosConfiguration,
 	dependents *[]schema.Dependent,
-	includeSettings bool,
-	processTemplates bool,
-	processYamlFunctions bool,
-	skip []string,
-	onlyInStack string,
-	stacks map[string]any,
-	depIdx dependencyIndex,
+	opts *dependentsOptions,
 ) error {
 	for i := 0; i < len(*dependents); i++ {
 		d := &(*dependents)[i]
 
-		deps, err := ExecuteDescribeDependents(
-			atmosConfig,
-			&DescribeDependentsArgs{
-				Component:            d.Component,
-				Stack:                d.Stack,
-				IncludeSettings:      includeSettings,
-				ProcessTemplates:     processTemplates,
-				ProcessYamlFunctions: processYamlFunctions,
-				Skip:                 skip,
-				OnlyInStack:          onlyInStack,
-				Stacks:               stacks,
-				DepIndex:             depIdx,
-			},
-		)
+		deps, err := describeDependentsFor(atmosConfig, d.Component, d.Stack, opts)
 		if err != nil {
 			return err
 		}
 
-		if len(deps) > 0 {
-			d.Dependents = deps
-			err = addDependentsToDependents(
-				atmosConfig,
-				&deps,
-				includeSettings,
-				processTemplates,
-				processYamlFunctions,
-				skip,
-				onlyInStack,
-				stacks,
-				depIdx,
-			)
-			if err != nil {
-				return err
-			}
-		} else {
+		if len(deps) == 0 {
 			d.Dependents = []schema.Dependent{}
+			continue
+		}
+
+		if opts.needsDependentMetadata() {
+			attachDependentMetadata(deps, opts.stacks)
+		}
+		d.Dependents = deps
+
+		if err := addDependentsToDependents(atmosConfig, &deps, opts); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+// attachDependentMetadata records each dependent's `metadata` section (looked up from the already-resolved
+// stacks) so the `--tags` / `--labels` selectors can be applied to dependents afterward.
+// A dependent that cannot be found, or has no metadata section, keeps a nil Metadata.
+func attachDependentMetadata(dependents []schema.Dependent, stacks map[string]any) {
+	for i := range dependents {
+		componentSection, _ := findComponentSectionInCachedStacksWithType(stacks, dependents[i].Stack, dependents[i].Component)
+		if metadataSection, ok := componentSection[sectionNameMetadata].(map[string]any); ok {
+			dependents[i].Metadata = metadataSection
+		}
+	}
+}
+
+// filterAffectedDependents applies the `--tags` / `--labels` selectors to the (nested) dependents of every
+// affected component and then recomputes `included_in_dependents` for the pruned trees.
+// It does nothing when the filter has no selectors, so `ExcludeLocked` never changes dependents.
+func filterAffectedDependents(affected *[]schema.Affected, filter AffectedFilter) {
+	if !filter.hasSelectors() {
+		return
+	}
+
+	for i := range *affected {
+		a := &(*affected)[i]
+		a.Dependents = pruneDependentsBySelectors(a.Dependents, filter)
+		clearDependentMetadata(a.Dependents)
+	}
+
+	processIncludedInDependencies(affected)
+}
+
+// maxFlattenDependentDepth bounds the walk over nested dependents, guarding against a dependency cycle
+// or an extremely deep chain. It matches the limit used when `list affected` flattens dependents.
+const maxFlattenDependentDepth = 100
+
+// dependentToAffected converts a dependent into a top-level affected entry with the given reason
+// (for example "dependent"). Every field the two types share is copied one to one; the transient
+// Metadata that selector matching records on a dependent is never copied.
+func dependentToAffected(d *schema.Dependent, reason string) schema.Affected {
+	return schema.Affected{
+		Component:            d.Component,
+		ComponentType:        d.ComponentType,
+		ComponentPath:        d.ComponentPath,
+		Namespace:            d.Namespace,
+		Tenant:               d.Tenant,
+		Environment:          d.Environment,
+		Stage:                d.Stage,
+		Stack:                d.Stack,
+		StackSlug:            d.StackSlug,
+		SpaceliftStack:       d.SpaceliftStack,
+		AtlantisProject:      d.AtlantisProject,
+		Affected:             reason,
+		AffectedAll:          []string{reason},
+		Dependents:           d.Dependents,
+		IncludedInDependents: d.IncludedInDependents,
+		Settings:             d.Settings,
+	}
+}
+
+// affectedKey identifies a component instance in the affected list: the same
+// (component, stack, component type) triple that appendToAffected de-duplicates on.
+func affectedKey(component, stack, componentType string) string {
+	return componentType + "\x00" + stack + "\x00" + component
+}
+
+// topLevelAffectedMetadata returns the `metadata` section of a top-level affected component as it is in
+// HEAD (looked up from the already-resolved stacks), or nil when the component or its metadata is missing.
+func topLevelAffectedMetadata(a *schema.Affected, stacks map[string]any) map[string]any {
+	componentSection := findComponentSectionInCachedStacksByType(stacks, a.Stack, a.Component, a.ComponentType)
+	metadataSection, _ := componentSection[sectionNameMetadata].(map[string]any)
+	return metadataSection
+}
+
+// applySelectorsToAffectedForest applies the `--tags` / `--labels` selectors to the whole affected forest,
+// after the dependents are resolved: the live affected components were not filtered while they were
+// computed (see AffectedFilter.DeferSelectors), so a component that fails the selectors can still
+// contribute the dependents that pass them.
+//
+//   - Every item's nested dependents are pruned by the selectors.
+//   - A top-level item is kept when it is deleted (deleted items were already matched against their BASE
+//     metadata) or when its HEAD metadata satisfies the selectors. A live item that is missing from the
+//     stacks, or has no metadata, cannot match and is dropped.
+//   - A dropped item's matching dependents are promoted into the top-level list at its position, with the
+//     reason "dependent", unless the same component is already a top-level item or was already promoted.
+//
+// `included_in_dependents` is recomputed for the result, and the transient dependent metadata is cleared.
+// With `--exclude-locked`, a locked dependent is never promoted. Without selectors the input is returned
+// unchanged.
+func applySelectorsToAffectedForest(affected []schema.Affected, filter AffectedFilter, stacks map[string]any) []schema.Affected {
+	out := applySelectorsToAffectedForestKeepMetadata(affected, filter, stacks)
+	clearAffectedDependentMetadata(out)
+	return out
+}
+
+// applySelectorsToAffectedForestKeepMetadata is applySelectorsToAffectedForest without the final metadata
+// clearing. The dependents keep the metadata recorded for selector matching, so a later step (flattening
+// with `--exclude-locked`) can still tell which dependents are locked. The caller must clear it afterwards
+// with clearAffectedDependentMetadata.
+func applySelectorsToAffectedForestKeepMetadata(affected []schema.Affected, filter AffectedFilter, stacks map[string]any) []schema.Affected {
+	if !filter.hasSelectors() {
+		return affected
+	}
+
+	keep := make([]bool, len(affected))
+	seen := make(map[string]struct{}, len(affected))
+	for i := range affected {
+		a := &affected[i]
+		a.Dependents = pruneDependentsBySelectors(a.Dependents, filter)
+		keep[i] = a.Deleted || filter.matchesSelectors(topLevelAffectedMetadata(a, stacks))
+		if keep[i] {
+			seen[affectedKey(a.Component, a.Stack, a.ComponentType)] = struct{}{}
+		}
+	}
+
+	out := make([]schema.Affected, 0, len(affected))
+	for i := range affected {
+		if keep[i] {
+			out = append(out, affected[i])
+			continue
+		}
+		out = appendPromotedDependents(out, affected[i].Dependents, filter, seen)
+	}
+
+	processIncludedInDependencies(&out)
+
+	return out
+}
+
+// clearAffectedDependentMetadata drops the transient dependent metadata from every affected item's
+// (nested) dependents.
+func clearAffectedDependentMetadata(affected []schema.Affected) {
+	for i := range affected {
+		clearDependentMetadata(affected[i].Dependents)
+	}
+}
+
+// appendPromotedDependents appends the dependents of a dropped top-level item to out as top-level entries
+// with the reason "dependent", skipping components already in seen. A promoted dependent becomes a top-level
+// entry, which is what reaches the matrix, so `--exclude-locked` drops a locked one here even though nested
+// dependents are left alone.
+func appendPromotedDependents(out []schema.Affected, deps []schema.Dependent, filter AffectedFilter, seen map[string]struct{}) []schema.Affected {
+	for j := range deps {
+		d := &deps[j]
+		if filter.isExcludedLockedDependent(d) {
+			continue
+		}
+		key := affectedKey(d.Component, d.Stack, d.ComponentType)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, dependentToAffected(d, affectedReasonDependent))
+	}
+	return out
+}
+
+// flattenAffectedDependents lifts every dependent into the top-level affected list as an entry with the
+// reason "dependent". Each top-level item keeps its position and loses its nested dependents; its
+// dependents follow it in pre-order. A component that is already a top-level item, or was already lifted
+// from another parent, appears only once. Deleted items pass through untouched (they have no dependents).
+// With `--exclude-locked`, a locked dependent is not lifted, but its own dependents still are (mirroring how
+// pruning promotes the children of a removed dependent). This needs the dependent metadata to have been
+// recorded. The result is never nil.
+func flattenAffectedDependents(affected []schema.Affected, filter AffectedFilter) []schema.Affected {
+	seen := make(map[string]struct{}, len(affected))
+	for i := range affected {
+		a := &affected[i]
+		seen[affectedKey(a.Component, a.Stack, a.ComponentType)] = struct{}{}
+	}
+
+	out := make([]schema.Affected, 0, len(affected))
+	for i := range affected {
+		a := affected[i]
+		if a.Deleted {
+			out = append(out, a)
+			continue
+		}
+
+		dependents := a.Dependents
+		a.Dependents = []schema.Dependent{}
+		a.IncludedInDependents = false
+		out = append(out, a)
+		out = appendFlattenedDependents(out, dependents, seen, filter, 1)
+	}
+
+	return out
+}
+
+// appendFlattenedDependents appends the dependents (pre-order) that are not in seen yet to out. The
+// subtree of a dependent that was already seen is skipped, because it is reached from that earlier
+// occurrence: from the top-level item that owns it, or from the parent it was first lifted from. A locked
+// dependent excluded by the filter is not appended, but it is marked seen and its children are still walked.
+func appendFlattenedDependents(out []schema.Affected, dependents []schema.Dependent, seen map[string]struct{}, filter AffectedFilter, depth int) []schema.Affected {
+	for i := range dependents {
+		d := &dependents[i]
+		key := affectedKey(d.Component, d.Stack, d.ComponentType)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		if !filter.isExcludedLockedDependent(d) {
+			lifted := dependentToAffected(d, affectedReasonDependent)
+			lifted.Dependents = []schema.Dependent{}
+			lifted.IncludedInDependents = false
+			out = append(out, lifted)
+		}
+
+		if depth < maxFlattenDependentDepth {
+			out = appendFlattenedDependents(out, d.Dependents, seen, filter, depth+1)
+		}
+	}
+	return out
+}
+
+// clearDependentMetadata drops the transient `metadata` recorded on dependents for selector matching, so
+// the pruned result has the same shape as one produced without selectors.
+func clearDependentMetadata(dependents []schema.Dependent) {
+	for i := range dependents {
+		dependents[i].Metadata = nil
+		clearDependentMetadata(dependents[i].Dependents)
+	}
+}
+
+// pruneDependentsBySelectors removes the dependents whose metadata does not satisfy the selectors.
+// Dependents are hierarchical, so a dependent that is removed does not hide its own matching dependents:
+// those are promoted to the removed dependent's parent (de-duplicated by stack slug) rather than lost.
+// A dependent without a metadata section cannot match a selector and is removed.
+func pruneDependentsBySelectors(dependents []schema.Dependent, filter AffectedFilter) []schema.Dependent {
+	if len(dependents) == 0 {
+		return dependents
+	}
+
+	kept := make([]schema.Dependent, 0, len(dependents))
+	seen := make(map[string]struct{}, len(dependents))
+	appendUnique := func(d schema.Dependent) {
+		if _, dup := seen[d.StackSlug]; dup {
+			return
+		}
+		seen[d.StackSlug] = struct{}{}
+		kept = append(kept, d)
+	}
+
+	for i := range dependents {
+		d := dependents[i]
+		d.Dependents = pruneDependentsBySelectors(d.Dependents, filter)
+		if filter.matchesSelectors(d.Metadata) {
+			appendUnique(d)
+			continue
+		}
+		for j := range d.Dependents {
+			appendUnique(d.Dependents[j])
+		}
+	}
+
+	sortDependentsByStackSlug(kept)
+	return kept
 }
 
 func processIncludedInDependencies(affected *[]schema.Affected) {

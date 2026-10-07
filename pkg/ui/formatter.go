@@ -1188,6 +1188,7 @@ func (f *formatter) buildMarkdownRenderOptions(preserveNewlines, noWrap bool) []
 
 // renderMarkdown is the internal markdown rendering implementation.
 func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool) (string, error) {
+	content = markdown.StripFrontmatter(content)
 	opts := f.buildMarkdownRenderOptions(preserveNewlines, noWrap)
 
 	renderer, err := glamour.NewTermRenderer(opts...)
@@ -1213,6 +1214,6 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool
 	// post-process rather than a renderer/style option).
 	rendered = markdown.FixListHangingIndent(rendered)
 
-	// Remove trailing whitespace that glamour adds for padding.
-	return atmosansi.TrimLinesRight(rendered), nil
+	// Remove padding without deleting foreground-styled text that ends in a space.
+	return atmosansi.TrimLinesRightSpaces(rendered), nil
 }

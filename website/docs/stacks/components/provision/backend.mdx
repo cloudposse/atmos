@@ -161,6 +161,38 @@ provision:
 ```
 </File>
 
+#### Bucket Namespace
+
+<dl>
+  <dt>`provision.backend.bucket_namespace`</dt>
+  <dd>
+    Optional string that Atmos sends as the `BucketNamespace` parameter of the S3
+    [CreateBucket](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html) call when it creates the bucket.
+    Atmos validates the value before contacting AWS and fails with the list of valid values when it is not one of them.
+
+    - **Type:** `string`
+    - **Valid values:** `global` or `account-regional`, as defined by Amazon S3. See
+      [Namespaces for general purpose buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html).
+    - **Default:** unset (the parameter is omitted from the request, so S3 uses its default namespace)
+    - **Applies to:** `s3` backends only. Stack manifest validation rejects it when `backend_type` is set to a different
+      backend type, and other backend types ignore it at runtime.
+  </dd>
+</dl>
+
+The option is read from `provision.backend`, so it is never written to the generated Terraform backend configuration.
+The bucket name in `backend.bucket` is used exactly as written, including names produced by Atmos templates. Amazon S3
+enforces the bucket naming rules for the chosen namespace, which are documented in the
+[S3 User Guide](https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html).
+
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+provision:
+  backend:
+    enabled: true
+    bucket_namespace: account-regional   # Sent to S3 CreateBucket as BucketNamespace
+```
+</File>
+
 #### Cross-Account Provisioning
 
 <File title="stacks/catalog/vpc.yaml">

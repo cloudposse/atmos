@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
 // gitTestRepo holds common test repository setup.
@@ -325,27 +326,10 @@ func TestProcessorSetupGitStorageInvalidBaseRef(t *testing.T) {
 func TestProcessorMergeFileReadError(t *testing.T) {
 	processor := NewProcessor()
 
-	err := processor.mergeFile(filepath.Join(t.TempDir(), "missing.yaml"), File{Path: "missing.yaml", Permissions: 0o644}, t.TempDir())
+	err := processor.mergeFile(filepath.Join(t.TempDir(), "missing.yaml"), &File{Path: "missing.yaml", Permissions: 0o644})
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrReadFile)
-}
-
-func TestProcessorMergeFileTemplateProcessingError(t *testing.T) {
-	initialContent := "name: demo\n"
-	testRepo := setupGitTestRepo(t, initialContent, initialContent)
-
-	templateFile := File{
-		Path:        "config.yaml",
-		Content:     "{{",
-		IsTemplate:  true,
-		Permissions: 0o644,
-	}
-
-	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrTemplateExecution)
 }
 
 func TestProcessorDetermineBaseContentWithoutGitStorage(t *testing.T) {
@@ -400,27 +384,27 @@ func TestProcessorMergeFile_DetermineBaseContentErrorPropagates(t *testing.T) {
 	testRepo.processor.baseStorage = storage.NewGitBaseStorage(repo, "nonexistent-ref")
 
 	templateFile := File{Path: "config.yaml", Content: "name: template\n", Permissions: 0o644}
-	err = testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+	err = testRepo.processor.mergeFile(testRepo.configPath, &templateFile)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
 }
 
-// TestProcessorMergeFile_TemplateProcessingSuccess covers the success path of
-// template processing inside mergeFile (IsTemplate: true with content that
-// renders cleanly), as opposed to the existing failure-path-only coverage.
-func TestProcessorMergeFile_TemplateProcessingSuccess(t *testing.T) {
+// TestProcessorMergeFile_PreRenderedContentSuccess covers the success path of
+// mergeFile when handed already-rendered content, which is the only shape its
+// caller (handleExistingFile) produces. Rendering itself is covered at the
+// ProcessFile level, since mergeFile no longer renders anything.
+func TestProcessorMergeFile_PreRenderedContentSuccess(t *testing.T) {
 	initialContent := "name: demo\n"
 	testRepo := setupGitTestRepo(t, initialContent, initialContent)
 
-	templateFile := File{
+	renderedFile := File{
 		Path:        "config.yaml",
-		Content:     "name: demo # rendered via a valid, variable-free template\n",
-		IsTemplate:  true,
+		Content:     "name: demo # already rendered by the caller\n",
 		Permissions: 0o644,
 	}
 
-	mergeErr := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+	mergeErr := testRepo.processor.mergeFile(testRepo.configPath, &renderedFile)
 
 	require.NoError(t, mergeErr)
 
@@ -446,7 +430,7 @@ func TestProcessorMergeFile_ConflictBranchReturnsError(t *testing.T) {
 		Permissions: 0o644,
 	}
 
-	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+	err := testRepo.processor.mergeFile(testRepo.configPath, &templateFile)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
@@ -482,7 +466,7 @@ func TestProcessorMergeFile_ConflictBranchDryRunDoesNotWrite(t *testing.T) {
 		Permissions: 0o644,
 	}
 
-	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+	err := testRepo.processor.mergeFile(testRepo.configPath, &templateFile)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
@@ -511,7 +495,7 @@ func TestProcessorMergeFile_RejectsUnresolvedMarkers(t *testing.T) {
 		Permissions: 0o644,
 	}
 
-	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+	err := testRepo.processor.mergeFile(testRepo.configPath, &templateFile)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
@@ -545,7 +529,7 @@ func TestProcessorMergeFile_DocumentStreamConflictHasNoMarkers(t *testing.T) {
 		Permissions: 0o644,
 	}
 
-	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+	err := testRepo.processor.mergeFile(testRepo.configPath, &templateFile)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
@@ -595,7 +579,7 @@ func TestProcessorMergeFile_ConflictWriteFailurePropagates(t *testing.T) {
 		Permissions: 0o644,
 	}
 
-	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+	err := testRepo.processor.mergeFile(testRepo.configPath, &templateFile)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrFileWrite)
@@ -625,7 +609,7 @@ func TestProcessorMergeFile_CleanWriteFailurePropagates(t *testing.T) {
 		Permissions: 0o644,
 	}
 
-	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+	err := testRepo.processor.mergeFile(testRepo.configPath, &templateFile)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrFileWrite)
@@ -647,4 +631,58 @@ func TestProcessorDetermineBaseContent_LoadBaseError(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, shouldSkip)
 	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestProcessFile_UpdateCustomDelimitersKeepsLiteralExpressions drives the full
+// --update path (ProcessFile -> handleExistingFile -> mergeFile) with a
+// scaffold whose spec.delimiters is "[[ ]]": the "[[ ]]" variable is rendered
+// exactly once with the scaffold's config, and a GitHub Actions "${{ }}"
+// expression in the payload survives into the merged file untouched.
+func TestProcessFile_UpdateCustomDelimitersKeepsLiteralExpressions(t *testing.T) {
+	initialContent := "# Config\nname: old\n"
+	userContent := "# Config\nname: old\ncustom: user-value\n"
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+
+	scaffoldConfig := &config.ScaffoldConfig{Spec: config.ScaffoldSpec{Delimiters: []string{"[[", "]]"}}}
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "# Config\nname: [[ .Config.name ]]\nsha: ${{ github.sha }}\n",
+		IsTemplate:  true,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.ProcessFile(templateFile, testRepo.tmpDir, false, true, scaffoldConfig, map[string]interface{}{"name": "demo"})
+	require.NoError(t, err)
+
+	mergedContent, err := os.ReadFile(testRepo.configPath)
+	require.NoError(t, err)
+
+	merged := string(mergedContent)
+	assert.Contains(t, merged, "name: demo", "Should render the [[ ]] variable")
+	assert.Contains(t, merged, "sha: ${{ github.sha }}", "Should keep the GitHub Actions expression literal")
+	assert.Contains(t, merged, "custom: user-value", "Should preserve the user's custom value")
+}
+
+// TestProcessorMergeFile_UsesContentAsRendered proves mergeFile treats
+// file.Content as already rendered ("theirs") and never re-renders it, even
+// when IsTemplate is still set: its sole caller (handleExistingFile) renders
+// with the scaffold's delimiters/config/values first, so a second render here
+// would use the wrong (nil) config and default delimiters.
+func TestProcessorMergeFile_UsesContentAsRendered(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	file := File{
+		Path:        "config.yaml",
+		Content:     "name: demo\nnote: \"{{ not rendered }}\"\n",
+		IsTemplate:  true,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, &file)
+	require.NoError(t, err)
+
+	mergedContent, err := os.ReadFile(testRepo.configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(mergedContent), `note: "{{ not rendered }}"`)
 }
