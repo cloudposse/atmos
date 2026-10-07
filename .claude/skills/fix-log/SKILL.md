@@ -25,10 +25,10 @@ a single, consistent five-section structure instead of ad hoc headers.
 4. Record what changed, why it changed, validation that actually ran, and follow-ups.
 5. Do not invent validation. If a check was skipped or blocked, say why.
 6. Follow `CLAUDE.md`'s **Follow-up Tracking (MANDATORY)** rule: **never create GitHub issues for an
-   implementation that has not merged into `main`.** Fix required work in the active PR or stack and
-   keep remaining tasks in its PRD or task list. The Follow-ups section may link to that document;
-   an issue number is not required. Only for already-merged features, track genuinely deferred work
-   in a GitHub issue and link it by number.
+    implementation that has not merged into `main`.** Fix required work in the active PR or stack and
+    keep remaining tasks in its PRD or task list. The Follow-ups section may link to that document;
+    an issue number is not required. Only for already-merged features, track genuinely deferred work
+    in a GitHub issue and link it by number.
 
 ## Required Document Shape
 

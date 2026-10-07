@@ -45,14 +45,21 @@ The return value is `None`.
 ### Add a tool directory
 
 ```python
-ci.path(fs.resolve("~/.local/bin"))
+ci.path("/opt/tools/bin")
 ```
 
 ### Add a freshly built binary
 
+Save this as `build.star` and pass an absolute output directory:
+
 ```python
-exec.run(["go", "build", "-o", "build/atmos", "."])
-ci.path(fs.resolve("build"))
+build_dir = ctx.args[0]
+exec.run(["go", "build", "-o", build_dir + "/atmos", "."])
+ci.path(build_dir)
+```
+
+```shell
+atmos ./build.star /absolute/path/to/build
 ```
 
 ## Errors
@@ -63,4 +70,5 @@ ci.path(fs.resolve("build"))
 ## Related
 
 - [`ci`](/functions/automation/ci) describes the module and the shared behavior rules.
-- [`ci.env`](/functions/automation/ci.env) exports an environment variable, and [`fs.resolve`](/functions/automation/fs.resolve) makes a path absolute.
+- [`ci.env`](/functions/automation/ci.env) exports an environment variable.
+- [`ctx.args`](/functions/automation/ctx.args) provides the arguments passed to a standalone script.
