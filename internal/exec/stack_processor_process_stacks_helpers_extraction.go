@@ -14,6 +14,15 @@ import (
 func extractComponentSections(opts *ComponentProcessorOptions, result *ComponentProcessorResult) error {
 	defer perf.Track(opts.AtmosConfig, "exec.extractComponentSections")()
 
+	// Sections set to `!unset` are treated as absent here and recorded so the final merge
+	// drops the inherited and global layers for them. The caller's options stay untouched.
+	if componentMap, unsetSections := splitUnsetSections(opts.ComponentMap); len(unsetSections) > 0 {
+		result.ComponentUnsetSections = unsetSections
+		stripped := *opts
+		stripped.ComponentMap = componentMap
+		opts = &stripped
+	}
+
 	// Extract vars section.
 	if i, ok := opts.ComponentMap[cfg.VarsSectionName]; ok {
 		componentVars, ok := i.(map[string]any)

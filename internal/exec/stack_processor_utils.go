@@ -1038,8 +1038,11 @@ func renderManifestSchemaErrorItems(relativeFilePath string, items []manifestSch
 // manifestSchemaErrorMessage replaces implementation-detail regex failures
 // with guidance that matches the stack manifest's YAML syntax.
 func manifestSchemaErrorMessage(message string) string {
-	if message == "does not match pattern '^!include'" {
+	switch message {
+	case "does not match pattern '^!include'":
 		return "file references must use the !include YAML tag"
+	case "does not match pattern '^!(include|unset)'":
+		return "file references must use the !include YAML tag, or !unset to remove the section"
 	}
 	return message
 }
@@ -2413,6 +2416,11 @@ func processBaseComponentConfigInternal(
 			baseComponentMap = baseComponentMapOfStrings
 		}
 
+		// Sections set to `!unset` are treated as absent at this level, and the values
+		// accumulated from lower levels are dropped after the ancestors are processed below.
+		var unsetSections []string
+		baseComponentMap, unsetSections = splitUnsetSections(baseComponentMap)
+
 		// First, process the base component(s) of this base component.
 		// Skip component chain resolution for abstract components — their metadata.component
 		// is a pointer to the Terraform directory but should not trigger inheritance traversal.
@@ -2718,6 +2726,8 @@ func processBaseComponentConfigInternal(
 		// merged — so the strategy always comes from the original YAML, not a previously
 		// merged value that may have been overwritten.
 		levelMergeConfig := effectiveAtmosConfig(initialMergeConfig, baseComponentSettings)
+
+		clearUnsetBaseComponentSections(baseComponentConfig, unsetSections)
 
 		// Base component `vars`
 		merged, err := m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentVars, baseComponentVars})

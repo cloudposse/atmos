@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
@@ -187,6 +188,7 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 	if dst.BaseComponentRetry, err = m.DeepCopyMap(src.BaseComponentRetry); err != nil {
 		return err
 	}
+	dst.BaseComponentUnsetSections = slices.Clone(src.BaseComponentUnsetSections)
 	return nil
 }
 

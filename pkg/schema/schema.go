@@ -2320,6 +2320,9 @@ type BaseComponentConfig struct {
 	// It is deep-merged with the child component's retry block by mergeComponentConfigurations.
 	BaseComponentRetry        AtmosSectionMapType
 	ComponentInheritanceChain []string
+	// BaseComponentUnsetSections names the sections a base component sets to `!unset`.
+	// The stack-level (global) layer of these sections is dropped in the final merge.
+	BaseComponentUnsetSections []string
 }
 
 // Stack imports (`import` section)
