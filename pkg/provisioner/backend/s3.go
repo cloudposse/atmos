@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -191,12 +192,18 @@ func CreateS3Backend(
 	atmosConfig *schema.AtmosConfiguration,
 	backendConfig map[string]any,
 	authContext *schema.AuthContext,
+	opts ...CreateOption,
 ) (*ProvisionResult, error) {
 	defer perf.Track(atmosConfig, "backend.CreateS3Backend")()
 
 	// Extract and validate required configuration.
 	config, err := extractS3Config(backendConfig)
 	if err != nil {
+		return nil, err
+	}
+
+	// Reject an unsupported bucket namespace before any AWS call is made.
+	if err := validateBucketNamespace(applyCreateOptions(opts).bucketNamespace); err != nil {
 		return nil, err
 	}
 
@@ -216,7 +223,7 @@ func CreateS3Backend(
 	client := newS3Client(&awsConfig, config, authContext)
 
 	// Check if bucket exists and create if needed.
-	bucketAlreadyExisted, err := ensureBucket(ctx, client, config.bucket, config.region)
+	bucketAlreadyExisted, err := ensureBucket(ctx, client, config.bucket, config.region, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +304,7 @@ func extractS3PathStyle(backendConfig map[string]any) bool {
 
 // ensureBucket checks if bucket exists and creates it if needed.
 // Returns (true, nil) if bucket already existed, (false, nil) if bucket was created, (_, error) on failure.
-func ensureBucket(ctx context.Context, client S3ClientAPI, bucket, region string) (bool, error) {
+func ensureBucket(ctx context.Context, client S3ClientAPI, bucket, region string, opts ...CreateOption) (bool, error) {
 	exists, err := bucketExists(ctx, client, bucket)
 	if err != nil {
 		return false, fmt.Errorf(errFormat, errUtils.ErrCheckBucketExist, err)
@@ -308,7 +315,7 @@ func ensureBucket(ctx context.Context, client S3ClientAPI, bucket, region string
 	}
 
 	// Create bucket.
-	if err := createBucket(ctx, client, bucket, region); err != nil {
+	if err := createBucket(ctx, client, bucket, region, opts...); err != nil {
 		return false, fmt.Errorf(errFormat, errUtils.ErrCreateBucket, err)
 	}
 	return false, nil
@@ -425,10 +432,42 @@ func S3BackendExists(
 	return bucketExists(ctx, client, config.bucket)
 }
 
+// validateBucketNamespace checks a bucket namespace against the values the AWS SDK defines.
+// The accepted values come from the SDK enum, so Atmos keeps no list of its own and
+// picks up new values when the SDK is upgraded. An empty namespace is always valid.
+func validateBucketNamespace(namespace string) error {
+	if namespace == "" {
+		return nil
+	}
+
+	valid := types.BucketNamespace("").Values()
+	names := make([]string, 0, len(valid))
+	for _, v := range valid {
+		if string(v) == namespace {
+			return nil
+		}
+		names = append(names, string(v))
+	}
+
+	return errUtils.Build(errUtils.ErrUnsupportedBucketNamespace).
+		WithExplanationf("Got '%s'", namespace).
+		WithHintf("Valid values: %s", strings.Join(names, ", ")).
+		WithHint("Remove 'provision.backend.bucket_namespace' to use the default namespace").
+		WithContext("bucket_namespace", namespace).
+		Err()
+}
+
 // createBucket creates an S3 bucket.
-func createBucket(ctx context.Context, client S3ClientAPI, bucket, region string) error {
+// A bucket namespace supplied via WithBucketNamespace is forwarded to S3 as-is.
+func createBucket(ctx context.Context, client S3ClientAPI, bucket, region string, opts ...CreateOption) error {
+	options := applyCreateOptions(opts)
+
 	input := &s3.CreateBucketInput{
 		Bucket: aws.String(bucket),
+	}
+
+	if options.bucketNamespace != "" {
+		input.BucketNamespace = types.BucketNamespace(options.bucketNamespace)
 	}
 
 	// LocationConstraint is required for all regions except us-east-1.
