@@ -2,6 +2,7 @@ package installer
 
 import "strings"
 
+// detectDEB verifies unambiguous dpkg ownership without assuming an APT repository.
 func detectDEB(d *detector) Installation {
 	if d.system.GOOS() != "linux" {
 		return Installation{}

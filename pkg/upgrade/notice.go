@@ -20,6 +20,7 @@ func PrintNotice(currentVersion, latestVersion string, hint installer.Hint) {
 	ui.Writeln(renderNotice(currentVersion, latestVersion, hint))
 }
 
+// renderNotice keeps conditions beside commands and retains the themed update box.
 func renderNotice(currentVersion, latestVersion string, hint installer.Hint) string {
 	// Get current theme styles that respect the active color profile.
 	styles := theme.GetCurrentStyles()

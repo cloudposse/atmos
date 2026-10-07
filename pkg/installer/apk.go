@@ -2,6 +2,7 @@ package installer
 
 import "strings"
 
+// detectAPK verifies local APK ownership without assuming a configured repository.
 func detectAPK(d *detector) Installation {
 	if d.system.GOOS() != "linux" {
 		return Installation{}

@@ -38,6 +38,7 @@ func (i Installation) UpgradeHint(latestVersion string) Hint {
 	return i.managerHint(version)
 }
 
+// managerHint builds guidance for an identified installation with an available manager.
 func (i Installation) managerHint(version string) Hint {
 	hint := Hint{URL: InstallURL}
 	switch i.Kind {
@@ -58,7 +59,7 @@ func (i Installation) managerHint(version string) Hint {
 		hint.Condition = "After updating the Atmos version in your aqua configuration"
 		hint.Command = "aqua install"
 	case Go:
-		hint.Command = "go install github.com/cloudposse/atmos@v" + version
+		return i.goHint(version)
 	case Native:
 		hint.Command = "atmos version install " + version
 		hint.Message = "If pinned, also update version.use, your version environment variable, or --use-version."
@@ -66,6 +67,7 @@ func (i Installation) managerHint(version string) Hint {
 	return hint
 }
 
+// packageHint keeps repository upgrades conditional and offers direct package downloads.
 func (i Installation) packageHint() Hint {
 	hint := Hint{
 		Message: "Or download and install the newer ." + string(i.Kind) + " package from the releases page.",

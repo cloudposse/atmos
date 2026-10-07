@@ -7,6 +7,7 @@ import (
 
 const brewCommand = "brew"
 
+// detectHomebrew matches Cellar layouts and probes custom Cellars only for plausible paths.
 func detectHomebrew(d *detector) Installation {
 	if d.system.GOOS() != "darwin" && d.system.GOOS() != "linux" {
 		return Installation{}
@@ -26,6 +27,7 @@ func detectHomebrew(d *detector) Installation {
 	return Installation{}
 }
 
+// homebrewRoots gathers configured, platform-default, and launcher-relative Cellars.
 func homebrewRoots(d *detector) []string {
 	roots := []string{d.system.Getenv("HOMEBREW_CELLAR")}
 	prefixes := []string{d.system.Getenv("HOMEBREW_PREFIX")}

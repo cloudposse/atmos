@@ -26,6 +26,7 @@ type fakeSystem struct {
 	info          *debug.BuildInfo
 	executableErr error
 	resolveErr    error
+	absErr        error
 	probe         func(context.Context, string, ...string) ([]byte, error)
 	calls         []string
 }
@@ -58,6 +59,9 @@ func (s *fakeSystem) EvalSymlinks(p string) (string, error) {
 }
 
 func (s *fakeSystem) Abs(p string) (string, error) {
+	if s.absErr != nil {
+		return "", s.absErr
+	}
 	if path.IsAbs(p) || (len(p) > 1 && p[1] == ':') {
 		return p, nil
 	}

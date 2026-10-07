@@ -29,19 +29,35 @@ const probeWaitDelay = 50 * time.Millisecond
 
 type osSystem struct{}
 
+// GOOS returns the platform whose installation layouts should be inspected.
 func (osSystem) GOOS() string { return runtime.GOOS }
 
+// Getenv reads package-manager environment settings as installation evidence.
+//
 //nolint:forbidigo // Third-party manager environment is OS evidence, not Atmos configuration.
-func (osSystem) Getenv(key string) string              { return os.Getenv(key) }
-func (osSystem) Executable() (string, error)           { return os.Executable() }
-func (osSystem) EvalSymlinks(p string) (string, error) { return filepath.EvalSymlinks(p) }
-func (osSystem) Abs(p string) (string, error)          { return filepath.Abs(p) }
-func (osSystem) LookPath(name string) (string, error)  { return exec.LookPath(name) }
-func (osSystem) BuildInfo() (*debug.BuildInfo, bool)   { return debug.ReadBuildInfo() }
+func (osSystem) Getenv(key string) string { return os.Getenv(key) }
 
+// Executable locates the binary running this process.
+func (osSystem) Executable() (string, error) { return os.Executable() }
+
+// EvalSymlinks resolves launcher links to their installed binary or directory.
+func (osSystem) EvalSymlinks(p string) (string, error) { return filepath.EvalSymlinks(p) }
+
+// Abs resolves a configured root against the current working directory.
+func (osSystem) Abs(p string) (string, error) { return filepath.Abs(p) }
+
+// LookPath finds a manager command without executing it.
+func (osSystem) LookPath(name string) (string, error) { return exec.LookPath(name) }
+
+// BuildInfo reads the running binary's embedded Go module metadata.
+func (osSystem) BuildInfo() (*debug.BuildInfo, bool) { return debug.ReadBuildInfo() }
+
+// UserHomeDir locates default per-user installation roots.
+//
 //nolint:forbidigo // Detection needs the actual user's installation roots, not Atmos configuration.
 func (osSystem) UserHomeDir() (string, error) { return os.UserHomeDir() }
 
+// Output executes a bounded, read-only probe with locale-independent output.
 func (osSystem) Output(ctx context.Context, executable string, args ...string) ([]byte, error) {
 	// Executable comes from LookPath; arguments are fixed, read-only probes.
 	cmd := exec.CommandContext(ctx, executable, args...)

@@ -142,6 +142,8 @@ For DEB, RPM, and APK installations, package ownership does **not** establish wh
 
 For version managers, the notification includes any required configuration step: installing a newer binary may not change the version selected by `.tool-versions`, mise or aqua configuration, or an Atmos version pin. Nix installations receive guidance to update their controlling configuration or input.
 
+For Go installations, the suggested command sets `GOBIN` to the directory containing the running executable, so it updates that installation even when `GOPATH` contains multiple entries. Windows Go hints explicitly use PowerShell syntax.
+
 If Atmos cannot identify its installation, it links to the [installation instructions](/install) without suggesting a command. If a recognized manager is unavailable on `PATH`, it provides written guidance instead. Detection uses local, read-only checks with a one-second command deadline; it does not refresh package indexes or install anything.
 
 These hints appear in automatic notifications and `atmos version --check`. The configured check frequency is unchanged; there is no additional delay based on a release's age. A release announced on GitHub may not yet be available through a third-party package repository.

@@ -1,5 +1,6 @@
 package installer
 
+// detectNative matches Atmos-managed versions under default and caller-supplied roots.
 func detectNative(d *detector) Installation {
 	cache := d.homePath(".cache")
 	if d.system.GOOS() == windowsOS {

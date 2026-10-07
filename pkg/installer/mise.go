@@ -1,5 +1,6 @@
 package installer
 
+// detectMise recognizes Atmos beneath mise's configured installation directory.
 func detectMise(d *detector) Installation {
 	fallback := joinRoot(d.dataHome(), "mise")
 	if d.system.GOOS() == windowsOS {

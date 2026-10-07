@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// detectAqua recognizes Atmos packages within aqua's configured package cache.
 func detectAqua(d *detector) Installation {
 	fallback := joinRoot(d.dataHome(), "aquaproj-aqua")
 	if d.system.GOOS() == windowsOS {
@@ -19,6 +20,7 @@ func detectAqua(d *detector) Installation {
 	return Installation{}
 }
 
+// aquaBinary accepts unpacked binaries and raw assets matching the version and platform.
 func (d *detector) aquaBinary(relative string) bool {
 	parts := strings.Split(relative, "/")
 	if len(parts) < 3 {

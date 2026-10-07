@@ -1,5 +1,6 @@
 package installer
 
+// detectASDF recognizes versioned Atmos binaries under the configured asdf root.
 func detectASDF(d *detector) Installation {
 	if d.system.GOOS() == windowsOS {
 		return Installation{}

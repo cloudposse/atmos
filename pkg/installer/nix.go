@@ -4,6 +4,7 @@ import "strings"
 
 const nixHashLength = 32
 
+// detectNix identifies Atmos store paths without inferring their controlling Nix configuration.
 func detectNix(d *detector) Installation {
 	if d.system.GOOS() == windowsOS {
 		return Installation{}

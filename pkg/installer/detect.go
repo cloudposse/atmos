@@ -41,6 +41,9 @@ type Installation struct {
 	// Manager is the available upgrade command, empty when it cannot be found.
 	Manager string
 	Global  bool
+	// goPlatformKnown and goWindows preserve the detected shell platform for Go hints.
+	goPlatformKnown bool
+	goWindows       bool
 }
 
 type options struct {
@@ -117,6 +120,7 @@ func Detect(ctx context.Context, opts ...Option) Installation {
 	return unknown
 }
 
+// detectTier returns the strongest available evidence, rejecting conflicting ownership.
 func (d *detector) detectTier(tier []detectFunc) (Installation, bool) {
 	result := Installation{Kind: Unknown, Executable: d.executable}
 	found := false
@@ -137,6 +141,7 @@ func (d *detector) detectTier(tier []detectFunc) (Installation, bool) {
 	return result, found
 }
 
+// installation records the owner and checks whether its upgrade command is available.
 func (d *detector) installation(kind Kind, manager string) Installation {
 	result := Installation{Kind: kind}
 	if manager != "" {
@@ -147,6 +152,7 @@ func (d *detector) installation(kind Kind, manager string) Installation {
 	return result
 }
 
+// probe runs a read-only manager query within the shared detection deadline.
 func (d *detector) probe(name string, args ...string) (string, bool) {
 	if d.ctx.Err() != nil {
 		return "", false

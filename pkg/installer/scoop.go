@@ -1,5 +1,6 @@
 package installer
 
+// detectScoop distinguishes user and global Scoop installations on Windows.
 func detectScoop(d *detector) Installation {
 	if d.system.GOOS() != windowsOS {
 		return Installation{}

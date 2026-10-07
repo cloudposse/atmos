@@ -13,6 +13,7 @@ func (d *detector) normalize(p string) string {
 	return path.Clean(p)
 }
 
+// root resolves an installation root to an absolute, normalized path when possible.
 func (d *detector) root(p string) string {
 	if p == "" {
 		return ""
@@ -27,6 +28,7 @@ func (d *detector) root(p string) string {
 	return d.normalize(abs)
 }
 
+// relative checks containment using a directory boundary after resolving the root.
 func (d *detector) relative(root string) (string, bool) {
 	root = d.root(root)
 	if root == "" || root == "/" || root == "." {
@@ -37,6 +39,7 @@ func (d *detector) relative(root string) (string, bool) {
 	return strings.TrimPrefix(p, prefix), strings.HasPrefix(p, prefix)
 }
 
+// envRoot selects an explicit manager root before its platform fallback.
 func (d *detector) envRoot(key, fallback string) string {
 	if value := d.system.Getenv(key); value != "" {
 		return value
@@ -44,6 +47,7 @@ func (d *detector) envRoot(key, fallback string) string {
 	return fallback
 }
 
+// homePath builds a user-relative root, leaving it unset when no home directory is known.
 func (d *detector) homePath(parts ...string) string {
 	if d.home == "" {
 		return ""
@@ -51,6 +55,7 @@ func (d *detector) homePath(parts ...string) string {
 	return joinRoot(d.normalize(d.home), parts...)
 }
 
+// joinRoot joins target-platform path components without inventing a missing root.
 func joinRoot(root string, parts ...string) string {
 	if root == "" {
 		return ""
@@ -59,10 +64,12 @@ func joinRoot(root string, parts ...string) string {
 	return path.Join(append([]string{strings.ReplaceAll(root, `\`, "/")}, parts...)...)
 }
 
+// dataHome selects the XDG data directory or its conventional user-local default.
 func (d *detector) dataHome() string {
 	return d.envRoot("XDG_DATA_HOME", d.homePath(".local", "share"))
 }
 
+// versionedBinary accepts a binary directly under a version or its bin directory.
 func (d *detector) versionedBinary(root string) bool {
 	rel, ok := d.relative(root)
 	if !ok {
@@ -76,6 +83,7 @@ func (d *detector) versionedBinary(root string) bool {
 	return len(parts) == 2 && parts[0] != "" && d.isBinary(parts[1])
 }
 
+// isBinary checks the Atmos executable name for the detected platform.
 func (d *detector) isBinary(name string) bool {
 	return name == binaryName || (d.system.GOOS() == windowsOS && name == "atmos.exe")
 }

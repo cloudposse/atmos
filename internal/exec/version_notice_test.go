@@ -31,6 +31,34 @@ func TestVersionExecuteUsesInjectedNotice(t *testing.T) {
 	assert.Equal(t, "9999.0.0", notified)
 }
 
+func TestVersionDefaultNotice(t *testing.T) {
+	config := &schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()}
+	config.Toolchain.InstallPath = "tools"
+	for _, tt := range []struct {
+		name   string
+		config *schema.AtmosConfiguration
+	}{
+		{"no configuration", nil},
+		{"relative native root", config},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			streams := &vendorModelTestStreams{stdout: &stdout, stderr: &stderr}
+			ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+			require.NoError(t, err)
+			ui.InitFormatter(ioCtx)
+			t.Cleanup(ui.Reset)
+			v := NewVersionExec(tt.config)
+			v.printMessageToUpgradeToAtmosLatestRelease("9999.0.0")
+			assert.Empty(t, stdout.String())
+			assert.Contains(t, stderr.String(), "Update available!")
+			assert.Contains(t, stderr.String(), "9999.0.0")
+			assert.Contains(t, stderr.String(), "https://atmos.tools/install")
+			assert.NotContains(t, stderr.String(), "Run:")
+		})
+	}
+}
+
 func TestVersionStructuredOutputDoesNotNotify(t *testing.T) {
 	for _, format := range []string{"json", "yaml"} {
 		t.Run(format, func(t *testing.T) {

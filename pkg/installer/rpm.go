@@ -2,6 +2,7 @@ package installer
 
 import "strings"
 
+// detectRPM verifies local RPM ownership and selects an available upgrade manager.
 func detectRPM(d *detector) Installation {
 	if d.system.GOOS() != "linux" {
 		return Installation{}
