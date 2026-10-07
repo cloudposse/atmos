@@ -141,14 +141,16 @@ These are different things and the names must not be conflated in docs:
 - The local renderer is the [generic provider](../providers/generic.md).
 - GitHub endpoints and permissions are in the [GitHub provider PRD](../providers/github/provider.md).
 
-## Out of scope (follow-ups)
+## Remaining implementation work
 
-- YAML step wrappers, so non-script steps (`type: ci.comment`, and similar) reach the same seam without a script ([#3299](https://github.com/cloudposse/atmos/issues/3299)).
-- Container image summary through the same path, so image build and push steps report through `ci.summary` ([#3300](https://github.com/cloudposse/atmos/issues/3300)).
-- The `ci.summary.template` and `ci.comments.template` settings applied to script calls, so teams can standardize layout for script-authored reports ([#3301](https://github.com/cloudposse/atmos/issues/3301)).
-- A laptop opt-in to post for real, for debugging a comment against a draft pull request ([#3302](https://github.com/cloudposse/atmos/issues/3302)).
-- The `pr.fork` field populated from the event payload, so scripts can tell a fork pull request apart without relying on the event name ([#3305](https://github.com/cloudposse/atmos/issues/3305)).
-- Housekeeping found during implementation: dead `providers/github/loggroup.go` ([#3303](https://github.com/cloudposse/atmos/issues/3303)), plugin-local gating copies ([#3304](https://github.com/cloudposse/atmos/issues/3304)), and the generic provider reading `ATMOS_CI_OUTPUT`/`ATMOS_CI_SUMMARY` at init instead of call time ([#3306](https://github.com/cloudposse/atmos/issues/3306)).
+This implementation has not merged into `main`. Resolve required fixes in the active PR stack and keep remaining work here.
+
+- YAML step wrappers, so non-script steps (`type: ci.comment`, and similar) reach the same seam without a script.
+- Container image summary through the same path, so image build and push steps report through `ci.summary`.
+- The `ci.summary.template` and `ci.comments.template` settings applied to script calls, so teams can standardize layout for script-authored reports.
+- A laptop opt-in to post for real, for debugging a comment against a draft pull request.
+- The `pr.fork` field populated from the event payload, so scripts can tell a fork pull request apart without relying on the event name.
+- Housekeeping found during implementation: dead `providers/github/loggroup.go`, plugin-local gating copies, and the generic provider reading `ATMOS_CI_OUTPUT`/`ATMOS_CI_SUMMARY` at init instead of call time.
 
 ## Testing
 

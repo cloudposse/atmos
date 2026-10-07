@@ -227,7 +227,9 @@ ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, 
 - **Include negative-path tests for recovery logic:** whenever a test verifies that a recovery/fallback triggers under condition X, add a corresponding test that verifies the recovery does NOT trigger when condition X is absent (e.g., mismatched workspace name).
 
 ### Follow-up Tracking (MANDATORY)
-When a PR defers work to a follow-up (e.g., migration, cleanup, refactor), **open a GitHub issue and link it by number** in the blog post, roadmap, and/or PR description before merging. Blog posts with "a follow-up issue will..." with no `#number` are incomplete — the work will never be tracked.
+**NEVER create GitHub issues for features or implementations that have not merged into `main`.** Fix bugs, incomplete behavior, and review findings in the active PR or PR stack. Keep remaining implementation work in its PRD or task list; do not turn it into public follow-up issues or declare the feature complete while required work remains.
+
+For features already merged into `main`, track genuinely deferred work in a GitHub issue and link it from the relevant documentation. This requirement does not apply to unmerged implementations.
 
 ### Mock Generation (MANDATORY)
 Use `go.uber.org/mock/mockgen` with `//go:generate` directives. Never manual mocks.
