@@ -33,6 +33,15 @@ The following exact commands ran in a disposable copy of `tests/fixtures/scenari
 - Put the Kubernetes `--all-namespaces` option after `get secrets`.
 - Split mutually exclusive `output` examples into separate Starlark blocks and document project-relative traceback display.
 
+- CI fixture correction (2026-10-06): decode script-provenance test inputs as full
+  `components.terraform.mock.hooks.check` manifests with the appropriate hook
+  `kind` and `type`. The former bare `with` fragments discarded the type before
+  the loader ran, even though the test supplied it later to the hook engine.
+  Retain every source-path, load-resolution, templating, and inheritance assertion.
+- Add a negative check that hook-shaped `with` data under `vars`, `settings`,
+  `env`, and `metadata` keeps exactly its declared fields. The production loader
+  and its plain-data protection are unchanged.
+
 ## Validation
 
 - Reproduced hook environment/directory, composed include, and per-call environment failures twice before fixing them. Real CLI repetitions pass after the changes, including component subprocesses in direct and parallel custom-command steps.
@@ -46,6 +55,14 @@ The following exact commands ran in a disposable copy of `tests/fixtures/scenari
   passes after regenerating the two snapshots through the CLI test harness.
   The test-case schema validation also passes.
 - The full native Helm lifecycle fixture passes against an isolated local k3s emulator in 277.8 seconds, using one regular fresh binary named `atmos` for the outer command, nested shell commands, and `ATMOS_CLI_PATH`. Verified local/public charts, hook ordering and cleanup, CRDs, job/readiness modes, timeout cleanup, failed-install cleanup, failed-upgrade rollback, dependency ordering, deployed secrets, console/GitHub-summary masking, ingress upgrade, delete dry-run, deletion, and emulator teardown. The default Helm apply policy is unchanged.
+
+- Reproduced the missing-provenance and empty-source-path failures locally before
+  correcting the fixture context. The existing hook provenance tests then passed
+  (2.051 seconds), as did the focused utils provenance and tag-walker tests
+  (0.991 seconds). The new ordinary-data regression passed (1.434 seconds).
+- `GOMAXPROCS=4 go test -race -shuffle=on -p 2 ./pkg/hooks ./pkg/utils -count=1`
+  passed for both complete packages: hooks in 26.893 seconds and utils in
+  8.925 seconds.
 
 ## Follow-ups
 
