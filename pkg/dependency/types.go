@@ -73,3 +73,35 @@ type Filter struct {
 	// pulls in, measured from the nearest filtered node (0 = unlimited).
 	DependentDepth int
 }
+
+// SelectionFilter describes a selector-aware graph filter. It separates the
+// kept selection (which dependencies expand from) from the unfiltered selection
+// (which dependents expand from) and lets the caller drop reached dependents
+// that do not match additional selectors.
+type SelectionFilter struct {
+	// Seeds is the kept selection. Dependencies expand from here, unfiltered.
+	Seeds []string
+
+	// DependentSeeds is the unfiltered selection that dependents expand from.
+	// A nil slice means Seeds. Entries that are not in Seeds are treated as
+	// dropped intermediates: they are never included, but dependents reached
+	// through them are still considered and ordering is contracted around them.
+	DependentSeeds []string
+
+	// IncludeDependencies pulls in dependencies of Seeds without applying KeepDependent.
+	IncludeDependencies bool
+
+	// DependencyDepth bounds how many dependency levels are pulled in (0 = unlimited).
+	DependencyDepth int
+
+	// IncludeDependents pulls in dependents of DependentSeeds that pass KeepDependent.
+	IncludeDependents bool
+
+	// DependentDepth bounds how many dependent levels are walked, counted on the
+	// full graph including dropped intermediates (0 = unlimited).
+	DependentDepth int
+
+	// KeepDependent reports whether a reached dependent is included. A nil
+	// function keeps every reached dependent.
+	KeepDependent func(*Node) bool
+}
