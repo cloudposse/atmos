@@ -253,6 +253,58 @@ func TestStreamingMaskWriter_RegexPatternsHoldUnfinishedLine(t *testing.T) {
 	assert.Equal(t, "10%\r20%\r", rec.String())
 }
 
+func TestStreamingMaskWriter_LongRegexSecrets(t *testing.T) {
+	payload := strings.Repeat("x", 12*1024)
+	tests := []struct {
+		name    string
+		pattern string
+		chunks  []string
+	}{
+		{
+			name:    "long token before newline",
+			pattern: `Bearer [A-Za-z0-9]+`,
+			chunks:  []string{"Bearer " + payload, "\n"},
+		},
+		{
+			name:    "split prefix and multiple token chunks",
+			pattern: `Bearer [A-Za-z0-9]+`,
+			chunks:  []string{"Bear", "er " + payload[:5000], payload[5000:9000], payload[9000:], "\n"},
+		},
+		{
+			name:    "flush without newline",
+			pattern: `Bearer [A-Za-z0-9]+`,
+			chunks:  []string{"Bearer " + payload[:7000], payload[7000:]},
+		},
+		{
+			name:    "pattern matches only after its closing delimiter",
+			pattern: `BEGIN [A-Za-z0-9]+ END`,
+			chunks:  []string{"BEGIN " + payload[:5000], payload[5000:], " END", "\n"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newMasker(&Config{})
+			require.NoError(t, m.RegisterPattern(tt.pattern))
+			rec := &recordingWriter{}
+			sw := newTestStreamingWriter(m, rec)
+			_, err := sw.Write([]byte("ordinary output\n"))
+			require.NoError(t, err)
+			for _, chunk := range tt.chunks {
+				n, err := sw.Write([]byte(chunk))
+				require.NoError(t, err)
+				require.Equal(t, len(chunk), n)
+				require.Zero(t, strings.Count(rec.String(), "x"), "no token bytes may be emitted, even before Flush")
+			}
+			require.NoError(t, sw.Flush())
+			want := "ordinary output\n" + MaskReplacement
+			if strings.HasSuffix(tt.chunks[len(tt.chunks)-1], "\n") {
+				want += "\n"
+			}
+			assert.Equal(t, want, rec.String())
+		})
+	}
+}
+
 func TestStreamingMaskWriter_WithoutLineHold(t *testing.T) {
 	m := newMasker(&Config{})
 	m.RegisterValue("s3cr3t-token-value")
@@ -412,4 +464,61 @@ func BenchmarkStreamingMaskWriter(b *testing.B) {
 			_, _ = w.Write(chunk)
 		}
 	})
+}
+
+func TestStreamingMaskWriter_BoundedCrossLineRegex(t *testing.T) {
+	tests := []struct{ name, pattern, secret string }{
+		{"newline", `secret\nvalue`, "secret\nvalue"},
+		{"carriage return", `secret\rvalue`, "secret\rvalue"},
+		{"CRLF", `secret\r\nvalue`, "secret\r\nvalue"},
+		{"class", `secret[\s]value`, "secret\nvalue"},
+		{"dot", `secret.value`, "secret\rvalue"},
+		{"dot all repetition", `(?s)secret.{1,3}value`, "secret\r\nvalue"},
+		{"negated class", `secret[^x]{1,2}value`, "secret\nvalue"},
+		{"unicode and alternation", `(?:秘密|x)\n[🌍🌎]{1,2}`, "秘密\n🌍🌎"},
+		{"case folded unicode", `(?i)k\nvalue`, "K\nvalue"},
+		{"line anchors", `(?m)^secret\nvalue$`, "secret\nvalue"},
+		{"word boundaries", `\bsecret\nvalue\b`, "secret\nvalue"},
+		{"optional segment", `secret(?:\r)?\nvalue`, "secret\nvalue"},
+		{"Unicode literal widths", `é秘🌍\nvalue`, "é秘🌍\nvalue"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newMasker(&Config{})
+			require.NoError(t, m.RegisterPattern(tt.pattern))
+			input := "safe line\n" + tt.secret + "\n" + strings.Repeat("after\n", 20)
+			want := "safe line\n" + MaskReplacement + "\n" + strings.Repeat("after\n", 20)
+			for split := 0; split <= len(input); split++ {
+				assert.Equal(t, want, streamInChunks(t, m, input, split), "split offset %d", split)
+			}
+			rec := &recordingWriter{}
+			sw := newTestStreamingWriter(m, rec)
+			for _, b := range []byte(input) {
+				_, err := sw.Write([]byte{b})
+				require.NoError(t, err)
+			}
+			assert.Contains(t, rec.String(), MaskReplacement, "a complete secret is masked before Flush")
+			assert.Contains(t, rec.String(), "after\n", "completed safe output is released before Flush")
+			require.NoError(t, sw.Flush())
+			assert.Equal(t, want, rec.String())
+		})
+	}
+}
+
+func TestStreamingMaskWriter_MixedCrossLineAndUnboundedLinePatterns(t *testing.T) {
+	m := newMasker(&Config{})
+	require.NoError(t, m.RegisterPattern(`secret\nvalue`))
+	require.NoError(t, m.RegisterPattern(`BEGIN [a-z]+ END`))
+	payload := strings.Repeat("x", 12*1024)
+	rec := &recordingWriter{}
+	sw := newTestStreamingWriter(m, rec)
+	for _, part := range []string{"ready\n", "BEGIN " + payload[:5000], payload[5000:], " END\nsecret\n", "value\n", strings.Repeat("done\n", 20)} {
+		_, err := sw.Write([]byte(part))
+		require.NoError(t, err)
+		assert.NotContains(t, rec.String(), "x")
+		assert.NotContains(t, rec.String(), "secret")
+	}
+	assert.Contains(t, rec.String(), "done\n", "bounded cross-line support must keep streaming")
+	require.NoError(t, sw.Flush())
+	assert.Equal(t, "ready\n"+MaskReplacement+"\n"+MaskReplacement+"\n"+strings.Repeat("done\n", 20), rec.String())
 }

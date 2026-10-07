@@ -164,8 +164,12 @@ func (p *Processor) Merge(base, ours, theirs, fileName string) (*merge.MergeResu
 
 // mergeFile attempts a 3-way merge for existing files.
 //
+// The caller must pass already-rendered content in the file's Content field: it is used as-is
+// as the "theirs" side of the merge. The sole caller (handleExistingFile) renders the template
+// with the scaffold's delimiters, config, and user values first, so mergeFile never re-renders.
+//
 //nolint:revive,funlen // function-length: merge logic requires detailed error handling
-func (p *Processor) mergeFile(existingPath string, file File, targetPath string) error {
+func (p *Processor) mergeFile(existingPath string, file *File) error {
 	// Read existing file content (user's version - "ours")
 	existingContent, err := os.ReadFile(existingPath)
 	if err != nil {
@@ -197,7 +201,7 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 	}
 
 	// Determine base content for 3-way merge
-	baseContent, shouldSkip, err := p.determineBaseContent(file, existingPath)
+	baseContent, shouldSkip, err := p.determineBaseContent(*file, existingPath)
 	if err != nil {
 		return err
 	}
@@ -205,27 +209,11 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 		return nil
 	}
 
-	// Process new template content to get "theirs" version
-	newContent := file.Content
-	if file.IsTemplate {
-		processedContent, err := p.ProcessTemplateWithDelimiters(newContent, targetPath, nil, nil, []string{defaultLeftDelimiter, defaultRightDelimiter})
-		if err != nil {
-			return errUtils.Build(errUtils.ErrTemplateExecution).
-				WithExplanationf("Failed to process template during merge: `%s`", file.Path).
-				WithHint("Check template syntax").
-				WithHint("Verify all variables are defined").
-				WithContext("file_path", file.Path).
-				WithExitCode(1).
-				Err()
-		}
-		newContent = processedContent
-	}
-
 	// Perform 3-way merge
 	// - base: original version from git (or template if no git)
 	// - ours: user's current version (existingContent)
-	// - theirs: new template version (newContent after processing)
-	result, err := p.merger.Merge(baseContent, string(existingContent), newContent, file.Path)
+	// - theirs: new template version (file.Content, already rendered by the caller)
+	result, err := p.merger.Merge(baseContent, string(existingContent), file.Content, file.Path)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrThreeWayMerge).
 			WithExplanationf("Failed to perform 3-way merge for file: `%s`", file.Path).

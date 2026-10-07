@@ -135,15 +135,17 @@ func (m *masker) RegisterPattern(pattern string) error {
 		return fmt.Errorf("invalid regex pattern: %w", err)
 	}
 
-	m.RegisterRegex(re)
-	return nil
+	return m.RegisterRegex(re)
 }
 
-func (m *masker) RegisterRegex(pattern *regexp.Regexp) {
+func (m *masker) RegisterRegex(pattern *regexp.Regexp) error {
 	defer perf.Track(nil, "io.masker.RegisterRegex")()
 
 	if pattern == nil {
-		return
+		return nil
+	}
+	if _, err := maskPatternSpan(pattern); err != nil {
+		return err
 	}
 
 	m.mu.Lock()
@@ -151,6 +153,7 @@ func (m *masker) RegisterRegex(pattern *regexp.Regexp) {
 
 	m.patterns = append(m.patterns, pattern)
 	m.snap = nil
+	return nil
 }
 
 func (m *masker) RegisterAWSAccessKey(accessKeyID string) {
@@ -165,7 +168,7 @@ func (m *masker) RegisterAWSAccessKey(accessKeyID string) {
 	// If this looks like an AWS access key, also mask the paired secret when labeled.
 	if len(accessKeyID) == awsAccessKeyIDLength && (strings.HasPrefix(accessKeyID, "AKIA") || strings.HasPrefix(accessKeyID, "ASIA")) {
 		// Match common labeling to reduce false positives.
-		_ = m.RegisterPattern(`(?i)\bAWS_SECRET_ACCESS_KEY\b[=:]\s*[A-Za-z0-9/+=]{40}`)
+		_ = m.RegisterPattern(`(?i)\bAWS_SECRET_ACCESS_KEY\b[=:][ \t]*[A-Za-z0-9/+=]{40}`)
 	}
 }
 

@@ -60,9 +60,9 @@ metadata.labels) -- see 'atmos vendor pull --help' for the distinction between -
 // the list of component names to diff.
 func resolveDiffComponents(cmd *cobra.Command, v *viper.Viper) ([]string, error) {
 	component := v.GetString("component")
-	filterTags := splitTags(v.GetString("tags"))
+	filterTags := splitTags(v.GetString(vendorTagsViperKey))
 	stack := v.GetString("stack")
-	labels, err := pkgtags.ParseLabelsFlag(v.GetString("labels"))
+	labels, err := pkgtags.ParseLabelsFlag(v.GetString(vendorLabelsViperKey))
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +153,7 @@ func diffManyComponents(v *viper.Viper, components []string) error {
 	return errors.Join(errs...)
 }
 
+// init registers the vendor diff flags with their namespaced selector Viper keys, then attaches the command to vendor.
 func init() {
 	vendorDiffParser = flags.NewStandardParser(
 		flags.WithStringFlag("component", "c", "", "Component to diff"),
@@ -162,8 +163,12 @@ func init() {
 		flags.WithStringFlag("diff-file", "", "", "Restrict the diff to a single file path within the component"),
 		flags.WithStringFlag("file", "", "", "Vendor manifest file (default: ./vendor.yaml)"),
 		flags.WithStringFlag("tags", "", "", "Diff every component whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
+		flags.WithEnvVars(vendorTagsFlagName, envVendorTags),
+		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
 		flags.WithStringFlag("stack", "s", "", "Diff every component belonging to the specified stack"),
-		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
+		flags.WithStringFlag(vendorLabelsFlagName, "", "", vendorLabelsFlagHelp),
+		flags.WithEnvVars(vendorLabelsFlagName, envVendorLabels),
+		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
 	)
 	vendorDiffParser.RegisterFlags(vendorDiffCmd)
 	if err := vendorDiffParser.BindToViper(viper.GetViper()); err != nil {

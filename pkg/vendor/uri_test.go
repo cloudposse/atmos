@@ -1,11 +1,22 @@
 package vendor
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestNativeAbsolutePathsAreLocal(t *testing.T) {
+	// Windows drive paths must stay local even with forward slashes and dots.
+	dir := filepath.Join(t.TempDir(), "project.git", "100% local")
+	for _, path := range []string{dir, filepath.ToSlash(dir)} {
+		assert.True(t, HasLocalPathPrefix(path), path)
+		assert.True(t, IsLocalPath(path), path)
+		assert.Equal(t, path, NormalizeURI(path))
+	}
+}
 
 func TestHasLocalPathPrefix(t *testing.T) {
 	tests := []struct {

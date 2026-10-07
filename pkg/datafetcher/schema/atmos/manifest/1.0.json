@@ -444,7 +444,7 @@
               "x-atmos-replacement": "dependencies.components"
             },
             "provision": {
-              "$ref": "#/definitions/provision"
+              "$ref": "#/definitions/terraform_provision"
             },
             "required_version": {
               "$ref": "#/definitions/required_version"
@@ -459,6 +459,11 @@
               "$ref": "#/definitions/terraform_flags"
             }
           },
+          "allOf": [
+            {
+              "$ref": "#/definitions/terraform_provision_backend_type_scope"
+            }
+          ],
           "required": []
         }
       ]
@@ -566,7 +571,7 @@
               "x-atmos-replacement": "dependencies.components"
             },
             "provision": {
-              "$ref": "#/definitions/provision"
+              "$ref": "#/definitions/terraform_provision"
             },
             "source": {
               "$ref": "#/definitions/source"
@@ -584,6 +589,11 @@
               "$ref": "#/definitions/terraform_flags"
             }
           },
+          "allOf": [
+            {
+              "$ref": "#/definitions/terraform_provision_backend_type_scope"
+            }
+          ],
           "required": []
         }
       ]
@@ -1838,6 +1848,75 @@
             }
           },
           "required": []
+        }
+      ]
+    },
+    "terraform_provision_backend_type_scope": {
+      "title": "terraform_provision_backend_type_scope",
+      "description": "Rejects provision.backend.bucket_namespace when backend_type explicitly selects a backend other than s3. A backend_type that is absent or an !include is not checked, because the effective backend cannot be determined from this manifest alone.",
+      "if": {
+        "properties": {
+          "backend_type": {
+            "type": "string",
+            "not": {
+              "anyOf": [
+                {
+                  "const": "s3"
+                },
+                {
+                  "pattern": "^!include"
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "backend_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "provision": {
+            "properties": {
+              "backend": {
+                "properties": {
+                  "bucket_namespace": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "terraform_provision": {
+      "title": "terraform_provision",
+      "description": "Provision section for Terraform components: the shared provision settings plus state backend provisioning settings",
+      "allOf": [
+        {
+          "$ref": "#/definitions/provision"
+        },
+        {
+          "properties": {
+            "backend": {
+              "description": "Terraform state backend provisioning settings",
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "bucket_namespace": {
+                      "type": "string",
+                      "description": "S3 only. Sent to the S3 CreateBucket call as BucketNamespace when Atmos creates the state bucket. Valid values are defined by Amazon S3 (global or account-regional); other values are rejected before any AWS call. Not written to the generated Terraform backend configuration. Rejected when backend_type is set to a different backend type."
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              ]
+            }
+          }
         }
       ]
     },
