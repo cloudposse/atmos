@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.yaml.in/yaml/v3"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/profiler"
@@ -20,8 +21,10 @@ type AtmosSectionMapType = map[string]any
 // DeferredEvaluationContext holds invocation-local evaluated values, independently
 // of the authentication implementation. The resolver identifies the invocation.
 type DeferredEvaluationContext struct {
-	Manager any
-	Values  sync.Map
+	Manager      any
+	Values       sync.Map
+	StoreValues  sync.Map
+	StoreFlights singleflight.Group
 }
 
 // DescribeSettings contains settings for the describe command output.
@@ -189,6 +192,7 @@ type AtmosConfiguration struct {
 	TrackProvenance           bool                   `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
 	Toolchain                 Toolchain              `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
 	Git                       GitConfig              `yaml:"git,omitempty" json:"git,omitempty" mapstructure:"git"`
+	Init                      InitConfig             `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
 	Devcontainer              map[string]any         `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
 	Profiles                  ProfilesConfig         `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
 	Metadata                  ConfigMetadata         `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
@@ -251,6 +255,17 @@ func (m *AtmosConfiguration) SetSchemaRegistry(key string, registry SchemaRegist
 		m.Schemas = make(map[string]any)
 	}
 	m.Schemas[key] = registry
+}
+
+// SetResourcePath stores a ResourcePath under the given key, lazily initializing the
+// Schemas map when it is nil. Like SetSchemaRegistry, it exists so flag and environment
+// variable overrides of the `jsonschema`, `opa` and `cue` base paths do not panic with
+// "assignment to entry in nil map" when the loaded `atmos.yaml` has no `schemas:` section.
+func (m *AtmosConfiguration) SetResourcePath(key string, resourcePath ResourcePath) {
+	if m.Schemas == nil {
+		m.Schemas = make(map[string]any)
+	}
+	m.Schemas[key] = resourcePath
 }
 
 func (m *AtmosConfiguration) GetResourcePath(key string) ResourcePath {
@@ -420,6 +435,13 @@ type Toolchain struct {
 	Registries      []ToolchainRegistry       `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
 	Aliases         map[string]string         `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
 	Proxies         map[string]ToolchainProxy `yaml:"proxies,omitempty" json:"proxies,omitempty" mapstructure:"proxies"`
+	// Install controls which tools Atmos installs automatically when a command, workflow,
+	// hook, or component run needs them: `never` installs nothing, `declared` installs only
+	// explicit `dependencies.tools` (and, for workflows, every `.tool-versions` tool), `auto`
+	// (default since 2026-10-09; a project pinned to an earlier edition gets `declared`
+	// restored) also installs a component's own executable when `.tool-versions` pins it, and
+	// `always` installs every `.tool-versions` tool for every run.
+	Install ToolchainInstall `yaml:"install,omitempty" json:"install,omitempty" mapstructure:"install" jsonschema:"enum=,enum=never,enum=declared,enum=auto,enum=always"`
 }
 
 // ToolchainProxy exposes a toolchain binary under a command name. The tool is
@@ -1639,6 +1661,7 @@ type Workflows struct {
 }
 
 type Logs struct {
+	Color *bool  `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
 	File  string `yaml:"file" json:"file" mapstructure:"file"`
 	Level string `yaml:"level" json:"level" mapstructure:"level"`
 }
@@ -1755,6 +1778,7 @@ type ArgsAndFlagsInfo struct {
 	RedirectStdErr            string
 	LogsLevel                 string
 	LogsFile                  string
+	LogsColor                 string
 	SettingsListMergeStrategy string
 	Query                     string
 	Affected                  bool
@@ -2040,6 +2064,7 @@ type ConfigAndStacksInfo struct {
 	RedirectStdErr            string
 	LogsLevel                 string
 	LogsFile                  string
+	LogsColor                 string
 	SettingsListMergeStrategy string
 	Query                     string
 	AtmosConfigFilesFromArg   []string
@@ -2372,6 +2397,10 @@ type Dependent struct {
 	Dependents           []Dependent         `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
 	IncludedInDependents bool                `yaml:"included_in_dependents" json:"included_in_dependents" mapstructure:"included_in_dependents"`
 	Settings             AtmosSectionMapType `yaml:"settings" json:"settings" mapstructure:"settings"`
+	// Metadata is the dependent component's `metadata` section. It is only populated by
+	// `describe affected --include-dependents` so the `--tags` / `--labels` selectors can be applied to
+	// dependents, and is never serialized.
+	Metadata AtmosSectionMapType `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // Settings

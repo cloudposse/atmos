@@ -19,6 +19,8 @@ type InitGitOptions struct {
 	TargetPath      string
 	TemplateName    string
 	TemplateVersion string
+	// AllowEmptyCommit supports directory copies containing only empty directories.
+	AllowEmptyCommit bool
 }
 
 // InitGitRepository initializes targetPath as a git repository and creates an
@@ -48,6 +50,7 @@ func InitGitRepository(opts InitGitOptions) (skipped bool, headSHA string, err e
 		return false, "", fmt.Errorf("%w: stage generated project files: %w", errUtils.ErrGitArtifactWrite, err)
 	}
 	commitHash, err := wt.Commit(initialCommitMessage(opts.TemplateName, opts.TemplateVersion), &git.CommitOptions{
+		AllowEmptyCommits: opts.AllowEmptyCommit,
 		Author: &object.Signature{
 			Name:  "Atmos",
 			Email: gitInitAuthorEmail,

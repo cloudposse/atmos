@@ -523,7 +523,9 @@ func TestDockerRuntime_RemoteRegistryCache_Integration(t *testing.T) {
 
 	contextDir := t.TempDir()
 	dockerfile := filepath.Join(contextDir, "Dockerfile")
-	require.NoError(t, os.WriteFile(dockerfile, []byte("FROM mirror.gcr.io/library/busybox:1.36\nRUN echo cached-layer > /cache-proof\n"), 0o600))
+	// A copied layer exercises registry caching without resolving an external base image.
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "cache-proof"), []byte("cached-layer\n"), 0o600))
+	require.NoError(t, os.WriteFile(dockerfile, []byte("FROM scratch\nCOPY cache-proof /cache-proof\n"), 0o600))
 	cacheRef := "cache-registry:5000/atmos-buildx-cache:latest"
 	buildkitdConfig := filepath.Join(contextDir, "buildkitd.toml")
 	require.NoError(t, os.WriteFile(buildkitdConfig, []byte(`[registry."cache-registry:5000"]
@@ -568,7 +570,8 @@ func TestDockerRuntime_RemoteRegistryCache_Integration(t *testing.T) {
 	importArgs = append(importArgs[:2], append([]string{"--progress=plain"}, importArgs[2:]...)...)
 	output, err := exec.Command("docker", importArgs...).CombinedOutput()
 	require.NoError(t, err, "Buildx cache import failed:\n%s", output)
-	assert.Contains(t, string(output), "CACHED", "second build should reuse the exported registry cache")
+	assert.Regexp(t, `(?m)#[0-9]+ \[1/1\] COPY cache-proof /cache-proof\r?\n#[0-9]+ CACHED`, string(output),
+		"second builder should reuse the copied layer from the exported registry cache")
 }
 
 func TestDockerRuntime_Logs_Integration(t *testing.T) {

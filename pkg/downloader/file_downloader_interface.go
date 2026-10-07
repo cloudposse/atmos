@@ -29,9 +29,8 @@ type FileDownloader interface {
 	// Uses temp file + fsync + atomic rename to prevent partial downloads.
 	FetchAtomic(src, dest string, mode ClientMode, timeout time.Duration) error
 
-	// FetchWithMetadata fetches like Fetch, additionally returning best-effort HTTP cache
-	// metadata (ETag/Last-Modified) captured from the response. It is empty for non-HTTP
-	// sources (git, OCI, local) or when the underlying client doesn't expose any.
+	// FetchWithMetadata fetches like Fetch, returning Git commit or HTTP cache
+	// metadata captured during the download when the underlying client exposes it.
 	FetchWithMetadata(src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error)
 }
 

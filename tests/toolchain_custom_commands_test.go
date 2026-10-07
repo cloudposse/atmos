@@ -408,6 +408,16 @@ func buildAtmosBinary(t *testing.T) string {
 	return sharedRunner.BinaryPath()
 }
 
+// sharedAtmosRunner returns the package-level runner built by buildAtmosBinary.
+// Tests must not call Cleanup on it: every runner in this process builds into the
+// same per-process directory, so cleaning one up deletes the binary for all tests.
+func sharedAtmosRunner(t *testing.T) *testhelpers.AtmosRunner {
+	t.Helper()
+
+	buildAtmosBinary(t)
+	return sharedRunner
+}
+
 // getBinaryPath constructs the expected binary path for an installed tool.
 func getBinaryPath(toolsDir, owner, repo, version, binaryName string) string {
 	// Use the centralized function for Windows .exe extension handling.

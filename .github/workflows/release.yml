@@ -45,7 +45,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8293d764b32a1211aacc40e24328f13e8fc5cf32 # main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@281621d6f2e63a883ea884559ffdbb4895c1bd98 # main
     with:
       publish: false
       format: binary
@@ -73,7 +73,7 @@ jobs:
     # OPENAI_API_KEY secret is configured, otherwise CodeRabbit's summary or
     # a truncated description - and rewrites the release (contents: write)
     # as collapsible per-PR notes. It never fails the release: any error is
-    # logged and the skeleton stays (see magefiles/ci_release_notes.go).
+    # logged and the skeleton stays (see magefiles/release/release_notes.go).
     permissions:
       contents: write
       pull-requests: read

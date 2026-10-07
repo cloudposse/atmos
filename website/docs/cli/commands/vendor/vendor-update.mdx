@@ -112,11 +112,11 @@ sources:
   <dt>`--component` / `-c` (string, repeatable)</dt>
   <dd>Update only these components. Repeat the flag to select more than one (`--component vpc --component eks`). Cannot be combined with `--stack`/`--labels`. Composes with `--tags` (narrows to these components only if their declared `vendor.yaml` tags also match).</dd>
   <dt>`--tags` (string)</dt>
-  <dd>Update only components whose `vendor.yaml` source declares any of these comma-separated tags. An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.</dd>
+  <dd>Update only components whose `vendor.yaml` source declares any of these comma-separated tags. An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.<br/>Environment variable: `ATMOS_VENDOR_TAGS`</dd>
   <dt>`--stack` / `-s` (string)</dt>
   <dd>Update only components belonging to the specified stack. Composes with `--labels` to narrow further, and with `--tags` to filter by declared source tags. Cannot be combined with an explicit `--component`.</dd>
   <dt>`--labels` (string)</dt>
-  <dd>Update only components whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs (resolved the same way as `--stack`). Composes with `--stack` and `--tags`. Cannot be combined with an explicit `--component`.</dd>
+  <dd>Update only components whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs (resolved the same way as `--stack`). Composes with `--stack` and `--tags`. Cannot be combined with an explicit `--component`.<br/>Environment variable: `ATMOS_VENDOR_LABELS`</dd>
   <dt>`--group` (string)</dt>
   <dd>Update only the named `vendor.update.groups` selection.</dd>
   <dt>`--pull-request`</dt>
