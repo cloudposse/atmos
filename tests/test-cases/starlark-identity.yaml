@@ -1,0 +1,135 @@
+# yaml-language-server: $schema=schema.json
+# A stack name derived from a !starlark value cannot be computed: the program runs only after the
+# stack is known. Every command fails with one clear error instead of using the encoded source as
+# the stack name. The failing manifest lives in its own fixture because a single such manifest makes
+# `list stacks` and `describe stacks` fail for every stack in the project.
+tests:
+  - name: starlark identity list stacks fails clearly
+    enabled: true
+    snapshot: false
+    description: A name_template input that is !starlark must fail list stacks, not print the encoded source as a stack.
+    workdir: fixtures/scenarios/starlark-identity/
+    command: atmos
+    args:
+      - list
+      - stacks
+    expect:
+      exit_code: 1
+      stdout:
+        - !not 'atmos-starlark-source'
+      stderr:
+        - 'stack identity cannot be computed'
+
+  - name: starlark identity describe stacks fails clearly
+    enabled: true
+    snapshot: false
+    description: describe stacks names the manifest and the field instead of using the encoded source as a map key.
+    workdir: fixtures/scenarios/starlark-identity/
+    command: atmos
+    args:
+      - describe
+      - stacks
+    expect:
+      exit_code: 1
+      stdout:
+        - !not 'atmos-starlark-source'
+      stderr:
+        - 'stack identity cannot be computed'
+        - 'deploy/computed-stage'
+        - 'vars\.stage'
+
+  - name: starlark identity describe component fails clearly
+    enabled: true
+    snapshot: false
+    description: Selecting the computed stack by its logical name reports the identity error, not "Could not find the component".
+    workdir: fixtures/scenarios/starlark-identity/
+    command: atmos
+    args:
+      - describe
+      - component
+      - mock
+      - -s
+      - computed-stage
+    expect:
+      exit_code: 1
+      stderr:
+        - 'stack identity cannot be computed'
+        - !not 'Could not find the component'
+
+  - name: starlark identity describe component by manifest path fails clearly
+    enabled: true
+    snapshot: false
+    description: Selecting the computed stack by its manifest path reports the same error.
+    workdir: fixtures/scenarios/starlark-identity/
+    command: atmos
+    args:
+      - describe
+      - component
+      - mock
+      - -s
+      - deploy/computed-stage
+    expect:
+      exit_code: 1
+      stderr:
+        - 'stack identity cannot be computed'
+
+  - name: starlark identity generate planfile fails before writing files
+    enabled: true
+    snapshot: false
+    description: terraform generate planfile must not write a file named after the encoded source.
+    workdir: fixtures/scenarios/starlark-identity/
+    command: atmos
+    args:
+      - terraform
+      - generate
+      - planfile
+      - mock
+      - -s
+      - deploy/computed-stage
+    expect:
+      exit_code: 1
+      stderr:
+        - 'stack identity cannot be computed'
+
+  - name: starlark context describe component reports the instance and stack-level locals
+    enabled: true
+    snapshot: false
+    description: ctx.component is the instance name, ctx.locals includes stack-level locals, and json.encode of a configuration mapping is an object.
+    workdir: fixtures/scenarios/starlark-steps/
+    command: atmos
+    args:
+      - describe
+      - component
+      - ctxecho
+      - -s
+      - computed
+      - --format
+      - json
+    expect:
+      exit_code: 0
+      stdout:
+        - '"mycomp": "ctxecho"'
+        - '"mytype": "terraform"'
+        - '"owner_local": "team-a"'
+        - '"json_rt": "\{\\"nested\\":\{\\"k\\":\\"v\\"\},\\"team\\":\\"plat\\"\}"'
+
+  - name: starlark context component locals override stack-level locals
+    enabled: true
+    snapshot: false
+    description: ctx.locals layers component locals over stack-level locals.
+    workdir: fixtures/scenarios/starlark-steps/
+    command: atmos
+    args:
+      - describe
+      - component
+      - localsc
+      - -s
+      - computed
+      - --format
+      - json
+    expect:
+      exit_code: 0
+      stdout:
+        - '"lc_owner": "team-a"'
+        - '"lc_comp": "from-component"'
+        - '"jenc_settings": "\{\}"'

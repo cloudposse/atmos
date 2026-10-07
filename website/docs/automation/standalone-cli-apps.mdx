@@ -172,7 +172,10 @@ flag bound to an environment variable shows `[env: DEPLOY_STAGE]`:
 
 ```text
 Usage:
-  release.star <service> [flags]
+  release <service> [flags]
+
+Arguments:
+  <service>  Service to deploy
 
 Flags:
   -h, --help           Show help for this script
@@ -180,7 +183,10 @@ Flags:
       --token string   API token (required) [env: DEPLOY_TOKEN]
 ```
 
-Help is compact and shows only your tool's own usage and flags.
+Help is compact and shows only your tool's own usage, arguments, and flags.
+
+Unless you pass `name` to `cli.command`, the command name shown in usage is the script's file name without the
+`.star` extension, so `release.star` appears as `release`.
 
 Mistakes in the command line are usage errors, not script crashes. An unknown flag,
 a missing or surplus argument, an invalid value, a missing required flag, or a value
@@ -190,12 +196,13 @@ traceback, and exits with status 2:
 ```text
 Error: usage error
 missing required argument <service>
-Usage: release.star <service> [flags]
+Usage: release <service> [flags]
 💡 Run ./release.star --help for usage.
 ```
 
-Errors your own code raises, such as `fail()`, a runtime error, or a `validate`
-callback returning `False`, keep the Starlark presentation with a traceback.
+A `validate` callback that returns `False` is also a usage error, with status 2. Errors your own code
+raises, such as `fail()` (including `fail()` inside `validate`, which exits with status 1 and shows its reason) or a
+runtime error, keep the Starlark presentation with a traceback.
 Tracebacks show paths relative to the working directory when the script is under
 it, and log fields use the script's file name, such as `step=release.star`.
 
@@ -208,8 +215,8 @@ you ask for `--help`.
 
 ## Global flags
 
-Atmos global flags go between `atmos` and the script path, in either the
-`--flag=value` or the `--flag value` form:
+Atmos global flags go between `atmos` and the script path. Flags that take a value
+accept the `--flag=value` form, and most also accept the `--flag value` form:
 
 ```shell
 atmos --chdir=tools ./release.star api
@@ -218,10 +225,11 @@ atmos --logs-level=Debug ./release.star api
 
 Atmos applies these flags itself, and the first word that is not a flag starts the
 script. Everything after the script path belongs to the script, including flags
-that look like Atmos flags, such as a script-owned `--chdir`. A relative script
+that look like Atmos flags, such as a script-owned `--chdir` or `--force-color`. A relative script
 path is resolved after `--chdir` is applied, so it is relative to the new working
-directory. Flags that take an optional value, such as `--identity`, use the
-`--flag=value` form. A flag Atmos does not define before the script is an error
+directory. The `--profile` and `--identity` flags must use the `--flag=value` form. A space form such as
+`--profile dev` before the script is rejected with a hint to write `--profile=dev`, because the word `dev` would
+otherwise be taken as the script path. A flag Atmos does not define before the script is an error
 from the normal command line.
 
 With `ATMOS_USE_VERSION` or `version.use`, Atmos re-runs your script with the pinned

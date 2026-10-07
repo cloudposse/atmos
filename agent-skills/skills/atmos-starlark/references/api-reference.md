@@ -1,18 +1,19 @@
 # Atmos Automation Language API Reference
 
-Everything below is predeclared; there is nothing to import. See the
-[language overview](https://atmos.tools/automation/language) and
-[script step](https://atmos.tools/steps/type/script) for usage. If a name is not listed here, it does not exist.
+Everything below is predeclared; there is nothing to import. The published
+[function reference](https://atmos.tools/functions/automation) documents each function in
+more depth. If a name is not listed here, check that page before concluding it does not exist.
 
 ## Context and inputs
 
-- `ctx.args`: immutable list of raw script arguments (standalone scripts only).
+- `ctx.args`: immutable list of raw script arguments. Standalone scripts get the tokens after the
+  script name; Git hooks get the arguments Git passes to the hook. It is empty elsewhere.
 - `ctx.flags`, `ctx.arguments`: immutable parsed inputs for script steps. Custom command
   string, bool, and `type: int` flags keep their types; workflow flags are strings and always
   include `stack`. In standalone scripts
   both are empty; use the `cli.command` callback instead.
-- `ctx.script`: `.path` and `.directory` of the physical file for standalone scripts and
-  file-backed included script steps; `None` for inline steps.
+- `ctx.script`: `.path` and `.directory` of the physical file. Set for standalone scripts and for
+  script steps included through a local `!include`; `None` for inline step scripts.
 - `ctx.component`, `ctx.hook`, `ctx.operation`: see the entry-point table in `SKILL.md`.
 - `env`: immutable dict of the step's explicit `env` inputs.
 
@@ -24,7 +25,10 @@ Everything below is predeclared; there is nothing to import. See the
 ## Processes
 
 - `exec.run(argv, working_directory=, env={...}, output="stream", check=True)`: argv-based
-  child process; returns a result with `.stdout`, `.stderr`, and `.exit_code`. It raises on
+  child process; returns a result with `.stdout`, `.stderr`, `.exit_code`, and `.data` (stdout
+  decoded as JSON on first access; reading it on non-JSON stdout fails). `timeout="30s"` bounds the
+  whole call, and `retry={"max_attempts": 3, "initial_delay": "1s", "conditions": [regex, ...]}`
+  retries ordinary nonzero exits (`conditions` match the failed attempt's output). It raises on
   failure by default, with the last stderr lines in the error. Use `check=False` to assert
   an expected nonzero exit. Start failures (command not found, bad directory), cancellation,
   signals, and transport errors always raise. `output="stream"` (default) shows output live
@@ -42,6 +46,8 @@ Everything below is predeclared; there is nothing to import. See the
   Examples: `atmos.version()`, `atmos.list("components")`, `atmos.vendor("pull", flags={"stack": "dev"})`,
   `atmos.describe("component", "api", flags={"stack": "dev", "format": "json"}, output="capture")`,
   `atmos.scaffold("generate", "template", "target")`, `atmos.config("get", args=["base_path"])`.
+  The `atmos.list`, `atmos.describe`, `atmos.config("get")`, `atmos.stack("get")`, and
+  `atmos.stack("config", "get")` wrappers default to JSON and captured output and expose `.data`.
 - `atmos.run(argv, working_directory=, env=, output=, check=)`: invoke the current Atmos binary
   with a full argument list. Use it for hyphenated custom command names that cannot be
   attributes: `atmos.run(["my-command", "--flag=value"])`.
@@ -49,7 +55,10 @@ Everything below is predeclared; there is nothing to import. See the
   and `atmos.helm(...)`: structured component arguments. Pass the stack as the `stack`
   argument, not as a `flags` entry. Prefer `deploy` over `apply` in non-interactive scripts.
 - `atmos.toolchain(command, tool=, flags=, args=, ...)`: explicit toolchain commands, for
-  example `atmos.toolchain("install", "jq@1.7.1")`. Does not change the script's `PATH`.
+  example `atmos.toolchain("install", "jqlang/jq@1.7.1")`. It behaves like the CLI and pins the
+  tool in the project's `.tool-versions`, so every later Atmos command in that project installs it
+  automatically. It does not change the script's `PATH`; use `dependencies.tools` for a
+  script-scoped pin.
 - Flag mapping: bare keys become `--name`; an explicit dash prefix preserves native tool
   spelling (`"-detailed-exitcode"`). Values are strings, ints, bools, or lists (a list
   repeats the flag). `True` emits a bare flag; `False` emits `--name=false`. `detailed-exitcode`
@@ -75,11 +84,23 @@ Everything below is predeclared; there is nothing to import. See the
   descriptor for `steps.parallel(tasks=[...])`. `retry` keys: `max_attempts`, `initial_delay`,
   `backoff_strategy`, `max_delay`.
 
+## Step library
+
+- `steps.run(type, **fields)` and `steps.<type>(**fields)` (for example `steps.input`, `steps.choose`,
+  `steps.join`, `steps.http`) execute any registered step handler immediately and return its result.
+  See [steps.run](https://atmos.tools/functions/automation/steps.run).
+
 ## Data helpers
 
 - `json.encode(value)`, `json.decode(text)`: structured data without shell quoting.
+  Use `json.indent(text, prefix=, indent=)` to pretty-print JSON text, and `json.encode_indent(value)`
+  to encode and format in one call.
 - `fs.read_file(path)`: read a local file as a string (relative to the step working
   directory, also inside loaded functions; absolute paths accepted). There is no write API.
+  Use `fs.glob(pattern)`, `fs.stat(path)`, `fs.exists(path)`, and `fs.readlink(path)` to inspect the
+  filesystem.
+- `errors.build(message)`: error builder with `.with_title`, `.with_explanation`, `.with_hint`,
+  `.with_example`, `.with_context`, `.with_exit_code`, and a final `.fail()`.
 - `regex.search(pattern, text)`: boolean match anywhere. `regex.findall(pattern, text)`:
   list of full matches. `regex.replace(pattern, replacement, text)`: replace all matches
   with literal text. Go/RE2 syntax, including inline flags; no lookaround, backreferences,

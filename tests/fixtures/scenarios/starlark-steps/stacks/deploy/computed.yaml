@@ -1,0 +1,265 @@
+# Field-test fixture for the !starlark YAML tag: docs examples, ctx.* probes, mixed YAML
+# functions, quoted-string injection, and inheritance (see computed-child.yaml). The stack name
+# here is static; see computed-stage.yaml for a computed stack identity. Catalog files
+# computed-*.yaml hold failure cases that must be imported from a throwaway stack.
+locals:
+  owner_local: team-a
+  suffix: blue
+
+vars:
+  stage: computed
+  region: us-east-2
+
+terraform:
+  backend_type: local
+  backend:
+    local:
+      path: !starlark |
+        return "state-" + ctx.vars["stage"] + ".tfstate"
+
+components:
+  terraform:
+    # Docs "Try it" example, verbatim.
+    mock:
+      metadata:
+        description: platform
+      vars:
+        message: hello-computed
+        resource_tags: !starlark |
+          return {
+              "Environment": ctx.vars["stage"],
+              "Region": ctx.vars["region"],
+              "Owner": ctx.metadata.get("description", "platform"),
+          }
+
+    # Docs "Computed dependencies" example (order independent).
+    deps:
+      metadata:
+        component: mock
+      vars:
+        replicas: !starlark |
+          return ctx.vars["minimum_replicas"] * 2
+        minimum_replicas: !starlark |
+          return 3 if ctx.vars["stage"] == "prod" else 1
+        message: deps
+
+    # Docs "Functions and results" example.
+    funcs:
+      metadata:
+        component: mock
+      vars:
+        enabled_regions: [us-east-1, us-east-2]
+        deployment_names: !starlark |
+          def name(region):
+              return "%s-%s" % (ctx.vars["stage"], region)
+
+          return [name(region) for region in ctx.vars["enabled_regions"]]
+        message: funcs
+
+    # Quoted-string injection, single-line forms, non-scalar tag, list item, nulls, empties.
+    inject:
+      metadata:
+        component: mock
+      vars:
+        message: inject
+        note: "!starlark return 'injected'"
+        note_not_code: "!starlarkish return 'x'"
+        single: !starlark return 3
+        single_str: !starlark return "a" + "b"
+        a_list:
+          - one
+          - !starlark return "two"
+          - three
+        fallthrough: !starlark |
+          x = 1
+        empty_list: !starlark return []
+        empty_dict: !starlark return {}
+        none_val: !starlark return None
+        big_int: !starlark return 1 << 62
+        float_val: !starlark return 1.5
+        bool_val: !starlark return True
+        nested: !starlark |
+          return {"a": [1, 2, {"b": None}], "c": {"d": "e"}}
+        literal_braces: !starlark |
+          return "{{ not.a.template }} and {{ .vars.stage }}"
+
+    # ctx.* echoes.
+    ctxecho:
+      metadata:
+        component: mock
+        description: me
+      settings:
+        team: plat
+        nested:
+          k: v
+      env:
+        FOO_ENV: fooval
+      vars:
+        message: ctxecho
+        mystack: !starlark return ctx.stack
+        mycomp: !starlark return ctx.component
+        mytype: !starlark return ctx.component_type
+        mymeta: !starlark return ctx.metadata
+        mysettings: !starlark return ctx.settings
+        myenv: !starlark return ctx.env
+        mylocals: !starlark return ctx.locals
+        getmissing: !starlark return ctx.vars.get("missing", "dflt")
+        in_check: !starlark return ["message" in ctx.vars, "nope" in ctx.vars]
+        length: !starlark return len(ctx.vars)
+        iter_keys: !starlark return [k for k in ctx.settings]
+        keys: !starlark return list(ctx.settings.keys())
+        values: !starlark return [str(v) for v in ctx.env.values()]
+        items: !starlark return [[k, str(v)] for k, v in ctx.env.items()]
+        json_rt: !starlark return json.encode(ctx.settings)
+        json_dec: !starlark |
+          return json.decode('{"a": 1}')
+        sumround: !starlark return [sum([1, 2, 3]), round(2.567)]
+
+    # settings/env sections using !starlark.
+    sect:
+      metadata:
+        component: mock
+      vars:
+        message: sect
+        v: 5
+      settings:
+        computed_setting: !starlark return ctx.vars["v"] * 2
+      env:
+        COMPUTED_ENV: !starlark return "env-" + ctx.stack
+        NUM_ENV: !starlark return 42
+
+    # Mixed YAML functions in one component.
+    mixed:
+      metadata:
+        component: mock
+      vars:
+        message: mixed
+        home: !env HOME
+        tmpl: !template '{{ .vars.region }}-x'
+        sl: !starlark return ctx.vars["region"].upper()
+        sl_reads_tmpl: !starlark return ctx.vars["tmpl"] + "!"
+        sl_reads_env: !starlark return "home=" + ctx.vars["home"]
+        lst:
+          - a
+          - b
+          - !unset
+          - !starlark return "c"
+
+    lists:
+      metadata:
+        component: mock
+      vars:
+        message: lists
+        l_plain:
+          - a
+          - !starlark return "b"
+        l_unset:
+          - a
+          - !unset
+          - !starlark return "c"
+        l_template_first:
+          - !starlark return "d"
+          - !env HOME
+          - !starlark return ["nested", "list"]
+        l_nested_a:
+          - - !starlark return "x"
+        l_nested_b:
+          - key: !starlark return "y"
+
+    lists2:
+      metadata:
+        component: mock
+      vars:
+        message: lists2
+        l_unset_after:
+          - a
+          - !starlark return "b"
+          - !unset
+        l_unset_map:
+          keep: 1
+          drop: !unset
+          comp: !starlark return "ok"
+        l_unset_only:
+          - !unset
+          - !starlark return "z"
+
+    localsc:
+      metadata:
+        component: mock
+      locals:
+        comp_local: from-component
+      vars:
+        message: localsc
+        lc: !starlark return ctx.locals
+        lc_owner: !starlark return ctx.locals.get("owner_local", "MISSING")
+        lc_comp: !starlark return ctx.locals.get("comp_local", "MISSING")
+        jenc_settings: !starlark return json.encode(ctx.settings)
+        jenc_env: !starlark return json.encode(ctx.env)
+        jenc_vars_message: !starlark return json.encode(ctx.vars["message"])
+        jenc_dict: !starlark |
+          return json.encode({"a": 1})
+        dict_copy: !starlark |
+          return {k: ctx.metadata[k] for k in ctx.metadata}
+        dict_ctor: !starlark return dict(ctx.metadata.items())
+
+    # Shared expression inherited by several components (per-consumer evaluation).
+    base-tags:
+      metadata:
+        type: abstract
+        component: mock
+      vars:
+        resource_tags: !starlark |
+          return {"Environment": ctx.vars["stage"], "Region": ctx.vars["region"], "Component": ctx.component, "Owner": ctx.metadata.get("description", "platform")}
+        tag_count: !starlark return len(ctx.vars["resource_tags"])
+    inh-a:
+      metadata:
+        component: mock
+        inherits: [base-tags]
+        description: team-a
+      vars:
+        message: inh-a
+    inh-b:
+      metadata:
+        component: mock
+        inherits: [base-tags]
+      vars:
+        message: inh-b
+        region: ap-south-1
+    inh-c:
+      metadata:
+        component: mock
+        inherits: [base-tags]
+      vars:
+        message: inh-c
+        resource_tags:
+          Static: only
+    inh-d:
+      metadata:
+        component: mock
+        inherits: [base-tags]
+      vars:
+        message: inh-d
+        resource_tags: !starlark |
+          return {"Other": "expr"}
+
+    # Same as mock; computed-child.yaml overrides only metadata.description/region (docs Usage example, with a schema-valid metadata key).
+    mock-docs:
+      metadata:
+        component: mock
+        description: platform
+      vars:
+        message: mock-docs
+        resource_tags: !starlark |
+          return {
+              "Environment": ctx.vars["stage"],
+              "Region": ctx.vars["region"],
+              "Owner": ctx.metadata.get("description", "platform"),
+          }
+
+  app:
+    api2:
+      metadata:
+        component: api
+      vars:
+        replicas: !starlark return 2 + 1
+        image: "nginx:1.25"

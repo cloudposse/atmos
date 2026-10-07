@@ -56,10 +56,11 @@ settings:
 
     "Peak memory" here means the largest single process's peak RSS observed during the run (Terraform, OpenTofu, or a provider plugin) — not a simultaneous sum across every concurrently running process. See the note below for what that means when sizing a runner.
 
-    Standalone Starlark scripts run in interpreter mode (`atmos ./deploy.star` or a `#!/usr/bin/env atmos` shebang) are the exception. A script is your own command-line tool, so Atmos does not print the final summary after it runs unless you explicitly set `settings.metrics.enabled: true`. Leaving the setting unset or setting it to `false` keeps the script's output free of Atmos metrics.
+    Standalone Starlark scripts run in interpreter mode (`atmos ./deploy.star` or a `#!/usr/bin/env atmos` shebang) and Git hooks run through `atmos git hooks run` are the exceptions. A script is your own command-line tool, so Atmos does not print the final summary after it runs unless you explicitly set `settings.metrics.enabled: true`. Leaving the setting unset or setting it to `false` keeps the script's output free of Atmos metrics.
 
     - **Type:** `boolean`
-    - **Default:** `true` (`false` for standalone Starlark scripts)
+    - **Default:** `true` (`false` for standalone Starlark scripts and Git hooks)
+    - **Environment variable:** `ATMOS_SETTINGS_METRICS_ENABLED`
   </dd>
 </dl>
 
