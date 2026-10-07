@@ -253,6 +253,17 @@ func (m *AtmosConfiguration) SetSchemaRegistry(key string, registry SchemaRegist
 	m.Schemas[key] = registry
 }
 
+// SetResourcePath stores a ResourcePath under the given key, lazily initializing the
+// Schemas map when it is nil. Like SetSchemaRegistry, it exists so flag and environment
+// variable overrides of the `jsonschema`, `opa` and `cue` base paths do not panic with
+// "assignment to entry in nil map" when the loaded `atmos.yaml` has no `schemas:` section.
+func (m *AtmosConfiguration) SetResourcePath(key string, resourcePath ResourcePath) {
+	if m.Schemas == nil {
+		m.Schemas = make(map[string]any)
+	}
+	m.Schemas[key] = resourcePath
+}
+
 func (m *AtmosConfiguration) GetResourcePath(key string) ResourcePath {
 	atmosSchemaInterface, interfaceOk := m.Schemas[key]
 	var resourcePath ResourcePath

@@ -80,6 +80,32 @@ func TestSetSchemaRegistry_ExistingMapPreservesOtherKeys(t *testing.T) {
 	assert.Equal(t, "opa/path", atmosConfig.GetResourcePath("opa").BasePath)
 }
 
+func TestSetResourcePath_NilMap(t *testing.T) {
+	// A config loaded without a `schemas:` section leaves Schemas nil; applying a
+	// `--schemas-opa-dir` or ATMOS_SCHEMAS_OPA_BASE_PATH override must not panic.
+	atmosConfig := &AtmosConfiguration{}
+	require.Nil(t, atmosConfig.Schemas, "precondition: Schemas must start nil")
+
+	assert.NotPanics(t, func() {
+		atmosConfig.SetResourcePath("opa", ResourcePath{BasePath: "opa/path"})
+	})
+
+	assert.Equal(t, "opa/path", atmosConfig.GetResourcePath("opa").BasePath)
+}
+
+func TestSetResourcePath_ExistingMapPreservesOtherKeys(t *testing.T) {
+	// Setting one key must not clobber unrelated entries, and it replaces the same key.
+	atmosConfig := &AtmosConfiguration{Schemas: map[string]any{
+		"jsonschema": ResourcePath{BasePath: "json/path"},
+		"opa":        ResourcePath{BasePath: "old/opa"},
+	}}
+
+	atmosConfig.SetResourcePath("opa", ResourcePath{BasePath: "new/opa"})
+
+	assert.Equal(t, "new/opa", atmosConfig.GetResourcePath("opa").BasePath)
+	assert.Equal(t, "json/path", atmosConfig.GetResourcePath("jsonschema").BasePath)
+}
+
 func TestIsColorEnabled(t *testing.T) {
 	tests := []struct {
 		name    string
