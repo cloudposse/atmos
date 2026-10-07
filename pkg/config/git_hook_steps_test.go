@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -106,10 +107,69 @@ func TestPreprocessGitHookStepsOtherForms(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
-	for _, content := range []string{"[invalid", "git: {hooks: {pre-commit: {steps: [{script: !include.raw ./missing.star}]}}}"} {
-		err := preprocessAtmosYamlFuncExceptCommands([]byte(content), viper.New(), filepath.Join(t.TempDir(), "atmos.yaml"))
-		require.Error(t, err)
-	}
+	err := preprocessAtmosYamlFuncExceptCommands([]byte("[invalid"), viper.New(), filepath.Join(t.TempDir(), "atmos.yaml"))
+	require.ErrorContains(t, err, "did not find expected")
+	err = preprocessAtmosYamlFuncExceptCommands([]byte("git: {hooks: {pre-commit: {steps: [{script: !include.raw ./missing.star}]}}}"), viper.New(), filepath.Join(t.TempDir(), "atmos.yaml"))
+	require.ErrorIs(t, err, ErrExecuteYamlFunctions)
+	require.ErrorContains(t, err, "references a file that does not exist")
+}
+
+// Viper lowercases map keys while merging configuration, so env step vars and step output names
+// must be restored to their authored case or later steps cannot see SHARED_VAR or myOutput.
+func TestLoadedGitHookStepsKeepVarsAndOutputsCase(t *testing.T) {
+	t.Setenv("ATMOS_BASE_PATH", "")
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "atmos.yaml"), `base_path: "./"
+git:
+  hooks:
+    pre-commit:
+      steps:
+        - name: setenv
+          type: env
+          vars:
+            SHARED_VAR: shared
+        - name: produce
+          type: shell
+          command: echo hi
+          outputs:
+            myOutput: '{{ .value }}'
+        - name: group
+          type: shell
+          command: echo group
+          steps:
+            - name: nested
+              type: env
+              vars:
+                Nested_Var: nested
+`)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Chdir(t.TempDir())
+
+	config, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+	steps := config.Git.Hooks["pre-commit"].Steps
+	require.Len(t, steps, 3)
+	assert.Equal(t, map[string]string{"SHARED_VAR": "shared"}, steps[0].Vars)
+	assert.Equal(t, map[string]string{"myOutput": "{{ .value }}"}, steps[1].Outputs)
+	require.Len(t, steps[2].Steps, 1)
+	assert.Equal(t, map[string]string{"Nested_Var": "nested"}, steps[2].Steps[0].Vars)
+}
+
+func TestMergeRecursiveStepCaseKeys(t *testing.T) {
+	t.Run("invalid YAML and unrelated documents record nothing", func(t *testing.T) {
+		caseMaps := casemap.New()
+		mergeRecursiveStepCaseKeys([]byte("[invalid"), caseMaps)
+		mergeRecursiveStepCaseKeys([]byte("git: {hooks: {h: {command: echo}}}"), caseMaps)
+		assert.Nil(t, caseMaps.Get(stepVarsCaseKey))
+		assert.Nil(t, caseMaps.Get(stepOutputsCaseKey))
+	})
+	t.Run("vars and outputs are kept apart and accumulate across files", func(t *testing.T) {
+		caseMaps := casemap.New()
+		mergeRecursiveStepCaseKeys([]byte("git: {hooks: {h: {steps: [{vars: {AbC: x}, outputs: {OutX: y}}]}}}"), caseMaps)
+		mergeRecursiveStepCaseKeys([]byte("commands: [{name: c, steps: [{vars: {Other: x}}]}]"), caseMaps)
+		assert.Equal(t, casemap.CaseMap{"abc": "AbC", "other": "Other"}, caseMaps.Get(stepVarsCaseKey))
+		assert.Equal(t, casemap.CaseMap{"outx": "OutX"}, caseMaps.Get(stepOutputsCaseKey))
+	})
 }
 
 func TestConfigAnchorsAcrossCommandsGitHooksAndSettings(t *testing.T) {

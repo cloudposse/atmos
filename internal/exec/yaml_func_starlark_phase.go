@@ -24,7 +24,7 @@ func prepareConfigurationValues(config *schema.AtmosConfiguration, info *schema.
 		return skip, noop
 	}
 	sources := make(map[string]string)
-	collectConfigurationSources(nil, selected, sources)
+	collectConfigurationSources(nil, selected, sources, skip)
 	if len(sources) == 0 {
 		return skip, noop
 	}
@@ -40,19 +40,27 @@ func prepareConfigurationValues(config *schema.AtmosConfiguration, info *schema.
 	}
 }
 
-func collectConfigurationSources(path []string, value any, sources map[string]string) {
+// collectConfigurationSources records each encoded Starlark source by its path. List indexes
+// are computed as they will appear after !unset items are dropped, because the resolver runs
+// against the compacted list.
+func collectConfigurationSources(path []string, value any, sources map[string]string, skip []string) {
 	switch value := value.(type) {
 	case string:
-		if starlarksource.Is(value) {
+		if starlarksource.IsEncoded(value) {
 			sources[configurationPathKey(path)] = value
 		}
 	case map[string]any:
 		for key, child := range value {
-			collectConfigurationSources(append(slices.Clone(path), key), child, sources)
+			collectConfigurationSources(append(slices.Clone(path), key), child, sources, skip)
 		}
 	case []any:
-		for index, child := range value {
-			collectConfigurationSources(append(slices.Clone(path), strconv.Itoa(index)), child, sources)
+		index := 0
+		for _, child := range value {
+			if isUnsetListItem(child, skip) {
+				continue
+			}
+			collectConfigurationSources(append(slices.Clone(path), strconv.Itoa(index)), child, sources, skip)
+			index++
 		}
 	}
 }

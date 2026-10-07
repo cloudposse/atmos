@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	githooks "github.com/cloudposse/atmos/pkg/git/hooks"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -17,9 +18,13 @@ import (
 // passes refs that start with refs/). Cobra must not attempt to parse them.
 // We extract the hook name manually from args.
 var runCmd = &cobra.Command{
-	Use:                "run <hook-name> [args...]",
-	Short:              "Execute the configured command for a named Git hook",
-	Long:               `Execute the configured command for the named hook, forwarding any extra arguments and stdin.`,
+	Use:   "run <hook-name> [args...]",
+	Short: "Execute the configured command or steps for a named Git hook",
+	Long: `Execute the configured command or steps for the named hook, forwarding any extra arguments and stdin.
+
+A hook sets either a command (a shell command line) or a steps list (shared Atmos steps).
+The hook runs from the repository root, as Git itself runs hooks, regardless of the current
+directory. Resource-usage metrics are off unless settings.metrics.enabled is set explicitly.`,
 	DisableFlagParsing: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "git.hooks.run.RunE")()
@@ -41,6 +46,7 @@ var runCmd = &cobra.Command{
 				Err()
 		}
 
+		cfg.DisableMetricsSummaryByDefault(atmosConfigPtr)
 		return githooks.Run(gitConfig(), hookName, hookArgs, githooks.WithContext(cmd.Context()), githooks.WithAtmosConfig(atmosConfigPtr))
 	},
 }

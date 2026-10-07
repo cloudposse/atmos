@@ -2,6 +2,7 @@ package starlark
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -80,4 +81,48 @@ func TestEvaluateConfigurationInputTypes(t *testing.T) {
 		_, err = New().EvaluateValue(context.Background(), script.Evaluation{Source: "return ctx.vars['value']", Context: staticValueMap{"vars": map[string]any{"value": value}}})
 		require.ErrorContains(t, err, "unsupported configuration input")
 	}
+}
+
+func TestEvaluateConfigurationMappingItems(t *testing.T) {
+	input := staticValueMap{
+		"vars": map[string]any{"region": "us-east-2", "stage": "prod", "tags": map[string]any{"team": "plat"}},
+	}
+	cases := []struct {
+		name   string
+		source string
+		want   any
+	}{
+		{"json encodes an object", `return json.encode(ctx.vars)`, `{"region":"us-east-2","stage":"prod","tags":{"team":"plat"}}`},
+		{"json encodes a nested mapping", `return json.encode(ctx.vars["tags"])`, `{"team":"plat"}`},
+		{"dict copies key/value pairs", `return dict(ctx.vars)["stage"]`, "prod"},
+		{"keyword unpacking", "def pick(region, **rest):\n    return region + \"/\" + rest[\"stage\"]\nreturn pick(**ctx.vars)", "us-east-2/prod"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := New().EvaluateValue(context.Background(), script.Evaluation{Source: tc.source, Context: input})
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, result)
+		})
+	}
+}
+
+type failingValueMap struct{}
+
+func (failingValueMap) Keys() []string { return []string{"ok", "bad"} }
+
+func (failingValueMap) Get(key string) (any, bool, error) {
+	if key == "bad" {
+		return nil, false, errFailingValue
+	}
+	return "fine", true, nil
+}
+
+var errFailingValue = errors.New("value cannot be resolved")
+
+func TestEvaluateConfigurationItemsSurfaceErrors(t *testing.T) {
+	_, err := New().EvaluateValue(context.Background(), script.Evaluation{
+		Source:  `return json.encode(ctx.vars)`,
+		Context: staticValueMap{"vars": failingValueMap{}},
+	})
+	require.ErrorIs(t, err, errFailingValue)
 }

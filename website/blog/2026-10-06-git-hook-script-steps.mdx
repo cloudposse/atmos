@@ -57,6 +57,13 @@ to work, and steps can use other registered types alongside scripts. This brings
 Git hook checks into the same execution model used by your other Atmos
 automation.
 
+Git hook invocations now omit the local resource-usage summary when
+[`settings.metrics.enabled`](/cli/configuration/settings/metrics) is unset,
+including existing command hooks. Set it explicitly to `true`, or set
+`ATMOS_SETTINGS_METRICS_ENABLED=true`, to keep that summary. Explicit settings
+take precedence; this change does not disable Native CI summaries or Atmos Pro
+reporting.
+
 ## How to Use It
 
 Add two separate checks to `atmos.yaml` in your repository root:

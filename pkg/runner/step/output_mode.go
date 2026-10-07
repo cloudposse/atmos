@@ -257,6 +257,70 @@ func NewCommandOutputWriter(step *schema.WorkflowStep, workflow *schema.Workflow
 	return NewOutputModeWriter(mode, step.Name, GetViewportConfig(step, workflow), show)
 }
 
+// ResolveStepOutputMode renders the step's `output:` against vars and validates the result, so a
+// templated mode such as `{{ .Flags.mode }}` takes effect. A step marked literal keeps the value as
+// written. It returns "" when the step sets no output, and fails with schema.ErrStepInvalidOutputMode
+// (listing the valid modes) when the rendered value is not a known mode, instead of falling back to
+// the default.
+func ResolveStepOutputMode(step *schema.WorkflowStep, vars *Variables) (string, error) {
+	defer perf.Track(nil, "step.ResolveStepOutputMode")()
+
+	raw := strings.TrimSpace(step.Output)
+	if raw == "" {
+		return "", nil
+	}
+	rendered := raw
+	if vars != nil && strings.Contains(raw, "{{") {
+		var err error
+		rendered, err = vars.ResolveStepField(step, "output", raw)
+		if err != nil {
+			return "", TemplateFieldError(step, "output", err)
+		}
+		rendered = strings.TrimSpace(rendered)
+	}
+	owner := "a step"
+	if step.Name != "" {
+		owner = fmt.Sprintf("step %q", step.Name)
+	}
+	if err := schema.ValidateRenderedOutputMode(owner, rendered); err != nil {
+		return "", err
+	}
+	return rendered, nil
+}
+
+// resolveOutputStep returns step with its templated `output:` rendered. The step itself is returned
+// when its output needs no rendering, and a copy otherwise, so the shared step definition keeps the
+// template for later runs.
+func resolveOutputStep(step *schema.WorkflowStep, vars *Variables) (*schema.WorkflowStep, error) {
+	if !schema.StepAcceptsOutputMode(step.Type) && step.Type != "" {
+		return step, nil
+	}
+	mode, err := ResolveStepOutputMode(step, vars)
+	if err != nil {
+		return nil, err
+	}
+	if mode == step.Output {
+		return step, nil
+	}
+	resolved := *step
+	resolved.Output = mode
+	return &resolved, nil
+}
+
+// ApplyStepOutputMode renders the step's templated `output:` in place, so the writers the step's
+// runner builds later read the rendered mode. Use it on a step the caller owns (for example a
+// per-run copy); handlers resolve on a copy themselves.
+func ApplyStepOutputMode(step *schema.WorkflowStep, vars *Variables) error {
+	defer perf.Track(nil, "step.ApplyStepOutputMode")()
+
+	resolved, err := resolveOutputStep(step, vars)
+	if err != nil {
+		return err
+	}
+	step.Output = resolved.Output
+	return nil
+}
+
 // GetOutputMode returns the effective output mode for a step.
 // Checks step-level, workflow-level, and defaults.
 func GetOutputMode(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition) OutputMode {

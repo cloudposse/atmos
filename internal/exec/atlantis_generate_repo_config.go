@@ -413,6 +413,9 @@ func ExecuteAtlantisGenerateRepoConfig(
 				default:
 					return errUtils.ErrMissingStackNameTemplateAndPattern
 				}
+				if err = ensureLiteralStackIdentity(stackConfigFileName, stackSlug, configAndStacksInfo.ComponentSection); err != nil {
+					return err
+				}
 
 				// Check if the 'stacks' filter is provided
 				if len(stacks) == 0 ||

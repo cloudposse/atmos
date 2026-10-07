@@ -66,25 +66,6 @@ func (f *failure) ErrorDetail() string {
 	return f.detail
 }
 
-// usageFailure carries a host-presented usage error through the interpreter unchanged. The user
-// mistyped the command line; the script did not fail, so scriptError returns the wrapped error
-// as-is, without the Starlark prefix or a traceback.
-type usageFailure struct{ err error }
-
-// Error returns the usage message.
-func (u *usageFailure) Error() string {
-	defer perf.Track(nil, "starlark.usageFailure.Error")()
-
-	return u.err.Error()
-}
-
-// Unwrap exposes the usage error so errors.Is sees ErrScriptUsage.
-func (u *usageFailure) Unwrap() error {
-	defer perf.Track(nil, "starlark.usageFailure.Unwrap")()
-
-	return u.err
-}
-
 // fail creates a classified failure without a cause.
 func fail(kind error, format string, args ...any) error {
 	return &failure{kind: kind, msg: fmt.Sprintf(format, args...)}
@@ -129,6 +110,13 @@ func invalidArg(format string, args ...any) error {
 	return convert.InvalidArgument(format, args...)
 }
 
+// withHint adds a user-facing hint to an argument error. The error keeps its message and its
+// classification; the hint is applied at the reporting boundary.
+func withHint(err error, hint string) error {
+	annotated := script.NewDiagnostic(err.Error()).With(func(b *errUtils.ErrorBuilder) { b.WithHint(hint) }).Err()
+	return failWithAll(errUtils.ErrStarlarkInvalidArgument, []error{annotated, err}, "%s", err.Error())
+}
+
 // withDetail attaches an explanation to a failure created by this package.
 func withDetail(err error, detail string) error {
 	var f *failure
@@ -162,9 +150,9 @@ func fenced(text string) string {
 // deadline errors stay reachable through errors.Is. Paths under projectRoot are shown relative
 // to it (display only).
 func scriptError(ctx context.Context, err error, projectRoot string) error {
-	var usage *usageFailure
+	var usage *script.UsageFailure
 	if errors.As(err, &usage) {
-		return usage.err
+		return usage.Err
 	}
 	cause := withContext(ctx, err)
 	recursion := isRecursionError(err)
@@ -189,7 +177,23 @@ func scriptError(ctx context.Context, err error, projectRoot string) error {
 // backtraceText renders the backtrace of an evaluation error for display: project-relative paths,
 // and long runs of repeated frames collapsed into a single marker line.
 func backtraceText(eval *starlark.EvalError, projectRoot string) string {
-	return collapseBacktrace(displayPaths(projectRoot, eval.Backtrace()))
+	return collapseBacktrace(dedupeErrorLead(displayPaths(projectRoot, eval.Backtrace())))
+}
+
+// dedupeErrorLead drops the builtin's name when the message repeats it: Starlark prints
+// "Error in fail: fail: reason" and "Error in cli.command: cli.command: reason" because it prefixes
+// the builtin's own prefixed message. Only the final "Error in" line is rewritten.
+func dedupeErrorLead(text string) string {
+	const lead = "Error in "
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		name, message, found := strings.Cut(strings.TrimPrefix(line, lead), ": ")
+		if !strings.HasPrefix(line, lead) || !found || !strings.HasPrefix(message, name+": ") {
+			continue
+		}
+		lines[i] = lead + name + ": " + strings.TrimPrefix(message, name+": ")
+	}
+	return strings.Join(lines, "\n")
 }
 
 // pathBoundary matches the character before a path in an error message or backtrace, so a root is

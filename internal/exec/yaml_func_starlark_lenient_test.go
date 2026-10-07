@@ -21,8 +21,8 @@ func TestStarlarkYAMLLenientDependencies(t *testing.T) {
 	getter.EXPECT().GetState(config, gomock.Any(), "dev", "vpc", "name", false, gomock.Any(), gomock.Any()).Return(nil, errUtils.ErrTerraformStateNotProvisioned).Times(2)
 	input := map[string]any{"vars": map[string]any{
 		"bucket":  `!terraform.state vpc dev name`,
-		"derived": `!starlark return ctx.vars["bucket"] + "-name"`,
-		"sibling": `!starlark return 3`,
+		"derived": starlarkTestSource(`return ctx.vars["bucket"] + "-name"`),
+		"sibling": starlarkTestSource(`return 3`),
 	}}
 	var warnings []DegradationWarning
 	result, err := ProcessCustomYamlTagsLenient(config, input, "dev", nil, nil, func(w DegradationWarning) { warnings = append(warnings, w) })

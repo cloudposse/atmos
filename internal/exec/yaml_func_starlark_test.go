@@ -40,7 +40,7 @@ metadata:
 
 func TestStarlarkYAMLCyclesAndSkip(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
-	input := map[string]any{"vars": map[string]any{"a": `!starlark return ctx.vars["b"]`, "b": `!starlark return ctx.vars["a"]`}}
+	input := map[string]any{"vars": map[string]any{"a": starlarkTestSource(`return ctx.vars["b"]`), "b": starlarkTestSource(`return ctx.vars["a"]`)}}
 	_, err := ProcessCustomYamlTags(config, input, "dev", nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "circular dependency")
@@ -69,7 +69,7 @@ func TestStarlarkYAMLExistingFunctionDependency(t *testing.T) {
 	t.Setenv("ATMOS_TEST_STARLARK_REGION", "us-east-2")
 	input := map[string]any{"vars": map[string]any{
 		"region": "!env ATMOS_TEST_STARLARK_REGION",
-		"name":   `!starlark return ctx.vars["region"] + "-app"`,
+		"name":   starlarkTestSource(`return ctx.vars["region"] + "-app"`),
 	}}
 	result, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "dev", nil, nil)
 	require.NoError(t, err)
@@ -80,7 +80,7 @@ func TestStarlarkYAMLExistingFunctionDependency(t *testing.T) {
 }
 
 func TestStarlarkYAMLPartialEvaluationContext(t *testing.T) {
-	input := map[string]any{"vars": map[string]any{"owner": `!starlark return ctx.metadata["owner"]`}}
+	input := map[string]any{"vars": map[string]any{"owner": starlarkTestSource(`return ctx.metadata["owner"]`)}}
 	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"metadata": map[string]any{"owner": "team-a"}}}
 	result, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "dev", nil, info)
 	require.NoError(t, err)
@@ -90,7 +90,7 @@ func TestStarlarkYAMLPartialEvaluationContext(t *testing.T) {
 func TestStarlarkYAMLConcurrentComponents(t *testing.T) {
 	t.Parallel()
 
-	source := `!starlark return {"stage": ctx.vars["stage"], "component": ctx.component}`
+	source := starlarkTestSource(`return {"stage": ctx.vars["stage"], "component": ctx.component}`)
 	for _, stage := range []string{"dev", "prod"} {
 		t.Run(stage, func(t *testing.T) {
 			t.Parallel()
@@ -106,7 +106,7 @@ func TestStarlarkYAMLConcurrentComponents(t *testing.T) {
 }
 
 func TestStarlarkYAMLSelectedFieldContext(t *testing.T) {
-	input := map[string]any{"vars": map[string]any{"name": `!starlark return ctx.vars["stage"] + ctx.vars["nested"]["suffix"]`}}
+	input := map[string]any{"vars": map[string]any{"name": starlarkTestSource(`return ctx.vars["stage"] + ctx.vars["nested"]["suffix"]`)}}
 	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"vars": map[string]any{"stage": "prod", "nested": map[string]any{"suffix": "-api"}}}}
 	result, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "prod", nil, info)
 	require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestStarlarkYAMLSelectedFieldContext(t *testing.T) {
 }
 
 func TestStarlarkYAMLUnsetContext(t *testing.T) {
-	input := map[string]any{"vars": map[string]any{"copy": `!starlark return ctx.settings`}, "settings": map[string]any{"keep": "value", "drop": "!unset"}}
+	input := map[string]any{"vars": map[string]any{"copy": starlarkTestSource(`return ctx.settings`)}, "settings": map[string]any{"keep": "value", "drop": "!unset"}}
 	result, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "dev", nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"keep": "value"}, result["vars"].(map[string]any)["copy"])
@@ -124,14 +124,14 @@ func TestStarlarkYAMLUnsetContext(t *testing.T) {
 func TestStarlarkYAMLComputedDependency(t *testing.T) {
 	input := map[string]any{"vars": map[string]any{
 		"unknown":     degradation.AtmosComputedValue{},
-		"derived":     `!starlark return ctx.vars["unknown"] + "-name"`,
-		"independent": `!starlark return 3`,
+		"derived":     starlarkTestSource(`return ctx.vars["unknown"] + "-name"`),
+		"independent": starlarkTestSource(`return 3`),
 	}}
 	result, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "dev", nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, degradation.AtmosComputedValue{}, result["vars"].(map[string]any)["derived"])
 	assert.Equal(t, int64(3), result["vars"].(map[string]any)["independent"])
-	input["vars"].(map[string]any)["independent"] = `!starlark return missing`
+	input["vars"].(map[string]any)["independent"] = starlarkTestSource(`return missing`)
 	_, err = ProcessCustomYamlTags(&schema.AtmosConfiguration{}, input, "dev", nil, nil)
 	require.ErrorContains(t, err, "undefined: missing")
 }

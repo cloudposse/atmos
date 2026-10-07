@@ -122,6 +122,9 @@ type describeStacksProcessor struct {
 	// processor does not go through processStacks (utils.go), so it must resolve deferred
 	// YAML functions itself instead of silently losing their contribution (#2888).
 	deferredContexts AllStacksDeferredContexts
+	// rawStackConfigs holds each stack manifest's own (pre-merge) configuration, keyed by stack
+	// file name. Stack-level locals survive only there; they feed the Starlark ctx.locals scope.
+	rawStackConfigs map[string]map[string]any
 	// evalSections is the opt-in evaluation-scope filter set by
 	// ExecuteDescribeStacksWithEvalSections: when non-nil, template rendering and YAML-function
 	// resolution (Stages 2/3, plus Go-template rendering) only run for these top-level component
@@ -465,6 +468,10 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 
 	info := buildConfigAndStacksInfo(componentName, stackFileName, stackManifestName, secs)
+	// Match the identity a single-component command (describe component, terraform plan) reports.
+	info.ComponentType = typeName
+	info.StackFile = stackFileName
+	info.StackLocalsSection = stackLocalsForComponent(p.rawStackConfigs, stackFileName, typeName)
 	info.EvaluationPaths = deferred.ExpandEvaluationPaths(componentSection, p.evalPaths, p.atmosConfig.Templates.Settings.Delimiters...)
 
 	// Ensure the component key is present in the info's ComponentSection.
@@ -477,6 +484,11 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	// that read info.Context see non-zero values (matching the original monolith's behaviour).
 	stackName, resolvedContext, err := resolveStackName(p.atmosConfig, stackFileName, stackManifestName, info, secs.vars)
 	if err != nil {
+		return err
+	}
+	// A name built from a !starlark value is not computable; fail before the stack filter so the
+	// encoded program text never becomes a stack key.
+	if err := ensureLiteralStackIdentity(stackFileName, stackName, info.ComponentSection); err != nil {
 		return err
 	}
 	info.Context = resolvedContext

@@ -32,6 +32,16 @@ func (l *AutomationLibrary) RunSteps(ctx context.Context, tasks schema.Tasks, ca
 	return nil
 }
 
+// ValidateSteps checks a step sequence without running it: duplicate names, unknown step types,
+// unsupported fields, and scheduler-only policies are rejected exactly as RunSteps rejects them.
+// Callers use it to fail early, for example when installing Git hook shims.
+func (l *AutomationLibrary) ValidateSteps(tasks schema.Tasks) error {
+	defer perf.Track(nil, "step.AutomationLibrary.ValidateSteps")()
+
+	_, err := prepareAutomationSteps(tasks, l.vars.automationParallel)
+	return err
+}
+
 func prepareAutomationSteps(tasks schema.Tasks, parallel bool) ([]schema.WorkflowStep, error) {
 	steps := make([]schema.WorkflowStep, len(tasks))
 	names := make(map[string]bool, len(tasks))

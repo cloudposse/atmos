@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -127,7 +128,7 @@ func TestStandaloneScriptMetricsSummaryOptIn(t *testing.T) {
 			config := schema.AtmosConfiguration{}
 			config.Settings.Metrics.Enabled = tc.enabled
 
-			suppressMetricsSummaryByDefault(&config)
+			cfg.DisableMetricsSummaryByDefault(&config)
 
 			require.NotNil(t, config.Settings.Metrics.Enabled)
 			assert.Equal(t, tc.expected, *config.Settings.Metrics.Enabled)

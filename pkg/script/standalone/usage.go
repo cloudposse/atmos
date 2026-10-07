@@ -3,6 +3,7 @@ package standalone
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -25,13 +26,37 @@ func NewUsageError(cmd *cobra.Command, invoked string, cause error) error {
 
 	base := cause
 	if !errors.Is(cause, errUtils.ErrScriptUsage) {
-		base = fmt.Errorf("%w: %w", errUtils.ErrScriptUsage, cause)
+		base = &usageCause{cause: cause}
 	}
 	return errUtils.Build(base).
 		WithExplanationf("Usage: `%s`", cmd.UseLine()).
 		WithHintf("Run %s --help for usage.", invoked).
 		WithExitCode(UsageExitCode).
 		Err()
+}
+
+// usageCause presents a rejected command line as `usage error: <reason>`. Flag validation already
+// opens its message with "invalid value for flag: invalid value ...", so that doubled lead-in is
+// dropped from the displayed text; the original error stays reachable through errors.Is and As.
+type usageCause struct{ cause error }
+
+// doubledLeadIn is the sentinel text that precedes a validation message that restates it.
+var doubledLeadIn = errUtils.ErrInvalidFlagValue.Error() + ": invalid "
+
+func (u *usageCause) Error() string {
+	defer perf.Track(nil, "standalone.usageCause.Error")()
+
+	text := u.cause.Error()
+	if strings.HasPrefix(text, doubledLeadIn) {
+		text = strings.TrimPrefix(text, errUtils.ErrInvalidFlagValue.Error()+": ")
+	}
+	return errUtils.ErrScriptUsage.Error() + ": " + text
+}
+
+func (u *usageCause) Unwrap() []error {
+	defer perf.Track(nil, "standalone.usageCause.Unwrap")()
+
+	return []error{errUtils.ErrScriptUsage, u.cause}
 }
 
 // CheckBoolPositional rejects a true/false word that directly follows a boolean flag. Boolean flags
@@ -127,4 +152,77 @@ func AnnotateFlags(set *pflag.FlagSet, declared []flags.Flag) {
 		}
 		flag.Usage = strings.TrimSpace(flag.Usage + " " + strings.Join(notes, " "))
 	}
+}
+
+// argumentsAnnotation is the command annotation that carries the rendered argument list into the
+// usage template.
+const argumentsAnnotation = "arguments"
+
+// DefaultName derives a command name from a script filename by dropping the extension, so help
+// reads `Usage: tool [flags]` rather than `Usage: tool.star [flags]`. The result follows the same
+// character rules as an explicit command name.
+func DefaultName(filename string) string {
+	defer perf.Track(nil, "standalone.DefaultName")()
+
+	return strings.TrimSuffix(filename, filepath.Ext(filename))
+}
+
+// DescribeArguments adds an Arguments section to the command's help. Required arguments appear as
+// <name> and optional ones as [name], matching the usage line. Arguments without a description are
+// listed by name only, and a command with no arguments gets no section.
+func DescribeArguments(cmd *cobra.Command, specs []*flags.PositionalArgSpec) {
+	defer perf.Track(nil, "standalone.DescribeArguments")()
+
+	if len(specs) == 0 {
+		return
+	}
+	labels := make([]string, len(specs))
+	width := 0
+	for index, spec := range specs {
+		labels[index] = "[" + spec.Name + "]"
+		if spec.Required {
+			labels[index] = "<" + spec.Name + ">"
+		}
+		width = max(width, len(labels[index]))
+	}
+	var lines []string
+	for index, spec := range specs {
+		line := "  " + labels[index]
+		if spec.Description != "" {
+			line += strings.Repeat(" ", width-len(labels[index])+2) + spec.Description
+		}
+		lines = append(lines, line)
+	}
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[argumentsAnnotation] = strings.Join(lines, "\n")
+	// Cobra's default template, with the Arguments section between the usage line and the examples.
+	cmd.SetUsageTemplate(strings.Replace(cmd.UsageTemplate(), "{{if .HasExample}}",
+		"{{if .Annotations.arguments}}\n\nArguments:\n{{.Annotations.arguments}}{{end}}{{if .HasExample}}", 1))
+}
+
+// listValue shows a string-list flag as `list` in help output, where pflag would print `strings`.
+type listValue struct{ pflag.Value }
+
+func (listValue) Type() string {
+	defer perf.Track(nil, "standalone.listValue.Type")()
+
+	return "list"
+}
+
+// LabelListFlags renames the displayed type of string-list flags from `strings` to `list`. It
+// replaces the flags' values, so call it only once parsing is finished and the values are no longer read.
+func LabelListFlags(set *pflag.FlagSet) {
+	defer perf.Track(nil, "standalone.LabelListFlags")()
+
+	set.VisitAll(func(flag *pflag.Flag) {
+		if flag.Value.Type() == "stringSlice" {
+			flag.Value = listValue{flag.Value}
+			// Only pflag's own slice types know "[]" is the zero default; an unset list shows none.
+			if flag.DefValue == "[]" {
+				flag.DefValue = ""
+			}
+		}
+	})
 }

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"time"
+	"sort"
 
 	"github.com/go-viper/mapstructure/v2"
 	"gopkg.in/yaml.v3"
@@ -55,6 +55,9 @@ var (
 	ErrTaskInvalidFormat = errors.New("invalid task format")
 	// ErrTaskUnexpectedNodeKind is returned when a task node has an unexpected kind.
 	ErrTaskUnexpectedNodeKind = errors.New("unexpected task node kind")
+	// ErrTaskUnknownField is recorded on a step that sets a field no step has, so a misspelling is
+	// reported instead of silently dropped.
+	ErrTaskUnknownField = errors.New("unknown field")
 )
 
 // Inputs declares a step's freshness inputs, replacing go-task's sources:/generates:/status:
@@ -115,8 +118,10 @@ type Task struct {
 	LiteralFields []string `yaml:"-" json:"-" mapstructure:"literal_fields"`
 	// Type specifies the step type: shell, script, atmos, exec, cast, simulate, workdir, or another registered step kind. Defaults to shell.
 	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
-	// Timeout specifies the maximum duration for the task. Zero means no timeout.
-	Timeout time.Duration `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
+	// Timeout specifies the maximum duration for the task as a Go duration string (for example
+	// "30s"). It may be a template; the step runner renders and parses it when the step starts, so
+	// a templated value does not fail config loading. Empty means no timeout.
+	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
 	// Stack specifies the stack to use for atmos commands.
 	Stack string `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 	// WorkingDirectory specifies the working directory for the command.
@@ -135,6 +140,10 @@ type Task struct {
 	// (evaluated before, against the running status). Unset means no forgiveness (today's
 	// fail-stop behavior, unchanged).
 	Continue Condition `yaml:"continue,omitempty" json:"continue,omitempty" mapstructure:"continue"`
+	// LoadError records a problem found while decoding this step from the merged configuration that
+	// must not fail the whole config load (for example an unknown `retry:` key). The registrar of the
+	// command and the step executor report it. It has no YAML, JSON, or mapstructure key.
+	LoadError error `yaml:"-" json:"-" mapstructure:"-"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -332,6 +341,9 @@ func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 	// Decode into a zero-value temp first so a reused receiver does not retain
 	// fields omitted from this YAML node (Decode merges into the destination).
 	var fresh plain
+	if err := ValidateRetryNode(value); err != nil {
+		return err
+	}
 	nodes, sanitized := splitStepPolymorphicNodes(value)
 	if err := sanitized.Decode(&fresh); err != nil {
 		return err
@@ -415,12 +427,6 @@ func (t *Tasks) UnmarshalYAML(value *yaml.Node) error {
 //
 //nolint:funlen,revive // Compatibility conversion must remain an explicit field-by-field mapping.
 func (task *Task) ToWorkflowStep() WorkflowStep {
-	// Convert time.Duration to string for WorkflowStep.
-	var timeoutStr string
-	if task.Timeout > 0 {
-		timeoutStr = task.Timeout.String()
-	}
-
 	return WorkflowStep{
 		// Core fields.
 		Name:             task.Name,
@@ -439,6 +445,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Continue:         task.Continue,
 		Interactive:      task.Interactive,
 		Tty:              task.Tty,
+		LoadError:        task.LoadError,
 
 		// Interactive step fields.
 		Prompt:         task.Prompt,
@@ -469,7 +476,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		ParallelOutput: task.ParallelOutput,
 		Height:         task.Height,
 		Viewport:       task.Viewport,
-		Timeout:        timeoutStr,
+		Timeout:        task.Timeout,
 		Count:          task.Count,
 
 		// Style step fields.
@@ -588,14 +595,6 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 //
 //nolint:funlen,revive // Compatibility conversion must remain an explicit field-by-field mapping.
 func TaskFromWorkflowStep(step *WorkflowStep) Task {
-	// Parse timeout string to time.Duration.
-	var timeout time.Duration
-	if step.Timeout != "" {
-		if parsed, err := time.ParseDuration(step.Timeout); err == nil {
-			timeout = parsed
-		}
-	}
-
 	return Task{
 		// Core fields.
 		Name:             step.Name,
@@ -614,7 +613,8 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Continue:         step.Continue,
 		Interactive:      step.Interactive,
 		Tty:              step.Tty,
-		Timeout:          timeout,
+		LoadError:        step.LoadError,
+		Timeout:          step.Timeout,
 
 		// Interactive step fields.
 		Prompt:         step.Prompt,
@@ -827,7 +827,10 @@ func decodeTasksFromSlice(slice []any) (Tasks, error) {
 	for i, item := range slice {
 		task, err := decodeTaskItem(item, i)
 		if err != nil {
-			return nil, err
+			// A step that cannot be decoded must not fail config loading for every command. Keep a
+			// placeholder that records the error; the command's registrar and the step executor
+			// report it when the command or step is used.
+			task = Task{Name: taskItemName(item), Type: TaskTypeShell, LoadError: err}
 		}
 		tasks = append(tasks, task)
 	}
@@ -853,6 +856,9 @@ func decodeTaskItem(item any, index int) (Task, error) {
 // decodeTaskFromMap decodes a map into a Task using mapstructure.
 func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	var task Task
+	// An unknown retry key must not fail config loading, which would take down every command, so the
+	// error is kept on the task and reported when the command or step is registered or run.
+	retryErr := validateRetryMapValue(m["retry"])
 	m, err := normalizeTaskOutputMap(m, &task)
 	if err != nil {
 		return Task{}, fmt.Errorf("failed to decode task output at index %d: %w", index, err)
@@ -904,10 +910,12 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 		m = withoutTaskMapKey(m, "container")
 	}
 
+	var decodeMetadata mapstructure.Metadata
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		Result:           &task,
 		TagName:          "mapstructure",
 		WeaklyTypedInput: true,
+		Metadata:         &decodeMetadata,
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
 			mapstructure.StringToTimeDurationHookFunc(),
 			ConditionDecodeHook(),
@@ -921,6 +929,12 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 		return Task{}, fmt.Errorf("failed to decode task at index %d: %w", index, err)
 	}
 	task.CursorSet = task.CursorSet || mapHasKey(m, "cursor")
+	if retryErr != nil {
+		task.LoadError = fmt.Errorf("step at index %d: %w", index, retryErr)
+	} else if unknown := unknownTaskKeys(decodeMetadata.Unused); len(unknown) > 0 {
+		// A misspelled field (for example `scritp:`) would otherwise be dropped silently.
+		task.LoadError = fmt.Errorf("step at index %d: %w %q (check the spelling against the step fields)", index, ErrTaskUnknownField, unknown[0])
+	}
 	// Default type to TaskTypeShell if not specified.
 	if task.Type == "" {
 		task.Type = TaskTypeShell
@@ -1193,4 +1207,54 @@ func withoutTaskMapKey(m map[string]any, key string) map[string]any {
 		}
 	}
 	return copied
+}
+
+// LoadError returns the first problem recorded while decoding the tasks from the merged
+// configuration, or nil when every task decoded cleanly.
+func (t Tasks) LoadError() error {
+	for i := range t {
+		if t[i].LoadError != nil {
+			return t[i].LoadError
+		}
+		if err := WorkflowSteps(t[i].Steps).LoadError(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// WorkflowSteps is a list of workflow steps, for helpers that apply to a whole list.
+type WorkflowSteps []WorkflowStep
+
+// LoadError returns the first problem recorded while decoding the steps, or nil.
+func (s WorkflowSteps) LoadError() error {
+	for i := range s {
+		if s[i].LoadError != nil {
+			return s[i].LoadError
+		}
+		if err := WorkflowSteps(s[i].Steps).LoadError(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// taskItemName returns the `name` of a raw task item when it has one, so a placeholder for a task
+// that failed to decode still identifies it.
+func taskItemName(item any) string {
+	m, ok := stringifyTaskMap(item)
+	if !ok {
+		return ""
+	}
+	name, _ := m["name"].(string)
+	return name
+}
+
+// unknownTaskKeys returns the keys mapstructure did not map onto Task, sorted. Keys that are
+// handled outside the struct decode (the polymorphic `with` and `container` blocks) are removed
+// from the map before decoding, so anything left is a field the step does not have.
+func unknownTaskKeys(unused []string) []string {
+	keys := append([]string(nil), unused...)
+	sort.Strings(keys)
+	return keys
 }

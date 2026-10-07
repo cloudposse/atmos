@@ -71,6 +71,12 @@ func (h *ContainerHandler) Execute(ctx context.Context, step *schema.WorkflowSte
 func (h *ContainerHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) (*StepResult, error) {
 	defer perf.Track(nil, "step.ContainerHandler.ExecuteWithWorkflow")()
 
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err := resolveOutputStep(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
 	switch containerStepAction(step) {
 	case containerActionBuild:
 		return h.executeBuild(ctx, step, vars)

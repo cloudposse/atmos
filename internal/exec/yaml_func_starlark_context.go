@@ -12,6 +12,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// identityKeys are the top-level ctx fields that describe where the value is evaluated.
+var identityKeys = []string{"stack", "component", "component_type"}
+
 type configurationContext struct {
 	resolver *configurationResolver
 	values   map[string]any
@@ -42,6 +45,12 @@ func (m *configurationContext) Get(key string) (any, bool, error) {
 	if !found {
 		return nil, false, nil
 	}
+	// Identity fields are plain strings supplied by Atmos. They must not go through the resolver's
+	// path cache, which also holds the component's own top-level keys: the base `component` would
+	// otherwise shadow the instance name.
+	if len(m.path) == 0 && slices.Contains(identityKeys, key) {
+		return raw, true, nil
+	}
 	path := append(slices.Clone(m.path), key)
 	if values, ok := raw.(map[string]any); ok {
 		return &configurationContext{resolver: m.resolver, values: values, path: path}, true, nil
@@ -63,7 +72,7 @@ func (m *configurationContext) Get(key string) (any, bool, error) {
 func (r *configurationResolver) context() script.ValueMap {
 	values := map[string]any{"stack": r.stack}
 	if r.info != nil {
-		values["component"] = r.info.Component
+		values["component"] = r.componentName()
 		values["component_type"] = r.info.ComponentType
 	}
 	for _, name := range []string{"vars", "metadata", "settings", "env", "locals"} {
@@ -71,9 +80,31 @@ func (r *configurationResolver) context() script.ValueMap {
 		if !ok {
 			section = map[string]any{}
 		}
+		if name == "locals" {
+			section = r.localsScope(section)
+		}
 		values[name] = section
 	}
 	return &configurationContext{resolver: r, values: values}
+}
+
+// componentName returns the instance name the user addresses (for example "ctxecho"),
+// not the base component it inherits from (info.Component is the base's folder name).
+func (r *configurationResolver) componentName() string {
+	if r.info.ComponentFromArg != "" {
+		return r.info.ComponentFromArg
+	}
+	return r.info.Component
+}
+
+// localsScope layers component locals over the stack manifest's file-level locals, matching
+// the precedence of `atmos describe locals` (component wins).
+func (r *configurationResolver) localsScope(componentLocals any) any {
+	if r.info == nil || len(r.info.StackLocalsSection) == 0 {
+		return componentLocals
+	}
+	overrides, _ := componentLocals.(map[string]any)
+	return mergeLocals(r.info.StackLocalsSection, overrides)
 }
 
 func (r *configurationResolver) degrade(value string, err error) {

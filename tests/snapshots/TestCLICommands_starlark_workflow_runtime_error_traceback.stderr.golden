@@ -1,3 +1,4 @@
+ WARN  Skipping invalid custom command; running it reports the error command=ft-retry-renamed error="step at index 0: invalid retry configuration: unknown retry field \"delay\" (valid fields: max_attempts, backoff_strategy, initial_delay, max_delay, random_jitter, multiplier, max_elapsed_time, conditions)"
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 
 # Workflow Error

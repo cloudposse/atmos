@@ -82,7 +82,7 @@ func newTask(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, 
 	if timeout != "" {
 		t.timeout, err = time.ParseDuration(timeout)
 		if err != nil || t.timeout <= 0 {
-			return nil, invalidArg("timeout must be a positive duration")
+			return nil, invalidArg("timeout %q for task %q must be a positive duration such as \"30s\" or \"5m\"", timeout, t.name)
 		}
 	}
 	t.retry, err = parseRetry(thread, retryValue)
@@ -132,6 +132,12 @@ func parseRetryConfig(thread *starlark.Thread, value starlark.Value) (*schema.Re
 	decoder := yaml.NewDecoder(strings.NewReader(string(encoded.(starlark.String))))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cfg); err != nil {
+		if field, ok := schema.UnknownRetryField(err); ok {
+			return nil, withDetail(
+				fail(errUtils.ErrStarlarkInvalidArgument, "unknown retry field %q", field),
+				"Valid retry fields: "+strings.Join(taskRetryFieldNames(), ", ")+".",
+			)
+		}
 		return nil, failWith(errUtils.ErrStarlarkInvalidArgument, err, "invalid retry: %s", err)
 	}
 	switch cfg.BackoffStrategy {
@@ -143,6 +149,19 @@ func parseRetryConfig(thread *starlark.Thread, value starlark.Value) (*schema.Re
 		return nil, failWith(errUtils.ErrStarlarkInvalidArgument, err, "invalid retry: %s", err)
 	}
 	return &cfg, nil
+}
+
+// taskRetryFieldNames lists the retry keys a function task accepts. Conditions are omitted: they
+// match subprocess output, which function tasks do not produce.
+func taskRetryFieldNames() []string {
+	names := schema.RetryFieldNames()
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if name != "conditions" {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func sequence(value starlark.Value) ([]starlark.Value, error) {

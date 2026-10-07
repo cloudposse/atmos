@@ -10,9 +10,11 @@ import (
 
 	cockroach "github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -120,7 +122,7 @@ func TestStandaloneScriptLeavesNonScriptsToNormalCommandHandling(t *testing.T) {
 		{"atmos", "--no-color", "./stacks"},
 		{"atmos", "./missing/tool"},
 		{"atmos", "./notes.txt"},
-		{"atmos", "--bogus-flag", "tool.star"},
+		{"atmos", "--bogus-flag", "stacks"},
 		{"atmos", "--chdir"},
 		{"atmos", "terraform", "plan", "x.star"},
 	} {
@@ -212,4 +214,116 @@ func TestStandaloneScriptLogFieldsUseTheFileName(t *testing.T) {
 	})
 	assert.Contains(t, logs.String(), "step=logs.star")
 	assert.NotContains(t, logs.String(), root)
+}
+
+func TestStandaloneScriptNamesLeadingFlagMistakes(t *testing.T) {
+	NewTestKit(t)
+	resetEarlyChdir(t)
+	root := t.TempDir()
+	t.Chdir(root)
+	writeStandaloneScript(t, root, "tool.star", `print("ran")`)
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+		hint string
+	}{
+		{"unknown flag", []string{"atmos", "--bogus-flag", "./tool.star", "api"}, `unknown flag "--bogus-flag"`, "belong to the script"},
+		{"profile with a space", []string{"atmos", "--profile", "dev", "./tool.star"}, `"--profile dev" before a script path is ambiguous`, "Write --profile=dev."},
+		{"identity with a space", []string{"atmos", "--identity", "dev", "./tool.star", "api"}, `"--identity dev" before a script path is ambiguous`, "Write --identity=dev."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			os.Args = tc.args
+			restore, err := prepareStandaloneScript()
+			require.ErrorIs(t, err, errUtils.ErrScriptUsage)
+			assert.Nil(t, restore)
+			assert.ErrorContains(t, err, tc.want)
+			assert.Contains(t, cockroach.FlattenHints(err), tc.hint)
+			assert.Equal(t, 2, errUtils.GetExitCode(err))
+			assert.Equal(t, tc.args, os.Args, "a rejected command line is left untouched")
+		})
+	}
+
+	for _, args := range [][]string{
+		{"atmos", "--profile=dev", "./tool.star"},
+		{"atmos", "--no-color", "./tool.star"},
+		{"atmos", "--help", "./tool.star"},
+		{"atmos", "--profile", "./tool.star"},
+		{"atmos", "describe", "stacks", "./tool.star"},
+	} {
+		os.Args = args
+		restore, err := prepareStandaloneScript()
+		require.NoError(t, err, "%v", args)
+		restore()
+	}
+}
+
+func TestColorScanStopsAtTheScriptPath(t *testing.T) {
+	NewTestKit(t)
+	resetEarlyChdir(t)
+	root := t.TempDir()
+	t.Chdir(root)
+	writeStandaloneScript(t, root, "tool.star", `print("ran")`)
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"script flag after the path is not scanned", []string{"atmos", "./tool.star", "api", "--force-color"}, []string{}},
+		{"global flag before the path is scanned", []string{"atmos", "--force-color", "./tool.star", "api"}, []string{"--force-color"}},
+		{"global flag with a value is scanned", []string{"atmos", "--logs-level", "Debug", "--force-color=true", "./tool.star", "--force-color"}, []string{"--logs-level", "Debug", "--force-color=true"}},
+		{"stdin selection stops the scan", []string{"atmos", "-", "--force-color"}, []string{}},
+		{"other commands are scanned in full", []string{"atmos", "describe", "stacks", "--force-color"}, []string{"atmos", "describe", "stacks", "--force-color"}},
+		{"no arguments", []string{"atmos"}, []string{"atmos"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, append([]string{}, colorScanArgs(tc.args)...))
+		})
+	}
+}
+
+func TestSetupColorProfileIgnoresScriptFlags(t *testing.T) {
+	NewTestKit(t)
+	resetEarlyChdir(t)
+	root := t.TempDir()
+	t.Chdir(root)
+	writeStandaloneScript(t, root, "tool.star", `print("ran")`)
+	viper.Set("force-color", false)
+	t.Cleanup(func() { viper.Set("force-color", false) })
+
+	t.Setenv("CLICOLOR_FORCE", "")
+	require.NoError(t, os.Unsetenv("CLICOLOR_FORCE"))
+	setupColorProfileFromEnvWithArgs([]string{"atmos", "./tool.star", "api", "--force-color"})
+	_, forced := os.LookupEnv("CLICOLOR_FORCE")
+	assert.False(t, forced, "a script's own --force-color must not enable Atmos color")
+
+	t.Cleanup(func() { _ = os.Unsetenv("CLICOLOR_FORCE") })
+	setupColorProfileFromEnvWithArgs([]string{"atmos", "--force-color", "./tool.star", "api"})
+	assert.Equal(t, "1", os.Getenv("CLICOLOR_FORCE"), "an Atmos global flag before the path still applies")
+}
+
+func TestStandaloneSelectionEnvForwardsGlobalFlags(t *testing.T) {
+	NewTestKit(t)
+	t.Setenv("ATMOS_PROFILE", "")
+	require.NoError(t, os.Unsetenv("ATMOS_PROFILE"))
+	viper.Set("profile", []string{"dev", "stage"})
+	t.Cleanup(func() { viper.Set("profile", nil) })
+	cmd := &cobra.Command{Use: "atmos"}
+	cmd.Flags().StringSlice("profile", nil, "")
+	cmd.Flags().String("identity", "", "")
+	require.NoError(t, cmd.Flags().Parse([]string{"--identity=admin"}))
+
+	env := standaloneSelectionEnv(cmd)
+	assert.Equal(t, "admin", env["ATMOS_IDENTITY"])
+	assert.Equal(t, "dev,stage", env["ATMOS_PROFILE"], "the profiles chosen with --profile reach nested atmos calls")
+
+	cmd = &cobra.Command{Use: "atmos"}
+	cmd.Flags().StringSlice("profile", nil, "")
+	cmd.Flags().String("identity", "", "")
+	assert.NotContains(t, standaloneSelectionEnv(cmd), "ATMOS_IDENTITY", "an identity that was not set is not forwarded")
+
+	viper.Set("profile", nil)
+	assert.NotContains(t, standaloneSelectionEnv(cmd), "ATMOS_PROFILE", "no profile means no entry")
 }
