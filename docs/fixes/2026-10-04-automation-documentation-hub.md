@@ -63,6 +63,9 @@ understand what they could automate and choose a starting point.
   the shared step reference's new `/steps` routes. Update Automation guides,
   announcements, example READMEs, and YAML include links to those canonical routes.
 
+- Review correction (2026-10-06, PR #3261): Clarify that an indexed update such as `state["n"] += 1` mutates the
+  dictionary while preserving the binding of `state`, matching the example.
+
 ## Validation
 
 - The “Why Starlark?” update passed the production website build and all nine
@@ -114,6 +117,11 @@ understand what they could automate and choose a starting point.
   saved in `.context/` and reviewed.
 - The development server exhausted its heap, including a retry with an 8 GiB
   heap. Browser checks used the successfully built static site instead.
+
+- Review correction validation (2026-10-06): Compared the indexed-mutation explanation with the existing Starlark example.
+  The documentation patch applies cleanly to PR #3261 and passes
+  `git diff --check`. This wording-only correction did not rerun interpreter
+  tests; the consolidated website build is handled with the complete stack.
 
 ## Follow-ups
 
