@@ -135,15 +135,15 @@ func TestDescribeAffected(t *testing.T) {
 		return false
 	}
 
-	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, filter AffectedFilter, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, filter AffectedFilter, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha, targetBranch string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha, targetBranch string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, filter AffectedFilter, authManager auth.AuthManager, authDisabled bool, errOptions DescribeStacksErrorOptions) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
 				Stack: "test-stack",
@@ -1955,6 +1955,8 @@ func newDescribeAffectedFlagSet() *pflag.FlagSet {
 	flags.String("query", "", "")
 	flags.Bool("verbose", false, "")
 	flags.Bool("exclude-locked", false, "")
+	flags.StringSlice("tags", nil, "")
+	flags.String("labels", "", "")
 	return flags
 }
 
@@ -2165,7 +2167,7 @@ func TestExecute_MatrixFormat(t *testing.T) {
 		ref, sha, targetBranch string,
 		includeSpaceliftAdminStacks, includeSettings bool,
 		stack string, processTemplates, processYamlFunctions bool,
-		skip []string, excludeLocked bool,
+		skip []string, filter AffectedFilter,
 		authManager auth.AuthManager,
 		authDisabled bool,
 		errOptions DescribeStacksErrorOptions,

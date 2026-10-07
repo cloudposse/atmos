@@ -22,6 +22,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
@@ -73,10 +74,21 @@ type AffectedCommandOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	ExcludeLocked    bool
-	ErrorMode        string // How to handle recoverable errors: "strict" (default), "warn", or "silent".
+	Tags             []string // Keep only components whose `metadata.tags` contain any of these.
+	LabelsRaw        string   // Raw --labels value; keep only components whose `metadata.labels` contain all pairs.
+	ErrorMode        string   // How to handle recoverable errors: "strict" (default), "warn", or "silent".
 
 	// Auth options.
 	IdentityName string // Identity name from --identity flag or ATMOS_IDENTITY env var.
+}
+
+// affectedFilter builds the component filter from the exclude-locked, tags, and labels options.
+func (opts *AffectedCommandOptions) affectedFilter() (e.AffectedFilter, error) {
+	labels, err := tags.ParseLabelsFlag(opts.LabelsRaw)
+	if err != nil {
+		return e.AffectedFilter{}, err
+	}
+	return e.AffectedFilter{ExcludeLocked: opts.ExcludeLocked, Tags: opts.Tags, Labels: labels}, nil
 }
 
 // ExecuteListAffectedCmd executes the list affected command.
@@ -251,6 +263,10 @@ func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *Affected
 }
 
 func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
+	filter, err := opts.affectedFilter()
+	if err != nil {
+		return nil, err
+	}
 	affected, _, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
 		atmosConfig,
 		opts.RepoPath,
@@ -260,7 +276,7 @@ func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *A
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		opts.Skip,
-		opts.ExcludeLocked,
+		filter,
 		authManager,
 		authDisabled,
 		errOptions,
@@ -272,6 +288,10 @@ func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *A
 }
 
 func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
+	filter, err := opts.affectedFilter()
+	if err != nil {
+		return nil, err
+	}
 	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
 		atmosConfig,
 		opts.Ref,
@@ -284,7 +304,7 @@ func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *Affe
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		opts.Skip,
-		opts.ExcludeLocked,
+		filter,
 		authManager,
 		authDisabled,
 		errOptions,
@@ -296,6 +316,10 @@ func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *Affe
 }
 
 func executeAffectedWithCheckout(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
+	filter, err := opts.affectedFilter()
+	if err != nil {
+		return nil, err
+	}
 	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 		atmosConfig,
 		opts.Ref,
@@ -307,7 +331,7 @@ func executeAffectedWithCheckout(atmosConfig *schema.AtmosConfiguration, opts *A
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		opts.Skip,
-		opts.ExcludeLocked,
+		filter,
 		authManager,
 		authDisabled,
 		errOptions,

@@ -64,3 +64,7 @@ jobs:
 </File>
 
 The `affected` job emits a matrix of `{component, stack}` pairs; the `deploy` job spreads across them in parallel.
+
+:::tip Keep privileged components out of the matrix
+Add `--labels=ci=auto` to the `atmos describe affected` command to exclude components such as `iam` or `tfstate-backend` from the matrix. See [Keeping privileged components out of CI](/ci#keeping-privileged-components-out-of-ci).
+:::

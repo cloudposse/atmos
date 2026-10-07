@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 var affectedParser *flags.StandardParser
@@ -35,6 +36,8 @@ type AffectedOptions struct {
 	IncludeDependents bool
 	Stack             string
 	ExcludeLocked     bool
+	Tags              []string
+	Labels            string
 
 	// Processing flags.
 	ProcessTemplates bool
@@ -88,6 +91,8 @@ var affectedCmd = &cobra.Command{
 			IncludeDependents: v.GetBool("include-dependents"),
 			Stack:             v.GetString("stack"),
 			ExcludeLocked:     v.GetBool("exclude-locked"),
+			Tags:              tags.ParseTagsFlag(v.GetString("tags")),
+			Labels:            v.GetString("labels"),
 			ProcessTemplates:  v.GetBool("process-templates"),
 			ProcessFunctions:  v.GetBool("process-functions"),
 			Skip:              v.GetStringSlice("skip"),
@@ -118,6 +123,8 @@ func init() {
 		WithIncludeDependentsFlag,
 		WithStackFlag,
 		WithExcludeLockedFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
 		WithAffectedSkipFlag,
@@ -164,6 +171,8 @@ func executeListAffectedCmd(cmd *cobra.Command, args []string, opts *AffectedOpt
 		ProcessFunctions:  opts.ProcessFunctions,
 		Skip:              opts.Skip,
 		ExcludeLocked:     opts.ExcludeLocked,
+		Tags:              opts.Tags,
+		LabelsRaw:         opts.Labels,
 		ErrorMode:         opts.ErrorMode,
 		IdentityName:      opts.IdentityName,
 	})

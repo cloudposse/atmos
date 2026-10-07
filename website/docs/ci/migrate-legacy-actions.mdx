@@ -29,7 +29,11 @@ Move Terraform CI features from wrapper actions into Atmos itself. Native comman
 | Update vendored components | `cloudposse/github-action-atmos-component-updater` | [`atmos vendor update --pull-request`](/cli/commands/vendor/vendor-update) |
 | Planfile storage | `cloudposse/github-action-terraform-plan-storage` (S3/Azure Blob + DynamoDB/CosmosDB) | Built-in [planfile storage](/ci/planfile-storage) (S3, GitHub Artifacts, or local) |
 | Read a setting | `cloudposse/github-action-atmos-get-setting` | `atmos list settings --query` / `atmos describe component --query` |
-| Select components by query | `cloudposse/github-action-atmos-terraform-select-components` | `atmos describe affected --format=matrix` / `atmos list components --query` |
+| Select components by query | `cloudposse/github-action-atmos-terraform-select-components` | `atmos describe affected --format=matrix` / `atmos list components --query`; narrow with [`--tags` and `--labels`](/cli/commands/describe/affected#filtering-by-tags-and-labels) |
 | Trigger Spacelift stacks | `cloudposse/github-action-atmos-affected-trigger-spacelift` | Native CI (the [Spacelift integration](/deprecated/spacelift) itself is deprecated) |
+
+### Opting Components Out of CI
+
+The legacy actions used `settings.github.actions_enabled` to decide which components CI could run. Native CI does not read that setting, so a component is in scope for CI unless you select it out. To get the same effect, label the components and filter the matrix with `--labels`: give every component a default label such as `ci: auto`, override it with `ci: manual` on privileged components like `iam` or `tfstate-backend`, and build the matrix with `atmos describe affected --format=matrix --labels=ci=auto`. See [Keeping privileged components out of CI](/ci#keeping-privileged-components-out-of-ci) for the full pattern, including an OPA policy that blocks those components if they run in CI anyway.
 
 The [deprecated action documentation](/deprecated/github-actions) remains available for maintaining existing workflows during migration.

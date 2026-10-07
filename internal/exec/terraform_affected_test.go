@@ -69,7 +69,7 @@ func TestGetAffectedComponents(t *testing.T) {
 						processTemplates bool,
 						processYamlFunctions bool,
 						skip []string,
-						excludeLocked bool,
+						filter AffectedFilter,
 					) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 						return []schema.Affected{
 							{Component: "vpc", Stack: "test-stack"},
@@ -103,7 +103,7 @@ func TestGetAffectedComponents(t *testing.T) {
 						processTemplates bool,
 						processYamlFunctions bool,
 						skip []string,
-						excludeLocked bool,
+						filter AffectedFilter,
 					) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 						return []schema.Affected{
 							{Component: "vpc", Stack: "test-stack"},
@@ -134,7 +134,7 @@ func TestGetAffectedComponents(t *testing.T) {
 						processTemplates bool,
 						processYamlFunctions bool,
 						skip []string,
-						excludeLocked bool,
+						filter AffectedFilter,
 						authManager auth.AuthManager,
 					) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 						return []schema.Affected{
@@ -165,7 +165,7 @@ func TestGetAffectedComponents(t *testing.T) {
 						processTemplates bool,
 						processYamlFunctions bool,
 						skip []string,
-						excludeLocked bool,
+						filter AffectedFilter,
 					) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 						return nil, nil, nil, "", errors.New("invalid repository path")
 					})
@@ -195,7 +195,7 @@ func TestGetAffectedComponents(t *testing.T) {
 						processTemplates bool,
 						processYamlFunctions bool,
 						skip []string,
-						excludeLocked bool,
+						filter AffectedFilter,
 					) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 						return nil, nil, nil, "", errors.New("failed to clone repository")
 					})
@@ -223,7 +223,7 @@ func TestGetAffectedComponents(t *testing.T) {
 						processTemplates bool,
 						processYamlFunctions bool,
 						skip []string,
-						excludeLocked bool,
+						filter AffectedFilter,
 						authManager auth.AuthManager,
 					) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 						return nil, nil, nil, "", errors.New("failed to checkout ref")
@@ -250,7 +250,7 @@ func TestGetAffectedComponents(t *testing.T) {
 						processTemplates bool,
 						processYamlFunctions bool,
 						skip []string,
-						excludeLocked bool,
+						filter AffectedFilter,
 					) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 						return []schema.Affected{}, nil, nil, "", nil
 					})
@@ -500,7 +500,7 @@ func BenchmarkGetAffectedComponents(b *testing.B) {
 			processTemplates bool,
 			processYamlFunctions bool,
 			skip []string,
-			excludeLocked bool,
+			filter AffectedFilter,
 		) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 			return []schema.Affected{
 				{Component: "vpc", Stack: "test-stack"},

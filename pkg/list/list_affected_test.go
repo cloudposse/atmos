@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
@@ -954,4 +955,36 @@ func TestAffectedCommandOptions_IdentityName(t *testing.T) {
 			assert.Equal(t, tt.identityName, opts.IdentityName)
 		})
 	}
+}
+
+func TestAffectedCommandOptions_AffectedFilter(t *testing.T) {
+	t.Run("builds filter from tags, labels, and exclude-locked", func(t *testing.T) {
+		opts := &AffectedCommandOptions{
+			ExcludeLocked: true,
+			Tags:          []string{"prod", "tier-1"},
+			LabelsRaw:     "ci=auto,team:platform",
+		}
+
+		got, err := opts.affectedFilter()
+
+		require.NoError(t, err)
+		assert.True(t, got.ExcludeLocked)
+		assert.Equal(t, []string{"prod", "tier-1"}, got.Tags)
+		assert.Equal(t, map[string]string{"ci": "auto", "team": "platform"}, got.Labels)
+	})
+
+	t.Run("empty options yield an empty filter", func(t *testing.T) {
+		got, err := (&AffectedCommandOptions{}).affectedFilter()
+
+		require.NoError(t, err)
+		assert.False(t, got.ExcludeLocked)
+		assert.Empty(t, got.Tags)
+		assert.Empty(t, got.Labels)
+	})
+
+	t.Run("malformed labels return an invalid flag error", func(t *testing.T) {
+		_, err := (&AffectedCommandOptions{LabelsRaw: "no-separator"}).affectedFilter()
+
+		require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	})
 }

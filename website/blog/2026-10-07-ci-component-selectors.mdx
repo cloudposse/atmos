@@ -1,0 +1,108 @@
+---
+slug: ci-component-selectors
+title: "Keep Privileged Components Out of CI with Tags and Labels"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Some components are too powerful to run from a pull request. The ones that create IAM roles, manage team access, or bootstrap the Terraform state backend can change who is allowed to do what, and most teams want a person with the right role to apply them deliberately. The legacy GitHub Actions had a way to express that, a per-component `actions_enabled` setting, but once a workflow moves to native CI there has been no equivalent, and no way to filter the job matrix that decides what CI runs.
+
+The `atmos describe affected` command now accepts `--tags` and `--labels`, so the matrix that drives your CI jobs can include exactly the components you want automated and leave the privileged ones out.
+
+<!--truncate-->
+
+## The Problem
+
+Teams migrating from the legacy actions to [native CI](/ci) carry a familiar list of foundation components: `aws-teams`, `iam`, `tfstate-backend`, and similar. Under the legacy actions, a setting on each component decided whether CI could touch it. Native CI does not read that setting, and `atmos describe affected --format=matrix` returned every affected component. A change to a privileged component showed up in the matrix next to everything else, and the plan or apply job started with whatever role the workflow was given.
+
+The only workaround was post-processing the matrix with a `jq` filter in the workflow, which pushes a policy decision about your infrastructure into workflow YAML, away from the stack configuration where the rest of that knowledge lives.
+
+## The Fix
+
+Components already carry [`metadata.tags` and `metadata.labels`](/stacks/components/component-metadata), and `atmos terraform` can already select on them. Now `atmos describe affected` takes the same two flags with the same meaning:
+
+- `--tags` takes a comma-separated list and matches components that have any of the tags. It can also be set with `ATMOS_TAGS`.
+- `--labels` takes a comma-separated list of `key=value` or `key:value` pairs and matches components that have all of them. It can also be set with `ATMOS_LABELS`.
+
+The filters apply to every output format, including `--format=matrix`, so the selection that reaches your CI jobs is the one you declared in the stacks. Abstract components, disabled components, and locked components (with `--exclude-locked`) are excluded exactly as before.
+
+## How to Use It
+
+Start with the stack configuration. Give every component a default label in the shared defaults, then override it on the instances that need a human in the loop. Labels match only positively, so a default plus an override is the way to express "everything except these".
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+# Default for every component.
+metadata:
+  labels:
+    ci: auto
+```
+
+```yaml title="stacks/catalog/iam.yaml"
+# Privileged instances override it.
+components:
+  terraform:
+    iam:
+      metadata:
+        labels:
+          ci: manual
+```
+
+Then select on the label where CI builds its matrix.
+
+```shell
+# The matrix for your pull request workflow.
+atmos describe affected --format=matrix --labels=ci=auto
+
+# Or plan the same selection directly.
+atmos terraform plan --affected --labels=ci=auto
+```
+
+In a workflow, that is a one-flag change to the job that produces the matrix:
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix --labels=ci=auto
+```
+
+The privileged components get their own workflow, with its own role and its own approvals, that selects them with `--labels=ci=manual`. Tags work the same way when you would rather select by a list, for example `--tags=production,tier-1`. The full flag reference is on the [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels) page.
+
+### Add a Backstop with OPA
+
+A selector keeps a job from starting, but it cannot stop someone from running the command some other way, such as a hand-written workflow or a copied command line. An [OPA policy](/validation/opa) attached to the privileged component closes that gap by refusing to run it when it detects CI.
+
+```rego title="stacks/schemas/opa/ci/privileged-component.rego"
+package atmos
+
+errors[message] {
+  input.process_env.GITHUB_ACTIONS == "true"
+  input.metadata.labels.ci == "manual"
+  message := sprintf("%s is a privileged component and can't run in CI", [input.atmos_component])
+}
+```
+
+```yaml title="stacks/catalog/iam.yaml"
+components:
+  terraform:
+    iam:
+      metadata:
+        labels:
+          ci: manual
+      settings:
+        validation:
+          ci-guard:
+            schema_type: opa
+            schema_path: "ci/privileged-component.rego"
+            description: Block privileged components from running in CI
+```
+
+The policy fails the job rather than skipping it, so treat it as a safety net. The matrix selector is what keeps the job from starting in the first place, and the policy makes sure a mistake elsewhere surfaces as a clear error instead of an apply.
+
+### One Thing to Know About Uploads
+
+The inventory that `atmos describe affected --upload` sends to Atmos Pro is always the complete, unfiltered set. Because of that, `--tags` and `--labels` are rejected when combined with `--upload`. Run the upload as its own command and filter only the matrix.
+
+If you are moving off the legacy actions, the [migration guide](/ci/migrate-legacy-actions#opting-components-out-of-ci) maps the old opt-out behavior to this pattern.
+
+## Get Involved
+
+See the [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels) reference and the native CI guide on [keeping privileged components out of CI](/ci#keeping-privileged-components-out-of-ci). If the pattern does not fit a workflow of yours, [open an issue](https://github.com/cloudposse/atmos/issues) and tell us what you need.

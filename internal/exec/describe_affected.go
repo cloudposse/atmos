@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
@@ -24,6 +25,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -55,13 +57,16 @@ type DescribeAffectedCmdArgs struct {
 	ProcessYamlFunctions        bool
 	Skip                        []string
 	ExcludeLocked               bool
-	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
-	AuthDisabled                bool             // True when --identity=false (or alias) explicitly disables authentication; routes stack resolution to ExecuteDescribeStacksWithAuthDisabled.
-	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
-	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
-	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
-	ErrorMode                   string           // How to handle recoverable errors: "strict" (default), "warn", or "silent".
-	Cmd                         *cobra.Command   // The invoking Cobra command, used to derive Flags for the exec-metadata sync capture (proexec.FlagsFromCommand).
+	Tags                        []string          // Keep only components whose `metadata.tags` contain any of these (from --tags).
+	LabelsRaw                   string            // Raw --labels value (comma-separated key=value pairs).
+	Labels                      map[string]string // Parsed --labels: keep only components whose `metadata.labels` contain all of these.
+	AuthManager                 auth.AuthManager  // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled                bool              // True when --identity=false (or alias) explicitly disables authentication; routes stack resolution to ExecuteDescribeStacksWithAuthDisabled.
+	HeadSHAOverride             string            // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
+	CIEventType                 string            // CI event type (e.g., "pull_request", "push") for upload validation.
+	TargetBranch                string            // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
+	ErrorMode                   string            // How to handle recoverable errors: "strict" (default), "warn", or "silent".
+	Cmd                         *cobra.Command    // The invoking Cobra command, used to derive Flags for the exec-metadata sync capture (proexec.FlagsFromCommand).
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -80,7 +85,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
-		excludeLocked bool,
+		filter AffectedFilter,
 		authManager auth.AuthManager,
 		authDisabled bool,
 		errOptions DescribeStacksErrorOptions,
@@ -97,7 +102,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
-		excludeLocked bool,
+		filter AffectedFilter,
 		authManager auth.AuthManager,
 		authDisabled bool,
 		errOptions DescribeStacksErrorOptions,
@@ -113,7 +118,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
-		excludeLocked bool,
+		filter AffectedFilter,
 		authManager auth.AuthManager,
 		authDisabled bool,
 		errOptions DescribeStacksErrorOptions,
@@ -193,8 +198,34 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	if result.ErrorMode != "strict" && result.ErrorMode != "warn" && result.ErrorMode != "silent" {
 		return DescribeAffectedCmdArgs{}, fmt.Errorf("%w: %q", ErrInvalidErrorMode, result.ErrorMode)
 	}
+	if err := resolveAffectedSelectors(&result); err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
 
 	return result, nil
+}
+
+// resolveAffectedSelectors normalizes the --tags and --labels selectors and rejects combinations
+// that cannot be honored. The Atmos Pro upload is intentionally unfiltered, so a selector alongside
+// --upload would filter the printed output while silently uploading everything.
+func resolveAffectedSelectors(a *DescribeAffectedCmdArgs) error {
+	a.Tags = tags.ParseTagsFlag(strings.Join(a.Tags, ","))
+
+	labels, err := tags.ParseLabelsFlag(a.LabelsRaw)
+	if err != nil {
+		return err
+	}
+	a.Labels = labels
+
+	if a.Upload && (len(a.Tags) > 0 || len(a.Labels) > 0) {
+		return fmt.Errorf("%w: --tags/--labels is not supported with --upload (the upload is always unfiltered)", errUtils.ErrInvalidFlag)
+	}
+	return nil
+}
+
+// affectedFilter builds the component filter applied while computing the affected set.
+func (a *DescribeAffectedCmdArgs) affectedFilter() AffectedFilter {
+	return AffectedFilter{ExcludeLocked: a.ExcludeLocked, Tags: a.Tags, Labels: a.Labels}
 }
 
 // SetDescribeAffectedFlagValueInCliArgs sets the flag values in CLI arguments.
@@ -223,6 +254,8 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"query":                          &describe.Query,
 		"verbose":                        &describe.Verbose,
 		"exclude-locked":                 &describe.ExcludeLocked,
+		"tags":                           &describe.Tags,
+		"labels":                         &describe.LabelsRaw,
 		"error-mode":                     &describe.ErrorMode,
 	}
 
@@ -429,7 +462,7 @@ func (d *describeAffectedExec) resolveAffectedStacks(a *DescribeAffectedCmdArgs,
 			a.ProcessTemplates,
 			a.ProcessYamlFunctions,
 			a.Skip,
-			a.ExcludeLocked,
+			a.affectedFilter(),
 			a.AuthManager,
 			a.AuthDisabled,
 			errOptions,
@@ -447,7 +480,7 @@ func (d *describeAffectedExec) resolveAffectedStacks(a *DescribeAffectedCmdArgs,
 			a.ProcessTemplates,
 			a.ProcessYamlFunctions,
 			a.Skip,
-			a.ExcludeLocked,
+			a.affectedFilter(),
 			a.AuthManager,
 			a.AuthDisabled,
 			errOptions,
@@ -464,7 +497,7 @@ func (d *describeAffectedExec) resolveAffectedStacks(a *DescribeAffectedCmdArgs,
 			a.ProcessTemplates,
 			a.ProcessYamlFunctions,
 			a.Skip,
-			a.ExcludeLocked,
+			a.affectedFilter(),
 			a.AuthManager,
 			a.AuthDisabled,
 			errOptions,

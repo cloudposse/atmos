@@ -1458,6 +1458,10 @@ func executeAffectedCommand(ctx context.Context, parentCmd *cobra.Command, args 
 	a.IncludeSettings = false
 	a.Upload = false
 	a.OutputFile = ""
+	// `terraform --affected` applies --tags/--labels itself, after the affected set (and any
+	// dependents) is computed, so the describe-affected selectors must not pre-filter it.
+	a.Tags = nil
+	a.Labels = nil
 
 	return e.ExecuteTerraformAffectedWithContext(ctx, &a, info)
 }

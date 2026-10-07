@@ -52,12 +52,12 @@ func runFindAffectedTF(t *testing.T, atmosConfig *schema.AtmosConfiguration, loc
 		&current,
 		&remoteStacks,
 		atmosConfig,
-		nil,   // changedFiles - none, so only section diffs matter.
-		false, // includeSpaceliftAdminStacks.
-		false, // includeSettings.
-		"",    // stackToFilter.
-		false, // excludeLocked.
-		"",    // gitRepoRoot.
+		nil,                                  // changedFiles - none, so only section diffs matter.
+		false,                                // includeSpaceliftAdminStacks.
+		false,                                // includeSettings.
+		"",                                   // stackToFilter.
+		AffectedFilter{ExcludeLocked: false}, // excludeLocked.
+		"",                                   // gitRepoRoot.
 	)
 	require.NoError(t, err)
 	return affected
@@ -346,7 +346,7 @@ func TestProcessKubernetesComponentsIndexed(t *testing.T) {
 	affected, err := processKubernetesComponentsIndexed(
 		stackName, kubernetesSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, true, false,
+		false, true, AffectedFilter{ExcludeLocked: false},
 	)
 	require.NoError(t, err)
 
@@ -385,7 +385,7 @@ func TestProcessKubernetesComponentsIndexed_NotAffected(t *testing.T) {
 	affected, err := processKubernetesComponentsIndexed(
 		stackName, kubernetesSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, false, false,
+		false, false, AffectedFilter{ExcludeLocked: false},
 	)
 	require.NoError(t, err)
 	assert.Empty(t, affected)
@@ -423,7 +423,7 @@ func TestProcessKubernetesComponentsIndexed_FolderChanged(t *testing.T) {
 	affected, err := processKubernetesComponentsIndexed(
 		stackName, kubernetesSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, false, false,
+		false, false, AffectedFilter{ExcludeLocked: false},
 	)
 	require.NoError(t, err)
 
@@ -461,7 +461,7 @@ func TestProcessKubernetesComponentsIndexed_SkipsAbstract(t *testing.T) {
 	affected, err := processKubernetesComponentsIndexed(
 		stackName, kubernetesSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, false, false,
+		false, false, AffectedFilter{ExcludeLocked: false},
 	)
 	require.NoError(t, err)
 	assert.Empty(t, affected)
@@ -624,7 +624,7 @@ func TestProcessHelmComponentsIndexed(t *testing.T) {
 	affected, err := processHelmComponentsIndexed(
 		helmTestStack, helmSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, true, false,
+		false, true, AffectedFilter{ExcludeLocked: false},
 	)
 	require.NoError(t, err)
 
@@ -656,7 +656,7 @@ func TestProcessHelmComponentsIndexed_NotAffected(t *testing.T) {
 	affected, err := processHelmComponentsIndexed(
 		helmTestStack, helmSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, false, false,
+		false, false, AffectedFilter{ExcludeLocked: false},
 	)
 	require.NoError(t, err)
 	assert.Empty(t, affected)
@@ -684,7 +684,7 @@ func TestProcessHelmComponentsIndexed_FolderChanged(t *testing.T) {
 	affected, err := processHelmComponentsIndexed(
 		helmTestStack, helmSection, &remoteStacks, &remoteStacks,
 		atmosConfig, filesIndex, patternCache,
-		false, false, false,
+		false, false, AffectedFilter{ExcludeLocked: false},
 	)
 	require.NoError(t, err)
 
@@ -733,7 +733,7 @@ func TestProcessHelmComponentsIndexed_ValuesFilesChanged(t *testing.T) {
 			affected, err := processHelmComponentsIndexed(
 				helmTestStack, helmSection, &remoteStacks, &remoteStacks,
 				atmosConfig, filesIndex, newComponentPathPatternCache(),
-				false, false, false,
+				false, false, AffectedFilter{ExcludeLocked: false},
 			)
 			require.NoError(t, err)
 
@@ -772,7 +772,7 @@ func TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *t
 		affected, err := processHelmComponentsIndexed(
 			helmTestStack, helmSection, &remoteStacks, &remoteStacks,
 			atmosConfig, filesIndex, patternCache,
-			false, false, false,
+			false, false, AffectedFilter{ExcludeLocked: false},
 		)
 		require.NoError(t, err)
 		assert.Empty(t, affected)
@@ -790,7 +790,7 @@ func TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *t
 		affected, err := processHelmComponentsIndexed(
 			helmTestStack, helmSection, &remoteStacks, &remoteStacks,
 			atmosConfig, filesIndex, patternCache,
-			false, false, true,
+			false, false, AffectedFilter{ExcludeLocked: true},
 		)
 		require.NoError(t, err)
 		assert.Empty(t, affected)
@@ -801,7 +801,7 @@ func TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *t
 		affected, err := processHelmComponentsIndexed(
 			helmTestStack, map[string]any{helmTestComponent: "invalid"}, &remoteStacks, &remoteStacks,
 			atmosConfig, filesIndex, patternCache,
-			false, false, false,
+			false, false, AffectedFilter{ExcludeLocked: false},
 		)
 		require.NoError(t, err)
 		assert.Empty(t, affected)

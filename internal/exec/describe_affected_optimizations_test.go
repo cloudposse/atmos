@@ -1824,9 +1824,9 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 			atmosConfig,
 			filesIndex,
 			patternCache,
-			false, // includeSpaceliftAdminStacks
-			false, // includeSettings
-			false, // excludeLocked
+			false,                                // includeSpaceliftAdminStacks
+			false,                                // includeSettings
+			AffectedFilter{ExcludeLocked: false}, // excludeLocked
 		)
 
 		require.NoError(t, err)
@@ -1892,7 +1892,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -1951,7 +1951,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2037,7 +2037,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2097,7 +2097,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2142,7 +2142,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2665,7 +2665,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2689,7 +2689,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2713,7 +2713,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2745,7 +2745,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)

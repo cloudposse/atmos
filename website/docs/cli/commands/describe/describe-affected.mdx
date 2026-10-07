@@ -221,6 +221,13 @@ atmos describe affected --skip=terraform.output
 atmos describe affected --skip=terraform.output --skip=include
 atmos describe affected --skip=include,eval
 atmos describe affected --exclude-locked
+# Select only components tagged `production` or `tier-1` (matches any tag)
+atmos describe affected --tags=production,tier-1
+# Select only components labeled `ci: auto` (matches all pairs)
+atmos describe affected --labels=ci=auto
+atmos describe affected --labels=ci=auto,team=platform
+# Filter the GitHub Actions matrix
+atmos describe affected --format=matrix --labels=ci=auto
 # Authenticate before describing (when YAML functions require credentials)
 atmos describe affected --identity my-aws-identity
 atmos describe affected --identity # Interactive selection
@@ -455,6 +462,31 @@ Affected components and stacks:
         `atmos describe affected --exclude-locked`
     </dd>
 
+    <dt>`--tags` <em>(optional)</em></dt>
+    <dd>
+        Only include components whose [`metadata.tags`](/stacks/components/component-metadata#tags) contain **any** of
+        the given tags. Pass a comma-separated list. Can also be set with the `ATMOS_TAGS` environment variable.
+
+        `atmos describe affected --tags=production,tier-1`
+
+        The filter applies to every output format, including `--format=matrix`. It is rejected together with
+        `--upload`. Refer to [Filtering by Tags and Labels](#filtering-by-tags-and-labels).
+    </dd>
+
+    <dt>`--labels` <em>(optional)</em></dt>
+    <dd>
+        Only include components whose [`metadata.labels`](/stacks/components/component-metadata#labels) contain **all**
+        of the given pairs. Pass a comma-separated list of `key=value` or `key:value` pairs. Can also be set with the
+        `ATMOS_LABELS` environment variable.
+
+        `atmos describe affected --labels=ci=auto`
+
+        `atmos describe affected --labels=ci=auto,team=platform`
+
+        The filter applies to every output format, including `--format=matrix`. It is rejected together with
+        `--upload`. Refer to [Filtering by Tags and Labels](#filtering-by-tags-and-labels).
+    </dd>
+
     <dt>`--upload` <em>(optional)</em></dt>
     <dd>
         Upload the affected components and stacks to a specified HTTP endpoint.
@@ -464,6 +496,8 @@ Affected components and stacks:
         Atmos will perform an HTTP POST request to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,
         where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,
         and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable
+
+        The upload is always unfiltered, so `--upload` cannot be combined with `--tags` or `--labels`.
     </dd>
 
     <dt>`--identity` / `-i` <em>(optional)</em></dt>
@@ -1200,6 +1234,60 @@ are also not included in the output since they are explicitly disabled.
 ]
 ```
 </Terminal>
+
+## Filtering by Tags and Labels
+
+Use `--tags` and `--labels` to narrow the affected set to the components you care about. Both read the optional
+[`metadata.tags`](/stacks/components/component-metadata#tags) and
+[`metadata.labels`](/stacks/components/component-metadata#labels) of each component, and use the same matching rules as
+the `--tags` and `--labels` flags of [`atmos terraform`](/cli/commands/terraform/usage):
+
+- `--tags` takes a comma-separated list and matches components that have **any** of the tags
+- `--labels` takes a comma-separated list of `key=value` or `key:value` pairs and matches components that have **all** of the pairs
+- When both are given, a component must satisfy both filters
+- Matching is positive only. There is no way to select "components that do not have a label", so give every component a default
+  value and override it where needed (see the example below)
+
+The filters apply to every output format, including `--format=matrix`, so the same selection drives the JSON or YAML
+document and the GitHub Actions job matrix. The existing exclusions are unchanged: abstract components, disabled
+components (`metadata.enabled: false`), and, with `--exclude-locked`, locked components are never reported.
+
+```shell
+# Only components tagged `production` or `tier-1`
+atmos describe affected --tags=production,tier-1
+
+# Only components labeled `ci: auto`, as a GitHub Actions matrix
+atmos describe affected --format=matrix --labels=ci=auto
+
+# The same selection, set through the environment
+ATMOS_LABELS=ci=auto atmos describe affected --format=matrix
+```
+
+For example, label every component as safe for automation and override the label on the few that must not run in CI:
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+metadata:
+  labels:
+    ci: auto
+```
+
+```yaml title="stacks/catalog/iam.yaml"
+components:
+  terraform:
+    iam:
+      metadata:
+        labels:
+          ci: manual
+```
+
+`atmos describe affected --labels=ci=auto` then reports every affected component except `iam`. For the complete pattern,
+including a policy that blocks a privileged component if it runs in CI anyway, refer to
+[Keeping privileged components out of CI](/ci#keeping-privileged-components-out-of-ci).
+
+:::note
+`--upload` sends the full inventory of affected components to Atmos Pro, so it cannot be combined with `--tags` or
+`--labels`. Run the upload as a separate, unfiltered `atmos describe affected --upload` command.
+:::
 
 ## Affected Components with Dependencies
 

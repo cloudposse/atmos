@@ -89,6 +89,89 @@ Run a workflow across every component instance in your stacks. Generate the job 
 
 [Read the Deploy All Components guide](/integrations/github-actions/deploy-all).
 
+### Keeping Privileged Components Out of CI
+
+Some components should never run from a pull request workflow: the ones that manage identity, access, or the Terraform state
+backend, such as `aws-teams`, `iam`, or `tfstate-backend`. Atmos has no CI-specific on/off switch for a component, and the
+legacy `settings.github.actions_enabled` setting is not read by native CI. Use a [label](/stacks/components/component-metadata#labels)
+and select on it when you build the job matrix.
+
+Give every component a default label in the stack defaults, then override it on the privileged instances:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+# Default for every component.
+metadata:
+  labels:
+    ci: auto
+```
+</File>
+
+<File title="stacks/catalog/iam.yaml">
+```yaml
+components:
+  terraform:
+    iam:
+      metadata:
+        labels:
+          ci: manual
+```
+</File>
+
+Select only the components that are safe for automation, using [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels):
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix --labels=ci=auto
+```
+
+Or plan only those components directly:
+
+```shell
+atmos terraform plan --affected --labels=ci=auto
+```
+
+Run the privileged components from a separate workflow, with its own role and approvals, that selects `--labels=ci=manual`.
+
+Labels match positively only. There is no "not labeled" selector, which is why every component gets a default value and the
+privileged ones override it.
+
+As a backstop, attach an [OPA policy](/validation/opa) to the privileged component so it fails if it runs in CI anyway:
+
+<File title="stacks/schemas/opa/ci/privileged-component.rego">
+```rego
+package atmos
+
+errors[message] {
+  input.process_env.GITHUB_ACTIONS == "true"
+  input.metadata.labels.ci == "manual"
+  message := sprintf("%s is a privileged component and can't run in CI", [input.atmos_component])
+}
+```
+</File>
+
+<File title="stacks/catalog/iam.yaml">
+```yaml
+components:
+  terraform:
+    iam:
+      settings:
+        validation:
+          ci-guard:
+            schema_type: opa
+            schema_path: "ci/privileged-component.rego"
+            description: Block privileged components from running in CI
+```
+</File>
+
+:::note
+The policy fails the job. It does not skip it. The matrix selector is what keeps the job from starting in the first place, and
+the policy catches a job that was started some other way, such as a hand-written workflow or a copied command.
+:::
+
+Passing `--labels` or `--tags` to `atmos describe affected` filters the output only. The Atmos Pro inventory upload
+(`atmos describe affected --upload`) is always unfiltered, so the two flags cannot be combined with `--upload`.
+
 ### Gating Production with Environments
 
 Require approval before deploying production infrastructure. GitHub environments provide approval gates and environment-specific credentials while Atmos selects and deploys the stack.

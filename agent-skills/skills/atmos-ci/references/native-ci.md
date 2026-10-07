@@ -235,6 +235,31 @@ jobs:
 Use `deploy` in automation when you want a fresh plan followed by apply with auto-approve. Use
 manual gates or GitHub environments for production.
 
+## Keeping Privileged Components Out of CI
+
+Label every component `ci: auto` in the stack defaults, override with `ci: manual` on privileged
+instances (`iam`, `aws-teams`, `tfstate-backend`), and filter the matrix. Labels match positively
+only, so a default plus an override replaces a negation.
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix --labels=ci=auto
+```
+
+`--labels` (match ALL `key=value`/`key:value` pairs, env `ATMOS_LABELS`) and `--tags` (match ANY tag,
+env `ATMOS_TAGS`) filter every output format and are rejected with `--upload`. Add an OPA policy through
+`settings.validation` as a backstop; it fails the job instead of skipping it:
+
+```rego
+package atmos
+
+errors[message] {
+  input.process_env.GITHUB_ACTIONS == "true"
+  input.metadata.labels.ci == "manual"
+  message := sprintf("%s is a privileged component and can't run in CI", [input.atmos_component])
+}
+```
+
 ## Deploy All Instances
 
 ```yaml

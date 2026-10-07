@@ -226,6 +226,41 @@ Use all-instance matrices for full estate bootstraps, release deploys, or Atmos 
   run: atmos list instances --format=matrix
 ```
 
+### Keeping privileged components out of CI
+
+Native CI ignores the legacy `settings.github.actions_enabled` setting. To keep privileged components
+(such as `aws-teams`, `iam`, `tfstate-backend`) out of automated plan/apply, label components and
+filter the matrix. Labels match positively only (no negation), so set a default and override it:
+
+```yaml
+# stacks/orgs/acme/_defaults.yaml - default for every component
+metadata:
+  labels:
+    ci: auto
+
+# stacks/catalog/iam.yaml - privileged instances override it
+components:
+  terraform:
+    iam:
+      metadata:
+        labels:
+          ci: manual
+```
+
+```bash
+atmos describe affected --format=matrix --labels=ci=auto
+atmos terraform plan --affected --labels=ci=auto
+```
+
+- `--tags` matches ANY tag in `metadata.tags`; `--labels` matches ALL `key=value`/`key:value` pairs in
+  `metadata.labels`. Env vars: `ATMOS_TAGS`, `ATMOS_LABELS`.
+- Both filter every output format, including `--format=matrix`, and are rejected with `--upload`
+  (the Atmos Pro inventory upload is always unfiltered).
+- Run privileged components from a separate workflow and role that selects `--labels=ci=manual`.
+- Backstop: an OPA policy in `settings.validation` (rule head `errors[message]` in `package atmos`)
+  that checks `input.process_env.GITHUB_ACTIONS == "true"` and `input.metadata.labels.ci == "manual"`.
+  The policy fails the job rather than skipping it; the matrix selector is what keeps the job from starting.
+
 For full examples, read [references/native-ci.md](references/native-ci.md).
 
 ## Auth and Profiles
