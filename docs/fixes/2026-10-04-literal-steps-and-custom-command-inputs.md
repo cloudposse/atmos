@@ -37,7 +37,10 @@ All of these now behave as declared.
   recorded on step mappings, so `vars`, `settings`, and `env` maps are unchanged.
 - Only declared environment values are rendered; the ambient process environment
   passes through verbatim (`pkg/runner/step/ambient_env.go`), including for
-  workflow `test` steps.
+  workflow `test` steps. Runtime ambient markers match exact environment names,
+  so inherited `FOO` remains literal while separately declared `foo` renders.
+  This preserves case-distinct Unix variables; declared `!literal` markers
+  retain their case-insensitive matching for configuration normalization.
 - Custom-command arguments round-trip losslessly as JSON
   (`pkg/customcommand/arguments.go`). Optional arguments without a default resolve
   to an empty string.
@@ -87,6 +90,12 @@ All of these now behave as declared.
   The documentation patch applies cleanly to PR #3275 and passes
   `git diff --check`. The consolidated website build is handled with the
   complete stack.
+
+- Review correction validation (2026-10-07): Reproduced both an ambient parse
+  failure and unintended substitution when a declared key differed only in case.
+  Regression tests now preserve both environment values, render only the declared
+  value, keep literal markers through task/step conversion, and exclude runtime
+  markers from serialized YAML and JSON.
 
 ## Follow-ups
 

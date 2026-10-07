@@ -41,11 +41,12 @@ func TestApplyAmbientEnv(t *testing.T) {
 			wantRendered: []string{"FOO"},
 		},
 		{
-			name:         "declared keys match ambient keys case-insensitively",
+			name:         "case-distinct names retain independent rendering policies",
 			ambient:      map[string]string{"Path": "/bin"},
 			declared:     map[string]string{"PATH": "/usr/bin"},
 			wantEnv:      map[string]string{"Path": "/bin", "PATH": "/usr/bin"},
-			wantRendered: []string{"Path", "PATH"},
+			wantLiteral:  []string{"Path"},
+			wantRendered: []string{"PATH"},
 		},
 		{
 			name:        "an existing literal marker is kept",
@@ -160,4 +161,20 @@ func TestScriptHandlerDeclaredEnvWithBadTemplateStillFails(t *testing.T) {
 	_, err := handler.Execute(context.Background(), step, vars)
 
 	require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+}
+
+func TestApplyAmbientEnvKeepsCaseDistinctValuesAndRendering(t *testing.T) {
+	for _, ambientValue := range []string{"{{bad", `{{ "injected" }}`} {
+		t.Run(ambientValue, func(t *testing.T) {
+			step := &schema.WorkflowStep{}
+			ApplyAmbientEnv(step,
+				map[string]string{"FOO": ambientValue},
+				map[string]string{"foo": `{{ "rendered" }}`})
+
+			resolved, err := NewVariables().ResolveStepEnvMap(step, step.Env)
+
+			require.NoError(t, err)
+			assert.Equal(t, map[string]string{"FOO": ambientValue, "foo": "rendered"}, resolved)
+		})
+	}
 }
