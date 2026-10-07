@@ -10,6 +10,8 @@ on:
       - reopened
     paths:
       - "website/**"
+      - "examples/**"
+      - ".github/workflows/website-preview-build.yml"
 
   # Build and run the website prebuild tests against the synthetic merge-queue commit,
   # so a PR that is green alone can't break the production deploy once combined with

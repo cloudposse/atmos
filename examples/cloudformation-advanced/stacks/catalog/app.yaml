@@ -7,7 +7,7 @@ components:
         - CAPABILITY_IAM
       parameters:
         ArtifactBucket: "{{ .vars.artifact_bucket }}"
-        ArtifactKey: 'lambda/{{ .vars.release }}/handler.zip'
+        ArtifactKey: 'lambda/{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}/handler.zip'
       settings:
         aws_cloudformation:
           region: us-east-1
@@ -27,7 +27,7 @@ components:
               type: shell
               command: python3 build.py
               env:
-                ATMOS_DEMO_RELEASE: '{{ .vars.release }}'
+                ATMOS_DEMO_RELEASE: '{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}'
             - name: test
               type: shell
               command: python3 -B -m unittest discover -s tests -v
@@ -39,7 +39,7 @@ components:
             - name: publish
               type: publish
               source: .build/handler.zip
-              destination: 'lambda/{{ .vars.release }}/handler.zip'
+              destination: 'lambda/{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}/handler.zip'
               target: artifacts
             - name: record-publish
               type: script
@@ -68,7 +68,7 @@ components:
               expect:
                 status: [200]
                 response:
-                  - '^\{"message": "hello from Atmos", "release": "{{ .vars.release }}"\}$'
+                  - '^\{"message": "hello from Atmos", "release": "{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}"\}$'
               timeout: 60s
               retry:
                 max_attempts: 10

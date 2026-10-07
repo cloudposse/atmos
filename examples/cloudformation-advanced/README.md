@@ -1,6 +1,9 @@
 ---
 title: CloudFormation Build and Publish Pipeline
 tags: [Components, Hooks, Automation, Emulators]
+cast:
+  file: /casts/examples/cloudformation-advanced/lifecycle.cast
+  title: CloudFormation build, publish, and deploy lifecycle
 related_docs:
   - label: CloudFormation Components
     url: /stacks/components/aws-cloudformation

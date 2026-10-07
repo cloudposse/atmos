@@ -6,4 +6,3 @@ import:
 vars:
   stage: advanced
   artifact_bucket: atmos-cfn-advanced-artifacts-local
-  release: !env ATMOS_DEMO_RELEASE "v1"
