@@ -444,13 +444,21 @@ func TestReporter_GatedByMasterSwitch(t *testing.T) {
 	})
 }
 
-// TestReporter_ForkGate verifies elevated events never post unless ci.allow_unsafe_fork_execution is set.
+// TestReporter_ForkGate verifies that on an elevated event a fork pull request never posts unless
+// ci.allow_unsafe_fork_execution is set, while a same-repository pull request posts normally.
 func TestReporter_ForkGate(t *testing.T) {
 	forkEnv := func() []ghtest.EnvOption {
 		return []ghtest.EnvOption{
 			ghtest.WithRepository("owner/repo"),
 			ghtest.WithEvent("pull_request_target", map[string]any{"action": "synchronize"}),
-			ghtest.WithPullRequest(42, "fork-branch", "main"),
+			ghtest.WithForkPullRequest(42, "fork-branch", "main"),
+		}
+	}
+	sameRepoEnv := func() []ghtest.EnvOption {
+		return []ghtest.EnvOption{
+			ghtest.WithRepository("owner/repo"),
+			ghtest.WithEvent("pull_request_target", map[string]any{"action": "synchronize"}),
+			ghtest.WithPullRequest(42, "feature", "main"),
 		}
 	}
 	calls := []struct {
@@ -495,11 +503,13 @@ func TestReporter_ForkGate(t *testing.T) {
 	}
 
 	for _, tc := range calls {
-		t.Run(tc.name+" is blocked on an elevated event", func(t *testing.T) {
+		t.Run(tc.name+" is blocked for a fork pull request on an elevated event", func(t *testing.T) {
 			h := newHarness(t, fullCIConfig(), nil, forkEnv()...)
 			c, err := h.reporter.Context()
 			require.NoError(t, err)
 			assert.True(t, c.ElevatedEvent)
+			require.NotNil(t, c.PullRequest)
+			assert.True(t, c.PullRequest.Fork)
 
 			rc, err := tc.call(h.reporter)
 
@@ -511,7 +521,25 @@ func TestReporter_ForkGate(t *testing.T) {
 			h.assertNothingWritten(t)
 		})
 
-		t.Run(tc.name+" is sent when unsafe fork execution is allowed", func(t *testing.T) {
+		t.Run(tc.name+" is sent for a same-repository pull request on an elevated event", func(t *testing.T) {
+			h := newHarness(t, fullCIConfig(), nil, sameRepoEnv()...)
+			c, err := h.reporter.Context()
+			require.NoError(t, err)
+			assert.True(t, c.ElevatedEvent)
+			require.NotNil(t, c.PullRequest)
+			assert.False(t, c.PullRequest.Fork)
+
+			rc, err := tc.call(h.reporter)
+
+			require.NoError(t, err)
+			assert.Empty(t, rc.Gate)
+			assert.False(t, rc.Local)
+			assert.Equal(t, github.ProviderName, rc.Provider)
+			assert.Empty(t, h.local.String())
+			tc.sent(t, h)
+		})
+
+		t.Run(tc.name+" is sent for a fork pull request when unsafe fork execution is allowed", func(t *testing.T) {
 			cfg := fullCIConfig()
 			cfg.CI.AllowUnsafeForkExecution = true
 			h := newHarness(t, cfg, nil, forkEnv()...)

@@ -63,13 +63,9 @@ func TestExecutePush_WritesSummaryForEveryPushedRefWhenEnabled(t *testing.T) {
 	rt := NewMockRuntime(ctrl)
 	withStubsConfig(t, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		buildSection("app:v1", "reg1.example.com/app:v1", "reg2.example.com/app:v1"), nil, rt)
-	var summaries []string
-	prev := writeComponentStepSummary
-	writeComponentStepSummary = func(content string) error {
-		summaries = append(summaries, content)
-		return nil
-	}
-	t.Cleanup(func() { writeComponentStepSummary = prev })
+	reporter, summaries, comments := useMockReporter(t, ctrl)
+	expectSummaryAndComment(reporter, summaries, comments, nil)
+	expectSummaryAndComment(reporter, summaries, comments, nil)
 
 	gomock.InOrder(
 		rt.EXPECT().Push(gomock.Any(), "reg1.example.com/app:v1").
@@ -83,11 +79,14 @@ func TestExecutePush_WritesSummaryForEveryPushedRefWhenEnabled(t *testing.T) {
 	)
 
 	require.NoError(t, ExecutePush(context.Background(), infoFor("app")))
-	require.Len(t, summaries, 2)
-	assert.Contains(t, summaries[0], "## 🐳 reg1.example.com/app:v1")
-	assert.Contains(t, summaries[0], "| Digest | `sha256:111` |")
-	assert.Contains(t, summaries[1], "## 🐳 reg2.example.com/app:v1")
-	assert.Contains(t, summaries[1], "| Digest | `sha256:222` |")
+	require.Len(t, *summaries, 2)
+	assert.Contains(t, (*summaries)[0], "## 🐳 reg1.example.com/app:v1")
+	assert.Contains(t, (*summaries)[0], "| Digest | `sha256:111` |")
+	assert.Contains(t, (*summaries)[1], "## 🐳 reg2.example.com/app:v1")
+	assert.Contains(t, (*summaries)[1], "| Digest | `sha256:222` |")
+	require.Len(t, *comments, 2)
+	assert.Equal(t, "container:image:reg1.example.com/app:v1", (*comments)[0].Key)
+	assert.Equal(t, "container:image:reg2.example.com/app:v1", (*comments)[1].Key)
 }
 
 func TestExecutePush_FailFast(t *testing.T) {

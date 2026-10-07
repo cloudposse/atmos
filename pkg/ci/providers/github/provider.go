@@ -127,6 +127,12 @@ func (p *Provider) Context() (*provider.Context, error) {
 		ctx.PullRequest = parsePRInfo()
 	}
 
+	// A workflow_run triggered by a fork carries no pull_request object, so the fork-execution
+	// gate would never see it. Surface it as a fork pull request instead of failing open.
+	if ctx.EventName == "workflow_run" {
+		ctx.PullRequest = parseForkWorkflowRun(ctx.Repository)
+	}
+
 	// pull_request_target and workflow_run run with the base repository's
 	// secrets even though the requested checkout may target untrusted fork
 	// content. Mark them elevated so the fork-checkout safety gate engages.
@@ -194,6 +200,7 @@ func parsePRInfo() *provider.PRInfo {
 		HeadRef: headRef,
 		BaseRef: baseRef,
 		URL:     prURL,
+		Fork:    payloadPRFromFork(),
 	}
 }
 

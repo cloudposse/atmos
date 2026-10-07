@@ -25,6 +25,13 @@ const (
 	defaultEventName  = "push"
 	eventPullRequest  = "pull_request"
 
+	// Head repositories of pull requests created by WithForkPullRequest belong to forkOwner.
+	forkOwner = "forker"
+
+	// Payload key names.
+	keyFullName = "full_name"
+	keyFork     = "fork"
+
 	// FilePerm is the mode of files SetEnv creates.
 	filePerm = 0o600
 )
@@ -47,6 +54,7 @@ type pullRequestFixture struct {
 	number  int
 	headRef string
 	baseRef string
+	fork    bool
 }
 
 type envConfig struct {
@@ -133,6 +141,16 @@ func WithPullRequest(number int, headRef, baseRef string) EnvOption {
 
 	return func(c *envConfig) {
 		c.pr = &pullRequestFixture{number: number, headRef: headRef, baseRef: baseRef}
+	}
+}
+
+// WithForkPullRequest is WithPullRequest for a pull request whose head lives in a fork:
+// the payload marks head.repo as a fork and gives it a full_name different from the base repository.
+func WithForkPullRequest(number int, headRef, baseRef string) EnvOption {
+	defer perf.Track(nil, "ghtest.WithForkPullRequest")()
+
+	return func(c *envConfig) {
+		c.pr = &pullRequestFixture{number: number, headRef: headRef, baseRef: baseRef, fork: true}
 	}
 }
 
@@ -258,8 +276,8 @@ func writeEventPayload(t testing.TB, path string, cfg *envConfig) {
 		payload["pull_request"] = map[string]any{
 			"number":   cfg.pr.number,
 			"html_url": fmt.Sprintf("%s/%s/pull/%s", cfg.serverURL, cfg.repository, strconv.Itoa(cfg.pr.number)),
-			"head":     map[string]any{"ref": cfg.pr.headRef, "sha": cfg.sha},
-			"base":     map[string]any{"ref": cfg.pr.baseRef, "sha": defaultBaseSHA},
+			"head":     map[string]any{"ref": cfg.pr.headRef, "sha": cfg.sha, "repo": headRepoFixture(cfg)},
+			"base":     map[string]any{"ref": cfg.pr.baseRef, "sha": defaultBaseSHA, "repo": map[string]any{keyFullName: cfg.repository, keyFork: false}},
 		}
 	}
 	for k, v := range cfg.payload {
@@ -276,6 +294,16 @@ func writeEventPayload(t testing.TB, path string, cfg *envConfig) {
 	if err := os.WriteFile(path, data, filePerm); err != nil {
 		t.Fatalf("ghtest: writing event payload: %v", err)
 	}
+}
+
+// headRepoFixture is the pull request head repository: the base repository for a same-repo pull
+// request, or a fork owned by another account for WithForkPullRequest.
+func headRepoFixture(cfg *envConfig) map[string]any {
+	if cfg.pr.fork {
+		_, name, _ := strings.Cut(cfg.repository, "/")
+		return map[string]any{keyFullName: forkOwner + "/" + name, keyFork: true}
+	}
+	return map[string]any{keyFullName: cfg.repository, keyFork: false}
 }
 
 // ReadFile returns the contents of path, failing the test on error.

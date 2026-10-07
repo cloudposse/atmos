@@ -2824,6 +2824,30 @@
             }
           ],
           "description": "Helmfile contains template overrides for helmfile commands.\nKeys are command names (e.g., \"diff\", \"apply\"), values are template file paths."
+        },
+        "container": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Container maps a container operation name (`image`) to a template file name under base_path."
         }
       },
       "type": "object",

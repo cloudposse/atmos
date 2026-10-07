@@ -16,7 +16,7 @@ import Intro from '@site/src/components/Intro'
 ## Usage
 
 ```python
-ci.summary(markdown)
+ci.summary(markdown = "", template = "", data = None)
 ```
 
 ## Arguments
@@ -24,10 +24,38 @@ ci.summary(markdown)
 <dl>
     <dt>`markdown`</dt>
     <dd>
-        Required. The Markdown to append, as a string. Each call adds to the summary rather than replacing it, so a
-        script can build the summary in several steps.
+        The Markdown to append, as a string. Each call adds to the summary rather than replacing it, so a script can
+        build the summary in several steps. Required unless `template` or `data` is given, and it cannot be combined
+        with them.
+    </dd>
+
+    <dt>`template`</dt>
+    <dd>
+        (Optional) The name of a [template file](#templates) to render into the summary, instead of passing
+        `markdown`. It is a file name under [`ci.templates.base_path`](/cli/configuration/ci/templates), or an absolute
+        path.
+    </dd>
+
+    <dt>`data`</dt>
+    <dd>
+        (Optional) A dict that becomes the template context. Keys are read in the template as `.key`. Passing `data`
+        without `template` renders the template that [`ci.summary.template`](/cli/configuration/ci/summary) names.
     </dd>
 </dl>
+
+## Templates
+
+A script can keep the layout of a summary in a template file and pass only the values:
+
+- An explicit `template=` is used when given.
+- Otherwise, a call that passes `data` renders the template that [`ci.summary.template`](/cli/configuration/ci/summary)
+  names. A call with neither `template` nor `data` appends `markdown` as written.
+- The name is resolved against [`ci.templates.base_path`](/cli/configuration/ci/templates). When no file has exactly
+  that name, the name with a `.md` suffix is tried.
+- Templates use Go template syntax with the same functions as the built-in plan templates. The `data` dict is the
+  template context.
+
+See [script report templates](/cli/configuration/ci/templates#script-report-templates) for the configuration.
 
 ## Returns
 
@@ -59,9 +87,27 @@ for stack, result in {"dev": "ok", "prod": "ok"}.items():
 ci.summary("\n".join(rows))
 ```
 
+### Render a summary from a template
+
+```text title=".atmos/ci/templates/deploy.md"
+## Deploy to {{ .stack }}
+
+{{ .count }} services deployed.
+{{ range .services }}
+- {{ . }}
+{{ end }}
+```
+
+```python
+ci.summary(template = "deploy.md", data = {"stack": "prod", "count": 2, "services": ["api", "web"]})
+```
+
 ## Errors
 
 - A missing or non-string `markdown` fails with an argument error that names `ci.summary`.
+- Passing `markdown` together with `template` or `data`, a `data` value that is not a dict, or `data` without any
+  template to render fails with an argument error.
+- A template that does not exist, or that fails to render, fails the script.
 - A failure to write the summary fails the script. A gated-off call never fails.
 
 ## Related

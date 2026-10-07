@@ -36,6 +36,8 @@ ci:
       diff: "helmfile-diff.md"
       apply: "helmfile-apply.md"
       destroy: "helmfile-destroy.md"
+    container:
+      image: "image.md"
 ```
 </File>
 
@@ -84,6 +86,17 @@ ci:
 
   <dt>`ci.templates.helmfile.destroy`</dt>
   <dd>Filename of the custom Helmfile destroy summary template within the base path.</dd>
+  <dt>`ci.templates.container.image`</dt>
+  <dd>
+    Filename of the custom container image summary template within the base path. Without it, Atmos uses
+    `<base_path>/container/image.md` when that file exists, and the built-in template otherwise. The same
+    Markdown is used for the job summary and for the per-image pull request comment, keyed `container:image:<image>`.
+
+    The template receives these fields, all already escaped Markdown: `.Image`, `.Badges`, `.Description`,
+    `.Tag`, `.Digest`, `.ID`, `.Revision`, `.Source`, `.Entrypoint`, `.Command`, `.StopSignal`, `.StorageDriver`,
+    `.ExposedPorts`, `.Env` (rows with `.Name` and `.Value`), `.Labels` (rows with `.Name` and `.Value`),
+    `.Layers` (rows with `.Index` and `.Digest`), and `.RawJSON`.
+  </dd>
 </dl>
 
 ## Template Context
@@ -214,6 +227,56 @@ No changes. Infrastructure is up-to-date.
 ```
 </File>
 
+## Script report templates
+
+Scripts that call [`ci.summary`](/functions/automation/ci.summary) or [`ci.comment`](/functions/automation/ci.comment)
+can render their text from a template file instead of building the Markdown in code. Two keys name the default
+template for each call:
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  templates:
+    base_path: ".atmos/ci/templates"
+  summary:
+    template: "deploy.md"      # default for ci.summary(data = ...)
+  comments:
+    template: "release.md"     # default for ci.comment(data = ...)
+```
+</File>
+
+<dl>
+  <dt>[`ci.summary.template`](/cli/configuration/ci/summary)</dt>
+  <dd>
+    The template that `ci.summary(data = {...})` renders when the call names no `template`.
+  </dd>
+
+  <dt>[`ci.comments.template`](/cli/configuration/ci/comments)</dt>
+  <dd>
+    The template that `ci.comment(data = {...})` renders when the call names no `template`.
+  </dd>
+</dl>
+
+A template name resolves against `ci.templates.base_path`, so `deploy.md` above is read from
+`.atmos/ci/templates/deploy.md`. An absolute path is used as written. When no file has exactly that name, the name with
+a `.md` suffix is tried, so `deploy` finds `deploy.md`. A call with an explicit `template=` ignores the configured
+default. The `data` dict that the script passes is the template context, and keys are read as `.key`.
+
+<File title=".atmos/ci/templates/deploy.md">
+```markdown
+## Deploy to {{ .stack }}
+
+{{ .count }} services deployed.
+{{ range .services }}
+- {{ . }}
+{{ end }}
+```
+</File>
+
+The native commands read `ci.summary.template` as well, as the name of a summary template inside the component type
+directory (for example `<base_path>/kubernetes/summary.md`). A name such as `summary` therefore works for both: the
+native commands read `<base_path>/<component type>/summary.md`, and scripts read `<base_path>/summary.md`.
+
 ## Built-in Templates
 
 The default templates are embedded in the Atmos binary:
@@ -230,4 +293,5 @@ You can use these as a starting point for customization.
 - [CI Configuration](/cli/configuration/ci) - Full configuration reference
 - [Summary](/cli/configuration/ci/summary) - Job summary configuration
 - [Comments](/cli/configuration/ci/comments) - PR comment configuration
+- [`ci.summary`](/functions/automation/ci.summary) and [`ci.comment`](/functions/automation/ci.comment) - Script functions that render these templates
 - [Job Summaries](/ci/job-summaries) - Summary format and template customization

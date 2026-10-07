@@ -126,6 +126,7 @@ type PRInfo struct {
     HeadRef string
     BaseRef string
     URL     string
+    Fork    bool // The pull request head lives in a fork of the base repository.
 }
 ```
 
@@ -313,14 +314,14 @@ Gate keys per feature:
 | `Check`, `UpdateCheck` | `ci.checks.enabled` |
 | `Comment` | `ci.comments.enabled` |
 | `Group` | `ci.groups.mode` (off disables) |
-| `Comment`/`Check`/`UpdateCheck` on an elevated event | `ci.allow_unsafe_fork_execution` |
+| `Comment`/`Check`/`UpdateCheck` for a fork pull request on an elevated event | `ci.allow_unsafe_fork_execution` |
 
 The `Receipt.Provider` field is always the name of the provider that handled the call, which is the generic provider's name when the write was gated or no provider was detected.
 
 Additional rules:
 
 - **Missing capability falls through.** The write needs an optional capability (`EnvExporter`, `Annotator`, `SARIFReporter`, `LogGrouper`). A detected provider that lacks it falls through to the generic provider with a debug log, keeping the gate in the receipt. When nothing can render the write the call is a no-op. The Reporter never returns `ErrCIOperationNotSupported`.
-- **Fork safety.** The fork gate applies only to detected providers and covers both `Comment` and `Check`/`UpdateCheck`. When `Context.ElevatedEvent` is true and `ci.allow_unsafe_fork_execution` is off, the write is rendered locally and the receipt carries `Gate=ci.allow_unsafe_fork_execution`.
+- **Fork safety.** The fork gate applies only to detected providers and covers both `Comment` and `Check`/`UpdateCheck`. The gate holds a write only when `Context.ElevatedEvent` is true, `Context.PullRequest` is set with `Fork` true, and `ci.allow_unsafe_fork_execution` is off. A same-repository pull request, or an elevated run with no pull request in the context, posts normally. A held write is rendered locally and the receipt carries `Gate=ci.allow_unsafe_fork_execution`.
 - **Comments.** A non-empty `Key` wraps into the marker `<!-- atmos:ci:<key> -->`, which is prepended to the body; an empty `Key` forces create. The PR number comes from the request, then `Context.PullRequest`. A detected provider with no PR number fails with `ErrCIPullRequestUnknown`; local rendering does not require one.
 - **Checks.** `Check` creates with the requested state (empty means pending). `UpdateCheck` maps `success` to conclusion `success`, `failure` and `error` to `failure`, and `cancelled` to `cancelled`, and sets `CompletedAt` for these final states. The details URL defaults to `Context.RunURL`.
 - **Masking.** `Mask` always registers the value with the in-process masker. It emits `::add-mask::` (through `ValueMasker`) only when a provider is detected and `ci.enabled` is on; otherwise the receipt is local.

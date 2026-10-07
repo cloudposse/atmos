@@ -196,12 +196,104 @@ func oneOf[T ~string](b *starlark.Builtin, field, value string, allowed ...T) (T
 }
 
 func (s *session) ciSummary(t *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var markdown string
-	if err := unpackCI(b, args, kwargs, "markdown", &markdown); err != nil {
+	var markdown, data starlark.Value
+	var template string
+	if err := unpackCI(b, args, kwargs, "markdown?", &markdown, "template?", &template, "data?", &data); err != nil {
 		return nil, err
 	}
-	rc, err := s.reporter(t).Summary(markdown)
+	reporter := s.reporter(t)
+	text, err := resolveCIText(b, &ciTextSource{field: "markdown", value: markdown, template: template, data: data, configKey: "ci.summary.template", render: reporter.RenderSummary})
+	if err != nil {
+		return nil, err
+	}
+	rc, err := reporter.Summary(text)
 	return s.ciDone(t, "summary", rc, err)
+}
+
+// ciTextSource describes the text arguments of ci.summary and ci.comment: the literal text, or a
+// template with data that renders it.
+type ciTextSource struct {
+	// field is the name of the literal text argument, markdown or body.
+	field string
+	// value is the literal text argument, or nil when absent.
+	value starlark.Value
+	// template is the explicit template name, or empty to use the configured default.
+	template string
+	// data is the template context argument, or nil when absent.
+	data starlark.Value
+	// configKey is the configuration key of the default template, for error messages.
+	configKey string
+	// render renders the named template, or the configured default when the name is empty.
+	render func(name string, data any) (string, error)
+}
+
+// resolveCIText returns the text to write. Literal text passes through unchanged. A template, or
+// data with a configured default template, is rendered instead. Literal text and a template are
+// mutually exclusive.
+func resolveCIText(b *starlark.Builtin, src *ciTextSource) (string, error) {
+	text, hasText, err := ciLiteralText(b, src.field, src.value)
+	if err != nil {
+		return "", err
+	}
+	data, hasData, err := ciTemplateData(b, src.data)
+	if err != nil {
+		return "", err
+	}
+	if src.template == "" && !hasData {
+		if !hasText {
+			return "", invalidArg("%s: %s is required unless template= or data= is given", b.Name(), src.field)
+		}
+		return text, nil
+	}
+	if text != "" {
+		other := "template"
+		if src.template == "" {
+			other = "data"
+		}
+		return "", invalidArg("%s: %s and %s are mutually exclusive", b.Name(), src.field, other)
+	}
+	return renderCIText(b, src, data)
+}
+
+// renderCIText renders the template and classifies a failure. A missing configured default means
+// the call passed data with nothing to render it, which is an argument error.
+func renderCIText(b *starlark.Builtin, src *ciTextSource, data any) (string, error) {
+	rendered, err := src.render(src.template, data)
+	if err == nil {
+		return rendered, nil
+	}
+	if src.template == "" && errors.Is(err, errUtils.ErrCITemplateNotFound) {
+		return "", invalidArg("%s: data requires template= or %s: %v", b.Name(), src.configKey, err)
+	}
+	return "", ciFail(strings.TrimPrefix(b.Name(), "ci."), err)
+}
+
+// ciLiteralText reads the literal text argument, which must be a string when present.
+func ciLiteralText(b *starlark.Builtin, field string, value starlark.Value) (text string, present bool, err error) {
+	if value == nil {
+		return "", false, nil
+	}
+	str, ok := value.(starlark.String)
+	if !ok {
+		return "", false, invalidArg("%s: for parameter %s: got %s, want string", b.Name(), field, value.Type())
+	}
+	return string(str), true, nil
+}
+
+// ciTemplateData converts the data argument to the template context. Absent and None mean no data.
+func ciTemplateData(b *starlark.Builtin, value starlark.Value) (data any, present bool, err error) {
+	if value == nil || value == starlark.None {
+		return nil, false, nil
+	}
+	dict, ok := value.(*starlark.Dict)
+	if !ok {
+		return nil, false, invalidArg("%s: for parameter data: got %s, want dict", b.Name(), value.Type())
+	}
+	converted, err := configurationResult(dict, make(map[starlark.Value]bool))
+	if err != nil {
+		return nil, false, invalidArg("%s: data: %v", b.Name(), err)
+	}
+	return converted, true, nil
 }
 
 func (s *session) ciOutput(t *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -272,10 +364,16 @@ func (s *session) ciAnnotate(t *starlark.Thread, b *starlark.Builtin, args starl
 }
 
 func (s *session) ciComment(t *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var body, key string
+	var bodyArg, data starlark.Value
+	var key, template string
 	behavior := string(ci.CommentBehaviorUpsert)
 	var pr int
-	if err := unpackCI(b, args, kwargs, "body", &body, "key?", &key, "behavior?", &behavior, "pr?", &pr); err != nil {
+	if err := unpackCI(b, args, kwargs, "body?", &bodyArg, "key?", &key, "behavior?", &behavior, "pr?", &pr, "template?", &template, "data?", &data); err != nil {
+		return nil, err
+	}
+	reporter := s.reporter(t)
+	body, err := resolveCIText(b, &ciTextSource{field: "body", value: bodyArg, template: template, data: data, configKey: "ci.comments.template", render: reporter.RenderComment})
+	if err != nil {
 		return nil, err
 	}
 	if err := requireText(b, "body", body); err != nil {
@@ -288,7 +386,7 @@ func (s *session) ciComment(t *starlark.Thread, b *starlark.Builtin, args starla
 	if pr < 0 {
 		return nil, invalidArg("%s: pr must not be negative", b.Name())
 	}
-	rc, err := s.reporter(t).Comment(threadContext(t), ci.CommentRequest{Body: body, Key: key, Behavior: parsed, PR: pr})
+	rc, err := reporter.Comment(threadContext(t), ci.CommentRequest{Body: body, Key: key, Behavior: parsed, PR: pr})
 	if err != nil {
 		return nil, ciFail("comment", err)
 	}

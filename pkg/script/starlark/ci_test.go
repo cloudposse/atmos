@@ -364,7 +364,7 @@ print(type(ci.context))`)
 		require.True(t, found, stdout)
 		assert.JSONEq(t, `{"provider":"github-actions","local":false,"event":"pull_request","sha":"abc","branch":"feat","repo":"o/r",`+
 			`"actor":"erik","run_id":"9","run_url":"https://run","elevated":true,`+
-			`"pr":{"number":12,"head":"feat","base":"main","url":"https://pr"}}`, encoded)
+			`"pr":{"number":12,"head":"feat","base":"main","url":"https://pr","fork":false}}`, encoded)
 		assert.Equal(t, "struct\n", kind)
 	})
 	t.Run("no pull request", func(t *testing.T) {
