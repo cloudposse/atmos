@@ -47,6 +47,10 @@ when the manifest or its parent directories do not exist yet.
   cross-process shared-lock test that excludes writers until release. Process
   fixtures use explicit owner/repo tool names to avoid registry network access.
 
+- Review correction (2026-10-06, PR #3266): Reap the shared-lock test child on setup or assertion failure. Cleanup cancels
+  the command context, closes stdin, and waits for the child; normal completion
+  retains the successful exit assertion and prevents a second wait.
+
 ## Validation
 
 - `go test -race -count=3 ./pkg/toolchain -run 'TestToolVersions|TestAddToolToVersionsConcurrent' -timeout=5m` passed.
@@ -107,6 +111,10 @@ when the manifest or its parent directories do not exist yet.
   metadata: reads can change access timestamps. Project-cleanliness assertions
   now compare recursive path names/types and file bytes, covering the intended
   no-project-writes contract without assuming access timestamps remain fixed.
+
+- Review correction validation (2026-10-06): `GOMAXPROCS=4 go test -p 2 ./pkg/toolchain -run
+  '^TestToolVersionsSharedLockAcrossProcesses$' -count=1 -v` passed after the
+  cleanup change (1.959 seconds). `gofumpt` and `git diff --check` passed.
 
 ## Follow-ups
 
