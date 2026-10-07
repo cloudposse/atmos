@@ -264,6 +264,14 @@ func TestToolVersionsSharedLockAcrossProcesses(t *testing.T) {
 	require.NoError(t, err)
 	defer stdin.Close()
 	require.NoError(t, cmd.Start())
+	waited := false
+	t.Cleanup(func() {
+		if !waited {
+			cancel()
+			_ = stdin.Close()
+			_ = cmd.Wait()
+		}
+	})
 	ready, err := bufio.NewReader(stdout).ReadString('\n')
 	require.NoError(t, err)
 	require.Equal(t, "locked\n", ready, "child must hold a shared OS lock before parent proceeds")
@@ -277,6 +285,7 @@ func TestToolVersionsSharedLockAcrossProcesses(t *testing.T) {
 		return nil
 	}), filelock.ErrAcquire)
 	require.NoError(t, stdin.Close())
+	waited = true
 	require.NoError(t, cmd.Wait())
 	require.NoError(t, lock.WithExclusive(ctx, func() error { return nil }))
 }

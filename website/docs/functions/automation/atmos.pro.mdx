@@ -90,7 +90,7 @@ if result.exit_code != 0:
     fail("Deploy failed with exit code {}.".format(result.exit_code))
 ```
 
-Passing `check = False` lets the script release the lock even when the deploy fails, because the language has no `try`/`finally`. The lock lasts 300 seconds, so the script should finish its work or unlock the stack before it expires.
+Passing `check = False` lets the script release the lock after an ordinary nonzero deploy exit, because the language has no `try`/`finally`. A process-start failure, cancellation, or signal termination can still stop the script before `unlock` runs, leaving the lock until its 300-second TTL expires. Finish the work or unlock the stack before that TTL expires.
 
 ### Commit formatted files
 
@@ -114,9 +114,9 @@ if lock.exit_code != 0:
 ```
 
 :::note
-These commands talk to Atmos Pro and are meant for CI pipelines that are connected to it, where authentication comes
-from the pipeline environment. Outside such a pipeline they fail, so run them from automation that already works with
-Atmos Pro.
+In connected GitHub Actions pipelines, Atmos can obtain a bearer token through OIDC. For `lock` and `unlock` in other
+automation, supply a bearer token through `settings.pro.token` or `ATMOS_PRO_TOKEN`. The CLI sends that token with the
+API request; Atmos Pro determines whether it authorizes the request.
 :::
 
 ## Related
