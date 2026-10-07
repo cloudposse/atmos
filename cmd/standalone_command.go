@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -42,7 +43,7 @@ func standaloneCommandParser(file *script.File, stdout io.Writer) script.Command
 			return script.CommandInput{}, err
 		}
 		if spec.Name == "" {
-			spec.Name = filename
+			spec.Name = standalone.DefaultName(filename)
 		}
 		return parseStandaloneCommand(ctx, &spec, argv, stdout, invoked)
 	}
@@ -72,16 +73,20 @@ func parseStandaloneCommand(ctx context.Context, spec *script.CommandSpec, argv 
 	parser.RegisterFlags(cmd)
 	useDecimalIntegers(cmd, spec.Flags)
 	standalone.AnnotateFlags(cmd.Flags(), spec.Flags)
+	standalone.DescribeArguments(cmd, spec.Args)
 	if err := cmd.ParseFlags(argv); err != nil {
 		return script.CommandInput{}, standalone.NewUsageError(cmd, invoked, err)
 	}
 	if help, _ := cmd.Flags().GetBool("help"); help {
+		standalone.LabelListFlags(cmd.Flags())
 		return script.CommandInput{Help: true}, cmd.Help()
 	}
 	input, err := collectStandaloneInput(cmd, parser, spec, argv)
 	if err != nil {
 		return script.CommandInput{}, standalone.NewUsageError(cmd, invoked, err)
 	}
+	// A validate callback may reject input the parser accepted; present that like any usage error.
+	input.Usage = func(cause error) error { return standalone.NewUsageError(cmd, invoked, cause) }
 	return input, nil
 }
 
@@ -141,7 +146,7 @@ func resolveStandaloneCommandFlags(parser *flags.StandardParser, cmd *cobra.Comm
 	for _, flag := range definitions {
 		name := flag.GetName()
 		explicit := cmd.Flags().Changed(name)
-		_, hasEnv := standaloneFlagEnvironment(flag)
+		_, _, hasEnv := standaloneFlagEnvironment(flag)
 		if flag.IsRequired() && !explicit && !hasEnv {
 			continue
 		}
@@ -214,16 +219,17 @@ func validStandaloneFlagName(name string) bool {
 }
 
 // standaloneFlagEnvironment follows Viper's default behavior: the first nonempty
-// bound variable wins, and an empty variable falls through to the next binding.
-func standaloneFlagEnvironment(flag flags.Flag) (string, bool) {
+// bound variable wins, and an empty variable falls through to the next binding. It returns the
+// variable's name along with its value so errors can name the source.
+func standaloneFlagEnvironment(flag flags.Flag) (name, value string, found bool) {
 	defer perf.Track(nil, "cmd.standaloneFlagEnvironment")()
 
 	for _, name := range flag.GetEnvVars() {
 		if value, exists := os.LookupEnv(name); exists && value != "" {
-			return value, true
+			return name, value, true
 		}
 	}
-	return "", false
+	return "", "", false
 }
 
 // Viper's typed getters silently turn malformed environment values into zero values, split lists
@@ -235,19 +241,51 @@ func applyStandaloneEnvironment(cmd *cobra.Command, values *viper.Viper, definit
 
 	for _, flag := range definitions {
 		name := flag.GetName()
-		raw, exists := standaloneFlagEnvironment(flag)
+		source, raw, exists := standaloneFlagEnvironment(flag)
 		if !exists || cmd.Flags().Changed(name) {
 			continue
 		}
 		parsed, err := standaloneEnvironmentValue(cmd, flag, raw)
+		if err == nil {
+			err = checkEnvironmentChoices(flag, raw, parsed)
+		}
 		if err != nil {
 			if !errors.Is(err, errUtils.ErrInvalidFlagValue) {
-				err = fmt.Errorf("%w: %w", errUtils.ErrInvalidFlagValue, err)
+				err = &standalone.ValueError{Reason: err.Error(), Cause: err}
 			}
-			return fmt.Errorf("invalid environment value for --%s: %w", name, err)
+			return environmentValueError(flag, source, raw, err)
 		}
 		if parsed != nil {
 			values.Set(name, parsed)
+		}
+	}
+	return nil
+}
+
+// environmentValueError names the variable and flag of a rejected environment value, so the user
+// can tell which of several sources to fix. The sentinel stays in the chain for errors.Is.
+func environmentValueError(flag flags.Flag, source, raw string, cause error) error {
+	return fmt.Errorf("invalid value %q from %s for flag --%s: %w", raw, source, flag.GetName(), cause)
+}
+
+// checkEnvironmentChoices enforces a flag's allowed values for an environment value. A nil parsed
+// value is a string, whose raw text is the value; a list is checked item by item.
+func checkEnvironmentChoices(flag flags.Flag, raw string, parsed any) error {
+	choices, ok := flag.(interface{ GetValidValues() []string })
+	if !ok || len(choices.GetValidValues()) == 0 {
+		return nil
+	}
+	allowed := strings.Join(choices.GetValidValues(), ", ")
+	list, isList := parsed.([]string)
+	if !isList {
+		if slices.Contains(choices.GetValidValues(), raw) {
+			return nil
+		}
+		return &standalone.ValueError{Reason: "not one of: " + allowed}
+	}
+	for _, item := range list {
+		if !slices.Contains(choices.GetValidValues(), item) {
+			return &standalone.ValueError{Reason: fmt.Sprintf("%q is not one of: %s", item, allowed)}
 		}
 	}
 	return nil
@@ -262,7 +300,10 @@ func standaloneEnvironmentValue(cmd *cobra.Command, flag flags.Flag, raw string)
 	case *flags.StringSliceFlag:
 		return standalone.ParseStringList(raw)
 	case *flags.BoolFlag:
-		return nil, cmd.Flags().Lookup(flag.GetName()).Value.Set(raw)
+		if err := cmd.Flags().Lookup(flag.GetName()).Value.Set(raw); err != nil {
+			return nil, &standalone.ValueError{Reason: "not a boolean (use true or false)", Cause: err}
+		}
+		return nil, nil
 	default:
 		return nil, nil
 	}

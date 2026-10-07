@@ -133,6 +133,12 @@ func processCustomCommandsWithWorkingDirectory(
 		// Clone the 'commandCfg' struct into a local variable because of the automatic closure in the `Run` function of the Cobra command.
 		// Cloning will make a closure over the local variable 'commandConfig' which is different in each iteration.
 		// https://www.calhoun.io/gotchas-and-common-mistakes-with-closures-in-go/
+		// A step that failed to decode without failing the whole config load (for example an
+		// unknown `retry:` key) makes only this command unusable: warn and register a stub.
+		if loadErr := commandCfg.Steps.LoadError(); loadErr != nil {
+			registerInvalidCustomCommand(parentCommand, &commandCfg, customCommandLoadError(commandCfg.Name, loadErr))
+			continue
+		}
 		commandConfig, err := cloneCommand(&commandCfg)
 		if err != nil {
 			return err
@@ -164,6 +170,14 @@ func processCustomCommandsWithWorkingDirectory(
 			// Create new custom command with flag validation.
 			customCommand, err := createCustomCommand(atmosConfig, commandConfig, parentCommand)
 			if err != nil {
+				// A flag with an unsupported type or an unusable default makes only this command
+				// unusable, so it must not abort startup for every other command, including
+				// `--help`. Warn, and register a stub that reports the same error when the user
+				// invokes this command by name. Flag-name conflicts with built-in flags stay fatal.
+				if errors.Is(err, errUtils.ErrCustomCommandFlagType) || errors.Is(err, errUtils.ErrCustomCommandFlagDefault) {
+					registerInvalidCustomCommand(parentCommand, commandConfig, err)
+					continue
+				}
 				return err
 			}
 			parentCommand.AddCommand(customCommand)
@@ -177,6 +191,46 @@ func processCustomCommandsWithWorkingDirectory(
 	}
 
 	return nil
+}
+
+// registerInvalidCustomCommand warns that a custom command is invalid and registers a stub in its
+// place, so the rest of the commands keep working and the error still reaches the user who runs it.
+func registerInvalidCustomCommand(parentCommand *cobra.Command, commandConfig *schema.Command, cause error) {
+	log.Warn("Skipping invalid custom command; running it reports the error", customCommandKeyCommand, commandConfig.Name, "error", cause.Error())
+	parentCommand.AddCommand(newInvalidCustomCommandStub(commandConfig, cause))
+}
+
+// customCommandLoadError wraps a step decode problem with the command it belongs to and, for a
+// retry problem, the keys a `retry:` block accepts.
+func customCommandLoadError(commandName string, loadErr error) error {
+	builder := errUtils.Build(loadErr).
+		WithExplanationf("Custom command `%s` has a step that cannot be used: %s.", commandName, loadErr).
+		WithContext(customCommandKeyCommand, commandName)
+	if errors.Is(loadErr, schema.ErrInvalidRetryConfig) {
+		builder = builder.WithHintf("Valid retry fields: %s.", strings.Join(schema.RetryFieldNames(), ", "))
+	}
+	return builder.Err()
+}
+
+// newInvalidCustomCommandStub returns a command that stands in for a custom command whose
+// configuration is invalid. It takes any flags and arguments and fails with the stored error, so the
+// problem is reported when the user runs the command instead of being lost to a startup warning.
+func newInvalidCustomCommandStub(commandConfig *schema.Command, cause error) *cobra.Command {
+	return &cobra.Command{
+		Use:                commandConfig.Name,
+		Aliases:            commandConfig.Aliases,
+		Hidden:             commandConfig.Internal,
+		Short:              commandConfig.Description,
+		Long:               commandConfig.Description,
+		DisableFlagParsing: true,
+		Args:               cobra.ArbitraryArgs,
+		Annotations: map[string]string{
+			annotationCustomCommand: annotationValueTrue,
+		},
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return cause
+		},
+	}
 }
 
 // processCommandAliases registers command aliases from the provided configuration as subcommands of
@@ -492,7 +546,7 @@ func createCustomCommand(
 	parentCommand *cobra.Command,
 ) (*cobra.Command, error) {
 	customCommand := &cobra.Command{
-		Use:     commandConfig.Name,
+		Use:     customCommandUse(commandConfig),
 		Aliases: commandConfig.Aliases,
 		Hidden:  commandConfig.Internal,
 		Short:   commandConfig.Description,
@@ -512,6 +566,7 @@ func createCustomCommand(
 		},
 	}
 	customCommand.PersistentFlags().Bool("", false, doubleDashHint)
+	setCustomCommandArgumentsAnnotation(customCommand, commandConfig)
 
 	// Add --identity flag to all custom commands to allow runtime override. Uses the shared
 	// flags.WithIdentityFlag() builder (rather than a hand-rolled PersistentFlags().String())
@@ -753,6 +808,7 @@ func registerStringFlag(cmd *cobra.Command, flag *schema.CommandFlag, usage stri
 	} else {
 		cmd.PersistentFlags().String(flag.Name, defaultVal, usage)
 	}
+	markQuotedDefault(cmd, flag.Name)
 }
 
 // getTopLevelCommands returns the top-level commands.
@@ -1324,6 +1380,17 @@ func executeCustomCommand(
 			return
 		}
 
+		// Render a templated `output:` (for example `{{ .Flags.mode }}`) so the mode takes effect, and
+		// fail the command when it renders to an unknown mode instead of running with the default.
+		if strings.Contains(step.Output, "{{") {
+			outputStep := step.ToWorkflowStep()
+			if outputErr := stepPkg.ApplyStepOutputMode(&outputStep, stepVars); outputErr != nil {
+				exitOrRecordDependencyErr(cmd, outputErr, "", "")
+				return
+			}
+			step.Output = outputStep.Output
+		}
+
 		stepWorkDir := workDir
 		if strings.TrimSpace(step.WorkingDirectory) != "" {
 			stepWorkDir, err = resolveWorkingDirectory(step.WorkingDirectory, workDir, workDir)
@@ -1540,7 +1607,7 @@ func executeCustomCommand(
 				if stepPkg.IsExtendedStepType(stepType) {
 					return runExtendedStep(stepCtx, step.ToWorkflowStep())
 				}
-				return fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
+				return stepPkg.UnsupportedStepTypeError(fmt.Sprintf("custom command `%s`", commandConfig.Name), step.Name, stepType)
 			}
 		}
 		// runStepBounded applies the step's `retry:` policy. The `timeout:` of shell, script, atmos, and

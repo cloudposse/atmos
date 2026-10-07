@@ -4,6 +4,7 @@ package standalone
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -52,13 +53,45 @@ func (v *DecimalInt) Type() string {
 	return "int"
 }
 
+// ValueError reports why a flag value was rejected. Its message is the bare reason: the callers
+// that surface it add the flag name and, for environment values, the variable, so a sentinel
+// prefix here would repeat in the output. It still satisfies errors.Is(err, ErrInvalidFlagValue).
+type ValueError struct {
+	Reason string
+	Cause  error
+}
+
+// Error returns the reason alone.
+func (e *ValueError) Error() string {
+	defer perf.Track(nil, "standalone.ValueError.Error")()
+
+	return e.Reason
+}
+
+// Unwrap exposes the underlying parse error, if any.
+func (e *ValueError) Unwrap() error {
+	defer perf.Track(nil, "standalone.ValueError.Unwrap")()
+
+	return e.Cause
+}
+
+// Is makes every value error satisfy ErrInvalidFlagValue.
+func (e *ValueError) Is(target error) bool {
+	defer perf.Track(nil, "standalone.ValueError.Is")()
+
+	return target == errUtils.ErrInvalidFlagValue
+}
+
 // ParseDecimalInt parses raw as a base-10 integer, for both command-line and environment values.
 func ParseDecimalInt(raw string) (int, error) {
 	defer perf.Track(nil, "standalone.ParseDecimalInt")()
 
 	parsed, err := strconv.ParseInt(raw, decimalBase, strconv.IntSize)
 	if err != nil {
-		return 0, fmt.Errorf("%w: %q is not a base-10 integer", errUtils.ErrInvalidFlagValue, raw)
+		if errors.Is(err, strconv.ErrRange) {
+			return 0, &ValueError{Reason: fmt.Sprintf("out of range for a %d-bit integer", strconv.IntSize), Cause: err}
+		}
+		return 0, &ValueError{Reason: "not a base-10 integer", Cause: err}
 	}
 	return int(parsed), nil
 }
@@ -73,7 +106,7 @@ func ParseStringList(raw string) ([]string, error) {
 	}
 	items, err := csv.NewReader(strings.NewReader(raw)).Read()
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidFlagValue, err)
+		return nil, &ValueError{Reason: err.Error(), Cause: err}
 	}
 	return items, nil
 }

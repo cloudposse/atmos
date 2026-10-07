@@ -68,6 +68,10 @@ func TestMain(m *testing.M) {
 	case "fail":
 		_, _ = os.Stderr.WriteString("fake-atmos-error")
 		os.Exit(3)
+	case "echo-selection":
+		// Report the profile and identity the nested command would run with.
+		_, _ = os.Stdout.WriteString(os.Getenv("ATMOS_PROFILE") + "|" + os.Getenv("ATMOS_IDENTITY"))
+		os.Exit(0)
 	case "rm-glob-and-fail":
 		removeGlobMatches(os.Getenv(atmosStepFakeRMGlobEnv))
 		os.Exit(1)

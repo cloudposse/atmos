@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -286,5 +287,51 @@ func TestCommandRejectsCaseCollidingNames(t *testing.T) {
 				return script.CommandInput{Help: true}, nil
 			}, new([]string))
 		require.NoError(t, err)
+	})
+}
+
+func TestRejectedValidationIsAUsageFailure(t *testing.T) {
+	t.Parallel()
+	const source = "def validate(args, flags):\n    return False\ndef main(args, flags):\n    emit(\"run\")\ncli.command(main, validate=validate)"
+
+	t.Run("uses the host's usage presentation", func(t *testing.T) {
+		t.Parallel()
+		var events []string
+		presented := errors.New("presented by the host")
+		var received error
+		_, err := executeCLI(source, func(_ *starlark.Thread, _ script.CommandSpec) (script.CommandInput, error) {
+			return script.CommandInput{Usage: func(cause error) error {
+				received = cause
+				return presented
+			}}, nil
+		}, &events)
+		var usage *script.UsageFailure
+		require.ErrorAs(t, err, &usage)
+		assert.Same(t, presented, usage.Err, "the host's error is reported unchanged")
+		require.ErrorIs(t, received, errUtils.ErrScriptUsage)
+		assert.ErrorContains(t, received, "input validation failed")
+		assert.Empty(t, events, "main does not run")
+	})
+
+	t.Run("without a host presentation it is still a usage error", func(t *testing.T) {
+		t.Parallel()
+		var events []string
+		_, err := executeCLI(source, func(_ *starlark.Thread, _ script.CommandSpec) (script.CommandInput, error) {
+			return script.CommandInput{}, nil
+		}, &events)
+		require.ErrorIs(t, err, errUtils.ErrScriptUsage)
+		assert.ErrorContains(t, err, "input validation failed")
+	})
+
+	t.Run("fail inside validate stays a script failure", func(t *testing.T) {
+		t.Parallel()
+		var events []string
+		_, err := executeCLI("def validate(args, flags):\n    fail(\"bad\")\ncli.command(lambda a, f: None, validate=validate)",
+			func(_ *starlark.Thread, _ script.CommandSpec) (script.CommandInput, error) {
+				return script.CommandInput{Usage: func(error) error { return errors.New("must not be used") }}, nil
+			}, &events)
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, errUtils.ErrScriptUsage)
+		assert.ErrorContains(t, err, "bad")
 	})
 }

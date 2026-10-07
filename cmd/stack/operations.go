@@ -117,7 +117,7 @@ func init() {
 func registerStackEditFlags(c *cobra.Command) {
 	c.Flags().StringVarP(&flagStack, "stack", "s", "", "Stack name (required)")
 	c.Flags().StringVarP(&flagComponent, "component", "c", "", "Component name (required)")
-	c.Flags().StringVar(&flagFile, "file", "", "Edit this manifest file explicitly instead of resolving via provenance")
+	c.Flags().StringVar(&flagFile, "file", "", "Read or edit this manifest file explicitly instead of resolving via provenance")
 	_ = c.MarkFlagRequired("stack")
 	_ = c.MarkFlagRequired("component")
 }
@@ -432,11 +432,16 @@ func resolveEditTarget(dotPath string, requireEditable bool) (*editTarget, error
 		// For read-only get, reflect the value actually stored in the explicit
 		// file rather than the merged value.
 		if !requireEditable {
-			if content, readErr := os.ReadFile(flagFile); readErr == nil {
-				if v, getErr := atmosyaml.Get(content, tgt.yqPath); getErr == nil {
-					tgt.value = v
-					tgt.valueContent, tgt.valuePath = content, tgt.yqPath
-				}
+			content, readErr := os.ReadFile(flagFile)
+			if readErr != nil {
+				return nil, errUtils.Build(fmt.Errorf("%w: %s: %w", errUtils.ErrFileNotFound, flagFile, readErr)).
+					WithExplanation("The manifest passed with --file could not be read.").
+					WithHint("Check that the path exists and is readable, or omit --file to read the merged stack configuration.").
+					Err()
+			}
+			if v, getErr := atmosyaml.Get(content, tgt.yqPath); getErr == nil {
+				tgt.value = v
+				tgt.valueContent, tgt.valuePath = content, tgt.yqPath
 			}
 		}
 		return tgt, nil

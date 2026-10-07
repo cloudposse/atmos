@@ -913,7 +913,7 @@ func setupColorProfileFromEnvWithArgs(args []string) {
 	// Also check --force-color CLI flag by manually parsing args.
 	// This is needed because Cobra hasn't parsed flags yet during init().
 	if !forceColor {
-		for _, arg := range args {
+		for _, arg := range colorScanArgs(args) {
 			if arg == "--force-color" {
 				forceColor = true
 				break
@@ -1011,11 +1011,7 @@ func calculateMaxFlagWidth(flags *pflag.FlagSet) int {
 
 // buildFlagDescription creates the flag description with default value if applicable.
 func buildFlagDescription(f *pflag.Flag) string {
-	usage := f.Usage
-	if f.DefValue != "" && f.DefValue != "false" && f.DefValue != "0" && f.DefValue != "[]" && f.Name != "" && f.Name != "help" {
-		usage += fmt.Sprintf(" (default `%s`)", f.DefValue)
-	}
-	return usage
+	return f.Usage + flagDefaultText(f)
 }
 
 // renderWrappedLines renders wrapped description lines with proper indentation.

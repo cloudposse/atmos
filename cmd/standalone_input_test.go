@@ -186,7 +186,7 @@ func TestStandaloneUserInputErrorsArePresentedAsUsageErrors(t *testing.T) {
 			assert.NotErrorIs(t, err, errUtils.ErrStarlark, "usage errors are not script failures")
 			assert.Equal(t, 2, errUtils.GetExitCode(err), "usage errors exit with status 2")
 			assert.Contains(t, cockroach.FlattenHints(err), "Run ./tool.star --help for usage.")
-			assert.Contains(t, cockroach.FlattenDetails(err), "tool.star <service> [flags]")
+			assert.Contains(t, cockroach.FlattenDetails(err), "tool <service> [flags]", "the command name drops the script extension")
 		})
 	}
 }
@@ -238,4 +238,84 @@ func TestStandaloneRejectsCaseCollidingNames(t *testing.T) {
 		&flags.StringFlag{Name: "stage"}, &flags.StringFlag{Name: "region"},
 	}})
 	require.NoError(t, err, "distinct names remain valid")
+}
+
+func TestStandaloneHelpListsArgumentsAndDropsTheExtension(t *testing.T) {
+	spec := script.CommandSpec{
+		Description: "Calculate capacity",
+		Args: []*flags.PositionalArgSpec{
+			{Name: "service", Description: "Service name", Required: true},
+			{Name: "region", Description: "Where to run"},
+		},
+		Flags: []flags.Flag{
+			&flags.StringSliceFlag{Name: "tags", Description: "Deploy tags"},
+			&flags.IntFlag{Name: "replicas", Default: 2},
+		},
+	}
+	input, help, err := parseStandalone(t, &spec, "--help")
+	require.NoError(t, err)
+	assert.True(t, input.Help)
+	assert.Contains(t, help, "tool <service> [region] [flags]", "the default name has no .star extension")
+	assert.NotContains(t, help, "tool.star")
+	assert.Contains(t, help, "Arguments:\n  <service>  Service name\n  [region]   Where to run\n")
+	assert.Contains(t, help, "--tags list")
+	assert.NotContains(t, help, "strings")
+
+	_, help, err = parseStandalone(t, &script.CommandSpec{Name: "custom"}, "--help")
+	require.NoError(t, err)
+	assert.Contains(t, help, "custom [flags]", "an explicit name is used as written")
+	assert.NotContains(t, help, "Arguments:", "no section when the command takes no arguments")
+}
+
+func TestStandaloneEnvironmentErrorsNameTheVariable(t *testing.T) {
+	spec := script.CommandSpec{Flags: []flags.Flag{
+		&flags.StringFlag{Name: "stage", ValidValues: []string{"dev", "prod"}, EnvVars: []string{"FT_STAGE_NAMED"}},
+		&flags.IntFlag{Name: "count", EnvVars: []string{"FT_COUNT_NAMED"}},
+		&flags.StringSliceFlag{Name: "zones", ValidValues: []string{"a", "b"}, EnvVars: []string{"FT_ZONES_NAMED"}},
+	}}
+	for _, tc := range []struct {
+		name, variable, value, want string
+		argv                        []string
+	}{
+		{"choice", "FT_STAGE_NAMED", "qa", `invalid value "qa" from FT_STAGE_NAMED for flag --stage`, nil},
+		{"integer", "FT_COUNT_NAMED", "many", `invalid value "many" from FT_COUNT_NAMED for flag --count: not a base-10 integer`, nil},
+		{"integer range", "FT_COUNT_NAMED", "99999999999999999999", "out of range for a 64-bit integer", nil},
+		{"list item", "FT_ZONES_NAMED", "a,z", `from FT_ZONES_NAMED for flag --zones: "z" is not one of: a, b`, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(tc.variable, tc.value)
+			_, _, err := parseStandalone(t, &spec, tc.argv...)
+			require.ErrorIs(t, err, errUtils.ErrScriptUsage)
+			require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+			assert.ErrorContains(t, err, tc.want)
+			assert.NotContains(t, err.Error(), "invalid value for flag: invalid value")
+		})
+	}
+
+	t.Run("a valid environment value is accepted", func(t *testing.T) {
+		t.Setenv("FT_STAGE_NAMED", "prod")
+		input, _, err := parseStandalone(t, &spec)
+		require.NoError(t, err)
+		assert.Equal(t, "prod", input.Flags["stage"])
+	})
+	t.Run("the command line is not checked against the environment", func(t *testing.T) {
+		t.Setenv("FT_STAGE_NAMED", "qa")
+		input, _, err := parseStandalone(t, &spec, "--stage=dev")
+		require.NoError(t, err)
+		assert.Equal(t, "dev", input.Flags["stage"])
+	})
+}
+
+func TestStandaloneCommandLineErrorsAreNotDoubled(t *testing.T) {
+	spec := script.CommandSpec{Flags: []flags.Flag{
+		&flags.IntFlag{Name: "count"}, &flags.StringFlag{Name: "stage", ValidValues: []string{"dev", "prod"}},
+	}}
+	_, _, err := parseStandalone(t, &spec, "--count=99999999999999999999")
+	require.ErrorIs(t, err, errUtils.ErrScriptUsage)
+	assert.ErrorContains(t, err, "out of range for a 64-bit integer")
+	assert.NotContains(t, err.Error(), "invalid value for flag: ")
+
+	_, _, err = parseStandalone(t, &spec, "--stage=qa")
+	require.ErrorIs(t, err, errUtils.ErrScriptUsage)
+	assert.NotContains(t, err.Error(), "invalid value for flag: invalid value")
 }

@@ -169,7 +169,7 @@ func decodeAutomationStep(call *automation.StepCall) (*schema.WorkflowStep, erro
 	if err := node.Encode(fields); err != nil {
 		return nil, fmt.Errorf("%w: step configuration: %w", errUtils.ErrAutomation, err)
 	}
-	if err := validateAutomationStepFields(&node); err != nil {
+	if err := validateAutomationStepFields(&node, call.Type); err != nil {
 		return nil, err
 	}
 	mapping := &node

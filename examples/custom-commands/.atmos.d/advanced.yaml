@@ -78,7 +78,7 @@ commands:
         value: "{{ .Flags.auto-approve }}"
     steps:
       - echo "Deploying component $ATMOS_COMPONENT to stack $ATMOS_STACK"
-      - echo "Auto-approve: $TF_AUTO_APPROVE"
+      - 'echo "Auto-approve: $TF_AUTO_APPROVE"'
       # In a real command, you would run:
       # - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
       # - |

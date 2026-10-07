@@ -312,3 +312,20 @@ output = [steps.parallel(functions=[branch, branch]), steps.parallel(tasks=[])]`
 	require.NoError(t, err)
 	assert.JSONEq(t, `[[[42,42],[42,42]],[]]`, result.Value)
 }
+
+func TestTaskRetryUnknownFieldIsReadable(t *testing.T) {
+	t.Parallel()
+	_, err := runSource(t, `steps.task(name="bad", function=lambda: 1, retry={"delay": "1s"})`)
+	require.ErrorIs(t, err, errUtils.ErrStarlarkInvalidArgument)
+	assert.Contains(t, err.Error(), `unknown retry field "delay"`)
+	assert.NotContains(t, err.Error(), "schema.RetryConfig")
+	assert.Contains(t, joinDetails(err), "initial_delay")
+}
+
+func TestTaskTimeoutErrorNamesTaskAndValue(t *testing.T) {
+	t.Parallel()
+	_, err := runSource(t, `steps.task(name="slow", function=lambda: 1, timeout="bogus")`)
+	require.ErrorIs(t, err, errUtils.ErrStarlarkInvalidArgument)
+	assert.Contains(t, err.Error(), `"bogus"`)
+	assert.Contains(t, err.Error(), `"slow"`)
+}

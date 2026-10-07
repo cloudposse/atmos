@@ -255,6 +255,15 @@ current schema.
   [the migration note](https://atmos.tools/changelog/pro-upload-byte-packing#how-to-use-it)
   and [the fix log](../fixes/2026-10-07-pro-upload-byte-packing-and-413-recovery.md).
 
+  **Additional post-editions candidate (2026-10-07):** when
+  `settings.metrics.enabled` is omitted, `atmos git hooks run` now suppresses its
+  local resource-usage summary; previously the omitted value enabled that summary
+  when subprocess metrics were available. Explicit `true` and `false` retain their
+  meaning. The stored default is unchanged, so this command-specific interpretation
+  ships independently of edition pins while `KindBehavior` resolution is unavailable.
+  See PR `LOCAL_PR_NUMBER_PENDING` and
+  [the migration section](git-hook-steps.md#migration-and-editions).
+
   **Not gatable:** the auth credential realm isolation change (2026-02-10,
   [changelog/auth-realm-isolation](https://atmos.tools/changelog/auth-realm-isolation)) is a hard
   break — cached credentials moved realms and every user had to re-login. Editions cannot roll it
@@ -281,3 +290,4 @@ current schema.
 | 2026-09-24 | 1.3 | Recorded project-relative toolchain paths and automatic-install metadata policy as behavior-gating candidates. |
 | 2026-09-25 | 1.4 | Recorded automatic exception reporting for existing Pro-enabled stacks as a behavior-gating candidate. |
 | 2026-10-07 | 1.5 | Recorded the Pro upload runtime budget fallback as a behavior-gating candidate. |
+| 2026-10-07 | 1.6 | Recorded opt-in local resource-usage summaries for Git hook invocations as a behavior-gating candidate. |

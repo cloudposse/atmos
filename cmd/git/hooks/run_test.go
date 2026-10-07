@@ -5,6 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ---- extractHookNameAndArgs ----
@@ -70,4 +73,32 @@ func TestGitConfig_NilWhenUnset(t *testing.T) {
 
 	SetAtmosConfig(nil)
 	assert.Nil(t, gitConfig())
+}
+
+// ---- metrics default ----
+
+func TestSuppressMetricsSummaryByDefault(t *testing.T) {
+	enabled, disabled := true, false
+	tests := []struct {
+		name   string
+		in     *bool
+		expect bool
+	}{
+		{"unset defaults to off", nil, false},
+		{"explicit true is preserved", &enabled, true},
+		{"explicit false is preserved", &disabled, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{}
+			config.Settings.Metrics.Enabled = tt.in
+			cfg.DisableMetricsSummaryByDefault(config)
+			require.NotNil(t, config.Settings.Metrics.Enabled)
+			assert.Equal(t, tt.expect, *config.Settings.Metrics.Enabled)
+		})
+	}
+
+	t.Run("nil config is a no-op", func(t *testing.T) {
+		assert.NotPanics(t, func() { cfg.DisableMetricsSummaryByDefault(nil) })
+	})
 }

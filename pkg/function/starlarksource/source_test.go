@@ -86,3 +86,25 @@ func TestProtectManyExpressions(t *testing.T) {
 		assert.Equal(t, fmt.Sprintf("return %d", i), Decode(result[fmt.Sprintf("field%d", i)]).Code)
 	}
 }
+
+func TestIsEncoded(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{"loader-encoded source", Source{Code: "return 1", File: "stack.yaml", Line: 3}.Encode(), true},
+		{"encoded empty body", Source{File: "stack.yaml", Line: 1}.Encode(), true},
+		{"quoted single line", "!starlark return 1", false},
+		{"plain multiline", "!starlark\nreturn 1", false},
+		{"similar tag", "!starlarkish", false},
+		{"wrong case", "!STARLARK x", false},
+		{"bare tag", "!starlark", false},
+		{"empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsEncoded(tt.value))
+		})
+	}
+}

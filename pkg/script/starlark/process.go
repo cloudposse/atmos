@@ -1,8 +1,10 @@
 package starlark
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 
 	"go.starlark.net/starlark"
 
@@ -83,6 +85,8 @@ type processCall struct {
 	check, stream    bool
 	allowPlanChanges bool
 	policy           automation.ExecutionPolicy
+	// dataHint overrides the hint shown when result.data is read from non-JSON stdout.
+	dataHint string
 }
 
 func (s *session) runProcess(thread *starlark.Thread, call *processCall) (starlark.Value, error) {
@@ -93,15 +97,35 @@ func (s *session) runProcess(thread *starlark.Thread, call *processCall) (starla
 		Policy: call.policy,
 	})
 	if err != nil {
-		if errors.Is(err, errUtils.ErrScriptProcessFailed) {
-			return nil, failWith(errUtils.ErrStarlarkProcessFailed, err, "%s", err)
-		}
-		return nil, err
+		return nil, s.processError(thread, call, err)
 	}
-	return newProcessResult(result), nil
+	processResult := newProcessResult(result)
+	if call.dataHint != "" {
+		processResult.hint = call.dataHint
+	}
+	return processResult, nil
+}
+
+// processError classifies a failed process call. A timeout names the command and the limit; the
+// script's own cancellation is left as it is.
+func (s *session) processError(thread *starlark.Thread, call *processCall, err error) error {
+	if errors.Is(err, errUtils.ErrScriptProcessFailed) {
+		return failWith(errUtils.ErrStarlarkProcessFailed, err, "%s", err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) && call.policy.Timeout > 0 && threadContext(thread).Err() == nil {
+		name := "exec.run"
+		if frame := thread.CallFrame(0); frame.Name != "" {
+			name = frame.Name
+		}
+		return failWith(errUtils.ErrStarlarkProcessFailed, err, "%s: command %q timed out after %s", name, strings.Join(call.argv, " "), call.policy.Timeout)
+	}
+	return err
 }
 
 func processArgv(argv starlark.Value) ([]string, error) {
+	if _, isString := argv.(starlark.String); isString {
+		return nil, withHint(invalidArg("argv must be a list of strings, got a string"), `Pass a list, e.g. exec.run(["ls", "-l"]).`)
+	}
 	values, err := sequence(argv)
 	if err != nil {
 		return nil, err

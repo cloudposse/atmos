@@ -25,18 +25,25 @@ func Install(ctx context.Context, cfg *schema.GitConfig, names []string, force b
 		return err
 	}
 
+	hookNames := hookNamesOrConfigured(names, cfg)
+	if len(hookNames) == 0 {
+		ui.Info("No hooks configured under git.hooks in atmos.yaml.")
+		return nil
+	}
+
+	// Reject broken hook configuration before writing any shim, so a shim never exists for a
+	// hook that fails on every Git operation.
+	if err := validateHooks(hookNames, cfg); err != nil {
+		return err
+	}
+	warnUnknownGitHookNames(hookNames)
+
 	// Warn when core.hooksPath is set; Git ignores .git/hooks in that case.
 	warnIfHooksPathSet(ctx)
 
 	hooksDir, err := resolveHooksDir(ctx)
 	if err != nil {
 		return err
-	}
-
-	hookNames := hookNamesOrConfigured(names, cfg)
-	if len(hookNames) == 0 {
-		ui.Info("No hooks configured under git.hooks in atmos.yaml.")
-		return nil
 	}
 
 	for _, name := range hookNames {
@@ -46,6 +53,15 @@ func Install(ctx context.Context, cfg *schema.GitConfig, names []string, force b
 	}
 
 	return nil
+}
+
+// warnUnknownGitHookNames warns about configured names that Git never invokes.
+func warnUnknownGitHookNames(names []string) {
+	for _, name := range names {
+		if !IsKnownGitHookName(name) {
+			ui.Warningf("%q is not a Git hook name, so Git will never run it. Check git.hooks for a typo.", name)
+		}
+	}
 }
 
 // installHook writes a single shim file for hookName into hooksDir.
@@ -60,6 +76,16 @@ func installHook(hooksDir, hookName string, force bool) error {
 	// Check if the file already exists.
 	existing, err := os.ReadFile(dest)
 	if err == nil {
+		// An unchanged Atmos shim needs no content write, but its executable bit may have been
+		// lost. Repair permissions so Git can still invoke it.
+		if string(existing) == shim {
+			if chmodErr := os.Chmod(dest, shimPerm); chmodErr != nil {
+				return fmt.Errorf("setting executable permission on hook shim %q: %w", dest, chmodErr)
+			}
+			ui.Successf("Hook shim already installed: %s", dest)
+			return nil
+		}
+
 		// File exists; overwrite only if Atmos-managed or --force is set.
 		if !strings.Contains(string(existing), ShimMarker) && !force {
 			return errUtils.Build(errUtils.ErrInvalidConfig).

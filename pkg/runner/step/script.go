@@ -88,6 +88,12 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 		return nil, err
 	}
 
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err = resolveOutputStep(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
 	// Enforce the step's timeout by running the interpreter under a context deadline. The embedded
 	// engine cancels its thread and subprocesses when the context ends.
 	deadline, err := StartStepDeadline(ctx, step, vars)

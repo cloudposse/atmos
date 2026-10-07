@@ -35,6 +35,15 @@ type aliasedHandler interface {
 	GetAliases() []string
 }
 
+// knownFieldsHandler is implemented by handlers that accept only a subset of the step fields. A
+// direct step call (`steps.<type>(...)`) is then checked against the common step fields plus
+// these, instead of against every field any step type has, so a field that means something else
+// for another type (for example `duration` on `sleep`) is rejected instead of silently ignored.
+type knownFieldsHandler interface {
+	// KnownFields returns the YAML keys, beyond the common step fields, the handler reads.
+	KnownFields() []string
+}
+
 // Registry manages step type handlers.
 type Registry struct {
 	mu       sync.RWMutex

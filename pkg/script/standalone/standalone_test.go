@@ -1,6 +1,9 @@
 package standalone
 
 import (
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	cockroach "github.com/cockroachdb/errors"
@@ -119,4 +122,92 @@ func TestAnnotateFlags(t *testing.T) {
 	assert.Equal(t, "Token (required) [env: A, B]", set.Lookup("token").Usage)
 	assert.Equal(t, "(one of: dev, prod)", set.Lookup("stage").Usage)
 	assert.Equal(t, "(one of: a, b) [env: Z]", set.Lookup("zones").Usage)
+}
+
+func TestDefaultNameDropsTheExtension(t *testing.T) {
+	t.Parallel()
+	for filename, want := range map[string]string{
+		"helplate.star": "helplate", "greeter": "greeter", "a.b.star": "a.b", "stdin": "stdin", "UPPER.STAR": "UPPER",
+	} {
+		assert.Equal(t, want, DefaultName(filename), filename)
+	}
+}
+
+func newHelpCommand(use string) *cobra.Command {
+	return &cobra.Command{Use: use, Short: "Short text", Run: func(*cobra.Command, []string) {}}
+}
+
+func helpText(t *testing.T, cmd *cobra.Command) string {
+	t.Helper()
+	var out strings.Builder
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	require.NoError(t, cmd.Help())
+	return out.String()
+}
+
+func TestDescribeArgumentsAddsAnArgumentsSection(t *testing.T) {
+	t.Parallel()
+	cmd := newHelpCommand("deploy <service> [region]")
+	DescribeArguments(cmd, []*flags.PositionalArgSpec{
+		{Name: "service", Description: "Service to deploy", Required: true},
+		{Name: "region", Description: "Target region"},
+		{Name: "extra"},
+	})
+	help := helpText(t, cmd)
+	assert.Contains(t, help, "Arguments:\n  <service>  Service to deploy\n  [region]   Target region\n  [extra]\n")
+	assert.Less(t, strings.Index(help, "Usage:"), strings.Index(help, "Arguments:"), "arguments follow the usage line")
+}
+
+func TestDescribeArgumentsWithoutArgumentsLeavesHelpAlone(t *testing.T) {
+	t.Parallel()
+	cmd := newHelpCommand("tool")
+	DescribeArguments(cmd, nil)
+	assert.NotContains(t, helpText(t, cmd), "Arguments:")
+}
+
+func TestLabelListFlagsShowsListNotStrings(t *testing.T) {
+	t.Parallel()
+	cmd := newHelpCommand("tool")
+	cmd.Flags().StringSlice("tags", nil, "Deploy tags")
+	cmd.Flags().StringSlice("zones", []string{"a", "b"}, "Zones")
+	cmd.Flags().String("name", "", "Name")
+	require.Contains(t, helpText(t, cmd), "strings", "pflag labels lists as strings by default")
+
+	require.NoError(t, cmd.Flags().Parse([]string{"--tags=x,y"}))
+	LabelListFlags(cmd.Flags())
+	help := helpText(t, cmd)
+	assert.Contains(t, help, "--tags list")
+	assert.Contains(t, help, "--zones list")
+	assert.Contains(t, help, "--name string")
+	assert.NotContains(t, help, "strings")
+	assert.NotContains(t, help, "(default [])", "an unset list shows no default")
+	assert.Contains(t, help, "(default [a,b])")
+}
+
+func TestValueErrorsStaySentinelCompatibleWithoutRepeatingIt(t *testing.T) {
+	t.Parallel()
+	_, err := ParseDecimalInt("abc")
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.Equal(t, "not a base-10 integer", err.Error())
+
+	_, err = ParseDecimalInt("99999999999999999999")
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	assert.Equal(t, "out of range for a 64-bit integer", err.Error())
+
+	_, err = ParseStringList(`"open`)
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+func TestUsageErrorsDoNotRepeatTheInvalidValueLeadIn(t *testing.T) {
+	t.Parallel()
+	cmd := newHelpCommand("tool <service>")
+	repeated := fmt.Errorf("%w: invalid value %q for flag --stage", errUtils.ErrInvalidFlagValue, "qa")
+	err := NewUsageError(cmd, "./tool.star", repeated)
+	assert.Equal(t, `usage error: invalid value "qa" for flag --stage`, err.Error())
+	require.ErrorIs(t, err, errUtils.ErrScriptUsage)
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+
+	other := NewUsageError(cmd, "./tool.star", errors.New("unknown flag: --bogus"))
+	assert.Equal(t, "usage error: unknown flag: --bogus", other.Error())
 }

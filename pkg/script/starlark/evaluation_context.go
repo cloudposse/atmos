@@ -32,6 +32,7 @@ func (m staticValueMap) Get(key string) (any, bool, error) {
 type configurationMap struct {
 	values     script.ValueMap
 	attributes bool
+	sink       *itemErrors
 }
 
 func (m *configurationMap) String() string {
@@ -85,7 +86,7 @@ func (m *configurationMap) Get(key starlark.Value) (starlark.Value, bool, error)
 	if err != nil || !found {
 		return nil, found, err
 	}
-	value, err := configurationValue(raw)
+	value, err := configurationValue(raw, m.sink)
 	return value, true, err
 }
 
@@ -93,6 +94,30 @@ func (m *configurationMap) Iterate() starlark.Iterator {
 	defer perf.Track(nil, "starlark.configurationMap.Iterate")()
 
 	return m.keys().Iterate()
+}
+
+// Items implements starlark.IterableMapping so dict(), json.encode, and ** unpacking see
+// key/value pairs rather than only the keys. Each value resolves through Get.
+func (m *configurationMap) Items() []starlark.Tuple {
+	defer perf.Track(nil, "starlark.configurationMap.Items")()
+
+	if m.values == nil {
+		return nil
+	}
+	keys := m.values.Keys()
+	items := make([]starlark.Tuple, 0, len(keys))
+	for _, key := range keys {
+		value, found, err := m.Get(starlark.String(key))
+		if err != nil {
+			m.sink.record(err)
+			continue
+		}
+		if !found {
+			continue
+		}
+		items = append(items, starlark.Tuple{starlark.String(key), value})
+	}
+	return items
 }
 
 func (m *configurationMap) keys() *starlark.List {

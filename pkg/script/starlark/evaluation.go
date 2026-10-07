@@ -24,8 +24,9 @@ func (e *Engine) EvaluateValue(ctx context.Context, spec script.Evaluation) (any
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	sink := &itemErrors{}
 	globals := starlark.StringDict{
-		"ctx":   &configurationMap{values: spec.Context, attributes: true},
+		"ctx":   &configurationMap{values: spec.Context, attributes: true, sink: sink},
 		"json":  starjson.Module,
 		"sum":   starlark.NewBuiltin("sum", numericSum),
 		"round": starlark.NewBuiltin("round", numericRound),
@@ -46,6 +47,9 @@ func (e *Engine) EvaluateValue(ctx context.Context, spec script.Evaluation) (any
 	value, err := starlark.Call(thread, module["__atmos_value"], nil, nil)
 	if err != nil {
 		return nil, scriptError(ctx, err, "")
+	}
+	if sink.err != nil {
+		return nil, scriptError(ctx, sink.err, "")
 	}
 	result, err := configurationResult(value, make(map[starlark.Value]bool))
 	if err != nil {

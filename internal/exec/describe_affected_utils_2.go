@@ -505,6 +505,9 @@ func addAffectedSpaceliftAdminStack(
 			return nil, err
 		}
 	}
+	if err = ensureLiteralStackIdentity(currentStackName, adminStackContextPrefix, configAndStacksInfo.ComponentSection); err != nil {
+		return nil, err
+	}
 
 	var componentVarsSection map[string]any
 	var componentSettingsSection map[string]any
@@ -543,6 +546,9 @@ func addAffectedSpaceliftAdminStack(
 								if err != nil {
 									return nil, err
 								}
+							}
+							if err = ensureLiteralStackIdentity(stackName, contextPrefix, configAndStacksInfo.ComponentSection); err != nil {
+								return nil, err
 							}
 
 							if adminStackContext.Component == componentName && adminStackContextPrefix == contextPrefix {

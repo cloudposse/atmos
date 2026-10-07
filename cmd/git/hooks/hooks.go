@@ -46,7 +46,7 @@ var Command = &cobra.Command{
 Subcommands:
   install    Write shim scripts into .git/hooks for configured hooks.
   uninstall  Remove Atmos-generated shims from .git/hooks.
-  run        Execute the configured command for a named hook.`,
+  run        Execute the configured command or steps for a named hook.`,
 }
 
 func init() {

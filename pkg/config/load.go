@@ -783,6 +783,8 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
 	bindEnv(v, "settings.terminal.help.filter", "ATMOS_HELP_FILTER")
 
+	bindEnv(v, "settings.metrics.enabled", "ATMOS_SETTINGS_METRICS_ENABLED")
+
 	bindEnv(v, "diagnostics.enabled", "ATMOS_DIAGNOSTICS_ENABLED")
 	bindEnv(v, "diagnostics.file", "ATMOS_DIAGNOSTICS_FILE")
 	bindEnv(v, "diagnostics.include_output", "ATMOS_DIAGNOSTICS_INCLUDE_OUTPUT")
@@ -2461,6 +2463,7 @@ func mergeCaseMapsFromFile(configFile string, mergedCaseMaps *casemap.CaseMaps) 
 	}
 
 	mergeRecursiveEnvCaseKeys(rawYAML, mergedCaseMaps)
+	mergeRecursiveStepCaseKeys(rawYAML, mergedCaseMaps)
 	mergeDotenvIncludeCaseMaps(configFile, rawYAML, mergedCaseMaps)
 }
 
@@ -2480,6 +2483,33 @@ func mergeRecursiveEnvCaseKeys(rawYAML []byte, mergedCaseMaps *casemap.CaseMaps)
 		existingMap[k] = v
 	}
 	mergedCaseMaps.Set(envKey, existingMap)
+}
+
+// Case map paths for the user-defined keys of step `vars:` and `outputs:` mappings. They are kept
+// apart from the shared "env" map because a name is only unique within its own mapping.
+const (
+	stepVarsCaseKey    = "steps.vars"
+	stepOutputsCaseKey = "steps.outputs"
+)
+
+// mergeRecursiveStepCaseKeys folds the authored key case of every `vars:` and `outputs:` mapping
+// (for example an `env` step's `SHARED_VAR` or a step's `myOutput`) into their case maps. Viper
+// lowercases map keys while merging step lists, so without it later steps cannot see those names.
+func mergeRecursiveStepCaseKeys(rawYAML []byte, mergedCaseMaps *casemap.CaseMaps) {
+	for field, path := range map[string]string{"vars": stepVarsCaseKey, "outputs": stepOutputsCaseKey} {
+		keys, err := casemap.CollectKeysRecursive(rawYAML, field)
+		if err != nil || len(keys) == 0 {
+			continue
+		}
+		existingMap := mergedCaseMaps.Get(path)
+		if existingMap == nil {
+			existingMap = make(casemap.CaseMap)
+		}
+		for k, v := range keys {
+			existingMap[k] = v
+		}
+		mergedCaseMaps.Set(path, existingMap)
+	}
 }
 
 // populateLegacyIdentityCaseMap copies auth.identities case mappings to the legacy IdentityCaseMap field.

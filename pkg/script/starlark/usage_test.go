@@ -39,11 +39,11 @@ func TestHostUsageErrorIsNotPresentedAsAScriptFailure(t *testing.T) {
 func TestScriptFailuresStillUseTheStarlarkPresentation(t *testing.T) {
 	t.Parallel()
 	for name, source := range map[string]string{
-		"fail":      "def main(args, flags):\n    fail(\"boom\")\ncli.command(main)",
-		"runtime":   "def main(args, flags):\n    return 1 // 0\ncli.command(main)",
-		"validate":  "def main(args, flags):\n    pass\ncli.command(main, validate = lambda a, f: False)",
-		"toplevel":  "fail(\"before cli.command\")",
-		"not-usage": "x = 1 +",
+		"fail":          "def main(args, flags):\n    fail(\"boom\")\ncli.command(main)",
+		"runtime":       "def main(args, flags):\n    return 1 // 0\ncli.command(main)",
+		"validate-fail": "def main(args, flags):\n    pass\ndef check(a, f):\n    fail(\"bad input\")\ncli.command(main, validate = check)",
+		"toplevel":      "fail(\"before cli.command\")",
+		"not-usage":     "x = 1 +",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -58,6 +58,27 @@ func TestScriptFailuresStillUseTheStarlarkPresentation(t *testing.T) {
 			assert.NotErrorIs(t, err, errUtils.ErrScriptUsage)
 		})
 	}
+}
+
+// A validate callback that returns False rejects the user's input, not the script: it is reported
+// through the host's usage presentation, without a Starlark prefix or a traceback.
+func TestRejectedValidationIsPresentedAsAUsageError(t *testing.T) {
+	t.Parallel()
+	_, err := New().Execute(t.Context(), script.Spec{
+		Name: "tool.star", File: &script.File{Path: filepath.Join(t.TempDir(), "tool.star")},
+		ParseCommand: func(context.Context, script.CommandSpec) (script.CommandInput, error) {
+			return script.CommandInput{Usage: func(cause error) error {
+				return errUtils.Build(cause).WithHint("Run tool --help for usage.").WithExitCode(2).Err()
+			}}, nil
+		},
+		Source: "def main(args, flags):\n    pass\ncli.command(main, validate = lambda a, f: False)",
+	})
+	require.ErrorIs(t, err, errUtils.ErrScriptUsage)
+	assert.NotErrorIs(t, err, errUtils.ErrStarlark)
+	assert.ErrorContains(t, err, "input validation failed")
+	assert.Equal(t, 2, errUtils.GetExitCode(err))
+	assert.Equal(t, "Run tool --help for usage.", cockroach.FlattenHints(err))
+	assert.Empty(t, cockroach.FlattenDetails(err), "no traceback")
 }
 
 func TestOutputHintNamesWhatIsAcceptedAndOmitsNone(t *testing.T) {
