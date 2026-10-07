@@ -19,12 +19,12 @@ import (
 func ApplyAmbientEnv(step *schema.WorkflowStep, ambient, declared map[string]string) {
 	defer perf.Track(nil, "step.ApplyAmbientEnv")()
 
-	merged := make(map[string]string, len(ambient)+len(declared))
+	merged := make(map[string]string, len(ambient))
 	maps.Copy(merged, ambient)
 	maps.Copy(merged, declared)
 	step.Env = merged
 
-	literal := make([]string, 0, len(step.LiteralFields)+len(ambient))
+	literal := make([]string, 0, len(step.LiteralFields))
 	literal = append(literal, step.LiteralFields...)
 	for key := range ambient {
 		if hasEnvKey(declared, key) {
