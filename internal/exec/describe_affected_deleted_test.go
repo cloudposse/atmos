@@ -46,7 +46,7 @@ func TestDetectDeletedComponents_ComponentDeleted(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 1)
 
@@ -84,7 +84,7 @@ func TestDetectDeletedComponents_EntireStackDeleted(t *testing.T) {
 	// Stack doesn't exist in HEAD.
 	currentStacks := map[string]any{}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 2)
 
@@ -140,7 +140,7 @@ func TestDetectDeletedComponents_AbstractComponentNotReported(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	// Abstract component should not be reported as deleted.
 	require.Len(t, deleted, 0)
@@ -189,7 +189,7 @@ func TestDetectDeletedComponents_WithStackFilter(t *testing.T) {
 	}
 
 	// Filter to only dev stack.
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "dev-us-east-1")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "dev-us-east-1", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 1)
 	assert.Equal(t, "prometheus", deleted[0].Component)
@@ -236,7 +236,7 @@ func TestDetectDeletedComponents_MultipleComponentTypes(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 3)
 
@@ -281,7 +281,7 @@ func TestDetectDeletedComponents_NativeHelmComponentDeleted(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 1)
 	assert.Equal(t, "hello", deleted[0].Component)
@@ -315,7 +315,7 @@ func TestDetectDeletedComponents_EntireStackDeletedNativeHelm(t *testing.T) {
 	// Stack doesn't exist in HEAD.
 	currentStacks := map[string]any{}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 1)
 	assert.Equal(t, "hello", deleted[0].Component)
@@ -359,7 +359,7 @@ func TestDetectDeletedComponents_AllProvisionableTypes(t *testing.T) {
 	remoteStacks := map[string]any{"dev": map[string]any{"components": remoteComponents}}
 	currentStacks := map[string]any{"dev": map[string]any{"components": currentComponents}}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, len(types))
 
@@ -402,7 +402,7 @@ func TestDetectDeletedComponents_EntireStackDeletedSkipsAbstractAndMalformed(t *
 	// Entire stack is gone in HEAD.
 	currentStacks := map[string]any{}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	// Only the real "vpc" component is reported; abstract and malformed are skipped.
 	require.Len(t, deleted, 1)
@@ -438,7 +438,7 @@ func TestDetectDeletedComponents_NoComponentsSection(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 1)
 	assert.Equal(t, "vpc", deleted[0].Component)
@@ -465,7 +465,7 @@ func TestDetectDeletedComponents_NoDeletions(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&stacks, &stacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&stacks, &stacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 0)
 }
@@ -496,7 +496,7 @@ func TestDetectDeletedComponents_StackSlug(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 1)
 	// Component name with "/" should have it replaced with "-" in stack_slug.
@@ -610,7 +610,7 @@ func TestDetectDeletedComponents_MalformedData(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			deleted, err := detectDeletedComponents(&tt.remoteStacks, &tt.currentStacks, atmosConfig, "")
+			deleted, err := detectDeletedComponents(&tt.remoteStacks, &tt.currentStacks, atmosConfig, "", AffectedFilter{})
 			require.NoError(t, err, tt.description)
 			assert.Len(t, deleted, tt.expectedCount, tt.description)
 		})
@@ -660,7 +660,7 @@ func TestDetectDeletedComponents_ComponentPath(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 2)
 
@@ -720,7 +720,7 @@ func TestDetectDeletedComponents_ComponentPathNewTypes(t *testing.T) {
 		},
 	}
 
-	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
 	require.Len(t, deleted, 3)
 

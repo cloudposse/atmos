@@ -244,6 +244,29 @@ type FileSpec struct {
 	// target: "environments/{{ .matrix.env }}/{{ .file.RelPath }}" for a
 	// directory-level matrix entry with path: "components/**".
 	Target string `yaml:"target,omitempty" json:"target,omitempty" jsonschema:"description=Output path template overriding Path; required when matrix is set; optional otherwise"`
+	// Delimiters optionally overrides the Go template delimiters for every
+	// file this entry matches (exactly two non-empty entries: left and
+	// right), taking precedence over ScaffoldSpec.Delimiters. It applies to
+	// everything rendered for those files: their content, their discovered
+	// path, Target, and Go-template Matrix axis expressions. When is CEL and
+	// is unaffected. Lets one template mix files that use template syntax of
+	// their own (Helm charts, GitHub Actions workflows) with ordinary files,
+	// e.g. delimiters: ["[[", "]]"] on path: "charts/**". As with Path, when
+	// several entries match the same file the last matching entry wins.
+	Delimiters []string `yaml:"delimiters,omitempty" json:"delimiters,omitempty" jsonschema:"description=Template delimiters for the matched files as a two-element list; overrides spec.delimiters for them,minItems=2,maxItems=2"`
+}
+
+// ResolveDelimiters returns this entry's own delimiter pair when it declares
+// exactly two non-empty entries, otherwise fallback (the pair that applies
+// when the entry has no override: spec.delimiters, or the caller's default).
+// The result is always a copy, so callers can't mutate the manifest through it.
+func (f FileSpec) ResolveDelimiters(fallback []string) []string {
+	defer perf.Track(nil, "config.FileSpec.ResolveDelimiters")()
+
+	if len(f.Delimiters) == 2 && f.Delimiters[0] != "" && f.Delimiters[1] != "" {
+		return []string{f.Delimiters[0], f.Delimiters[1]}
+	}
+	return append([]string(nil), fallback...)
 }
 
 // JSONSchemaExtend adds an if/then rule requiring a non-empty target:

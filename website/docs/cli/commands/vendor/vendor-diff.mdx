@@ -76,11 +76,11 @@ atmos vendor diff --stack dev-us-west-2 --tags networking
   <dt>`--component` / `-c` (string)</dt>
   <dd>The component to diff. Mutually exclusive with `--stack`/`--labels`. Composes with `--tags` (narrows to this component only if its declared `vendor.yaml` tags also match).</dd>
   <dt>`--tags` (string)</dt>
-  <dd>Diff only components whose `vendor.yaml` source declares any of these comma-separated tags (matches any). An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.</dd>
+  <dd>Diff only components whose `vendor.yaml` source declares any of these comma-separated tags (matches any). An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.<br/>Environment variable: `ATMOS_VENDOR_TAGS`</dd>
   <dt>`--stack` / `-s` (string)</dt>
   <dd>Diff every component belonging to the specified stack. Composes with `--labels` to narrow further, and with `--tags` to filter by declared source tags. Mutually exclusive with `--component`.</dd>
   <dt>`--labels` (string)</dt>
-  <dd>Diff every component whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs. Composes with `--stack` and `--tags`. Mutually exclusive with `--component`.</dd>
+  <dd>Diff every component whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs. Composes with `--stack` and `--tags`. Mutually exclusive with `--component`.<br/>Environment variable: `ATMOS_VENDOR_LABELS`</dd>
   <dt>`--from` (string)</dt>
   <dd>Starting ref (tag, branch, or commit). Defaults to each component's current pinned version.</dd>
   <dt>`--to` (string)</dt>

@@ -1,0 +1,86 @@
+---
+slug: scaffold-per-file-delimiters
+title: "Per-file template delimiters for scaffold templates"
+authors: [osterman]
+tags: [feature]
+---
+
+A Helm chart is full of `{{ }}` expressions, and so is a GitHub Actions workflow with its
+`${{ github.sha }}`. Put either one in a scaffold template that also uses `{{ }}` for its own
+variables, and the generator tries to render the chart's and the workflow's expressions too. A
+template could pick one delimiter pair for every file it generates, so mixing a chart or a
+workflow with ordinary files meant escaping every Helm and Actions expression by hand.
+
+<!--truncate-->
+
+## The Problem
+
+Scaffold templates render with `{{ }}` by default, and `spec.delimiters` can switch the whole
+template to a different pair. That works while every file in the template agrees on one pair. It
+breaks down as soon as a single template generates files that already contain `{{ }}` of their own:
+
+- A Helm chart needs its `{{ .Values.image }}` expressions to reach the generated chart untouched,
+  so Helm can render them later.
+- A GitHub Actions workflow needs `${{ github.sha }}` to stay literal for the same reason.
+- The rest of the project, such as stack files and READMEs, still wants the convenient default.
+
+Switching the whole template to `[[ ]]` fixes the chart but forces every other file to change
+syntax with it. Keeping `{{ }}` means escaping every Helm and Actions expression by hand.
+
+Custom delimiters also had a second gap. When Atmos checked a generated file path for unrendered
+template markers, it always looked for `{{` and `}}`, no matter which delimiters the template
+used. A path that legitimately contained a literal `{{`, such as one produced under a `[[ ]]`
+template, was rejected as if a variable had been left unrendered.
+
+## The Fix
+
+An entry in `spec.files` can now carry its own `delimiters`, which override the template-wide
+pair for every file the entry matches. The pair covers everything Atmos renders for those files:
+their content, their paths, `target`, and any `matrix` axis written as a Go template expression.
+The `when` condition is a CEL expression, so it never uses delimiters.
+
+Atmos picks a file's delimiters in this order:
+
+1. The `delimiters` of the matching `spec.files` entry. When several entries match the same file,
+   the last one wins, as it does for `path` and `when`.
+2. `spec.delimiters`.
+3. `{{` and `}}`.
+
+Path validation now follows the same pair, so a literal `{{` or `${{` in a path is accepted under
+`[[ ]]` while a forgotten `[[ .Config.name ]]` is still caught. Both `atmos scaffold generate` and
+`atmos init` honor per-file delimiters, and so do `--dry-run` previews and `--update` merges. An
+update keeps your edits to a chart file while Helm's own expressions stay literal.
+
+## How to Use It
+
+Declare the template-wide default once, then override it for the files that need something else:
+
+```yaml title="scaffold.yaml"
+spec:
+  delimiters: ["{{", "}}"]          # template-wide default (optional)
+  files:
+    - path: "charts/**"             # Helm templates use {{ }} themselves
+      delimiters: ["[[", "]]"]
+    - path: ".github/workflows/*.yml.tmpl"
+      delimiters: ["<<", ">>"]      # keeps ${{ github.sha }} literal
+```
+
+A chart template can then mix both syntaxes. Atmos fills in the `[[ ]]` expression and leaves the
+Helm expression for Helm:
+
+```yaml title="charts/app/templates/deployment.yaml"
+# atmos:template
+name: [[ .Config.name ]]
+image: "{{ .Values.image }}"
+```
+
+Each pair must be exactly two non-empty strings, and `atmos scaffold validate` rejects anything
+else. See [Template Delimiters](/cli/commands/scaffold/usage#template-delimiters) for the full
+rules, and the [`atmos scaffold generate`](/cli/commands/scaffold/generate#template-delimiters)
+reference for how delimiters combine with `target` and `matrix`.
+
+## Get Involved
+
+Try it on a template that generates a chart or a workflow, and
+[open an issue](https://github.com/cloudposse/atmos/issues) with feedback or edge cases you run
+into.

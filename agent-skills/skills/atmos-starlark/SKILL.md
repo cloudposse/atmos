@@ -30,9 +30,9 @@ Keep simple one-command automation in YAML (`atmos-workflows`, `atmos-custom-com
 or concurrency. Declarations of project commands and component bindings stay in YAML.
 The script step configuration is `type: script` with `interpreter: starlark`.
 
-Public documentation: [Language reference](https://atmos.tools/automation/language),
+Documentation: [Language reference](https://atmos.tools/automation/language),
 [Custom CLI apps](https://atmos.tools/automation/standalone-cli-apps),
-[function reference](https://atmos.tools/functions/automation), and the
+[function reference](references/api-reference.md), and the
 [script step](https://atmos.tools/steps/type/script).
 
 ## Choose the entry point
@@ -56,9 +56,9 @@ Standalone tool with typed inputs:
 
 ```python
 #!/usr/bin/env atmos
-dependencies.tools("jqlang/jq", "1.7.1")
 
 def main(args, flags):
+    dependencies.tools("jqlang/jq", "1.7.1")
     for stack in flags["stack"]:
         atmos.terraform("deploy", args["component"], stack)
         ui.success("deployed " + args["component"] + " to " + stack)
