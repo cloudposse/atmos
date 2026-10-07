@@ -30,6 +30,12 @@ A terminal Ctrl-C hides the problem because the terminal signals the whole foreg
   empty child registry. The test runs on Windows as well as Unix and does not
   use a platform-specific process-liveness stub.
 
+- Give the grandchild deadline test a 20-second context deadline so
+  race-instrumented helper startup can finish on loaded CI runners. Require
+  parent and grandchild readiness before the deadline, then assert real
+  `context.DeadlineExceeded`, process termination, and registry cleanup.
+  A slow-parent helper deliberately takes longer than the former 750ms budget.
+
 ## Validation
 
 - `go test ./pkg/process/... ./pkg/signals/... -race -count=1` passes.
@@ -44,6 +50,14 @@ A terminal Ctrl-C hides the problem because the terminal signals the whole foreg
   cross-compilation and `go vet` passed; Windows execution remains a CI check.
   These local coverage figures cover the touched packages' own tests, not
   full-suite coverage or Windows-only statements; CI Codecov is authoritative.
+
+- A controlled one-second helper startup delay reproduced the original CI
+  failure with the 750ms deadline: the parent never reported its PID. The
+  same slow-start scenario passed with the 20-second deadline and readiness
+  checks. Other process deadline tests assert cancellation without depending
+  on helper readiness and did not need this change. The full process/signals
+  tests passed with race detection and shuffled order after the fix; Windows
+  amd64 test cross-compilation and vet passed.
 
 ## Follow-ups
 

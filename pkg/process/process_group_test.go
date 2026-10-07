@@ -30,6 +30,8 @@ const (
 
 	// Mode parent spawns a grandchild (modeSleep) and then sleeps.
 	modeParent = "parent"
+	// Mode slowParent delays readiness beyond the former 750ms deadline.
+	modeSlowParent = "slow-parent"
 	// Mode stubbornParent spawns a grandchild that ignores graceful termination.
 	modeStubbornParent = "stubborn-parent"
 	modeStubbornChild  = "stubborn-child"
@@ -49,7 +51,10 @@ const (
 func runProcessHelper(mode string) {
 	dir := os.Getenv(helperPIDDirEnv)
 	switch mode {
-	case modeParent:
+	case modeParent, modeSlowParent:
+		if mode == modeSlowParent {
+			time.Sleep(time.Second)
+		}
 		writePIDFile(dir, "parent")
 		spawnGrandchild(modeSleep, false)
 		time.Sleep(helperSleep)
@@ -223,13 +228,24 @@ func TestRun_ContextDeadlineKillsGrandchildren(t *testing.T) {
 	dir := t.TempDir()
 	killAtCleanup(t, dir, "parent", "child")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	// Race-instrumented subprocess startup needs time on a busy CI runner.
+	// Both helpers must be ready before the real context deadline expires.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*pidWait)
 	defer cancel()
-	res := awaitRun(t, runAsync(ctx, ptr(helperSpec(t, modeParent, dir, nil))))
+	done := runAsync(ctx, ptr(helperSpec(t, modeSlowParent, dir, nil)))
+	parent := waitForPID(t, dir, "parent")
+	child := waitForPID(t, dir, "child")
+	require.NoError(t, ctx.Err(), "both helpers must start before the deadline")
 
+	<-ctx.Done()
+	res := awaitRun(t, done)
+
+	assert.ErrorIs(t, ctx.Err(), context.DeadlineExceeded)
+	assert.ErrorIs(t, res.Err, context.DeadlineExceeded)
 	assert.True(t, res.Canceled)
-	requireGone(t, waitForPID(t, dir, "parent"), "child process")
-	requireGone(t, waitForPID(t, dir, "child"), "grandchild process")
+	requireGone(t, parent, "child process")
+	requireGone(t, child, "grandchild process")
+	assert.Empty(t, liveChildren(), "deadline cleanup must unregister the child")
 }
 
 // Direct-child cleanup is guaranteed on every platform, including Windows.
