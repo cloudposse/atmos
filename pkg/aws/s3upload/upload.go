@@ -54,6 +54,7 @@ type Result struct {
 type object struct {
 	filename string
 	key      string
+	size     int64
 }
 
 // Upload compares SHA-256, size, and delivery headers before streaming changed files.
@@ -155,29 +156,19 @@ func uploadObject(ctx context.Context, client Client, bucket string, obj object,
 		return false, err
 	}
 	defer file.Close()
-	input, err := prepareObject(ctx, file, bucket, obj, opts)
-	if err != nil {
-		return false, err
-	}
-	remote, err := client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: input.Bucket, Key: input.Key})
-	if err != nil && !isMissing(err) {
-		return false, err
-	}
-	if err == nil && objectMatches(remote, input) {
-		return false, nil
-	}
-	_, err = client.PutObject(ctx, input)
-	return err == nil, err
-}
-
-func prepareObject(ctx context.Context, file *os.File, bucket string, obj object, opts Options) (*s3.PutObjectInput, error) {
 	info, err := file.Stat()
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	if !info.Mode().IsRegular() || info.Size() > maxObjectSize {
-		return nil, errUtils.ErrS3UploadSource
+	if !info.Mode().IsRegular() {
+		return false, errUtils.ErrS3UploadSource
 	}
+	opts.Source = obj.filename
+	opts.Destination = (&url.URL{Scheme: "s3", Host: bucket, Path: "/" + obj.key}).String()
+	return UploadReader(ctx, client, file, info.Size(), opts)
+}
+
+func prepareReader(ctx context.Context, file io.ReadSeeker, bucket string, obj object, opts Options) (*s3.PutObjectInput, error) {
 	hash := sha256.New()
 	if _, err := io.Copy(hash, &contextReader{ctx: ctx, reader: file}); err != nil {
 		return nil, err
@@ -192,7 +183,7 @@ func prepareObject(ctx context.Context, file *os.File, bucket string, obj object
 	}
 	return &s3.PutObjectInput{
 		Bucket: aws.String(bucket), Key: aws.String(obj.key), Body: file,
-		ContentLength: aws.Int64(info.Size()), ContentType: aws.String(contentType),
+		ContentLength: aws.Int64(obj.size), ContentType: aws.String(contentType),
 		CacheControl:   optionalString(opts.CacheControl),
 		Metadata:       map[string]string{checksumMetadata: hex.EncodeToString(digest)},
 		ChecksumSHA256: aws.String(base64.StdEncoding.EncodeToString(digest)),
@@ -206,7 +197,7 @@ func objectMatches(remote *s3.HeadObjectOutput, input *s3.PutObjectInput) bool {
 		aws.ToString(remote.CacheControl) == aws.ToString(input.CacheControl)
 }
 
-func resolveContentType(file *os.File, filename, override string) (string, error) {
+func resolveContentType(file io.ReadSeeker, filename, override string) (string, error) {
 	if override != "" {
 		return override, nil
 	}

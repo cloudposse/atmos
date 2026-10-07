@@ -269,6 +269,13 @@ func reconcile(ctx context.Context, s *repoSession) error {
 // commitAndPush stages the managed path, commits any changes, and pushes when a
 // commit was created.
 func commitAndPush(ctx context.Context, s *repoSession, cfg *config, artifact *target.ProvisionArtifact) error {
+	_, err := commitAndPushResult(ctx, s, cfg, artifact, false)
+	return err
+}
+
+// commitAndPushResult optionally pushes unchanged content to retry a previously
+// failed push. Reconciliation accepts a local branch that is ahead of the remote.
+func commitAndPushResult(ctx context.Context, s *repoSession, cfg *config, artifact *target.ProvisionArtifact, pushUnchanged bool) (string, error) {
 	var result atmosgit.CommitResult
 	stderr, err := atmosgit.CaptureStderr(s.provider, func() error {
 		res, commitErr := s.provider.Commit(ctx, &atmosgit.CommitOptions{
@@ -285,11 +292,11 @@ func commitAndPush(ctx context.Context, s *repoSession, cfg *config, artifact *t
 		return commitErr
 	})
 	if err != nil {
-		return atmosgit.WrapOperationError("commit Git changes", s.rc.Workdir, stderr, err, "")
+		return result.SHA, atmosgit.WrapOperationError("commit Git changes", s.rc.Workdir, stderr, err, "")
 	}
-	if !result.Committed {
+	if !result.Committed && !pushUnchanged {
 		// Nothing changed in the managed path; a no-op is a clean success.
-		return nil
+		return "", nil
 	}
 
 	stderr, err = atmosgit.CaptureStderr(s.provider, func() error {
@@ -298,7 +305,7 @@ func commitAndPush(ctx context.Context, s *repoSession, cfg *config, artifact *t
 			Retries:     s.resolved.PushRetries,
 		})
 	})
-	return atmosgit.WrapOperationError(
+	return result.SHA, atmosgit.WrapOperationError(
 		"push Git repository",
 		s.rc.Workdir,
 		stderr,

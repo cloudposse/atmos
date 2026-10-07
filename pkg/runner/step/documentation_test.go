@@ -55,7 +55,7 @@ func TestStepDocumentationCoversRegisteredTypes(t *testing.T) {
 		"hint": "hint", "http": "http", "input": "input", "join": "join", "junit": "junit",
 		"linebreak": "linebreak", "log": "log", "markdown": "markdown", "matrix": "matrix",
 		"pager": "pager", "parallel": "parallel", "require": "require", "say": "say",
-		"aws/s3": "aws/s3", "script": "script", "shell": "shell", "sleep": "sleep", "spin": "spin",
+		"publish": "publish", "script": "script", "shell": "shell", "sleep": "sleep", "spin": "spin",
 		"stage": "stage", "store": "store", "style": "style", "table": "table", "test": "test",
 		"tflint": "tflint", "title": "title",
 		"toast": "toast", "wait": "wait", "wait-all": "wait", "workdir": "workdir", "write": "write",

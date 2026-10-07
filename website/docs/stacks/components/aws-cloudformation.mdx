@@ -335,7 +335,7 @@ template: |
 
 Use the [`archive` step](/steps/type/archive) in a
 [`kind: steps` hook](/stacks/hooks#kind-steps-run-ordered-steps) to package local
-code, followed by an [`aws/s3` step](/steps/type/aws/s3) to upload it. The example
+code, followed by a [`publish` step](/steps/type/publish) to upload it. The example
 requires an existing S3 bucket accessible to the component's credentials.
 
 Add these fields to the CloudFormation component. Its template must declare
@@ -359,10 +359,13 @@ hooks:
         source: src/
         destination: handler.zip
         mtime: epoch
-      - type: aws/s3
+      - type: publish
         source: handler.zip
-        destination: "s3://{{ .vars.artifact_bucket }}/{{ .vars.artifact_key }}"
-        region: us-east-1
+        destination: "{{ .vars.artifact_key }}"
+        target:
+          kind: aws/s3
+          bucket: "{{ .vars.artifact_bucket }}"
+          region: us-east-1
 ```
 
 Enable Go templating in `atmos.yaml` for the expressions above. Relative paths

@@ -17,14 +17,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestStepVariablesAWSIdentity(t *testing.T) {
+func TestStepVariablesPublishIdentity(t *testing.T) {
 	auth := &schema.AWSAuthContext{Profile: "artifact-writer", Region: "us-east-2"}
 	ctx := &ExecContext{Hook: &Hook{}, AtmosConfig: &schema.AtmosConfiguration{}, Info: &schema.ConfigAndStacksInfo{AuthContext: &schema.AuthContext{AWS: auth}}}
 	vars := stepVariables(ctx)
-	assert.Same(t, auth, vars.AWSAuthContext)
-	assert.Same(t, auth, vars.Clone().AWSAuthContext)
+	assert.Same(t, auth, vars.PublishInfo.AuthContext.AWS)
+	assert.Same(t, auth, vars.Clone().PublishInfo.AuthContext.AWS)
 	ctx.Info.AuthContext = nil
-	assert.Nil(t, stepVariables(ctx).AWSAuthContext)
+	assert.Nil(t, stepVariables(ctx).PublishInfo.AuthContext)
 }
 
 // TestArchiveS3Hook exercises the documented two-step packaging recipe through
@@ -62,9 +62,11 @@ func TestArchiveS3Hook(t *testing.T) {
 	defer server.Close()
 	hook := &Hook{Kind: stepsKindName, With: []any{
 		map[string]any{"name": "package", "type": "archive", "source": "src", "destination": "handler.zip", "mtime": "epoch", "working_directory": dir},
-		map[string]any{"name": "upload", "type": "aws/s3", "source": "{{ .steps.package.value }}", "destination": "s3://artifacts/handler.zip", "region": "us-east-1"},
+		map[string]any{"name": "upload", "type": "publish", "source": "{{ .steps.package.value }}", "target": "assets"},
 	}}
 	ctx := stepsExecContext(hook)
+	ctx.Info.ComponentSection = map[string]any{}
+	ctx.Info.ComponentSection["provision"] = map[string]any{"targets": map[string]any{"assets": map[string]any{"kind": "aws/s3", "bucket": "artifacts", "region": "us-east-1"}}}
 	ctx.Info.AuthContext = &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "component", CredentialsFile: credentialsFile, ConfigFile: filepath.Join(t.TempDir(), "config"), EndpointURL: server.URL}}
 	for range 2 {
 		out, err := (stepsEngine{}).Run(ctx)

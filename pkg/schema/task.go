@@ -152,7 +152,7 @@ type Task struct {
 
 	// File picker fields.
 	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
-	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or a local directory/file for archive and aws/s3 steps (string only).
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only).
 	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
@@ -251,18 +251,14 @@ type Task struct {
 	Provider         string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // auto, docker, podman, or empty for auto-detect.
 	Container        *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
 
-	// Region selects the AWS region for an aws/s3 upload step.
-	Region string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
-	// ContentType overrides the detected MIME type for an aws/s3 upload step.
-	ContentType string `yaml:"content_type,omitempty" json:"content_type,omitempty" mapstructure:"content_type"`
-	// CacheControl sets the Cache-Control header for an aws/s3 upload step.
-	CacheControl string `yaml:"cache_control,omitempty" json:"cache_control,omitempty" mapstructure:"cache_control"`
+	// Target selects a named component target or an inline publishing target.
+	Target any `yaml:"target,omitempty" json:"target,omitempty" mapstructure:"target" jsonschema:"oneof_type=string;object"`
 
 	// Archive step fields (type: archive). Action reuses the container step's
 	// Action field (create | extract | update | replace); Source reuses the
 	// workdir step's Source field (archive requires it to be a string path).
 	Format      string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`                // zip | tar | tgz | tar.bz2 | tar.xz; inferred from destination/source extension when omitted.
-	Destination string   `yaml:"destination,omitempty" json:"destination,omitempty" mapstructure:"destination"` // Archive output/extraction path, or aws/s3 destination URI.
+	Destination string   `yaml:"destination,omitempty" json:"destination,omitempty" mapstructure:"destination"` // Archive output/extraction path, or publish path relative to its target.
 	Subpath     string   `yaml:"subpath,omitempty" json:"subpath,omitempty" mapstructure:"subpath"`             // Pack: nest source content under this path inside the archive. Extract: only extract this path, prefix stripped.
 	Include     []string `yaml:"include,omitempty" json:"include,omitempty" mapstructure:"include"`             // Glob(s); keep only matching files.
 	Exclude     []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`             // Glob(s); drop matching files, evaluated before include.
@@ -556,9 +552,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Mtime:       task.Mtime,
 
 		// S3 upload step fields.
-		Region:       task.Region,
-		ContentType:  task.ContentType,
-		CacheControl: task.CacheControl,
+		Target: task.Target,
 
 		// Require step fields.
 		Tools: task.Tools,
@@ -728,9 +722,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Mtime:       step.Mtime,
 
 		// S3 upload step fields.
-		Region:       step.Region,
-		ContentType:  step.ContentType,
-		CacheControl: step.CacheControl,
+		Target: step.Target,
 
 		// Require step fields.
 		Tools: step.Tools,

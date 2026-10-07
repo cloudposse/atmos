@@ -1,0 +1,206 @@
+---
+title: publish
+sidebar_label: publish
+slug: /steps/type/publish
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Publish local files to an Amazon S3 or Git target. Unchanged files are skipped, and destination-only files are retained.
+</Intro>
+
+## Usage
+
+```yaml
+steps:
+  - name: publish-assets
+    type: publish
+    source: dist/
+    target:
+      kind: aws/s3
+      bucket: acme-artifacts
+      prefix: releases/v1/
+      region: us-east-1
+```
+
+The bucket must already exist. Directory contents retain their relative paths;
+empty directories do not create objects. A single file uses its basename unless
+`destination` supplies another name.
+
+## Examples
+
+### Package and Publish an Archive
+
+```yaml
+steps:
+  - name: package
+    type: archive
+    source: src/
+    destination: handler.zip
+    mtime: epoch
+  - name: publish
+    type: publish
+    source: '{{ .steps.package.value }}'
+    target:
+      kind: aws/s3
+      bucket: acme-artifacts
+      prefix: lambda/v1/
+      region: us-east-1
+  - type: log
+    content: 'Artifact: {{ .steps.publish.value }}'
+```
+
+The [`archive` step's timestamp settings](/steps/type/archive#reproducible-archives)
+produce reproducible archives, allowing unchanged builds to skip the upload.
+
+### Publish to Git
+
+Configure a [managed Git repository](/cli/configuration/git), then select it in the target:
+
+```yaml
+steps:
+  - name: publish-config
+    type: publish
+    source: dist/
+    target:
+      kind: git
+      repository: deployment-repo
+      path: generated/service
+      commit:
+        message: Publish service configuration
+```
+
+Git clones or updates the configured repository, writes files below `path`,
+then commits and pushes changes scoped to that path. An unchanged run creates
+no commit and performs no push. Files remain byte-for-byte intact, including
+archives and YAML files. Publishing does not combine YAML documents.
+
+### Use a Component's Named Target
+
+Within a component hook, `target: artifacts` selects the component's merged
+`provision.targets.artifacts` definition:
+
+```yaml
+provision:
+  targets:
+    artifacts:
+      kind: aws/s3
+      bucket: acme-artifacts
+      prefix: releases/v1/
+      region: us-east-1
+hooks:
+  publish-assets:
+    events: [before.aws/cloudformation.apply]
+    kind: steps
+    with:
+      - type: publish
+        source: dist/
+        target: artifacts
+```
+
+An explicit target is required. The step does not use `provision.default`.
+Workflows and custom commands without component scope must provide an inline
+target. Selecting a deployment-only target fails without deploying resources.
+
+## Settings
+
+<dl>
+  <dt>`source`</dt>
+  <dd>Required local file or directory. Relative paths use the step's working directory. Symlinks and special files are rejected.</dd>
+  <dt>`target`</dt>
+  <dd>Required inline target mapping, or the name of a component's provision target when running in a hook. Supported kinds are `aws/s3` and `git`.</dd>
+  <dt>`destination`</dt>
+  <dd>Optional path relative to the target root. For a file, replaces its basename; a trailing slash appends the basename. For a directory, adds a prefix to each relative path. Absolute paths, parent traversal, backslashes, and Git metadata paths are rejected. Write spaces and `#` literally; returned S3 URIs are escaped automatically.</dd>
+</dl>
+
+String settings support Go templates, including strings within the target map.
+Common fields such as [`working_directory`](/steps/working-directory),
+[`retry`](/steps/retry), and [`when`](/steps#conditional-execution) also apply.
+The step has no `action` field.
+
+### S3 Target
+
+<dl>
+  <dt>`kind`</dt><dd>`aws/s3`.</dd>
+  <dt>`bucket`</dt><dd>Required existing S3 bucket.</dd>
+  <dt>`region`</dt><dd>Required bucket region.</dd>
+  <dt>`prefix`</dt><dd>Optional relative key prefix. Files are published below this prefix.</dd>
+  <dt>`content_type`</dt><dd>Optional MIME type applied to every file. Defaults to detection by extension, then file contents.</dd>
+  <dt>`cache_control`</dt><dd>Optional Cache-Control header. Omitting it clears a previously configured value on the next upload.</dd>
+  <dt>`auth`</dt><dd>Optional target authentication, such as `auth: {identity: artifacts-writer}`.</dd>
+</dl>
+
+### Git Target
+
+<dl>
+  <dt>`kind`</dt><dd>`git`.</dd>
+  <dt>`repository`</dt><dd>Required name from `git.repositories`.</dd>
+  <dt>`path`</dt><dd>Required directory root within the repository. The repository root itself is not allowed. Filename extensions do not change directory semantics.</dd>
+  <dt>`commit`</dt><dd>Optional `message` and `signing` settings, using the existing Git target conventions.</dd>
+  <dt>`auth`</dt><dd>Optional target identity override. Otherwise the repository's configured identity applies.</dd>
+</dl>
+
+The manifest-specific `split` setting and pull-request creation are unsupported.
+File/directory collisions and symlink destinations fail without replacing the
+conflicting entry. Existing component delivery to Git still reconciles its
+managed path; the `publish` step retains destination-only files.
+
+## Authentication
+
+Publishing uses the existing identity selection rules: an explicit step or
+runner identity takes precedence over target authentication. Hooks inherit the
+component's auth scope; the target can select its own identity when no explicit
+caller override applies. Automatically selected component identities do not
+become explicit overrides. Each target resolves credentials independently.
+
+Without an Atmos identity, S3 uses the runner's AWS environment and standard
+SDK credential chain. The SDK receives environment values without changing the
+process environment. Use `AWS_ENDPOINT_URL_S3` for an S3-compatible test endpoint.
+Git uses its repository identity when no target or caller identity overrides it.
+
+S3 callers need permission to inspect and upload objects. Grant `s3:GetObject`
+and `s3:PutObject`, plus `s3:ListBucket` to distinguish missing objects from
+access-denied responses. Access errors fail without attempting an upload.
+Bucket encryption policies may require KMS permissions.
+
+## Incremental Publishing
+
+S3 compares the `atmos-sha256` metadata digest, size, content type, and cache
+control. Objects without Atmos metadata are uploaded once. Comparison does not
+download remote content or use a shared deployment manifest. Replaced objects
+do not preserve unrelated metadata; bucket versioning and encryption defaults apply.
+
+Git compares file content and commits only changes. Repository signing and
+push-retry configuration apply. Dirty unrelated work in the managed checkout
+can prevent reconciliation or a scoped commit.
+
+## Results
+
+| Value | Meaning |
+| --- | --- |
+| `.steps.publish.value` | Location for one file; target name or `inline` for zero or multiple files. |
+| `.steps.publish.values` | All locations, including unchanged files: S3 URIs or Git repository-relative paths. |
+| `.steps.publish.metadata.kind` | Target kind. |
+| `.steps.publish.metadata.target` | Target name or `inline`. |
+| `.steps.publish.metadata.changed` | Files written. |
+| `.steps.publish.metadata.unchanged` | Files already matching. |
+| `.steps.publish.metadata.bucket` / `.key` | S3 bucket and object key, or prefix for multiple files. |
+| `.steps.publish.metadata.uploaded` | S3 objects uploaded. |
+| `.steps.publish.metadata.repository` / `.branch` | Git repository name and configured branch. |
+| `.steps.publish.metadata.commit` | Created Git commit SHA; empty when no commit was created. |
+
+## Limitations
+
+S3 files must be no larger than 5 GiB; multipart uploads and bucket creation
+are unsupported. Publishing is not atomic across files. Earlier writes may
+remain after a failure; S3 retries skip completed matching objects.
+
+Publishing does not delete remote files, download files, or rewrite template
+references. CloudFormation template packaging retains its separate content-addressed
+keys and metadata format. For Lambda assets, use a new object key per release
+and pass it as a template parameter so CloudFormation can detect the change.
+See the [asset packaging hook example](/stacks/components/aws-cloudformation#asset-packaging-hooks).
+
+The publishing handler's dry-run validates local paths and target configuration
+without authenticating, calling AWS, or cloning, committing, or pushing Git repositories.

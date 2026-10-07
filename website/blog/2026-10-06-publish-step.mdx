@@ -1,12 +1,12 @@
 ---
-slug: aws-s3-upload-step
-title: Upload Artifacts with the Native AWS S3 Step
+slug: publish-step
+title: Publish Artifacts to S3 and Git
 authors: [osterman]
 tags: [feature]
 ---
 
 Packaging a Lambda archive is only part of a deployment: the archive must also
-reach S3. The new [`aws/s3` step](/steps/type/aws/s3) uploads files and directories
+reach S3. The new [`publish` step](/steps/type/publish) uploads files and directories
 from workflows, custom commands, and component hooks, and skips unchanged objects.
 
 <!--truncate-->
@@ -19,7 +19,7 @@ content types, and repeated uploads themselves.
 
 ## The Fix
 
-Use `type: aws/s3` to upload through the step runner. Atmos compares SHA-256
+Use `type: publish` with an `aws/s3` target to upload through the step runner. Atmos compares SHA-256
 metadata, object size, and delivery headers before uploading. Files that already
 match stay untouched, and files removed locally are retained in S3.
 
@@ -33,22 +33,44 @@ steps:
     destination: handler.zip
     mtime: epoch
   - name: upload
-    type: aws/s3
+    type: publish
     source: '{{ .steps.package.value }}'
-    destination: s3://acme-artifacts/lambda/v1/handler.zip
-    region: us-east-1
+    target:
+      kind: aws/s3
+      bucket: acme-artifacts
+      prefix: lambda/v1/
+      region: us-east-1
 ```
 
 Create the bucket first and grant the caller permission to inspect and upload
-objects. For a directory, set `source: dist/` and a destination prefix. Configure
-`cache_control` when publishing assets with caching headers.
+objects. For a directory, set `source: dist/` and a target `prefix`. Configure
+the target's `cache_control` when publishing assets with caching headers.
 
 CloudFormation hooks can now package and upload local assets without a shell
 upload command. See the [complete hook example](/stacks/components/aws-cloudformation#asset-packaging-hooks).
 Template references remain explicit; use a new key per release so CloudFormation
 can detect the artifact change.
 
+Git targets use the same step:
+
+```yaml
+steps:
+  - type: publish
+    source: dist/
+    target:
+      kind: git
+      repository: deployment-repo
+      path: generated/service
+      commit:
+        message: Publish service configuration
+```
+
+Declare `deployment-repo` in your managed Git configuration first. Atmos writes
+raw files, commits changes, and pushes. Destination-only files stay intact;
+an unchanged run creates no commit. In component hooks, use a target name to
+reuse a definition from `provision.targets`.
+
 ## Get Involved
 
-Read the [step reference](/steps/type/aws/s3) for credentials, outputs, and limits.
+Read the [step reference](/steps/type/publish) for credentials, outputs, and limits.
 Report problems or share use cases in [GitHub discussions](https://github.com/cloudposse/atmos/discussions).

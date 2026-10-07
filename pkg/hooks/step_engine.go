@@ -408,9 +408,7 @@ func verifyStepsHookTypes(name string, hook *Hook) error {
 func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	vars := runnerstep.NewVariables()
 	vars.SetAtmosConfig(ctx.AtmosConfig)
-	if ctx.Info != nil && ctx.Info.AuthContext != nil {
-		vars.AWSAuthContext = ctx.Info.AuthContext.AWS
-	}
+	vars.PublishInfo = ctx.Info
 	for k, v := range BuildAtmosEnv(ctx, "", "") {
 		vars.SetEnv(k, v)
 	}
