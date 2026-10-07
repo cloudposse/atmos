@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/container"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
@@ -444,7 +444,7 @@ func convertWorkflowMounts(mounts []schema.ContainerMount) []container.Mount {
 		}
 		result = append(result, container.Mount{
 			Type:     mountType,
-			Source:   expandHome(mount.Source),
+			Source:   filesystem.ExpandHome(mount.Source),
 			Target:   mount.Target,
 			ReadOnly: mount.ReadOnly,
 		})
@@ -517,23 +517,6 @@ func mergeEnvSlices(base, overlay []string) []string {
 		result = append(result, key+"="+values[key])
 	}
 	return result
-}
-
-func expandHome(path string) string {
-	if path == "" || path[0] != '~' {
-		return path
-	}
-	home, err := homedir.Dir()
-	if err != nil {
-		return path
-	}
-	if path == "~" {
-		return home
-	}
-	if strings.HasPrefix(path, "~/") {
-		return filepath.Join(home, path[2:])
-	}
-	return path
 }
 
 func defaultString(value, fallback string) string {

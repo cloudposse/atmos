@@ -25,7 +25,7 @@ fs.read_file(path)
     <dt>`path`</dt>
     <dd>
         Required. The file to read, as a string. It can be passed positionally or as `path = ...`. An absolute path is
-        used as given. A relative path, including one with `..` segments, resolves against the script's working
+        used as given. A leading `~` expands to the home directory. A relative path, including one with `..` segments, resolves against the script's working
         directory: the step's `working_directory` for a workflow or custom command step, or the directory Atmos was
         started from for a standalone script. The same rule applies to calls made from functions in loaded modules.
     </dd>
@@ -92,7 +92,8 @@ version = fs.read_file(path = "/opt/app/version.txt").strip()
 The function only reads. Scripts have no file-writing function. Use
 [`fs.glob`](/functions/automation/fs.glob), [`fs.stat`](/functions/automation/fs.stat),
 [`fs.exists`](/functions/automation/fs.exists), and
-[`fs.readlink`](/functions/automation/fs.readlink) to inspect files without reading their contents.
+[`fs.readlink`](/functions/automation/fs.readlink) to inspect files without reading their contents, and
+[`fs.resolve`](/functions/automation/fs.resolve) to turn a user-supplied path into an absolute one.
 
 ## Related
 
