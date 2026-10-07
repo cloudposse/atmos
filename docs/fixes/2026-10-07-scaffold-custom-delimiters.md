@@ -10,13 +10,13 @@ contain GitHub Actions `${{ }}` expressions literally. Three call sites in
 ignored there:
 
 1. `validateRenderedPath` rejected any rendered path containing `{{` or `}}`, even when the
-   scaffold's active delimiters were `[[ ]]`. A rendered path that legitimately contained a
-   literal `{{` was wrongly rejected, and an unrendered `[[ .x ]]` path marker was not
-   detected.
+    scaffold's active delimiters were `[[ ]]`. A rendered path that legitimately contained a
+    literal `{{` was wrongly rejected, and an unrendered `[[ .x ]]` path marker was not
+    detected.
 2. `ProcessTemplate` (public API) always rendered with the default delimiters, ignoring the
-   scaffold config it was handed.
+    scaffold config it was handed.
 3. `mergeFile` carried a second `IsTemplate` re-render branch that used nil config, nil values,
-   and default delimiters.
+    and default delimiters.
 
 ## Context
 
