@@ -155,15 +155,15 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 
 	leftDelim, _ := tags.TemplateDelims(opts.AtmosConfig.Templates.Settings.Delimiters)
 	graph := discoverTerraformGraph(opts.Stacks, leftDelim)
-	var err error
-	graph, err = FilterTerraformGraph(opts.AtmosConfig, graph, opts.Info, opts.Selection)
+	filtered, err := FilterTerraformGraph(opts.AtmosConfig, graph, opts.Info, opts.Selection)
 	if err != nil {
 		return err
 	}
-	graph, err = buildScopedTerraformGraph(opts.Stacks, leftDelim, terraformGraphNodeIDs(graph))
+	graph, err = buildScopedTerraformGraph(opts.Stacks, leftDelim, terraformGraphNodeIDs(filtered))
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrBuildDepGraph, err)
 	}
+	addContractedTerraformEdges(graph, filtered)
 
 	if graph.Size() == 0 {
 		ui.Success("No components matched")
@@ -419,12 +419,19 @@ func discoverTerraformGraph(stacks map[string]any, leftDelim string) *dependency
 }
 
 // FilterTerraformGraph narrows graph nodes to the user-selected bulk operation
-// set: a seed (stack/components/query filters or a precomputed --affected
-// selection, further narrowed by tags/labels), optionally expanded with the
-// dependency/dependent closure around the seed. Selectors choose the seed;
-// closure flags expand it — closure-added nodes execute even when they do not
-// match the selectors, since they are prerequisites (or dependents) of what
-// was selected, not selections themselves.
+// set. The primary selection (stack/components/query filters or a precomputed
+// --affected selection) produces the candidate set; tags/labels narrow it to
+// the kept seed. Closure flags then expand around it:
+//
+//	run = (seedKept + dependencies(seedKept)) + {n in dependents(candidates) : n matches tags/labels}
+//
+// Dependencies (prerequisites) run regardless of tags/labels because they are
+// required by what was selected. Dependents added by --include-dependents honour
+// tags/labels, and their traversal starts from every candidate, so a candidate
+// that fails tags/labels is not run itself but its matching dependents still
+// are. Depth is counted on the full graph, and dependents dropped along the way
+// are contracted so that ordering between the surviving nodes is preserved.
+// This mirrors `atmos describe affected`.
 func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, info *schema.ConfigAndStacksInfo, selection *TerraformSelection) (*dependency.Graph, error) {
 	defer perf.Track(atmosConfig, "scheduler.adapters.FilterTerraformGraph")()
 
@@ -432,7 +439,7 @@ func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *depende
 		return dependency.NewGraph(), nil
 	}
 
-	seedIDs, err := terraformSeedNodeIDs(atmosConfig, graph, info, selection)
+	seedIDs, candidateIDs, err := terraformSeedNodeIDs(atmosConfig, graph, info, selection)
 	if err != nil {
 		return nil, err
 	}
@@ -441,54 +448,107 @@ func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *depende
 	if !closure.includeDependencies && !closure.includeDependents && len(seedIDs) == graph.Size() {
 		return graph, nil
 	}
-	return graph.Filter(dependency.Filter{
-		NodeIDs:             seedIDs,
+	return graph.FilterSelection(&dependency.SelectionFilter{
+		Seeds:               seedIDs,
+		DependentSeeds:      nonNilStrings(candidateIDs),
 		IncludeDependencies: closure.includeDependencies,
-		IncludeDependents:   closure.includeDependents,
 		DependencyDepth:     closure.dependencyDepth,
+		IncludeDependents:   closure.includeDependents,
 		DependentDepth:      closure.dependentDepth,
+		KeepDependent: func(node *dependency.Node) bool {
+			return matchesTerraformTagsAndLabels(node, info)
+		},
 	}), nil
 }
 
-// terraformSeedNodeIDs computes the seed node set for FilterTerraformGraph.
-// Tags/labels compose with whichever primary selection produced the seed
-// (--all/--components/--query or a precomputed --affected selection), rather
-// than being an alternative selection mechanism.
-func terraformSeedNodeIDs(atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, info *schema.ConfigAndStacksInfo, selection *TerraformSelection) ([]string, error) {
+// nonNilStrings returns a non-nil slice so dependency.SelectionFilter treats an
+// empty candidate set as "no dependent seeds" rather than "same as Seeds".
+func nonNilStrings(in []string) []string {
+	if in == nil {
+		return []string{}
+	}
+	return in
+}
+
+// terraformSeedNodeIDs computes the kept seed set and the pre-selector candidate
+// set for FilterTerraformGraph. Tags/labels compose with whichever primary
+// selection produced the candidates (--all/--components/--query or a
+// precomputed --affected selection), rather than being an alternative selection
+// mechanism: the seed is the candidates that match, while the candidates
+// themselves root the dependents traversal.
+func terraformSeedNodeIDs(atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, info *schema.ConfigAndStacksInfo, selection *TerraformSelection) (seedIDs, candidateIDs []string, err error) {
 	if selection != nil {
-		return terraformSelectionSeedNodeIDs(graph, info, selection), nil
+		seedIDs, candidateIDs = terraformSelectionSeedNodeIDs(graph, info, selection)
+		return seedIDs, candidateIDs, nil
 	}
 
-	nodeIDs, err := selectedTerraformNodeIDs(atmosConfig, graph, info)
+	candidateIDs, err = selectedTerraformNodeIDs(atmosConfig, graph, info)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var seedIDs []string
-	for _, id := range nodeIDs {
+	for _, id := range candidateIDs {
 		if matchesTerraformTagsAndLabels(graph.Nodes[id], info) {
 			seedIDs = append(seedIDs, id)
 		}
 	}
-	return seedIDs, nil
+	return seedIDs, candidateIDs, nil
 }
 
-// terraformSelectionSeedNodeIDs narrows a precomputed selection to the nodes
-// present in the graph that pass the tags/labels seed filters. The query filter
-// never applies here: the only producer of TerraformSelection is the --affected
-// path, and checkTerraformFlags rejects --affected combined with --query.
-func terraformSelectionSeedNodeIDs(graph *dependency.Graph, info *schema.ConfigAndStacksInfo, selection *TerraformSelection) []string {
-	var seedIDs []string
+// terraformSelectionSeedNodeIDs splits a precomputed selection into the nodes
+// present in the graph (candidates) and the subset that passes the tags/labels
+// filters (seeds). The query filter never applies here: the only producer of
+// TerraformSelection is the --affected path, and checkTerraformFlags rejects
+// --affected combined with --query.
+func terraformSelectionSeedNodeIDs(graph *dependency.Graph, info *schema.ConfigAndStacksInfo, selection *TerraformSelection) (seedIDs, candidateIDs []string) {
 	for _, id := range sortedUniqueStrings(selection.NodeIDs) {
 		node, ok := graph.GetNode(id)
 		if !ok {
 			continue
 		}
-		if !matchesTerraformTagsAndLabels(node, info) {
+		candidateIDs = append(candidateIDs, id)
+		if matchesTerraformTagsAndLabels(node, info) {
+			seedIDs = append(seedIDs, id)
+		}
+	}
+	return seedIDs, candidateIDs
+}
+
+// addContractedTerraformEdges restores ordering edges that the strict scoped
+// rebuild cannot derive from the stacks map. When a dependent is dropped by the
+// tags/labels selectors, FilterTerraformGraph contracts the edges around it
+// (base <- middle <- leaf becomes base <- leaf), but buildScopedTerraformGraph
+// only re-creates edges that are declared directly between selected nodes.
+// Every edge in filtered whose endpoints both exist in scoped but is missing
+// there is copied over with the same optional flag.
+func addContractedTerraformEdges(scoped, filtered *dependency.Graph) {
+	if scoped == nil || filtered == nil {
+		return
+	}
+	for _, fromID := range sortedGraphNodeIDs(filtered) {
+		fromFiltered := filtered.Nodes[fromID]
+		if fromFiltered == nil || scoped.Nodes[fromID] == nil {
 			continue
 		}
-		seedIDs = append(seedIDs, id)
+		copyMissingContractedEdges(scoped, fromID, fromFiltered)
 	}
-	return seedIDs
+	scoped.IdentifyRoots()
+}
+
+// copyMissingContractedEdges copies the dependency edges of fromFiltered that
+// scoped does not have yet, provided the target exists in scoped.
+func copyMissingContractedEdges(scoped *dependency.Graph, fromID string, fromFiltered *dependency.Node) {
+	existing := make(map[string]bool, len(scoped.Nodes[fromID].Dependencies))
+	for _, dep := range scoped.Nodes[fromID].Dependencies {
+		existing[dep] = true
+	}
+	for _, toID := range sortedCopy(fromFiltered.Dependencies) {
+		if existing[toID] || scoped.Nodes[toID] == nil {
+			continue
+		}
+		if err := scoped.AddDependencyWithOptional(fromID, toID, fromFiltered.OptionalDependencies[toID]); err != nil {
+			log.Debug("Terraform contracted dependency edge skipped", "error", err, "from", fromID, "to", toID)
+		}
+	}
 }
 
 // terraformClosure describes the requested closure expansion around the seed.

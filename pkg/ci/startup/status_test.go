@@ -210,11 +210,17 @@ func TestPrintStatusLines_LegacyActionWarning(t *testing.T) {
 	assert.Contains(t, stderr.String(), "Detected legacy action cloudposse/github-action-atmos-terraform-plan")
 	assert.Contains(t, stderr.String(), "migrate to Native CI for better performance — learn more at https://atmos.tools/ci")
 
-	// The same warning is also emitted as a real GitHub Actions annotation
-	// on the data channel (stdout), not just a console line.
-	assert.Contains(t, stdout.String(), "::warning")
-	assert.Contains(t, stdout.String(), "title=Deprecated GitHub Action")
-	assert.Contains(t, stdout.String(), "Detected legacy action cloudposse/github-action-atmos-terraform-plan")
+	// The same warning is also emitted as a real GitHub Actions annotation so it
+	// shows up in the PR Checks/Files UI. It MUST land on stderr (the UI
+	// channel), never stdout (the data channel): legacy actions capture the
+	// stdout of `atmos describe ...` and parse it as JSON, so a stray
+	// `::warning ...` line there breaks them. Regression guard for #3309.
+	assert.Contains(t, stderr.String(), "::warning")
+	assert.Contains(t, stderr.String(), "title=Deprecated GitHub Action")
+	assert.Contains(t, stderr.String(), "Detected legacy action cloudposse/github-action-atmos-terraform-plan")
+
+	// Nothing in the startup banner may touch the data channel (stdout).
+	assert.Empty(t, stdout.String(), "startup banner must not write to stdout (the data channel)")
 }
 
 // TestPrintStatusLines_LegacyActionWarning_PlanStorage covers the companion
@@ -228,8 +234,9 @@ func TestPrintStatusLines_LegacyActionWarning_PlanStorage(t *testing.T) {
 	printStatusLines(&schema.AtmosConfiguration{})
 
 	assert.Contains(t, stderr.String(), "Detected legacy action cloudposse/github-action-terraform-plan-storage")
-	assert.Contains(t, stdout.String(), "::warning")
-	assert.Contains(t, stdout.String(), "Detected legacy action cloudposse/github-action-terraform-plan-storage")
+	assert.Contains(t, stderr.String(), "::warning")
+	assert.Contains(t, stderr.String(), "Detected legacy action cloudposse/github-action-terraform-plan-storage")
+	assert.Empty(t, stdout.String(), "startup banner must not write to stdout (the data channel)")
 }
 
 func TestPrintStatusLines_NoLegacyActionWarningWhenUnset(t *testing.T) {

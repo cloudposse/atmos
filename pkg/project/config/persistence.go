@@ -87,6 +87,9 @@ func LoadScaffoldConfigFromContent(content string, opts ...ScaffoldLoadOption) (
 	if err := validateFilePathPatterns(scaffoldConfig); err != nil {
 		return nil, err
 	}
+	if err := validateFileDelimiters(scaffoldConfig); err != nil {
+		return nil, err
+	}
 	if err := validateFileMatrix(scaffoldConfig); err != nil {
 		return nil, err
 	}

@@ -23,6 +23,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
+
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 const (
@@ -418,4 +421,96 @@ func TestPollUntilReturnsLastErrorOnTimeout(t *testing.T) {
 	})
 	require.ErrorIs(t, err, sentinel)
 	require.Greater(t, calls, 1, "should have retried at least once before the budget elapsed")
+}
+
+// pinFlociToolDependencies uses the repository's CI versions in temporary test stacks.
+// Installation and verification remain enabled; only live version discovery is avoided.
+func pinFlociToolDependencies(t *testing.T, stackPath string, paths ...[]string) {
+	t.Helper()
+	versions, err := toolchain.LoadToolVersions(filepath.Join(repoRoot, ".tool-versions"))
+	require.NoError(t, err)
+	content, err := os.ReadFile(stackPath)
+	require.NoError(t, err)
+	var document yaml.Node
+	require.NoError(t, yaml.Unmarshal(content, &document))
+	require.Len(t, document.Content, 1)
+	repositories := map[string]string{"terraform": "hashicorp/terraform", "opentofu": "opentofu/opentofu"}
+	for _, path := range paths {
+		node := document.Content[0]
+		for _, key := range path {
+			require.Equal(t, yaml.MappingNode, node.Kind, "expected mapping before %q in %s", key, stackPath)
+			var next *yaml.Node
+			for i := 0; i < len(node.Content); i += 2 {
+				if node.Content[i].Value == key {
+					next = node.Content[i+1]
+					break
+				}
+			}
+			require.NotNil(t, next, "missing %q in %s", key, stackPath)
+			node = next
+		}
+		require.Equal(t, yaml.MappingNode, node.Kind, "expected dependencies.tools mapping in %s", stackPath)
+		pinned := 0
+		for i := 0; i < len(node.Content); i += 2 {
+			repository, ok := repositories[node.Content[i].Value]
+			if !ok {
+				continue
+			}
+			pins := versions.Tools[repository]
+			require.NotEmpty(t, pins, "missing repository pin for %s", repository)
+			version := node.Content[i+1]
+			require.Equal(t, yaml.ScalarNode, version.Kind)
+			version.Tag, version.Value = "!!str", pins[0]
+			pinned++
+		}
+		require.Positive(t, pinned, "no Terraform/OpenTofu dependency found at %v in %s", path, stackPath)
+	}
+	content, err = yaml.Marshal(&document)
+	require.NoError(t, err)
+	info, err := os.Stat(stackPath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(stackPath, content, info.Mode().Perm()))
+}
+
+func TestPinFlociToolDependencies(t *testing.T) {
+	versions, err := toolchain.LoadToolVersions(filepath.Join(repoRoot, ".tool-versions"))
+	require.NoError(t, err)
+	stackPath := filepath.Join(t.TempDir(), "stack.yaml")
+	source := `# Preserve the fixture's backend and unrelated dependencies.
+terraform:
+  backend:
+    bucket: !env TEST_BUCKET
+dependencies:
+  tools:
+    terraform: "latest"
+    tfmigrate: "0.4.0"
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+    app:
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+`
+	require.NoError(t, os.WriteFile(stackPath, []byte(source), 0o600))
+	pinFlociToolDependencies(
+		t, stackPath,
+		[]string{"dependencies", "tools"},
+		[]string{"components", "terraform", "vpc", "dependencies", "tools"},
+		[]string{"components", "terraform", "app", "dependencies", "tools"},
+	)
+	content, err := os.ReadFile(stackPath)
+	require.NoError(t, err)
+	expected := strings.ReplaceAll(source, `"latest"`, `"`+versions.Tools["hashicorp/terraform"][0]+`"`)
+	expected = strings.ReplaceAll(expected, `"^1.10.0"`, `"`+versions.Tools["opentofu/opentofu"][0]+`"`)
+	var got, want yaml.Node
+	require.NoError(t, yaml.Unmarshal(content, &got))
+	require.NoError(t, yaml.Unmarshal([]byte(expected), &want))
+	// Canonical encoding compares all values and preserves custom tags and comments.
+	wantContent, err := yaml.Marshal(&want)
+	require.NoError(t, err)
+	require.Equal(t, string(wantContent), string(content))
 }

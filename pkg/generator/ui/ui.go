@@ -219,12 +219,14 @@ func FileOutputPath(file tmpl.File, spec config.FileSpec) string {
 // written, so this specific misconfiguration fails cleanly with zero
 // partial output.
 //
-// activeDelimiters must be the same delimiter pair the run's actual
-// rendering uses (see executeWithSetup's ResolveDelimiters call) so
-// TargetReferencesFileContext parses spec.Target's template actions with
-// the scaffold's real delimiters instead of always assuming the default
-// "{{"/"}}"  -- a scaffold with custom delimiters would otherwise see every
-// target: parsed as plain text with no actions at all.
+// The activeDelimiters argument must be the same scaffold-wide pair the run's actual
+// rendering starts from (see executeWithSetup's ResolveDelimiters call); each
+// spec's own delimiters, when it declares any, override it via
+// ResolveFileDelimiters -- exactly as processFileEntry does at render time --
+// so TargetReferencesFileContext parses spec.Target's template actions with
+// the delimiters that will really render it instead of always assuming the
+// default "{{"/"}}"  -- a scaffold with custom delimiters would otherwise see
+// every target: parsed as plain text with no actions at all.
 func validateDirectoryMatrixTargetsDifferentiate(fileSpecs map[string]config.FileSpec, activeDelimiters []string) error {
 	matchCounts := make(map[string]int, len(fileSpecs))
 	specByPath := make(map[string]config.FileSpec, len(fileSpecs))
@@ -249,7 +251,7 @@ func validateDirectoryMatrixTargetsDifferentiate(fileSpecs map[string]config.Fil
 		// "output.file.txt"), or an invalid field like ".file.Unknown" that
 		// can never actually differentiate matched files. See
 		// engine.TargetReferencesFileContext's doc comment.
-		referencesFile, err := engine.TargetReferencesFileContext(spec.Target, activeDelimiters)
+		referencesFile, err := engine.TargetReferencesFileContext(spec.Target, ResolveFileDelimiters(activeDelimiters, spec))
 		if err != nil {
 			return err
 		}
@@ -291,6 +293,20 @@ func ResolveDelimiters(delimiters []string, scaffoldConfig *config.ScaffoldConfi
 		return delimiters
 	}
 	return []string{"{{", "}}"}
+}
+
+// ResolveFileDelimiters returns the delimiter pair that applies to every
+// render for one discovered file: the matching spec.files[] entry's own
+// delimiters when it declares exactly two non-empty entries, otherwise active
+// (the scaffold-wide pair from ResolveDelimiters). It is the single place that
+// per-file precedence lives. The processFileEntry function calls it once per file, so the
+// file's content, discovered path, target:, matrix: axis expressions, and
+// engine.File.Delimiters all see the same pair; the --update-strategy=rendered
+// pristine re-render reaches it through the same processFileEntry call.
+// when: is CEL and does not use delimiters. The README is not a spec.files[]
+// entry and always uses the scaffold-wide pair.
+func ResolveFileDelimiters(active []string, spec config.FileSpec) []string {
+	return spec.ResolveDelimiters(active)
 }
 
 // delimitersAsScaffoldConfig wraps activeDelimiters in the
@@ -1282,6 +1298,8 @@ func validateSetupValues(scaffoldConfig *config.ScaffoldConfig, mergedValues map
 // spec.Target (or file.Path when Target is unset) as the output path
 // template (processSingleFileEntry), or once per matrix combination that
 // survives spec.When when spec.Matrix is set (processMatrixedFileEntry).
+// The activeDelimiters argument is the scaffold-wide pair; the file's own pair (see
+// ResolveFileDelimiters) is resolved here once and used for everything below.
 //
 //nolint:revive // argument-limit: dispatches to processSingleFileEntry/processMatrixedFileEntry, which need the same full context
 func (ui *InitUI) processFileEntry(
@@ -1296,6 +1314,11 @@ func (ui *InitUI) processFileEntry(
 	matrixExpansions map[string]matrixExpansionResult,
 ) (successCount, errorCount int, failedPaths []string, err error) {
 	outputTemplate := FileOutputPath(file, spec)
+
+	// From here down activeDelimiters is this file's own pair, not the
+	// scaffold-wide one: every render below (path, target:, matrix: axes,
+	// content) must agree on it.
+	activeDelimiters = ResolveFileDelimiters(activeDelimiters, spec)
 
 	if len(spec.Matrix) == 0 {
 		return ui.processSingleFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
@@ -1625,6 +1648,9 @@ func (ui *InitUI) writeOneOutput(
 	engineFile := toEngineFile(file)
 	engineFile.OriginalSourcePath = engineFile.Path
 	engineFile.Path = outputTemplate
+	// ProcessFile derives its delimiters from scaffoldConfig unless the file
+	// carries its own, so hand it the pair resolved for this file above.
+	engineFile.Delimiters = activeDelimiters
 	err := ui.processor.ProcessFile(engineFile, targetPath, force, update, scaffoldConfig, values)
 
 	success, failed = ui.reportWriteResult(err, renderedPath, existedBefore)
@@ -1725,7 +1751,10 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// Resolved once, up front, with the same precedence ProcessFile's own
 	// extractDelimiters uses (scaffoldConfig.Spec.Delimiters wins), so this
 	// preflight check, the actual file-body rendering below, and README
-	// rendering all agree on which delimiters a template action uses.
+	// rendering all agree on which delimiters a template action uses. This is
+	// the scaffold-wide pair: a spec.files[] entry's own delimiters override
+	// it per file (see ResolveFileDelimiters), in the preflight check and in
+	// processFileEntry alike; only the README always uses this one.
 	activeDelimiters := ResolveDelimiters(delimiters, scaffoldConfig)
 
 	// Resolved before hooks run (not just before writing) so a scaffold with

@@ -1,37 +1,44 @@
 package exec
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
 	"github.com/cloudposse/atmos/tests"
+	"github.com/cloudposse/atmos/tests/testhelpers/gitconfigenv"
 )
 
 // TestVendorPullBasicExecution tests basic vendor pull command execution.
-// It verifies the command runs without errors using the vendor2 fixture.
+// It verifies the vendor2 manifest clones and filters a real, isolated Git repository.
 func TestVendorPullBasicExecution(t *testing.T) {
-	// Skip long tests in short mode (this test takes ~4 seconds due to network I/O and Git operations)
-	tests.SkipIfShort(t)
-
-	// Check for GitHub access with rate limit check.
-	rateLimits := tests.RequireGitHubAccess(t)
-	if rateLimits != nil && rateLimits.Remaining < 10 {
-		t.Skipf("Insufficient GitHub API requests remaining (%d). Test may require ~10 requests.", rateLimits.Remaining)
+	tests.RequireExecutable(t, "git", "basic vendor pull integration")
+	expected := map[string]string{
+		"main.tf":         "# local Git component\n",
+		"defaults.tfvars": "enabled = true\n",
+		"README.md":       "# Vendored fixture\n",
 	}
-
-	stacksPath := "../../tests/fixtures/scenarios/vendor2"
-	t.Cleanup(func() { _ = os.Remove(filepath.Join(stacksPath, "vendor.lock.yaml")) })
-
-	// Use t.Setenv for automatic cleanup.
+	stacksPath := vendorPullBasicSandbox(t, expected)
+	viper.Reset()
+	t.Cleanup(viper.Reset)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+	// Fail immediately if the test ever regresses to a network Git transport.
+	t.Setenv("GIT_ALLOW_PROTOCOL", "file")
+	t.Chdir(stacksPath)
 
 	// Create command with global flags (including profile flag).
 	cmd := newTestCommandWithGlobalFlags("pull")
@@ -49,9 +56,73 @@ func TestVendorPullBasicExecution(t *testing.T) {
 	cmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags")
 	cmd.PersistentFlags().Bool("everything", false, "Vendor all components")
 
-	// Execute the command.
-	err := cmd.RunE(cmd, []string{})
-	assert.NoError(t, err, "'atmos vendor pull' command should execute without error")
+	plan, err := PlanVendorPull(cmd, nil)
+	require.NoError(t, err)
+	require.Len(t, plan.Packages, 1)
+	assert.Equal(t, install.PkgTypeRemote, plan.Packages[0].PkgType(), "exercise Git fetch rather than local-file copying")
+
+	// Execute the real command and verify only the selected component's included files.
+	require.NoError(t, cmd.RunE(cmd, nil), "'atmos vendor pull' command should execute without error")
+	target := filepath.Join(stacksPath, "components", "terraform", "github", "stargazers", "main")
+	for name, want := range expected {
+		contents, readErr := os.ReadFile(filepath.Join(target, name))
+		require.NoError(t, readErr)
+		assert.Equal(t, want, string(contents), "vendored %s", name)
+	}
+	assert.NoFileExists(t, filepath.Join(target, "excluded.txt"))
+	assert.NoFileExists(t, filepath.Join(target, "outside.tf"))
+}
+
+// vendorPullBasicSandbox preserves the vendor2 manifest's subdirectory, version, and include patterns.
+func vendorPullBasicSandbox(t *testing.T, expected map[string]string) string {
+	t.Helper()
+	repository := t.TempDir()
+	repo, err := git.PlainInitWithOptions(repository, &git.PlainInitOptions{InitOptions: git.InitOptions{DefaultBranch: plumbing.NewBranchReferenceName("main")}})
+	require.NoError(t, err)
+	component := filepath.Join(repository, "examples", "demo-library", "github", "stargazers")
+	require.NoError(t, os.MkdirAll(component, 0o755))
+	for name, contents := range expected {
+		require.NoError(t, os.WriteFile(filepath.Join(component, name), []byte(contents), 0o644))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(component, "excluded.txt"), []byte("excluded by include patterns\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repository, "outside.tf"), []byte("outside selected subdirectory\n"), 0o644))
+	tree, err := repo.Worktree()
+	require.NoError(t, err)
+	require.NoError(t, tree.AddWithOptions(&git.AddOptions{All: true}))
+	_, err = tree.Commit("local vendor fixture", &git.CommitOptions{Author: &object.Signature{
+		Name: "Atmos Test", Email: "test@example.com", When: time.Unix(1, 0),
+	}})
+	require.NoError(t, err)
+
+	// Normalize Windows drive paths and URL-escape spaces before passing the mirror URL to Git.
+	sourcePath := filepath.ToSlash(repository)
+	if !strings.HasPrefix(sourcePath, "/") {
+		sourcePath = "/" + sourcePath
+	}
+	source := (&url.URL{Scheme: "file", Path: sourcePath}).String()
+	project := t.TempDir()
+	for _, name := range []string{"atmos.yaml", "vendor.yaml"} {
+		contents, readErr := os.ReadFile(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "vendor2", name))
+		require.NoError(t, readErr)
+		require.NoError(t, os.WriteFile(filepath.Join(project, name), contents, 0o644))
+	}
+	// Keep Git's checkout independent of developer settings and Windows newline conversion.
+	gitConfig := filepath.Join(t.TempDir(), "gitconfig")
+	require.NoError(t, os.WriteFile(gitConfig, []byte("[core]\n\tautocrlf = false\n"), 0o644))
+	t.Setenv("GIT_CONFIG_GLOBAL", gitConfig)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	// Keep the original GitHub-style manifest while redirecting only its Git transport locally.
+	overrides := map[string]string{}
+	gitconfigenv.Append(overrides, os.Environ(), gitconfigenv.GitConfigEntry{
+		Key: "url." + source + ".insteadOf", Value: "https://github.com/cloudposse/atmos.git",
+	})
+	for key, value := range overrides {
+		t.Setenv(key, value)
+	}
+	for _, name := range []string{"ATMOS_GITHUB_CLI", "ATMOS_GITHUB_TOKEN", "ATMOS_PRO_GITHUB_TOKEN", "GITHUB_TOKEN"} {
+		t.Setenv(name, "")
+	}
+	return project
 }
 
 // TestVendorPullConfigFileProcessing tests reading and processing vendor config files.

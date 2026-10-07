@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -46,6 +47,7 @@ type cmdStateSnapshot struct {
 	osArgs         []string
 	flags          map[*cobra.Command]map[string]flagSnapshot
 	chdirProcessed bool
+	loggerLevel    log.Level
 	colorProfile   termenv.Profile // Lipgloss color profile
 	openDocsURL    func(string) error
 	// atmosConfig is the package-level configuration value at snapshot time.
@@ -120,6 +122,7 @@ func snapshotRootCmdState() *cmdStateSnapshot {
 		osArgs:         make([]string, len(os.Args)),
 		flags:          make(map[*cobra.Command]map[string]flagSnapshot),
 		chdirProcessed: chdirProcessed,
+		loggerLevel:    log.GetLevel(),
 		colorProfile:   lipgloss.ColorProfile(),
 		openDocsURL:    openDocsURL,
 		childCommands:  make(map[*cobra.Command][]*cobra.Command),
@@ -198,6 +201,10 @@ func restoreStringSliceFlag(f *pflag.Flag, snap flagSnapshot) {
 
 // restoreRootCmdState restores RootCmd, Viper, and I/O to a previously captured state.
 func restoreRootCmdState(snapshot *cmdStateSnapshot) {
+	// Logger setup changes process state independently of Cobra's logs-level flag.
+	// Restore it before later tests invoke command.Run without startup setup.
+	log.SetLevel(snapshot.loggerLevel)
+
 	// Reset global I/O and UI state BEFORE restoring os std streams.
 	// This ensures cached I/O contexts are cleared while tests may still have
 	// modified stdout/stderr, preventing the next test from inheriting stale stream references.

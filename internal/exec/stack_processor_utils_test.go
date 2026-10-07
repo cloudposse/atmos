@@ -4820,3 +4820,19 @@ func TestManifestSchemaErrorMessage(t *testing.T) {
 	)
 	assert.Equal(t, "does not match pattern '^component'", manifestSchemaErrorMessage("does not match pattern '^component'"))
 }
+
+func BenchmarkLocalsRepeated(b *testing.B) {
+	ac := &schema.AtmosConfiguration{}
+	content := "locals:\n  namespace: acme\n  prefix: '{{ .locals.namespace }}-dev'\nvars:\n  stage: dev\n"
+	b.Cleanup(ClearLocalsExtractionCache)
+	b.ResetTimer()
+	for range b.N {
+		ClearLocalsExtractionCache()
+		for range 200 {
+			result, err := extractLocalsFromRawYAML(ac, content, "benchmark/catalog/shared.yaml")
+			if err != nil || result == nil {
+				b.Fatalf("locals: %v", err)
+			}
+		}
+	}
+}

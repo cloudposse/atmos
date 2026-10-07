@@ -240,7 +240,7 @@ func TestHandleExistingFileForce(t *testing.T) {
 }
 
 func TestValidateRenderedPath_PathTraversalRejected(t *testing.T) {
-	err := validateRenderedPath("../escape/file.txt", "{{ .Config.dir }}/file.txt")
+	err := validateRenderedPath("../escape/file.txt", "{{ .Config.dir }}/file.txt", nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
@@ -255,7 +255,7 @@ func TestValidateRenderedPath_PathTraversalRejected(t *testing.T) {
 func TestValidateRenderedPath_RejectsRootedPathRegardlessOfOS(t *testing.T) {
 	for _, path := range []string{"/etc/passwd", `\Windows\System32\config`, `C:\Windows\System32\config`} {
 		t.Run(path, func(t *testing.T) {
-			err := validateRenderedPath(path, path)
+			err := validateRenderedPath(path, path, nil)
 
 			require.Error(t, err)
 			assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
@@ -264,7 +264,7 @@ func TestValidateRenderedPath_RejectsRootedPathRegardlessOfOS(t *testing.T) {
 }
 
 func TestValidateRenderedPath_UnrenderedMarkerInPath(t *testing.T) {
-	err := validateRenderedPath("foo/{{ .Config.missing }}/bar", "foo/{{ .Config.missing }}/bar")
+	err := validateRenderedPath("foo/{{ .Config.missing }}/bar", "foo/{{ .Config.missing }}/bar", nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrUnprocessedTemplate)
@@ -838,4 +838,106 @@ func TestProcessFileWithEmptyContent(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(tempDir, "empty.txt"))
 	require.NoError(t, err)
 	assert.Empty(t, string(content))
+}
+
+// TestValidateRenderedPath_HonorsActiveDelimiters proves the unrendered-template
+// check uses the scaffold's active delimiter pair rather than a hardcoded
+// "{{"/"}}": with "[[ ]]" an unrendered "[[ .x ]]" marker is rejected, while a
+// literal "{{" or "${{" (legitimate in a path rendered under "[[ ]]") is allowed.
+func TestValidateRenderedPath_HonorsActiveDelimiters(t *testing.T) {
+	custom := []string{"[[", "]]"}
+	defaults := []string{defaultLeftDelimiter, defaultRightDelimiter}
+
+	tests := []struct {
+		name       string
+		path       string
+		delimiters []string
+		wantErr    bool
+	}{
+		{name: "custom delimiters reject unrendered marker", path: "foo/[[ .Config.x ]]/bar", delimiters: custom, wantErr: true},
+		{name: "custom delimiters reject lone left marker", path: "foo/[[bar", delimiters: custom, wantErr: true},
+		{name: "custom delimiters reject lone right marker", path: "foo/bar]]", delimiters: custom, wantErr: true},
+		{name: "custom delimiters allow literal braces", path: "foo/{{literal}}/bar", delimiters: custom},
+		{name: "custom delimiters allow literal dollar braces", path: "foo/${{ github.sha }}/bar", delimiters: custom},
+		{name: "default delimiters reject unrendered marker", path: "foo/{{ .x }}/bar", delimiters: defaults, wantErr: true},
+		{name: "default delimiters allow clean path", path: "foo/bar.txt", delimiters: defaults},
+		{name: "nil delimiters fall back to defaults and reject", path: "foo/{{ .x }}/bar", delimiters: nil, wantErr: true},
+		{name: "invalid delimiter length falls back to defaults and rejects", path: "foo/{{ .x }}/bar", delimiters: []string{"[["}, wantErr: true},
+		{name: "invalid delimiter length falls back to defaults and allows square brackets", path: "foo/[[x]]/bar", delimiters: []string{"[["}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateRenderedPath(tt.path, tt.path, tt.delimiters)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrUnprocessedTemplate)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestProcessTemplate_HonorsScaffoldConfigDelimiters proves the public
+// ProcessTemplate entry point renders with the scaffold config's delimiters
+// (not a hardcoded "{{"/"}}"), so a payload can carry GitHub Actions
+// "${{ }}" expressions literally.
+func TestProcessTemplate_HonorsScaffoldConfigDelimiters(t *testing.T) {
+	customConfig := &config.ScaffoldConfig{Spec: config.ScaffoldSpec{Delimiters: []string{"[[", "]]"}}}
+	userValues := map[string]interface{}{"name": "demo"}
+	const content = "name: [[ .Config.name ]]\nsha: ${{ github.sha }}\n"
+
+	tests := []struct {
+		name           string
+		scaffoldConfig interface{}
+		content        string
+		want           string
+	}{
+		{name: "pointer config", scaffoldConfig: customConfig, content: content, want: "name: demo\nsha: ${{ github.sha }}\n"},
+		{name: "value config", scaffoldConfig: *customConfig, content: content, want: "name: demo\nsha: ${{ github.sha }}\n"},
+		{
+			name:           "map config",
+			scaffoldConfig: map[string]interface{}{"delimiters": []interface{}{"[[", "]]"}},
+			content:        content,
+			want:           "name: demo\nsha: ${{ github.sha }}\n",
+		},
+		{name: "typed nil pointer config uses defaults", scaffoldConfig: (*config.ScaffoldConfig)(nil), content: "name: {{ .Config.name }}\n", want: "name: demo\n"},
+		{name: "nil config uses defaults", scaffoldConfig: nil, content: "name: {{ .Config.name }}\n", want: "name: demo\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processor := NewProcessor()
+
+			got, err := processor.ProcessTemplate(tt.content, filepath.Join(t.TempDir(), "out.yaml"), tt.scaffoldConfig, userValues)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestProcessFile_CustomDelimitersPathWithLiteralBraces proves ProcessFile does
+// not reject a rendered path that legitimately contains a literal "{{" when the
+// scaffold's active delimiters are "[[ ]]", and still renders the "[[ ]]"
+// variable in the same path.
+func TestProcessFile_CustomDelimitersPathWithLiteralBraces(t *testing.T) {
+	processor := NewProcessor()
+	tempDir := t.TempDir()
+	scaffoldConfig := &config.ScaffoldConfig{Spec: config.ScaffoldSpec{Delimiters: []string{"[[", "]]"}}}
+
+	file := File{
+		Path:        "[[ .Config.name ]]-{{literal}}.txt",
+		Content:     "payload ${{ github.sha }}",
+		IsTemplate:  true,
+		Permissions: 0o644,
+	}
+
+	err := processor.ProcessFile(file, tempDir, false, false, scaffoldConfig, map[string]interface{}{"name": "demo"})
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(tempDir, "demo-{{literal}}.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "payload ${{ github.sha }}", string(content))
 }

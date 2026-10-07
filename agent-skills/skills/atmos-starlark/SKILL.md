@@ -30,9 +30,9 @@ Keep simple one-command automation in YAML (`atmos-workflows`, `atmos-custom-com
 or concurrency. Declarations of project commands and component bindings stay in YAML.
 The script step configuration is `type: script` with `interpreter: starlark`.
 
-Public documentation: [Language reference](https://atmos.tools/automation/language),
+Documentation: [Language reference](https://atmos.tools/automation/language),
 [Custom CLI apps](https://atmos.tools/automation/standalone-cli-apps),
-[function reference](https://atmos.tools/functions/automation), and the
+[function reference](references/api-reference.md), and the
 [script step](https://atmos.tools/steps/type/script).
 
 ## Choose the entry point
@@ -56,9 +56,9 @@ Standalone tool with typed inputs:
 
 ```python
 #!/usr/bin/env atmos
-dependencies.tools("jqlang/jq", "1.7.1")
 
 def main(args, flags):
+    dependencies.tools("jqlang/jq", "1.7.1")
     for stack in flags["stack"]:
         atmos.terraform("deploy", args["component"], stack)
         ui.success("deployed " + args["component"] + " to " + stack)
@@ -102,9 +102,9 @@ workflows:
 - `ctx.flags` and `ctx.arguments`: immutable parsed command inputs, preserving host types
   in custom commands. Read these directly; do not map flags through `env` or template
   values into script source.
-- Atmos renders step script bodies as Go templates before Starlark runs, so `{{` in source
-  fails. Write `script: !literal |` for any script that contains braces; it runs the body exactly
-  as written. Split the delimiter (`"{" + "{"`) only for included scripts, which are still rendered.
+- Atmos renders step script bodies as Go templates before Starlark runs. Valid `{{ ... }}` actions
+  are rendered; malformed or unresolved actions can fail. Write `script: !literal |` when braces
+  must remain literal. Split the delimiter (`"{" + "{"`) only for included scripts, which are still rendered.
 - Output channels: `print` writes data to stdout. `ui.info` (`▶`), `ui.success` (`✓`), and
   `ui.warning` (`⚠`) write human status to stderr. `log.trace/debug/info/warn/error(message, **fields)`
   writes diagnostics through the Atmos logger with `step` (and, in parallel tasks, `task`)
