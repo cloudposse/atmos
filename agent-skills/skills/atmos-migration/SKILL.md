@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "Migrate to Atmos from native Terraform, Terraform Workspaces, Terramate, Terragrunt, Make, Just, or Task; migrate tool versions from mise or Aqua CLI; migrate AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, or okta-aws-cli to atmos auth; and replace GitHub Actions CI (dflook, tfcmt, cloud OIDC, component updater, TFLint, Checkov, Trivy, KICS, Infracost, tfsec) with Atmos Native CI. Use for incremental adoption that preserves layout, state, task behavior, and CI enforcement."
+description: "Migrate to Atmos from native Terraform, Terraform Workspaces, Terramate, Terragrunt, Make, Just, or Task; migrate tool versions from asdf, aqua, tfenv, tofuenv, tenv, mise, or a Homebrew Brewfile; migrate AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, or okta-aws-cli to atmos auth; and replace GitHub Actions CI (dflook, tfcmt, cloud OIDC, component updater, TFLint, Checkov, Trivy, KICS, Infracost, tfsec) with Atmos Native CI. Use for incremental adoption that preserves layout, state, task behavior, and CI enforcement."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -17,6 +17,11 @@ references:
   - references/from-terragrunt.md
   - references/from-mise.md
   - references/from-aqua.md
+  - references/from-asdf.md
+  - references/from-tfenv.md
+  - references/from-tofuenv.md
+  - references/from-tenv.md
+  - references/from-homebrew-brewfile.md
   - references/from-aws-config.md
   - references/from-gcp-config.md
   - references/from-azure-config.md
@@ -102,22 +107,31 @@ user's repository.
 Find the user's source pattern before you propose any change. Each pattern points to a different
 reference file:
 
-| User has...                                                          | Use reference                                    |
-|----------------------------------------------------------------------|--------------------------------------------------|
-| One TF root module, env config via `.tfvars` or env vars             | [from-native-terraform.md](references/from-native-terraform.md) |
-| Multiple TF root modules in scattered dirs                           | [from-native-terraform.md](references/from-native-terraform.md) |
-| `terraform.workspace`-driven environments with shared state backend  | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
+| User has... | Use reference |
+|---|---|
+| One TF root module, env config via `.tfvars` or env vars | [from-native-terraform.md](references/from-native-terraform.md) |
+| Multiple TF root modules in scattered dirs | [from-native-terraform.md](references/from-native-terraform.md) |
+| `terraform.workspace`-driven environments with shared state backend | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
 | `.tm.hcl` files, `stack.tm.hcl`, `generate_hcl` blocks (Terramate project) | [from-terramate.md](references/from-terramate.md) |
-| Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
-| User has a Makefile driving builds/tests/deploys                     | [from-makefile.md](references/from-makefile.md) |
-| User has a Justfile (`just` command runner)                          | [from-justfile.md](references/from-justfile.md) |
-| User has a Taskfile.yml (go-task)                                    | [from-taskfile.md](references/from-taskfile.md) |
-| `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
-| Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`)               | [from-terragrunt.md](references/from-terragrunt.md) |
+| Need to read outputs from un-migrated TF (legacy or another repo) | [remote-state-bridge.md](references/remote-state-bridge.md) |
+| User has a Makefile driving builds/tests/deploys | [from-makefile.md](references/from-makefile.md) |
+| User has a Justfile (`just` command runner) | [from-justfile.md](references/from-justfile.md) |
+| User has a Taskfile.yml (go-task) | [from-taskfile.md](references/from-taskfile.md) |
+| `cloudposse/github-action-atmos-component-updater` | [from-component-updater.md](references/from-component-updater.md) |
+| Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`) | [from-terragrunt.md](references/from-terragrunt.md) |
 | mise config (`mise.toml`, `.mise.toml`, `.mise/config.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
-| `aqua.yaml` (Aqua CLI) for tool versions                             | [from-aqua.md](references/from-aqua.md) |
+| `aqua.yaml` (Aqua CLI) for tool versions | [from-aqua.md](references/from-aqua.md) |
+| asdf (`.tool-versions`, asdf plugins) for tool versions | [from-asdf.md](references/from-asdf.md) |
+| tfenv (`.terraform-version`) for Terraform versions | [from-tfenv.md](references/from-tfenv.md) |
+| tofuenv (`.opentofu-version`) for OpenTofu versions | [from-tofuenv.md](references/from-tofuenv.md) |
+| tenv (version files for Terraform, OpenTofu, Terragrunt, Terramate, Atmos) | [from-tenv.md](references/from-tenv.md) |
+| Homebrew Brewfile (CLI tools only) | [from-homebrew-brewfile.md](references/from-homebrew-brewfile.md) |
 | CI on GitHub Actions (setup-terraform, configure-aws-credentials, dflook, tfcmt) | [to-native-ci.md](references/to-native-ci.md) |
 | Scanner actions (TFLint, Checkov, Trivy, KICS, Infracost, tfsec) | [to-native-ci-scanners.md](references/to-native-ci-scanners.md) |
+
+Each tool-version reference has a command-mapping table and a Shell Integration section. The Atmos
+toolchain does not add itself to `PATH` by default, unlike shim-based tools. If the user expects a
+plain `terraform` command to keep working, point them to `atmos toolchain env` in their shell profile.
 
 The remote-state-bridge pattern makes progressive migration possible. It lets a team migrate one
 component at a time. Without it, the team must migrate everything at once. Use this pattern when
@@ -154,15 +168,15 @@ Authentication is an orthogonal migration axis from IaC -- a user may migrate th
 their auth setup, both, or neither in a given session. Don't conflate the two. Identify which
 credential tooling the user has today and route to the matching reference:
 
-| User has...                                            | Use reference                                    |
-|------------------------------------------------------------|----------------------------------------------------|
-| `~/.aws/config`/`~/.aws/credentials` profiles               | [from-aws-config.md](references/from-aws-config.md) |
-| `gcloud` CLI config, ADC, or service-account keys            | [from-gcp-config.md](references/from-gcp-config.md) |
-| `az` CLI config, service principals, or Managed Identity     | [from-azure-config.md](references/from-azure-config.md) |
-| Leapp (desktop credential manager)                           | [from-leapp.md](references/from-leapp.md)           |
-| Granted (the `assume` CLI)                                   | [from-granted.md](references/from-granted.md)       |
-| saml2aws                                                      | [from-aws2saml.md](references/from-aws2saml.md)     |
-| okta-aws-cli                                                   | [from-okta-cli.md](references/from-okta-cli.md) -- **partial support only, read the gap callouts** |
+| User has... | Use reference |
+|---|---|
+| `~/.aws/config`/`~/.aws/credentials` profiles | [from-aws-config.md](references/from-aws-config.md) |
+| `gcloud` CLI config, ADC, or service-account keys | [from-gcp-config.md](references/from-gcp-config.md) |
+| `az` CLI config, service principals, or Managed Identity | [from-azure-config.md](references/from-azure-config.md) |
+| Leapp (desktop credential manager) | [from-leapp.md](references/from-leapp.md) |
+| Granted (the `assume` CLI) | [from-granted.md](references/from-granted.md) |
+| saml2aws | [from-aws2saml.md](references/from-aws2saml.md) |
+| okta-aws-cli | [from-okta-cli.md](references/from-okta-cli.md) -- **partial support only, read the gap callouts** |
 
 All are pure config-translation guides -- there is no `atmos auth import`/`migrate` command.
 None of them require touching the user's IaC migration path; they can run before, after, or
@@ -212,10 +226,10 @@ Pick the layout that matches the user's goals. Atmos recommends the `components/
 layout, especially for a new repository or a multi-tool project. You can keep an existing layout
 when the user wants less disruption.
 
-| `base_path`                              | Use when                                                                |
-|------------------------------------------|-------------------------------------------------------------------------|
-| `base_path: "."`                         | TF root modules live at the repo root; user wants zero file moves       |
-| `base_path: "terraform"`                 | TF-only repo with code already in `terraform/`; preserve dir name       |
+| `base_path` | Use when |
+|---|---|
+| `base_path: "."` | TF root modules live at the repo root; user wants zero file moves |
+| `base_path: "terraform"` | TF-only repo with code already in `terraform/`; preserve dir name |
 | `base_path: "."` + `components.terraform.base_path: "components/terraform"` | Multi-toolchain or new repo; canonical Atmos layout |
 
 For more organization patterns, such as multi-region, multi-account, and organization
@@ -226,14 +240,14 @@ hierarchies, see the skill [atmos-design-patterns](../atmos-design-patterns/SKIL
 This is a common mistake: an agent chooses a Gomplate datasource when a YAML function is safer
 and clearer. Use the option in the right column:
 
-| Goal                          | Reach for (NOT this)                              | Use instead                              |
-|-------------------------------|---------------------------------------------------|------------------------------------------|
-| Include a file's contents     | `gomplate.datasources` with file URL              | `!include path/to/file`                  |
-| Read an environment variable  | `gomplate getenv "FOO"`                           | `!env FOO`                               |
-| Run a shell command           | Template + `gomplate exec`                        | `!exec "command"`                        |
-| Read a store value            | Custom datasource URL                             | `!store store_name component stack key`  |
-| Read Terraform output         | Templated remote-state datasource                 | `!terraform.state component output`      |
-| Get current AWS account ID    | `gomplate.datasources` AWS plugin                 | `!aws.account_id`                        |
+| Goal | Reach for (NOT this) | Use instead |
+|---|---|---|
+| Include a file's contents | `gomplate.datasources` with file URL | `!include path/to/file` |
+| Read an environment variable | `gomplate getenv "FOO"` | `!env FOO` |
+| Run a shell command | Template + `gomplate exec` | `!exec "command"` |
+| Read a store value | Custom datasource URL | `!store store_name component stack key` |
+| Read Terraform output | Templated remote-state datasource | `!terraform.state component output` |
+| Get current AWS account ID | `gomplate.datasources` AWS plugin | `!aws.account_id` |
 
 A YAML function checks its own types. It gives a clear error message. It works without Gomplate
 turned on. It does not require the template text to stay valid YAML. Use a Go template only for
@@ -297,6 +311,10 @@ Push back if a user or another agent proposes one of these methods during migrat
   automation from `atmos.yaml`. Keep infrastructure adoption separate from task-runner adoption.
 - **"Delete the existing task file before adopting Atmos."** Atmos can call the existing runner.
   Migrate task bodies incrementally and preserve the source tool's ordering and freshness semantics.
+- **"Copy `aqua.yaml` packages into Atmos verbatim."** This is false. Atmos supports only part of
+  the Aqua registry schema. Check the Functional Gaps table in [from-aqua.md](references/from-aqua.md).
+- **"Replace the whole Brewfile with the Atmos toolchain."** This is false. Casks, `mas` entries,
+  and source-built formulae are out of scope. See [from-homebrew-brewfile.md](references/from-homebrew-brewfile.md).
 - **"Wrap atmos commands in a Makefile, Justfile, or Taskfile forever."** This is false. A
   wrapper is a good bridge while the user builds trust in Atmos, not the final state -- change
   each leaf target to a custom command (see Principle 7 and "Common Problems in Task-Runner
