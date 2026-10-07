@@ -41,6 +41,12 @@ Field testing the Starlark step work found these defects:
 - New regression tests: `pkg/schema/task_test.go`, `pkg/schema/retry_decode_test.go`, `pkg/runner/step/step_field_rendering_test.go`, `pkg/script/starlark/engine_test.go`, `cmd/custom_command_step_load_error_test.go`, `cmd/custom_command_help_test.go`, and the flag-type case in `cmd/custom_command_inputs_resolution_test.go`.
 - `go test ./tests -run 'TestCLICommands/starlark' -count=1` passes, including the new `tests/test-cases/starlark-step-fields.yaml` cases (templated timeout command, `list stacks` with an invalid command present, invocation error, templated output modes, workflow timeout and output, `type: starlark` wording, argument help).
 
+- CI correction: the unsupported-step diagnostic test now removes ANSI styling before
+  checking the unchanged visible wording. CI enables color, which inserts escape
+  sequences around command names and inline code; the raw substring assertions
+  failed on all three operating systems and in the race suite. Reproduced with
+  CI color enabled and verified the same assertions after normalization.
+
 ## Follow-ups
 
 - Unknown `retry:` keys inside the children of a `parallel` or `matrix` custom-command step are still ignored, because those children are decoded through the workflow-step hook that has no error channel.

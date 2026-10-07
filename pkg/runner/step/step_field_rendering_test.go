@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -101,13 +102,14 @@ func TestSchedulerPolicyErrorNamesTheOffendingFields(t *testing.T) {
 func TestUnsupportedStepTypeErrorListsTypesAndHintsStarlark(t *testing.T) {
 	err := UnsupportedStepTypeError("custom command `build`", "compile", "starlark")
 	require.ErrorIs(t, err, errUtils.ErrInvalidWorkflowStepType)
-	formatted := errUtils.Format(err, errUtils.FormatterConfig{})
+	// Assert the visible wording independently of the terminal color profile.
+	formatted := atmosansi.Strip(errUtils.Format(err, errUtils.FormatterConfig{}))
 	assert.Contains(t, formatted, "Step compile of custom command build")
 	assert.Contains(t, formatted, "script")
 	assert.Contains(t, formatted, "shell")
 	assert.Contains(t, formatted, "Use type: script with interpreter: starlark.")
 
-	other := errUtils.Format(UnsupportedStepTypeError("workflow `w`", "", "nope"), errUtils.FormatterConfig{})
+	other := atmosansi.Strip(errUtils.Format(UnsupportedStepTypeError("workflow `w`", "", "nope"), errUtils.FormatterConfig{}))
 	assert.Contains(t, other, "(unnamed)")
 	assert.NotContains(t, other, "interpreter: starlark")
 }
