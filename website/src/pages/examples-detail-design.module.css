@@ -122,3 +122,13 @@
 @media(prefers-reduced-motion:reduce) { .page *, .page *::before, .page *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 
 .page section[id] { scroll-margin-top: 90px; }
+
+/* The content is the existing GitHub-style README, rendered by FileViewer. */
+.heroText { max-width: 680px; }
+.readme { margin-top: 30px; min-width: 0; }
+.readme h1 { font-size: 28px; letter-spacing: -.6px; }
+.readme h2 { margin-top: 30px; }
+.readme h3 { font-size: 18px; }
+.readme p, .readme li, .readme td { font-size: 14px; line-height: 1.75; }
+.readme pre { font-size: 13px; }
+.rail .onPage { margin-top: 0; }

@@ -11,6 +11,7 @@ import {
   RiFileCopyLine, RiFullscreenLine, RiShareLine, RiDownloadLine,
 } from "react-icons/ri";
 import CastPlayer from "../components/CastPlayer";
+import FileViewer from "../components/FileBrowser/FileViewer";
 import type { ExamplesTree, FileNode, TreeNode } from "../components/FileBrowser/types";
 import treeData from "@generated/file-browser/examples/file-browser-tree-examples.json";
 import styles from "./examples-detail-design.module.css";
@@ -77,7 +78,7 @@ function Demo() {
       controls={play} scrubber showCommand={false} className={styles.player} />
     {!play && <div className={styles.demoFooter}>
       <button type="button" className={styles.watch} onClick={() => setPlay(true)}><RiPlayFill /> Watch walkthrough</button>
-      <span>List stacks → inspect configuration → plan</span>
+      <span>Recorded from this example</span>
     </div>}
     {play && <button type="button" className={styles.resetDemo} onClick={() => setPlay(false)}><RiRestartLine /> Back to preview</button>}
   </div>;
@@ -127,12 +128,6 @@ function SourceBrowser({ selected, onSelect }: { selected: FileNode; onSelect: (
   </div>;
 }
 
-const steps = [
-  { title: "Open the example", description: "From your local checkout of the Atmos repository.", command: "cd examples/quick-start-simple" },
-  { title: "Explore your stacks", description: "List dev, staging, and prod. Inspect station’s configuration in dev.", command: "atmos list stacks\natmos describe component station -s dev" },
-  { title: "Preview the changes", description: "Run a Terraform plan for the component in your dev stack.", command: "atmos terraform plan --all -s dev" },
-];
-
 export default function ExampleDetailDesign() {
   const location = useLocation();
   const history = useHistory();
@@ -146,7 +141,7 @@ export default function ExampleDetailDesign() {
     keyboardTab.current = null;
     const frame = requestAnimationFrame(() => {
       if (target) tabs.current?.querySelector<HTMLButtonElement>(`[id="${target}-tab"]`)?.focus();
-      if (location.hash === "#run") document.getElementById("run")?.scrollIntoView({ block: "start" });
+      if (location.hash === "#readme") document.getElementById("readme")?.scrollIntoView({ block: "start" });
     });
     return () => cancelAnimationFrame(frame);
   }, [tab, location.hash]);
@@ -160,19 +155,19 @@ export default function ExampleDetailDesign() {
     keyboardTab.current = next;
     navigate(next);
   }
-  return <Layout title="Quick Start Simple · Design preview" description={example.description}>
+  return <Layout title={`${example.title || example.name} · Design preview`} description={example.description}>
     <Head><meta name="robots" content="noindex,nofollow" /></Head>
     <main className={styles.page}>
-      <div className={styles.breadcrumb}><Link to="/examples"><RiArrowLeftLine /> Examples</Link><span>/</span><span>Quick Start Simple</span><span className={styles.previewLabel}>Design preview</span></div>
+      <div className={styles.breadcrumb}><Link to="/examples"><RiArrowLeftLine /> Examples</Link><span>/</span><span>{example.title || example.name}</span><span className={styles.previewLabel}>Design preview</span></div>
       <header className={styles.hero}>
         <div className={styles.heroText}>
-          <div className={styles.eyebrow}><RiTerminalBoxLine /> QUICKSTART <span>NO CLOUD ACCOUNT REQUIRED</span></div>
-          <h1>Quick Start Simple</h1>
-          <p>A simple starting point for Atmos. One component, three environments,<br className={styles.desktopBreak} /> and a clear path from configuration to your first plan.</p>
-          <div className={styles.tags}><span>Quickstart</span><span>Terraform</span><span>Stack configuration</span></div>
+          <div className={styles.eyebrow}><RiTerminalBoxLine /> EXAMPLE</div>
+          <h1>{example.title || example.name}</h1>
+          <p>{example.description}</p>
+          <div className={styles.tags}>{example.tags.map(tag => <span key={tag}>{tag}</span>)}</div>
         </div>
         <div className={styles.heroActions}>
-          <Link className={styles.primary} to={`${route}#run`}>Run this example <RiArrowRightLine /></Link>
+          <Link className={styles.primary} to={`${route}#readme`}>Read README <RiArrowRightLine /></Link>
           <a className={styles.secondary} href={example.root.githubUrl || "https://github.com/cloudposse/atmos/tree/main/examples/quick-start-simple"}><RiGithubFill /> View on GitHub <RiArrowRightUpLine /></a>
         </div>
       </header>
@@ -188,37 +183,18 @@ export default function ExampleDetailDesign() {
       </section> : <section role="tabpanel" id="overview-panel" aria-labelledby="overview-tab" className={styles.overview}>
         <div className={styles.content}>
           <section id="demo" className={styles.section}>
-            <div className={styles.sectionHeading}><h2>See it in action</h2><span>THE COMPLETE WORKFLOW</span></div>
+            <div className={styles.sectionHeading}><h2>See it in action</h2><span>RECORDED DEMO</span></div>
             <Demo />
             <p className={styles.caption}>Real commands. Real output. Follow along at your own pace.</p>
           </section>
-          <section id="learn" className={styles.learn}>
-            <h2>Three building blocks. One simple project.</h2>
-            <div className={styles.concepts}>
-              <div><RiCodeSSlashLine /><h3>A reusable component</h3><p>Define <code>station</code> once and configure it for each environment.</p></div>
-              <div><RiGitBranchLine /><h3>Three environments</h3><p>Keep dev, staging, and prod organized in separate stack files.</p></div>
-              <div><RiFolderLine /><h3>Shared defaults</h3><p>Use a catalog to share configuration across your stacks.</p></div>
-            </div>
-          </section>
-          <section id="run" className={styles.run}>
-            <div className={styles.sectionHeading}><h2>Run it locally</h2><span>FROM THE REPOSITORY ROOT</span></div>
-            {steps.map((step, index) => <div className={styles.step} key={step.title}>
-              <span className={styles.stepNumber}>{index + 1}</span><div><h3>{step.title}</h3><p>{step.description}</p>
-                <div className={styles.command}><pre><code>{step.command}</code></pre><CopyButton text={step.command} /></div>
-              </div>
-            </div>)}
-          </section>
-          <div className={styles.next}><span><span className={styles.nextLabel}>KEEP EXPLORING</span><strong>Ready for a larger project?</strong></span><Link to="/examples/quick-start-advanced">Advanced quick start <RiArrowRightLine /></Link></div>
+          {example.root.readme && <section id="readme" className={styles.readme} aria-label="README">
+            <FileViewer file={example.root.readme} routeBasePath="/examples" />
+          </section>}
         </div>
         <aside className={styles.rail}>
-          <div className={styles.railBlock}><h2>Before you begin</h2><p>You’ll need these installed locally.</p>
-            <a href="https://atmos.tools/install"><span><RiCheckLine /> Atmos CLI</span><RiArrowRightUpLine /></a>
-            <a href="https://developer.hashicorp.com/terraform/install"><span><RiCheckLine /> Terraform</span><RiArrowRightUpLine /></a>
-            <div className={styles.accountNote}><RiCheckLine /> No cloud credentials needed</div>
-          </div>
-          <nav className={styles.onPage} aria-label="On this page"><h2>On this page</h2><a href="#demo">See it in action</a><a href="#learn">What you’ll learn</a><a href="#run">Run it locally</a></nav>
-          <div className={styles.keyFiles}><h2>A look inside</h2>
-            {[["atmos.yaml", "Project configuration"], ["stacks/deploy/dev.yaml", "Your dev environment"], ["stacks/catalog/station.yaml", "Shared component defaults"]].map(([path, label]) => <button key={path} type="button" onClick={() => navigate("files", files.find((file) => relative(file) === path)!)}><span><RiFileTextLine /><span><strong>{path}</strong><small>{label}</small></span></span><RiArrowRightLine /></button>)}
+          <nav className={styles.onPage} aria-label="On this page"><h2>On this page</h2><a href="#demo">See it in action</a><a href="#readme">README</a></nav>
+          <div className={styles.keyFiles}><h2>Source files</h2>
+            {files.filter(file => !file.name.startsWith(".") && file.name !== "README.md").slice(0, 3).map(file => <button key={file.path} type="button" onClick={() => navigate("files", file)}><span><RiFileTextLine /><strong>{relative(file)}</strong></span><RiArrowRightLine /></button>)}
             <button className={styles.browseAll} type="button" onClick={() => navigate("files")}>Browse all {files.length} files <RiArrowRightLine /></button>
           </div>
           <div className={styles.docs}><h2>Go a little deeper</h2>{example.docs.slice(0, 3).map((doc) => <Link key={doc.url} to={doc.url}>{doc.label}<RiArrowRightUpLine /></Link>)}</div>
