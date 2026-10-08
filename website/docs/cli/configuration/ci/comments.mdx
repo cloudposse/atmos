@@ -41,15 +41,6 @@ ci:
     **Environment variable:** `ATMOS_CI_COMMENTS_ENABLED` — overrides this setting when set.
   </dd>
 
-  <dt>`ci.comments.template`</dt>
-  <dd>
-    Reserved. No command reads this key today. Native Terraform plan comments reuse the plan summary template, which
-    you override with [`ci.templates`](/cli/configuration/ci/templates). Scripts that call
-    [`ci.comment`](/functions/automation/ci.comment) name their template in the call with `template=`.
-
-    **Default:** none
-  </dd>
-
   <dt>`ci.comments.behavior`</dt>
   <dd>
     How to handle comments:

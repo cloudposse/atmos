@@ -274,8 +274,8 @@ the value of `ci.templates.base_path`.
 
 The [`ci.summary.template`](/cli/configuration/ci/summary) key belongs to the native commands. They read it as the
 name of a summary template for the component type (for example `<base_path>/kubernetes/summary.md`), and scripts never
-read it, so setting it cannot change what a script renders. The
-[`ci.comments.template`](/cli/configuration/ci/comments) key is not read by scripts either.
+read it, so setting it cannot change what a script renders. There is no comment counterpart: native plan comments
+reuse the rendered plan summary, and scripts name their comment template in the call.
 
 ## Built-in Templates
 

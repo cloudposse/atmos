@@ -74,8 +74,7 @@ A script can keep the layout of a comment in a template file and pass only the v
 
 - A call with `template=` renders that file, with `data` as the context. A call with only `body` posts the text as
   written.
-- There is no configured default template. The [`ci.comments.template`](/cli/configuration/ci/comments) key belongs to
-  the comments Atmos posts for commands, and scripts never read it.
+- There is no configured default template. Every call that renders a template names it with `template=`.
 - The name is resolved against [`ci.templates.base_path`](/cli/configuration/ci/templates). A relative `base_path`
   resolves against the Atmos `base_path`. When no file has exactly that name, the name with a `.md` suffix is tried.
 - Templates use Go template syntax with the same functions as the built-in plan templates. The `data` dict is the
