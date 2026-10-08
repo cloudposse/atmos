@@ -189,6 +189,7 @@ type AtmosConfiguration struct {
 	TrackProvenance           bool                   `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
 	Toolchain                 Toolchain              `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
 	Git                       GitConfig              `yaml:"git,omitempty" json:"git,omitempty" mapstructure:"git"`
+	Init                      InitConfig             `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
 	Devcontainer              map[string]any         `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
 	Profiles                  ProfilesConfig         `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
 	Metadata                  ConfigMetadata         `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
