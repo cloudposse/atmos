@@ -1,0 +1,14 @@
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+      ephemeral: true
+      region: us-east-1
+      container:
+        env:
+          FLOCI_SERVICES_CLOUDFORMATION_ALLOW_STUB_UNSUPPORTED_RESOURCE_TYPES: "false"
+          FLOCI_SERVICES_CLOUDFORMATION_ALLOW_STUB_LAMBDA_CODE: "false"
+        # Floci needs the host runtime to execute Lambda code in a container.
+        runtime:
+          host: true
+        image: mirror.gcr.io/floci/floci@sha256:e97cd0c1dc2aa14e7697fb5ef5018404c4d6345169dbd276315f0bed2c7b0520
