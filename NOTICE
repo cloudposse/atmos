@@ -1196,7 +1196,7 @@ BSD LICENSED DEPENDENCIES
 
   - mvdan.cc/sh/v3
     License: BSD-3-Clause
-    URL: https://github.com/mvdan/sh/blob/v3.13.1/LICENSE
+    URL: https://github.com/mvdan/sh/blob/v3.14.0/LICENSE
 
   - mvdan.cc/xurls/v2
     License: BSD-3-Clause
