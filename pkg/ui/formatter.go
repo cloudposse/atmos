@@ -1188,6 +1188,7 @@ func (f *formatter) buildMarkdownRenderOptions(preserveNewlines, noWrap bool) []
 
 // renderMarkdown is the internal markdown rendering implementation.
 func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool) (string, error) {
+	content = markdown.StripFrontmatter(content)
 	opts := f.buildMarkdownRenderOptions(preserveNewlines, noWrap)
 
 	renderer, err := glamour.NewTermRenderer(opts...)
