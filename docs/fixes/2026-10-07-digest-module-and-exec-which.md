@@ -1,10 +1,10 @@
-# Fix: hash module and exec.which in the Automation Language
+# Fix: digest module and exec.which in the Automation Language
 
 **Date:** 2026-10-07
 
 ## Summary
 
-Scripts can now compute digests with `hash.sha256`, `hash.sha512`, `hash.sha1`, and `hash.md5`, and can ask `exec.which(name)` which executable `exec.run` would start. Both close gaps found while mapping a Python pipeline harness onto the automation language.
+Scripts can now compute digests with `digest.sha256`, `digest.sha512`, `digest.sha1`, and `digest.md5`, and can ask `exec.which(name)` which executable `exec.run` would start. Both close gaps found while mapping a Python pipeline harness onto the automation language.
 
 ## Context
 
@@ -13,7 +13,7 @@ A Python test harness for a CloudFormation example used `hashlib.sha256` to fing
 ## Changes
 
 - Added `process.LookPath(dir, env, name)` in `pkg/process/lookpath.go` and made `resolveCommand` use it, so `exec.run` and `exec.which` share one resolution rule.
-- Added the stateless `hash` module in `pkg/script/starlark/stdlib/hash`. Each function takes one string and returns lowercase hex. Starlark strings are byte strings, so `hash.sha256(fs.read_file(path))` hashes binary files exactly. `md5` and `sha1` carry `gosec` suppressions with a stated interoperability purpose.
+- Added the stateless `digest` module in `pkg/script/starlark/stdlib/digest`. It is named `digest` rather than `hash` because Starlark's universe already provides `hash(x)`, and a predeclared module would shadow it; a test guards that `hash("abc")` still works. Each function takes one string and returns lowercase hex. Starlark strings are byte strings, so `digest.sha256(fs.read_file(path))` hashes binary files exactly. `md5` and `sha1` carry `gosec` suppressions with a stated interoperability purpose.
 - Added `exec.which(name)` in `pkg/script/starlark/process_which.go`. It searches the effective execution environment, including directories added by `dependencies.tools`, honors cancellation, rejects an empty name, and returns `None` when nothing matches.
 - Documented five functions, listed them in the function index, the built-in reference, the language overview, the Python differences table, the script step table, the agent skill, and the Starlark PRD mapping table.
 

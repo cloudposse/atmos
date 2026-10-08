@@ -122,8 +122,8 @@ workflows:
 - `steps.run(type, **fields)` and the `steps.<type>(...)` library call any registered step
   handler (see [steps.run](https://atmos.tools/functions/automation/steps.run)); they exist,
   and `steps.input` and `steps.choose` prompt. Also available: `fs.read_file`, `fs.glob`,
-  `fs.stat`, `fs.exists`, `fs.readlink`, `fs.resolve` (absolute path; every `fs.*` call accepts a leading `~`), `exec.which` (path or `None`),
-  `hash.sha256`/`hash.sha512`/`hash.sha1`/`hash.md5` (hex digest of a string or file contents), `errors.build(...)` (a builder ending in `.fail()`),
+  `fs.stat`, `fs.exists`, `fs.readlink`, `fs.resolve` (absolute path; every `fs.*` call accepts a leading `~`), `exec.which` (path or `None`), `defer(fn, *args)` (cleanup that runs when the script or task finishes, even after `fail()`; there is no `try`/`finally`),
+  `digest.sha256`/`digest.sha512`/`digest.sha1`/`digest.md5` (hex digest of a string or file contents), `errors.build(...)` (a builder ending in `.fail()`),
   `json.indent`, `json.encode_indent`, and the `ci` module (`ci.context`, `ci.summary`,
   `ci.comment`, `ci.annotate`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`, `ci.check`,
   `ci.group`, `ci.sarif`, `ci.base`; distinct from the `atmos.ci(...)` command wrapper).

@@ -243,7 +243,7 @@ func (s *session) attempt(ctx context.Context, prefix string, t *task, library a
 		out.flush()
 	}()
 	value, err := starlark.Call(thread, t.function, t.args, t.kwargs)
-	if err != nil {
+	if err = s.runDeferred(ctx, thread, err); err != nil {
 		return nil, withContext(ctx, err)
 	}
 	return value, ctx.Err()

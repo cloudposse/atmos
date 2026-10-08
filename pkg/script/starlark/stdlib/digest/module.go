@@ -1,5 +1,5 @@
-// Package hash exposes message digests to the Atmos Automation Language.
-package hash
+// Package digest exposes message digests to the Atmos Automation Language.
+package digest
 
 import (
 	"crypto/md5"  //nolint:gosec // md5 is offered for checksums and interoperability (S3 ETags), not for security.
@@ -30,14 +30,14 @@ func digest(name string, constructor func() hash.Hash) *starlark.Builtin {
 	})
 }
 
-// New returns the stateless hash module.
+// New returns the stateless digest module.
 func New() starlark.Value {
 	defer perf.Track(nil, "hash.New")()
 
-	return &starlarkstruct.Module{Name: "hash", Members: starlark.StringDict{
-		"md5":    digest("hash.md5", md5.New),
-		"sha1":   digest("hash.sha1", sha1.New),
-		"sha256": digest("hash.sha256", sha256.New),
-		"sha512": digest("hash.sha512", sha512.New),
+	return &starlarkstruct.Module{Name: "digest", Members: starlark.StringDict{
+		"md5":    digest("digest.md5", md5.New),
+		"sha1":   digest("digest.sha1", sha1.New),
+		"sha256": digest("digest.sha256", sha256.New),
+		"sha512": digest("digest.sha512", sha512.New),
 	}}
 }

@@ -23,7 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/script"
 	climodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/cli"
-	hashmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/hash"
+	digestmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/digest"
 	regexmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/regex"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -136,7 +136,7 @@ func (e *Engine) Execute(ctx context.Context, spec script.Spec) (script.Result, 
 		return script.Result{}, scriptError(ctx, err, s.spec.ProjectRoot)
 	}
 	globals, err := starlark.ExecFileOptions(fileOptions, thread, programName(&spec), spec.Source, s.globals)
-	if err != nil {
+	if err = s.runDeferred(ctx, thread, err); err != nil {
 		return script.Result{}, scriptError(ctx, err, s.spec.ProjectRoot)
 	}
 	return s.output(ctx, thread, globals)
@@ -240,6 +240,7 @@ func (s *session) predeclared() starlark.StringDict {
 	return starlark.StringDict{
 		"sum":    starlark.NewBuiltin("sum", numericSum),
 		"round":  starlark.NewBuiltin("round", numericRound),
+		"defer":  starlark.NewBuiltin("defer", deferCall),
 		"errors": module("errors", starlark.StringDict{"build": starlark.NewBuiltin("errors.build", buildError)}),
 		"cli": climodule.New(func(t *starlark.Thread, command script.CommandSpec) (script.CommandInput, error) {
 			if s.spec.ParseCommand == nil || t.Local(outputKey) != nil {
@@ -262,7 +263,7 @@ func (s *session) predeclared() starlark.StringDict {
 		"fs":           s.filesystemModule(),
 		"regex":        regexmodule.New(),
 		"steps":        s.stepsModule(),
-		"hash":         hashmodule.New(),
+		"digest":       digestmodule.New(),
 		"exec": module("exec", starlark.StringDict{
 			"run":   starlark.NewBuiltin("exec.run", s.exec),
 			"which": starlark.NewBuiltin("exec.which", s.which),
