@@ -80,7 +80,7 @@ steps:
   <dd>List of regular expressions; the response body must match at least one. Patterns may be written as `/.../ ` literals (surrounding slashes are stripped) or bare regex strings.</dd>
 
   <dt>`timeout`</dt>
-  <dd>Per-attempt timeout (e.g., `30s`, `1m`). Defaults to `30s`. Each retry attempt gets its own deadline.</dd>
+  <dd>Per-attempt timeout (e.g., `30s`, `1m`). Defaults to `30s`. Each retry attempt gets its own deadline. The `http` step gives `timeout` this meaning of its own, so it is a limit on each request and not on the step as a whole.</dd>
 
   <dt>`retry`</dt>
   <dd>Retry policy (see [retry](/steps/retry)). Transport errors, `5xx`, and `429` responses are retried by default; other `4xx` responses fail fast. Use `retry.conditions` (regexes matched against `"<status> <body>"`) to retry additional cases.</dd>

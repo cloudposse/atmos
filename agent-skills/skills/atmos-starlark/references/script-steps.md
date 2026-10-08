@@ -28,10 +28,14 @@ The script body is rendered as a Go template before Starlark runs. This applies 
   Tag the script with `!literal` to skip rendering: `script: !literal |` runs the body exactly
   as written, in sequential steps, `parallel`/`matrix` children, custom commands, workflows,
   and hooks. Prefer it for any script that contains braces, including `"{}".format(...)`
-  next to `{{`. `!literal` also works on `command`, `interpreter`, `working_directory`, and
-  individual `env` values, and only the tagged field skips rendering.
-- Fallback when `!literal` is not an option, such as a script loaded with `!include`, which is
-  still rendered: avoid the sequence by splitting it, for example `"{" + "{ value }}"`.
+  next to `{{`. `!literal` also works on `command`, `interpreter`, `working_directory`, `timeout`, and
+  individual `env` values (including plain-string steps, command-level `env`, and `env` on `parallel`/`matrix`
+  parents), and only the tagged field skips rendering. On any other step field it fails config load,
+  naming the field and step (checked for custom-command steps).
+- `script: !include.raw path` (or `command:`) is used exactly as written, with no rendering. A script loaded with
+  `!include` is still rendered; the template-error hint says to move the text into a `load()`ed module or use
+  `!include.raw`.
+- Fallback when neither is an option: avoid the sequence by splitting it, for example `"{" + "{ value }}"`.
   Escape sequences such as `{{"{{"}}` do not survive, because the rendered result is rendered
   again (workflows and custom commands run more than one render pass).
 - Sprig and Gomplate functions (`{{ upper "abc" }}`) work the same in sequential steps and in
@@ -75,7 +79,9 @@ Resolve one explicitly with `components.get("vpc", "dev", "terraform")`.
   shell steps. `show: {labels: true}` on the step restores the labels.
 - The step `output:` field selects the display mode: `raw`, `log`, `viewport`, or `none`. Any
   other value, such as `output: capture`, fails validation before the step runs and the error
-  lists the valid modes. The same check applies to `shell`, `atmos`, and `container` steps and to
+  lists the valid modes (for `capture`/`stream` it also points to `exec.run`). In the script itself,
+  `exec.run`, `component.exec`, and `atmos.*` take `output="stream"|"capture"|"viewport"` (viewport falls back to
+  streaming without a TTY or in parallel tasks). The same check applies to `shell`, `atmos`, and `container` steps and to
   the workflow-level `output:`. (Subprocess capture is `exec.run(..., output="capture")` inside
   the script.) Container steps now default to raw output without labels, like the other command
   steps.
@@ -91,7 +97,7 @@ Resolve one explicitly with `components.get("vpc", "dev", "terraform")`.
 
 - A `timeout:` on the script step is enforced: the interpreter runs under a deadline, the
   Starlark thread and its subprocesses are canceled when it elapses, and the step fails with
-  `step timed out`. An invalid value (not a positive duration) fails with `invalid step
+  `step timed out` (explanation: `Step '<name>' (type <t>) did not finish within its timeout of <d>`). An invalid value (not a positive duration) fails with `invalid step
   timeout`. `shell` and `atmos` steps enforce `timeout:` the same way in workflows and custom
   commands. Per-task limits inside the script still use `steps.task(name, fn, timeout="30s")`
   and `steps.parallel`.
@@ -127,7 +133,13 @@ just like inline functions.
 
 ## Retries and errors
 
-A step-level `retry:` re-runs the whole script. Make side effects repeatable, or put retries
+A step-level `retry:` re-runs the whole script. `retry.conditions` (regexes, optionally `/like this/`, matched against
+stdout, stderr, and error text) is honored by every step type except `http`; a non-matching failure ends the loop at
+once, an invalid pattern errors before the step runs, and exit/abort/cancel are never retried.
+Ctrl-C runs `defer` calls with a 30 s grace and exits 130 silently; a second Ctrl-C exits at once.
+`steps.env` changes reach later child processes and templates, not the Starlark `env` global.
+Script failures render under a `# Workflow Error` heading (workflows) as `Error in fail: <reason>` after the
+traceback, followed by an explanation and a resume hint. `--profile`/`--identity` reach nested `atmos.*` calls. Make side effects repeatable, or put retries
 around a narrower function with `steps.task(..., retry={...})`.
 
 Script errors are single-line messages followed by the Starlark traceback. A subprocess

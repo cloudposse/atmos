@@ -41,3 +41,7 @@ steps:
 </dl>
 
 The step result stores stdout as the step value and includes `stdout`, `stderr`, and `exit_code` metadata.
+
+## Timeout and cancellation {#timeout-and-cancellation}
+
+The nested Atmos command starts through the same process runner as `shell` steps, so a timeout or cancellation ends its whole process tree, including the commands it started, and not only the nested `atmos` process. A child whose stdin is a terminal stays in the terminal's foreground process group, and Atmos signals only that direct child. On Windows, Atmos stops only the direct child. A timeout overrun reads `step timed out`, and its explanation names the step and its type.

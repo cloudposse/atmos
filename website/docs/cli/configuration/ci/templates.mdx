@@ -44,9 +44,12 @@ ci:
 <dl>
   <dt>`ci.templates.base_path`</dt>
   <dd>
-    Directory containing custom template files, relative to the repository root.
+    Directory containing custom template files. A relative path resolves against the Atmos
+    [`base_path`](/cli/configuration#base-path), not against the repository root or the working directory. An
+    absolute path is used as written. The `.atmos/ci/templates` value in the examples on this page is a suggested
+    location, not a default.
 
-    **Default:** `.atmos/ci/templates`
+    **Default:** None. Without it, only files named by absolute path and the built-in templates are used.
   </dd>
 
   <dt>`ci.templates.terraform.plan`</dt>
@@ -86,11 +89,13 @@ ci:
 
   <dt>`ci.templates.helmfile.destroy`</dt>
   <dd>Filename of the custom Helmfile destroy summary template within the base path.</dd>
+
   <dt>`ci.templates.container.image`</dt>
   <dd>
-    Filename of the custom container image summary template within the base path. Without it, Atmos uses
+    Filename of the custom container image summary template within the base path. A configured file that does not
+    exist is an error, so a typo cannot silently revert to the built-in template. Without the key, Atmos uses
     `<base_path>/container/image.md` when that file exists, and the built-in template otherwise. The same
-    Markdown is used for the job summary and for the per-image pull request comment, keyed `container:image:<image>`.
+    Markdown is used for the job summary and for the per-image pull request comment, keyed `container:image:<registry/repository>`.
 
     The template receives these fields, all already escaped Markdown: `.Image`, `.Badges`, `.Description`,
     `.Tag`, `.Digest`, `.ID`, `.Revision`, `.Source`, `.Entrypoint`, `.Command`, `.StopSignal`, `.StorageDriver`,
@@ -230,37 +235,31 @@ No changes. Infrastructure is up-to-date.
 ## Script report templates
 
 Scripts that call [`ci.summary`](/functions/automation/ci.summary) or [`ci.comment`](/functions/automation/ci.comment)
-can render their text from a template file instead of building the Markdown in code. Two keys name the default
-template for each call:
+can render their text from a template file instead of building the Markdown in code. The call names the template, and
+the configuration only says where template files live. Scripts have no configured default template.
 
 <File title="atmos.yaml">
 ```yaml
 ci:
   templates:
     base_path: ".atmos/ci/templates"
-  summary:
-    template: "deploy.md"      # default for ci.summary(data = ...)
-  comments:
-    template: "release.md"     # default for ci.comment(data = ...)
 ```
 </File>
 
-<dl>
-  <dt>[`ci.summary.template`](/cli/configuration/ci/summary)</dt>
-  <dd>
-    The template that `ci.summary(data = {...})` renders when the call names no `template`.
-  </dd>
+```python
+ci.summary(template = "deploy.md", data = {"stack": "prod", "count": 2, "services": ["api", "web"]})
+ci.comment(template = "release.md", data = {"version": "1.4.0"}, key = "release")
+```
 
-  <dt>[`ci.comments.template`](/cli/configuration/ci/comments)</dt>
-  <dd>
-    The template that `ci.comment(data = {...})` renders when the call names no `template`.
-  </dd>
-</dl>
+A call that passes `data` must also pass `template`. A call with `data` and no `template` fails with an argument error
+that asks for `template=`.
 
 A template name resolves against `ci.templates.base_path`, so `deploy.md` above is read from
 `.atmos/ci/templates/deploy.md`. An absolute path is used as written. When no file has exactly that name, the name with
-a `.md` suffix is tried, so `deploy` finds `deploy.md`. A call with an explicit `template=` ignores the configured
-default. The `data` dict that the script passes is the template context, and keys are read as `.key`.
+a `.md` suffix is tried, so `deploy` finds `deploy.md`. The `data` dict that the script passes is the template context,
+and keys are read as `.key`. A key that the template reads but `data` does not contain fails the render and names the
+key, so a typo never renders `<no value>`. A template that cannot be found fails the script with the resolved path and
+the value of `ci.templates.base_path`.
 
 <File title=".atmos/ci/templates/deploy.md">
 ```markdown
@@ -273,9 +272,10 @@ default. The `data` dict that the script passes is the template context, and key
 ```
 </File>
 
-The native commands read `ci.summary.template` as well, as the name of a summary template inside the component type
-directory (for example `<base_path>/kubernetes/summary.md`). A name such as `summary` therefore works for both: the
-native commands read `<base_path>/<component type>/summary.md`, and scripts read `<base_path>/summary.md`.
+The [`ci.summary.template`](/cli/configuration/ci/summary) key belongs to the native commands. They read it as the
+name of a summary template for the component type (for example `<base_path>/kubernetes/summary.md`), and scripts never
+read it, so setting it cannot change what a script renders. The
+[`ci.comments.template`](/cli/configuration/ci/comments) key is not read by scripts either.
 
 ## Built-in Templates
 

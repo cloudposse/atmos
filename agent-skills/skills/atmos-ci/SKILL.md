@@ -394,6 +394,39 @@ components:
 
 `settings.depends_on` is legacy. If found, recommend migration to `dependencies.components`.
 
+## Reporting From Scripts
+
+Scripts in the Atmos Automation Language report into CI through the predeclared `ci` module
+(`ci.summary`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`, `ci.annotate`, `ci.comment`, `ci.check`,
+`ci.group`, `ci.sarif`, `ci.context`). It is not `atmos.ci`, which runs the `atmos ci` command group.
+Key facts to get right (details in [references/native-ci.md](references/native-ci.md#reporting-from-scripts)):
+
+- **Gates.** Every write needs `ci.enabled: true` plus the feature flag. A gated call warns, renders
+  locally, and the script continues. The warning names `ci.enabled` when the master switch is off, and
+  the per-feature key only when the master is on. Atmos never turns `ci.enabled` on inside a CI run.
+- **Local rendering.** With no recognized provider the `generic` provider prints every call on stderr:
+  annotations as `path:line: level: message (title)`, multiline outputs in heredoc form, comments as a
+  preview that is never posted. `ATMOS_CI_OUTPUT`/`ATMOS_CI_SUMMARY`/`ATMOS_CI_ENV`/`ATMOS_CI_PATH`
+  redirect outputs to files, and `ATMOS_CI_PR`/`ATMOS_CI_REPOSITORY`/`ATMOS_CI_SHA` supply context.
+- **Forced CI mode.** `--ci`, `ATMOS_CI=true`, or `CI=true` on an unrecognized platform makes the
+  generic provider the detected one: gates apply, `ci.context.local` is `False`, and the `ATMOS_CI_*`
+  files are written.
+- **GHES.** `GITHUB_API_URL` or `ATMOS_CI_GITHUB_API_URL` (which wins) sets the API base; an invalid URL
+  fails the command.
+- **Fork posting gate.** Under `pull_request_target`/`workflow_run`, comments, commit statuses,
+  environment and `PATH` exports, and SARIF uploads are held for a fork pull request (head and base
+  `full_name` differ; a deleted fork or unreadable payload counts as a fork). Summaries, outputs,
+  annotations, groups, and masks are never held. `ci.allow_unsafe_fork_execution` or
+  `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` releases this gate and the clone gate. Native Terraform plan
+  comments and statuses use the same gate. The pull request number comes from the event payload.
+- **Comment targets.** `ci.comment(target="auto"|"pr"|"commit")`; `auto` posts to the pull request
+  when known and otherwise to a commit comment on the SHA (needs `contents: write`). `behavior="update"`
+  requires `key`.
+- **Templates.** Scripts have no configured default template: `data=` requires `template=` on
+  `ci.summary` and `ci.comment`. `ci.summary.template` applies only to native commands. A relative
+  `ci.templates.base_path` resolves against the Atmos `base_path`. A missing key in `data` fails and
+  names the key.
+
 ## Integrations
 
 Atlantis remains a supported integration target, but keep Atmos as the source of truth. For Atlantis,

@@ -3,14 +3,15 @@ title: "ctx.args"
 sidebar_position: 33
 sidebar_label: "ctx.args"
 sidebar_class_name: command
-description: The raw command-line arguments passed to a standalone script.
+description: The raw command-line arguments passed to a standalone script, or the arguments Git passes to a Git hook.
 ---
 
 import Intro from '@site/src/components/Intro'
 import EmbedFile from '@site/src/components/EmbedFile'
 
 <Intro>
-    The `ctx.args` value is a read-only list of the strings that follow the script file name on the command line.
+    The `ctx.args` value is a read-only list of strings. In a standalone script they are the tokens that follow the
+    script file name on the command line. In a Git hook they are the arguments Git passes to the hook.
 </Intro>
 
 ## Usage

@@ -41,3 +41,9 @@ steps:
 </dl>
 
 Non-interactive shell steps can use [output modes](/steps/output). Steps with `tty` or `interactive` attach directly to the terminal and do not produce capturable stdout.
+
+## Timeout and cancellation {#timeout-and-cancellation}
+
+When a `shell` step times out or is canceled, for example with Ctrl-C, Atmos ends the whole process tree the command started, including grandchildren, and not only the shell. The same applies to every place Atmos runs a shell command: custom commands, workflows, the [`!exec`](/functions/yaml/exec) YAML function, and hook commands. A timeout overrun reads `step timed out`, and its explanation names the step and its type: `Step '<name>' (type shell) did not finish within its timeout of <duration>`.
+
+A child whose stdin is a terminal, such as an editor or a prompt, stays in the terminal's foreground process group so it can keep reading the terminal. Atmos signals only that direct child. On Windows, Atmos stops only the direct child.

@@ -271,7 +271,110 @@ git:
   </dd>
 </dl>
 
+The shim that `atmos git hooks install` writes pins the absolute path of the `atmos` binary that installed it, and falls back to `atmos` on `PATH` when that binary has moved or been removed. Hooks therefore keep working from IDEs and GUI Git clients that do not have `atmos` on their `PATH`.
+
 Local Git hooks are triggered by **Git itself** in the current repository. They are separate from Atmos lifecycle events — for event-bound Git publishing (e.g., commit after `terraform apply`), use the [`kind: git` hook](/stacks/hooks#kind-git).
+
+### Inline script steps
+
+Keep small checks inside the hook configuration. Starlark scripts run in-process
+and can call the [step library](/functions/automation/steps.run):
+
+```yaml
+git:
+  hooks:
+    pre-commit:
+      steps:
+        - name: check-instruction-size
+          type: script
+          interpreter: starlark
+          script: |
+            for path in fs.glob("CLAUDE.md"):
+                if fs.stat(path).size > 40000:
+                    errors.build("CLAUDE.md exceeds 40,000 bytes").fail()
+        - name: report
+          type: script
+          interpreter: starlark
+          script: ui.success("Repository checks passed")
+```
+
+Choose exactly one of `command` or a non-empty `steps` list. Install the shim with
+`atmos git hooks install`, then run it directly with `atmos git hooks run pre-commit`.
+Existing command hooks keep their argument and stdin forwarding behavior.
+
+Steps run in order and stop at the first failure. They run from the repository root,
+even when you invoke the hook from a subdirectory. They share named outputs. A
+`type: env` step exports variables to the processes and templates of later steps
+(for example `{{ .env.X }}`). The `env` global of a Starlark step contains only the
+`env:` that step declares, not variables exported by earlier steps. Each step supports its handler's timeout and retry
+behavior; embedded scripts also have access to `steps.parallel`.
+Git hook arguments are available as `ctx.args` in embedded scripts, for example
+the commit-message path supplied to `commit-msg`, and as positional parameters in `shell` steps (`$1`, `"$@"`). Git's `pre-commit` hook supplies
+no filenames: query the Git index explicitly when a check needs tracked or staged paths.
+
+Relative paths resolve from the repository root, unless a step sets
+`working_directory`. These checks read working-tree files; Atmos does not stash unstaged changes
+or limit checks to the staged contents automatically.
+
+Hook step lists use synchronous execution. Workflow scheduling fields (`needs`,
+`when`, `continue`, `identity`, background execution, and freshness policies) are
+rejected. Use an explicit container step for container operations. Background-job
+handlers require a workflow context. Use a workflow when a hook needs that scheduling.
+
+See [two inline repository checks](/changelog/git-hook-script-steps) for tracked
+symlink validation and separate size limits for CLAUDE.md and agent files.
+
+### Hook arguments and standard input {#hook-arguments-and-stdin}
+
+Every step of a `steps` hook can read what Git passed to the hook:
+
+<dl>
+  <dt>Arguments</dt>
+  <dd>
+    A `shell` step receives the arguments as positional parameters (`$1`, `"$@"`), which keeps an argument that contains
+    spaces intact. Every step's environment also holds `ATMOS_GIT_HOOK_ARGS`, the arguments joined by single spaces.
+    A Starlark step reads them from `ctx.args`.
+  </dd>
+
+  <dt>Standard input</dt>
+  <dd>
+    Git writes data to the standard input of `pre-push`, `pre-receive`, `post-receive`, `post-rewrite`,
+    `reference-transaction`, and `proc-receive`. Atmos reads that input once and saves it to a temporary file. The
+    environment variable `ATMOS_GIT_HOOK_STDIN` holds the path of the file for every step, so an embedded script can
+    open it with `fs.read_file`. The first `shell` step also receives the same data on its standard input. Atmos removes
+    the file when the hook ends. Other hooks capture nothing and leave `ATMOS_GIT_HOOK_STDIN` unset.
+  </dd>
+</dl>
+
+For example, a `pre-push` hook can read the refs Git is about to update:
+
+```yaml
+git:
+  hooks:
+    pre-push:
+      steps:
+        - name: refs
+          type: shell
+          command: |
+            echo "pushing to $1 ($2)"
+            while read -r local_ref local_sha remote_ref remote_sha; do
+              echo "$local_ref -> $remote_ref"
+            done
+```
+
+### Exit codes and prompts {#hook-exit-codes}
+
+`atmos git hooks run` exits with the code of the step that failed, so Git blocks the operation with the status the step
+chose. A Starlark `fail()` exits with 1, and `errors.build("message").with_exit_code(5).fail()` exits with 5.
+
+A step that prompts for input, such as `confirm` or `input`, needs a terminal. Git often runs hooks without one, for
+example from a GUI client. A prompt step without a `default:` fails there with a hint that setting `default:` lets the
+step run without a terminal.
+
+### Configuration layers
+
+When several configuration sources define the same hook, a later source that gives the hook `steps:` replaces an earlier
+`command:`, and a later `command:` replaces earlier `steps:`. Atmos never runs both forms.
 
 ## List Output
 
@@ -336,58 +439,10 @@ Git workdirs change on every publish, so they churn cache archives. This is safe
 
 :::
 
+
 ## Related
 
 - [`atmos git`](/cli/commands/git/usage) — the command group
 - [`kind: git` hooks](/stacks/hooks#kind-git) — publish artifacts on lifecycle events
 - [Authentication](/cli/configuration/auth) — identities and integrations
 - [CI Configuration](/cli/configuration/ci) — native CI detection and cache
-
-### Inline script steps
-
-Keep small checks inside the hook configuration. Starlark scripts run in-process
-and can call the [step library](/functions/automation/steps.run):
-
-```yaml
-git:
-  hooks:
-    pre-commit:
-      steps:
-        - name: check-instruction-size
-          type: script
-          interpreter: starlark
-          script: |
-            for path in fs.glob("CLAUDE.md"):
-                if fs.stat(path).size > 40000:
-                    errors.build("CLAUDE.md exceeds 40,000 bytes").fail()
-        - name: report
-          type: script
-          interpreter: starlark
-          script: ui.success("Repository checks passed")
-```
-
-Choose exactly one of `command` or a non-empty `steps` list. Install the shim with
-`atmos git hooks install`, then run it directly with `atmos git hooks run pre-commit`.
-Existing command hooks keep their argument and stdin forwarding behavior.
-
-Steps run in order and stop at the first failure. They run from the repository root,
-even when you invoke the hook from a subdirectory. They share named outputs. A
-`type: env` step exports variables to the processes and templates of later steps
-(for example `{{ .env.X }}`). The `env` global of a Starlark step contains only the
-`env:` that step declares, not variables exported by earlier steps. Each step supports its handler's timeout and retry
-behavior; embedded scripts also have access to `steps.parallel`.
-Git hook arguments are available as `ctx.args` in embedded scripts, for example
-the commit-message path supplied to `commit-msg`. Git's `pre-commit` hook supplies
-no filenames: query the Git index explicitly when a check needs tracked or staged paths.
-
-Relative paths resolve from the repository root, unless a step sets
-`working_directory`. These checks read working-tree files; Atmos does not stash unstaged changes
-or limit checks to the staged contents automatically.
-
-Hook step lists use synchronous execution. Workflow scheduling fields (`needs`,
-`when`, `continue`, `identity`, background execution, and freshness policies) are
-rejected. Use an explicit container step for container operations. Background-job
-handlers require a workflow context. Use a workflow when a hook needs that scheduling.
-
-See [two inline repository checks](/changelog/git-hook-script-steps) for tracked
-symlink validation and separate size limits for CLAUDE.md and agent files.

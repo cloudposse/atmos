@@ -384,3 +384,32 @@ Replace deprecated wrapper actions with direct commands:
 | Deprecated `cloudposse/github-action-setup-atmos` | `container: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}` |
 
 Deprecated: do not use `integrations.github.gitops`; model CI behavior directly in workflows and stack settings.
+
+## Reporting From Scripts
+
+The `ci` module is available in standalone scripts and in script steps of custom commands, workflows,
+and hooks, including parallel and matrix children.
+
+```python
+build = ci.check("build", state = "in_progress", description = "Building")
+result = ci.group("Test", lambda: exec.run(["go", "test", "./..."], check = False))
+ci.summary(template = "deploy.md", data = {"stack": "prod", "count": 2})
+ci.comment("Built " + ci.context.sha[:7], key = "build-report")   # target = "auto"
+build.update("success", description = "Done")
+```
+
+Reference points:
+
+- `ci.comment(target = "auto" | "pr" | "commit")`: default `auto`. `pr` with no pull request fails with the hint
+  to pass the pull request number or run in a pull request context. A commit comment needs `contents: write`;
+  a pull request comment needs `pull-requests: write`; `ci.check` needs `statuses: write`.
+- GitHub maps check states onto commit statuses: `in_progress` becomes pending and `cancelled` becomes error.
+  `check.update()` sends the id, and `check.url` is the details URL (the request URL, else the run URL).
+- Local rendering of an `update` with no earlier comment fails the way GitHub does. Local previews read
+  `commit comment preview (...)` when no pull request is known.
+- Workflow commands (`::add-mask::`, `::group::`, annotations) go to stderr. `::add-mask::` is emitted only when
+  `ci.enabled` is true. Repeated `ci.base()` calls do not duplicate `safe.directory` entries.
+- Forced CI mode (`--ci`, `ATMOS_CI=true`, `CI=true` without a recognized provider) makes the generic provider the
+  detected provider. `ATMOS_CI_PR_FORK` only fills `ci.context.pr.fork`; it never gates anything there.
+- Container image comments (`atmos container build/push`): one comment per `registry/repository`, truncated at
+  65,000 characters, attempted only when `ci.comments.enabled` is on, failures logged as warnings.

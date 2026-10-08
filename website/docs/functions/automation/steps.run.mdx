@@ -44,7 +44,7 @@ to run functions concurrently.
   <dt>`**fields`</dt>
   <dd>The fields from the corresponding <a href="/steps/type">step reference</a>,
   with the same types and defaults as YAML. Use dictionaries for nested blocks.
-  Unknown step fields and invalid values produce errors.</dd>
+  Invalid values produce errors. See <a href="#field-validation">Field validation</a> for the accepted field names.</dd>
   <dt>`with_`, `for_`, `continue_`</dt>
   <dd>Spellings for fields that conflict with language keywords. For example,
   pass a container's YAML `with:` block as `with_ = {"image": "..."}`.
@@ -55,6 +55,34 @@ Hyphens in type names become underscores in function names: `wait-all` is
 `steps.wait_all`. The existing `steps.parallel` function continues to run AAL
 functions. To execute a YAML-style parallel group, use
 `steps.run("parallel", steps = [...])` with child step dictionaries.
+
+## Field validation {#field-validation}
+
+Each step type accepts the common fields (`name`, `type`, `output`, `show`, `env`, `working_directory`, `timeout`,
+`retry`, `outputs`, and `with`) plus the fields of its own reference page. A field outside that set is an error that
+lists what the type accepts:
+
+```text
+unknown field "seperator" for step type "join"; valid fields: ...
+```
+
+A step type that does not declare its own field list is checked against the fields of any step type and reports
+`unknown step field "x"` instead. The same check applies to the child steps of a YAML-style `steps.run("parallel", steps = [...])` group.
+
+## Output modes
+
+The `output` field of a step call chooses how the step shows what it produced: `raw`, `log`, `viewport`, or `none`.
+The values `capture` and `stream` belong to [`exec.run`](/functions/automation/exec.run#arguments) and the `atmos.*`
+wrappers, not to step calls. A step call that passes either one fails, and the error points to
+[`exec.run`](/functions/automation/exec.run), whose `output = "capture"` captures a command's output. Every step
+result already carries its output in `value`.
+
+## Timeouts
+
+A step call honors `timeout:`. An overrun reads `step timed out` and names the step and its type, for example
+`Step 'build' (type shell) did not finish within its timeout of 30s`. The `sleep` step uses `timeout` as its duration,
+and the `http` step uses it for each request, so neither is bounded again as a whole. A script's own `timeout`
+bounds the entire script step.
 
 ## Results
 
@@ -126,7 +154,7 @@ working directory. They use the current Atmos configuration and component
 resolvers supplied by the enclosing command, workflow, or hook.
 
 Step state belongs to the script invocation. Calls to `steps.env` update the
-environment used by later **step-library calls**, not the script's immutable
+templates and child processes of later **step-library calls**, not the script's immutable
 `env` dictionary or the environment used by `exec.run` and `atmos.*`. Use their
 `env` argument when those calls need an override. Step state does not modify the
 enclosing YAML runner's variables.

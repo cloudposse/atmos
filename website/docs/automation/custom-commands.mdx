@@ -66,8 +66,10 @@ atmos capacity
 Run `atmos capacity --help` to see the command description and generated flag help:
 
 ```text
---replicas string  Number of service replicas (default 2)
+--replicas int  Number of service replicas (default 2)
 ```
+
+A flag declared as a string shows its default quoted, as in `--replicas string  Number of service replicas (default "2")`.
 
 <CastEmbed src="/casts/examples/starlark-commands/capacity.cast" title="Custom command: atmos capacity --replicas 3" chrome controls scrubber />
 
@@ -77,15 +79,23 @@ Script steps read parsed flags from `ctx.flags` and named positional arguments
 from `ctx.arguments`. These mappings are read-only, and values stay data rather
 than being inserted into the program's source.
 
-The example declares `replicas` as a string flag, so the script converts
-`ctx.flags["replicas"]` with `int()` before calculating. A boolean flag would
-arrive as a boolean. The step calls `fail("replicas must be positive")` for zero
-or negative counts, stopping the command with that error.
+The example declares `replicas` with `type: int`, so Atmos rejects a value such as
+`--replicas=many` with a usage error before the script runs, and `ctx.flags["replicas"]`
+arrives as an integer that needs no conversion. A boolean flag arrives as a boolean, and a
+`type: string` flag arrives as a string that you convert with `int()` before calculating. The
+step calls `fail("replicas must be positive")` for zero or negative counts, stopping the
+command with that error.
 
 Try `atmos capacity --replicas 0` to see the validation error.
 
-Declare a flag with `type: int` to receive an integer in `ctx.flags` and drop the `int()`
-conversion. An optional argument (`required: false`, no `default`) that the caller omits is an
+An `int` flag reads base-10 digits only, so `--replicas=010` is 10 and `--replicas=0x10` is
+rejected. The `default` of a flag must match its `type`: an unquoted `2` on a `type: string`
+flag, or `"true"` in quotes on a `type: bool` flag, makes that command unusable. Atmos prints a
+warning that names the flag, keeps every other command working, and reports the same error when
+you run the broken command.
+
+An argument with neither `required:` nor `default:` is required. Write `required: false` to make
+it optional. An optional argument (`required: false`, no `default`) that the caller omits is an
 empty string in `ctx.arguments`, so test it with `if ctx.arguments["region"]:`. See
 [flags](/cli/configuration/commands/flags#integer-flags) and
 [optional arguments](/cli/configuration/commands/arguments#optional-arguments).

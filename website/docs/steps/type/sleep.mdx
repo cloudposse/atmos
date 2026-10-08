@@ -21,7 +21,7 @@ steps:
 
 <dl>
   <dt>`timeout`</dt>
-  <dd>Optional sleep duration, such as `5s`, `1m`, or `2m30s`. Defaults to `1s`.</dd>
+  <dd>Optional sleep duration, such as `5s`, `1m`, or `2m30s`. Defaults to `1s`. The `sleep` step gives `timeout` this meaning of its own, so it is the duration to sleep and not a limit on the step.</dd>
 </dl>
 
 The step result value is the resolved duration.

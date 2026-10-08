@@ -120,6 +120,9 @@ values. Mappings also support iteration, `.keys()`, `.values()`, and `.items()`.
 <dd>The component type, such as <code>terraform</code> or <code>helmfile</code>, when available.</dd>
 </dl>
 
+Attribute access works on `ctx` itself (`ctx.vars`, `ctx.stack`). Inside a section, use subscripts and `.get()`:
+`ctx.vars["network"]["cidr"]` works, while `ctx.vars.network` and `ctx.vars["network"].cidr` do not.
+
 The mappings convert to ordinary values: `dict(ctx.vars)`, `json.encode(ctx.vars)`, and `**ctx.vars` in a call all work.
 
 Missing configuration sections are empty mappings. Reading a missing key with
@@ -181,12 +184,16 @@ rejected as return values.
 Use `!starlark` in component configuration values within stack manifests. It
 computes values after structural merging; it does not generate imports,
 component names, inheritance rules, or stack identities. It is not supported in
-`atmos.yaml` or scaffold configuration.
+`atmos.yaml`, profiles, imported `atmos.yaml` configuration files, or scaffold configuration. Atmos rejects the tag
+there when it loads the configuration, and the error names the file and the key that holds it.
 
 Fields that Atmos reads to compute the stack name cannot use `!starlark`. When
 `stacks.name_template` or `stacks.name_pattern` consumes a field such as `vars.stage`, a `!starlark` value there
 fails with `stack identity cannot be computed with !starlark`. You can still select the stack by its manifest
 path, for example `-s deploy/dev`.
+
+Stack identity is the one place where commands differ on purpose. `atmos describe stacks` rejects a stack identity
+computed with `!starlark`, while `atmos terraform generate varfiles` and `atmos terraform generate backends` accept it.
 
 The selector fields `metadata.tags` and `metadata.labels` reject `!starlark`.
 They determine component selection before full evaluation, while context reads
@@ -206,3 +213,38 @@ configuration field and, for source errors, the originating filename and line.
 Commands that support `--skip=starlark` preserve the expression without
 evaluating it. What the command outputs is the source as the manifest loader encoded it, not the literal text you
 typed in the file.
+
+## Selective evaluation
+
+Commands that print only part of the configuration do not evaluate every `!starlark` value in the component. They
+evaluate the configuration fields a `!starlark` value reads through `ctx`:
+
+- `atmos list ... --columns`
+- `atmos describe stacks --sections` and `--query`
+- `atmos describe component --query`
+
+Atmos reads your Starlark source to find those fields. These reads have a known boundary, so the command evaluates only
+what they name:
+
+- `ctx.<section>["key"]`, and chains of subscripts such as `ctx.vars["network"]["cidr"]`
+- `ctx.<section>.get("key")` and `ctx.<section>.get("key", default)` with a string literal as the key
+- `ctx.stack`, `ctx.component`, and `ctx.component_type`
+
+The sections are `vars`, `metadata`, `settings`, `env`, and `locals`.
+
+Anything else falls back to evaluating the full component. That covers a whole section used as a value
+(`dict(ctx.vars)`, `json.encode(ctx.vars)`, iteration, or an alias such as `v = ctx.vars`), a computed key
+(`ctx.vars[name]`), `get` with a key that is not a string literal, `items()`, `keys()`, and `values()`, `ctx` passed to
+a function, a `ctx` field that does not exist, and source that does not parse. The fallback is always correct; it only
+costs the time of the full evaluation.
+
+A full `atmos describe component` with no `--query` always evaluates everything.
+
+Write reads in the bounded forms when a value feeds a command you run often, such as a column in `atmos list`:
+
+```yaml
+vars:
+  # Evaluates only vars.stage and settings.owner in selective commands.
+  label: !starlark |
+    return "%s/%s" % (ctx.vars["stage"], ctx.settings.get("owner", "platform"))
+```

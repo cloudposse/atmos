@@ -32,7 +32,9 @@ more depth. If a name is not listed here, check that page before concluding it d
   failure by default, with the last stderr lines in the error. Use `check=False` to assert
   an expected nonzero exit. Start failures (command not found, bad directory), cancellation,
   signals, and transport errors always raise. `output="stream"` (default) shows output live
-  and also captures it; `output="capture"` captures without showing. It inherits the
+  and also captures it; `output="capture"` captures without showing; `output="viewport"` shows live output in a bounded
+  viewport (streams without a TTY or in parallel tasks). A `check=True` failure that reaches the top exits Atmos with
+  the child's exit code. It inherits the
   effective execution environment without changing the global working directory or
   environment. Relative `working_directory` resolves against the step working directory.
 - `exec.which(name)`: absolute path of the executable `exec.run` would start for `name`, or `None`.
@@ -56,7 +58,8 @@ more depth. If a name is not listed here, check that page before concluding it d
   with a full argument list. Use it for hyphenated custom command names that cannot be
   attributes: `atmos.run(["my-command", "--flag=value"])`.
 - `atmos.terraform(command, component, stack, flags={}, args=[], working_directory=, env=, output=, check=)`
-  and `atmos.helm(...)`: structured component arguments. Pass the stack as the `stack`
+  and `atmos.helm(...)`: structured component arguments. `atmos.tf` is `atmos.terraform` (same keyword `component=`/`stack=`
+  signature and `detailed-exitcode` tolerance). Pass the stack as the `stack`
   argument, not as a `flags` entry. Prefer `deploy` over `apply` in non-interactive scripts.
 - `atmos.toolchain(command, tool=, flags=, args=, ...)`: explicit toolchain commands, for
   example `atmos.toolchain("install", "jqlang/jq@1.7.1")`. It behaves like the CLI and pins the

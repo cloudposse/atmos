@@ -1,6 +1,6 @@
 ---
 name: atmos-git
-description: "Atmos Git and GitOps: git.repositories, clone/pull/status/diff/commit/push/clean, local Git hook shims, signed commits, managed workdirs, fork-PR trust gate, and auth via identities or github/sts"
+description: "Atmos Git and GitOps: git.repositories, clone/pull/status/diff/commit/push/clean, local Git hook shims and hook env vars, signed commits, managed workdirs, fork-PR trust gate (clone gate and posting gate), and auth via identities or github/sts"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -57,7 +57,20 @@ Use identities or `github/sts` for private GitHub access. Do not put tokens in r
 | `atmos git clean <name>` | Remove managed workdirs |
 
 Use `atmos git hooks install`, `run`, and `uninstall` for local Git hook shims in the current
-repository.
+repository. Shims pin the absolute `atmos` path at install time and fall back to `PATH`.
+The `atmos git hooks run` command exits with the failing step's code (`fail()` exits 1,
+`errors.build().with_exit_code(5)` exits 5).
+
+### Git Hook Environment
+
+While a hook runs, shell steps get the hook arguments as `"$@"` and in `ATMOS_GIT_HOOK_ARGS`; Starlark
+steps get `ctx.args`. For `pre-push`, `pre-receive`, `post-receive`, `post-rewrite`,
+`reference-transaction`, and `proc-receive`, `ATMOS_GIT_HOOK_STDIN` is the path of a temp file holding the
+data Git piped in (removed when the hook ends; the first shell step still receives it on stdin).
+The `ATMOS_HOOK_DEPTH` variable counts nested hooks; a hook that reaches depth 8 fails with
+`hook recursion limit exceeded`. A later config source that switches a hook between `steps:` and `command:`
+replaces the earlier form. A prompt step without a `default:` fails under a non-TTY hook. Hook `print()`
+reaches stdout, so a hook on a data command must use `ui.*`.
 
 ## GitOps Guidance
 
@@ -86,3 +99,14 @@ credentials against untrusted code. Opt in explicitly and only with a documented
 `ci.allow_unsafe_fork_execution: true`; the bypass logs a prominent warning so it stays visible in
 CI logs and easy to grep for in review. Prefer `pull_request` (not `pull_request_target`) for
 workflows that clone and plan fork contributions, since `pull_request` withholds fork secrets.
+
+### Fork Posting Gate
+
+The clone gate has a second half for CI reporting. Under `pull_request_target` and `workflow_run`, the
+posting gate holds comments, commit statuses, `ci.env`/`ci.path` exports, and SARIF uploads for a fork
+pull request, from the `ci` script module and from native Terraform plan comments alike. Summaries,
+outputs, annotations, groups, and masks are never held. A fork means the head and base repository
+`full_name` differ; a deleted fork or an unreadable event payload counts as a fork, a repository that is
+itself a fork is not penalized, and a plain `pull_request` event is never gated.
+`ci.allow_unsafe_fork_execution` and `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` set the same key and release both
+the clone gate and the posting gate.

@@ -93,6 +93,33 @@ A before-hook has no operation outcome yet: status, exit code, and error are
 capture the parent command's stdout or stderr, and Terraform outputs are not
 automatically attached to the component context.
 
+## Keep data commands clean
+
+A hook script's `print()` writes to stdout, like `print()` anywhere else. When a hook is attached to a command that
+produces data, such as `terraform output -json`, anything the hook prints lands in the data a pipe or `jq` reads. Use
+`ui.info`, `ui.success`, and `ui.warning` for human messages in such hooks. They write to stderr and leave stdout clean:
+
+```python
+# Safe for: atmos terraform output vpc -s dev --format=json | jq .
+ui.success("Owner check passed")
+```
+
+## Nested Atmos calls and recursion
+
+Scripts in hooks can call Atmos itself with the [`atmos.*` functions](/functions/automation/atmos.run). The `--profile`
+and `--identity` selections you gave the parent command reach those nested calls, just as they do in standalone scripts
+and `type: atmos` steps, so a hook that runs `atmos.terraform(...)` uses the same profile and identity.
+
+A hook that runs the Atmos command it is attached to would start itself again. Atmos counts nesting in the
+`ATMOS_HOOK_DEPTH` environment variable: every hook runs with a value one higher than the command that triggered it, and
+a hook that reaches depth 8 fails with `hook recursion limit exceeded`, naming the hook and the event. Scope the hook to
+the event that needs it, or check `ATMOS_HOOK_DEPTH` to guard the command it runs.
+
+## Interrupting a hook
+
+Ctrl-C cancels the running script, runs its [`defer`](/functions/automation/defer) calls with a 30 second grace period,
+and exits with status 130 without an error box. A second Ctrl-C exits immediately.
+
 ## Choose events and failure behavior
 
 Declare the events your hook handles explicitly. Use before-events for checks

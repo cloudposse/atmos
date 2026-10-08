@@ -49,10 +49,13 @@ The return value is `None`.
 - **Runs after `fail()`.** The original error is still the script's error. A failure inside a deferred call is
   reported after it and never masks it. When the body succeeded, a failing deferred call fails the script. The
   remaining deferred calls still run.
-- **Runs after cancellation.** When Atmos is interrupted, for example with Ctrl-C, the script's own context is
-  cancelled and deferred calls run on a fresh context with a 30 second grace period, so `exec.run` and `atmos.*`
-  calls inside them still work. This is the automation-language form of a shell `trap ... EXIT`; scripts never
-  install signal handlers themselves.
+- **Runs after cancellation.** The first Ctrl-C (SIGINT) cancels the script's own context, runs the deferred calls on
+  a fresh context with a 30 second grace period, so `exec.run` and `atmos.*` calls inside them still work, and then
+  exits with status 130. The exit is silent: Atmos prints no error box, like a shell, unless a deferred call fails, in
+  which case that failure is reported and the status is still 130. A second Ctrl-C exits immediately without waiting
+  for the remaining deferred calls. This holds for every embedded script session (standalone scripts, `script`
+  steps, custom commands, workflows, and hooks). It is the automation-language form of a shell `trap ... EXIT`;
+  scripts never install signal handlers themselves.
 - **Nested registration.** A deferred call may itself call `defer`; the new call runs after it.
 
 ## Examples

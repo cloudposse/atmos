@@ -4,19 +4,19 @@
 
 ## Overview (IMPLEMENTED)
 
-The generic CI provider is the local renderer on a workstation and the fallback for unknown CI under `--ci`. It never posts anything to a remote service. Every CI operation that a real provider would perform remotely (comments, annotations, SARIF upload, log groups, environment export) has a local rendering that is safe to run anywhere.
+The generic CI provider is the local renderer on a workstation and the stand-in provider for unknown CI under forced CI mode. It never posts anything to a remote service. Every CI operation that a real provider would perform remotely (comments, annotations, SARIF upload, log groups, environment export) has a local rendering that is safe to run anywhere.
 
-It is **never auto-detected** — `Detect()` always returns `false` and is unchanged. Callers reach it through `ci.ResolveProvider()`, which returns the detected provider when one matches and the generic provider otherwise.
+Its `Detect()` always returns `false` and is unchanged, so it never wins provider detection on its own. Callers reach it in two ways: as the local fallback when no provider matches, and as the detected provider when CI mode is forced.
 
-## Detection
+## Selection
 
-The generic provider does NOT auto-detect. It is selected by `ci.ResolveProvider()` (`pkg/ci/registry_provider.go`):
+`Detect()` across the registered providers (GitHub, etc.) is unchanged, and the generic provider never matches it. The `ci.Reporter` (`pkg/ci/reporter.go`, `NewReporter`) selects it as follows:
 
-1. Run `Detect()` across the registered providers (GitHub, etc.).
-2. If a provider matches, return it.
-3. Otherwise, return `Get("generic")`.
+1. If a registered provider is detected, the reporter uses it, with the generic provider as the local fallback for gated or unsupported writes.
+2. Otherwise, if CI mode is forced (`--ci`, `ATMOS_CI` truthy, or `CI` truthy), the generic provider becomes the **detected** provider. The `ci.*` gates apply as on a real platform, the context reports `Provider=generic` with `ci.context.local` false, and the `ATMOS_CI_OUTPUT`, `ATMOS_CI_SUMMARY`, `ATMOS_CI_ENV`, and `ATMOS_CI_PATH` files are written when set.
+3. Otherwise there is no detected provider and every write renders locally through the generic provider (`Local=true`, `ci.context.local` true).
 
-The executor uses the same fallback when `--ci` is set (or `CI`/`ATMOS_CI` env var is true) and no specific provider is detected. On a workstation, callers such as the `ci.Reporter` use `ResolveProvider()` to render locally instead of failing.
+`ci.ResolveProvider()` (`pkg/ci/registry_provider.go`), which returns the detected provider or the generic one, remains the helper for callers that need only a provider to run on, such as the native plugin executor under `--ci`. The Reporter does not use it.
 
 ## Context Resolution (IMPLEMENTED)
 
@@ -44,12 +44,13 @@ Fields NOT populated: `RunNumber`, `Workflow`, `Job`, `Ref`.
 
 | Capability | Supported | Details |
 |-----------|-----------|---------|
-| **OutputWriter** | Yes | `WriteOutput` uses the shared collision-safe heredoc formatter (`pkg/github/actions.FormatValue`, delimiter `ATMOS_EOF_<KEY>`) and appends to the `$ATMOS_CI_OUTPUT` file, or renders the formatted line locally if unset |
+| **OutputWriter** | Yes | `WriteOutput` uses the shared collision-safe heredoc formatter (`provider.FormatOutputLine` in `pkg/ci/internal/provider`, delimiter `ATMOS_EOF_<KEY>`) and appends to the `$ATMOS_CI_OUTPUT` file, or renders the same formatted line locally if unset (the heredoc form for a multiline value) |
 | **Summary** | Yes | Masks the content, then appends to the `$ATMOS_CI_SUMMARY` file; without a file, renders the markdown locally (see [Rendering](#rendering)) |
-| **Check Runs** | Yes | Synthetic in-memory check runs with IDs from a shared `atomic.Int64` counter, logged via `ui` |
-| **PostComment** | Yes (local) | Renders a masked preview and returns a synthetic `Comment` (`Created=true`, empty `URL`, ID from a shared `atomic.Int64` counter). Never posts. |
-| **Annotate** | Yes (local) | One line per annotation: `path:line: title: message`, omitting empty parts, emitted as error, warning, or info by level |
-| **ReportSARIF** | Yes (local) | One info line with the category and byte count, noting that nothing was uploaded |
+| **Check Runs** | Yes | Synthetic in-memory check runs with IDs from a shared `atomic.Int64` counter, logged via `ui`, with a `URL:` line when a details URL exists |
+| **PostComment** | Yes (local) | Renders a masked preview and returns a synthetic `Comment` (empty `URL`, ID from a shared `atomic.Int64` counter). Never posts. An in-process ledger of rendered markers makes `behavior=update` with no earlier comment fail with `ErrCICommentNotFound`, as it does on GitHub. |
+| **CommitCommenter** | Yes (local) | `PostCommitComment` renders a `commit comment preview (...)` the same way, with its own marker ledger scoped to the commit |
+| **Annotate** | Yes (local) | One line per annotation: `path:line: level: message (title)`, omitting empty parts, emitted as error, warning, or info by level |
+| **ReportSARIF** | Yes (local) | One info line naming the category, the file when known, and the byte count, with the reason the report was not uploaded (the switch that is off, or that no CI provider is detected) |
 | **LogGrouper** | Yes (local) | `StartLogGroup` prints a heading line; `EndLogGroup` is a no-op |
 | **EnvExporter** | Yes (local) | See [Environment export](#environment-export) |
 | **OutputBinder** | Yes | `BindOutput(io.Writer)` routes every local rendering to the caller's writer |
@@ -61,7 +62,7 @@ Summary and comment-preview bodies are emitted **raw** when the provider is unbo
 
 ### PostComment validation
 
-The generic `PostComment` is deliberately lenient because a laptop run usually has no pull request number and often no owner or repo. It validates only that `Body` is non-empty and, when a `Marker` is set, that the marker appears in the body (otherwise future upserts would create duplicates). It does not require owner, repo, or PR number. The preview header is `PR comment preview (<behavior>, PR #<n>)`, and omits the PR number when it is 0. Failures wrap `ErrCICommentPostFailed`.
+The generic `PostComment` is deliberately lenient because a laptop run usually has no pull request number and often no owner or repo. It validates only that `Body` is non-empty and, when a `Marker` is set, that the marker appears in the body (otherwise future upserts would create duplicates). It does not require owner, repo, or PR number. The preview header is `PR comment preview (<behavior>, PR #<n>)`, and omits the PR number when it is 0. A commit comment reads `commit comment preview (<behavior>, commit <sha7>)`. Failures wrap `ErrCICommentPostFailed`.
 
 ### Environment export
 
@@ -69,9 +70,9 @@ The generic `PostComment` is deliberately lenient because a laptop run usually h
 
 | Variable set | Behavior |
 |--------------|----------|
-| `ATMOS_CI_ENV` | `WriteEnv(key, value)` appends a `ghactions.FormatValue`-formatted line to the file |
+| `ATMOS_CI_ENV` | `WriteEnv(key, value)` appends a `provider.FormatOutputLine`-formatted line (`KEY=value`, heredoc for multiline) to the file |
 | `ATMOS_CI_PATH` | `AddPath(dir)` appends `dir` to the file in the same format |
-| Unset | `WriteEnv` prints `export KEY='value'`; `AddPath` prints `export PATH='<dir>':"$PATH"` to the UI channel (stderr) or the bound writer, ready to `eval` in a shell |
+| Unset | `WriteEnv` prints `export KEY=value`; `AddPath` prints `export PATH=<dir>:"$PATH"` to the UI channel (stderr) or the bound writer, ready to `eval` in a shell. Values are shell-quoted only when they need quoting (`shellescape.Quote`). |
 
 Failures wrap `ErrCIEnvWriteFailed`.
 

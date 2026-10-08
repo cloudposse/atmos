@@ -209,9 +209,11 @@ ci:
 <dl>
   <dt>`ci.templates.base_path`</dt>
   <dd>
-    Directory containing custom template files, relative to the repository root.
+    Directory containing custom template files. A relative path resolves against the Atmos
+    [`base_path`](/cli/configuration#base-path). The `.atmos/ci/templates` value in the examples is a suggested
+    location, not a default.
 
-    **Default:** `.atmos/ci/templates`
+    **Default:** None
   </dd>
 
   <dt>`ci.templates.terraform.plan`</dt>
