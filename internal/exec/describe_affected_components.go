@@ -804,7 +804,7 @@ func processCloudFormationComponentsIndexed(
 	patternCache *componentPathPatternCache,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
-	excludeLocked bool,
+	filter AffectedFilter,
 ) ([]schema.Affected, error) {
 	var affected []schema.Affected
 
@@ -815,7 +815,11 @@ func processCloudFormationComponentsIndexed(
 		}
 
 		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
-		if hasMetadata && shouldSkipComponent(metadataSection, componentName, excludeLocked) {
+		// A selector (--tags/--labels) can only match metadata, so components without a metadata section are excluded.
+		if !hasMetadata && filter.selectorsApplyNow() {
+			continue
+		}
+		if hasMetadata && shouldSkipComponent(metadataSection, componentName, filter) {
 			continue
 		}
 

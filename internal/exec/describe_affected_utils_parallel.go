@@ -237,7 +237,7 @@ func processStackAffected(
 			patternCache,
 			includeSpaceliftAdminStacks,
 			includeSettings,
-			excludeLocked,
+			filter,
 		)
 		if err != nil {
 			return nil, err
