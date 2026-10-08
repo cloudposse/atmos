@@ -274,16 +274,11 @@ artifacts (Terraform-only). See [ci-and-listing](references/ci-and-listing.md#na
 
 Seven lifecycle pairs fire hook events: `before`/`after` × `diff` (`plan` normalizes to `diff`),
 `apply` (`deploy` normalizes to `apply`), `delete`, `drift detect`, `drift describe`,
-`changeset create`, and `changeset execute` — e.g. `after.aws/cloudformation.apply`,
-`before.aws/cloudformation.drift-detect`, `after.aws/cloudformation.drift-describe`,
-`before.aws/cloudformation.changeset-create`, and `before.aws/cloudformation.changeset-execute`.
-Hyphens inside command names are meaningful. The changeset events are separate from `apply` and are
-not aliases of it; add them to a packaging hook's `events:` list for a `changeset create` /
-`changeset execute` workflow. Every other verb (`render`, `validate`, `output`, `fmt`, `tree`,
-`logs`, `watch`, `changeset list`/`delete`, `get *`, `stackset *`, `list`, `backend *`, `source *`)
-fires none. The hook-firing verbs accept `--skip-hooks`
-(no value skips all; `--skip-hooks=a,b` skips named hooks) and honor `ATMOS_SKIP_HOOKS`, as
-`atmos terraform` does. See [atmos-hooks](../atmos-hooks/SKILL.md) for the `hooks:` block shape.
+`changeset create`, and `changeset execute` — e.g. `before.aws/cloudformation.changeset-create`.
+Hyphens inside command names are meaningful. The changeset events are not aliases of `apply`; add
+them to a packaging hook's `events:` list. Every other verb fires none. Hook-firing verbs accept `--skip-hooks` (no value skips all; `--skip-hooks=a,b` skips named
+hooks) and honor `ATMOS_SKIP_HOOKS`, as `atmos terraform` does. See
+[atmos-hooks](../atmos-hooks/SKILL.md) for the `hooks:` block shape.
 
 ## Secrets
 
@@ -298,18 +293,11 @@ the presentation boundary; direct AWS responses remain outside this protection. 
 
 ## Migrating from Rain or Raw CloudFormation
 
-There is no Rain CLI or config-file compatibility layer, and no `!Rain::` directive preprocessing —
-`aws/cloudformation` reads a component's `path:` template as raw bytes and submits it unmodified.
-Existing templates are pointed at (or `!include`d for parameter files), not rewritten. See
-[atmos-migration](../atmos-migration/SKILL.md)'s `references/from-rain.md` for the full `!Rain::`
-directive mapping table (`Constant`, `Env`, `Include`, `Embed`, `S3`, `S3Http`, `Module`) and the
-Rain-verb-to-`atmos aws cloudformation`-verb cross-reference (`fmt`→`fmt`, `cat`→`get template`,
-`ls`→`list`, `bootstrap`→`backend create`, `logs`→`logs`, `rm`→`delete`,
-`stackset deploy|ls|rm`→`stackset create|update|instances|delete`). `rain tree` (local-template
-dependency graph) is not equivalent to Atmos `tree` (deployed nested-stack tree), and `rain diff`
-(compares two templates) is not `plan`/`diff` (changeset against the deployed stack).
-A `path:` template still containing `!Rain::` directives fails locally with
-`ErrAwsCloudFormationRainDirective` (directives listed, one replacement hint each).
+There is no Rain compatibility layer: a `path:` template is submitted as written, and one that still
+contains `!Rain::` directives fails locally with `ErrAwsCloudFormationRainDirective` and one
+replacement hint per directive. Route every directive, config-file, and verb mapping question to
+[atmos-migration](../atmos-migration/SKILL.md)'s `references/from-rain.md`; do not restate the
+tables here.
 
 ## Guidance
 
