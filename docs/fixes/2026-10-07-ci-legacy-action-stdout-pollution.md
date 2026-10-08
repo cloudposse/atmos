@@ -26,11 +26,16 @@ annotations and log groups behave differently:
 
 ## Context
 
-- Reported in issue #3309; the startup banner was introduced in #3004
-  (`feat(ci): startup banner for CI/Pro status and legacy-action detection`),
-  which first shipped in v1.228.0.
-- Affected versions: last known good 1.227.0; every release from v1.228.0 onward
-  is affected (the reporter hit it on 1.238.1).
+- Reported in issue #3309. The legacy-action startup banner framework landed in
+  #3004 (`feat(ci): startup banner for CI/Pro status and legacy-action
+  detection`, v1.228.0), but that version emitted the deprecation notice only to
+  stderr. The specific stdout-polluting line — the `::warning` annotation
+  emitted via the data channel — was added later in #3177 (`fix(ci): improve
+  legacy action migration guidance and docs release labels`), which first
+  shipped in v1.230.0.
+- Affected versions: every release from v1.230.0 onward (the reporter hit it on
+  1.238.1); last known good 1.227.0. v1.228.0-v1.229.x carry the banner but not
+  the stdout annotation, so they are unaffected.
 - Design discussion on PR #3310 (superseded by this change) concluded: keep
   annotations on stderr always; disable grouping in detected legacy actions
   rather than moving group markers to stderr (which would desynchronize the
