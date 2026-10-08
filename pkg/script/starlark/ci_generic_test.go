@@ -121,11 +121,13 @@ ci.summary("## Done")`})
 
 func TestCIGenericMaskRedactsLaterOutput(t *testing.T) {
 	const secret = "hunter2-masked-value"
+	// The surrounding words avoid credential keywords on purpose: the process-wide masker also
+	// applies pattern rules, and a phrase such as "token is" can match one of them wholesale.
 	_, stderr, err := runGeneric(t, nil, `ci.mask("`+secret+`")
-ci.summary("token is `+secret+`")`)
+ci.summary("the value is `+secret+`")`)
 	require.NoError(t, err)
 	assert.NotContains(t, stderr, secret)
-	assert.Contains(t, stderr, "token is")
+	assert.Contains(t, stderr, "the value is")
 }
 
 func TestCIGenericCommentReturnsASyntheticIDStartingAtOne(t *testing.T) {

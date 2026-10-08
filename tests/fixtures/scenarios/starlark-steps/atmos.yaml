@@ -552,9 +552,13 @@ commands:
           FT_KEPT: !literal '{{ kept }}'
           FT_RENDERED: '{{ printf "rendered" }}'
         steps:
+          # A direct shell child runs through COMSPEC on Windows, where $VAR is not expanded;
+          # steps.shell uses the built-in POSIX interpreter on every OS and inherits the parent env.
           - name: child
-            type: shell
-            command: echo "kept=$FT_KEPT rendered=$FT_RENDERED"
+            type: script
+            interpreter: starlark
+            script: |
+              steps.shell(command = 'echo "kept=$FT_KEPT rendered=$FT_RENDERED"')
 
   - name: ft-literal-timeout-braces
     description: A !literal timeout is parsed as written, so the braces are an invalid duration
