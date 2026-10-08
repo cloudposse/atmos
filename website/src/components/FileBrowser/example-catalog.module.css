@@ -1,4 +1,6 @@
 .page {
+  width: 100%;
+  box-sizing: border-box;
   background: var(--atmos-docs-surface);
   color: var(--atmos-docs-text);
   min-height: 100vh;
