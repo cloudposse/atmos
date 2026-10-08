@@ -816,6 +816,7 @@ var (
 	ErrFailedToGetGitHubOIDCToken   = errors.New("failed to get GitHub OIDC token")
 	ErrFailedToUploadInstances      = errors.New("failed to upload instances")
 	ErrFailedToUploadInstanceStatus = errors.New("failed to upload instance status")
+	ErrPayloadTooLarge              = errors.New("request exceeded the Atmos Pro body size limit")
 	ErrUploadRetryExhausted         = errors.New("upload failed after all retries")
 	ErrTokenRefreshFailed           = errors.New("failed to refresh API token")
 	ErrFailedToUnmarshalAPIResponse = errors.New("failed to unmarshal API response")
