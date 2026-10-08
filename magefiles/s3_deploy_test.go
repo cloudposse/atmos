@@ -14,8 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/internal/mimeutil"
 )
 
 func writeS3TestFile(t *testing.T, root, relative, content string) string {
@@ -37,7 +35,7 @@ func TestS3DeployContentType(t *testing.T) {
 		"unknown.zzz":   {detected: "text/plain; charset=utf-8", expected: "text/plain; charset=utf-8"},
 	}
 	for path, test := range tests {
-		assert.Equal(t, test.expected, mimeutil.ContentType(path, test.detected), path)
+		assert.Equal(t, test.expected, s3DeployContentType(path, test.detected), path)
 	}
 
 	// Go augments its MIME table from the operating system. macOS registers
@@ -45,7 +43,7 @@ func TestS3DeployContentType(t *testing.T) {
 	assert.Contains(
 		t,
 		[]string{"application/xml; charset=utf-8", "text/xml; charset=utf-8"},
-		mimeutil.ContentType("feed.xml", "text/plain; charset=utf-8"),
+		s3DeployContentType("feed.xml", "text/plain; charset=utf-8"),
 	)
 }
 

@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"mime"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -204,9 +203,6 @@ func objectMatches(remote *s3.HeadObjectOutput, input *s3.PutObjectInput) bool {
 func resolveContentType(file io.ReadSeeker, filename, override string) (string, error) {
 	if override != "" {
 		return override, nil
-	}
-	if contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(filename))); contentType != "" {
-		return mimeutil.ContentType(filename, contentType), nil
 	}
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return "", err

@@ -109,7 +109,7 @@ func TestUploadDirectoryAndPreservesRemote(t *testing.T) {
 	assert.Equal(t, []string{"s3://artifacts/releases/a.txt", "s3://artifacts/releases/nested/b.json"}, result.URIs)
 	assert.Equal(t, 2, result.Uploaded)
 	assert.Equal(t, "keep", client.bodies["releases/old.txt"])
-	assert.Equal(t, "application/json; charset=utf-8", aws.ToString(client.objects["releases/nested/b.json"].ContentType))
+	assert.Equal(t, "application/json", aws.ToString(client.objects["releases/nested/b.json"].ContentType))
 	require.NoError(t, os.Remove(filepath.Join(source, "a.txt")))
 	result, err = Upload(t.Context(), client, Options{Source: source, Destination: "s3://artifacts/releases"})
 	require.NoError(t, err)

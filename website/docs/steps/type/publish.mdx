@@ -136,7 +136,7 @@ The step has no `action` field.
   <dt>`bucket`</dt><dd>Required existing S3 bucket.</dd>
   <dt>`region`</dt><dd>Required bucket region.</dd>
   <dt>`prefix`</dt><dd>Optional relative key prefix. Files are published below this prefix.</dd>
-  <dt>`content_type`</dt><dd>Optional MIME type applied to every file. Defaults to detection by extension, then file contents.</dd>
+  <dt>`content_type`</dt><dd>Optional Content-Type header applied verbatim to every file, including any explicit charset. By default, the MIME type uses the filename extension with content detection as a fallback. Text charsets come from content detection, not extension defaults; an undetected charset is omitted. Detection samples the file and does not transcode its bytes.</dd>
   <dt>`cache_control`</dt><dd>Optional Cache-Control header. Omitting it clears a previously configured value on the next upload.</dd>
   <dt>`auth`</dt><dd>Optional target authentication, such as `auth: {identity: artifacts-writer}`.</dd>
 </dl>

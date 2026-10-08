@@ -18,11 +18,16 @@ func TestUploadContentTypesAndRepairHeaders(t *testing.T) {
 	files := map[string]struct{ body, contentType string }{
 		"index.HTML":            {"<!doctype html><title>Résumé</title>", "text/html; charset=utf-8"},
 		"app.js":                {"console.log('hello');", "text/javascript; charset=utf-8"},
-		"data.json":             {`{"message":"Résumé"}`, "application/json; charset=utf-8"},
-		"feed.svg":              {`<svg xmlns="http://www.w3.org/2000/svg"></svg>`, "image/svg+xml; charset=utf-8"},
-		"manifest.atmosunknown": {`{"message":"Résumé"}`, "application/json; charset=utf-8"},
+		"data.json":             {`{"message":"Résumé"}`, "application/json"},
+		"feed.svg":              {`<svg xmlns="http://www.w3.org/2000/svg"></svg>`, "image/svg+xml"},
+		"manifest.atmosunknown": {`{"message":"Résumé"}`, "application/json"},
 		"binary.atmosunknown":   {"\x00\x01\x02\x03", "application/octet-stream"},
 	}
+	files["latin1.txt"] = struct{ body, contentType string }{"caf\xe9\n", "text/plain; charset=iso-8859-1"}
+	files["utf16le.js"] = struct{ body, contentType string }{"\xff\xfe\x74\x00\x68\x00\x69\x00\x73\x00", "text/javascript; charset=utf-16le"}
+	files["utf16be.txt"] = struct{ body, contentType string }{"\xfe\xff\x00\x74\x00\x68\x00\x69\x00\x73", "text/plain; charset=utf-16be"}
+	files["legacy.html"] = struct{ body, contentType string }{`<html><head><meta charset="iso-8859-1"></head><body>hello</body></html>`, "text/html; charset=iso-8859-1"}
+	files["binary.txt"] = struct{ body, contentType string }{"\x00\x01\x02\x03", "text/plain"}
 	for name, file := range files {
 		writeSource(t, filepath.Join(root, name), file.body)
 	}
@@ -35,13 +40,13 @@ func TestUploadContentTypesAndRepairHeaders(t *testing.T) {
 		assert.Equal(t, file.contentType, aws.ToString(client.objects["site/"+name].ContentType), name)
 		assert.Equal(t, file.body, client.bodies["site/"+name], "detection must not truncate the uploaded body")
 	}
-	// Repair the old header even though the checksum and size still match.
-	client.objects["site/data.json"].ContentType = aws.String("application/json")
+	// Repair an assumed UTF-8 header even though the checksum and size still match.
+	client.objects["site/data.json"].ContentType = aws.String("application/json; charset=utf-8")
 	result, err = Upload(t.Context(), client, opts)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Uploaded)
 	assert.Equal(t, len(files)-1, result.Unchanged)
-	assert.Equal(t, "application/json; charset=utf-8", aws.ToString(client.objects["site/data.json"].ContentType))
+	assert.Equal(t, "application/json", aws.ToString(client.objects["site/data.json"].ContentType))
 	result, err = Upload(t.Context(), client, opts)
 	require.NoError(t, err)
 	assert.Zero(t, result.Uploaded)
