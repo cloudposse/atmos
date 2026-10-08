@@ -64,8 +64,10 @@ jobs:
 ```
 </File>
 
-The `affected` job emits a matrix of `{component, stack}` pairs and the number of entries in it; the `deploy` job spreads across the matrix in parallel. When nothing is affected, the matrix is `{"include":[]}` rather than an empty string, so the `deploy` job tests `count != '0'` to skip itself instead of failing on an empty matrix. In CI, Atmos writes `matrix` and `count` to `$GITHUB_OUTPUT` automatically; elsewhere, pass `--output-file="$GITHUB_OUTPUT"`.
+The `affected` job outputs a matrix of `{component, stack}` pairs and a `count`. The `deploy` job checks `count != '0'`
+to skip empty matrices (`{"include":[]}`). With `ci.enabled: true`, Atmos writes these outputs to `$GITHUB_OUTPUT`
+automatically; otherwise, pass `--output-file="$GITHUB_OUTPUT"`.
 
-:::tip Keep privileged components out of the matrix
-Add `--labels=ci=auto` to the `atmos describe affected` command to exclude components such as `iam` or `tfstate-backend` from the matrix. See [Keeping privileged components out of CI](/ci#keeping-privileged-components-out-of-ci).
-:::
+Add `--labels=ci:auto` to select components labeled for this workflow. See
+[Choosing which components run in CI](/ci#keeping-privileged-components-out-of-ci) for components needing different
+permissions or network connectivity.

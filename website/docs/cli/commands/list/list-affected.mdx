@@ -61,13 +61,12 @@ atmos list affected --tags=production,tier-1
 atmos list affected --labels=ci=auto
 ```
 
-The selectors use the same matching rules as [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels): `--tags` matches any tag, `--labels` matches all of the given pairs, and matching is positive only. Matching is case-sensitive, a label key given more than once keeps its last value, and a component without a `metadata` section (or without `metadata.tags` or `metadata.labels`) never matches.
+Tags match any supplied tag; labels match all supplied `key=value` or `key:value` pairs. See the
+[shared matching rules](/cli/commands/describe/affected#selector-matching-rules) for case sensitivity, missing metadata,
+and deleted components.
 
-:::note
-The environment variables for these flags are `ATMOS_COMPONENT_TAGS` and `ATMOS_COMPONENT_LABELS`. `atmos list affected` does not read `ATMOS_TAGS` or `ATMOS_LABELS`, which are the variables of `atmos describe affected` and `atmos terraform`, so a job-level `ATMOS_LABELS` does not change what this command lists.
-:::
-
-Deleted components (`deleted: true`, including every component of a deleted stack) are filtered the same way, using their `metadata` from the base ref.
+This command reads `ATMOS_COMPONENT_TAGS` and `ATMOS_COMPONENT_LABELS`, independently of the `ATMOS_TAGS` and
+`ATMOS_LABELS` variables used by `describe affected` and Terraform.
 
 Output in different formats:
 ```shell
@@ -151,7 +150,7 @@ atmos list affected --repo-path /tmp/target-repo
   <dd>Filter results to a specific stack.<br/>Environment variable: `ATMOS_STACK`</dd>
 
   <dt>`--include-dependents`</dt>
-  <dd>Resolve the components that depend on each affected component and include them as separate rows with depth indicators. Dependent rows have the affected reason `dependent`. With `--tags` or `--labels`, dependents that do not match are left out, and the matching dependents of a component that does not match are kept, as in [`atmos describe affected`](/cli/commands/describe/affected#filtering-by-tags-and-labels).<br/>Environment variable: `ATMOS_AFFECTED_INCLUDE_DEPENDENTS`</dd>
+  <dd>Include dependents as separate rows with depth indicators and reason `dependent`. Tags and labels filter these rows while retaining matching descendants of excluded components; see [dependent filtering](/cli/commands/describe/affected#filtering-and-flattening-dependents).<br/>Environment variable: `ATMOS_AFFECTED_INCLUDE_DEPENDENTS`</dd>
 
   <dt>`--exclude-locked`</dt>
   <dd>Exclude components with `metadata.locked: true` from results, including deleted components that were locked in the base ref.<br/>Environment variable: `ATMOS_AFFECTED_EXCLUDE_LOCKED`</dd>

@@ -14,11 +14,9 @@ import Intro from '@site/src/components/Intro'
 Use this command to clear local session data (tokens, cached credentials) while preserving your keychain credentials for faster re-authentication. This is useful when switching identities, ending work sessions, or troubleshooting authentication issues.
 </Intro>
 
-:::tip Safe by Default
 By default, `atmos auth logout` preserves your **keychain credentials** (IAM user access keys, service account credentials) to enable instant re-authentication. It only clears **session data** (AWS SSO tokens, temporary credentials).
 
 To also delete keychain credentials, use the `--keychain` flag. This requires interactive confirmation for safety (bypass with `--force` in CI/CD).
-:::
 
 :::warning Browser Sessions Remain Active
 This command only removes **local credentials**. It does **not** log you out of web-based sessions with your identity provider (AWS SSO, Okta, etc.). Your browser sessions remain active until you explicitly sign out from the identity provider's website.
@@ -264,11 +262,10 @@ Understanding what gets removed:
 | `atmos auth logout --all` | **Preserved** | **Cleared** | **All profiles removed** | Clean session data |
 | `atmos auth logout --all --keychain` | **Deleted** | **Cleared** | **All profiles removed** | Complete cleanup |
 
-:::tip Safe by Default
 Without `--keychain`, logout preserves your stored credentials (IAM user keys, service account creds) for instant re-authentication. It only clears session data (AWS SSO tokens, temporary credentials).
-:::
 
-:::note Ambient Providers
+### Ambient Providers
+
 Some providers re-resolve the active principal from ambient state on every login rather than
 holding credentials of their own:
 
@@ -287,15 +284,12 @@ These have nothing to preserve in the keychain, so logout always clears their en
 or not you pass `--keychain`. Nothing is lost — the next `atmos auth login` re-resolves from
 the source above. Logout also does not fail when there is no entry to remove, which is the
 normal state for these providers.
-:::
 
 :::danger Permanent Deletion
 Using `--keychain` permanently deletes credentials from your system keychain. You'll need to re-enter IAM user access keys or re-authenticate service accounts when logging in again.
 :::
 
-:::tip Re-authentication
 All logout commands preserve your `atmos.yaml` configuration. Run `atmos auth login` to re-authenticate with any configured identity.
-:::
 
 ## Arguments
 

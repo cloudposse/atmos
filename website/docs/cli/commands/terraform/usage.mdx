@@ -450,12 +450,12 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 
     <dt>`--include-dependents` <em>(optional; requires a multi-component selection)</em></dt>
     <dd>
-        For each selected component, detect the components that depend on it and process them in dependency order, recursively.
-        Dependents are components that are not selected themselves, but are configured as [dependencies](/stacks/dependencies/components) of the components that are.
+        Recursively process components that depend on the selection, in dependency order.
         Works with any multi-component selection (`--all`, `--components`, `--query`, `--stack`, `--tags`, `--labels`, `--affected`).
-        Dependents added by this flag honour `--tags` and `--labels`: a dependent that does not match is skipped, while its matching dependents still run and keep their dependency order.
-        A selected component that does not match `--tags` or `--labels` is skipped the same way, and the matching components that depend on it still run, mirroring [`atmos describe affected`](/cli/commands/describe/affected).
-        As a result, `--tags` or `--labels` with `--include-dependents` and no other selection is equivalent to `--tags` or `--labels` alone.
+        Tags and labels filter both the initial selection and its dependents: non-matching components are skipped,
+        but their matching descendants remain in dependency order, as with
+        [`atmos describe affected`](/cli/commands/describe/affected#filtering-and-flattening-dependents).
+        With only tags or labels as the selection, adding `--include-dependents` does not expand the result.
 
         Accepts an optional depth: the bare flag expands the full dependent chain, while `--include-dependents=2` bounds the expansion to two levels.
         Pass the depth with `=`; a space-separated value is not bound to the flag. Values `true` and `false` are accepted for backward compatibility (unlimited and off).

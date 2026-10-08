@@ -34,6 +34,10 @@ Move Terraform CI features from wrapper actions into Atmos itself. Native comman
 
 ### Opting Components Out of CI
 
-The legacy actions used `settings.github.actions_enabled` to decide which components CI could run. Native CI does not read that setting, so a component is in scope for CI unless you select it out. To get the same effect, label the components and filter the matrix with `--labels`: give every component a default label such as `ci: auto`, override it with `ci: manual` on privileged components like `iam` or `tfstate-backend`, and build the matrix with `atmos describe affected --format=matrix --labels=ci=auto`. See [Keeping privileged components out of CI](/ci#keeping-privileged-components-out-of-ci) for the full pattern, including an OPA policy that blocks those components if they run in CI anyway.
+Native CI does not read the legacy Atmos GitHub Actions setting `settings.github.actions_enabled`. Instead, set a default
+label such as `ci: auto`, override it on excluded components, and build the matrix with
+`atmos describe affected --format=matrix --labels=ci:auto`. See
+[Choosing which components run in CI](/ci#keeping-privileged-components-out-of-ci) for components requiring different
+credentials, manual execution, or network access.
 
 The [deprecated action documentation](/deprecated/github-actions) remains available for maintaining existing workflows during migration.
