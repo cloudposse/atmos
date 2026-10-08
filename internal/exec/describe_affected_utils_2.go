@@ -640,6 +640,9 @@ type dependentsOptions struct {
 	// Filter holds the `--tags` / `--labels` selectors. When it has selectors, each dependent's `metadata`
 	// is recorded as the dependents are resolved so the nested lists can be pruned afterward.
 	Filter AffectedFilter
+	// RecordMetadata records each dependent's `metadata` even without selectors. `--exclude-locked` with
+	// `--flatten` needs it to tell which lifted dependents are locked.
+	RecordMetadata bool
 
 	// stacks and depIdx are resolved once by addDependentsToAffectedWithFilter and shared by every step.
 	stacks map[string]any
@@ -711,6 +714,19 @@ func addDependentsToAffectedWithFilter(
 	return nil
 }
 
+// needsDependentMetadata reports whether each resolved dependent must record its `metadata` section:
+// to apply the `--tags` / `--labels` selectors, or to honour `--exclude-locked` when dependents are lifted.
+func (o *dependentsOptions) needsDependentMetadata() bool {
+	return o.Filter.hasSelectors() || o.RecordMetadata
+}
+
+// isExcludedLockedDependent reports whether the dependent is locked (`metadata.locked: true`) and the filter
+// excludes locked components. It needs the metadata recorded by attachDependentMetadata; a dependent
+// without recorded metadata is never reported as locked.
+func (f AffectedFilter) isExcludedLockedDependent(d *schema.Dependent) bool {
+	return f.ExcludeLocked && d.Metadata != nil && isComponentLocked(d.Metadata)
+}
+
 // addDependentsToAffectedItem resolves the (nested) dependents of one affected component from the
 // pre-computed stacks and reverse dependency index.
 func addDependentsToAffectedItem(
@@ -728,7 +744,7 @@ func addDependentsToAffectedItem(
 		return nil
 	}
 
-	if opts.Filter.hasSelectors() {
+	if opts.needsDependentMetadata() {
 		attachDependentMetadata(deps, opts.stacks)
 	}
 	a.Dependents = deps
@@ -779,7 +795,7 @@ func addDependentsToDependents(
 			continue
 		}
 
-		if opts.Filter.hasSelectors() {
+		if opts.needsDependentMetadata() {
 			attachDependentMetadata(deps, opts.stacks)
 		}
 		d.Dependents = deps
@@ -876,7 +892,8 @@ func topLevelAffectedMetadata(a *schema.Affected, stacks map[string]any) map[str
 //     reason "dependent", unless the same component is already a top-level item or was already promoted.
 //
 // `included_in_dependents` is recomputed for the result, and the transient dependent metadata is cleared.
-// Without selectors the input is returned unchanged.
+// With `--exclude-locked`, a locked dependent is never promoted. Without selectors the input is returned
+// unchanged.
 func applySelectorsToAffectedForest(affected []schema.Affected, filter AffectedFilter, stacks map[string]any) []schema.Affected {
 	if !filter.hasSelectors() {
 		return affected
@@ -899,16 +916,7 @@ func applySelectorsToAffectedForest(affected []schema.Affected, filter AffectedF
 			out = append(out, affected[i])
 			continue
 		}
-		deps := affected[i].Dependents
-		for j := 0; j < len(deps); j++ {
-			d := &deps[j]
-			key := affectedKey(d.Component, d.Stack, d.ComponentType)
-			if _, dup := seen[key]; dup {
-				continue
-			}
-			seen[key] = struct{}{}
-			out = append(out, dependentToAffected(d, affectedReasonDependent))
-		}
+		out = appendPromotedDependents(out, affected[i].Dependents, filter, seen)
 	}
 
 	for i := range out {
@@ -919,12 +927,34 @@ func applySelectorsToAffectedForest(affected []schema.Affected, filter AffectedF
 	return out
 }
 
+// appendPromotedDependents appends the dependents of a dropped top-level item to out as top-level entries
+// with the reason "dependent", skipping components already in seen. A promoted dependent becomes a top-level
+// entry, which is what reaches the matrix, so `--exclude-locked` drops a locked one here even though nested
+// dependents are left alone.
+func appendPromotedDependents(out []schema.Affected, deps []schema.Dependent, filter AffectedFilter, seen map[string]struct{}) []schema.Affected {
+	for j := range deps {
+		d := &deps[j]
+		if filter.isExcludedLockedDependent(d) {
+			continue
+		}
+		key := affectedKey(d.Component, d.Stack, d.ComponentType)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, dependentToAffected(d, affectedReasonDependent))
+	}
+	return out
+}
+
 // flattenAffectedDependents lifts every dependent into the top-level affected list as an entry with the
 // reason "dependent". Each top-level item keeps its position and loses its nested dependents; its
 // dependents follow it in pre-order. A component that is already a top-level item, or was already lifted
 // from another parent, appears only once. Deleted items pass through untouched (they have no dependents).
-// The result is never nil.
-func flattenAffectedDependents(affected []schema.Affected) []schema.Affected {
+// With `--exclude-locked`, a locked dependent is not lifted, but its own dependents still are (mirroring how
+// pruning promotes the children of a removed dependent). This needs the dependent metadata to have been
+// recorded. The result is never nil.
+func flattenAffectedDependents(affected []schema.Affected, filter AffectedFilter) []schema.Affected {
 	seen := make(map[string]struct{}, len(affected))
 	for i := range affected {
 		a := &affected[i]
@@ -943,7 +973,7 @@ func flattenAffectedDependents(affected []schema.Affected) []schema.Affected {
 		a.Dependents = []schema.Dependent{}
 		a.IncludedInDependents = false
 		out = append(out, a)
-		out = appendFlattenedDependents(out, dependents, seen, 1)
+		out = appendFlattenedDependents(out, dependents, seen, filter, 1)
 	}
 
 	return out
@@ -951,8 +981,9 @@ func flattenAffectedDependents(affected []schema.Affected) []schema.Affected {
 
 // appendFlattenedDependents appends the dependents (pre-order) that are not in seen yet to out. The
 // subtree of a dependent that was already seen is skipped, because it is reached from that earlier
-// occurrence: from the top-level item that owns it, or from the parent it was first lifted from.
-func appendFlattenedDependents(out []schema.Affected, dependents []schema.Dependent, seen map[string]struct{}, depth int) []schema.Affected {
+// occurrence: from the top-level item that owns it, or from the parent it was first lifted from. A locked
+// dependent excluded by the filter is not appended, but it is marked seen and its children are still walked.
+func appendFlattenedDependents(out []schema.Affected, dependents []schema.Dependent, seen map[string]struct{}, filter AffectedFilter, depth int) []schema.Affected {
 	for i := range dependents {
 		d := &dependents[i]
 		key := affectedKey(d.Component, d.Stack, d.ComponentType)
@@ -961,13 +992,15 @@ func appendFlattenedDependents(out []schema.Affected, dependents []schema.Depend
 		}
 		seen[key] = struct{}{}
 
-		lifted := dependentToAffected(d, affectedReasonDependent)
-		lifted.Dependents = []schema.Dependent{}
-		lifted.IncludedInDependents = false
-		out = append(out, lifted)
+		if !filter.isExcludedLockedDependent(d) {
+			lifted := dependentToAffected(d, affectedReasonDependent)
+			lifted.Dependents = []schema.Dependent{}
+			lifted.IncludedInDependents = false
+			out = append(out, lifted)
+		}
 
 		if depth < maxFlattenDependentDepth {
-			out = appendFlattenedDependents(out, d.Dependents, seen, depth+1)
+			out = appendFlattenedDependents(out, d.Dependents, seen, filter, depth+1)
 		}
 	}
 	return out

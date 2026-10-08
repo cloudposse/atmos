@@ -113,7 +113,7 @@ func TestListVendorTags_IgnoreTerraformEnvVar(t *testing.T) {
 
 		_, v := bindRootLike(t, "vendor", vendorParser)
 
-		assert.Empty(t, v.GetString(tagsViperKey))
+		assert.Empty(t, v.GetString(vendorTagsViperKey))
 	})
 
 	t.Run("ATMOS_VENDOR_TAGS is honoured", func(t *testing.T) {
@@ -122,7 +122,36 @@ func TestListVendorTags_IgnoreTerraformEnvVar(t *testing.T) {
 
 		_, v := bindRootLike(t, "vendor", vendorParser)
 
-		assert.Equal(t, "networking", v.GetString(tagsViperKey))
+		assert.Equal(t, "networking", v.GetString(vendorTagsViperKey))
+	})
+
+	t.Run("ATMOS_COMPONENT_TAGS does not reach list vendor", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENT_TAGS", "istio")
+
+		_, v := bindRootLike(t, "vendor", vendorParser)
+
+		assert.Empty(t, v.GetString(vendorTagsViperKey))
+	})
+
+	t.Run("ATMOS_VENDOR_TAGS does not reach list components", func(t *testing.T) {
+		t.Setenv("ATMOS_VENDOR_TAGS", "networking")
+
+		cmd, v := bindRootLike(t, "components", componentsParser)
+		opts := parseComponentsOptions(cmd, v)
+
+		assert.Empty(t, opts.Tags)
+		assert.Empty(t, v.GetString(tagsViperKey))
+	})
+
+	t.Run("both env vars stay independent when set together", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENT_TAGS", "istio")
+		t.Setenv("ATMOS_VENDOR_TAGS", "networking")
+
+		_, vv := bindRootLike(t, "vendor", vendorParser)
+		cmd, cv := bindRootLike(t, "components", componentsParser)
+
+		assert.Equal(t, "networking", vv.GetString(vendorTagsViperKey))
+		assert.Equal(t, []string{"istio"}, parseComponentsOptions(cmd, cv).Tags)
 	})
 }
 

@@ -458,6 +458,10 @@ Affected components and stacks:
         Exclude the locked components (`metadata.locked: true`) from the output. A deleted component is excluded too
         when it was locked in the base ref, because a component that no longer exists in `HEAD` keeps the `metadata` it had there.
 
+        A locked dependent is also never turned into a top-level entry: with `--include-dependents`, `--exclude-locked` skips it
+        when `--tags` or `--labels` promote it in place of a removed parent, and when `--flatten` lifts it. The nested
+        `dependents` lists of the components that stay are not changed by `--exclude-locked`.
+
         Refer to [Locking Components with `metadata.locked`](/stacks/components#locking-components-metadatalocked)
 
         `atmos describe affected --exclude-locked`
@@ -1317,7 +1321,8 @@ automated dependent as its own entry, instead of hiding it behind the parent tha
 
 Add `--flatten` to lift every remaining dependent into the top-level list as well, so each dependent is reported once as
 `affected: dependent` with an empty `dependents` list. Use it when the output feeds a job matrix that must run the
-dependents too:
+dependents too. With `--exclude-locked`, a locked dependent is left out of the flattened list, while its own unlocked
+dependents are still lifted:
 
 ```shell
 # The changed components and their dependents, only those labeled `ci: auto`, as one flat matrix

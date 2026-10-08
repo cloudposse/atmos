@@ -25,6 +25,16 @@ func typedDependent(component, ci string, children ...schema.Dependent) schema.D
 	return d
 }
 
+// lockedDependent is typedDependent with `metadata.locked: true` recorded, as attachDependentMetadata does.
+func lockedDependent(component, ci string, children ...schema.Dependent) schema.Dependent {
+	d := typedDependent(component, ci, children...)
+	if d.Metadata == nil {
+		d.Metadata = map[string]any{}
+	}
+	d.Metadata["locked"] = true
+	return d
+}
+
 // topLevelAffected builds a live top-level affected entry for the "dev" stack.
 func topLevelAffected(component string, dependents ...schema.Dependent) schema.Affected {
 	return schema.Affected{
@@ -202,6 +212,48 @@ func TestApplySelectorsToAffectedForest(t *testing.T) {
 	})
 }
 
+func TestApplySelectorsToAffectedForest_ExcludeLocked(t *testing.T) {
+	autoExcludeLocked := AffectedFilter{ExcludeLocked: true, Labels: map[string]string{"ci": "auto"}}
+	stacks := forestStacks(map[string]string{"iam": "manual"})
+	newForest := func() []schema.Affected {
+		return []schema.Affected{
+			topLevelAffected("iam", lockedDependent("locked-app", "auto"), typedDependent("open-app", "auto")),
+		}
+	}
+
+	t.Run("a locked dependent is not promoted with ExcludeLocked", func(t *testing.T) {
+		got := applySelectorsToAffectedForest(newForest(), autoExcludeLocked, stacks)
+
+		assert.Equal(t, []string{"open-app"}, affectedComponents(got))
+	})
+
+	t.Run("a locked dependent is promoted without ExcludeLocked", func(t *testing.T) {
+		got := applySelectorsToAffectedForest(newForest(), autoOnly, stacks)
+
+		assert.Equal(t, []string{"locked-app", "open-app"}, affectedComponents(got))
+	})
+
+	t.Run("a locked dependent does not block a later unlocked occurrence of the same component", func(t *testing.T) {
+		affected := []schema.Affected{
+			topLevelAffected("iam", lockedDependent("app", "auto")),
+			topLevelAffected("ops", typedDependent("app", "auto")),
+		}
+
+		got := applySelectorsToAffectedForest(affected, autoExcludeLocked, forestStacks(map[string]string{"iam": "manual", "ops": "manual"}))
+
+		assert.Equal(t, []string{"app"}, affectedComponents(got))
+	})
+
+	t.Run("nested dependents of a kept item are left alone", func(t *testing.T) {
+		affected := []schema.Affected{topLevelAffected("vpc", lockedDependent("app", "auto"))}
+
+		got := applySelectorsToAffectedForest(affected, autoExcludeLocked, forestStacks(map[string]string{"vpc": "auto"}))
+
+		require.Equal(t, []string{"vpc"}, affectedComponents(got))
+		assert.Equal(t, []string{"dev-app"}, dependentSlugs(got[0].Dependents), "ExcludeLocked keeps its nested behavior")
+	})
+}
+
 func TestTopLevelAffectedMetadata(t *testing.T) {
 	stacks := forestStacks(map[string]string{"vpc": "auto"})
 	a := topLevelAffected("vpc")
@@ -266,7 +318,7 @@ func TestFlattenAffectedDependents(t *testing.T) {
 			topLevelAffected("app"),
 		}
 
-		got := flattenAffectedDependents(affected)
+		got := flattenAffectedDependents(affected, AffectedFilter{})
 
 		assert.Equal(t, []string{"vpc", "db", "app"}, affectedComponents(got))
 		assert.Equal(t, affectedReasonDependent, got[1].Affected)
@@ -279,7 +331,7 @@ func TestFlattenAffectedDependents(t *testing.T) {
 			topLevelAffected("b", typedDependent("x", "")),
 		}
 
-		got := flattenAffectedDependents(affected)
+		got := flattenAffectedDependents(affected, AffectedFilter{})
 
 		assert.Equal(t, []string{"a", "x", "b"}, affectedComponents(got))
 	})
@@ -293,7 +345,7 @@ func TestFlattenAffectedDependents(t *testing.T) {
 			),
 		}
 
-		got := flattenAffectedDependents(affected)
+		got := flattenAffectedDependents(affected, AffectedFilter{})
 
 		assert.Equal(t, []string{"vpc", "iam", "app", "web"}, affectedComponents(got))
 		for i := range got {
@@ -308,7 +360,7 @@ func TestFlattenAffectedDependents(t *testing.T) {
 		dep.ComponentPath = "components/terraform/app"
 		dep.Settings = schema.AtmosSectionMapType{"k": "v"}
 
-		got := flattenAffectedDependents([]schema.Affected{topLevelAffected("vpc", dep)})
+		got := flattenAffectedDependents([]schema.Affected{topLevelAffected("vpc", dep)}, AffectedFilter{})
 
 		require.Len(t, got, 2)
 		assert.Equal(t, "components/terraform/app", got[1].ComponentPath)
@@ -323,7 +375,7 @@ func TestFlattenAffectedDependents(t *testing.T) {
 			Deleted: true, DeletionType: deletionTypeComponent, Dependents: []schema.Dependent{},
 		}
 
-		got := flattenAffectedDependents([]schema.Affected{deleted})
+		got := flattenAffectedDependents([]schema.Affected{deleted}, AffectedFilter{})
 
 		require.Len(t, got, 1)
 		assert.Equal(t, deleted, got[0])
@@ -335,14 +387,14 @@ func TestFlattenAffectedDependents(t *testing.T) {
 			topLevelAffected("web"),
 		}
 
-		once := flattenAffectedDependents(affected)
-		twice := flattenAffectedDependents(once)
+		once := flattenAffectedDependents(affected, AffectedFilter{})
+		twice := flattenAffectedDependents(once, AffectedFilter{})
 
 		assert.Equal(t, once, twice)
 	})
 
 	t.Run("an item without dependents gets an empty non-nil list", func(t *testing.T) {
-		got := flattenAffectedDependents([]schema.Affected{topLevelAffected("vpc")})
+		got := flattenAffectedDependents([]schema.Affected{topLevelAffected("vpc")}, AffectedFilter{})
 
 		require.Len(t, got, 1)
 		assert.NotNil(t, got[0].Dependents)
@@ -350,15 +402,15 @@ func TestFlattenAffectedDependents(t *testing.T) {
 	})
 
 	t.Run("nil and empty input yield a non-nil empty slice", func(t *testing.T) {
-		assert.NotNil(t, flattenAffectedDependents(nil))
-		assert.Empty(t, flattenAffectedDependents(nil))
-		assert.Empty(t, flattenAffectedDependents([]schema.Affected{}))
+		assert.NotNil(t, flattenAffectedDependents(nil, AffectedFilter{}))
+		assert.Empty(t, flattenAffectedDependents(nil, AffectedFilter{}))
+		assert.Empty(t, flattenAffectedDependents([]schema.Affected{}, AffectedFilter{}))
 	})
 
 	t.Run("the input is not modified", func(t *testing.T) {
 		affected := []schema.Affected{topLevelAffected("vpc", typedDependent("app", ""))}
 
-		got := flattenAffectedDependents(affected)
+		got := flattenAffectedDependents(affected, AffectedFilter{})
 		got[0].Component = "mutated"
 
 		assert.Equal(t, "vpc", affected[0].Component)
@@ -369,10 +421,79 @@ func TestFlattenAffectedDependents(t *testing.T) {
 		// a -> b -> a: b's child a is already seen (top level), so the walk stops there.
 		a := typedDependent("a", "")
 		b := typedDependent("b", "", a)
-		got := flattenAffectedDependents([]schema.Affected{topLevelAffected("a", b)})
+		got := flattenAffectedDependents([]schema.Affected{topLevelAffected("a", b)}, AffectedFilter{})
 
 		assert.Equal(t, []string{"a", "b"}, affectedComponents(got))
 	})
+}
+
+func TestFlattenAffectedDependents_ExcludeLocked(t *testing.T) {
+	excludeLocked := AffectedFilter{ExcludeLocked: true}
+
+	t.Run("a locked lifted dependent is dropped but its children are kept", func(t *testing.T) {
+		affected := []schema.Affected{
+			topLevelAffected(
+				"vpc",
+				lockedDependent("iam", "", typedDependent("app", ""), lockedDependent("batch", "")),
+				typedDependent("web", ""),
+			),
+		}
+
+		got := flattenAffectedDependents(affected, excludeLocked)
+
+		assert.Equal(t, []string{"vpc", "app", "web"}, affectedComponents(got))
+		assert.Equal(t, affectedReasonDependent, got[1].Affected)
+		assert.Equal(t, affectedReasonDependent, got[2].Affected)
+		for i := range got {
+			assert.Empty(t, got[i].Dependents)
+		}
+	})
+
+	t.Run("a locked dependent is lifted without ExcludeLocked", func(t *testing.T) {
+		affected := []schema.Affected{topLevelAffected("vpc", lockedDependent("iam", "", typedDependent("app", "")))}
+
+		got := flattenAffectedDependents(affected, AffectedFilter{})
+
+		assert.Equal(t, []string{"vpc", "iam", "app"}, affectedComponents(got))
+	})
+
+	t.Run("a dependent without recorded metadata is lifted", func(t *testing.T) {
+		affected := []schema.Affected{topLevelAffected("vpc", dependentFixture("iam", ""))}
+
+		got := flattenAffectedDependents(affected, excludeLocked)
+
+		assert.Equal(t, []string{"vpc", "iam"}, affectedComponents(got))
+	})
+
+	t.Run("a locked dependent reached twice does not re-lift its children", func(t *testing.T) {
+		affected := []schema.Affected{
+			topLevelAffected("a", lockedDependent("x", "", typedDependent("leaf", ""))),
+			topLevelAffected("b", lockedDependent("x", "", typedDependent("leaf", ""))),
+		}
+
+		got := flattenAffectedDependents(affected, excludeLocked)
+
+		assert.Equal(t, []string{"a", "leaf", "b"}, affectedComponents(got))
+	})
+}
+
+func TestDependentsOptions_NeedsDependentMetadata(t *testing.T) {
+	tests := []struct {
+		name string
+		opts dependentsOptions
+		want bool
+	}{
+		{"nothing set", dependentsOptions{}, false},
+		{"exclude locked alone", dependentsOptions{Filter: AffectedFilter{ExcludeLocked: true}}, false},
+		{"tags selector", dependentsOptions{Filter: AffectedFilter{Tags: []string{"a"}}}, true},
+		{"labels selector", dependentsOptions{Filter: autoOnly}, true},
+		{"record metadata", dependentsOptions{RecordMetadata: true}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.opts.needsDependentMetadata())
+		})
+	}
 }
 
 func TestValidateDescribeAffectedArgs(t *testing.T) {
@@ -634,6 +755,40 @@ func TestFinalizeAffectedDependents(t *testing.T) {
 		assert.Equal(t, []string{"vpc", "app"}, affectedComponents(affected))
 	})
 
+	t.Run("exclude-locked with flatten records dependent metadata and drops locked dependents", func(t *testing.T) {
+		plainCalls, filterCalls = 0, 0
+		var recorded bool
+		locking := dependentsResolvers{
+			plain: resolvers.plain,
+			withFilter: func(_ *schema.AtmosConfiguration, affected *[]schema.Affected, opts *dependentsOptions) error {
+				filterCalls++
+				recorded = opts.RecordMetadata
+				(*affected)[0].Dependents = []schema.Dependent{lockedDependent("iam", "", typedDependent("app", "")), typedDependent("web", "")}
+				return nil
+			},
+		}
+		affected := []schema.Affected{topLevelAffected("vpc")}
+
+		opts := &AffectedDependentsOptions{Filter: AffectedFilter{ExcludeLocked: true}, Flatten: true}
+		require.NoError(t, finalizeAffectedDependents(atmosConfig, &affected, opts, locking))
+
+		assert.Zero(t, plainCalls)
+		assert.Equal(t, 1, filterCalls)
+		assert.True(t, recorded)
+		assert.Equal(t, []string{"vpc", "app", "web"}, affectedComponents(affected))
+	})
+
+	t.Run("exclude-locked without flatten keeps the plain resolver", func(t *testing.T) {
+		plainCalls, filterCalls = 0, 0
+		affected := []schema.Affected{topLevelAffected("vpc")}
+
+		opts := &AffectedDependentsOptions{Filter: AffectedFilter{ExcludeLocked: true}}
+		require.NoError(t, finalizeAffectedDependents(atmosConfig, &affected, opts, resolvers))
+
+		assert.Equal(t, 1, plainCalls)
+		assert.Zero(t, filterCalls)
+	})
+
 	t.Run("a resolver error is returned", func(t *testing.T) {
 		boom := cockroachErrors.New("boom")
 		failing := dependentsResolvers{
@@ -642,7 +797,7 @@ func TestFinalizeAffectedDependents(t *testing.T) {
 			},
 			withFilter: func(*schema.AtmosConfiguration, *[]schema.Affected, *dependentsOptions) error { return boom },
 		}
-		for _, opts := range []*AffectedDependentsOptions{{}, {Filter: autoOnly}} {
+		for _, opts := range []*AffectedDependentsOptions{{}, {Filter: autoOnly}, {Filter: AffectedFilter{ExcludeLocked: true}, Flatten: true}} {
 			affected := []schema.Affected{topLevelAffected("vpc")}
 			require.ErrorIs(t, finalizeAffectedDependents(atmosConfig, &affected, opts, failing), boom)
 		}

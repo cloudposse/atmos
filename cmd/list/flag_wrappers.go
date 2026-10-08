@@ -22,6 +22,11 @@ const (
 	tagsViperKey   = "list.tags"
 	labelsViperKey = "list.labels"
 
+	// The vendor tags key is separate from tagsViperKey: Viper checks every environment variable bound
+	// to a key, so sharing "list.tags" would let ATMOS_VENDOR_TAGS narrow the component-metadata list
+	// commands and ATMOS_COMPONENT_TAGS narrow `list vendor`.
+	vendorTagsViperKey = "list.vendor.tags"
+
 	// Environment variables.
 	envListColumns = "ATMOS_LIST_COLUMNS"
 
@@ -287,7 +292,7 @@ func WithVendorTagsFlag(options *[]flags.Option) {
 		*options,
 		flags.WithStringFlag(flagTags, "", "", "Filter by vendor manifest tags (comma-separated, matches any): --tags=networking,storage"),
 		flags.WithEnvVars(flagTags, "ATMOS_VENDOR_TAGS"),
-		flags.WithViperKey(flagTags, tagsViperKey),
+		flags.WithViperKey(flagTags, vendorTagsViperKey),
 	)
 }
 

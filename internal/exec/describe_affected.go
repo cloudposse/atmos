@@ -723,8 +723,9 @@ func finalizeAffectedDependents(atmosConfig *schema.AtmosConfiguration, affected
 	}
 
 	// With `--tags` / `--labels`, dependents are resolved together with their metadata so the nested lists and
-	// the top-level list can be pruned by the same selectors; without selectors the original path is used unchanged.
-	if opts.Filter.hasSelectors() {
+	// the top-level list can be pruned by the same selectors. `--exclude-locked` with `--flatten` needs the
+	// metadata too, to drop locked dependents when they are lifted. Otherwise the original path is used unchanged.
+	if opts.Filter.hasSelectors() || (opts.Filter.ExcludeLocked && opts.Flatten) {
 		depOpts := &dependentsOptions{
 			IncludeSettings:      opts.IncludeSettings,
 			ProcessTemplates:     opts.ProcessTemplates,
@@ -735,17 +736,19 @@ func finalizeAffectedDependents(atmosConfig *schema.AtmosConfiguration, affected
 			AuthDisabled:         opts.AuthDisabled,
 			ErrOptions:           opts.ErrOptions,
 			Filter:               opts.Filter,
+			RecordMetadata:       opts.Filter.ExcludeLocked && opts.Flatten,
 		}
 		if err := resolve.withFilter(atmosConfig, affected, depOpts); err != nil {
 			return err
 		}
+		// Does nothing without selectors.
 		*affected = applySelectorsToAffectedForest(*affected, opts.Filter, depOpts.stacks)
 	} else if err := resolve.plain(atmosConfig, affected, opts.IncludeSettings, opts.ProcessTemplates, opts.ProcessYamlFunctions, opts.Skip, opts.OnlyInStack, opts.AuthManager, opts.AuthDisabled, opts.ErrOptions); err != nil {
 		return err
 	}
 
 	if opts.Flatten {
-		*affected = flattenAffectedDependents(*affected)
+		*affected = flattenAffectedDependents(*affected, opts.Filter)
 	}
 	return nil
 }
