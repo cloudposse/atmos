@@ -47,13 +47,18 @@ func newTestProvider(t *testing.T, s *ghtest.Server) *Provider {
 // countRequests returns how many recorded requests used the given method against
 // the PR 42 comments endpoint.
 func countRequests(s *ghtest.Server, method string) int {
-	n := 0
+	return len(listRequests(s, method))
+}
+
+// listRequests returns the recorded comment-list requests for method, in order.
+func listRequests(s *ghtest.Server, method string) []ghtest.RecordedRequest {
+	var out []ghtest.RecordedRequest
 	for _, r := range s.Requests() {
 		if r.Method == method && r.Path == commentsPath {
-			n++
+			out = append(out, r)
 		}
 	}
-	return n
+	return out
 }
 
 func TestProvider_PostComment_UpsertCreatesWhenMarkerAbsent(t *testing.T) {
@@ -376,7 +381,9 @@ func TestProvider_PostComment_PaginatesListSearch(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, 2, countRequests(s, http.MethodGet), "must walk to the second page")
+	gets := listRequests(s, http.MethodGet)
+	require.Lenf(t, gets, 2, "must walk to the second page; recorded requests: %+v", s.Requests())
+	assert.Contains(t, gets[1].RawQuery, "page=2", "second request must ask for page 2; recorded requests: %+v", s.Requests())
 	writes := s.Comments()
 	require.Len(t, writes, 1)
 	assert.True(t, writes[0].Edited)
