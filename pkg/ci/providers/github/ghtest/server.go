@@ -51,6 +51,11 @@ type Server struct {
 	pulls     map[repoKey][]PullRequest
 
 	requests []RecordedRequest
+
+	// afterRoute, when set, runs after a route handler returns and before the
+	// request's status is recorded. Internal tests use it to hold a handler open
+	// and prove that Requests already lists the request.
+	afterRoute func()
 }
 
 // NewServer starts a fake GitHub API and registers its shutdown with t.Cleanup.
@@ -166,22 +171,34 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
-// serve records the request, applies injected failures, then dispatches to the routes.
+// serve records the request on arrival, applies injected failures, dispatches to the
+// routes, and fills in the status once the handler returns.
+//
+// Recording on arrival matters: a response body larger than net/http's write buffer
+// reaches the client before the handler returns, and go-github finishes decoding a
+// page as soon as the JSON value is complete. The client can therefore issue the next
+// request, and a test can read Requests, while this handler is still unwinding. If
+// the record were appended afterwards, Requests would be missing or reorder the
+// request that was served first.
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	s.mu.Lock()
+	index := len(s.requests)
+	s.requests = append(s.requests, RecordedRequest{
+		Method:   r.Method,
+		Path:     r.URL.Path,
+		RawQuery: r.URL.RawQuery,
+		Body:     string(body),
+	})
+	s.mu.Unlock()
 
 	rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 	defer func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		s.requests = append(s.requests, RecordedRequest{
-			Method:   r.Method,
-			Path:     r.URL.Path,
-			RawQuery: r.URL.RawQuery,
-			Body:     string(body),
-			Status:   rec.status,
-		})
+		s.requests[index].Status = rec.status
 	}()
 
 	if f, ok := s.matchFailure(r); ok {
@@ -190,6 +207,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.routes().ServeHTTP(rec, r)
+	if s.afterRoute != nil {
+		s.afterRoute()
+	}
 }
 
 func (s *Server) matchFailure(r *http.Request) (failure, bool) {
