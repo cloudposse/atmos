@@ -212,8 +212,9 @@ func buildIdentityRow(authManager authTypes.AuthManager, identity *schema.Identi
 }
 
 // resolveIdentityVia determines the via-provider and via-identity display
-// values, special-casing aws/user identities (which have no `via:` config)
-// to show "aws-user" as their provider.
+// values, special-casing standalone identities with a synthetic provider name
+// (aws/user, aws/credential-process; they have no `via:` config) to show that
+// name as their provider.
 func resolveIdentityVia(identity *schema.Identity) (viaProvider, viaIdentity string) {
 	viaProvider, viaIdentity = emptyMarker, emptyMarker
 	if identity.Via != nil {
@@ -224,8 +225,10 @@ func resolveIdentityVia(identity *schema.Identity) (viaProvider, viaIdentity str
 			viaIdentity = identity.Via.Identity
 		}
 	}
-	if identity.Kind == "aws/user" && viaProvider == emptyMarker {
-		viaProvider = "aws-user"
+	if viaProvider == emptyMarker {
+		if providerName, ok := authTypes.StandaloneProviderName(identity.Kind); ok {
+			viaProvider = providerName
+		}
 	}
 	return viaProvider, viaIdentity
 }

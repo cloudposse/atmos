@@ -131,7 +131,9 @@ func runPreExecutionSteps(
 	}
 
 	if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
-		log.Error("Error executing 'atmos auth terraform pre-hook'",
+		// The error is returned and rendered once by the command boundary, so it is only logged
+		// at debug level here to avoid printing the same failure twice.
+		log.Debug("Error executing 'atmos auth terraform pre-hook'",
 			logFieldComponent, info.ComponentFromArg, "error", err)
 		// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
 		// Authentication setup failures must not silently produce unauthenticated terraform commands.

@@ -2,10 +2,15 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,10 +20,105 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
+// Environment variables that turn the test binary into a fake AWS credential_process helper.
+// Tests of credential_process spawn the test binary itself (via os.Executable) so they work on
+// every platform without relying on Unix-only tools.
+const (
+	// When set, makes the test binary print its value to stdout.
+	testCredentialProcessJSONEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_JSON"
+	// When set, makes the test binary exit with that code.
+	testCredentialProcessExitEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_EXIT"
+	// When set to a duration string, makes the test binary sleep first.
+	testCredentialProcessSleepEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_SLEEP"
+	// When set to a duration string, makes the test binary spawn a grandchild that keeps the
+	// inherited stdout pipe open for that long, then hang itself. It models a helper started
+	// through `sh -c` whose own child outlives it (e.g. `sleep 70`).
+	testCredentialProcessGrandchildEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_GRANDCHILD"
+)
+
 // TestMain disables homedir caching to prevent cached values from affecting test isolation.
+// It also acts as a fake credential_process helper when the _ATMOS_TEST_CREDENTIAL_PROCESS_*
+// environment variables are set (see runFakeCredentialProcess).
 func TestMain(m *testing.M) {
+	runFakeCredentialProcess()
+
 	homedir.DisableCache = true
 	os.Exit(m.Run())
+}
+
+// runFakeCredentialProcess emulates a credential helper when the test binary is executed as one.
+// It returns immediately (running the normal test suite) when no helper variable is set.
+func runFakeCredentialProcess() {
+	if grandchildSleep, ok := os.LookupEnv(testCredentialProcessGrandchildEnv); ok {
+		runFakeCredentialProcessWithGrandchild(grandchildSleep)
+	}
+
+	jsonOut, hasJSON := os.LookupEnv(testCredentialProcessJSONEnv)
+	exitCode, hasExit := os.LookupEnv(testCredentialProcessExitEnv)
+	sleep, hasSleep := os.LookupEnv(testCredentialProcessSleepEnv)
+	if !hasJSON && !hasExit && !hasSleep {
+		return
+	}
+
+	if hasSleep {
+		if d, err := time.ParseDuration(sleep); err == nil {
+			time.Sleep(d)
+		}
+	}
+	if hasJSON {
+		fmt.Fprint(os.Stdout, jsonOut)
+	}
+	if hasExit {
+		code, err := strconv.Atoi(exitCode)
+		if err != nil {
+			code = 1
+		}
+		os.Exit(code)
+	}
+	os.Exit(0)
+}
+
+// runFakeCredentialProcessWithGrandchild starts a detached grandchild that holds the inherited
+// stdout pipe open for the given duration, then blocks until it is killed or the grandchild's
+// lifetime has passed. It never returns.
+func runFakeCredentialProcessWithGrandchild(grandchildSleep string) {
+	// The helper inherits the test binary's stderr. When `sh -c` forks instead of exec'ing (dash
+	// on Linux), the timeout kills only the shell and this process outlives the test; holding the
+	// test's stderr would then make `go test` wait for I/O ("Test I/O incomplete") long after the
+	// test finished. Release it, since this helper never writes to stderr.
+	_ = os.Stderr.Close()
+
+	lifetime, err := time.ParseDuration(grandchildSleep)
+	if err != nil {
+		os.Exit(2)
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		os.Exit(2)
+	}
+
+	var env []string
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, testCredentialProcessGrandchildEnv+"=") {
+			continue
+		}
+		env = append(env, kv)
+	}
+
+	// Stdout is inherited on purpose; stdin and stderr stay nil (the null device) so the
+	// orphan never keeps the test runner's own pipes open after the test is over.
+	grandchild := exec.Command(exe)
+	env = append(env, testCredentialProcessSleepEnv+"="+grandchildSleep)
+	grandchild.Env = env
+	grandchild.Stdout = os.Stdout
+	if err := grandchild.Start(); err != nil {
+		os.Exit(2)
+	}
+
+	// Outlive the caller's timeout, but stay bounded so an orphaned helper exits on its own.
+	time.Sleep(lifetime)
+	os.Exit(0)
 }
 
 // skipIfCannotDenyDirWrite skips tests that rely on removing write permission

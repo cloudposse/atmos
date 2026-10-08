@@ -289,6 +289,10 @@ the source above. Logout also does not fail when there is no entry to remove, wh
 normal state for these providers.
 :::
 
+:::note Credential-Process Identities
+Identities of kind [`aws/credential-process`](/cli/configuration/auth/identities#credential-process) never store the helper's credentials in the keychain, because the helper owns them. Logout removes the credentials Atmos cached in its managed AWS files for the identity. It also removes any stale keychain entry that an older Atmos version may have written, whether or not you pass `--keychain`, and it does not fail when there is no entry to remove, which is the normal state.
+:::
+
 :::danger Permanent Deletion
 Using `--keychain` permanently deletes credentials from your system keychain. You'll need to re-enter IAM user access keys or re-authenticate service accounts when logging in again.
 :::

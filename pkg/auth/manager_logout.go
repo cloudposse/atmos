@@ -34,7 +34,12 @@ func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychai
 	// keyring, the normal state at logout is that no entry exists. A forced delete that
 	// misses is therefore expected, and must not be reported as a partial logout the way
 	// an explicitly requested `--keychain` delete would be.
-	ambientForced := m.identityChainRootIsAmbient(identityName)
+	//
+	// Identities that never persist credentials in the keyring (aws/credential-process: the
+	// helper owns the credentials) are forced the same way. Any entry for them can only have
+	// been written by an older Atmos version and would otherwise survive logout and keep being
+	// reused, so logout must remove it without requiring `--keychain`.
+	ambientForced := m.identityChainRootIsAmbient(identityName) || !types.PersistsCredentialsInKeyring(identity)
 	bestEffort := ambientForced && !deleteKeychain
 	deleteKeychain = deleteKeychain || ambientForced
 

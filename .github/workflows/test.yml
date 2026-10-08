@@ -1390,7 +1390,7 @@ jobs:
     services:
       floci:
         # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
-        image: floci/floci@sha256:d2ecc8035822b23b8587a56eab15edd825f41d3fb80d93e8e66680410beddc08 # 1.5.23
+        image: floci/floci@sha256:d2ecc8035822b23b8587a56eab15edd825f41d3fb80d93e8e66680410beddc08 # 1.5.33
         ports:
           - 4566:4566
       floci-gcp:
@@ -1485,7 +1485,7 @@ jobs:
           FLOCI_GCP_ENDPOINT: "http://localhost:4588"
           FLOCI_AZURE_ENDPOINT: "http://localhost:4577"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: go test ./tests -run 'Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|LocalGitOpsPushE2E|Scaffold(AWSLandingZone|GCPLandingZone|AzureLandingZone|AWSApp)FlociE2E|InitFromTemplateRepoGiteaE2E|TerraformFlociTfmigrateS3History|TerraformComponentMocksFallbackFlociS3)' -count=1 -timeout 25m -v
+        run: go test ./tests -run 'Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|AWSCredentialProcessFlociE2E|LocalGitOpsPushE2E|Scaffold(AWSLandingZone|GCPLandingZone|AzureLandingZone|AWSApp)FlociE2E|InitFromTemplateRepoGiteaE2E|TerraformFlociTfmigrateS3History|TerraformComponentMocksFallbackFlociS3)' -count=1 -timeout 25m -v
 
   # Run the approachable k3s demos plus the focused native Helm lifecycle
   # scenario. Keep failure-path coverage under tests/fixtures so public examples

@@ -127,10 +127,10 @@ func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 		} else {
 			// Extract hints from cause before wrapping, since fmt.Errorf
 			// doesn't preserve cockroachdb hint metadata.
-			if causeHints := errors.GetAllHints(cause); len(causeHints) > 0 {
+			if causeHints := AllHints(cause); len(causeHints) > 0 {
 				b.hints = append(b.hints, causeHints...)
 			}
-			causeDetails := errors.GetAllDetails(cause)
+			causeDetails := AllDetails(cause)
 			// Extract context from cause before wrapping, since fmt.Errorf
 			// doesn't preserve cockroachdb safe details metadata.
 			b.extractContextFromCause(cause)

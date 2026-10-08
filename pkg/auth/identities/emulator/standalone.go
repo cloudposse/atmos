@@ -2,7 +2,6 @@ package emulator
 
 import (
 	"context"
-	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -24,7 +23,7 @@ func (i *Identity) AuthenticateStandalone(ctx context.Context) (types.ICredentia
 
 	credentials, err := i.Authenticate(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: emulator identity %q authentication failed: %w", errUtils.ErrAuthenticationFailed, i.Name(), err)
+		return nil, errUtils.WrapAuthenticationFailed(err, "identity %q", i.Name())
 	}
 
 	log.Debug("Emulator identity authenticated (no-op)", logKeyIdentity, i.Name())

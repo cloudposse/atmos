@@ -195,7 +195,7 @@ func authenticateForToken(ctx context.Context, authConfig *schema.AuthConfig, cl
 
 	whoami, err := mgr.Authenticate(ctx, identityName)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, err)
+		return nil, errUtils.WrapIdentityAuthFailed(identityName, err)
 	}
 
 	if whoami.Credentials == nil {

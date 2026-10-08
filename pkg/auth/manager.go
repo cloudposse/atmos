@@ -13,18 +13,17 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws"    // Register aws/ecr and aws/eks integrations.
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/azure"  // Register azure/acr and azure/aks integrations.
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/gcp"    // Register gcp/gke integration.
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/github" // Register github/sts integration.
+	"github.com/cloudposse/atmos/pkg/auth/interactive"
 	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -45,7 +44,7 @@ const (
 const (
 	// The minCredentialValidityBuffer is the minimum duration credentials must be valid.
 	// AWS can invalidate credentials before their stated expiration time.
-	minCredentialValidityBuffer = 15 * time.Minute
+	minCredentialValidityBuffer = types.DefaultMinCredentialValidity
 )
 
 // contextKey is a type for context keys to avoid collisions.
@@ -73,21 +72,15 @@ func IntegrationsSkipped(ctx context.Context) bool {
 }
 
 // isInteractive checks if interactive prompts should be shown.
-// Interactive mode requires:
-// 1. --interactive flag is true (or ATMOS_INTERACTIVE env var).
-// 2. Stdin is a TTY (for user input).
-// 3. Not running in CI environment.
+// It delegates to the shared predicate in pkg/auth/interactive, which requires
+// interactive mode to be enabled, stdin AND stderr to be terminals (the prompt
+// reads from stdin and is drawn on stderr), and a non-CI environment.
 //
 // This ensures prompts only appear in truly interactive contexts and gracefully
-// degrade to standard errors in pipelines, scripts, and CI environments.
+// degrade to standard errors in pipelines, scripts, CI environments, and helper
+// processes whose stderr is captured by a parent (e.g. AWS CLI credential_process).
 func isInteractive() bool {
-	// Check if interactive mode is enabled via flag or environment.
-	if !viper.GetBool("interactive") {
-		return false
-	}
-
-	// Check if stdin is a TTY and not in CI.
-	return term.IsTTYSupportForStdin() && !telemetry.IsCI()
+	return interactive.Available()
 }
 
 // manager implements the AuthManager interface.
@@ -142,25 +135,21 @@ func NewAuthManager(
 	stackInfo *schema.ConfigAndStacksInfo,
 	cliConfigPath string,
 ) (types.AuthManager, error) {
+	// Errors are returned, never printed here: the command boundary renders them once.
 	if config == nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "Config", "auth config cannot be nil")
-		return nil, errUtils.ErrNilParam
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, "auth config cannot be nil")
 	}
 	if credentialStore == nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "Credential Store", "credential store cannot be nil")
-		return nil, errUtils.ErrNilParam
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, "credential store cannot be nil")
 	}
 	if validator == nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "Validator", "validator cannot be nil")
-		return nil, errUtils.ErrNilParam
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, "validator cannot be nil")
 	}
 
 	// Compute the credential realm for isolation.
 	realmInfo, err := realm.GetRealm(config.Realm, cliConfigPath)
 	if err != nil {
-		wrappedErr := fmt.Errorf("failed to compute auth realm: %w", err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Compute Auth Realm", "")
-		return nil, wrappedErr
+		return nil, fmt.Errorf("failed to compute auth realm: %w", err)
 	}
 
 	// Empty realm is allowed for backward compatibility with existing configs.
@@ -257,7 +246,6 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 
 	// We expect the identity name to be provided by the caller.
 	if identityName == "" {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, identityNameKey)
 	}
 
@@ -301,13 +289,10 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	identityName = resolvedName
 
 	// Build the complete authentication chain.
+	// buildAuthenticationChain already names the identity in its error.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		wrappedErr := fmt.Errorf("failed to build authentication chain for identity %q: %w", identityName, err)
-		if !types.SuppressAuthErrors(ctx) {
-			errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
-		}
-		return nil, wrappedErr
+		return nil, err
 	}
 	// Persist the chain for later retrieval by providers or callers.
 	m.chain = chain
@@ -316,11 +301,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	// Perform credential chain authentication (bottom-up).
 	finalCreds, err := m.authenticateChain(ctx, identityName)
 	if err != nil {
-		wrappedErr := fmt.Errorf("%w: failed to authenticate via credential chain for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
-		if !types.SuppressAuthErrors(ctx) {
-			errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Credential Chain", "")
-		}
-		return nil, wrappedErr
+		// Returned, not printed: the command boundary renders it once. Hints and explanations
+		// attached by providers stay reachable through the wrapped cause.
+		return nil, errUtils.WrapAuthenticationFailed(err, "identity %q", identityName)
 	}
 
 	// Call post-authentication hook on the identity (now part of Identity interface).
@@ -541,7 +524,6 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 	// and can be used to derive the identity credentials without interactive prompts.
 	// Use a non-interactive context to prevent credential prompts during whoami.
 	nonInteractiveCtx := types.WithAllowPrompts(ctx, false)
-	nonInteractiveCtx = types.WithSuppressAuthErrors(nonInteractiveCtx, true)
 	authInfo, authErr := m.Authenticate(nonInteractiveCtx, identityName)
 	if authErr == nil {
 		log.Debug("Successfully authenticated through chain", logKeyIdentity, identityName)
@@ -573,8 +555,8 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	if forceSelect {
 		// Check if we're in interactive mode (have TTY).
 		if !isInteractive() {
-			// User requested interactive selection but we don't have a TTY.
-			return "", errUtils.ErrIdentitySelectionRequiresTTY
+			// User requested interactive selection but prompts cannot be shown.
+			return "", promptUnavailableBuilder(errUtils.ErrIdentitySelectionRequiresTTY).Err()
 		}
 		// We have a TTY - show selector.
 		return m.promptForIdentity("Select an identity:", m.ListIdentities())
@@ -593,7 +575,7 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	case 0:
 		// No default identities found.
 		if !isInteractive() {
-			return "", errUtils.ErrNoDefaultIdentity
+			return "", promptUnavailableBuilder(errUtils.ErrNoDefaultIdentity).Err()
 		}
 		// In interactive mode, prompt user to choose from all identities.
 		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
@@ -605,11 +587,24 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	default:
 		// Multiple default identities found.
 		if !isInteractive() {
-			return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedFmt, defaultIdentities))
+			return "", promptUnavailableBuilder(errUtils.ErrMultipleDefaultIdentities).
+				WithCausef("%s", fmt.Sprintf(backtickedFmt, defaultIdentities)).
+				Err()
 		}
 		// In interactive mode, prompt user to choose from default identities.
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
 	}
+}
+
+// promptUnavailableBuilder starts an error for a flow that needs an interactive identity
+// selector when none can be shown. The selector reads stdin and draws on stderr, so it needs
+// both to be terminals; otherwise it would hang invisibly (for example when a parent process
+// such as the AWS CLI captures stderr).
+func promptUnavailableBuilder(sentinel error) *errUtils.ErrorBuilder {
+	return errUtils.Build(sentinel).
+		WithExplanation("An interactive identity prompt is needed, but this session cannot show one (it requires stdin and stderr to be terminals outside CI)").
+		WithHint("Pass `--identity=<name>`, or mark an identity as default with `default: true` in atmos.yaml").
+		WithHint("To authenticate interactively, run `atmos auth login --identity=<name>` in a terminal")
 }
 
 // promptForIdentity prompts the user to select an identity from the given list.
@@ -647,7 +642,6 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 		if errors.Is(err, huh.ErrUserAborted) {
 			return "", errUtils.ErrUserAborted
 		}
-		errUtils.CheckErrorAndPrint(err, "Prompt for Identity", "")
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrUnsupportedInputType, err)
 	}
 
@@ -811,16 +805,14 @@ func (m *manager) GetFilesDisplayPath(providerName string) string {
 func (m *manager) GetProviderKindForIdentity(identityName string) (string, error) {
 	defer perf.Track(nil, "auth.Manager.GetProviderKindForIdentity")()
 
-	// Build the complete authentication chain.
+	// Build the complete authentication chain. Errors are returned, not printed: the caller
+	// renders them once.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		wrappedErr := fmt.Errorf("failed to get provider kind for identity %q: %w", identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
-		return "", wrappedErr
+		return "", fmt.Errorf("failed to get provider kind for identity %q: %w", identityName, err)
 	}
 
 	if len(chain) == 0 {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "")
 		return "", fmt.Errorf("%w: empty chain", errUtils.ErrInvalidAuthConfig)
 	}
 
@@ -836,7 +828,6 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 		return identity.Kind, nil
 	}
 
-	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderKindForIdentity", fmt.Sprintf("provider %q not found in configuration", providerName))
 	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrInvalidAuthConfig, providerName)
 }
 

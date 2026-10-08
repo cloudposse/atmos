@@ -1,0 +1,49 @@
+# Fixture for the opt-in Floci E2E tests of `atmos aws credential-process` and the
+# `aws/credential-process` identity kind (see tests/credential_process_floci_test.go).
+#
+# The credential_process commands embed the absolute path of the atmos binary under test, which is
+# only known at runtime, so the tests inject them through environment variables.
+base_path: "./"
+
+auth:
+  identities:
+    # Producer root: long-lived test keys exchanged for a session through Floci STS.
+    base:
+      kind: aws/user
+      credentials:
+        access_key_id: test
+        secret_access_key: test
+        region: us-east-1
+      spec:
+        endpoint_url: !env FLOCI_ENDPOINT_URL
+
+    # Consumer: obtains its credentials by running `atmos aws credential-process --identity=base`.
+    piped:
+      kind: aws/credential-process
+      credentials:
+        credential_process: !env ATMOS_TEST_CREDENTIAL_PROCESS_BASE_CMD
+        region: us-east-1
+      spec:
+        endpoint_url: !env FLOCI_ENDPOINT_URL
+
+    # Recursion guard: the helper requests credentials for the identity that is running it.
+    loop:
+      kind: aws/credential-process
+      credentials:
+        credential_process: !env ATMOS_TEST_CREDENTIAL_PROCESS_LOOP_CMD
+        region: us-east-1
+
+    # Chain: assume a role using the credential_process identity as the source.
+    chained:
+      kind: aws/assume-role
+      via:
+        identity: piped
+      principal:
+        assume_role: arn:aws:iam::000000000000:role/test-role
+        session_name: atmos-credential-process-e2e
+      spec:
+        endpoint_url: !env FLOCI_ENDPOINT_URL
+
+logs:
+  file: /dev/stderr
+  level: Info

@@ -10,6 +10,11 @@ const (
 	ProviderKindAWSPermissionSet     = "aws/permission-set"
 	ProviderKindAWSAssumeRoot        = "aws/assume-root"
 
+	// AWS identity kinds.
+	// IdentityKindAWSCredentialProcess is a standalone identity whose credentials come from
+	// running an AWS `credential_process` command.
+	IdentityKindAWSCredentialProcess = "aws/credential-process"
+
 	// Azure provider kinds.
 	ProviderKindAzureOIDC        = "azure/oidc"
 	ProviderKindAzureCLI         = "azure/cli"
