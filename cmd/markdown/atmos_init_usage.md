@@ -12,6 +12,12 @@ $ atmos list stacks
 $ atmos init examples/quick-start-simple --ref main
 ```
 
+- Fetch a custom repository with full Git history
+
+```
+$ atmos init github.com/example/project//starter --depth 0
+```
+
 - Copy a directory verbatim, including any scaffold templates it contains
 
 ```

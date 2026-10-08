@@ -110,7 +110,6 @@ func normalizeGitHubDirectory(u *url.URL) (InitSource, error) {
 	}
 	u.RawPath = ""
 	result.Copy = isOfficialExample(parts[0], repo, subdir)
-	applyExampleCloneDepth(query, result.Copy)
 	u.RawQuery = query.Encode()
 	u.Fragment = ""
 	result.Source = "git::" + u.String()
@@ -119,13 +118,6 @@ func normalizeGitHubDirectory(u *url.URL) (InitSource, error) {
 		result.Name = path.Base(subdir)
 	}
 	return result, nil
-}
-
-func applyExampleCloneDepth(query url.Values, officialExample bool) {
-	// Official examples need only one revision, not the repository's history.
-	if officialExample && !query.Has("depth") {
-		query.Set("depth", "1")
-	}
 }
 
 func validateInitSubdirectory(subdir string) error {

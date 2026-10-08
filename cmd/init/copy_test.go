@@ -154,7 +154,7 @@ func TestExecuteInitCopyGitSubdirectoryAtPinnedRevision(t *testing.T) {
 	require.NoError(t, err)
 	t.Chdir(t.TempDir())
 	require.NoError(t, executeInit(context.Background(), &initOptions{
-		templateName: "git::file://" + filepath.ToSlash(src) + "//example?ref=" + first.String(),
+		templateName: "git::" + initRenderedE2EFileURI(src) + "//example?ref=" + first.String(),
 		ref:          "ignored-because-source-is-pinned",
 	}))
 	content, err := os.ReadFile(filepath.Join("example", "file.tmpl"))

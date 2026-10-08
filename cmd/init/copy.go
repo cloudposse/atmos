@@ -73,6 +73,9 @@ func prepareInitSource(opts *initOptions, selected *templates.Configuration, con
 	prepared := &preparedInitSource{cleanup: func() {}}
 	_, catalog := configs[opts.templateName]
 	if !opts.copy && (opts.templateName == "" || catalog) {
+		if err := applyTemplateDepth(opts, selected); err != nil {
+			return nil, err
+		}
 		cleanup, err := source.Hydrate(selected, opts.sourceOverride)
 		prepared.cleanup = cleanup
 		return prepared, err
@@ -88,7 +91,11 @@ func prepareInitSource(opts *initOptions, selected *templates.Configuration, con
 }
 
 func prepareInitDirectory(opts *initOptions, selected *templates.Configuration, normalized source.InitSource) (*preparedInitSource, error) {
-	atmosConfig, err := initSourceConfig(normalized.Source)
+	atmosConfig, err := initSourceConfig(opts, normalized.Source)
+	if err != nil {
+		return nil, err
+	}
+	normalized.Source, err = source.WithDepth(normalized.Source, atmosConfig.Init.Depth)
 	if err != nil {
 		return nil, err
 	}
@@ -180,14 +187,27 @@ func displayCopiedProject(prepared *preparedInitSource, targetDir string) error 
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	ui.Writef("\nNext: cd %s\n", shellescape.Quote(targetDir))
+	ui.MarkdownMessagef("## Get started\n\n```shell\ncd %s\n```", shellescape.Quote(targetDir))
 	return nil
 }
 
 // initSourceConfig avoids configuration loading for explicit local paths.
-func initSourceConfig(src string) (schema.AtmosConfiguration, error) {
-	if vendor.IsLocalPath(src) || vendor.IsFileURI(src) {
+func initSourceConfig(opts *initOptions, src string) (schema.AtmosConfiguration, error) {
+	if opts.atmosConfig != nil {
+		return *opts.atmosConfig, nil
+	}
+	if src != "" && (vendor.IsLocalPath(src) || vendor.IsFileURI(src)) {
 		return schema.AtmosConfiguration{}, nil
 	}
 	return cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+}
+
+// applyTemplateDepth gives named remote templates the same fetch settings as direct sources.
+func applyTemplateDepth(opts *initOptions, selected *templates.Configuration) error {
+	if opts.atmosConfig == nil || !vendor.IsGitURI(selected.Source) || len(selected.Files) != 0 {
+		return nil
+	}
+	var err error
+	selected.Source, err = source.WithDepth(selected.Source, opts.atmosConfig.Init.Depth)
+	return err
 }

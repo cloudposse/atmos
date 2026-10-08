@@ -20,20 +20,20 @@ func TestNormalizeInitSource(t *testing.T) {
 		input, ref, want, name string
 		copy                   bool
 	}{
-		{"examples/quick-start-simple", "", "git::https://github.com/cloudposse/atmos.git//examples/quick-start-simple?depth=1&ref=main", "quick-start-simple", true},
+		{"examples/quick-start-simple", "", "git::https://github.com/cloudposse/atmos.git//examples/quick-start-simple?ref=main", "quick-start-simple", true},
 		{"github.com/cloudposse/atmos//examples/demo?depth=0", "", "git::https://github.com/cloudposse/atmos.git//examples/demo?depth=0", "demo", true},
-		{"examples/scaffolds/aws/app", "v1", "git::https://github.com/cloudposse/atmos.git//examples/scaffolds/aws/app?depth=1&ref=v1", "app", true},
-		{"github.com/cloudposse/atmos//examples/quick-start-simple", "", "git::https://github.com/cloudposse/atmos.git//examples/quick-start-simple?depth=1", "quick-start-simple", true},
-		{"github.com/cloudposse/atmos/examples/scaffolding", "", "git::https://github.com/cloudposse/atmos.git//examples/scaffolding?depth=1", "scaffolding", true},
-		{"https://github.com/cloudposse/atmos/tree/v1/examples/scaffolding", "ignored", "git::https://github.com/cloudposse/atmos.git//examples/scaffolding?depth=1&ref=v1", "scaffolding", true},
+		{"examples/scaffolds/aws/app", "v1", "git::https://github.com/cloudposse/atmos.git//examples/scaffolds/aws/app?ref=v1", "app", true},
+		{"github.com/cloudposse/atmos//examples/quick-start-simple", "", "git::https://github.com/cloudposse/atmos.git//examples/quick-start-simple", "quick-start-simple", true},
+		{"github.com/cloudposse/atmos/examples/scaffolding", "", "git::https://github.com/cloudposse/atmos.git//examples/scaffolding", "scaffolding", true},
+		{"https://github.com/cloudposse/atmos/tree/v1/examples/scaffolding", "ignored", "git::https://github.com/cloudposse/atmos.git//examples/scaffolding?ref=v1", "scaffolding", true},
 		{"git::https://github.com/acme/repo.git//tree/example?ref=pinned", "ignored", "git::https://github.com/acme/repo.git//tree/example?ref=pinned", "example", false},
 		{"github.com/acme/repo//nested/example", "feature/hello&world", "git::https://github.com/acme/repo.git//nested/example?ref=feature%2Fhello%26world", "example", false},
 		{"https://github.com/acme/repo", "", "git::https://github.com/acme/repo.git", "repo", false},
 		{"https://example.com/project.tar.gz", "ignored", "https://example.com/project.tar.gz", "project", false},
 		{"./examples/scaffolding", "", "./examples/scaffolding", "scaffolding", false},
 		{"git::ssh://git@example.com/acme/project.git//demo?ref=v1", "v2", "git::ssh://git@example.com/acme/project.git//demo?ref=v1", "demo", false},
-		{"git@github.com:cloudposse/atmos.git//examples/scaffolding", "", "git::ssh://git@github.com/cloudposse/atmos.git//examples/scaffolding?depth=1", "scaffolding", true},
-		{"git::ssh://git@github.com/cloudposse/atmos.git//examples/scaffolding", "", "git::ssh://git@github.com/cloudposse/atmos.git//examples/scaffolding?depth=1", "scaffolding", true},
+		{"git@github.com:cloudposse/atmos.git//examples/scaffolding", "", "git::ssh://git@github.com/cloudposse/atmos.git//examples/scaffolding", "scaffolding", true},
+		{"git::ssh://git@github.com/cloudposse/atmos.git//examples/scaffolding", "", "git::ssh://git@github.com/cloudposse/atmos.git//examples/scaffolding", "scaffolding", true},
 		{"git@example.com:acme/project.git", "v1", "git@example.com:acme/project.git?ref=v1", "project", false},
 		{"./100% local", "", "./100% local", "100% local", false},
 		{"oci://registry.example.com:5000/team/starter:v1", "ignored", "oci://registry.example.com:5000/team/starter:v1", "starter", false},
@@ -79,12 +79,26 @@ func TestFileURIProvenanceUsesDecodedPath(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "with spaces")
 	require.NoError(t, os.Mkdir(dir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "scaffold.yaml"), []byte(sampleScaffold), 0o600))
-	uri := (&url.URL{Scheme: "file", Path: filepath.ToSlash(dir)}).String()
+	uri := sourceTestGitFileURI(dir)
 	conf, cleanup, err := Resolve(nil, "sample", uri, 0)
 	require.NoError(t, err)
 	defer cleanup()
 	assert.Equal(t, dir, conf.Source)
 	assert.Equal(t, dir, conf.IncludeSourceDir())
+}
+
+func TestLocalDirectoryFileURIPath(t *testing.T) {
+	// An absolute drive path in a file URI has an extra slash on Windows.
+	// On Unix the same URI refers to a literal directory named "C:" at the root.
+	uriPath := "/C:/atmos-file-uri-test/missing"
+	wantPath := uriPath
+	if filepath.VolumeName("C:") != "" {
+		wantPath = filepath.FromSlash(uriPath[1:])
+	}
+	_, err := localDirectory((&url.URL{Scheme: "file", Path: uriPath}).String())
+	var pathError *os.PathError
+	require.ErrorAs(t, err, &pathError)
+	assert.Equal(t, wantPath, pathError.Path)
 }
 
 func TestFetchDirectoryArchiveAndCleanup(t *testing.T) {

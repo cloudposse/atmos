@@ -47,7 +47,7 @@ func TestNormalizeInitArgumentConfiguredRepository(t *testing.T) {
 	}{
 		{"examples/demo", "git::https://github.com/acme/starters.git//examples/demo?ref=stable"},
 		{"templates/demo", "git::https://github.com/acme/starters.git//templates/demo?ref=stable"},
-		{"github.com/cloudposse/atmos//examples/demo", "git::https://github.com/cloudposse/atmos.git//examples/demo?depth=1"},
+		{"github.com/cloudposse/atmos//examples/demo", "git::https://github.com/cloudposse/atmos.git//examples/demo"},
 		{"./examples/demo", "./examples/demo"},
 		{"aws/app", "aws/app"},
 	} {
@@ -67,9 +67,14 @@ func TestInitDefaultsPrecedence(t *testing.T) {
 	v := viper.New()
 	require.NoError(t, initParser.BindFlagsToViper(cmd, v))
 	disabled := false
-	bindInitDefaults(v, schema.InitConfig{Ref: "configured", Git: &disabled})
+	bindInitDefaults(v, schema.InitConfig{Ref: "configured", Depth: 3, Git: &disabled})
 	assert.Equal(t, "configured", v.GetString("ref"))
 	assert.False(t, v.GetBool("git"))
+	assert.Equal(t, 3, v.GetInt("depth"))
+	t.Setenv("ATMOS_INIT_DEPTH", "2")
+	assert.Equal(t, 2, v.GetInt("depth"))
+	require.NoError(t, cmd.Flags().Set("depth", "0"))
+	assert.Zero(t, v.GetInt("depth"), "explicit zero requests full history")
 	t.Setenv("ATMOS_INIT_REF", "environment")
 	t.Setenv("ATMOS_INIT_GIT", "true")
 	assert.Equal(t, "environment", v.GetString("ref"))

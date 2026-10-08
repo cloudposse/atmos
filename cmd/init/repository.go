@@ -10,22 +10,27 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 // applyInitDefaults places configured values below command flags and environment
 // overrides. Viper's ordinary flag/env precedence remains authoritative.
-func applyInitDefaults(v *viper.Viper) error {
+func applyInitDefaults(v *viper.Viper) (*schema.AtmosConfiguration, error) {
+	progress := spinner.New("Loading configuration")
+	progress.Start()
+	defer progress.Stop()
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	bindInitDefaults(v, atmosConfig.Init)
-	return nil
+	return &atmosConfig, nil
 }
 
 func bindInitDefaults(v *viper.Viper, defaults schema.InitConfig) {
 	v.SetDefault("ref", defaults.Ref)
+	v.SetDefault("depth", defaults.Depth)
 	gitEnabled := true
 	if defaults.Git != nil {
 		gitEnabled = *defaults.Git
@@ -39,7 +44,7 @@ func expandInitRepository(opts *initOptions) error {
 	if source.IsTemplateSource(opts.templateName) || !strings.Contains(opts.templateName, "/") {
 		return nil
 	}
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := initSourceConfig(opts, "")
 	if err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ package source
 import (
 	"net/url"
 	"os"
+	"path/filepath"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -49,6 +50,12 @@ func localDirectory(src string) (*Directory, error) {
 				WithExplanation("Local file sources must not specify a remote host").Err()
 		}
 		localPath = parsed.Path
+		// File URIs prefix Windows drive paths with a slash. VolumeName keeps
+		// literal Unix paths such as /C:/example unchanged.
+		if len(localPath) > 1 && localPath[0] == '/' && filepath.VolumeName(localPath[1:]) != "" {
+			localPath = localPath[1:]
+		}
+		localPath = filepath.FromSlash(localPath)
 	}
 	info, err := os.Stat(localPath)
 	if err != nil || !info.IsDir() {

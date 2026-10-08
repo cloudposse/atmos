@@ -457,7 +457,7 @@ var RootCmd = &cobra.Command{
 			configAndStacksInfo.AtmosConfigDirsFromArg = cfgDirs
 		}
 		// Load the config (includes env var bindings); don't store globally yet.
-		tmpConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
+		tmpConfig, err := loadStartupConfig(cmd.Root(), &configAndStacksInfo)
 		if err != nil {
 			if errors.Is(err, cfg.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error.
@@ -1891,7 +1891,8 @@ func Execute() error {
 	// Here we need the custom commands from the config.
 	// Note: --version flag is now handled in main.go before calling Execute().
 	var initErr error
-	atmosConfig, initErr = cfg.InitCliConfig(cfg.EarlyConfigAndStacksInfoFromArgs(os.Args[1:]), false)
+	earlyConfigInfo := cfg.EarlyConfigAndStacksInfoFromArgs(os.Args[1:])
+	atmosConfig, initErr = loadStartupConfig(RootCmd, &earlyConfigInfo)
 
 	// Set atmosConfig for commands that need access to config.
 	version.SetAtmosConfig(&atmosConfig)

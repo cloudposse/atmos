@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/hooks"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
@@ -73,9 +74,14 @@ For scaffold templates, an omitted target directory is prompted interactively.`,
 		if err := initParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
-		if err := applyInitDefaults(v); err != nil {
+		atmosConfig, err := applyInitDefaults(v)
+		if err != nil {
 			return err
 		}
+		if v.GetInt("depth") < 0 {
+			return copyOptionError("init.depth and --depth must be zero or greater")
+		}
+		atmosConfig.Init.Depth = v.GetInt("depth")
 
 		// Reject an invalid --update-strategy/--merge-driver/--merge-strategy value
 		// before doing any work; BindFlagsToViper alone doesn't enforce the
@@ -141,6 +147,7 @@ For scaffold templates, an omitted target directory is prompted interactively.`,
 
 		return executeInit(cmd.Context(), &initOptions{
 			templateName:    template,
+			atmosConfig:     atmosConfig,
 			copy:            v.GetBool("copy"),
 			copyUnsupported: explicitScaffoldFlags(cmd, v),
 			targetDir:       target,
@@ -167,6 +174,8 @@ var initParser *flags.StandardParser
 func init() {
 	// Create StandardParser for init command flags with ATMOS_INIT_* env vars.
 	initParser = flags.NewStandardParser(
+		flags.WithIntFlag("depth", "", 1, "Git history depth for initialization (0 fetches full history)"),
+		flags.WithEnvVars("depth", "ATMOS_INIT_DEPTH"),
 		flags.WithBoolFlag("copy", "", false, "Copy source files verbatim without processing scaffold configuration or templates"),
 		flags.WithEnvVars("copy", "ATMOS_INIT_COPY"),
 		flags.WithBoolFlag("force", "f", false, "Overwrite existing files"),
@@ -285,6 +294,7 @@ func parseSetFlag(flag string) (string, string, error) {
 
 // initOptions holds configuration for the init operation.
 type initOptions struct {
+	atmosConfig     *schema.AtmosConfiguration
 	copy            bool
 	copyUnsupported []string
 	templateName    string

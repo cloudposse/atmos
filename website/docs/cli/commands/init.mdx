@@ -68,9 +68,9 @@ atmos init github.com/example/project//starter ./my-project --copy
 ```
 
 Relative source paths such as `examples/<path>` resolve against `init.repository`,
-which defaults to `github.com/cloudposse/atmos`. Official example sources use a shallow Git
-fetch by default; an explicit `depth` query parameter overrides this. The official shorthand
-defaults to `main`.
+which defaults to `github.com/cloudposse/atmos`. Git sources use a shallow fetch by default. Set `init.depth` to change the history depth
+for any repository, or use `0` for full history. An explicit `depth` query parameter in the
+source URL overrides this setting. The official shorthand defaults to `main`.
 Override the repository in an `atmos.yaml` where you run initialization (including your global
 Atmos configuration):
 
@@ -78,14 +78,15 @@ Atmos configuration):
 init:
   repository: github.com/acme/starters
   ref: main
+  depth: 1
   git: true
 ```
 
 With this setting, `atmos init examples/demo` fetches `github.com/acme/starters//examples/demo`.
 The optional `init.ref` sets the default revision, and `init.git` controls creation of the
 repository and initial commit (default `true`). An unset `init.ref` uses `main` for official
-shorthand and the repository default branch for other sources. `--ref` / `ATMOS_INIT_REF` and
-`--git` / `ATMOS_INIT_GIT` override configuration, with flags taking precedence over environment
+shorthand and the repository default branch for other sources. `--ref` / `ATMOS_INIT_REF`,
+`--git` / `ATMOS_INIT_GIT`, and `--depth` / `ATMOS_INIT_DEPTH` override configuration, with flags taking precedence over environment
 variables. `--no-git` disables Git initialization. A revision embedded in the source or repository
 URL still takes precedence over these revision defaults.
 
@@ -211,6 +212,10 @@ generation's recorded answers, not the template's field definitions).
   <dt>`--copy`</dt>
   <dd>Copy a source directory verbatim, bypassing scaffold configuration and template processing.
   Also available as `ATMOS_INIT_COPY=true`.</dd>
+
+  <dt>`--depth`</dt>
+  <dd>Git history depth for any init source, defaulting to `init.depth` (`1`). Use `0` for
+  full history. Also available as `ATMOS_INIT_DEPTH`; a source URL's `depth` parameter wins.</dd>
 
   <dt>`--set key=value` <em>(repeatable)</em></dt>
   <dd>Provide a template answer; repeat for multiple fields.</dd>

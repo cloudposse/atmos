@@ -867,6 +867,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("init.repository", schema.DefaultInitRepository)
 	v.SetDefault("init.ref", "")
 	v.SetDefault("init.git", true)
+	v.SetDefault("init.depth", 1)
 	v.SetDefault("vendor.max_concurrency", 4)
 	// Start or initialize the Podman machine when it is selected and not running.
 	// Docker remains preferred whenever it is already available.
