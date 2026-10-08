@@ -281,7 +281,8 @@ print(hasattr([], "append"), hasattr([], "push"))  # True False
 
 Returns an integer hash of a string or bytes value. The result is the same on every run
 and every machine: strings hash like Java's `String.hashCode`, and bytes use the 32-bit FNV
-algorithm. Other types fail with `hash: got int, want string or bytes`.
+algorithm. Other types fail with `hash: got int, want string or bytes`. For cryptographic
+digests such as SHA-256, use the [`digest`](/functions/automation/digest.sha256) module.
 
   </dd>
 </dl>
@@ -658,6 +659,9 @@ They are available without an import and are documented in the
   <dt>`steps`</dt>
   <dd>Module. [`steps.task`](/functions/automation/steps.task) describes a deferred call, and [`steps.parallel`](/functions/automation/steps.parallel) runs calls concurrently.</dd>
 
+  <dt>`defer`</dt>
+  <dd>Function. [`defer(fn, *args, **kwargs)`](/functions/automation/defer) registers a call to run when the script or task finishes, last in first out, even after `fail()` or cancellation.</dd>
+
   <dt>`fs`</dt>
   <dd>Module. [`fs.read_file`](/functions/automation/fs.read_file) reads a local file as text, and [`fs.resolve`](/functions/automation/fs.resolve) turns a path into an absolute one. Every `fs` function accepts a leading `~` for the home directory.</dd>
 
@@ -667,8 +671,8 @@ They are available without an import and are documented in the
   <dt>`regex`</dt>
   <dd>Module. [`regex.search`](/functions/automation/regex.search), [`regex.findall`](/functions/automation/regex.findall), and [`regex.replace`](/functions/automation/regex.replace).</dd>
 
-  <dt>`hash`</dt>
-  <dd>Module. [`hash.sha256`](/functions/automation/hash.sha256), [`hash.sha512`](/functions/automation/hash.sha512), [`hash.sha1`](/functions/automation/hash.sha1), and [`hash.md5`](/functions/automation/hash.md5) return lowercase hex digests of a string or of file contents.</dd>
+  <dt>`digest`</dt>
+  <dd>Module. [`digest.sha256`](/functions/automation/digest.sha256), [`digest.sha512`](/functions/automation/digest.sha512), [`digest.sha1`](/functions/automation/digest.sha1), and [`digest.md5`](/functions/automation/digest.md5) return lowercase hex digests of a string or of file contents.</dd>
 
   <dt>`dependencies`</dt>
   <dd>Module. [`dependencies.tools`](/functions/automation/dependencies.tools) installs and selects tools through the Atmos toolchain.</dd>

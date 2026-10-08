@@ -128,7 +128,7 @@ In this example, `spin` is the value of `steps[].type`. The fields `title`, `com
   <dd>Declared outputs derived from the step result. See [outputs](/steps/outputs).</dd>
 
   <dt>`when`</dt>
-  <dd>Condition controlling whether the step runs. Omitted means success-only: the step runs while the workflow status is still `success`. Use `when: always` for cleanup steps that must run after a previous step fails, such as stopping an emulator, restoring a backup file, or removing Terraform state.</dd>
+  <dd>Condition controlling whether the step runs. Omitted means success-only: the step runs while the workflow status is still `success`. Use `when: always` for cleanup steps that must run after a previous step fails, such as stopping an emulator, restoring a backup file, or removing Terraform state. Inside a script step, [`defer`](/functions/automation/defer) registers cleanup within the script itself.</dd>
 </dl>
 
 Type-specific fields are documented with [type](/steps/type).

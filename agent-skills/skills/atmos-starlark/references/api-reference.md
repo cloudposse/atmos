@@ -88,6 +88,15 @@ more depth. If a name is not listed here, check that page before concluding it d
   descriptor for `steps.parallel(tasks=[...])`. `retry` keys: `max_attempts`, `initial_delay`,
   `backoff_strategy`, `max_delay`.
 
+## Cleanup
+
+- `defer(fn, *args, **kwargs)`: registers a call to run when the enclosing script or `steps.parallel`
+  task finishes, last in first out, after a normal return, `fail()`, or cancellation (then with a
+  30 s grace context so `exec.run`/`atmos.*` still work). Arguments are captured at registration. The
+  body error stays primary; a failing deferred call is reported after it. This is the `finally` /
+  `trap EXIT` equivalent; `when: always` is the YAML-step counterpart. Never write cleanup after a
+  `fail()` and expect it to run.
+
 ## Step library
 
 - `steps.run(type, **fields)` and `steps.<type>(**fields)` (for example `steps.input`, `steps.choose`,
@@ -106,8 +115,8 @@ more depth. If a name is not listed here, check that page before concluding it d
   filesystem. `fs.resolve(path)` returns the absolute path (tilde expanded, relative paths joined to the
   working directory, cleaned) without touching the filesystem, so use it instead of hand-rolled
   `~` and absolute-path checks.
-- `hash.sha256(data)`, `hash.sha512(data)`, `hash.sha1(data)`, `hash.md5(data)`: lowercase hex digest of a
-  string. Strings are bytes, so `hash.sha256(fs.read_file(path))` fingerprints a binary file exactly.
+- `digest.sha256(data)`, `digest.sha512(data)`, `digest.sha1(data)`, `digest.md5(data)`: lowercase hex digest of a
+  string. Strings are bytes, so `digest.sha256(fs.read_file(path))` fingerprints a binary file exactly.
   There is no incremental API; sha1 and md5 exist for interoperability (Git ids, S3 ETags), not security.
 - `errors.build(message)`: error builder with `.with_title`, `.with_explanation`, `.with_hint`,
   `.with_example`, `.with_context`, `.with_exit_code`, and a final `.fail()`.
