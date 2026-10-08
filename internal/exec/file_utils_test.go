@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -367,5 +368,74 @@ func TestRemoveTempDir(t *testing.T) {
 			_, err := os.Stat(path)
 			assert.True(t, os.IsNotExist(err), "Directory should be removed")
 		})
+	}
+}
+
+// TestPrintOrWriteToFile_ScalarResults verifies the exact printed text for query-style results: a top-level string
+// scalar is printed raw in YAML (so shell capture such as acct=$(atmos describe component ... --query .vars.acct)
+// yields the bare value) and as a proper JSON string in JSON, while numbers, booleans, maps and lists keep their
+// normal encoding with ambiguous strings inside structures quoted.
+//
+//nolint:paralleltest // The stdout sub-tests swap os.Stdout to capture output; must run serially.
+func TestPrintOrWriteToFile_ScalarResults(t *testing.T) {
+	tests := []struct {
+		name         string
+		data         any
+		expectedYAML string
+		expectedJSON string
+	}{
+		{"string with leading zero", "068007702576", "068007702576\n", "\"068007702576\"\n"},
+		{"numeric-looking string", "123456789012", "123456789012\n", "\"123456789012\"\n"},
+		{"bool-looking string", "true", "true\n", "\"true\"\n"},
+		{"plain string", "dev", "dev\n", "\"dev\"\n"},
+		{"integer", 123456789012, "123456789012\n", "123456789012\n"},
+		{"max int64", int64(9223372036854775807), "9223372036854775807\n", "9223372036854775807\n"},
+		{"float", 1.5, "1.5\n", "1.5\n"},
+		{"bool", true, "true\n", "true\n"},
+		{"null", nil, "null\n", "null\n"},
+		{
+			"map containing ambiguous values",
+			map[string]any{"acct": "068007702576", "flag": "true", "count": 42, "ratio": 1.5},
+			"acct: \"068007702576\"\ncount: 42\nflag: \"true\"\nratio: 1.5\n",
+			"{\n  \"acct\": \"068007702576\",\n  \"count\": 42,\n  \"flag\": \"true\",\n  \"ratio\": 1.5\n}\n",
+		},
+		{
+			"list containing ambiguous values",
+			[]any{"007", 7, "false", 1.5},
+			"- \"007\"\n- 7\n- \"false\"\n- 1.5\n",
+			"[\n  \"007\",\n  7,\n  \"false\",\n  1.5\n]\n",
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	for _, tt := range tests {
+		for _, format := range []string{"yaml", "json"} {
+			expected := tt.expectedYAML
+			if format == "json" {
+				expected = tt.expectedJSON
+			}
+
+			t.Run(tt.name+"/"+format+"/file", func(t *testing.T) {
+				file := filepath.Join(t.TempDir(), "out."+format)
+				require.NoError(t, printOrWriteToFile(atmosConfig, format, file, tt.data))
+				content, err := os.ReadFile(file)
+				require.NoError(t, err)
+				assert.Equal(t, expected, string(content))
+			})
+
+			t.Run(tt.name+"/"+format+"/stdout", func(t *testing.T) {
+				var printErr error
+				out := captureStdout(t, func() {
+					printErr = printOrWriteToFile(atmosConfig, format, "", tt.data)
+				})
+				require.NoError(t, printErr)
+				// The YAML printer terminates every printed document with an extra newline.
+				if format == "yaml" {
+					expected += "\n"
+				}
+				assert.Equal(t, expected, out)
+			})
+		}
 	}
 }

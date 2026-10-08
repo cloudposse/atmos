@@ -48,6 +48,9 @@ func validateDryRun(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigA
 	if err := check.validateStackSet(); err != nil {
 		return err
 	}
+	if err := check.validateTargetAuth(); err != nil {
+		return err
+	}
 	if err := check.validatePackaging(); err != nil {
 		return err
 	}

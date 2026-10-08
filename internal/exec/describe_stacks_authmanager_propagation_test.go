@@ -42,7 +42,7 @@ func TestAuthManagerPropagationToDescribeStacks(t *testing.T) {
 	mockAuthManager.EXPECT().
 		GetStackInfo().
 		Return(authStackInfo).
-		Times(1)
+		MinTimes(1)
 
 	// Test the propagation logic by calling ExecuteDescribeStacks.
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
@@ -168,7 +168,7 @@ func TestDescribeStacksAuthManagerWithNilAuthContext(t *testing.T) {
 	mockAuthManager.EXPECT().
 		GetStackInfo().
 		Return(authStackInfo).
-		Times(1)
+		MinTimes(1)
 
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)

@@ -20,6 +20,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	"github.com/cloudposse/atmos/pkg/component/typedetect"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/env"
@@ -699,6 +700,165 @@ func findComponentInStacks(
 	return 1, []string{candidates[0].stackFile}, candidates[0].info, stackNameMappings
 }
 
+// componentLookup is the outcome of searching the stack manifests for a component.
+type componentLookup struct {
+	count        int
+	stacks       []string
+	info         schema.ConfigAndStacksInfo
+	nameMappings map[string]string
+}
+
+// looksLikeComponentPath reports whether a component argument could be a filesystem path.
+//
+// It prevents treating plain component names (like "vpc") as relative paths from CWD.
+//
+// Note: Component names in stack configs can contain forward slashes (like "infra/vpc"),
+// but these are namespace prefixes, not file paths. The key distinction is:
+// - "infra/vpc" as a component name → already found in first loop, no fallback needed
+// - "components/terraform/vpc" as a path → not found in first loop, fallback needed
+//
+// Path indicators (trigger fallback):
+// - Forward slash: "components/terraform/vpc"
+// - Backslash (Windows): "components\terraform\vpc"
+// - Dot paths: ".", "..", "./vpc"
+//
+// Examples that should NOT trigger fallback: "vpc", "top-level-component1", "infra/vpc" (if defined in stack).
+func looksLikeComponentPath(pathArg string) bool {
+	hasForwardSlash := strings.Contains(pathArg, "/")
+	hasPlatformSep := filepath.Separator != '/' && strings.ContainsRune(pathArg, filepath.Separator)
+	// Check for dot paths with both forward slash and platform separator.
+	isDotPath := pathArg == "." || pathArg == ".." ||
+		strings.HasPrefix(pathArg, "./") || strings.HasPrefix(pathArg, "../") ||
+		strings.HasPrefix(pathArg, "."+string(filepath.Separator)) ||
+		strings.HasPrefix(pathArg, ".."+string(filepath.Separator))
+	return hasForwardSlash || hasPlatformSep || isDotPath
+}
+
+// pathExistsOnDisk reports whether pathArg resolves to an existing filesystem entry.
+func pathExistsOnDisk(pathArg string) bool {
+	resolvedPathArg, err := resolvePathArgForExistenceCheck(pathArg)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(resolvedPathArg)
+	return err == nil
+}
+
+// componentSearch bundles what is needed to search the stack manifests for a component.
+type componentSearch struct {
+	atmosConfig      *schema.AtmosConfiguration
+	stacksMap        map[string]any
+	deferredContexts AllStacksDeferredContexts
+	authManager      auth.AuthManager
+}
+
+// find searches the stack manifests for the component named in info.
+func (s *componentSearch) find(info *schema.ConfigAndStacksInfo) componentLookup {
+	count, stacks, foundInfo, nameMappings := findComponentInStacks(s.atmosConfig, info, s.stacksMap, s.deferredContexts, s.authManager)
+	return componentLookup{count: count, stacks: stacks, info: foundInfo, nameMappings: nameMappings}
+}
+
+// retryFromPath retries a failed component lookup by treating the component argument as a
+// filesystem path, when it looks like one. It leaves lookup unchanged when the component was
+// already found or the argument is not path-like, and returns the detailed path error when the
+// argument is a real path outside the component directories.
+func (s *componentSearch) retryFromPath(info *schema.ConfigAndStacksInfo, lookup *componentLookup) error {
+	atmosConfig := s.atmosConfig
+	// Only attempt the path fallback when the argument looks like a path (see looksLikeComponentPath).
+	pathArg := info.ComponentFromArg
+	shouldAttemptPathResolution := lookup.count == 0 && looksLikeComponentPath(pathArg)
+
+	// The forward-slash/dot-path heuristic above can't distinguish a real filesystem path
+	// ("components/terraform/vpc") from a plain component name that merely contains a
+	// namespace-style slash ("infra/vpc", "test/test-component"). Only trust
+	// ErrPathNotInComponentDir as the authoritative failure reason -- and surface its detailed
+	// message instead of the generic "component not found" one -- when pathArg actually
+	// resolves to something on disk. A namespaced component name essentially never does,
+	// since it's evaluated relative to the current working directory, not any component base
+	// path.
+	pathArgExistsOnDisk := pathExistsOnDisk(pathArg)
+
+	if shouldAttemptPathResolution {
+		// Component not found - try fallback to path resolution.
+		// If the component argument looks like it could be a path (e.g., "components/terraform/vpc"),
+		// try resolving it as a filesystem path and retry with the resolved component name.
+		log.Debug(
+			"Component not found by name, attempting path resolution fallback",
+			"component", info.ComponentFromArg,
+			"stack", info.Stack,
+		)
+
+		resolvedComponent, pathErr := ResolveComponentFromPathWithoutValidation(
+			atmosConfig,
+			info.ComponentFromArg,
+			info.ComponentType,
+		)
+
+		if pathErr == nil {
+			// Path resolution succeeded - retry with resolved component name.
+			log.Debug(
+				"Path resolution succeeded, retrying with resolved component",
+				"original", info.ComponentFromArg,
+				"resolved", resolvedComponent,
+			)
+
+			// Update ComponentFromArg with resolved name and retry the loop.
+			info.ComponentFromArg = resolvedComponent
+
+			*lookup = s.find(info)
+		} else if pathArgExistsOnDisk && errors.Is(pathErr, errUtils.ErrPathNotInComponentDir) {
+			// Path resolution failed because path is not in component directories, and
+			// pathArg is a real, existing filesystem path -- not just a namespaced component
+			// name that happens to contain a slash. Return the detailed path error instead of
+			// the generic "component not found" one.
+			return pathErr
+		}
+	}
+	return nil
+}
+
+// newManifestPresenceProbe returns a probe reporting whether the requested component is defined
+// under a component type in the requested stack. It resolves the component and stack exactly as
+// processStacks does (including stack name templates and path-style component arguments) but
+// reads only the already-merged stack manifests: no templates or YAML functions are evaluated
+// and no cloud or auth calls are made. The manifests are loaded once, on first use.
+func newManifestPresenceProbe(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	authManager auth.AuthManager,
+) typedetect.Probe {
+	var (
+		stacksMap        map[string]any
+		deferredContexts AllStacksDeferredContexts
+		loadErr          error
+		loaded           bool
+	)
+
+	return func(componentType string) (bool, error) {
+		if !loaded {
+			stacksMap, _, deferredContexts, loadErr = FindStacksMap(atmosConfig, false)
+			loaded = true
+		}
+		if loadErr != nil {
+			return false, loadErr
+		}
+
+		probeInfo := *info
+		probeInfo.ComponentType = componentType
+
+		if atmosConfig.StackType == "Directory" {
+			err := processComponentConfig(atmosConfig, &probeInfo, probeInfo.Stack, stacksMap, deferredContexts, componentType, probeInfo.ComponentFromArg, authManager)
+			return err == nil, nil
+		}
+
+		search := &componentSearch{atmosConfig: atmosConfig, stacksMap: stacksMap, deferredContexts: deferredContexts, authManager: authManager}
+		lookup := search.find(&probeInfo)
+		// A path error means the argument is not a component of this type; the caller reports it.
+		pathErr := search.retryFromPath(&probeInfo, &lookup)
+		return pathErr == nil && lookup.count > 0, nil
+	}
+}
+
 // ProcessStacks processes stack config.
 func ProcessStacks(
 	atmosConfig *schema.AtmosConfiguration,
@@ -822,87 +982,12 @@ func processStacks(
 			return configAndStacksInfo, nil
 		}
 
-		// Only attempt path resolution fallback if the component argument looks like a file path.
-		// This prevents treating plain component names (like "vpc") as relative paths from CWD.
-		//
-		// Note: Component names in stack configs can contain forward slashes (like "infra/vpc"),
-		// but these are namespace prefixes, not file paths. The key distinction is:
-		// - "infra/vpc" as a component name → already found in first loop, no fallback needed
-		// - "components/terraform/vpc" as a path → not found in first loop, fallback needed
-		//
-		// Path indicators (trigger fallback):
-		// - Forward slash: "components/terraform/vpc"
-		// - Backslash (Windows): "components\terraform\vpc"
-		// - Dot paths: ".", "..", "./vpc"
-		//
-		// Examples that should NOT trigger fallback: "vpc", "top-level-component1", "infra/vpc" (if defined in stack)
-		pathArg := configAndStacksInfo.ComponentFromArg
-		hasForwardSlash := strings.Contains(pathArg, "/")
-		hasPlatformSep := filepath.Separator != '/' && strings.ContainsRune(pathArg, filepath.Separator)
-		// Check for dot paths with both forward slash and platform separator.
-		isDotPath := pathArg == "." || pathArg == ".." ||
-			strings.HasPrefix(pathArg, "./") || strings.HasPrefix(pathArg, "../") ||
-			strings.HasPrefix(pathArg, "."+string(filepath.Separator)) ||
-			strings.HasPrefix(pathArg, ".."+string(filepath.Separator))
-		shouldAttemptPathResolution := foundStackCount == 0 && (hasForwardSlash || hasPlatformSep || isDotPath)
-
-		// The forward-slash/dot-path heuristic above can't distinguish a real filesystem path
-		// ("components/terraform/vpc") from a plain component name that merely contains a
-		// namespace-style slash ("infra/vpc", "test/test-component"). Only trust
-		// ErrPathNotInComponentDir as the authoritative failure reason -- and surface its detailed
-		// message instead of the generic "component not found" one -- when pathArg actually
-		// resolves to something on disk. A namespaced component name essentially never does,
-		// since it's evaluated relative to the current working directory, not any component base
-		// path.
-		pathArgExistsOnDisk := false
-		if resolvedPathArg, resolveErr := resolvePathArgForExistenceCheck(pathArg); resolveErr == nil {
-			if _, statErr := os.Stat(resolvedPathArg); statErr == nil {
-				pathArgExistsOnDisk = true
-			}
+		search := &componentSearch{atmosConfig: atmosConfig, stacksMap: stacksMap, deferredContexts: deferredContexts, authManager: authManager}
+		lookup := componentLookup{count: foundStackCount, stacks: foundStacks, info: foundConfigAndStacksInfo, nameMappings: stackNameMappings}
+		if pathErr := search.retryFromPath(&configAndStacksInfo, &lookup); pathErr != nil {
+			return configAndStacksInfo, pathErr
 		}
-
-		if shouldAttemptPathResolution {
-			// Component not found - try fallback to path resolution.
-			// If the component argument looks like it could be a path (e.g., "components/terraform/vpc"),
-			// try resolving it as a filesystem path and retry with the resolved component name.
-			log.Debug(
-				"Component not found by name, attempting path resolution fallback",
-				"component", configAndStacksInfo.ComponentFromArg,
-				"stack", configAndStacksInfo.Stack,
-			)
-
-			resolvedComponent, pathErr := ResolveComponentFromPathWithoutValidation(
-				atmosConfig,
-				configAndStacksInfo.ComponentFromArg,
-				configAndStacksInfo.ComponentType,
-			)
-
-			if pathErr == nil {
-				// Path resolution succeeded - retry with resolved component name.
-				log.Debug(
-					"Path resolution succeeded, retrying with resolved component",
-					"original", configAndStacksInfo.ComponentFromArg,
-					"resolved", resolvedComponent,
-				)
-
-				// Update ComponentFromArg with resolved name and retry the loop.
-				configAndStacksInfo.ComponentFromArg = resolvedComponent
-
-				foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings = findComponentInStacks(
-					atmosConfig,
-					&configAndStacksInfo,
-					stacksMap,
-					deferredContexts,
-					authManager,
-				)
-			} else if pathArgExistsOnDisk && errors.Is(pathErr, errUtils.ErrPathNotInComponentDir) {
-				// Path resolution failed because path is not in component directories, and
-				// pathArg is a real, existing filesystem path -- not just a namespaced component
-				// name that happens to contain a slash. Return the detailed path error instead of
-				// the generic "component not found" one.
-				return configAndStacksInfo, pathErr
-			}
-		}
+		foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings = lookup.count, lookup.stacks, lookup.info, lookup.nameMappings
 
 		// If still not found after path resolution attempt (or if path resolution was skipped), return error.
 		if foundStackCount == 0 {

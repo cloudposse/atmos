@@ -9,10 +9,12 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"text/template"
 
 	"github.com/hairyhenderson/gomplate/v3/data"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -29,7 +31,41 @@ func FuncMap(
 ) template.FuncMap {
 	defer perf.Track(atmosConfig, "exec.FuncMap")()
 
-	atmosFuncs := &AtmosFuncs{atmosConfig, configAndStacksInfo, ctx, gomplateData}
+	return newFuncMap(atmosConfig, configAndStacksInfo, ctx, gomplateData, "")
+}
+
+// manifestLoadFuncMap creates the template functions used while a stack manifest is being loaded
+// (before all manifests are merged). It is identical to FuncMap except that atmos.Component fails
+// with a clear error instead of describing the target component, which would load every stack
+// manifest again, including the manifest currently being rendered.
+func manifestLoadFuncMap(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	ctx context.Context,
+	gomplateData *data.Data,
+	manifestFile string,
+) template.FuncMap {
+	defer perf.Track(atmosConfig, "exec.manifestLoadFuncMap")()
+
+	return newFuncMap(atmosConfig, configAndStacksInfo, ctx, gomplateData, manifestFile)
+}
+
+// newFuncMap builds the template function map. A non-empty manifestFile marks the functions as
+// running during stack manifest loading.
+func newFuncMap(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	ctx context.Context,
+	gomplateData *data.Data,
+	manifestFile string,
+) template.FuncMap {
+	atmosFuncs := &AtmosFuncs{
+		atmosConfig:         atmosConfig,
+		configAndStacksInfo: configAndStacksInfo,
+		ctx:                 ctx,
+		gomplateData:        gomplateData,
+		manifestLoadFile:    manifestFile,
+	}
 
 	funcs := templatefuncs.FuncMap()
 	funcs["atmos"] = func() any { return atmosFuncs }
@@ -43,10 +79,25 @@ type AtmosFuncs struct {
 	configAndStacksInfo *schema.ConfigAndStacksInfo
 	ctx                 context.Context
 	gomplateData        *data.Data
+	// manifestLoadFile is the stack manifest being rendered while stacks are loading.
+	// Empty outside manifest loading.
+	manifestLoadFile string
 }
 
 // Component returns component configuration for the given component and stack.
 func (f AtmosFuncs) Component(component string, stack string) (any, error) {
+	// Re-entry guard: describing a component loads and renders every stack manifest, including the
+	// manifest that is being rendered right now, which would call atmos.Component again without limit.
+	if f.manifestLoadFile != "" {
+		return nil, errUtils.Build(fmt.Errorf("%w: atmos.Component(%q, %q) in stack manifest '%s'",
+			errUtils.ErrComponentFuncDuringManifestLoad, component, stack, f.manifestLoadFile)).
+			WithContext("file", f.manifestLoadFile).
+			WithContext("component", component).
+			WithContext("stack", stack).
+			WithHint("Use atmos.Component in a component section (vars, settings, env) of a regular stack manifest: Atmos evaluates those after all manifests are loaded.").
+			WithHint("Manifests that are fully rendered while loading (files ending in .tmpl and imports with a context) cannot use atmos.Component.").
+			Err()
+	}
 	return componentFunc(f.atmosConfig, f.configAndStacksInfo, component, stack)
 }
 

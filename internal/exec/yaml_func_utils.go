@@ -13,6 +13,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 	secretdeferred "github.com/cloudposse/atmos/pkg/secrets/deferred"
 	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -302,6 +303,20 @@ func processContextAwareTags(
 	return nil, false, nil
 }
 
+// secretSelectorEvaluator lets `!secret` resolve a declaration's `store:`/`sops:` YAML-function
+// selector (for example `!aws.cloudformation.output ...`) with the same evaluator and processing
+// context that is walking the component. It only evaluates the selector value it is handed.
+func secretSelectorEvaluator(atmosConfig *schema.AtmosConfiguration, currentStack string, stackInfo *schema.ConfigAndStacksInfo) secrets.SelectorEvaluator {
+	const key = "selector"
+	return func(_ []string, raw any) (any, error) {
+		evaluated, err := processNodesWithContext(atmosConfig, map[string]any{key: raw}, currentStack, nil, GetOrCreateResolutionContext(), stackInfo, nil)
+		if err != nil {
+			return nil, err
+		}
+		return evaluated[key], nil
+	}
+}
+
 // processSimpleTags processes tags that don't need cycle detection.
 // Returns (result, handled, error) where handled indicates if a matching tag was found.
 func processSimpleTags(
@@ -326,7 +341,8 @@ func processSimpleTags(
 		return res, true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncSecret, skip) {
-		res, err := secretdeferred.NewValue(atmosConfig, input, currentStack, stackInfo).Resolve()
+		res, err := secretdeferred.NewValue(atmosConfig, input, currentStack, stackInfo,
+			secrets.WithSelectorEvaluator(secretSelectorEvaluator(atmosConfig, currentStack, stackInfo))).Resolve()
 		if err != nil {
 			return nil, true, err
 		}

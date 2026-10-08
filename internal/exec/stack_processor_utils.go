@@ -19,6 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfnmanifest "github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -173,7 +174,10 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		// that aren't valid YAML. Files with .yaml.tmpl extension are processed
 		// as templates first, which allows non-YAML-valid Go template syntax.
 		hint := ""
-		if !strings.HasSuffix(filePath, u.TemplateExtension) {
+		if cfnHint := cfnmanifest.UnsupportedTagHint(err); cfnHint != "" {
+			// A CloudFormation short-form intrinsic (!Ref, !Sub, ...) is not a templating problem.
+			hint = " (hint: " + cfnHint + ")"
+		} else if !strings.HasSuffix(filePath, u.TemplateExtension) {
 			hint = " (hint: if this file contains Go template directives, rename it to .yaml.tmpl)"
 		}
 		return nil, fmt.Errorf("%w: failed to parse YAML for locals extraction%s: %w", errUtils.ErrInvalidStackManifest, hint, err)
@@ -343,7 +347,7 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 	// Use ignoreMissingTemplateValues=false so templates with missing values fail
 	// (e.g., {{ .atmos_component }} when component context isn't available yet).
 	// The caller will fall back to raw values, preserving templates for later processing.
-	processed, err := ProcessTmpl(atmosConfig, filePath, yamlStr, context, false)
+	processed, err := processTmpl(atmosConfig, tmplInput{name: filePath, value: yamlStr, data: context, manifestLoadFile: filePath})
 	if err != nil {
 		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to process templates in section: %w", err))
 	}
@@ -383,6 +387,22 @@ func processStructuredTemplateRefs(value any, context map[string]any) any {
 	default:
 		return value
 	}
+}
+
+// canDeferManifestTemplateError reports whether a template error raised while rendering a stack
+// manifest at load time can be deferred to the later, per-component template pass (which has the
+// full component context) by keeping the raw manifest content.
+//
+// It cannot when the context was provided from outside (an import `context`), because the rendered
+// result is final. It also cannot for an atmos.Component call in a template file (`.tmpl`): that
+// file is only ever rendered at load time, so deferring would only hide the clear error behind a
+// YAML parse error of the raw template. A regular manifest defers atmos.Component to the component
+// sections, where it is evaluated after all manifests are loaded.
+func canDeferManifestTemplateError(originalContextProvided bool, filePath string, err error) bool {
+	if originalContextProvided {
+		return false
+	}
+	return !stderrors.Is(err, errUtils.ErrComponentFuncDuringManifestLoad) || !u.IsTemplateFile(filePath)
 }
 
 // extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
@@ -890,8 +910,9 @@ func isSchemaBranchWrapperMessage(msg string) bool {
 // editorconfig --format=gcc` already uses, instead of a raw BasicOutput JSON
 // dump. BasicOutput's first entry is always a generic "doesn't validate with
 // <schema>" wrapper around the whole document (empty KeywordLocation);
-// wrapper entries throughout (including nested oneOf/anyOf branch failures)
-// are dropped in favor of the specific leaf violations.
+// wrapper entries throughout (including nested oneOf/anyOf branch failures
+// and message-less nodes that only group several failed keywords) are dropped
+// in favor of the specific leaf violations.
 //
 // Markdown list syntax (not plain lines) is deliberate: the CLI's error box
 // renders this as CommonMark, which treats a lone "\n" between plain
@@ -939,6 +960,12 @@ func collectManifestSchemaErrorItems(e *jsonschema.ValidationError, positions u.
 	alternatives := make(map[string]*manifestSchemaTypeAlternatives)
 	for _, basicErr := range e.BasicOutput().Errors {
 		if basicErr.KeywordLocation == "" || isSchemaBranchWrapperMessage(basicErr.Error) {
+			continue
+		}
+		// A schema node with several failing keywords is reported as a wrapper
+		// with an empty message; its causes carry the real findings, so printing
+		// it would only produce a bullet with a location and no explanation.
+		if strings.TrimSpace(basicErr.Error) == "" {
 			continue
 		}
 		path := jsonPointerToPositionKey(basicErr.InstanceLocation)
@@ -1195,14 +1222,14 @@ func processYAMLConfigFileWithContextInternal(
 		}
 
 		var tmplErr error
-		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(atmosConfig, relativeFilePath, stackManifestTemplateInput, context, ignoreMissingTemplateValues)
+		stackManifestTemplatesProcessed, tmplErr = processTmpl(atmosConfig, tmplInput{name: relativeFilePath, value: stackManifestTemplateInput, data: context, ignoreMissing: ignoreMissingTemplateValues, manifestLoadFile: relativeFilePath})
 		if tmplErr != nil {
 			// If template processing failed and the only context is from file extraction
 			// (locals/settings/vars/env, not from an explicit import context), this is likely
 			// due to templates referencing component context (like {{ .atmos_component }}) that
 			// isn't available during import. Fall back to the raw content — these templates will
 			// be processed later in ProcessStacks when the full component context is available.
-			if !originalContextProvided {
+			if canDeferManifestTemplateError(originalContextProvided, filePath, tmplErr) {
 				log.Debug("Template processing deferred for file with file-extracted context only",
 					"file", relativeFilePath, "error", tmplErr)
 				stackManifestTemplatesProcessed = stackManifestTemplateInput
@@ -1952,7 +1979,7 @@ func renderImportPath(
 		tmplData = merged
 	}
 
-	rendered, err := ProcessTmpl(atmosConfig, fmt.Sprintf("import-path(%s)", relativeFilePath), imp, tmplData, ignoreMissing)
+	rendered, err := processTmpl(atmosConfig, tmplInput{name: fmt.Sprintf("import-path(%s)", relativeFilePath), value: imp, data: tmplData, ignoreMissing: ignoreMissing, manifestLoadFile: relativeFilePath})
 	if err != nil {
 		wrapped := fmt.Errorf("%w: import path '%s' in file '%s': %w",
 			errUtils.ErrImportPathTemplate, imp, relativeFilePath, err)

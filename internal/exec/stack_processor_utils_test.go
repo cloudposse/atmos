@@ -4820,3 +4820,54 @@ func TestManifestSchemaErrorMessage(t *testing.T) {
 	)
 	assert.Equal(t, "does not match pattern '^component'", manifestSchemaErrorMessage("does not match pattern '^component'"))
 }
+
+// TestExtractLocalsFromRawYAML_UnsupportedTagHints verifies the parse-failure hint: a CloudFormation
+// short-form intrinsic gets CloudFormation-specific advice instead of the unrelated suggestion to
+// rename the file to .yaml.tmpl, while any other unsupported tag keeps the generic advice.
+func TestExtractLocalsFromRawYAML_UnsupportedTagHints(t *testing.T) {
+	t.Cleanup(ClearLocalsExtractionCache)
+
+	tests := []struct {
+		name        string
+		content     string
+		file        string
+		wantContain []string
+		wantAbsent  []string
+	}{
+		{
+			name:        "short-form Ref",
+			content:     "components:\n  aws/cloudformation:\n    web:\n      template:\n        Outputs:\n          Id: !Ref Bucket\n",
+			file:        "stack-ref.yaml",
+			wantContain: []string{"`!Ref` is a CloudFormation short-form intrinsic", "Ref:", "path:"},
+			wantAbsent:  []string{"rename it to .yaml.tmpl"},
+		},
+		{
+			name:        "short-form Sub",
+			content:     "components:\n  aws/cloudformation:\n    web:\n      template:\n        Value: !Sub \"${AWS::Region}\"\n",
+			file:        "stack-sub.yaml",
+			wantContain: []string{"`!Sub` is a CloudFormation short-form intrinsic", "Fn::Sub:"},
+			wantAbsent:  []string{"rename it to .yaml.tmpl"},
+		},
+		{
+			name:        "other unsupported tag keeps the generic hint",
+			content:     "vars:\n  stage: !envv HOME\n",
+			file:        "stack-other.yaml",
+			wantContain: []string{"rename it to .yaml.tmpl"},
+			wantAbsent:  []string{"CloudFormation short-form"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := extractLocalsFromRawYAML(&schema.AtmosConfiguration{}, tt.content, tt.file)
+
+			require.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
+			require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+			for _, want := range tt.wantContain {
+				assert.Contains(t, err.Error(), want)
+			}
+			for _, absent := range tt.wantAbsent {
+				assert.NotContains(t, err.Error(), absent)
+			}
+		})
+	}
+}

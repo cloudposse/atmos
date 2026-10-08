@@ -313,3 +313,92 @@ func TestOperationFlags_RecordsTopLevelAliasVerb(t *testing.T) {
 	changeset := find(t, CloudFormationCmd, "changeset")
 	assert.NotContains(t, operationFlags(find(t, changeset, "create"), "changeset-create", nil), invokedVerbFlag)
 }
+
+// leafCommands returns every runnable command in a command tree.
+func leafCommands(root *cobra.Command) []*cobra.Command {
+	var leaves []*cobra.Command
+	for _, child := range root.Commands() {
+		if len(child.Commands()) > 0 {
+			leaves = append(leaves, leafCommands(child)...)
+			continue
+		}
+		leaves = append(leaves, child)
+	}
+	return leaves
+}
+
+// resetIdentityFlag restores the identity flag to its pristine state so parse tests do not leak into each other.
+func resetIdentityFlag(cmd *cobra.Command) {
+	if flag := cmd.Flag("identity"); flag != nil {
+		_ = flag.Value.Set(flag.DefValue)
+		flag.Changed = false
+	}
+}
+
+// The -i shorthand must equal --identity on every aws cloudformation verb, matching `atmos terraform`.
+func TestIdentityShorthandAcceptedOnEveryVerb(t *testing.T) {
+	leaves := leafCommands(CloudFormationCmd)
+	require.Positive(t, len(leaves), "the command tree must not be empty")
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		// The identity flag has a NoOptDefVal (bare --identity selects interactively), so a value
+		// must be attached with "=" at the pflag layer, exactly as for `atmos terraform`.
+		{"shorthand", []string{"-i=dev-admin"}},
+		{"long form", []string{"--identity=dev-admin"}},
+	}
+
+	// These verbs are shared with other component types (pkg/provisioner/source/cmd) and read only
+	// local state, so they do not register an identity flag of their own.
+	noIdentityVerbs := map[string]bool{
+		"cloudformation source list":     true,
+		"cloudformation source describe": true,
+		"cloudformation source delete":   true,
+	}
+
+	checked := 0
+	for _, leaf := range leaves {
+		if noIdentityVerbs[leaf.CommandPath()] {
+			continue
+		}
+		checked++
+		t.Run(leaf.CommandPath(), func(t *testing.T) {
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					cmd := leaf
+					t.Cleanup(func() { resetIdentityFlag(cmd) })
+
+					require.NoError(t, cmd.ParseFlags(tt.args), "-i/--identity must be a known flag")
+					flag := cmd.Flag("identity")
+					require.NotNil(t, flag)
+					assert.Equal(t, "i", flag.Shorthand)
+					assert.Equal(t, "dev-admin", flag.Value.String())
+				})
+			}
+
+			t.Run("bare -i selects interactively like --identity", func(t *testing.T) {
+				cmd := leaf
+				t.Cleanup(func() { resetIdentityFlag(cmd) })
+
+				require.NoError(t, cmd.ParseFlags([]string{"-i"}))
+				assert.Equal(t, cfg.IdentityFlagSelectValue, cmd.Flag("identity").Value.String())
+			})
+		})
+	}
+	require.Positive(t, checked, "the identity checks must cover at least one verb")
+}
+
+// The verb tree must keep covering the operation verbs, not just the backend ones that already had -i.
+func TestIdentityShorthandCoversOperationVerbs(t *testing.T) {
+	paths := map[string]bool{}
+	for _, leaf := range leafCommands(CloudFormationCmd) {
+		if leaf.Flags().Lookup("identity") != nil {
+			paths[leaf.Name()] = true
+		}
+	}
+	for _, verb := range []string{"output", "plan", "deploy", "apply", "diff", "delete", "render", "validate", "fmt", "tree", "logs", "watch"} {
+		assert.True(t, paths[verb], "%q must accept --identity/-i", verb)
+	}
+}

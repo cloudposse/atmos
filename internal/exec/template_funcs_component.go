@@ -37,6 +37,7 @@ type ComponentFuncOutputsExecutor interface {
 // defaultComponentFuncOutputsExecutor implements ComponentFuncOutputsExecutor using pkg/terraform/output.
 type defaultComponentFuncOutputsExecutor struct{}
 
+// ExecuteWithSections reads Terraform outputs using the already resolved sections and target auth context.
 func (defaultComponentFuncOutputsExecutor) ExecuteWithSections(
 	atmosConfig *schema.AtmosConfiguration,
 	component, stack string,
@@ -52,6 +53,7 @@ func (defaultComponentFuncOutputsExecutor) ExecuteWithSections(
 // verified without invoking Terraform or a remote backend.
 var componentFuncOutputsExecutor ComponentFuncOutputsExecutor = defaultComponentFuncOutputsExecutor{}
 
+// componentFunc resolves template component references and caches outputs within the selected target identity.
 func componentFunc(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
@@ -100,25 +102,26 @@ func componentFunc(
 	if maskOnly {
 		valueCache = nil
 	}
-	if cached, ok := valueCache.Load("atmos.Component"); ok {
-		return cached, nil
-	}
 
 	// Resolve identity before the eager cache lookup so distinct callers cannot
 	// share output values. Deferred mode uses its target-bound value cache above.
 	authContext := resolvedTargetAuthContext(atmosConfig, resolvedAuthMgr, nil, authDisabled)
 	stackSlug := fmt.Sprintf("%s-%s-%s", stack, component, authCacheKeySuffix(authContext))
-
-	// Inspection must neither consume resolved secrets nor cache display placeholders.
-	var existingSections any
-	var found bool
-	if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
-		existingSections, found = componentFuncSyncMap.Load(stackSlug)
+	// Non-CloudFormation values use the component's auth scope and can be reused
+	// before describing the target, avoiding repeated secret/template evaluation.
+	// CloudFormation stores a separate deferred key and must resolve delivery auth
+	// before consulting either cache, including when its principal matches this one.
+	if cached, ok := valueCache.Load("atmos.Component"); ok {
+		return cached, nil
 	}
-	if found && existingSections != nil {
-		logComponentFuncCacheHit(functionName, existingSections.(map[string]any))
-
-		return existingSections, nil
+	if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		if cached, ok := componentFuncSyncMap.Load(stackSlug); ok && cached != nil {
+			sections := cached.(map[string]any)
+			if sections[cfg.ComponentTypeSectionName] != cfg.CloudFormationComponentType {
+				logComponentFuncCacheHit(functionName, sections)
+				return sections, nil
+			}
+		}
 	}
 
 	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
@@ -136,9 +139,36 @@ func componentFunc(
 		return nil, errUtils.WrapComponentDescribeError(component, stack, err, "atmos.Component")
 	}
 
+	componentType := sections[cfg.ComponentTypeSectionName]
+	cacheKey := "atmos.Component"
+	if componentType == cfg.CloudFormationComponentType {
+		authContext, err = cloudFormationOutputAuthForSections(atmosConfig, sections, cloudFormationOutputScope(stack, configAndStacksInfo, authDisabled), authContext)
+		if err != nil {
+			return nil, err
+		}
+		// The deployment target may use a different principal from the component.
+		// Resolve it before cache access so failed auth never serves stale outputs.
+		stackSlug = fmt.Sprintf("%s-%s-%s", stack, component, authCacheKeySuffix(authContext))
+		cacheKey += "-" + authCacheKeySuffix(authContext)
+	}
+	if cached, ok := valueCache.Load(cacheKey); ok {
+		return cached, nil
+	}
+
+	// Inspection must neither consume resolved secrets nor cache display placeholders.
+	var existingSections any
+	var found bool
+	if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		existingSections, found = componentFuncSyncMap.Load(stackSlug)
+	}
+	if found && existingSections != nil {
+		logComponentFuncCacheHit(functionName, existingSections.(map[string]any))
+
+		return existingSections, nil
+	}
+
 	// Process Terraform remote state.
 	var terraformOutputs map[string]any
-	componentType := sections[cfg.ComponentTypeSectionName]
 	if componentType == cfg.TerraformComponentType {
 		// Check if the component in the stack is configured with the 'static' remote state backend,
 		// in which case get the `output` from the static remote state instead of executing `terraform output`.
@@ -171,7 +201,7 @@ func componentFunc(
 	}
 
 	// Cache the result
-	valueCache.Store("atmos.Component", sections)
+	valueCache.Store(cacheKey, sections)
 	if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
 		componentFuncSyncMap.Store(stackSlug, sections)
 	}

@@ -146,7 +146,7 @@ func deployDirect(octx *opContext, client CloudFormationClient, spec *stackSpec)
 	result, err := createChangeSet(ctx, client, spec)
 	if err != nil {
 		discardChangeSet(ctx, client, spec.StackName, result)
-		return nil, err
+		return result, err
 	}
 	if result.NoOp {
 		discardChangeSet(ctx, client, spec.StackName, result)
@@ -157,7 +157,7 @@ func deployDirect(octx *opContext, client CloudFormationClient, spec *stackSpec)
 	renderApplyPreview(spec.StackName, result)
 	if err := confirmApply(octx, spec.StackName); err != nil {
 		discardChangeSet(ctx, client, spec.StackName, result)
-		return nil, err
+		return result, err
 	}
 
 	if _, err := prepareStackPolicy(ctx, client, spec, result); err != nil {
@@ -176,10 +176,10 @@ func deployDirect(octx *opContext, client CloudFormationClient, spec *stackSpec)
 	}
 
 	status, err := streamStackEvents(ctx, client, spec.StackName, baseline, OperationApply)
+	result.StackStatus = status
 	if err != nil {
 		return result, err
 	}
-	result.StackStatus = status
 	if isFailedStackStatus(status) {
 		return result, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationOperationFailed, spec.StackName, status)
 	}
@@ -299,6 +299,10 @@ func s3ConfigFromTargetAllowEmptyRegion(name string, block map[string]any) (*tar
 // own non-cluster targets, just carrying a CloudFormation template instead of
 // Kubernetes manifests.
 func deliverToExternalTarget(octx *opContext, selected *target.SelectedTarget, spec *stackSpec, summary map[string]any) error {
+	info, targetConfig, err := externalTargetAuth(octx, selected)
+	if err != nil {
+		return err
+	}
 	fileName := spec.StackName + ".yaml"
 	content := templateContentForDelivery(spec)
 	files := map[string][]byte{fileName: content}
@@ -321,9 +325,9 @@ func deliverToExternalTarget(octx *opContext, selected *target.SelectedTarget, s
 	if err := target.Deliver(deliverCtx, selected.Kind, &target.DeliverInput{
 		AtmosConfig:  octx.AtmosConfig,
 		TargetName:   selected.Name,
-		TargetConfig: selected.Config,
+		TargetConfig: targetConfig,
 		Artifact:     artifact,
-		EnvProvider:  authManagerFor(octx.Info),
+		EnvProvider:  authManagerFor(info),
 	}); err != nil {
 		return err
 	}

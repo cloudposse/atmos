@@ -117,7 +117,7 @@ func init() {
 		panic(err)
 	}
 
-	CloudFormationCmd.AddCommand(newOperationCommand(opRender, opRender, "Render the local template client-side (no API calls)"))
+	CloudFormationCmd.AddCommand(newOperationCommand(opRender, opRender, "Render the template client-side without deploying or validating it"))
 	CloudFormationCmd.AddCommand(newOperationCommand(opPlan, opDiff, "Preview changes an apply would make"))
 	CloudFormationCmd.AddCommand(newOperationCommand(opDiff, opDiff, "Show changes an apply would make"))
 	CloudFormationCmd.AddCommand(newOperationCommand(opApply, subCommandApply, "Create or update the stack"))
@@ -294,6 +294,10 @@ func operationFlagOptions(use, subCommand string) []flags.Option {
 		// populate it: WithConditionalCompletionPrompt only takes effect for a
 		// flag registered on this same parser (see promptForSingleMissingFlag).
 		flags.WithStackFlag(),
+		// The root command's persistent --identity has no shorthand, so each verb registers the
+		// identity flag locally from the global flag registry. That is where -i comes from, the
+		// same -i/--identity pair `atmos terraform` and the backend verbs expose.
+		flags.WithIdentityFlag(),
 		flags.WithBoolFlag("ci", "", false, "Enable native CI integration (requires ci.enabled)."),
 		flags.WithBoolFlag(flagAll, "", false, "Process all aws/cloudformation components in dependency order."),
 		flags.WithBoolFlag(flagAffected, "", false, "Process affected aws/cloudformation components in dependency order."),
