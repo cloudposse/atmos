@@ -32,9 +32,9 @@ Learn more in the [Quick Start Guide](https://atmos.tools/quick-start/).
 
 ## Try It
 
-```shell
-cd examples/quick-start-simple
+From this example's directory, run:
 
+```shell
 # List all stacks
 atmos list stacks
 

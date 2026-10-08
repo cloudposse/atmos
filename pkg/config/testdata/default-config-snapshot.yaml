@@ -19,6 +19,10 @@ diagnostics.enabled: false
 diagnostics.file: ""
 diagnostics.include_output: false
 docs.generate.readme.output: ./README.md
+init.depth: 1
+init.git: true
+init.ref: ""
+init.repository: github.com/cloudposse/atmos
 list.error_mode: warn
 logs.file: /dev/stderr
 logs.level: Warning
