@@ -1,24 +1,26 @@
 package cmd
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
+	initcmd "github.com/cloudposse/atmos/cmd/init"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
-// loadStartupConfig shows progress for project initialization before configuration
-// is available. The spinner stops before formatter initialization or error output.
-func loadStartupConfig(root *cobra.Command, info *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
-	if showInitConfigProgress(root, os.Args[1:]) {
-		progress := spinner.New("Loading configuration")
-		progress.Start()
-		defer progress.Stop()
+// startInitProgress keeps a single indicator alive from startup through copying.
+// Help and non-terminal output stay quiet; init stops it before prompts or results.
+func startInitProgress(root *cobra.Command, args []string) func() {
+	if !showInitConfigProgress(root, args) || !term.IsTTYSupportForStdout() {
+		return func() {}
 	}
-	return cfg.InitCliConfig(*info, false)
+	progress := spinner.New("Loading configuration")
+	progress.Start()
+	initcmd.SetStartupProgress(progress)
+	return func() {
+		progress.Stop()
+		initcmd.SetStartupProgress(nil)
+	}
 }
 
 // showInitConfigProgress limits early progress to the built-in project init command;

@@ -20,11 +20,34 @@ type Directory struct {
 	ResolvedRef string
 }
 
+// FetchProgress updates an indicator owned by the caller instead of starting a
+// separate download spinner. The caller remains responsible for stopping it.
+type FetchProgress interface {
+	Update(string)
+}
+
+type fetchOptions struct {
+	progress FetchProgress
+}
+
+// FetchOption configures directory fetching.
+type FetchOption func(*fetchOptions)
+
+// WithProgress reuses the caller's progress indicator during remote downloads.
+func WithProgress(progress FetchProgress) FetchOption {
+	defer perf.Track(nil, "source.WithProgress")()
+	return func(options *fetchOptions) { options.progress = progress }
+}
+
 // FetchDirectory acquires a local or remote directory without requiring a scaffold manifest.
 // The returned cleanup function is always safe to call, including after errors.
-func FetchDirectory(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) (*Directory, func(), error) {
+func FetchDirectory(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration, opts ...FetchOption) (*Directory, func(), error) {
 	defer perf.Track(nil, "source.FetchDirectory")()
 
+	options := &fetchOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
 	if timeout <= 0 {
 		timeout = DefaultFetchTimeout
 	}
@@ -33,9 +56,12 @@ func FetchDirectory(atmosConfig *schema.AtmosConfiguration, name, src string, ti
 		return directory, func() {}, err
 	}
 	if vendor.IsOCIURI(src) {
+		if options.progress != nil {
+			options.progress.Update("Fetching source " + name)
+		}
 		return fetchOCI(atmosConfig, src, timeout)
 	}
-	return fetchRemoteDirectory(atmosConfig, name, src, timeout)
+	return fetchRemoteDirectory(atmosConfig, name, src, timeout, options)
 }
 
 func localDirectory(src string) (*Directory, error) {

@@ -245,7 +245,7 @@ func fetchOCI(atmosConfig *schema.AtmosConfiguration, src string, timeout time.D
 // fetchRemoteDirectory fetches a remote source (git/https/s3, via
 // go-getter) into a temporary directory without interpreting its contents. The
 // returned cleanup function removes the temporary directory.
-func fetchRemoteDirectory(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) (*Directory, func(), error) {
+func fetchRemoteDirectory(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration, options *fetchOptions) (*Directory, func(), error) {
 	noop := func() {}
 
 	tempDir, err := os.MkdirTemp("", "atmos-scaffold-")
@@ -258,7 +258,7 @@ func fetchRemoteDirectory(atmosConfig *schema.AtmosConfiguration, name, src stri
 	}
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
 
-	metadata, err := fetchRemoteSource(atmosConfig, name, src, tempDir, timeout)
+	metadata, err := options.fetchRemoteSource(atmosConfig, name, src, tempDir, timeout)
 	if err != nil {
 		cleanup()
 		return nil, noop, err
@@ -269,7 +269,7 @@ func fetchRemoteDirectory(atmosConfig *schema.AtmosConfiguration, name, src stri
 
 // fetchRemoteSource downloads src into destDir via go-getter, showing a
 // spinner while the download runs.
-func fetchRemoteSource(atmosConfig *schema.AtmosConfiguration, name, src, destDir string, timeout time.Duration) (downloader.FetchMetadata, error) {
+func (options *fetchOptions) fetchRemoteSource(atmosConfig *schema.AtmosConfiguration, name, src, destDir string, timeout time.Duration) (downloader.FetchMetadata, error) {
 	normalized := vendor.NormalizeURI(src)
 	// Keep the spinner message short: the full go-getter URL (subdir + ref)
 	// can be long enough to wrap across terminal rows, which breaks
@@ -278,7 +278,7 @@ func fetchRemoteSource(atmosConfig *schema.AtmosConfiguration, name, src, destDi
 	progressMsg := fmt.Sprintf("Fetching source `%s`", name)
 	completedMsg := fmt.Sprintf("Fetched source `%s`", name)
 	var metadata downloader.FetchMetadata
-	fetchErr := spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+	fetchErr := options.run(progressMsg, completedMsg, func() error {
 		var err error
 		metadata, err = downloader.NewGoGetterDownloader(atmosConfig).FetchWithMetadata(normalized, destDir, downloader.ClientModeDir, timeout)
 		return err
@@ -294,6 +294,15 @@ func fetchRemoteSource(atmosConfig *schema.AtmosConfiguration, name, src, destDi
 			Err()
 	}
 	return metadata, nil
+}
+
+// run leaves a shared indicator running for the next initialization step.
+func (options *fetchOptions) run(message, completed string, operation func() error) error {
+	if options.progress == nil {
+		return spinner.ExecWithSpinner(message, completed, operation)
+	}
+	options.progress.Update(message)
+	return operation()
 }
 
 func requireScaffoldConfig(conf *templates.Configuration, src string) error {

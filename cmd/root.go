@@ -457,7 +457,7 @@ var RootCmd = &cobra.Command{
 			configAndStacksInfo.AtmosConfigDirsFromArg = cfgDirs
 		}
 		// Load the config (includes env var bindings); don't store globally yet.
-		tmpConfig, err := loadStartupConfig(cmd.Root(), &configAndStacksInfo)
+		tmpConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			if errors.Is(err, cfg.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error.
@@ -1867,6 +1867,8 @@ func applyCIGitCloneBootstrap(cmd *cobra.Command, args []string, tmpConfig *sche
 // command, captures telemetry, and handles unknown-command errors by showing usage.
 // This function is invoked once from main.main.
 func Execute() error {
+	stopProgress := startInitProgress(RootCmd, os.Args[1:])
+	defer stopProgress()
 	executionID, restoreInvocation := proexec.BeginInvocation()
 	defer restoreInvocation()
 	defer perf.Track(&atmosConfig, "cmd.Execute")()
@@ -1892,7 +1894,7 @@ func Execute() error {
 	// Note: --version flag is now handled in main.go before calling Execute().
 	var initErr error
 	earlyConfigInfo := cfg.EarlyConfigAndStacksInfoFromArgs(os.Args[1:])
-	atmosConfig, initErr = loadStartupConfig(RootCmd, &earlyConfigInfo)
+	atmosConfig, initErr = cfg.InitCliConfig(earlyConfigInfo, false)
 
 	// Set atmosConfig for commands that need access to config.
 	version.SetAtmosConfig(&atmosConfig)

@@ -95,6 +95,7 @@ func prepareInitSource(opts *initOptions, selected *templates.Configuration, con
 	prepared := &preparedInitSource{cleanup: func() {}}
 	_, catalog := configs[opts.templateName]
 	if !opts.copy && (opts.templateName == "" || catalog) {
+		opts.stopProgress()
 		if err := applyTemplateDepth(opts, selected); err != nil {
 			return nil, err
 		}
@@ -121,7 +122,8 @@ func prepareInitDirectory(opts *initOptions, selected *templates.Configuration, 
 	if err != nil {
 		return nil, err
 	}
-	dir, cleanup, err := source.FetchDirectory(&atmosConfig, normalized.Name, normalized.Source, source.DefaultFetchTimeout)
+	dir, cleanup, err := source.FetchDirectory(&atmosConfig, normalized.Name, normalized.Source, source.DefaultFetchTimeout,
+		source.WithProgress(opts.progress))
 	if err != nil {
 		cleanup()
 		return nil, err
@@ -187,16 +189,19 @@ func runCopyInit(ctx context.Context, opts *initOptions, prepared *preparedInitS
 	if err := resolveCopyTarget(opts, prepared.name); err != nil {
 		return err
 	}
+	opts.updateProgress("Copying files")
 	if err := directory.Copy(ctx, prepared.directory.Path, opts.targetDir, opts.force); err != nil {
 		return err
 	}
 	if opts.git {
+		opts.updateProgress("Initializing Git repository")
 		if _, _, err := gen.InitGitRepository(gen.InitGitOptions{
 			TargetPath: opts.targetDir, TemplateName: prepared.name, AllowEmptyCommit: true,
 		}); err != nil {
 			return err
 		}
 	}
+	opts.stopProgress()
 	return displayCopiedProject(prepared, opts.targetDir)
 }
 

@@ -146,6 +146,7 @@ For scaffold templates, an omitted target directory is prompted interactively.`,
 		}
 
 		return executeInit(cmd.Context(), &initOptions{
+			progress:        startupProgress,
 			templateName:    template,
 			atmosConfig:     atmosConfig,
 			copy:            v.GetBool("copy"),
@@ -294,6 +295,7 @@ func parseSetFlag(flag string) (string, string, error) {
 
 // initOptions holds configuration for the init operation.
 type initOptions struct {
+	progress        Progress
 	atmosConfig     *schema.AtmosConfiguration
 	copy            bool
 	copyUnsupported []string
@@ -318,6 +320,8 @@ type initOptions struct {
 // executeInit initializes a new Atmos project from a template.
 // This logic was moved from internal/exec/init.go to keep command logic in cmd/.
 func executeInit(ctx context.Context, opts *initOptions) error {
+	defer opts.stopProgress()
+	opts.updateProgress("Preparing source")
 	// Convert to absolute path if provided.
 	opts.targetDir = resolveTargetDir(opts.targetDir)
 
@@ -337,6 +341,9 @@ func executeInit(ctx context.Context, opts *initOptions) error {
 	}
 
 	// Select the template.
+	if opts.templateName == "" {
+		opts.stopProgress()
+	}
 	selectedConfig, err := selectTemplate(opts.templateName, opts.interactive, initUI, configs, opts.ref)
 	if err != nil {
 		return err
@@ -355,6 +362,7 @@ func executeInit(ctx context.Context, opts *initOptions) error {
 		return runCopyInit(ctx, opts, prepared)
 	}
 
+	opts.stopProgress()
 	return runScaffoldInit(initUI, &selectedConfig, opts)
 }
 

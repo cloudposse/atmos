@@ -10,16 +10,12 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 // applyInitDefaults places configured values below command flags and environment
 // overrides. Viper's ordinary flag/env precedence remains authoritative.
 func applyInitDefaults(v *viper.Viper) (*schema.AtmosConfiguration, error) {
-	progress := spinner.New("Loading configuration")
-	progress.Start()
-	defer progress.Stop()
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return nil, err
