@@ -11,10 +11,6 @@ related_docs:
     url: /cli/commands/emulator/usage
 ---
 
-> **Availability:** This example requires the native CloudFormation implementation in
-> [PR #3157](https://github.com/cloudposse/atmos/pull/3157). The documentation-only revision
-> does not register `atmos aws cloudformation` or `atmos aws cfn`.
-
 ## Notes
 
 This example deploys a real, minimal CloudFormation stack (a single `AWS::SSM::Parameter`
@@ -62,4 +58,4 @@ The `atmos test` custom command runs the full deploy/delete lifecycle end to end
 
 ## Learn More
 
-See the [`atmos aws cloudformation`](https://github.com/cloudposse/atmos/pull/3157) docs.
+See the [`atmos aws cloudformation`](https://atmos.tools/cli/commands/aws/cloudformation) docs.

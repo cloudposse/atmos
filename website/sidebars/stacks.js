@@ -134,6 +134,15 @@ const instanceFields = {
     "settings",
     "vars",
   ],
+  "aws/cloudformation": [
+    "auth",
+    "dependencies",
+    "env",
+    "hooks",
+    "metadata",
+    "settings",
+    "vars",
+  ],
   container: ["command", "env", "metadata", "settings", "vars"],
   emulator: ["env", "metadata", "settings", "vars"],
   helm: [
@@ -274,7 +283,9 @@ const defaultFields = {
 };
 /** Preserve component overview IDs, including Terraform's nested index page. */
 const overview = (kind) =>
-  `stacks/components/${kind}${kind === "terraform" ? "/index" : ""}`;
+  kind === "aws/cloudformation"
+    ? "stacks/components/aws-cloudformation"
+    : `stacks/components/${kind}${kind === "terraform" ? "/index" : ""}`;
 
 // Register global field pages first as their canonical navigation entries.
 const items = [
