@@ -1,4 +1,5 @@
 ---
+slug: /scripting/reference/execution-model
 title: Execution Model
 sidebar_label: Execution Model
 sidebar_position: 7
@@ -20,7 +21,7 @@ A script runs in two phases.
 
 1. **Parse and resolve.** Atmos reads the whole file, reports syntax errors, and checks that every
    name used in the file is defined somewhere in it, is a built-in, or is one of the
-   [names Atmos adds](/automation/reference/builtin-functions#names-that-atmos-adds). A mistake
+   [names Atmos adds](/scripting/reference/builtin-functions#names-that-atmos-adds). A mistake
    found in this phase, such as a misspelled variable, stops the script before any statement runs,
    so nothing is printed and no command starts.
 2. **Execute.** Atmos runs the top-level statements in order. A `def` statement creates a function
@@ -349,8 +350,8 @@ inside files named by `load()` are not detected. During the check, `ctx` is `Non
 
 ## Related pages
 
-- [Statements](/automation/reference/statements) describes `load`, `for`, `while`, and the rest
+- [Statements](/scripting/reference/statements) describes `load`, `for`, `while`, and the rest
   of the statement syntax.
-- [Differences from Python](/automation/reference/differences-from-python) lists the Python
+- [Differences from Python](/scripting/reference/differences-from-python) lists the Python
   features that scripts do not have.
 - [Script step](/steps/type/script) covers entry points, working directory, and containers.

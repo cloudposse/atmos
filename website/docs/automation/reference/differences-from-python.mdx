@@ -1,4 +1,5 @@
 ---
+slug: /scripting/reference/differences-from-python
 title: Differences from Python
 sidebar_label: Differences from Python
 sidebar_position: 8
@@ -29,7 +30,7 @@ Atmos.
 | `l.sort()` | `sorted(l)`, which returns a new list. |
 | `l.copy()`, `d.copy()` | `list(l)`, `dict(d)`. |
 | `del l[0]` | `l.pop(0)`, `d.pop("key")`. |
-| `sum(xs)`, `round(x)` | Available as Atmos built-ins; see [`sum`](/automation/reference/builtin-functions#sum) and [`round`](/automation/reference/builtin-functions#round). |
+| `sum(xs)`, `round(x)` | Available as Atmos built-ins; see [`sum`](/scripting/reference/builtin-functions#sum) and [`round`](/scripting/reference/builtin-functions#round). |
 | `isinstance(x, list)` | `type(x) == "list"`. |
 | `(x for x in xs)` | `[x for x in xs]`. There are no generators. |
 | `for c in "abc"` | `for c in "abc".codepoints()`. |
@@ -39,7 +40,7 @@ Atmos.
 
 **No `try`, `except`, `finally`, or `raise`.** Errors propagate to the top and stop the script.
 The `fail()` function is the only way to raise one. See
-[Errors and tracebacks](/automation/reference/execution-model#errors-and-tracebacks). For the
+[Errors and tracebacks](/scripting/reference/execution-model#errors-and-tracebacks). For the
 `finally` case, [`defer`](/functions/automation/defer) registers cleanup that runs when the script
 or task finishes, whatever the outcome.
 
@@ -77,7 +78,7 @@ x = 1
 x = 2  # fails: cannot reassign global x
 ```
 
-See [Globals are assigned once](/automation/reference/execution-model#globals-are-assigned-once).
+See [Globals are assigned once](/scripting/reference/execution-model#globals-are-assigned-once).
 
 **Functions cannot assign to globals.** There is no `global` statement. Assigning inside a function
 creates a local variable, and `count += 1` on a global inside a function fails with
@@ -86,7 +87,7 @@ creates a local variable, and `count += 1` on a global inside a function fails w
 
 **Loaded and shared values are frozen.** Collections that come from `load()` are immutable, and
 collections reachable from `steps.parallel` tasks become immutable when the tasks start. See
-[Frozen values](/automation/reference/execution-model#frozen-values).
+[Frozen values](/scripting/reference/execution-model#frozen-values).
 
 **Names are checked before the script runs.** A misspelled name is an error even on a line that
 would never execute. A global must still be assigned before it is read, though functions may refer
@@ -103,8 +104,8 @@ to names that are defined later in the file.
 is `2`. Dividing by zero is an error for both `/` and `//`.
 
 **There is no `**` operator.** Use `x * x`, a loop, or a function. The functions `pow` and `divmod` are also unavailable.
-Atmos supplies [`sum`](/automation/reference/builtin-functions#sum) and
-[`round`](/automation/reference/builtin-functions#round) for adding and rounding numbers.
+Atmos supplies [`sum`](/scripting/reference/builtin-functions#sum) and
+[`round`](/scripting/reference/builtin-functions#round) for adding and rounding numbers.
 
 **Bitwise operators work.** `&`, `|`, `^`, `~`, `<<`, and `>>` operate on integers, and integers have
 arbitrary precision: `1 << 70` is `1180591620717411303424`.
@@ -139,7 +140,7 @@ specifications such as `{:>5}` or lookups such as `{a.b}`. The `%` operator supp
 `%i`, `%r`, `%x`, `%X`, `%o`, `%e`, `%f`, `%g`, `%c`, and `%%`, without width or precision.
 
 **Fewer methods.** Strings have 35 methods, listed under
-[String methods](/automation/reference/methods#string-methods). Methods that do not exist include
+[String methods](/scripting/reference/methods#string-methods). Methods that do not exist include
 `zfill`, `center`, `ljust`, `rjust`, `swapcase`, and `expandtabs`.
 
 **Number parsing does not trim whitespace.** The call `int(" 7 ")` fails, so call `.strip()` first.
@@ -167,7 +168,7 @@ new collection.
 
 **Fewer methods.** Lists have seven methods (`append`, `clear`, `extend`, `index`, `insert`,
 `pop`, `remove`), so there is no `sort()`, `reverse()`, `count()`, or `copy()`. Dictionaries have no
-`fromkeys()`, and there is no `collections` module. See [Methods](/automation/reference/methods).
+`fromkeys()`, and there is no `collections` module. See [Methods](/scripting/reference/methods).
 
 **Sorting is stable.** `sorted(items, key=...)` keeps the original order of elements that compare
 equal. It returns a new list. Values of different types cannot be ordered, so `sorted([1, "a"])`
@@ -185,11 +186,11 @@ so is a bare `*` before keyword-only parameters. Call-site unpacking with `f(*li
 **Defaults are evaluated once,** when the function is defined, as in Python.
 
 **Built-in functions take positional arguments.** `enumerate(items, start=1)` fails, while
-`enumerate(items, 1)` works. See [Built-in Functions](/automation/reference/builtin-functions).
+`enumerate(items, 1)` works. See [Built-in Functions](/scripting/reference/builtin-functions).
 
 **The `print` function writes a line to standard output and accepts only `sep`.** There is no `end` or `file`
 argument. Status messages belong in `ui.info()` and diagnostics in `log.debug()`. See
-[Output streams](/automation/reference/execution-model#output-streams).
+[Output streams](/scripting/reference/execution-model#output-streams).
 
 **Collections print the way the language writes them.** Strings inside collections use double quotes,
 sets print as `set([1, 2])`, floats always show a decimal point (`1.0`), and `None` prints as `None`.
@@ -199,7 +200,7 @@ sets print as `set([1, 2])`, floats always show a decimal point (`1.0`), and `No
 cover `map` and `filter`, and `exec.run` and `fs.read_file` cover process and file access.
 
 **Recursion works, within a limit.** Calls nest to a depth of 10,000. See
-[Recursion](/automation/reference/execution-model#recursion).
+[Recursion](/scripting/reference/execution-model#recursion).
 
 ## Standard library
 
@@ -231,8 +232,8 @@ dictionaries, so `ctx.flags["name"]` works but assigning to it does not.
 
 ## Related pages
 
-- [Execution Model](/automation/reference/execution-model) explains single-assignment globals,
+- [Execution Model](/scripting/reference/execution-model) explains single-assignment globals,
   frozen values, and error reporting in detail.
-- [Built-in Functions](/automation/reference/builtin-functions) and
-  [Methods](/automation/reference/methods) list what is available.
-- [Atmos Automation Language](/automation/language) introduces the language and why Atmos uses it.
+- [Built-in Functions](/scripting/reference/builtin-functions) and
+  [Methods](/scripting/reference/methods) list what is available.
+- [Atmos Automation Language](/scripting/language) introduces the language and why Atmos uses it.

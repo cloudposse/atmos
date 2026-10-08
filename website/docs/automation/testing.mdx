@@ -3,7 +3,7 @@ title: Testing Automation
 sidebar_label: Testing
 description: Test automation with native test steps, Atmos Automation Language checks, and assertions on real command results.
 id: testing
-slug: /automation/testing
+slug: /scripting/testing
 ---
 
 import Intro from '@site/src/components/Intro'
@@ -90,7 +90,7 @@ calculation check still passes, and the workflow exits nonzero.
 ## Test a custom command's behavior
 
 Test the interface your team uses as well as the logic behind it. For the
-[custom command guide's](/automation/custom-commands) `atmos capacity`, add this
+[custom command guide's](/scripting/custom-commands) `atmos capacity`, add this
 child under the test step's `steps` list in the same project:
 
 ```yaml
@@ -132,6 +132,6 @@ policy for suites intended to gate CI.
 Test steps also work inside custom commands and lifecycle hooks. See the
 [test step reference](/steps/type/test) for failure policies, supported
 children, counts, and hook configuration. The
-[language overview](/automation/language) describes output
+[language overview](/scripting/language) describes output
 values and process execution; the [test example](/examples/tests) shows a larger
 suite.

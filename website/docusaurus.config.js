@@ -408,6 +408,10 @@ const config = {
                 // URLs (still bookmarked/indexed externally) to their current
                 // /changelog/<slug> location.
                 createRedirects(existingPath) {
+                    // Scripting guides previously lived under /automation.
+                    if (existingPath === '/scripting' || existingPath.startsWith('/scripting/')) {
+                        return [existingPath.replace(/^\/scripting(?=\/|$)/, '/automation')];
+                    }
                     if (existingPath === '/steps' || existingPath.startsWith('/steps/')) {
                         return [existingPath.replace(/^\/steps(?=\/|$)/, '/workflows/steps')];
                     }

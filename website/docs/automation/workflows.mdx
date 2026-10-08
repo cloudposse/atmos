@@ -2,7 +2,7 @@
 title: Automate with workflows
 sidebar_label: Workflows
 description: Combine Atmos commands, tools, and Atmos Automation Language programs into repeatable runbooks.
-slug: /automation/workflows
+slug: /scripting/workflows
 ---
 
 import Intro from '@site/src/components/Intro'
@@ -61,7 +61,7 @@ atmos workflow capacity -f capacity
 
 The program prints `Total workers: 12`. `capacity` here is a workflow name;
 it does not register an `atmos capacity` subcommand. Use
-[custom commands](/automation/custom-commands) when you want that interface.
+[custom commands](/scripting/custom-commands) when you want that interface.
 
 ## Collect input and pass results between steps
 
@@ -135,7 +135,7 @@ step. Atmos displays their results and shows failing output, so the workflow can
 verify its own results as part of the runbook. A test group can also run in a
 custom command or lifecycle hook.
 
-See [testing automation](/automation/testing) for a complete suite and checks
+See [testing automation](/scripting/testing) for a complete suite and checks
 written in the Atmos Automation Language.
 
 ## Share program logic
@@ -169,6 +169,6 @@ An embedded script runs inside Atmos. When a workflow uses containers, set
 `container: false` on its Starlark script steps. External commands started by a
 script still need their tools and credentials available in the execution environment.
 
-Continue with the [language overview](/automation/language), or explore the
+Continue with the [language overview](/scripting/language), or explore the
 [release-plan walkthrough](/steps/type/script#custom-components)
 for reusable functions and component-aware parallel work.
