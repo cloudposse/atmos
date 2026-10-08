@@ -251,6 +251,7 @@ current schema.
   upload without changing configuration. The shared fallback also lowers the
   exec-metadata offload threshold. This runtime behavior is independent of edition
   pins; no literal configuration default changes. See
+  [PR #3314](https://github.com/cloudposse/atmos/pull/3314),
   [the migration note](https://atmos.tools/changelog/pro-upload-byte-packing#how-to-use-it)
   and [the fix log](../fixes/2026-10-07-pro-upload-byte-packing-and-413-recovery.md).
 
