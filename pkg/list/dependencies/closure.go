@@ -47,6 +47,69 @@ func ReachableClosure(graph *dependency.Graph, roots []string, direction Directi
 	return graph.Filter(filter)
 }
 
+// SelectedClosure returns the closure around the nodes sel selects, applying
+// the tags/labels selectors to the seed and to the dependents the closure adds,
+// but never to prerequisites:
+//
+//	closure = (seedKept + dependencies(seedKept)) + {n in dependents(seedAll) : n matches tags/labels}
+//
+// seedKept is Roots(graph, sel) and seedAll is the same selection without
+// tags/labels (components, stack). A seed that fails tags/labels is therefore
+// not itself in the closure, yet its matching dependents still are. Depth is
+// counted on the full graph, and dependents dropped along the way are
+// contracted out so ordering between the survivors is preserved. This is the
+// same semantics `atmos terraform --include-dependents` and
+// `atmos describe affected` use. With no tags/labels it equals ReachableClosure.
+func SelectedClosure(graph *dependency.Graph, sel *Selector, direction Direction, depths Depths) *dependency.Graph {
+	defer perf.Track(nil, "dependencies.SelectedClosure")()
+
+	if graph == nil || sel == nil {
+		return dependency.NewGraph()
+	}
+	return selectedClosureFromRoots(graph, closureRoots{
+		seeds:          Roots(graph, sel),
+		dependentSeeds: Roots(graph, sel.withoutSelectors()),
+	}, sel, direction, depths)
+}
+
+// closureRoots carries the kept seeds (dependencies expand from them) and the
+// unfiltered seeds (dependents expand from them) for selectedClosureFromRoots.
+type closureRoots struct {
+	seeds          []string
+	dependentSeeds []string
+}
+
+// selectedClosureFromRoots computes SelectedClosure from precomputed roots, so
+// callers that refine the kept seeds against a resolved graph can reuse it.
+func selectedClosureFromRoots(graph *dependency.Graph, roots closureRoots, sel *Selector, direction Direction, depths Depths) *dependency.Graph {
+	if graph == nil || (len(roots.seeds) == 0 && len(roots.dependentSeeds) == 0) {
+		return dependency.NewGraph()
+	}
+
+	filter := &dependency.SelectionFilter{
+		Seeds:           roots.seeds,
+		DependentSeeds:  roots.dependentSeeds,
+		DependencyDepth: depths.Dependencies,
+		DependentDepth:  depths.Dependents,
+		KeepDependent: func(node *dependency.Node) bool {
+			return nodeMatchesTagsLabels(node, sel.Tags, sel.Labels, sel.LeftDelim, sel.RightDelim)
+		},
+	}
+	switch direction {
+	case DirectionForward:
+		filter.IncludeDependencies = true
+	case DirectionReverse:
+		filter.IncludeDependents = true
+	default: // DirectionBoth, or "" before normalizeDirection runs.
+		filter.IncludeDependencies = true
+		filter.IncludeDependents = true
+	}
+	if roots.dependentSeeds == nil {
+		filter.DependentSeeds = []string{}
+	}
+	return graph.FilterSelection(filter)
+}
+
 // ClosureScope maps the flag-encoded closure depths (0 = off, -1 = unlimited,
 // N>0 = N levels; see flags.ParseClosureDepth) onto a traversal Direction and
 // per-direction Depths (filter encoding: 0 = unlimited). At least one of the
