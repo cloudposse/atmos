@@ -89,12 +89,11 @@ func TestTerraformGenerators_InvalidResolvedContext(t *testing.T) {
 					require.NoError(t, os.WriteFile(stackFile, content, 0o644))
 					outputPath := filepath.Join(componentDir, "output.json")
 					err = generator.run(config, outputPath, "json", nil, []string{"network/vpc"})
-					require.Error(t, err)
 					if nameTemplate == "" {
-						assert.ErrorIs(t, err, errUtils.ErrStackNamePatternPartMissing)
+						require.ErrorIs(t, err, errUtils.ErrStackNamePatternPartMissing)
 					} else {
 						var templateError template.ExecError
-						assert.ErrorAs(t, err, &templateError)
+						require.ErrorAs(t, err, &templateError)
 					}
 					assert.NoFileExists(t, outputPath)
 				})

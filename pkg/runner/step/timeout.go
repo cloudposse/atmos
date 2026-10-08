@@ -8,7 +8,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -20,6 +19,8 @@ type StepDeadline struct {
 	parent  context.Context
 	timeout time.Duration
 	step    string
+	// stepType is the step's type, named in the timeout error next to the step name.
+	stepType string
 }
 
 // StartStepDeadline derives a context limited by the step's `timeout:`. The returned deadline's
@@ -29,7 +30,7 @@ type StepDeadline struct {
 func StartStepDeadline(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepDeadline, error) {
 	defer perf.Track(nil, "step.StartStepDeadline")()
 
-	deadline := &StepDeadline{ctx: ctx, parent: ctx, step: step.Name}
+	deadline := &StepDeadline{ctx: ctx, parent: ctx, step: step.Name, stepType: step.Type}
 	raw := strings.TrimSpace(step.Timeout)
 	if raw == "" {
 		return deadline, nil
@@ -94,11 +95,37 @@ func (d *StepDeadline) Wrap(err error) error {
 	}
 	return errUtils.Build(errUtils.ErrStepTimeout).
 		WithCause(err).
-		WithExplanationf("Step '%s' did not finish within its timeout of %s and was canceled.", d.step, d.timeout).
+		WithExplanationf("Step '%s'%s did not finish within its timeout of %s and was canceled.", d.step, d.typeLabel(), d.timeout).
 		WithHint("Raise the step's `timeout:` or make the work faster.").
 		WithContext("step", d.step).
+		WithContext("type", d.stepType).
 		WithContext("timeout", d.timeout.String()).
 		Err()
+}
+
+// Expired returns an ErrStepTimeout error when the step's own deadline ended the work, and nil
+// otherwise. It serves work that can report success after the deadline killed it, such as a shell
+// script whose background job was cancelled.
+func (d *StepDeadline) Expired() error {
+	defer perf.Track(nil, "step.StepDeadline.Expired")()
+
+	return d.Wrap(d.expiredCause())
+}
+
+// expiredCause returns context.DeadlineExceeded once the step's own deadline has passed.
+func (d *StepDeadline) expiredCause() error {
+	if d == nil || d.timeout <= 0 || !errors.Is(d.ctx.Err(), context.DeadlineExceeded) {
+		return nil
+	}
+	return context.DeadlineExceeded
+}
+
+// typeLabel renders " (type shell)" for the timeout message, or "" when the step has no type.
+func (d *StepDeadline) typeLabel() string {
+	if d.stepType == "" {
+		return ""
+	}
+	return " (type " + d.stepType + ")"
 }
 
 // RunWithStepDeadline runs fn under the step's `timeout:` and marks a deadline overrun as
@@ -124,7 +151,8 @@ func RunWithStepRetry(ctx context.Context, step *schema.WorkflowStep, vars *Vari
 	defer perf.Track(nil, "step.RunWithStepRetry")()
 
 	return RunWithStepDeadline(ctx, step, vars, func(stepCtx context.Context) error {
-		return retry.Do(stepCtx, step.Retry, func() error {
+		// `retry.conditions` limits the retried failures to the ones whose output or error text matches.
+		return RetryWithConditions(stepCtx, step.Retry, func() error {
 			return fn(stepCtx)
 		})
 	})

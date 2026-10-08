@@ -59,6 +59,9 @@ type ExecContext struct {
 	// so the installed pinned versions take precedence over the operator's
 	// PATH. Empty when the component declares no hook dependencies.
 	ToolchainPATH string
+	// HookDepth is the nesting level this hook's commands and steps run at; engines export it as
+	// ATMOS_HOOK_DEPTH. Zero (a directly constructed context) leaves the variable unset.
+	HookDepth int
 	// Stdout and Stderr receive subprocess output when a concurrent caller
 	// supplies serialized component writers. Nil uses the process streams.
 	Stdout io.Writer

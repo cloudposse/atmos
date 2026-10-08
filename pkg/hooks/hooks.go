@@ -246,8 +246,13 @@ func (h *Hooks) runHookIfMatch(name string, hook *Hook, ctx *hookRunContext) err
 }
 
 func (h *Hooks) runResolvedHook(name string, kind *Kind, executionHook *Hook, ctx *hookRunContext) error {
+	depth, err := enterHook(name, ctx.event)
+	if err != nil {
+		return err
+	}
 	resolved := kind.ResolveDefaults(executionHook)
 	execCtx := &ExecContext{
+		HookDepth:     depth,
 		Hook:          resolved,
 		Kind:          kind,
 		Event:         ctx.event,

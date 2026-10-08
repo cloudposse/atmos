@@ -33,7 +33,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
-	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/runner/freshness"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -921,7 +920,7 @@ func ExecuteWorkflow(
 				default:
 					// The step's timeout cancels the shell command through the context.
 					err = stepPkg.RunWithStepDeadline(context.Background(), &step, stepVars(), func(shellCtx context.Context) error {
-						return retry.Do(shellCtx, step.Retry, func() error {
+						return stepPkg.RetryWithConditions(shellCtx, step.Retry, func() error {
 							return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
 								return process.RunShellStep(shellCtx, &process.ShellSessionSpec{
 									Command:     command,
@@ -982,7 +981,7 @@ func ExecuteWorkflow(
 				ui.Infof("Executing command: `atmos %s`", command)
 				// The step's timeout cancels the atmos subprocess through the context.
 				err = stepPkg.RunWithStepDeadline(context.Background(), &step, stepVars(), func(atmosCtx context.Context) error {
-					return retry.Do(atmosCtx, step.Retry, func() error {
+					return stepPkg.RetryWithConditions(atmosCtx, step.Retry, func() error {
 						return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
 							writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
 							_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {

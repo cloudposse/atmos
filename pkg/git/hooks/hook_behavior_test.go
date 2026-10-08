@@ -234,7 +234,7 @@ func TestInstall_RerunLeavesUnchangedShimAlone(t *testing.T) {
 	assert.True(t, before.ModTime().Equal(after.ModTime()), "an unchanged shim must not be rewritten")
 	content, err := os.ReadFile(dest)
 	require.NoError(t, err)
-	assert.Equal(t, ShimContent("pre-commit"), string(content))
+	assert.Equal(t, ShimContentFor("pre-commit", installedAtmosPath()), string(content))
 }
 
 func TestInstall_RerunRepairsExecutableMode(t *testing.T) {
@@ -259,7 +259,7 @@ func TestInstall_RerunRepairsExecutableMode(t *testing.T) {
 	assert.True(t, before.ModTime().Equal(after.ModTime()), "repairing permissions must not rewrite the shim")
 	content, err := os.ReadFile(dest)
 	require.NoError(t, err)
-	assert.Equal(t, ShimContent("pre-commit"), string(content))
+	assert.Equal(t, ShimContentFor("pre-commit", installedAtmosPath()), string(content))
 }
 
 func TestValidateHook(t *testing.T) {

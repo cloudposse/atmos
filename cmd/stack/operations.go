@@ -104,7 +104,7 @@ values. Use --file to format one manifest explicitly.`,
 
 func init() {
 	registerStackEditFlags(stackGetCmd)
-	stackGetCmd.Flags().StringP("format", "f", "raw", "Output format: raw or json")
+	registerGetFormat(stackGetCmd, "stack_get", "ATMOS_STACK_GET_FORMAT")
 	registerStackEditFlags(stackSetCmd)
 	registerStackEditFlags(stackDeleteCmd)
 	registerStackEditFlags(stackFormatCmd)

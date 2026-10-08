@@ -27,6 +27,8 @@ type runOptions struct {
 	ctx            context.Context
 	config         *schema.AtmosConfiguration
 	stdout, stderr io.Writer
+	// stdin overrides the process's standard input as the source of the data Git pipes to the hook.
+	stdin io.Reader
 }
 
 // WithContext supplies cancellation and deadlines for step execution.
@@ -50,6 +52,15 @@ func WithOutputWriters(stdout, stderr io.Writer) RunOption {
 	return func(o *runOptions) { o.stdout, o.stderr = stdout, stderr }
 }
 
+// WithStdin supplies the data Git pipes to the hook, instead of reading the process's standard
+// input. It applies to the hooks Git writes data to: pre-push, pre-receive, post-receive,
+// post-rewrite, reference-transaction, and proc-receive.
+func WithStdin(stdin io.Reader) RunOption {
+	defer perf.Track(nil, "hooks.WithStdin")()
+
+	return func(o *runOptions) { o.stdin = stdin }
+}
+
 func runSteps(name string, entry schema.GitHookEntry, args []string, opts []RunOption) error {
 	defer perf.Track(nil, "hooks.runSteps")()
 
@@ -60,6 +71,12 @@ func runSteps(name string, entry schema.GitHookEntry, args []string, opts []RunO
 	vars := step.NewVariables()
 	vars.SetAtmosConfig(options.config)
 	vars.ScriptArgs = slices.Clone(args)
+	input, err := captureHookStdin(name, options.stdin)
+	if err != nil {
+		return wrapHookError(name, err)
+	}
+	defer input.cleanup()
+	vars.HookStdin = input.stdin
 	dir, processEnv, err := resolveHookEnvironment()
 	if err != nil {
 		return wrapHookError(name, err)
@@ -71,9 +88,11 @@ func runSteps(name string, entry schema.GitHookEntry, args []string, opts []RunO
 	if options.config != nil {
 		globalEnv = options.config.Env
 	}
+	processEnv = envpkg.MergeGlobalEnv(processEnv, globalEnv)
+	processEnv = append(processEnv, hookEnvironment(args, input.path)...)
 	err = step.NewAutomationLibrary(vars, nil).RunSteps(options.ctx, entry.Steps, &automation.StepCall{
 		WorkingDirectory: dir,
-		ProcessEnv:       envpkg.MergeGlobalEnv(processEnv, globalEnv),
+		ProcessEnv:       processEnv,
 		Stdout:           options.stdout,
 		Stderr:           options.stderr,
 	})
