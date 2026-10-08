@@ -122,6 +122,23 @@ type LogGroupingSuppressor interface {
 	SuppressLogGrouping() bool
 }
 
+// CommitCommenter is an optional capability for providers that can comment on a commit,
+// which is how a run with no pull request (a push) reports in the same place a pull request
+// comment would. Providers without it make a commit-targeted comment fall back to local rendering.
+type CommitCommenter interface {
+	// PostCommitComment posts or upserts a comment on a commit, matching an existing comment
+	// by the marker as PostComment does.
+	PostCommitComment(ctx context.Context, opts *PostCommitCommentOptions) (*Comment, error)
+}
+
+// ConfigValidator is an optional capability for providers whose environment can be
+// misconfigured in a way that must stop the run before any write is attempted, for
+// example an unparsable API base URL that would otherwise send the token nowhere useful.
+type ConfigValidator interface {
+	// ValidateConfig returns an error when the provider's environment is unusable.
+	ValidateConfig() error
+}
+
 // OutputBinder is implemented by providers that render locally and can be bound to a
 // specific writer (for example a script step's stderr) instead of the global UI channel.
 type OutputBinder interface {

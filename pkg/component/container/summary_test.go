@@ -2,145 +2,156 @@ package container
 
 import (
 	"context"
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/component/container/imagesummary/imagesummarytest"
 	ctr "github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// useMockReporter injects a mock ci.Reporter through newContainerReporter and returns it
-// together with the slices that recordings from expectSummaryAndComment append to.
-func useMockReporter(t *testing.T, ctrl *gomock.Controller) (*MockReporter, *[]string, *[]ci.CommentRequest) {
-	t.Helper()
-	reporter := NewMockReporter(ctrl)
-	prev := newContainerReporter
-	newContainerReporter = func(*schema.AtmosConfiguration) ci.Reporter { return reporter }
-	t.Cleanup(func() { newContainerReporter = prev })
-	return reporter, &[]string{}, &[]ci.CommentRequest{}
-}
+// Compile-time sentinels for the schema fields these tests set.
+var (
+	_ = schema.CIConfig{Enabled: true}
+	_ = schema.CICommentsConfig{Enabled: boolPtr(true)}
+	_ = schema.CISummaryConfig{Enabled: boolPtr(true)}
+)
 
-// expectSummaryAndComment expects one Summary call followed by one Comment call and records
-// their arguments. The Comment call returns commentErr.
-func expectSummaryAndComment(reporter *MockReporter, summaries *[]string, comments *[]ci.CommentRequest, commentErr error) {
+func boolPtr(v bool) *bool { return &v }
+
+func TestExecuteBuild_WritesJobSummaryWithoutCommentWhenCommentsOff(t *testing.T) {
+	h := imagesummarytest.NewGitHub(t)
+	ctrl := gomock.NewController(t)
+	rt := NewMockRuntime(ctrl)
+	section := map[string]any{
+		"build": map[string]any{"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}},
+	}
+	withStubsConfig(t, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, section, nil, rt)
 	gomock.InOrder(
-		reporter.EXPECT().Summary(gomock.Any()).DoAndReturn(func(md string) (ci.Receipt, error) {
-			*summaries = append(*summaries, md)
-			return ci.Receipt{Provider: "github"}, nil
-		}),
-		reporter.EXPECT().Comment(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req ci.CommentRequest) (ci.Receipt, error) {
-			*comments = append(*comments, req)
-			return ci.Receipt{Provider: "github"}, commentErr
-		}),
+		rt.EXPECT().Build(gomock.Any(), gomock.Any()).Return(nil),
+		rt.EXPECT().ImageInspect(gomock.Any(), "img:1").Return(&ctr.ImageInfo{
+			ID:          "sha256:img",
+			RepoTags:    []string{"img:1"},
+			RepoDigests: []string{"img@sha256:digest"},
+		}, nil),
 	)
+
+	require.NoError(t, ExecuteBuild(context.Background(), infoFor("api")))
+
+	assert.Contains(t, h.Summary(t), "## 🐳 img:1")
+	assert.Contains(t, h.Summary(t), "| Digest | `sha256:digest` |")
+	assert.Empty(t, h.Server.Requests(), "comments are off by default, so GitHub is never called")
 }
 
-func enabledCIConfig() *schema.AtmosConfiguration {
-	return &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}
-}
-
-func TestWriteImageSummaryReportsSummaryAndComment(t *testing.T) {
+func TestExecuteBuild_PostsOneCommentPerImageWhenCommentsOn(t *testing.T) {
+	h := imagesummarytest.NewGitHub(t)
 	ctrl := gomock.NewController(t)
-	reporter, summaries, comments := useMockReporter(t, ctrl)
-	expectSummaryAndComment(reporter, summaries, comments, nil)
+	rt := NewMockRuntime(ctrl)
+	section := map[string]any{
+		"build": map[string]any{"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:sha-1"}},
+	}
+	withStubsConfig(t, imagesummarytest.Config(true), section, nil, rt)
+	rt.EXPECT().Build(gomock.Any(), gomock.Any()).Return(nil)
+	rt.EXPECT().ImageInspect(gomock.Any(), "img:sha-1").Return(&ctr.ImageInfo{RepoTags: []string{"img:sha-1"}}, nil)
 
-	info := &ctr.ImageInfo{RepoTags: []string{"img:1"}}
-	opts := ctr.ImageSummaryOptions{Image: "img:1"}
-	writeImageSummary(context.Background(), enabledCIConfig(), info, opts)
+	require.NoError(t, ExecuteBuild(context.Background(), infoFor("api")))
 
-	want := ctr.RenderImageSummaryMarkdown(info, opts)
-	require.NotEmpty(t, want)
-	require.Len(t, *summaries, 1)
-	assert.Equal(t, want, (*summaries)[0])
-	require.Len(t, *comments, 1)
-	assert.Equal(t, "container:image:img:1", (*comments)[0].Key)
-	assert.Equal(t, want, (*comments)[0].Body)
+	comments := h.Comments()
+	require.Len(t, comments, 1)
+	assert.Contains(t, comments[0].Body, "<!-- atmos:ci:container:image:img -->")
+	assert.Contains(t, comments[0].Body, "## 🐳 img:sha-1")
 }
 
-func TestWriteImageSummaryCommentKeyFallsBackToRepoTag(t *testing.T) {
+func TestExecuteBuild_SkipsCISummaryWhenDisabled(t *testing.T) {
+	h := imagesummarytest.NewGitHub(t)
 	ctrl := gomock.NewController(t)
-	reporter, summaries, comments := useMockReporter(t, ctrl)
-	expectSummaryAndComment(reporter, summaries, comments, nil)
+	rt := NewMockRuntime(ctrl)
+	cfg := imagesummarytest.Config(true)
+	cfg.CI.Summary.Enabled = boolPtr(false)
+	section := map[string]any{
+		"build": map[string]any{"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}},
+	}
+	withStubsConfig(t, cfg, section, nil, rt)
+	// The runtime mock has no ImageInspect expectation: a disabled summary must not even inspect the image.
+	rt.EXPECT().Build(gomock.Any(), gomock.Any()).Return(nil)
 
-	writeImageSummary(context.Background(), enabledCIConfig(), &ctr.ImageInfo{RepoTags: []string{"tagged:2"}}, ctr.ImageSummaryOptions{})
+	require.NoError(t, ExecuteBuild(context.Background(), infoFor("api")))
 
-	require.Len(t, *comments, 1)
-	assert.Equal(t, "container:image:tagged:2", (*comments)[0].Key)
+	assert.Empty(t, h.Summary(t))
+	assert.Empty(t, h.Server.Requests())
 }
 
-func TestWriteImageSummaryDoesNotCommentWithoutImageName(t *testing.T) {
+func TestExecutePush_ListsEveryPushedRefInTheImageComment(t *testing.T) {
+	h := imagesummarytest.NewGitHub(t)
 	ctrl := gomock.NewController(t)
-	reporter, _, _ := useMockReporter(t, ctrl)
-	reporter.EXPECT().Summary(gomock.Any()).Return(ci.Receipt{Provider: "github"}, nil)
+	rt := NewMockRuntime(ctrl)
+	withStubsConfig(t, imagesummarytest.Config(true),
+		buildSection("app:v1", "reg1.example.com/app:v1", "reg1.example.com/app:latest", "reg2.example.com/app:v1"), nil, rt)
+	for _, ref := range []string{"reg1.example.com/app:v1", "reg1.example.com/app:latest", "reg2.example.com/app:v1"} {
+		gomock.InOrder(
+			rt.EXPECT().Push(gomock.Any(), ref).Return(&ctr.PushResult{Image: ref, Digest: "sha256:111"}, nil),
+			rt.EXPECT().ImageInspect(gomock.Any(), ref).Return(&ctr.ImageInfo{RepoTags: []string{ref}}, nil),
+		)
+	}
 
-	writeImageSummary(context.Background(), enabledCIConfig(), &ctr.ImageInfo{ID: "sha256:x"}, ctr.ImageSummaryOptions{})
+	require.NoError(t, ExecutePush(context.Background(), infoFor("app")))
+
+	for _, ref := range []string{"reg1.example.com/app:v1", "reg1.example.com/app:latest", "reg2.example.com/app:v1"} {
+		assert.Contains(t, h.Summary(t), "## 🐳 "+ref, "the job summary lists every pushed ref")
+	}
+	comments := h.Comments()
+	require.Len(t, comments, 2, "one comment per image repository, not per pushed ref")
+	var reg1, reg2 string
+	for _, c := range comments {
+		switch {
+		case strings.Contains(c.Body, "<!-- atmos:ci:container:image:reg1.example.com/app -->"):
+			reg1 = c.Body
+		case strings.Contains(c.Body, "<!-- atmos:ci:container:image:reg2.example.com/app -->"):
+			reg2 = c.Body
+		}
+	}
+	require.NotEmpty(t, reg1)
+	assert.Contains(t, reg1, "## 🐳 reg1.example.com/app:v1")
+	assert.Contains(t, reg1, "## 🐳 reg1.example.com/app:latest")
+	require.NotEmpty(t, reg2)
+	assert.Contains(t, reg2, "## 🐳 reg2.example.com/app:v1")
 }
 
-func TestWriteImageSummaryDoesNotCommentWhenRenderedLocally(t *testing.T) {
+func TestExecutePush_PostsTheCommentOfPushedRefsWhenALaterPushFails(t *testing.T) {
+	h := imagesummarytest.NewGitHub(t)
 	ctrl := gomock.NewController(t)
-	reporter, _, _ := useMockReporter(t, ctrl)
-	reporter.EXPECT().Summary(gomock.Any()).Return(ci.Receipt{Provider: "generic", Local: true}, nil)
+	rt := NewMockRuntime(ctrl)
+	withStubsConfig(t, imagesummarytest.Config(true), buildSection("app:v1", "reg1.example.com/app:v1", "reg2.example.com/app:v1"), nil, rt)
+	gomock.InOrder(
+		rt.EXPECT().Push(gomock.Any(), "reg1.example.com/app:v1").Return(&ctr.PushResult{Image: "reg1.example.com/app:v1"}, nil),
+		rt.EXPECT().ImageInspect(gomock.Any(), "reg1.example.com/app:v1").Return(&ctr.ImageInfo{RepoTags: []string{"reg1.example.com/app:v1"}}, nil),
+		rt.EXPECT().Push(gomock.Any(), "reg2.example.com/app:v1").Return(nil, assert.AnError),
+	)
 
-	writeImageSummary(context.Background(), enabledCIConfig(), &ctr.ImageInfo{RepoTags: []string{"img:1"}}, ctr.ImageSummaryOptions{Image: "img:1"})
+	require.Error(t, ExecutePush(context.Background(), infoFor("app")))
+
+	comments := h.Comments()
+	require.Len(t, comments, 1)
+	assert.Contains(t, comments[0].Body, "## 🐳 reg1.example.com/app:v1")
 }
 
-func TestWriteImageSummaryIgnoresReporterErrors(t *testing.T) {
-	t.Run("summary error skips the comment and does not propagate", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		reporter, _, _ := useMockReporter(t, ctrl)
-		reporter.EXPECT().Summary(gomock.Any()).Return(ci.Receipt{}, assert.AnError)
-
-		assert.NotPanics(t, func() {
-			writeImageSummary(context.Background(), enabledCIConfig(), &ctr.ImageInfo{RepoTags: []string{"img:1"}}, ctr.ImageSummaryOptions{Image: "img:1"})
-		})
-	})
-
-	t.Run("comment error does not propagate", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		reporter, summaries, comments := useMockReporter(t, ctrl)
-		expectSummaryAndComment(reporter, summaries, comments, assert.AnError)
-
-		assert.NotPanics(t, func() {
-			writeImageSummary(context.Background(), enabledCIConfig(), &ctr.ImageInfo{RepoTags: []string{"img:1"}}, ctr.ImageSummaryOptions{Image: "img:1"})
-		})
-		assert.Len(t, *comments, 1)
-	})
-}
-
-func TestWriteImageSummaryUsesTemplateOverride(t *testing.T) {
-	baseDir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(baseDir, "container"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(baseDir, "container", "image.md"), []byte("custom {{.Image}}"), 0o644))
-	cfg := enabledCIConfig()
-	cfg.CI.Templates.BasePath = baseDir
-
+func TestInspectFailureSkipsReporting(t *testing.T) {
+	h := imagesummarytest.NewGitHub(t)
 	ctrl := gomock.NewController(t)
-	reporter, summaries, comments := useMockReporter(t, ctrl)
-	expectSummaryAndComment(reporter, summaries, comments, nil)
+	rt := NewMockRuntime(ctrl)
+	section := map[string]any{
+		"build": map[string]any{"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}},
+	}
+	withStubsConfig(t, imagesummarytest.Config(true), section, nil, rt)
+	rt.EXPECT().Build(gomock.Any(), gomock.Any()).Return(nil)
+	rt.EXPECT().ImageInspect(gomock.Any(), "img:1").Return(nil, assert.AnError)
 
-	writeImageSummary(context.Background(), cfg, &ctr.ImageInfo{RepoTags: []string{"img:1"}}, ctr.ImageSummaryOptions{Image: "img:1"})
+	require.NoError(t, ExecuteBuild(context.Background(), infoFor("api")))
 
-	require.Len(t, *summaries, 1)
-	assert.Equal(t, "custom img:1", (*summaries)[0])
-	assert.Equal(t, "custom img:1", (*comments)[0].Body)
-}
-
-func TestWriteImageSummarySkipsReportingWhenTemplateFails(t *testing.T) {
-	baseDir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(baseDir, "container"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(baseDir, "container", "image.md"), []byte("{{.Missing"), 0o644))
-	cfg := enabledCIConfig()
-	cfg.CI.Templates.BasePath = baseDir
-
-	ctrl := gomock.NewController(t)
-	// The mock has no expectations, so any reporter call fails the test.
-	useMockReporter(t, ctrl)
-
-	writeImageSummary(context.Background(), cfg, &ctr.ImageInfo{RepoTags: []string{"img:1"}}, ctr.ImageSummaryOptions{Image: "img:1"})
+	assert.Empty(t, h.Summary(t))
+	assert.Empty(t, h.Server.Requests())
 }

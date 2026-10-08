@@ -5,7 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"sync"
+
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
@@ -18,6 +22,9 @@ import (
 )
 
 //go:generate mockgen -typed -destination=mock_reporter_test.go -package=ci github.com/cloudposse/atmos/pkg/ci Reporter
+
+// logKeyOperation is the structured log key naming the reporter operation a debug message is about.
+const logKeyOperation = "operation"
 
 // Feature names the configuration key that gates a reporting surface.
 type Feature string
@@ -57,22 +64,37 @@ type Receipt struct {
 	Check *CheckRun
 }
 
+// Gated reports whether a detected provider was skipped because a switch is off, so the write was
+// rendered locally instead. Gate names the switch.
+func (r Receipt) Gated() bool {
+	defer perf.Track(nil, "ci.Receipt.Gated")()
+
+	return r.Gate != ""
+}
+
 // CommentRequest describes a PR/MR comment to post.
 type CommentRequest struct {
 	// Body is the comment markdown.
 	Body string
-	// Key is the marker key. Empty means no marker, and the behavior is forced to create.
+	// Key is the marker key that finds the comment again on later runs. Empty means no marker: the
+	// comment is always created, and behavior=update is rejected with ErrCICommentKeyRequired.
 	Key string
 	// Behavior is create, update, or upsert. Empty means upsert.
 	Behavior CommentBehavior
 	// PR is the pull request number. Zero means the current PR from Context.
 	PR int
+	// Target selects where the comment lands: auto, pr, or commit. Empty means auto, which posts to the
+	// pull request when one is known and otherwise to the run's commit.
+	Target CommentTarget
 }
 
 // CheckRequest describes a commit status or check run to create or update.
 type CheckRequest struct {
 	// Name is the check run name.
 	Name string
+	// ID is the identifier of the check being updated, as returned in Receipt.Check by Check. UpdateCheck
+	// passes it to the provider when non-zero. Providers that correlate by Name ignore it.
+	ID int64
 	// State is the check run state. Empty means pending.
 	State CheckRunState
 	// Description is the provider title or status description.
@@ -91,7 +113,7 @@ type Reporter interface {
 	Base() (*BaseResolution, error)
 	// Summary appends markdown to the job summary.
 	Summary(markdown string) (Receipt, error)
-	// RenderSummary renders the summary template (name, or ci.summary.template when empty) with data.
+	// RenderSummary renders the template name with data. The name is required.
 	RenderSummary(name string, data any) (string, error)
 	// Output writes a CI output variable.
 	Output(key, value string) (Receipt, error)
@@ -105,7 +127,7 @@ type Reporter interface {
 	Annotate(annotation Annotation) (Receipt, error)
 	// Comment posts or updates a PR/MR comment.
 	Comment(ctx context.Context, req CommentRequest) (Receipt, error)
-	// RenderComment renders the comment template (name, or ci.comments.template when empty) with data.
+	// RenderComment renders the template name with data. The name is required.
 	RenderComment(name string, data any) (string, error)
 	// Check creates a commit status or check run.
 	Check(ctx context.Context, req CheckRequest) (Receipt, error)
@@ -130,26 +152,80 @@ type reporter struct {
 	cfg      *schema.AtmosConfiguration
 	detected provider.Provider
 	fallback provider.Provider
-	out      io.Writer
-	state    *reporterState
+	// forced is true when detected is the generic provider standing in for a CI platform that was
+	// not detected, because CI mode was forced (--ci, ATMOS_CI, or CI). Gates apply, and the reporter
+	// is not in the pure-local mode.
+	forced bool
+	out    io.Writer
+	state  *reporterState
 }
 
-// NewReporter returns a Reporter bound to the provider detected in the current
-// environment, with the generic provider as the local fallback.
+// NewReporter returns a Reporter bound to the provider detected in the current environment, with
+// the generic provider as the local fallback.
+//
+// When no provider is detected but CI mode is forced (--ci, ATMOS_CI, or CI is truthy), the generic
+// provider is treated as the detected one: the configuration gates apply, the context reports the
+// generic provider with local false, and the ATMOS_CI_* variables supply the run metadata and output
+// files. With neither a detected provider nor forced CI mode, every write renders locally.
 func NewReporter(cfg *schema.AtmosConfiguration) Reporter {
 	defer perf.Track(cfg, "ci.NewReporter")()
 
-	fallback, err := Get("generic")
+	fallback, err := Get(GenericProviderName)
 	if err != nil {
 		log.Debug("CI reporter has no local fallback provider", "error", err)
 		fallback = nil
 	}
+	detected := Detect()
+	forced := false
+	if detected == nil && fallback != nil && forcedCIMode() {
+		detected, forced = fallback, true
+		log.Debug("CI mode is forced and no CI provider is detected, using the generic provider")
+	}
 	return &reporter{
 		cfg:      cfg,
-		detected: Detect(),
+		detected: detected,
 		fallback: fallback,
+		forced:   forced,
 		state:    &reporterState{},
 	}
+}
+
+// NewReporterForProvider returns a Reporter bound to p as its detected provider, for callers that
+// already resolved the provider and the run context, such as the native CI plugins. The ciCtx
+// argument may be nil, in which case the context is read from p on first use. The generic provider
+// is the local fallback.
+func NewReporterForProvider(cfg *schema.AtmosConfiguration, p provider.Provider, ciCtx *Context) Reporter {
+	defer perf.Track(cfg, "ci.NewReporterForProvider")()
+
+	fallback, err := Get(GenericProviderName)
+	if err != nil {
+		log.Debug("CI reporter has no local fallback provider", "error", err)
+		fallback = nil
+	}
+	state := &reporterState{}
+	if ciCtx != nil {
+		state.ctx = ciCtx
+		state.ctxOnce.Do(func() {})
+	}
+	return &reporter{
+		cfg:      cfg,
+		detected: p,
+		fallback: fallback,
+		forced:   p != nil && p.Name() == GenericProviderName,
+		state:    state,
+	}
+}
+
+// forcedCIMode reports whether CI mode was forced by the --ci flag or by ATMOS_CI / CI.
+func forcedCIMode() bool {
+	return viper.GetBool("ci") || envEnabled("ATMOS_CI") || envEnabled("CI")
+}
+
+// envEnabled reports whether the environment variable holds a truthy value: set, and not false, 0, or no.
+func envEnabled(key string) bool {
+	// ATMOS_CI and CI are standard CI environment variables read for CI auto-detection.
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	return value != "" && value != "false" && value != "0" && value != "no"
 }
 
 // local returns the fallback provider bound to the reporter's output writer when possible.
@@ -165,6 +241,20 @@ func (r *reporter) local() provider.Provider {
 	return r.fallback
 }
 
+// active returns the detected provider, bound to the reporter's output writer when it is the generic
+// stand-in for a forced CI mode, so its renderings go where the caller asked.
+func (r *reporter) active() provider.Provider {
+	if r.detected == nil {
+		return nil
+	}
+	if r.forced && r.out != nil {
+		if binder, ok := r.detected.(provider.OutputBinder); ok {
+			return binder.BindOutput(r.out)
+		}
+	}
+	return r.detected
+}
+
 // localReceipt builds a receipt for the local fallback.
 func (r *reporter) localReceipt(l provider.Provider, gate Feature) Receipt {
 	rc := Receipt{Local: true, Gate: gate}
@@ -172,6 +262,15 @@ func (r *reporter) localReceipt(l provider.Provider, gate Feature) Receipt {
 		rc.Provider = l.Name()
 	}
 	return rc
+}
+
+// gateFor names the switch to report when a detected provider is skipped for f. When the master
+// switch is off every per-feature switch reads off too, so the master switch is the one to name.
+func (r *reporter) gateFor(f Feature) Feature {
+	if !Enabled(r.cfg) {
+		return FeatureEnabled
+	}
+	return f
 }
 
 // target picks the provider that handles a write gated by f. It returns a nil provider
@@ -183,18 +282,36 @@ func (r *reporter) target(f Feature, enabled func(*schema.AtmosConfiguration) bo
 	}
 	if !enabled(r.cfg) {
 		l := r.local()
-		return l, r.localReceipt(l, f)
+		return l, r.localReceipt(l, r.gateFor(f))
 	}
-	return r.detected, Receipt{Provider: r.detected.Name()}
+	return r.active(), Receipt{Provider: r.detected.Name()}
+}
+
+// forkHeld reports whether a write that publishes to the repository must be held: the run is an
+// elevated event (pull_request_target, workflow_run) for a fork pull request and
+// ci.allow_unsafe_fork_execution is not set.
+func (r *reporter) forkHeld(ciCtx *Context) bool {
+	if ciCtx == nil || !ciCtx.ElevatedEvent || ciCtx.PullRequest == nil || !ciCtx.PullRequest.Fork {
+		return false
+	}
+	return r.cfg == nil || !r.cfg.CI.AllowUnsafeForkExecution
 }
 
 // routeTo resolves the provider for a write gated by f that needs the optional capability T,
-// falling back to the local provider when the chosen one lacks it.
-func routeTo[T any](r *reporter, f Feature, enabled func(*schema.AtmosConfiguration) bool, op string) (T, Receipt, bool) {
+// falling back to the local provider when the chosen one lacks it. Writes with forkGated set are
+// also held for fork pull requests under elevated events.
+func routeTo[T any](r *reporter, f Feature, enabled func(*schema.AtmosConfiguration) bool, forkGated bool, op string) (T, Receipt, bool) {
 	var zero T
 	p, rc := r.target(f, enabled)
 	if p == nil {
 		return zero, rc, false
+	}
+	if forkGated && !rc.Local && r.heldForFork(op) {
+		p = r.local()
+		rc = r.localReceipt(p, FeatureForkGate)
+		if p == nil {
+			return zero, rc, false
+		}
 	}
 	if c, ok := p.(T); ok {
 		return c, rc, true
@@ -202,13 +319,28 @@ func routeTo[T any](r *reporter, f Feature, enabled func(*schema.AtmosConfigurat
 	if !rc.Local {
 		if l := r.local(); l != nil {
 			if c, ok := l.(T); ok {
-				log.Debug("CI provider lacks capability, using local rendering", "operation", op, "provider", p.Name())
+				log.Debug("CI provider lacks capability, using local rendering", logKeyOperation, op, "provider", p.Name())
 				return c, r.localReceipt(l, rc.Gate), true
 			}
 		}
 	}
-	log.Debug("No CI provider supports operation", "operation", op, "provider", p.Name())
+	log.Debug("No CI provider supports operation", logKeyOperation, op, "provider", p.Name())
 	return zero, rc, false
+}
+
+// heldForFork resolves the run context and reports whether the write is held for a fork pull
+// request. An unreadable context cannot prove the run safe, so it holds the write.
+func (r *reporter) heldForFork(op string) bool {
+	ciCtx, err := r.Context()
+	if err != nil {
+		log.Debug("CI context unavailable, holding the write", logKeyOperation, op, "error", err)
+		return true
+	}
+	if r.forkHeld(ciCtx) {
+		log.Debug("Skipping CI write for a fork pull request on an elevated event without ci.allow_unsafe_fork_execution", logKeyOperation, op)
+		return true
+	}
+	return false
 }
 
 // wrapErr wraps err with sentinel unless it already carries it.
@@ -223,7 +355,7 @@ func (r *reporter) Context() (*Context, error) {
 	defer perf.Track(r.cfg, "ci.Reporter.Context")()
 
 	r.state.ctxOnce.Do(func() {
-		p := r.detected
+		p := r.active()
 		if p == nil {
 			p = r.fallback
 		}
@@ -239,7 +371,7 @@ func (r *reporter) Context() (*Context, error) {
 func (r *reporter) Base() (*BaseResolution, error) {
 	defer perf.Track(r.cfg, "ci.Reporter.Base")()
 
-	p := r.detected
+	p := r.active()
 	if p == nil {
 		p = r.fallback
 	}
@@ -267,12 +399,9 @@ func (r *reporter) Summary(markdown string) (Receipt, error) {
 func (r *reporter) RenderSummary(name string, data any) (string, error) {
 	defer perf.Track(r.cfg, "ci.Reporter.RenderSummary")()
 
-	if name == "" && r.cfg != nil {
-		name = r.cfg.CI.Summary.Template
-	}
 	if name == "" {
 		return "", errUtils.Build(errUtils.ErrCITemplateNotFound).
-			WithExplanation("no template given and ci.summary.template is not set").
+			WithExplanation("a template name is required").
 			Err()
 	}
 	return templates.RenderReport(r.cfg, name, data)
@@ -281,12 +410,9 @@ func (r *reporter) RenderSummary(name string, data any) (string, error) {
 func (r *reporter) RenderComment(name string, data any) (string, error) {
 	defer perf.Track(r.cfg, "ci.Reporter.RenderComment")()
 
-	if name == "" && r.cfg != nil {
-		name = r.cfg.CI.Comments.Template
-	}
 	if name == "" {
 		return "", errUtils.Build(errUtils.ErrCITemplateNotFound).
-			WithExplanation("no template given and ci.comments.template is not set").
+			WithExplanation("a template name is required").
 			Err()
 	}
 	return templates.RenderReport(r.cfg, name, data)
@@ -316,7 +442,7 @@ func (r *reporter) write(f Feature, enabled func(*schema.AtmosConfiguration) boo
 func (r *reporter) Env(key, value string) (Receipt, error) {
 	defer perf.Track(r.cfg, "ci.Reporter.Env")()
 
-	e, rc, ok := routeTo[provider.EnvExporter](r, FeatureOutput, OutputEnabled, "env")
+	e, rc, ok := routeTo[provider.EnvExporter](r, FeatureOutput, OutputEnabled, true, "env")
 	if !ok {
 		return rc, nil
 	}
@@ -326,7 +452,7 @@ func (r *reporter) Env(key, value string) (Receipt, error) {
 func (r *reporter) Path(dir string) (Receipt, error) {
 	defer perf.Track(r.cfg, "ci.Reporter.Path")()
 
-	e, rc, ok := routeTo[provider.EnvExporter](r, FeatureOutput, OutputEnabled, "path")
+	e, rc, ok := routeTo[provider.EnvExporter](r, FeatureOutput, OutputEnabled, true, "path")
 	if !ok {
 		return rc, nil
 	}
@@ -356,7 +482,7 @@ func (r *reporter) Mask(value string) (Receipt, error) {
 func (r *reporter) Annotate(annotation Annotation) (Receipt, error) {
 	defer perf.Track(r.cfg, "ci.Reporter.Annotate")()
 
-	a, rc, ok := routeTo[provider.Annotator](r, FeatureAnnotations, AnnotationsEnabled, "annotate")
+	a, rc, ok := routeTo[provider.Annotator](r, FeatureAnnotations, AnnotationsEnabled, false, "annotate")
 	if !ok {
 		return rc, nil
 	}
@@ -366,30 +492,26 @@ func (r *reporter) Annotate(annotation Annotation) (Receipt, error) {
 func (r *reporter) SARIF(ctx context.Context, report SARIFReport) (Receipt, error) {
 	defer perf.Track(r.cfg, "ci.Reporter.SARIF")()
 
-	s, rc, ok := routeTo[provider.SARIFReporter](r, FeatureResults, ResultsEnabled, "sarif")
+	s, rc, ok := routeTo[provider.SARIFReporter](r, FeatureResults, ResultsEnabled, true, "sarif")
 	if !ok {
 		return rc, nil
+	}
+	if rc.Local && report.SkipReason == "" {
+		report.SkipReason = skipReason(rc)
 	}
 	return rc, wrapErr(errUtils.ErrCISARIFUploadFailed, s.ReportSARIF(ctx, report))
 }
 
-func (r *reporter) Group(title string) (func(), Receipt, error) {
-	defer perf.Track(r.cfg, "ci.Reporter.Group")()
-
-	enabled := func(c *schema.AtmosConfiguration) bool { return resolveGroupMode(c) != GroupModeOff }
-	g, rc, ok := routeTo[provider.LogGrouper](r, FeatureGroups, enabled, "group")
-	if !ok {
-		return func() {}, rc, nil
+// skipReason words why a local rendering replaced a CI write: the switch that is off.
+func skipReason(rc Receipt) string {
+	switch rc.Gate {
+	case "":
+		return ""
+	case FeatureForkGate:
+		return "held for a fork pull request (set ci.allow_unsafe_fork_execution to release it)"
+	default:
+		return string(rc.Gate) + " is off"
 	}
-	if err := g.StartLogGroup(title); err != nil {
-		return func() {}, rc, err
-	}
-	end := func() {
-		if err := g.EndLogGroup(); err != nil {
-			log.Debug("Failed to close CI log group", "title", title, "error", err)
-		}
-	}
-	return end, rc, nil
 }
 
 func (r *reporter) WithOutput(w io.Writer) Reporter {

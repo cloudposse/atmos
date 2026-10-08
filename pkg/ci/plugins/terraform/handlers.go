@@ -681,28 +681,24 @@ func (p *Plugin) createCheckRun(ctx *plugin.HookContext) error {
 		return errUtils.Build(errUtils.ErrCICheckRunMissingComponent).WithCause(err).Err()
 	}
 
-	opts := &provider.CreateCheckRunOptions{
-		Name:       name,
-		Status:     provider.CheckRunStateInProgress,
-		Title:      fmt.Sprintf("%s in progress...", ctx.Command),
-		DetailsURL: runURL(ctx),
-	}
-
-	if ctx.CICtx != nil {
-		opts.Owner = ctx.CICtx.RepoOwner
-		opts.Repo = ctx.CICtx.RepoName
-		opts.SHA = ctx.CICtx.SHA
-	}
-
-	checkRun, err := ctx.Provider.CreateCheckRun(context.Background(), opts)
+	rc, err := reporterFor(ctx).Check(context.Background(), ci.CheckRequest{
+		Name:        name,
+		State:       provider.CheckRunStateInProgress,
+		Description: fmt.Sprintf("%s in progress...", ctx.Command),
+		URL:         runURL(ctx),
+	})
 	if err != nil {
 		return errUtils.Build(errUtils.ErrCICheckRunCreateFailed).
 			WithCause(err).
-			WithContext("name", name).
+			WithContext(logKeyName, name).
 			Err()
 	}
+	noteHeld(rc, "the commit status", logKeyName, name)
+	if rc.Gate == ci.FeatureForkGate || rc.Check == nil {
+		return nil
+	}
 
-	log.Debug("Created commit status", "name", name, "id", checkRun.ID)
+	log.Debug("Created commit status", logKeyName, name, "id", rc.Check.ID)
 	return nil
 }
 
@@ -725,28 +721,23 @@ func (p *Plugin) updateCheckRun(ctx *plugin.HookContext, result *plugin.OutputRe
 	// Update component-level status.
 	statusesCfg := getChecksStatuses(ctx.Config)
 	if isStatusEnabled(statusesCfg.Component) {
-		opts := &provider.UpdateCheckRunOptions{
-			Name:       name,
-			Status:     status,
-			Title:      buildStatusDescription(ctx.Command, result),
-			DetailsURL: runURL(ctx),
-		}
-
-		if ctx.CICtx != nil {
-			opts.Owner = ctx.CICtx.RepoOwner
-			opts.Repo = ctx.CICtx.RepoName
-			opts.SHA = ctx.CICtx.SHA
-		}
-
-		_, err := ctx.Provider.UpdateCheckRun(context.Background(), opts)
+		rc, err := reporterFor(ctx).UpdateCheck(context.Background(), ci.CheckRequest{
+			Name:        name,
+			State:       status,
+			Description: buildStatusDescription(ctx.Command, result),
+			URL:         runURL(ctx),
+		})
 		if err != nil {
 			return errUtils.Build(errUtils.ErrCICheckRunUpdateFailed).
 				WithCause(err).
-				WithContext("name", name).
+				WithContext(logKeyName, name).
 				Err()
 		}
 
-		log.Debug("Updated commit status", "name", name, "status", status)
+		noteHeld(rc, "the commit status update", logKeyName, name)
+		if rc.Gate != ci.FeatureForkGate {
+			log.Debug("Updated commit status", logKeyName, name, "status", status)
+		}
 	}
 
 	// Create per-operation statuses (only when counts > 0).
@@ -789,24 +780,19 @@ func (p *Plugin) createPerOperationStatuses(ctx *plugin.HookContext, result *plu
 			log.Warn("CI per-operation status context invalid; skipping", "operation", op.operation, "error", err)
 			continue
 		}
-		opts := &provider.CreateCheckRunOptions{
-			Name:       opName,
-			Status:     provider.CheckRunStateSuccess,
-			Title:      formatResourceCount(op.count),
-			DetailsURL: runURL(ctx),
-		}
-
-		if ctx.CICtx != nil {
-			opts.Owner = ctx.CICtx.RepoOwner
-			opts.Repo = ctx.CICtx.RepoName
-			opts.SHA = ctx.CICtx.SHA
-		}
-
-		_, err = ctx.Provider.CreateCheckRun(context.Background(), opts)
-		if err != nil {
-			log.Warn("CI per-operation status creation skipped", "name", opName, "error", err)
-		} else {
-			log.Debug("Created per-operation status", "name", opName, "count", op.count)
+		rc, err := reporterFor(ctx).Check(context.Background(), ci.CheckRequest{
+			Name:        opName,
+			State:       provider.CheckRunStateSuccess,
+			Description: formatResourceCount(op.count),
+			URL:         runURL(ctx),
+		})
+		switch {
+		case err != nil:
+			log.Warn("CI per-operation status creation skipped", logKeyName, opName, "error", err)
+		case rc.Gate == ci.FeatureForkGate:
+			noteHeld(rc, "the per-operation status", logKeyName, opName)
+		default:
+			log.Debug("Created per-operation status", logKeyName, opName, "count", op.count)
 		}
 	}
 }

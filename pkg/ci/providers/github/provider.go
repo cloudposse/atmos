@@ -64,6 +64,13 @@ func (p *Provider) ensureClient() error {
 	return p.clientErr
 }
 
+// ValidateConfig fails the run early when the configured API base URL is unusable.
+func (p *Provider) ValidateConfig() error {
+	defer perf.Track(nil, "github.Provider.ValidateConfig")()
+
+	return ValidateAPIURL()
+}
+
 // Name returns the provider name.
 func (p *Provider) Name() string {
 	defer perf.Track(nil, "github.Provider.Name")()

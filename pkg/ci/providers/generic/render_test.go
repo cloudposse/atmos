@@ -152,10 +152,10 @@ func TestAnnotate(t *testing.T) {
 		{Level: provider.AnnotationError, Title: "T4", Message: "no path"},
 	}))
 	out := buf.String()
-	assert.Contains(t, out, "main.tf:12: T1: bad thing")
-	assert.Contains(t, out, "vars.tf:3: T2: meh")
-	assert.Contains(t, out, "a.tf: fyi")
-	assert.Contains(t, out, "T4: no path")
+	assert.Contains(t, out, "main.tf:12: error: bad thing (T1)")
+	assert.Contains(t, out, "vars.tf:3: warning: meh (T2)")
+	assert.Contains(t, out, "a.tf: notice: fyi")
+	assert.Contains(t, out, "error: no path (T4)")
 }
 
 func TestFormatAnnotation(t *testing.T) {
@@ -164,10 +164,12 @@ func TestFormatAnnotation(t *testing.T) {
 		in   provider.Annotation
 		want string
 	}{
-		{"full", provider.Annotation{Path: "a", StartLine: 1, Title: "t", Message: "m"}, "a:1: t: m"},
-		{"no line", provider.Annotation{Path: "a", Title: "t", Message: "m"}, "a: t: m"},
-		{"no path", provider.Annotation{StartLine: 5, Title: "t", Message: "m"}, "t: m"},
-		{"message only", provider.Annotation{Message: "m"}, "m"},
+		{"full", provider.Annotation{Path: "a", StartLine: 1, Level: provider.AnnotationWarning, Title: "t", Message: "m"}, "a:1: warning: m (t)"},
+		{"no title omits the parentheses", provider.Annotation{Path: "a", StartLine: 1, Level: provider.AnnotationWarning, Message: "m"}, "a:1: warning: m"},
+		{"no line", provider.Annotation{Path: "a", Level: provider.AnnotationError, Title: "t", Message: "m"}, "a: error: m (t)"},
+		{"no path", provider.Annotation{StartLine: 5, Level: provider.AnnotationNotice, Title: "t", Message: "m"}, "notice: m (t)"},
+		{"message only defaults to the warning level", provider.Annotation{Message: "m"}, "warning: m"},
+		{"unknown level defaults to the warning level", provider.Annotation{Level: "bogus", Message: "m"}, "warning: m"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -189,6 +191,15 @@ func TestReportSARIF(t *testing.T) {
 		p, buf := newBoundProvider(t)
 		require.NoError(t, p.ReportSARIF(ctx, provider.SARIFReport{Body: []byte("12345"), Category: "trivy", Path: "reports/trivy.sarif"}))
 		assert.Contains(t, buf.String(), `SARIF report "trivy" from reports/trivy.sarif (5 bytes) not uploaded: no CI provider detected`)
+	})
+
+	t.Run("names the switch that is off instead of claiming no provider", func(t *testing.T) {
+		p, buf := newBoundProvider(t)
+		require.NoError(t, p.ReportSARIF(ctx, provider.SARIFReport{
+			Body: []byte("12345"), Category: "trivy", Path: "reports/trivy.sarif", SkipReason: "ci.results.enabled is off",
+		}))
+		assert.Contains(t, buf.String(), `not uploaded: ci.results.enabled is off`)
+		assert.NotContains(t, buf.String(), "no CI provider detected")
 	})
 }
 
@@ -300,6 +311,12 @@ func TestOutputWriter_Rendering(t *testing.T) {
 		assert.Equal(t, "key=value\n", buf.String())
 	})
 
+	t.Run("WriteOutput multiline without a file renders the heredoc form", func(t *testing.T) {
+		p, buf := newBoundProvider(t)
+		require.NoError(t, p.OutputWriter().WriteOutput("report", "line1\nline2"))
+		assert.Equal(t, "report<<EOF\nline1\nline2\nEOF\n", buf.String())
+	})
+
 	t.Run("WriteOutput heredoc avoids delimiter collision", func(t *testing.T) {
 		file := filepath.Join(t.TempDir(), "out")
 		w := &OutputWriter{outputFile: file}
@@ -334,10 +351,173 @@ func TestOutputWriter_Rendering(t *testing.T) {
 	})
 }
 
+func TestCheckRun_RendersTheDetailsURL(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("create names the URL when set", func(t *testing.T) {
+		p, buf := newBoundProvider(t)
+		_, err := p.CreateCheckRun(ctx, &provider.CreateCheckRunOptions{Name: "chk", Status: provider.CheckRunStatePending, DetailsURL: "https://ci.example/run/1"})
+		require.NoError(t, err)
+		assert.Contains(t, buf.String(), "URL: https://ci.example/run/1")
+	})
+
+	t.Run("update names the URL when set", func(t *testing.T) {
+		p, buf := newBoundProvider(t)
+		_, err := p.UpdateCheckRun(ctx, &provider.UpdateCheckRunOptions{Name: "chk", Status: provider.CheckRunStateSuccess, DetailsURL: "https://ci.example/run/1"})
+		require.NoError(t, err)
+		assert.Contains(t, buf.String(), "URL: https://ci.example/run/1")
+	})
+
+	t.Run("no URL line without one", func(t *testing.T) {
+		p, buf := newBoundProvider(t)
+		_, err := p.CreateCheckRun(ctx, &provider.CreateCheckRunOptions{Name: "chk", Status: provider.CheckRunStatePending})
+		require.NoError(t, err)
+		assert.NotContains(t, buf.String(), "URL:")
+	})
+}
+
 func TestCheckRun_RendersToBoundWriter(t *testing.T) {
 	p, buf := newBoundProvider(t)
 	_, err := p.CreateCheckRun(context.Background(), &provider.CreateCheckRunOptions{Name: "chk", Status: provider.CheckRunStatePending, Title: "ttl"})
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "Check run created: chk")
 	assert.Contains(t, buf.String(), "Title: ttl")
+}
+
+func TestPostComment_UpdateRequiresAnEarlierComment(t *testing.T) {
+	ctx := context.Background()
+	const marker = "<!-- atmos:ci:plan -->"
+	opts := func(behavior provider.CommentBehavior, pr int) *provider.PostCommentOptions {
+		return &provider.PostCommentOptions{PRNumber: pr, Marker: marker, Body: marker + "\nbody", Behavior: behavior}
+	}
+
+	t.Run("update without a prior comment fails like GitHub", func(t *testing.T) {
+		p, buf := newBoundProvider(t)
+		c, err := p.PostComment(ctx, opts(provider.CommentBehaviorUpdate, 7))
+		require.ErrorIs(t, err, errUtils.ErrCICommentNotFound)
+		assert.Nil(t, c)
+		assert.Empty(t, buf.String(), "a failed update renders no preview")
+	})
+
+	t.Run("update after a create reuses the comment", func(t *testing.T) {
+		p, _ := newBoundProvider(t)
+		first, err := p.PostComment(ctx, opts(provider.CommentBehaviorCreate, 7))
+		require.NoError(t, err)
+		assert.True(t, first.Created)
+
+		second, err := p.PostComment(ctx, opts(provider.CommentBehaviorUpdate, 7))
+		require.NoError(t, err)
+		assert.False(t, second.Created)
+		assert.Equal(t, first.ID, second.ID)
+	})
+
+	t.Run("a comment on another pull request is not a match", func(t *testing.T) {
+		p, _ := newBoundProvider(t)
+		_, err := p.PostComment(ctx, opts(provider.CommentBehaviorCreate, 7))
+		require.NoError(t, err)
+		_, err = p.PostComment(ctx, opts(provider.CommentBehaviorUpdate, 8))
+		require.ErrorIs(t, err, errUtils.ErrCICommentNotFound)
+	})
+
+	t.Run("upsert creates then updates", func(t *testing.T) {
+		p, _ := newBoundProvider(t)
+		first, err := p.PostComment(ctx, opts(provider.CommentBehaviorUpsert, 7))
+		require.NoError(t, err)
+		assert.True(t, first.Created)
+		second, err := p.PostComment(ctx, opts(provider.CommentBehaviorUpsert, 7))
+		require.NoError(t, err)
+		assert.False(t, second.Created)
+		assert.Equal(t, first.ID, second.ID)
+	})
+
+	t.Run("markers are shared by providers bound from the same base", func(t *testing.T) {
+		base := NewProvider()
+		var a, b bytes.Buffer
+		_, err := base.BindOutput(&a).PostComment(ctx, opts(provider.CommentBehaviorCreate, 7))
+		require.NoError(t, err)
+		_, err = base.BindOutput(&b).PostComment(ctx, opts(provider.CommentBehaviorUpdate, 7))
+		require.NoError(t, err)
+	})
+}
+
+func TestPostCommitComment(t *testing.T) {
+	ctx := context.Background()
+	const marker = "<!-- atmos:ci:deploy -->"
+	opts := func(behavior provider.CommentBehavior, sha string) *provider.PostCommitCommentOptions {
+		return &provider.PostCommitCommentOptions{SHA: sha, Marker: marker, Body: marker + "\nbody", Behavior: behavior}
+	}
+
+	t.Run("renders a commit comment preview", func(t *testing.T) {
+		p, buf := newBoundProvider(t)
+		c, err := p.PostCommitComment(ctx, opts(provider.CommentBehaviorCreate, "0123456789abcdef"))
+		require.NoError(t, err)
+		assert.True(t, c.Created)
+		assert.Contains(t, buf.String(), "commit comment preview (create, commit 0123456)")
+		assert.Contains(t, buf.String(), "body")
+	})
+
+	t.Run("without a SHA the preview omits it", func(t *testing.T) {
+		p, buf := newBoundProvider(t)
+		_, err := p.PostCommitComment(ctx, opts(provider.CommentBehaviorUpsert, ""))
+		require.NoError(t, err)
+		assert.Contains(t, buf.String(), "commit comment preview (upsert)")
+	})
+
+	t.Run("update requires an earlier commit comment on the same commit", func(t *testing.T) {
+		p, _ := newBoundProvider(t)
+		_, err := p.PostCommitComment(ctx, opts(provider.CommentBehaviorUpdate, "aaaaaaaa"))
+		require.ErrorIs(t, err, errUtils.ErrCICommentNotFound)
+
+		_, err = p.PostCommitComment(ctx, opts(provider.CommentBehaviorCreate, "aaaaaaaa"))
+		require.NoError(t, err)
+		c, err := p.PostCommitComment(ctx, opts(provider.CommentBehaviorUpdate, "aaaaaaaa"))
+		require.NoError(t, err)
+		assert.False(t, c.Created)
+
+		_, err = p.PostCommitComment(ctx, opts(provider.CommentBehaviorUpdate, "bbbbbbbb"))
+		require.ErrorIs(t, err, errUtils.ErrCICommentNotFound)
+	})
+
+	t.Run("a pull request comment is not a commit comment match", func(t *testing.T) {
+		p, _ := newBoundProvider(t)
+		_, err := p.PostComment(ctx, &provider.PostCommentOptions{PRNumber: 1, Marker: marker, Body: marker, Behavior: provider.CommentBehaviorCreate})
+		require.NoError(t, err)
+		_, err = p.PostCommitComment(ctx, opts(provider.CommentBehaviorUpdate, "aaaaaaaa"))
+		require.ErrorIs(t, err, errUtils.ErrCICommentNotFound)
+	})
+
+	t.Run("invalid options", func(t *testing.T) {
+		p, buf := newBoundProvider(t)
+		for _, o := range []*provider.PostCommitCommentOptions{nil, {}, {Body: "x", Marker: "<!-- m -->"}} {
+			c, err := p.PostCommitComment(ctx, o)
+			require.ErrorIs(t, err, errUtils.ErrCICommentPostFailed)
+			assert.Nil(t, c)
+		}
+		assert.Empty(t, buf.String())
+	})
+}
+
+func TestUpdateCheckRun_KeepsTheCheckHandle(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("reuses the ID the caller holds and carries the details URL", func(t *testing.T) {
+		p, _ := newBoundProvider(t)
+		created, err := p.CreateCheckRun(ctx, &provider.CreateCheckRunOptions{Name: "n", Status: provider.CheckRunStatePending, DetailsURL: "https://ci.example/run/1"})
+		require.NoError(t, err)
+		assert.Equal(t, "https://ci.example/run/1", created.DetailsURL)
+
+		updated, err := p.UpdateCheckRun(ctx, &provider.UpdateCheckRunOptions{ID: created.ID, Name: "n", Status: provider.CheckRunStateSuccess, DetailsURL: "https://ci.example/run/1"})
+		require.NoError(t, err)
+		assert.Equal(t, created.ID, updated.ID)
+		assert.Equal(t, "https://ci.example/run/1", updated.DetailsURL)
+	})
+
+	t.Run("without an ID it allocates a new one", func(t *testing.T) {
+		p, _ := newBoundProvider(t)
+		created, err := p.CreateCheckRun(ctx, &provider.CreateCheckRunOptions{Name: "n", Status: provider.CheckRunStatePending})
+		require.NoError(t, err)
+		updated, err := p.UpdateCheckRun(ctx, &provider.UpdateCheckRunOptions{Name: "n", Status: provider.CheckRunStateSuccess})
+		require.NoError(t, err)
+		assert.NotEqual(t, created.ID, updated.ID)
+	})
 }
