@@ -25,7 +25,6 @@ ci:
   comments:
     enabled: true
     behavior: upsert
-    template: "release.md"
 ```
 </File>
 
@@ -44,11 +43,9 @@ ci:
 
   <dt>`ci.comments.template`</dt>
   <dd>
-    The default template for script calls: `ci.comment(data = {...})` in an
-    [automation script](/functions/automation/ci.comment) renders `<base_path>/<template>` (or
-    `<base_path>/<template>.md`) with the data as context when the call names no `template` itself.
-    The path is relative to the [templates base path](/cli/configuration/ci/templates#script-report-templates).
-    Native Terraform plan comments do not read this key; they reuse the plan summary template.
+    Reserved. No command reads this key today. Native Terraform plan comments reuse the plan summary template, which
+    you override with [`ci.templates`](/cli/configuration/ci/templates). Scripts that call
+    [`ci.comment`](/functions/automation/ci.comment) name their template in the call with `template=`.
 
     **Default:** none
   </dd>
@@ -67,6 +64,27 @@ ci:
     **Default:** `upsert`
   </dd>
 </dl>
+
+## Comments without a pull request
+
+The [`ci.comment`](/functions/automation/ci.comment) function in a script takes a `target` of `auto`, `pr`, or
+`commit`. With the default `auto`, a run that has a pull request comments on it, and any other run (a `push`, for
+example) comments on the commit. Commit comments need the `contents: write` permission instead of
+`pull-requests: write`. Both kinds are gated by `ci.comments.enabled`.
+
+## Container image comments
+
+The `atmos container build` and `atmos container push` commands post one image summary comment per
+`registry/repository`, so pushing a new tag updates the existing comment instead of adding another. The comment is
+attempted only when `ci.comments.enabled` is on; with comments off, nothing is previewed in the log. A comment body
+longer than 65,000 characters is truncated with a note, and a failed post is logged as a warning without failing the
+build. See [container components](/stacks/components/container).
+
+## Fork pull requests
+
+Comments are held for a pull request from a fork under the elevated `pull_request_target` and `workflow_run` events.
+Native Terraform plan comments go through the same gate as comments from scripts. See the
+[fork posting gate](/cli/configuration/ci#fork-posting-gate).
 
 ## Environment Variables
 

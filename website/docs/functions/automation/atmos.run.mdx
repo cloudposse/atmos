@@ -16,16 +16,22 @@ import Intro from '@site/src/components/Intro'
 ## Usage
 
 ```python
-atmos.run(argv, working_directory = ..., env = ..., output = "stream", check = True)
+atmos.run(argv, working_directory = ..., env = ..., output = "stream", check = True)  # output: "stream", "capture", or "viewport"
 ```
+
+The `--profile` and `--identity` selections given to the parent Atmos command reach every nested `atmos.*` call, in
+standalone scripts and in script steps of custom commands, workflows, and hooks. A value in the step's own `env`
+overrides the forwarded selection.
 
 ## Custom commands and aliases
 
 Besides `atmos.run`, `atmos.terraform`, `atmos.helm`, and `atmos.toolchain`, the `atmos` module has one member for every
 command in the CLI, including aliases and the custom commands defined in `atmos.yaml`. A custom command named
-`capacity` is callable as `atmos.capacity(flags = {"replicas": "3"})`, and the alias `tf` as `atmos.tf(...)`. These
-members follow the [command wrapper signature](#command-wrappers). A command whose name contains
-a hyphen cannot be written as an attribute, so call it with `atmos.run(["my-command", "--flag=value"])` instead.
+`capacity` is callable as `atmos.capacity(flags = {"replicas": "3"})`. These members follow the
+[command wrapper signature](#command-wrappers). The alias `tf` is the same function as `atmos.terraform`: it takes
+`command`, `component`, and `stack` (positionally or as keywords), and accepts the `detailed-exitcode` flag like
+`atmos.terraform` does. A command whose name contains a hyphen cannot be written as an attribute, so call it with
+`atmos.run(["my-command", "--flag=value"])` instead.
 
 ## Command wrappers
 
@@ -69,7 +75,7 @@ for item in result.data:
     print(item["component"], item["stack"])
 ```
 
-Pass `output = "stream"` to display output live, or override the format with
+Pass `output = "stream"` to display output live (or `"viewport"` to show it in a bounded viewport), or override the format with
 `flags = {"format": "yaml"}` for commands that support YAML. An explicit format
 in `flags`, positional arguments, or `args` takes precedence. The config getters
 support `"raw"` and `"json"`. Reading `data` requires valid JSON regardless of the
@@ -122,13 +128,17 @@ For example, `atmos.vendor("pull", flags = {"component": "vpc"})` runs
     <dt>`output`</dt>
     <dd>
         (Optional) `"stream"` (the default) shows the command's output live and also captures it. The value `"capture"`
-        captures stdout and stderr without showing them.
+        captures stdout and stderr without showing them. The value `"viewport"` shows the live output in a bounded
+        terminal viewport, and also captures it; it falls back to streaming when there is no terminal or when the call
+        runs inside a task of a parallel group. All `atmos.*` wrappers, [`exec.run`](/functions/automation/exec.run), and
+        [`component.exec`](/functions/automation/component.exec) accept the same three modes.
     </dd>
 
     <dt>`check`</dt>
     <dd>
-        (Optional) Defaults to `True`: a nonzero exit code raises an error. Pass `False` to receive the result and
-        inspect `exit_code` yourself.
+        (Optional) Defaults to `True`: a nonzero exit code raises an error, and a failure that reaches the top of the
+        script ends Atmos with the command's exit code. Pass `False` to receive the result and inspect `exit_code`
+        yourself.
     </dd>
 </dl>
 

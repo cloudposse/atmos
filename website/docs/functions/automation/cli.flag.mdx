@@ -67,7 +67,9 @@ cli.flag(
     <dt>`choices`</dt>
     <dd>
         (Optional) A list or tuple of allowed strings. Choices apply to `string` and `string_list` flags. A value
-        outside the list stops the program with an error that names the valid values.
+        outside the list stops the program with an error that names the valid values. A declared `default` must be
+        one of the choices, otherwise `cli.flag` fails when the script is loaded. An empty value typed on the command
+        line (`--stage=`) is checked against the choices like any other value.
     </dd>
 
     <dt>`env`</dt>
@@ -90,6 +92,8 @@ A declaration value for the `flags` list of [`cli.command`](/functions/automatio
 - The form `--verbose` sets a boolean flag to `True`, and `--verbose=false` sets it to `False`. A boolean flag never
   consumes the next word, so `--verbose false` is rejected with a hint to write `--verbose=false`.
 - An `int` flag reads base-10 digits only. `--count 010` is ten, and `--count 0x10` is an error.
+- When the same flag appears more than once on the command line, the last value wins (`--stage=dev --stage=prod`
+  is `prod`). Only a `string_list` flag collects every occurrence.
 - A `string_list` flag accepts comma-separated values, repeated flags, or both: `--tag=a,b --tag=c` produces
   `["a", "b", "c"]`.
 
@@ -125,13 +129,16 @@ cli.command(
 
 - An invalid name, an invalid shorthand, an unsupported `type`, or a default of the wrong type fails with an
   argument error when `cli.flag` is called.
-- Setting `choices` on an `int` or `bool` flag fails.
+- Setting `choices` on an `int` or `bool` flag fails, and so does a `default` that is not one of the `choices`.
 - Duplicate flag names or shorthands in one `cli.command` call fail, and names that differ only by case count as
   duplicates.
 - A missing required flag, an unknown flag, an invalid value, or a value outside `choices` stops the program with a
   usage error before your functions run. A usage error has no traceback, suggests `--help`, and exits with status 2.
 
 ## Help output
+
+`--help` prints the usage and then ends the script: nothing after the `cli.command` call runs, and the exit status is
+0.
 
 `--help` annotates each flag: `(required)` for a required flag, `(one of: dev, prod)` for `choices`, and
 `[env: DEPLOY_ENV]` for an `env` binding, for example

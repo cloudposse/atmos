@@ -103,6 +103,9 @@ EOF
 ["foo", "bar"]
 ```
 
+When standard input is a terminal, Atmos prints `Reading script from stdin; press Ctrl-D to end.` on stderr so
+you know it is waiting for the script. Pipes and here-documents print nothing.
+
 Atmos reads the source through EOF before executing it. Relative `load()` imports
 and file operations resolve from the working directory. There is no source
 filename, so `ctx.script` is `None`, and tracebacks identify the source as
@@ -213,6 +216,11 @@ is, and any other value is written as JSON. `None` means no output, so
 `output = cli.command(...)` prints nothing when the callback returns nothing or when
 you ask for `--help`.
 
+## Interrupt with Ctrl-C
+
+The first Ctrl-C cancels the script, runs its [`defer`](/functions/automation/defer) calls with a 30 second grace
+period, and exits with status 130 without printing an error box. A second Ctrl-C exits immediately.
+
 ## Global flags
 
 Atmos global flags go between `atmos` and the script path. Flags that take a value
@@ -226,8 +234,9 @@ atmos --logs-level=Debug ./release.star api
 Atmos applies these flags itself, and the first word that is not a flag starts the
 script. Everything after the script path belongs to the script, including flags
 that look like Atmos flags, such as a script-owned `--chdir` or `--force-color`. A relative script
-path is resolved after `--chdir` is applied, so it is relative to the new working
-directory. The `--profile` and `--identity` flags must use the `--flag=value` form. A space form such as
+path is resolved against the directory you were in before `--chdir` (or `ATMOS_CHDIR`) moved the process,
+because that is the directory you typed it against. The script then runs in the new working directory.
+Usage hints keep the spelling you typed. The `--profile` and `--identity` flags must use the `--flag=value` form. A space form such as
 `--profile dev` before the script is rejected with a hint to write `--profile=dev`, because the word `dev` would
 otherwise be taken as the script path. A flag Atmos does not define before the script is an error
 from the normal command line.
@@ -240,7 +249,8 @@ such as `./stacks` is left to normal Atmos command handling.
 
 ## File names and editor support
 
-A script runs by path, so the `.star` extension is optional. These all run the script:
+A script runs by path, so the `.star` extension is optional. The extension match ignores case, so `TOOL.STAR` and
+`Tool.Star` run like `tool.star`. These all run the script:
 
 ```shell
 ./tool                # Shebang: #!/usr/bin/env atmos
@@ -250,6 +260,17 @@ atmos tool.star
 
 A bare `atmos tool` with no slash and no `.star` is an Atmos command name, so it
 never runs a script. Use `./tool`, `atmos ./tool`, or a `.star` name.
+
+The shebang can carry Atmos global flags. Both first lines below run the file as an Atmos script:
+
+```text
+#!/usr/bin/env atmos
+#!/usr/bin/env -S atmos --logs-level=Debug
+```
+
+The `-S` option of `env` splits the line into separate words, so the flags that follow `atmos` reach Atmos before the
+script path, where they apply like any global flag written between `atmos` and the script. `env` also accepts
+`NAME=value` assignments ahead of `atmos`.
 
 The `.star` extension is what lets editors and GitHub recognize a file as Starlark
 without any other hint. An extensionless script needs a file-type hint. Put the

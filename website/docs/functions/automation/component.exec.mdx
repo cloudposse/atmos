@@ -47,10 +47,17 @@ defaults for the directory and environment.
     </dd>
 
     <dt>`output`</dt>
-    <dd>(Optional) `"stream"` (the default) or `"capture"`.</dd>
+    <dd>
+        (Optional) `"stream"` (the default), `"capture"`, or `"viewport"`. The value `"viewport"` shows the live output in
+        a bounded terminal viewport and falls back to streaming without a terminal or inside the tasks of a parallel
+        group. See [`exec.run`](/functions/automation/exec.run#arguments).
+    </dd>
 
     <dt>`check`</dt>
-    <dd>(Optional) Defaults to `True`: a nonzero exit code raises an error.</dd>
+    <dd>
+        (Optional) Defaults to `True`: a nonzero exit code raises an error, and a failure that reaches the top of the
+        script ends Atmos with the program's exit code.
+    </dd>
 </dl>
 
 ## Environment layering

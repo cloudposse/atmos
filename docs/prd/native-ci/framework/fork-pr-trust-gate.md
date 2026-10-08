@@ -143,6 +143,31 @@ and static analysis (the v7 design intent behind `allow-unsafe-pr-checkout`).
 - Reserve `pull_request_target` / `workflow_run` for trusted, secret-free steps (e.g. labeling,
   comment formatting), or gate them behind `--allow-unsafe-fork` only with a documented reason.
 
+## FR-34: Posting Gate for Fork Pull Requests
+
+**Requirement**: Under the elevated events, Atmos does not let a fork pull request drive writes to the repository
+or to later steps of the job. The same opt-in as FR-32 releases both gates.
+
+**Behavior**:
+- The gate holds comments (pull request and commit), commit statuses, environment exports (`ci.env`), `PATH`
+  exports (`ci.path`), and SARIF uploads. A held write warns and renders locally; the command continues.
+- Summaries, outputs, annotations, log groups, and masks only affect the current job and are never held.
+- A pull request is a fork when the head and base repository `full_name` differ. `head.repo.fork` is not
+  consulted, so a repository that is itself a fork is not penalized. A deleted fork (`head.repo` is null) and an
+  unreadable event payload are treated as a fork, so the gate fails closed. A plain `pull_request` event from a fork
+  is never gated.
+- Under `pull_request_target` and `workflow_run`, the pull request number comes from the event payload
+  (`pull_request.number`, or `workflow_run.pull_requests[0].number`) and falls back to `GITHUB_REF`.
+- The gate sits in `ci.Reporter`, so scripts and the native Terraform plan comments and commit statuses share it.
+- `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` sets `ci.allow_unsafe_fork_execution`, the same key the clone gate reads.
+  The generic provider's `ATMOS_CI_PR_FORK` only fills `ci.context.pr.fork` and never gates anything.
+
+**Validation**:
+- Fork pull request under `pull_request_target`: comment, status, env, path, and SARIF held; summary and output written.
+- Same-repository pull request (including in a repository that is itself a fork): posts normally.
+- Deleted fork and unreadable payload: held.
+- Same fork with the opt-in set: posts.
+
 ## Behavior Matrix
 
 | Event | Clone target | Opt-in | Result |
@@ -154,6 +179,8 @@ and static analysis (the v7 design intent behind `allow-unsafe-pr-checkout`).
 | `workflow_run` | fork ref / fork URI | no | **refuse** |
 | `workflow_run` | fork ref / fork URI | yes | clone (warn) |
 | `pull_request` | any | — | clone (low-privilege event) |
+| `pull_request_target` / `workflow_run`, fork PR | post a comment, status, env, path, or SARIF | no | **hold** (warn, render locally) |
+| `pull_request_target` / `workflow_run`, fork PR | post a comment, status, env, path, or SARIF | yes | post |
 | `push` / `merge_group` / local | any | — | clone |
 
 ## Out of Scope / Future

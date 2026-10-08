@@ -131,7 +131,7 @@ Positional arguments are defined as a list under `arguments`:
 arguments:
   - name: string           # Required: Argument name
     description: string    # Optional: Help text
-    required: boolean      # Optional: Whether argument is required (default: false)
+    required: boolean      # Optional: With neither required nor default, the argument is required; write required: false to make it optional
     default: string        # Optional: Default value if not provided
 ```
 
@@ -151,7 +151,8 @@ steps:
 ### Required vs Optional
 
 If `required: true` and no value is provided, the command fails unless a `default` is specified.
-An argument that is not required and has no `default` can be omitted: its value is an empty
+An argument with neither `required:` nor `default:` is required; write `required: false` to make it optional. An
+optional argument with no `default` can be omitted: its value is an empty
 string in `{{ .Arguments.<name> }}` and in `ctx.arguments`. Values keep commas, empty strings,
 and non-ASCII text intact.
 
@@ -266,7 +267,9 @@ atmos mycommand --auto-approve=false   # auto-approve=false (explicit override)
 ### Flag Defaults
 
 String, boolean, and integer flags support defaults. An `int` flag is an integer in templates
-and `ctx.flags`, and its default must be a whole number:
+and `ctx.flags`, and its default must be a whole number. It reads base-10 digits only (`010` is 10, `0x10` is
+rejected). A `default` whose type does not match the flag (an unquoted `2` on a `string` flag, `"true"` on a `bool`
+flag) makes the command a stub that logs a warning naming the flag and reports the error when run:
 
 ```yaml
 flags:

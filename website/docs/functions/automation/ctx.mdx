@@ -16,7 +16,7 @@ import Intro from '@site/src/components/Intro'
 ## Usage
 
 ```python
-ctx.args         # list of script arguments
+ctx.args         # list of script or Git hook arguments
 ctx.script       # source file, or None
 ctx.flags        # dictionary of parsed flags
 ctx.arguments    # dictionary of parsed named arguments
@@ -29,7 +29,7 @@ ctx.operation    # parent operation details, or None
 
 <dl>
     <dt>[`ctx.args`](/functions/automation/ctx.args)</dt>
-    <dd>The command-line arguments passed to a standalone script.</dd>
+    <dd>The command-line arguments passed to a standalone script, or the arguments Git passes to a Git hook.</dd>
 
     <dt>[`ctx.script`](/functions/automation/ctx.script)</dt>
     <dd>The path and directory of the script file, when the script was read from a file.</dd>

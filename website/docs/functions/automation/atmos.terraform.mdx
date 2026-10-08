@@ -29,7 +29,9 @@ atmos.terraform(
 )
 ```
 
-The function is also available as `atmos.tf`. The `command` argument accepts any subcommand of
+The function is also available as `atmos.tf`, which has the same signature: `command`, `component`, and `stack` can be
+positional or keywords (`component = "vpc"`, `stack = "dev"`), and `detailed-exitcode` is handled the same way. The
+`command` argument accepts any subcommand of
 [`atmos terraform`](/cli/commands/terraform/usage), including [`plan`](/cli/commands/terraform/plan),
 [`apply`](/cli/commands/terraform/apply), [`deploy`](/cli/commands/terraform/deploy), and
 [`output`](/cli/commands/terraform/output).
@@ -61,7 +63,8 @@ The function is also available as `atmos.tf`. The `command` argument accepts any
 
     <dt>`working_directory`, `env`, `output`, `check`</dt>
     <dd>
-        (Optional) The same process options as [`atmos.run`](/functions/automation/atmos.run#arguments). The call
+        (Optional) The same process options as [`atmos.run`](/functions/automation/atmos.run#arguments), including the
+        `output` modes `"stream"`, `"capture"`, and `"viewport"`. The call
         runs from the directory Atmos was started in by default, even when the script runs in a component
         directory, so configuration discovery stays the same.
     </dd>
@@ -83,7 +86,7 @@ spelling explicitly, as in `flags = {"-var": ["region=us-east-1", "az_count=3"]}
 ## Exit code 2 from plan
 
 When the command is `plan` and the flags request `detailed-exitcode`, an exit code of `2` means the plan found
-changes. With `check=True`, `atmos.terraform` accepts it and returns the result instead of raising.
+changes. With `check=True`, `atmos.terraform` and `atmos.tf` accept it and returns the result instead of raising.
 
 ## Examples
 

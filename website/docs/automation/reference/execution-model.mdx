@@ -221,6 +221,10 @@ available.
 A script stops when the command or workflow that runs it is canceled. Cancellation reaches
 running code even inside a loop that never calls a function.
 
+Ctrl-C cancels the script in every embedded session, including standalone scripts, script steps, and hooks. The first
+interrupt cancels the script's context and runs its [`defer`](/functions/automation/defer) calls with a 30 second grace
+period, then exits with status 130 and prints no error box. A second interrupt exits immediately.
+
 [`steps.task`](/functions/automation/steps.task) accepts a `timeout` such as `"30s"` or `"5m"`. The
 timeout bounds the whole task, including every retry attempt and delay. A task that exceeds it
 fails with `task "slow" timed out after 1s`, and the traceback shows where the task was when time
