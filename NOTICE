@@ -1309,11 +1309,11 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/terraform-exec
     License: MPL-2.0
-    URL: https://github.com/hashicorp/terraform-exec/blob/v0.25.2/LICENSE
+    URL: https://github.com/hashicorp/terraform-exec/blob/v0.25.3/LICENSE
 
   - github.com/hashicorp/terraform-json
     License: MPL-2.0
-    URL: https://github.com/hashicorp/terraform-json/blob/v0.27.2/LICENSE
+    URL: https://github.com/hashicorp/terraform-json/blob/v0.28.0/LICENSE
 
   - github.com/hashicorp/vault/api
     License: MPL-2.0
