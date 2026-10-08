@@ -35,6 +35,10 @@ more depth. If a name is not listed here, check that page before concluding it d
   and also captures it; `output="capture"` captures without showing. It inherits the
   effective execution environment without changing the global working directory or
   environment. Relative `working_directory` resolves against the step working directory.
+- `exec.which(name)`: absolute path of the executable `exec.run` would start for `name`, or `None`.
+  Searches the same `PATH` as `exec.run` (including `dependencies.tools` directories); a name with a
+  path separator resolves relative to the working directory. Use it for prerequisite checks instead of
+  running a tool just to see whether it exists.
 - `component.exec(argv, working_directory=, env={...}, output=, check=)`: same, but runs in the
   component's physical directory and uses the component env (then command, step, and per-call
   overrides). Use the handle rather than inferring a path from a logical name.
@@ -102,6 +106,9 @@ more depth. If a name is not listed here, check that page before concluding it d
   filesystem. `fs.resolve(path)` returns the absolute path (tilde expanded, relative paths joined to the
   working directory, cleaned) without touching the filesystem, so use it instead of hand-rolled
   `~` and absolute-path checks.
+- `hash.sha256(data)`, `hash.sha512(data)`, `hash.sha1(data)`, `hash.md5(data)`: lowercase hex digest of a
+  string. Strings are bytes, so `hash.sha256(fs.read_file(path))` fingerprints a binary file exactly.
+  There is no incremental API; sha1 and md5 exist for interoperability (Git ids, S3 ETags), not security.
 - `errors.build(message)`: error builder with `.with_title`, `.with_explanation`, `.with_hint`,
   `.with_example`, `.with_context`, `.with_exit_code`, and a final `.fail()`.
 - `regex.search(pattern, text)`: boolean match anywhere. `regex.findall(pattern, text)`:

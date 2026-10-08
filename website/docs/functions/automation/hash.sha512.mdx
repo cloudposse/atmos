@@ -1,0 +1,52 @@
+---
+title: "hash.sha512"
+sidebar_position: 24
+sidebar_label: "hash.sha512"
+sidebar_class_name: command
+description: Compute the SHA-512 digest of a string or file contents as lowercase hex.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `hash.sha512` function returns the SHA-512 digest of a string as lowercase hexadecimal. It takes
+    the same argument as [`hash.sha256`](/functions/automation/hash.sha256) and returns a 128-character
+    string. Use it when a registry or checksum file expects SHA-512.
+</Intro>
+
+## Usage
+
+```python
+hash.sha512(data)
+```
+
+## Arguments
+
+<dl>
+    <dt>`data`</dt>
+    <dd>Required. The string to hash, as bytes. File contents from `fs.read_file` hash exactly as stored.</dd>
+</dl>
+
+## Returns
+
+The digest as a 128-character lowercase hexadecimal string.
+
+## Example
+
+### Verify a download against a SHA-512 checksum file
+
+```python
+expected = fs.read_file("release.tar.gz.sha512").split()[0]
+actual = hash.sha512(fs.read_file("release.tar.gz"))
+if actual != expected:
+    fail("checksum mismatch for release.tar.gz")
+```
+
+## Errors
+
+- A missing argument, or an argument that is not a string, fails with an argument error.
+
+## Related
+
+- [`hash.sha256`](/functions/automation/hash.sha256) is the usual choice for fingerprints and cache keys.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script)

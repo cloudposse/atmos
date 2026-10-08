@@ -1,0 +1,55 @@
+---
+title: "hash.md5"
+sidebar_position: 26
+sidebar_label: "hash.md5"
+sidebar_class_name: command
+description: Compute the MD5 digest of a string for checksums and interoperability.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `hash.md5` function returns the MD5 digest of a string as lowercase hexadecimal. MD5 is not
+    collision resistant, so use it only where another system already expects it, such as comparing
+    against an S3 ETag for a single-part upload. For fingerprints you control, use
+    [`hash.sha256`](/functions/automation/hash.sha256).
+</Intro>
+
+## Usage
+
+```python
+hash.md5(data)
+```
+
+## Arguments
+
+<dl>
+    <dt>`data`</dt>
+    <dd>Required. The string to hash, as bytes.</dd>
+</dl>
+
+## Returns
+
+The digest as a 32-character lowercase hexadecimal string.
+
+## Example
+
+### Compare a local file with an S3 ETag
+
+S3 reports the MD5 of a single-part upload as its ETag, wrapped in quotes:
+
+```python
+local = hash.md5(fs.read_file(".build/handler.zip"))
+etag = exec.run(["aws", "s3api", "head-object", "--bucket", bucket, "--key", key], output = "capture").data["ETag"].strip('"')
+if local != etag:
+    fail("the published object differs from the local build")
+```
+
+## Errors
+
+- A missing argument, or an argument that is not a string, fails with an argument error.
+
+## Related
+
+- [`hash.sha256`](/functions/automation/hash.sha256) for fingerprints and cache keys.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script)

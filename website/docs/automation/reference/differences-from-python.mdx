@@ -206,6 +206,8 @@ The Python standard library and Python packages are not part of the runtime, and
 | Python | In Atmos Automation Language |
 | --- | --- |
 | `subprocess` | [`exec.run`](/functions/automation/exec.run) and [`atmos.run`](/functions/automation/atmos.run). |
+| `shutil.which` | [`exec.which`](/functions/automation/exec.which), which searches the same `PATH` that `exec.run` uses. |
+| `hashlib` | [`hash.sha256`](/functions/automation/hash.sha256), [`hash.sha512`](/functions/automation/hash.sha512), [`hash.sha1`](/functions/automation/hash.sha1), and [`hash.md5`](/functions/automation/hash.md5). Each takes a string and returns lowercase hex; there is no incremental `update()`. |
 | `os.environ` | [`env`](/functions/automation/env), a read-only dictionary of the step's declared inputs. |
 | `open(path).read()` | [`fs.read_file`](/functions/automation/fs.read_file). File writes are not available. |
 | `json` | [`json.encode`](/functions/automation/json.encode), [`json.decode`](/functions/automation/json.decode), [`json.indent`](/functions/automation/json.indent). |

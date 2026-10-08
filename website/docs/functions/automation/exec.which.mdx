@@ -1,0 +1,78 @@
+---
+title: "exec.which"
+sidebar_position: 12
+sidebar_label: "exec.which"
+sidebar_class_name: command
+description: Find the executable that exec.run would start for a program name.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `exec.which` function returns the absolute path of the executable that
+    [`exec.run`](/functions/automation/exec.run) would start for a program name, or `None` when
+    no executable matches. Use it to check a prerequisite before running it, or to branch on which
+    tool is available.
+</Intro>
+
+## Usage
+
+```python
+exec.which(name)
+```
+
+## Arguments
+
+<dl>
+    <dt>`name`</dt>
+    <dd>
+        Required. The program name, such as `"terraform"`. A name that contains a path separator,
+        such as `"./scripts/deploy"`, resolves relative to the script's working directory instead of
+        being searched on `PATH`. An empty name is an error.
+    </dd>
+</dl>
+
+## Returns
+
+The absolute path of the executable as a string, or `None` when nothing matches.
+
+The search uses the same environment as [`exec.run`](/functions/automation/exec.run): the `PATH`
+of the effective execution environment, including the directories that
+[`dependencies.tools`](/functions/automation/dependencies.tools) adds, and `PATHEXT` on Windows.
+It does not consult the shell, so aliases and shell functions are never found.
+
+## Examples
+
+### Check prerequisites before running anything
+
+```python
+missing = [tool for tool in ["docker", "python3"] if not exec.which(tool)]
+if missing:
+    errors.build("Missing prerequisites: " + ", ".join(missing)).with_hint("Install them or pin them with dependencies.tools.").fail()
+```
+
+### Prefer one tool over another
+
+```python
+tf = exec.which("tofu") or exec.which("terraform")
+if not tf:
+    fail("neither tofu nor terraform is installed")
+exec.run([tf, "version"])
+```
+
+### Report where a tool came from
+
+```python
+ui.info("Using " + exec.which("jq"))
+```
+
+## Errors
+
+- An empty name, a missing argument, or an argument that is not a string fails with an argument error.
+- A name that does not resolve is not an error: the function returns `None`.
+
+## Related
+
+- [`exec.run`](/functions/automation/exec.run) runs the program.
+- [`dependencies.tools`](/functions/automation/dependencies.tools) installs a tool and adds it to `PATH` for later calls.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script)

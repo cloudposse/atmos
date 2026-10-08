@@ -1,0 +1,51 @@
+---
+title: "hash.sha1"
+sidebar_position: 25
+sidebar_label: "hash.sha1"
+sidebar_class_name: command
+description: Compute the SHA-1 digest of a string for checksums and interoperability.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `hash.sha1` function returns the SHA-1 digest of a string as lowercase hexadecimal. SHA-1 is
+    not collision resistant, so use it only where another system already expects it, such as Git
+    object ids or legacy checksum files. For fingerprints you control, use
+    [`hash.sha256`](/functions/automation/hash.sha256).
+</Intro>
+
+## Usage
+
+```python
+hash.sha1(data)
+```
+
+## Arguments
+
+<dl>
+    <dt>`data`</dt>
+    <dd>Required. The string to hash, as bytes.</dd>
+</dl>
+
+## Returns
+
+The digest as a 40-character lowercase hexadecimal string.
+
+## Example
+
+### Compute a Git blob id without Git
+
+```python
+content = fs.read_file("README.md")
+blob = hash.sha1("blob " + str(len(content)) + "\0" + content)
+```
+
+## Errors
+
+- A missing argument, or an argument that is not a string, fails with an argument error.
+
+## Related
+
+- [`hash.sha256`](/functions/automation/hash.sha256) for fingerprints and cache keys.
+- [Atmos Automation Language](/automation/language) and the [script step](/steps/type/script)

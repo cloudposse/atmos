@@ -7,11 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"time"
-
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
@@ -158,11 +154,7 @@ func resolveCommand(spec *TaskSpec) (string, error) {
 	if spec.Env == nil {
 		return spec.Command, nil
 	}
-	dir, err := filepath.Abs(spec.Dir)
-	if err != nil {
-		return "", err
-	}
-	return interp.LookPathDir(dir, expand.ListEnviron(spec.Env...), spec.Command)
+	return LookPath(spec.Dir, spec.Env, spec.Command)
 }
 
 func writerOrDiscard(w io.Writer) io.Writer {
