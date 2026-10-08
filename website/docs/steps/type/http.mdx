@@ -83,12 +83,12 @@ steps:
   <dd>Per-attempt timeout (e.g., `30s`, `1m`). Defaults to `30s`. Each retry attempt gets its own deadline.</dd>
 
   <dt>`retry`</dt>
-  <dd>Retry policy (see [retry](/steps/retry)). Transport errors, `5xx`, and `429` responses are retried by default; other `4xx` responses fail fast. Use `retry.conditions` (regexes matched against `"<status> <body>"`) to retry additional cases.</dd>
+  <dd>Retry policy (see [retry](/steps/retry)). Transport errors, `5xx`, and `429` responses are retried by default; other `4xx` responses fail fast. When `expect` is set, a retry policy also retries any response that fails the expectation (a status outside `expect.status`, or a body that matches none of `expect.response`) until `max_attempts` runs out, which is what makes polling work. Use `retry.conditions` (regexes matched against `"<status> <body>"`) to retry additional cases. The failure error names the last status received and the number of attempts.</dd>
 </dl>
 
 ## Polling
 
-Because `http` retries are HTTP-aware, the step doubles as a poller — `GET` an endpoint and retry until the body matches:
+Because `http` retries are HTTP-aware, the step doubles as a poller — `GET` an endpoint and retry until both the status and the body match the expectation:
 
 ```yaml
 steps:

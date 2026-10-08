@@ -206,7 +206,7 @@ func (h *HTTPHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 		return reqErr
 	}
 
-	retryErr := retry.WithPredicate(ctx, step.Retry, doRequest, shouldRetryHTTP(step.Retry))
+	retryErr := retry.WithPredicate(ctx, step.Retry, doRequest, shouldRetryHTTP(step.Retry, expect))
 
 	if lastResult != nil {
 		lastResult.WithMetadata(metaAttempts, attempts).
@@ -214,7 +214,7 @@ func (h *HTTPHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 	}
 
 	if retryErr != nil {
-		return lastResult, buildHTTPError(step, req, retryErr)
+		return lastResult, buildHTTPError(step, req, retryErr, attempts)
 	}
 
 	if lastResult != nil {
@@ -302,8 +302,13 @@ func (e *httpExpect) check(statusCode int, body string) failureReason {
 }
 
 // shouldRetryHTTP builds the retry predicate: retry on transport errors, 5xx, 429,
-// or anything matching the configured retry.conditions regexes; never on other failures.
-func shouldRetryHTTP(cfg *schema.RetryConfig) func(error) bool {
+// anything matching the configured retry.conditions regexes, and -- when the
+// step declared its own `expect:` -- any response that fails that expectation.
+// The last rule is what makes an `http` step with `expect` and `retry` a poller:
+// a readiness endpoint that returns 404 or an unexpected body while warming up is
+// retried until it satisfies the expectation or `max_attempts` runs out. Without
+// an explicit `expect`, a 4xx still fails fast.
+func shouldRetryHTTP(cfg *schema.RetryConfig, expect *httpExpect) func(error) bool {
 	return func(err error) bool {
 		var httpErr *httpError
 		if !errors.As(err, &httpErr) {
@@ -315,8 +320,29 @@ func shouldRetryHTTP(cfg *schema.RetryConfig) func(error) bool {
 		if httpErr.statusCode >= httpServerErrorMin || httpErr.statusCode == http.StatusTooManyRequests {
 			return true
 		}
+		if expect.explicit() && (httpErr.reason == reasonStatus || httpErr.reason == reasonResponse) {
+			return true
+		}
 		return matchesRetryConditions(cfg, httpErr)
 	}
+}
+
+// explicit reports whether the step declared success criteria of its own
+// (`expect.status` or `expect.response`), as opposed to the implicit 2xx default.
+func (e *httpExpect) explicit() bool {
+	return e != nil && (len(e.statuses) > 0 || len(e.responses) > 0)
+}
+
+// expectedStatusText renders the statuses the step expects, for error messages.
+func expectedStatusText(step *schema.WorkflowStep) string {
+	if step.Expect != nil && len(step.Expect.Status) > 0 {
+		parts := make([]string, 0, len(step.Expect.Status))
+		for _, code := range step.Expect.Status {
+			parts = append(parts, strconv.Itoa(code))
+		}
+		return strings.Join(parts, ", ")
+	}
+	return "2xx"
 }
 
 // matchesRetryConditions reports whether the response matches any retry.conditions regex.
@@ -338,8 +364,9 @@ func matchesRetryConditions(cfg *schema.RetryConfig, httpErr *httpError) bool {
 	return false
 }
 
-// buildHTTPError converts the retry loop's final error into a user-facing error.
-func buildHTTPError(step *schema.WorkflowStep, req *httpRequest, retryErr error) error {
+// buildHTTPError converts the retry loop's final error into a user-facing error
+// that states what the endpoint actually returned and how many attempts were made.
+func buildHTTPError(step *schema.WorkflowStep, req *httpRequest, retryErr error, attempts int) error {
 	var httpErr *httpError
 	if !errors.As(retryErr, &httpErr) {
 		return retryErr
@@ -348,26 +375,32 @@ func buildHTTPError(step *schema.WorkflowStep, req *httpRequest, retryErr error)
 	if httpErr.transport {
 		return errUtils.Build(errUtils.ErrHTTPStepRequestFailed).
 			WithCause(httpErr.cause).
+			WithExplanationf("No response was received after %d attempt(s).", attempts).
 			WithContext("step", step.Name).
 			WithContext("url", sanitizeHTTPDestination(req.url)).
+			WithContext("attempts", strconv.Itoa(attempts)).
 			WithHint("Verify the URL is reachable and the timeout is large enough").
 			Err()
 	}
 
 	if httpErr.reason == reasonResponse {
 		return errUtils.Build(errUtils.ErrHTTPStepUnexpectedResponse).
+			WithExplanationf("The endpoint returned %s, but the body did not match expect.response after %d attempt(s).", httpErr.status, attempts).
 			WithContext("step", step.Name).
 			WithContext("url", sanitizeHTTPDestination(req.url)).
 			WithContext("status", httpErr.status).
-			WithHint("Adjust 'expect.response' or fix the endpoint so the body matches").
+			WithContext("attempts", strconv.Itoa(attempts)).
+			WithHint("Adjust 'expect.response' or fix the endpoint so the body matches; with a retry policy the step keeps polling until it does").
 			Err()
 	}
 
 	return errUtils.Build(errUtils.ErrHTTPStepUnexpectedStatus).
+		WithExplanationf("The endpoint returned %s after %d attempt(s); expected status %s.", httpErr.status, attempts, expectedStatusText(step)).
 		WithContext("step", step.Name).
 		WithContext("url", sanitizeHTTPDestination(req.url)).
 		WithContext("status", httpErr.status).
-		WithHint("Set 'expect.status' to the codes the endpoint returns, or add a retry policy for transient failures").
+		WithContext("attempts", strconv.Itoa(attempts)).
+		WithHint("Set 'expect.status' to the codes the endpoint returns, or add a retry policy; with expect configured, the step retries until the expectation is met or max_attempts is reached").
 		Err()
 }
 
