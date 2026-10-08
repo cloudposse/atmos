@@ -350,9 +350,9 @@ func TestReadStandaloneSourceAnnouncesInteractiveStdin(t *testing.T) {
 				assert.Equal(t, "from file", string(source))
 			}
 			if tc.wantAnnounce {
-				assert.Contains(t, stderr, announcement)
+				assert.Contains(t, stripANSI(stderr), announcement)
 			} else {
-				assert.NotContains(t, stderr, announcement)
+				assert.NotContains(t, stripANSI(stderr), announcement)
 			}
 		})
 	}
