@@ -1,3 +1,23 @@
+- Copy an official example without a scaffold configuration
+
+```
+$ atmos init github.com/cloudposse/atmos//examples/quick-start-simple
+$ cd quick-start-simple
+$ atmos list stacks
+```
+
+- Select an example revision using the official examples alias
+
+```
+$ atmos init examples/quick-start-simple --ref main
+```
+
+- Copy a directory verbatim, including any scaffold templates it contains
+
+```
+$ atmos init ./my-source ./my-project --copy --no-git
+```
+
 - Interactive mode (select template and target)
 
 ```

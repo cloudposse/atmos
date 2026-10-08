@@ -1,0 +1,55 @@
+---
+slug: initialize-from-examples
+title: "Start an Atmos Project from Any Example Directory"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Trying an example should take a few commands after installing Atmos. Previously, getting a working copy meant cloning the repository or preparing a scaffold manifest. The [Atmos init command](/cli/commands/init) now accepts example directories directly.
+
+<!--truncate-->
+
+## The Problem
+
+An example can already contain everything needed to run Atmos: configuration, stacks, and components. Requiring a separate scaffold manifest adds work before a new user can try it or a team can share it.
+
+## The Fix
+
+Initialize from a GitHub directory, an existing remote source, or a local directory. Official Atmos examples are copied verbatim, including examples that contain a scaffold manifest. Other direct sources use scaffold generation when a root manifest exists and copy their contents otherwise.
+
+Official examples use a single shallow Git fetch to avoid downloading repository history. The CLI prints the actual destination and a `cd` command after displaying the example's README.
+
+Copies preserve literal template content, dotfiles, executable permissions, and empty directories while excluding Git metadata. Existing template names and interactive selection continue to work.
+
+## How to Use It
+
+After installing Atmos, initialize the quick-start example and list its stacks:
+
+```shell
+atmos init github.com/cloudposse/atmos//examples/quick-start-simple
+cd quick-start-simple
+atmos list stacks
+```
+
+The destination defaults to the source directory's name. Supply a second argument to choose another destination, or use the shorthand for the default repository:
+
+```shell
+atmos init examples/quick-start-simple ./my-project
+```
+
+Configure [initialization defaults](/cli/commands/init#examples-and-source-directories) in `atmos.yaml` to use your team's repository and revision:
+
+```yaml
+init:
+  repository: github.com/acme/starters
+  ref: main
+  git: true
+```
+
+The repository defaults to `github.com/cloudposse/atmos`. Git initialization and an initial commit are enabled by default; set `git: false` or pass `--no-git` to skip them. Explicit source URLs bypass the default repository, and a revision embedded in the source takes precedence over `--ref` and configuration.
+
+Use `--copy` to copy another source verbatim even when it contains a scaffold manifest. Copy mode skips template rendering and scaffold hooks, requires an empty destination unless `--force` is supplied, and does not support scaffold updates or template variables. Read the [init reference](/cli/commands/init) for source formats, precedence, and overwrite behavior.
+
+## Get Involved
+
+Explore the [examples](/examples) and share your experience in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

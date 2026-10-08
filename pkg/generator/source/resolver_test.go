@@ -408,33 +408,6 @@ func initSourceTestGitRepo(t *testing.T, files map[string]string) string {
 	return repoDir
 }
 
-// TestResolveFetchedGitRef_NotAGitRepoReturnsEmpty covers the "src wasn't a
-// git:: source" case (e.g. oci/s3/http fetches) directly, without needing a
-// full Resolve round trip.
-func TestResolveFetchedGitRef_NotAGitRepoReturnsEmpty(t *testing.T) {
-	assert.Empty(t, resolveFetchedGitRef(t.TempDir()))
-}
-
-// TestResolveFetchedGitRef_CommittedRepoReturnsHash covers the success path:
-// a real commit checked out at dir resolves to its exact hash.
-func TestResolveFetchedGitRef_CommittedRepoReturnsHash(t *testing.T) {
-	dir := initSourceTestGitRepo(t, map[string]string{"file.txt": "hello"})
-
-	assert.Regexp(t, `^[0-9a-f]{40}$`, resolveFetchedGitRef(dir))
-}
-
-// TestResolveFetchedGitRef_EmptyRepoReturnsEmpty covers repo.Head() failing
-// on a real git working tree that has no commits yet (unborn HEAD) -- a
-// legitimate git repository, distinct from "not a git repo at all", where
-// resolution is still best-effort empty rather than an error.
-func TestResolveFetchedGitRef_EmptyRepoReturnsEmpty(t *testing.T) {
-	dir := t.TempDir()
-	_, err := git.PlainInit(dir, false)
-	require.NoError(t, err)
-
-	assert.Empty(t, resolveFetchedGitRef(dir))
-}
-
 func sourceTestGitFileURI(path string) string {
 	cleaned := filepath.ToSlash(filepath.Clean(path))
 	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
@@ -457,7 +430,7 @@ func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
 
 	requireGitBinary(t)
 	// Real Git subprocesses can exceed a minute on busy Windows runners. Use
-	// the production fetch budget so the best-effort ref probe can finish too.
+	// the production fetch budget for the local Git transport.
 	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, DefaultFetchTimeout)
 	require.NoError(t, err)
 	require.NotNil(t, cleanup)
@@ -467,7 +440,7 @@ func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
 	// Regression: go-getter's git fetch for a //subdir source clones the full
 	// repo into its own internal temp location and copies only the subdir's
 	// content into tempDir, so tempDir itself never has a usable .git
-	// directory for resolveFetchedGitRef to inspect directly -- ResolvedRef
+	// directory to inspect afterward -- ResolvedRef
 	// used to silently stay empty for this extremely common source shape
 	// (the exact one `atmos init aws/app` uses), meaning
 	// --update-strategy=rendered could never record a pinnable ref for any
@@ -475,10 +448,8 @@ func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
 	assert.Regexp(t, `^[0-9a-f]{40}$`, cfg.ResolvedRef, "ResolvedRef must be captured even for a //subdir source")
 }
 
-// TestResolve_RemoteGitSubdirWithoutRefStillResolvesCommit covers the
-// resolveSubdirGitRef fallback with no explicit ?ref= at all (default
-// branch), proving the fallback's re-fetch doesn't depend on an explicit ref
-// being present in src.
+// TestResolve_RemoteGitSubdirWithoutRefStillResolvesCommit verifies provenance
+// capture when fetching the repository's default branch.
 func TestResolve_RemoteGitSubdirWithoutRefStillResolvesCommit(t *testing.T) {
 	repoDir := initSourceTestGitRepo(t, map[string]string{
 		"aws/app/scaffold.yaml": sampleScaffold,
@@ -520,65 +491,34 @@ func commitFileToTestRepo(t *testing.T, repoDir, relPath, content string) {
 	require.NoError(t, err)
 }
 
-// TestResolveRemote_SubdirGitSourcePinsRefBeforeFetch is a regression test
-// for a data-integrity race: resolveRemote used to fetch a //subdir source's
-// content first and only *afterward* re-fetch the same (possibly mutable)
-// ref a second time, purely to resolve its commit. If the ref moved between
-// those two fetches, the generated files could come from one commit while
-// conf.ResolvedRef recorded another, corrupting --update-strategy=rendered's
-// three-way merge base. The fix (pinSubdirGitSource) resolves the commit
-// *before* the content fetch and pins that fetch to the exact resolved SHA.
-// This proves the fix by moving the source repo's branch forward *after*
-// resolution but *before* the pinned fetch runs: the pinned fetch must still
-// land on the pre-move commit, and ResolvedRef must match it exactly.
-func TestResolveRemote_SubdirGitSourcePinsRefBeforeFetch(t *testing.T) {
+// The content and provenance must come from a single checkout, even if the
+// remote branch later moves. A subdirectory fetch must not clone a probe repo.
+func TestResolveRemote_SubdirUsesSingleCheckout(t *testing.T) {
+	requireGitBinary(t)
 	repoDir := initSourceTestGitRepo(t, map[string]string{
 		"aws/app/scaffold.yaml": sampleScaffold,
 		"aws/app/file.txt":      "v1",
 	})
-	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app"
-
-	requireGitBinary(t)
-
-	pinnedSrc, ref := pinSubdirGitSource(&schema.AtmosConfiguration{}, "aws/app", src, DefaultFetchTimeout)
-	require.Regexp(t, `^[0-9a-f]{40}$`, ref, "the commit must be resolved before the content fetch runs")
-	require.Contains(t, pinnedSrc, "ref="+ref, "the content fetch must be pinned to the resolved commit")
-
-	// Move "main" forward after resolution but before the pinned fetch below
-	// -- exactly the race window that used to split content from ResolvedRef.
-	commitFileToTestRepo(t, repoDir, "aws/app/file.txt", "v2")
-
-	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", pinnedSrc, DefaultFetchTimeout)
+	repo, err := git.PlainOpen(repoDir)
+	require.NoError(t, err)
+	head, err := repo.Head()
+	require.NoError(t, err)
+	trace := filepath.Join(t.TempDir(), "git-trace.log")
+	t.Setenv("GIT_TRACE", trace)
+	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app?ref=main&depth=1"
+	conf, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, DefaultFetchTimeout)
 	require.NoError(t, err)
 	defer cleanup()
-	require.NotNil(t, cfg)
-	assert.Equal(t, ref, cfg.ResolvedRef, "ResolvedRef must be exactly the commit the fetch was pinned to")
-
-	found := false
-	for _, f := range cfg.Files {
+	commitFileToTestRepo(t, repoDir, "aws/app/file.txt", "v2")
+	assert.Equal(t, head.Hash().String(), conf.ResolvedRef)
+	for _, f := range conf.Files {
 		if f.Path == "file.txt" {
-			found = true
-			assert.Equal(t, "v1", f.Content, "the pre-move commit's content must be fetched despite the branch moving afterward")
+			assert.Equal(t, "v1", f.Content)
 		}
 	}
-	assert.True(t, found, "file.txt must be present in the fetched content")
-}
-
-// TestResolveSubdirGitRef_NoSubdirReturnsEmpty proves the fallback is a
-// pure no-op for a source with no //subdir at all: resolveRemote's own
-// direct resolveFetchedGitRef(tempDir) result already reflects reality for
-// that case, so this must not attempt a redundant re-fetch.
-func TestResolveSubdirGitRef_NoSubdirReturnsEmpty(t *testing.T) {
-	assert.Empty(t, resolveSubdirGitRef(&schema.AtmosConfiguration{}, "aws/app", "git::file:///does/not/matter?ref=main", time.Minute))
-}
-
-// TestResolveSubdirGitRef_FetchFailurePropagatesEmpty covers the re-fetch
-// itself failing (unreachable source): best-effort, so this must return ""
-// rather than propagating an error the caller has no use for.
-func TestResolveSubdirGitRef_FetchFailurePropagatesEmpty(t *testing.T) {
-	src := "git::file:///definitely/not/a/repo//sub?ref=main"
-
-	assert.Empty(t, resolveSubdirGitRef(&schema.AtmosConfiguration{}, "aws/app", src, time.Millisecond))
+	commands, err := os.ReadFile(trace)
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(commands), "built-in: git clone"), "fetch must clone only once: %s", commands)
 }
 
 // TestResolve_RemoteGitExcludesGitDirectory reproduces a client-reported bug: fetching a

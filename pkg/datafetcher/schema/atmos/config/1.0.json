@@ -6259,6 +6259,48 @@
       "type": "object",
       "description": "ImportsSettings holds global defaults applied when processing stack imports."
     },
+    "InitConfig": {
+      "properties": {
+        "repository": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Repository resolves relative source paths after named templates."
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Ref selects the source revision when neither the source URL nor --ref pins one."
+        },
+        "git": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Git controls creation of a Git repository and initial commit, defaulting to true."
+        }
+      },
+      "type": "object",
+      "description": "InitConfig configures source resolution for atmos init."
+    },
     "Inputs": {
       "properties": {
         "sources": {
@@ -17100,6 +17142,19 @@
       "anyOf": [
         {
           "$ref": "#/$defs/GitConfig"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/yamlFunction"
+        }
+      ]
+    },
+    "init": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InitConfig"
         },
         {
           "type": "null"

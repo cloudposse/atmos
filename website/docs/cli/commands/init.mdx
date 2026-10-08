@@ -3,7 +3,7 @@ title: atmos init
 sidebar_label: init
 sidebar_class_name: command
 id: init
-description: Initialize a complete Atmos project from a built-in or catalog template.
+description: Initialize an Atmos project from an example, source directory, or scaffold template.
 ---
 
 import CastPlayer from '@site/src/components/CastPlayer'
@@ -11,9 +11,9 @@ import Intro from '@site/src/components/Intro'
 import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
-Initialize a project from a proven Atmos starting point. `atmos init` selects a project template,
-collects its validated answers, generates the project, and records the source needed for later
-updates.
+Initialize a project from an example, source directory, or scaffold template. Ordinary directories
+are copied as-is. Scaffold templates collect validated answers, generate the project, and record
+the source needed for later updates.
 </Intro>
 
 <CastPlayer title="atmos init --help" src="/casts/screengrabs/atmos-init--help.cast" static chrome />
@@ -21,7 +21,14 @@ updates.
 ## Usage
 
 ```shell
-atmos init [template] [target] [flags]
+atmos init [source] [target] [flags]
+```
+
+```shell
+# Copy an official example, then try it.
+atmos init github.com/cloudposse/atmos//examples/quick-start-simple
+cd quick-start-simple
+atmos list stacks
 ```
 
 ```shell
@@ -39,6 +46,75 @@ atmos init aws/landing-zone ./my-platform
 atmos init basic ./my-project --set project_name=my-project --interactive=false
 ```
 
+## Examples and Source Directories
+
+No `scaffold.yaml` or existing Atmos configuration is required to copy a directory. The double
+slash in a Git source separates the repository from the directory to copy. An omitted target
+defaults to the source directory's name, without a prompt.
+
+```shell
+# Equivalent shorthand for the official Atmos repository, defaulting to main.
+atmos init examples/quick-start-simple
+
+# GitHub browser directory URLs work too.
+atmos init https://github.com/cloudposse/atmos/tree/main/examples/quick-start-simple
+
+# Choose another revision and target directory.
+atmos init github.com/cloudposse/atmos//examples/quick-start-simple ./demo --ref main
+
+# Local directories and other supported remote sources work as well.
+atmos init ./my-source ./my-project
+atmos init github.com/example/project//starter ./my-project --copy
+```
+
+Relative source paths such as `examples/<path>` resolve against `init.repository`,
+which defaults to `github.com/cloudposse/atmos`. Official example sources use a shallow Git
+fetch by default; an explicit `depth` query parameter overrides this. The official shorthand
+defaults to `main`.
+Override the repository in an `atmos.yaml` where you run initialization (including your global
+Atmos configuration):
+
+```yaml title="atmos.yaml"
+init:
+  repository: github.com/acme/starters
+  ref: main
+  git: true
+```
+
+With this setting, `atmos init examples/demo` fetches `github.com/acme/starters//examples/demo`.
+The optional `init.ref` sets the default revision, and `init.git` controls creation of the
+repository and initial commit (default `true`). An unset `init.ref` uses `main` for official
+shorthand and the repository default branch for other sources. `--ref` / `ATMOS_INIT_REF` and
+`--git` / `ATMOS_INIT_GIT` override configuration, with flags taking precedence over environment
+variables. `--no-git` disables Git initialization. A revision embedded in the source or repository
+URL still takes precedence over these revision defaults.
+
+Full source URLs always bypass the default repository. Named templates retain precedence; bare
+names without a slash remain template identifiers. Use `./examples/<path>` to select a local
+directory explicitly. For branch names containing slashes, use the canonical `//directory` syntax with
+`--ref feature/my-branch`, rather than a GitHub browser URL.
+
+Direct references to official Atmos examples always copy verbatim, including examples that
+contain a scaffold manifest. Other direct sources run as scaffolds when a root `scaffold.yaml`
+exists and copy when it is absent. Use `--copy` (or `ATMOS_INIT_COPY=true`) to bypass scaffold
+processing explicitly. Invalid manifests are errors unless copy mode is selected.
+
+Copying preserves file content, filenames, executable permissions, dotfiles, and empty
+directories. It excludes source Git metadata and never evaluates templates or runs scaffold
+hooks. Local sources containing symlinks or special files are rejected. Existing source
+transport requirements and symlink handling still apply to remote downloads.
+
+The destination must be empty unless `--force` is supplied. Force overwrites matching files
+and preserves unrelated files. Copies create a fresh Git repository and initial commit by
+default, unless the destination is already inside a repository; use `--no-git` to disable this.
+Copy mode does not create scaffold update metadata and rejects `--update`, `--set`, and other
+scaffold-specific options.
+
+After copying, Atmos displays the source's `README.md` as Markdown without template
+substitution when present, then prints a `cd` command for the actual destination.
+Install any prerequisites and run the example using its README instructions; initialization
+does not install tools or execute the example.
+
 ## Templates
 
 The built-in catalog includes `basic`, `simple`, `atmos`, `aws/app`,
@@ -50,7 +126,7 @@ configured and remote sources available to the current project.
 an application SDLC layout with development, staging, and production stacks. The landing-zone
 templates establish cloud-specific platform foundations.
 
-`[template]` also accepts a direct source instead of a catalog name — a local path, git, HTTPS,
+`[source]` also accepts a direct source instead of a catalog name — a local path, git, HTTPS,
 S3, or an OCI registry reference:
 
 ```shell
@@ -132,6 +208,10 @@ generation's recorded answers, not the template's field definitions).
 ## Flags and Automation
 
 <dl>
+  <dt>`--copy`</dt>
+  <dd>Copy a source directory verbatim, bypassing scaffold configuration and template processing.
+  Also available as `ATMOS_INIT_COPY=true`.</dd>
+
   <dt>`--set key=value` <em>(repeatable)</em></dt>
   <dd>Provide a template answer; repeat for multiple fields.</dd>
 
