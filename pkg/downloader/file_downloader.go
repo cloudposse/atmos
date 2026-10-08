@@ -101,9 +101,8 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 	return nil
 }
 
-// FetchWithMetadata fetches like Fetch, additionally returning best-effort HTTP cache metadata
-// (ETag/Last-Modified) captured from the response when the underlying client exposes any -- empty
-// for non-HTTP sources (git, OCI, local) or when the fetch itself fails.
+// FetchWithMetadata fetches like Fetch, returning Git commit or HTTP cache
+// metadata captured during the download when the underlying client exposes it.
 func (fd *fileDownloader) FetchWithMetadata(src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error) {
 	return fd.FetchWithMetadataContext(context.Background(), src, dest, mode, timeout)
 }
@@ -140,8 +139,8 @@ func (fd *fileDownloader) FetchWithMetadataContext(parent context.Context, src, 
 		return FetchMetadata{}, fmt.Errorf("%w: %w", errUtils.ErrDownloadFile, err)
 	}
 
-	// DownloadClient implementations that don't do HTTP (git, OCI, local copy, test mocks/fakes)
-	// simply don't implement Metadata() and get a zero-value result here -- deliberately not part
+	// DownloadClient implementations without provenance support (local copy, test mocks/fakes)
+	// can omit Metadata() and get a zero-value result here -- deliberately not part
 	// of the DownloadClient interface itself, see FetchWithMetadata's doc comment.
 	if provider, ok := client.(interface{ Metadata() FetchMetadata }); ok {
 		return provider.Metadata(), nil
