@@ -126,7 +126,10 @@ commands:
           if re.search(r"^http://127\.0\.0\.1", plain, re.MULTILINE):
               raise SystemExit("CloudFormation publish cast leaked the endpoint helper output")
           assert_colored(text, "Created")
+          assert_colored(text, "Changes for")
+          if "▶ Changes for atmos-cast-artifacts-local · 1 resource" not in plain:
+              raise SystemExit("CloudFormation preview must use the shared UI info message")
           if len({frame for frame in "⣽⣻⢿⡿⣟⣯⣷⣾" if frame in text}) < 2:
               raise SystemExit("CloudFormation publish cast is missing animated spinner frames")
-          if not re.search(r"[⣽⣻⢿⡿⣟⣯⣷⣾].*Creating.*Function", plain):
+          if not re.search(r"[⣽⣻⢿⡿⣟⣯⣷⣾].*(?:Creating|Updating).*Function", plain):
               raise SystemExit("CloudFormation publish cast is missing the live resource spinner")

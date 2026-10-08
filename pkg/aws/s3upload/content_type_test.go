@@ -37,7 +37,9 @@ func TestUploadContentTypesAndRepairHeaders(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, len(files), result.Uploaded)
 	for name, file := range files {
-		assert.Equal(t, file.contentType, aws.ToString(client.objects["site/"+name].ContentType), name)
+		// Windows registers application/javascript; the charset must still match.
+		got := strings.Replace(aws.ToString(client.objects["site/"+name].ContentType), "application/javascript;", "text/javascript;", 1)
+		assert.Equal(t, file.contentType, got, name)
 		assert.Equal(t, file.body, client.bodies["site/"+name], "detection must not truncate the uploaded body")
 	}
 	// Repair an assumed UTF-8 header even though the checksum and size still match.

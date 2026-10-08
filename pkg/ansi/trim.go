@@ -214,11 +214,15 @@ func TrimRightSpaces(s string) string {
 
 	result, i := copyContentAndANSI(s, len(trimmed))
 
-	// Capture any trailing ANSI codes that immediately follow the last character.
-	for i < len(s) && isStart(s, i) {
-		start := i
-		i = skip(s, i)
-		result.WriteString(s[start:i])
+	// Preserve resets even when they follow padding, so styles cannot leak into the next line.
+	for i < len(s) {
+		if isStart(s, i) {
+			start := i
+			i = skip(s, i)
+			result.WriteString(s[start:i])
+		} else {
+			i++
+		}
 	}
 
 	return result.String()

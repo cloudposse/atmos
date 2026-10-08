@@ -17,6 +17,11 @@ func diffSummaryText(stackName string, result *changeSetResult) string {
 	if result.NoOp {
 		return fmt.Sprintf("%s: no changes (changeset would be a no-op)", stackName)
 	}
+	rows := changePreviewRows(result)
+	return fmt.Sprintf("Changes for %s: %s", stackName, changeCountText(len(rows))) + changePreviewTable(rows)
+}
+
+func changePreviewRows(result *changeSetResult) [][]string {
 	rows := make([][]string, 0, len(result.Changes))
 	for _, change := range result.Changes {
 		if rc := change.ResourceChange; rc != nil {
@@ -27,15 +32,29 @@ func diffSummaryText(stackName string, result *changeSetResult) string {
 			rows = append(rows, []string{string(rc.Action), stringValue(rc.LogicalResourceId), stringValue(rc.ResourceType), replacement})
 		}
 	}
+	return rows
+}
+
+func changeCountText(count int) string {
 	noun := "resources"
-	if len(rows) == 1 {
+	if count == 1 {
 		noun = "resource"
 	}
-	title := fmt.Sprintf("Changes for %s: %d %s", stackName, len(rows), noun)
+	return fmt.Sprintf("%d %s", count, noun)
+}
+
+func changePreviewTable(rows [][]string) string {
 	if len(rows) == 0 {
-		return title
+		return ""
 	}
-	return title + strings.TrimRight(listformat.CreateStyledTable([]string{"Action", "Resource", "Type", "Replacement"}, rows), "\r\n") + "\n"
+	table := listformat.CreateStyledTableWithOptions(
+		[]string{"Action", "Resource", "Type", "Replacement"}, rows,
+		listformat.TableOptions{ColumnRoles: []listformat.ColumnRole{
+			listformat.ColumnRoleNone, listformat.ColumnRoleNone,
+			listformat.ColumnRoleMuted, listformat.ColumnRoleMuted,
+		}},
+	)
+	return strings.TrimRight(table, "\r\n") + "\n"
 }
 
 // dispatchStackEvents remembers the root status actually displayed, including a

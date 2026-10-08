@@ -102,3 +102,27 @@ func TestLiveEventVocabulary(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyPreviewUsesUIFormatting(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		result *changeSetResult
+		want   string
+	}{
+		{"one resource", &changeSetResult{Changes: []cfntypes.Change{{ResourceChange: &cfntypes.ResourceChange{Action: cfntypes.ChangeActionAdd, LogicalResourceId: awsString("Bucket"), ResourceType: awsString("AWS::S3::Bucket")}}}}, "▶ Changes for app · 1 resource"},
+		{"empty", &changeSetResult{}, "▶ Changes for app · 0 resources"},
+		{"missing detail", &changeSetResult{Changes: []cfntypes.Change{{}}}, "▶ Changes for app · 0 resources"},
+		{"no op", &changeSetResult{NoOp: true}, "▶ app · no changes (changeset would be a no-op)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stderr string
+			stdout := captureStdout(t, func() {
+				stderr = captureStderr(t, func() { renderApplyPreview("app", tc.result) })
+			})
+			assert.Empty(t, stdout)
+			assert.Contains(t, normalizeUIOutput(stderr), tc.want)
+			assert.NotContains(t, stderr, "**")
+			assert.NotContains(t, stderr, "((")
+		})
+	}
+}

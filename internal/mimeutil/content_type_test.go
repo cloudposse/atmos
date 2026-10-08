@@ -1,6 +1,7 @@
 package mimeutil
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,7 +28,9 @@ func TestContentType(t *testing.T) {
 	} {
 		t.Run(tc.filename+"/"+tc.detected, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, ContentType(tc.filename, tc.detected))
+			// Windows registers the application/javascript alias for .js files.
+			got := strings.Replace(ContentType(tc.filename, tc.detected), "application/javascript;", "text/javascript;", 1)
+			assert.Equal(t, tc.want, got)
 		})
 	}
 }

@@ -159,7 +159,8 @@ func TestTrimRight(t *testing.T) {
 
 			// Compare results.
 			if result != tt.expected {
-				t.Errorf("\nTest: %s\nDescription: %s\n\nInput:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nExpected:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nGot:\n  Raw: %q\n  Hex: % X\n  Visual: %s",
+				t.Errorf(
+					"\nTest: %s\nDescription: %s\n\nInput:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nExpected:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nGot:\n  Raw: %q\n  Hex: % X\n  Visual: %s",
 					tt.name,
 					tt.desc,
 					tt.input,
@@ -186,7 +187,8 @@ func TestTrimRight(t *testing.T) {
 				resultWidth := externalansi.StringWidth(strippedResult)
 
 				if resultWidth != expectedWidth {
-					t.Errorf("\nVisual width mismatch:\n  Expected trimmed width: %d (from %q)\n  Got width: %d (from %q)",
+					t.Errorf(
+						"\nVisual width mismatch:\n  Expected trimmed width: %d (from %q)\n  Got width: %d (from %q)",
 						expectedWidth,
 						strings.TrimRight(strippedInput, " \t"),
 						resultWidth,
@@ -196,7 +198,8 @@ func TestTrimRight(t *testing.T) {
 
 				// Verify no trailing whitespace in result.
 				if strippedResult != strings.TrimRight(strippedResult, " \t") {
-					t.Errorf("\nResult still has trailing whitespace:\n  Stripped result: %q\n  After TrimRight: %q",
+					t.Errorf(
+						"\nResult still has trailing whitespace:\n  Stripped result: %q\n  After TrimRight: %q",
 						strippedResult,
 						strings.TrimRight(strippedResult, " \t"),
 					)
@@ -204,7 +207,8 @@ func TestTrimRight(t *testing.T) {
 
 				// Verify expected also matches this property.
 				if strippedExpected != strings.TrimRight(strippedExpected, " \t") {
-					t.Errorf("\nTest case error - expected value has trailing whitespace:\n  Stripped expected: %q\n  After TrimRight: %q",
+					t.Errorf(
+						"\nTest case error - expected value has trailing whitespace:\n  Stripped expected: %q\n  After TrimRight: %q",
 						strippedExpected,
 						strings.TrimRight(strippedExpected, " \t"),
 					)
@@ -372,7 +376,8 @@ func TestTrimLeftSpaces(t *testing.T) {
 
 			// Compare results.
 			if result != tt.expected {
-				t.Errorf("\nTest: %s\nDescription: %s\n\nInput:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nExpected:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nGot:\n  Raw: %q\n  Hex: % X\n  Visual: %s",
+				t.Errorf(
+					"\nTest: %s\nDescription: %s\n\nInput:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nExpected:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nGot:\n  Raw: %q\n  Hex: % X\n  Visual: %s",
 					tt.name,
 					tt.desc,
 					tt.input,
@@ -397,7 +402,8 @@ func TestTrimLeftSpaces(t *testing.T) {
 			resultWidth := externalansi.StringWidth(strippedResult)
 
 			if resultWidth != expectedWidth {
-				t.Errorf("\nVisual width mismatch:\n  Expected trimmed width: %d (from %q)\n  Got width: %d (from %q)",
+				t.Errorf(
+					"\nVisual width mismatch:\n  Expected trimmed width: %d (from %q)\n  Got width: %d (from %q)",
 					expectedWidth,
 					strings.TrimLeft(strippedInput, " "),
 					resultWidth,
@@ -407,7 +413,8 @@ func TestTrimLeftSpaces(t *testing.T) {
 
 			// Verify no leading whitespace in result.
 			if strippedResult != strings.TrimLeft(strippedResult, " ") {
-				t.Errorf("\nResult still has leading whitespace:\n  Stripped result: %q\n  After TrimLeft: %q",
+				t.Errorf(
+					"\nResult still has leading whitespace:\n  Stripped result: %q\n  After TrimLeft: %q",
 					strippedResult,
 					strings.TrimLeft(strippedResult, " "),
 				)
@@ -415,7 +422,8 @@ func TestTrimLeftSpaces(t *testing.T) {
 
 			// Verify expected also matches this property.
 			if strippedExpected != strings.TrimLeft(strippedExpected, " ") {
-				t.Errorf("\nTest case error - expected value has leading whitespace:\n  Stripped expected: %q\n  After TrimLeft: %q",
+				t.Errorf(
+					"\nTest case error - expected value has leading whitespace:\n  Stripped expected: %q\n  After TrimLeft: %q",
 					strippedExpected,
 					strings.TrimLeft(strippedExpected, " "),
 				)
@@ -444,6 +452,16 @@ func TestTrimRightSpaces(t *testing.T) {
 			name:     "ANSI colored with trailing spaces",
 			input:    "\x1b[31mhello\x1b[0m   ",
 			expected: "\x1b[31mhello\x1b[0m",
+		},
+		{
+			name:     "reset after colored padding",
+			input:    "\x1b[31mhello   \x1b[0m",
+			expected: "\x1b[31mhello\x1b[0m",
+		},
+		{
+			name:     "multiple resets separated by padding",
+			input:    "\x1b[31mhello   \x1b[39m  \x1b[0m",
+			expected: "\x1b[31mhello\x1b[39m\x1b[0m",
 		},
 		{
 			name:     "empty string",

@@ -6,7 +6,7 @@
     "docusaurus": "docusaurus",
     "generate:media-kit": "node scripts/generate-media-kit.mjs",
     "prestart": "node scripts/generate-media-kit.mjs",
-    "prebuild": "node --test scripts/command-intros.test.mjs plugins/file-browser/example-docs.test.mjs plugins/doc-release-data/drafts.test.mjs src/components/FileBrowser/index-page.test.mjs && node scripts/generate-media-kit.mjs && node scripts/copy-theme.mjs",
+    "prebuild": "node --test scripts/command-intros.test.mjs plugins/file-browser/example-docs.test.mjs plugins/doc-release-data/drafts.test.mjs src/components/FileBrowser/index-page.test.mjs src/components/FileBrowser/markdown-links.test.mjs && node scripts/generate-media-kit.mjs && node scripts/copy-theme.mjs",
     "start": "node scripts/start-docusaurus.mjs",
     "build": "docusaurus build",
     "postbuild": "cp build/llms.txt static/llms.txt && cp build/llms-full.txt static/llms-full.txt",

@@ -132,7 +132,7 @@ export default function DirectoryPage({
           {/* Show README if present */}
           {dirData.readme && (
             <div className={styles.readmeSection}>
-              <FileViewer file={dirData.readme} />
+              <FileViewer file={dirData.readme} routeBasePath={routeBasePath} />
             </div>
           )}
 
