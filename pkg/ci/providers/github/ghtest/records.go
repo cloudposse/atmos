@@ -47,7 +47,8 @@ type RecordedRequest struct {
 	Path     string
 	RawQuery string
 	Body     string
-	// Status is the HTTP status code the server answered with.
+	// Status is the HTTP status code the server answered with. It is zero while the
+	// handler is still running: a request is listed as soon as it arrives.
 	Status int
 }
 
