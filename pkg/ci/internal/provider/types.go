@@ -97,6 +97,28 @@ type LogGrouper interface {
 	EndLogGroup() error
 }
 
+// LogGroupingSuppressor is an optional capability for providers that run in a
+// context where log grouping must be disabled because stdout has to stay free
+// of CI workflow-command metadata.
+//
+// A log group's `::group::`/`::endgroup::` markers have to bracket the stdout
+// content they fold, and the CI runner does not guarantee ordering between
+// stdout and stderr, so group markers cannot simply be moved to stderr the way
+// standalone annotations can. The only safe option in such a context is to not
+// emit them at all. The canonical case is a deprecated GitHub Action that
+// captures the atmos process's stdout and parses it as JSON (e.g.
+// cloudposse/github-action-atmos-get-settings): a `::group::` line on stdout
+// would corrupt that JSON.
+//
+// When a detected provider reports true here, ci grouping is disabled for the
+// whole run (every dimension and both grouping entry points). Annotations are
+// unaffected — they remain on stderr regardless. See issue #3309.
+type LogGroupingSuppressor interface {
+	// SuppressLogGrouping reports whether log grouping must be disabled for the
+	// current run to keep stdout free of CI workflow-command metadata.
+	SuppressLogGrouping() bool
+}
+
 // CacheProvider is an optional capability for CI providers that expose a remote
 // build cache (for example, the GitHub Actions cache). Providers implement this
 // when their platform offers a documented cache store reachable from within a
