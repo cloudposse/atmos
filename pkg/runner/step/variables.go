@@ -53,8 +53,12 @@ type Variables struct {
 	scriptComponentInfo ComponentInfoResolver
 	// ScriptHook supplies host-owned lifecycle facts to embedded script steps.
 	ScriptHook *script.HookContext
-	// ScriptArgs holds positional arguments supplied by the host.
+	// ScriptArgs holds positional arguments supplied by the host. Embedded scripts read them as
+	// ctx.args and shell steps as $1, $2, and "$@".
 	ScriptArgs []string
+	// HookStdin holds the standard input a Git hook received. The first shell step reads it as its
+	// standard input. It is shared by every branch cloned from this Variables.
+	HookStdin *HookStdin
 	// componentWorkingDir is the effective on-disk working directory of the
 	// hook's component (pkg/hooks.ComponentPath's return value), used only to
 	// anchor a bare-relative (non-dot-prefixed) explicit step.WorkingDirectory

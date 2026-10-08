@@ -101,7 +101,7 @@ func stackPathPatternArg(args []string) string {
 }
 
 func init() {
-	stackConfigGetCmd.Flags().StringP("format", "f", "raw", "Output format: raw or json")
+	registerGetFormat(stackConfigGetCmd, "stack_config_get", "ATMOS_STACK_CONFIG_GET_FORMAT")
 	for _, c := range []*cobra.Command{stackConfigGetCmd, stackConfigSetCmd, stackConfigDeleteCmd, stackConfigFormatCmd} {
 		registerStackEditFlags(c)
 	}
