@@ -54,6 +54,26 @@ func TestNormalizeInitSourceRejectsTraversal(t *testing.T) {
 	}
 }
 
+func TestNormalizeInitSourceRejectsMalformedGitHubURLs(t *testing.T) {
+	for _, src := range []string{"https://[invalid", "https://github.com/owner", "https://github.com/owner/repo/tree/"} {
+		_, err := NormalizeInitSource(src, "")
+		require.ErrorIs(t, err, errUtils.ErrInvalidFormat, src)
+	}
+	got, err := NormalizeInitSource("https://github.com/owner/repo/tree/main", "")
+	require.NoError(t, err)
+	assert.Equal(t, InitSource{Source: "git::https://github.com/owner/repo.git?ref=main", Name: "repo"}, got)
+}
+
+func TestFetchDirectoryRejectsInvalidFileURLs(t *testing.T) {
+	for _, src := range []string{"file://[invalid", "file://remote-host/project"} {
+		dir, cleanup, err := FetchDirectory(nil, "example", src, 0)
+		require.Error(t, err)
+		assert.Nil(t, dir)
+		require.NotNil(t, cleanup)
+		cleanup()
+	}
+}
+
 func TestNormalizeInitSourceNativeAbsolutePath(t *testing.T) {
 	// Percent signs must remain literal, including in Windows drive paths.
 	dir := filepath.Join(t.TempDir(), "100% local")

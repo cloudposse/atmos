@@ -132,6 +132,7 @@ func TestExecuteInitCopyRejectsScaffoldOptions(t *testing.T) {
 		{"update", func(o *initOptions) { o.update = true }},
 		{"set", func(o *initOptions) { o.templateVars = map[string]interface{}{"name": "foo"} }},
 		{"rendered", func(o *initOptions) { o.updateStrategy = "rendered" }},
+		{"merge-driver", func(o *initOptions) { o.mergeDriver = "git" }},
 		{"explicit-default", func(o *initOptions) { o.copyUnsupported = []string{"--merge-driver"} }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

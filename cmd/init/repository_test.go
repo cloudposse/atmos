@@ -38,6 +38,17 @@ func TestRepositoryDirectorySource(t *testing.T) {
 	}
 }
 
+func TestRepositoryDirectorySourceRejectsMalformedQuery(t *testing.T) {
+	for _, tc := range []struct{ repository, directory string }{
+		{"github.com/acme/starters?ref=%zz", "examples/demo"},
+		{"github.com/acme/starters", "examples/demo?ref=%zz"},
+	} {
+		result, err := repositoryDirectorySource(tc.repository, tc.directory, "")
+		require.Error(t, err)
+		assert.Empty(t, result, "malformed revisions must not fall back to the default branch")
+	}
+}
+
 func TestInitDefaultsReuseResolvedConfiguration(t *testing.T) {
 	t.Chdir(t.TempDir())
 	require.NoError(t, os.WriteFile("atmos.yaml", []byte("invalid: ["), 0o600))
@@ -50,6 +61,22 @@ func TestInitDefaultsReuseResolvedConfiguration(t *testing.T) {
 	assert.Equal(t, resolved.Init, got.Init)
 	assert.Equal(t, "selected-profile", v.GetString("ref"))
 	assert.Equal(t, 4, v.GetInt("depth"))
+}
+
+func TestInitPropagatesConfigurationErrorsBeforeFetch(t *testing.T) {
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.WriteFile("atmos.yaml", []byte("invalid: ["), 0o600))
+	SetAtmosConfig(nil)
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+	config, err := applyInitDefaults(viper.New())
+	require.Error(t, err)
+	assert.Nil(t, config)
+	opts := &initOptions{templateName: "examples/demo", copy: true}
+	require.Error(t, expandInitRepository(opts))
+	selected := &templates.Configuration{Source: "github.com/acme/starters"}
+	prepared, err := prepareInitSource(opts, selected, nil)
+	require.Error(t, err)
+	assert.Nil(t, prepared)
 }
 
 func TestNormalizeInitArgumentConfiguredRepository(t *testing.T) {

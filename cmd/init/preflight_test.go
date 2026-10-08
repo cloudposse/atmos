@@ -48,3 +48,21 @@ func TestPreflightPreservesManifestAndEnvironmentOptions(t *testing.T) {
 	require.NoError(t, Preflight([]string{"pacts", "target"}))
 	require.ErrorIs(t, Preflight([]string{"pacts", "target", "--force=false"}), errUtils.ErrTargetDirectoryNotEmpty)
 }
+
+func TestPreflightDefersAmbiguousSourcesAndParserErrors(t *testing.T) {
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.Mkdir("target", 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join("target", "existing"), []byte("keep"), 0o600))
+	for _, args := range [][]string{
+		nil,
+		{"one", "two", "three"},
+		{"--unknown-flag"},
+		{"--depth", "invalid"},
+		{"basic", "target"},
+		{"examples/demo", "target"},
+		{"https://example.com/template.zip", "target"},
+	} {
+		require.NoError(t, Preflight(args), "%v must be handled by normal command processing", args)
+	}
+	require.ErrorIs(t, Preflight([]string{"--copy", "examples/demo", "target"}), errUtils.ErrTargetDirectoryNotEmpty)
+}
