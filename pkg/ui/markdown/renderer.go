@@ -150,7 +150,6 @@ func NewHelpRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*R
 }
 
 func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
-	content = StripFrontmatter(content)
 	// Render without line wrapping
 	var out *glamour.TermRenderer
 	var err error
@@ -177,7 +176,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 	}
 	result := ""
 	if r.shouldRenderStyled(terminal.Stdout) {
-		result, err = out.Render(content)
+		result, err = out.Render(StripFrontmatter(content))
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout
 		result, err = r.RenderAsciiWithoutWordWrap(content)
@@ -193,11 +192,10 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 
 // Render renders markdown content to ANSI styled text.
 func (r *Renderer) Render(content string) (string, error) {
-	content = StripFrontmatter(content)
 	var rendered string
 	var err error
 	if r.shouldRenderStyled(terminal.Stdout) {
-		rendered, err = r.renderer.Render(content)
+		rendered, err = r.renderer.Render(StripFrontmatter(content))
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout.
 		rendered, err = r.RenderAscii(content)

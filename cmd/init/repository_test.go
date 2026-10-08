@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -141,4 +143,42 @@ func TestInitRunEConfiguredDefaults(t *testing.T) {
 	assert.False(t, viper.GetBool("git"))
 	assert.FileExists(t, filepath.Join(target, "file"))
 	assert.NoDirExists(t, filepath.Join(target, ".git"))
+}
+
+func TestInitRunEWithoutConfiguration(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+	for _, key := range []string{"HOME", "USERPROFILE", "APPDATA", "ATMOS_CLI_CONFIG_PATH"} {
+		t.Setenv(key, workDir)
+	}
+	SetAtmosConfig(nil)
+	t.Cleanup(func() { SetAtmosConfig(nil) })
+
+	// Missing atmos.yaml must use the built-in defaults without an injected config.
+	defaults, err := applyInitDefaults(viper.New())
+	require.NoError(t, err)
+	require.Empty(t, cfg.LoadedConfigFiles(), "this test must not load a physical configuration file")
+	assert.Equal(t, schema.DefaultInitRepository, defaults.Init.Repository)
+	assert.Empty(t, defaults.Init.Ref)
+	assert.Equal(t, 1, defaults.Init.Depth)
+	require.NotNil(t, defaults.Init.Git)
+	assert.True(t, *defaults.Init.Git)
+
+	src := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(src, "file"), []byte("raw"), 0o600))
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	initParser.RegisterFlags(cmd)
+	target := filepath.Join(workDir, "result")
+	require.NoError(t, initCmd.RunE(cmd, []string{src, target}))
+	require.Empty(t, cfg.LoadedConfigFiles())
+	content, err := os.ReadFile(filepath.Join(target, "file"))
+	require.NoError(t, err)
+	assert.Equal(t, "raw", string(content))
+	repo, err := git.PlainOpen(target)
+	require.NoError(t, err)
+	_, err = repo.Head()
+	require.NoError(t, err, "default initialization must create the initial Git commit")
 }

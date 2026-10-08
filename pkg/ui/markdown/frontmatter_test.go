@@ -3,9 +3,13 @@ package markdown
 import (
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 func TestStripFrontmatter(t *testing.T) {
@@ -35,4 +39,41 @@ func TestFrontmatterIsNotRenderedAsProse(t *testing.T) {
 	assert.Contains(t, output, "{{ .Example }}")
 	assert.NotContains(t, output, "Metadata title")
 	assert.NotContains(t, output, "demo.cast")
+}
+
+func TestRenderPreservesBodyAfterFrontmatter(t *testing.T) {
+	const input = "---\ntitle: Hidden metadata\n---\n---\nstatus: live\n---\n\nVisible {{ .Example }}."
+	for _, tc := range []struct {
+		name    string
+		styled  bool
+		noColor bool
+	}{
+		{name: "fallback"},
+		{name: "fallback-no-color", noColor: true},
+		{name: "styled", styled: true},
+		{name: "styled-no-color", styled: true, noColor: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := schema.AtmosConfiguration{}
+			cfg.Settings.Terminal.NoColor = tc.noColor
+			renderer, err := NewRenderer(cfg)
+			require.NoError(t, err)
+			renderer.shouldRender = func(terminal.Stream) bool { return tc.styled }
+			for name, render := range map[string]func(string) (string, error){
+				"wrapped":         renderer.Render,
+				"unwrapped":       renderer.RenderWithoutWordWrap,
+				"ascii":           renderer.RenderAscii,
+				"ascii-unwrapped": renderer.RenderAsciiWithoutWordWrap,
+			} {
+				t.Run(name, func(t *testing.T) {
+					output, err := render(input)
+					require.NoError(t, err)
+					output = ansi.Strip(output)
+					assert.NotContains(t, output, "Hidden metadata")
+					assert.Contains(t, output, "status: live")
+					assert.Contains(t, output, "Visible {{ .Example }}.")
+				})
+			}
+		})
+	}
 }
