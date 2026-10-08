@@ -1,6 +1,7 @@
 package step
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -66,6 +67,8 @@ func TestPublishStepSDKAndCredentials(t *testing.T) {
 	}))
 	defer server.Close()
 	vars := NewVariables()
+	var uiOutput, dataOutput bytes.Buffer
+	vars.OutputWriters = OutputWriters{Stdout: &dataOutput, Stderr: &uiOutput}
 	vars.Env = map[string]string{"AWS_ACCESS_KEY_ID": "step-key", "AWS_SECRET_ACCESS_KEY": "step-secret", "AWS_REGION": "us-east-1", "AWS_ENDPOINT_URL_S3": server.URL}
 	source := filepath.Join(t.TempDir(), "artifact.zip")
 	require.NoError(t, os.WriteFile(source, []byte("artifact"), 0o600))
@@ -80,6 +83,9 @@ func TestPublishStepSDKAndCredentials(t *testing.T) {
 	assert.Equal(t, 1, heads)
 	assert.Equal(t, 1, puts)
 	assert.Equal(t, "ambient-key", os.Getenv("AWS_ACCESS_KEY_ID"))
+	assert.Contains(t, uiOutput.String(), "1 uploaded, 0 unchanged")
+	assert.Contains(t, uiOutput.String(), "s3://bucket/release%20%231.zip")
+	assert.Empty(t, dataOutput.String(), "publish UI must not pollute pipeline data")
 }
 
 func TestPublishDryRunValidation(t *testing.T) {

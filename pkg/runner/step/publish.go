@@ -83,7 +83,9 @@ func (h *PublishHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 	if err != nil {
 		return nil, err
 	}
-	return publishStepResult(name, kind, result), nil
+	out := publishStepResult(name, kind, result)
+	reportPublishResult(ctx, step, vars, out)
+	return out, nil
 }
 
 func (h *PublishHandler) publishInput(step *schema.WorkflowStep, vars *Variables, block map[string]any) (*target.PublishInput, error) {
@@ -179,4 +181,24 @@ func publishStepResult(name, kind string, result *target.PublishResult) *StepRes
 		out.WithMetadata(key, value)
 	}
 	return out
+}
+
+// reportPublishResult shows the actual artifact locations on the scoped UI
+// stream. Locations include unchanged files; the counts distinguish writes
+// from skipped uploads without claiming every listed file changed.
+func reportPublishResult(ctx context.Context, step *schema.WorkflowStep, vars *Variables, result *StepResult) {
+	if OutputSuppressed(ctx) || step.Output == string(OutputModeNone) {
+		return
+	}
+	verb := "written"
+	if result.Metadata["kind"] == "aws/s3" {
+		verb = "uploaded"
+	}
+	vars.UI().Infof("Publish %s (%s): %d %s, %d unchanged", result.Metadata["target"], result.Metadata["kind"], result.Metadata["changed"], verb, result.Metadata["unchanged"])
+	if result.Metadata["kind"] == "git" {
+		vars.UI().Infof("Repository: %s (branch %s)", result.Metadata["repository"], result.Metadata["branch"])
+	}
+	for _, location := range result.Values {
+		vars.UI().Writef("  → %s\n", location)
+	}
 }

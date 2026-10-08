@@ -97,8 +97,10 @@ commands:
               "ATMOS_DEMO_RELEASE=v2 atmos aws cfn deploy app -s advanced",
               "Built release v1",
               "Built release v2",
-              "S3: 1 uploaded, 0 unchanged",
-              "S3: 0 uploaded, 1 unchanged",
+              "s3://atmos-cast-artifacts-local/lambda/v1/handler.zip",
+              "s3://atmos-cast-artifacts-local/lambda/v2/handler.zip",
+              "Publish artifacts (aws/s3): 1 uploaded, 0 unchanged",
+              "Publish artifacts (aws/s3): 0 uploaded, 1 unchanged",
               "Created",
               "Updated",
               "HTTP 200",
@@ -108,7 +110,7 @@ commands:
           for bad in ("atmos test", "unittest", "# Error", "Incorrect Usage", "unknown flag", "panic"):
               if bad in plain:
                   raise SystemExit(f"CloudFormation publish cast contains {bad!r}")
-          if plain.count("S3: 1 uploaded, 0 unchanged") != 2 or plain.count("S3: 0 uploaded, 1 unchanged") != 1:
+          if plain.count("Publish artifacts (aws/s3): 1 uploaded, 0 unchanged") != 2 or plain.count("Publish artifacts (aws/s3): 0 uploaded, 1 unchanged") != 1:
               raise SystemExit("CloudFormation publish cast is missing the first, repeat, or v2 publish result")
           for header in ("Action", "Resource", "Type", "Replacement", "Output", "Value"):
               if header not in plain:

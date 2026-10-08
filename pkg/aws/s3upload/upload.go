@@ -11,7 +11,6 @@ import (
 	"io"
 	"io/fs"
 	"mime"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -20,8 +19,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
+	"github.com/gabriel-vasile/mimetype"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/mimeutil"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -204,18 +205,17 @@ func resolveContentType(file io.ReadSeeker, filename, override string) (string, 
 	if override != "" {
 		return override, nil
 	}
-	if contentType := mime.TypeByExtension(filepath.Ext(filename)); contentType != "" {
-		return contentType, nil
+	if contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(filename))); contentType != "" {
+		return mimeutil.ContentType(filename, contentType), nil
 	}
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return "", err
 	}
-	var sample [512]byte
-	n, err := file.Read(sample[:])
-	if err != nil && !errors.Is(err, io.EOF) {
+	detected, err := mimetype.DetectReader(file)
+	if err != nil {
 		return "", err
 	}
-	return http.DetectContentType(sample[:n]), nil
+	return mimeutil.ContentType(filename, detected.String()), nil
 }
 
 func isMissing(err error) bool {

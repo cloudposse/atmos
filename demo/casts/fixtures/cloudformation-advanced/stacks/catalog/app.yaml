@@ -41,16 +41,6 @@ components:
               source: .build/handler.zip
               destination: 'lambda/{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}/handler.zip'
               target: artifacts
-            - name: publish-result
-              type: script
-              output: raw
-              show:
-                labels: false
-              interpreter: python3
-              script: |
-                changed = {{ "{{ .steps.publish.metadata.changed }}" }}
-                unchanged = {{ "{{ .steps.publish.metadata.unchanged }}" }}
-                print(f"S3: {changed} uploaded, {unchanged} unchanged")
         validate:
           events: [after.aws/cloudformation.apply]
           kind: steps

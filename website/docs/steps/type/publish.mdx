@@ -187,6 +187,13 @@ can prevent reconciliation or a scoped commit.
 
 ## Results
 
+The step prints an informational summary on stderr with the number of files
+uploaded or written, the unchanged count, and every destination. S3 destinations
+include the full bucket and object key. Git output includes the repository,
+resolved branch, and repository-relative file paths. Listed destinations include
+unchanged files. Set `output: none` to hide these messages.
+
+
 | Value | Meaning |
 | --- | --- |
 | `.steps.publish.value` | Location for one file; target name or `inline` for zero or multiple files. |

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"mime"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -21,6 +20,8 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/gobwas/glob"
 	"github.com/magefile/mage/mg"
+
+	"github.com/cloudposse/atmos/internal/mimeutil"
 )
 
 // S3 groups content-aware S3 deployment targets.
@@ -308,36 +309,8 @@ func s3DeployFileMetadata(path, relative string) (s3DeployFile, error) {
 	return s3DeployFile{
 		SHA256:      hex.EncodeToString(hash.Sum(nil)),
 		Size:        info.Size(),
-		ContentType: s3DeployContentType(relative, detected.String()),
+		ContentType: mimeutil.ContentType(relative, detected.String()),
 	}, nil
-}
-
-func s3DeployContentType(path, detected string) string {
-	extension := strings.ToLower(filepath.Ext(path))
-	contentType := mime.TypeByExtension(extension)
-	if contentType == "" {
-		contentType = detected
-	}
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-	mediaType, parameters, err := mime.ParseMediaType(contentType)
-	if err != nil || !s3DeployContentTypeUsesUTF8(mediaType) {
-		return contentType
-	}
-	parameters["charset"] = "utf-8"
-	return mime.FormatMediaType(mediaType, parameters)
-}
-
-func s3DeployContentTypeUsesUTF8(mediaType string) bool {
-	return strings.HasPrefix(mediaType, "text/") ||
-		strings.HasSuffix(mediaType, "+json") ||
-		strings.HasSuffix(mediaType, "+xml") ||
-		strings.Contains(mediaType, "javascript") ||
-		mediaType == "application/json" ||
-		mediaType == "application/toml" ||
-		mediaType == "application/xml" ||
-		mediaType == "application/yaml"
 }
 
 func diffS3DeployManifests(oldManifest, newManifest s3DeployManifest, protected []s3ProtectedPattern) ([]string, []string) {
