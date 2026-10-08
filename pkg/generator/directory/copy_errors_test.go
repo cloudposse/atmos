@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,16 +37,19 @@ func TestCopyRejectsTypeCollisionsBeforeWriting(t *testing.T) {
 
 func TestCopyInvalidPathsDoNotWrite(t *testing.T) {
 	for _, invalidSource := range []bool{false, true} {
-		src, dst := t.TempDir(), filepath.Join(t.TempDir(), "target")
+		targetRoot := t.TempDir()
+		src, dst := t.TempDir(), filepath.Join(targetRoot, "target")
 		if invalidSource {
 			src = filepath.Join(src, "invalid") + "\x00"
 		} else {
 			dst = filepath.Join(dst, "invalid") + "\x00"
 		}
 		err := Copy(context.Background(), src, dst, true)
-		var pathErr *os.PathError
-		require.ErrorAs(t, err, &pathErr)
-		assert.NoDirExists(t, dst)
+		// Windows can return EINVAL directly instead of wrapping it in os.PathError.
+		require.ErrorIs(t, err, syscall.EINVAL)
+		entries, err := os.ReadDir(targetRoot)
+		require.NoError(t, err)
+		assert.Empty(t, entries, "invalid paths must not create any destination entries")
 	}
 	src := filepath.Join(t.TempDir(), "missing")
 	dst := filepath.Join(t.TempDir(), "target")
