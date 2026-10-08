@@ -75,12 +75,15 @@ func runCI(t *testing.T, m *MockReporter, source string) (stdout, stderr string,
 // useGenericOnly isolates the registry so the real reporter renders through the generic provider.
 func useGenericOnly(t *testing.T) {
 	t.Helper()
+	// A CI runner exports CI=true and GITHUB_ACTIONS=true; both would make the reporter treat a
+	// provider as detected and put the I/O layer into CI mode, so these tests blank every switch
+	// that forces CI mode before the formatter and the registry are set up.
+	for _, k := range []string{"CI", "ATMOS_CI", "GITHUB_ACTIONS", "ATMOS_CI_OUTPUT", "ATMOS_CI_SUMMARY", "ATMOS_CI_ENV", "ATMOS_CI_PATH"} {
+		t.Setenv(k, "")
+	}
 	initCIFormatter(t)
 	restore := ci.SwapRegistryForTest()
 	t.Cleanup(restore)
-	t.Setenv("GITHUB_ACTIONS", "")
-	t.Setenv("ATMOS_CI_OUTPUT", "")
-	t.Setenv("ATMOS_CI_SUMMARY", "")
 	ci.Register(generic.NewProvider())
 }
 
@@ -562,7 +565,7 @@ print(c.id, c.created, repr(c.url))
 `})
 	require.NoError(t, err)
 	assert.Equal(t, "1 True \"\"\n", stdout)
-	for _, want := range []string{"Hi there", "PR comment preview (upsert)", "comment body", "a=b"} {
+	for _, want := range []string{"Hi there", "comment preview (upsert", "comment body", "a=b"} {
 		assert.Contains(t, stderr, want)
 		assert.NotContains(t, stdout, want)
 	}

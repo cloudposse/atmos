@@ -3,6 +3,7 @@ package templates
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,6 +23,17 @@ func reportConfig(dir string) *schema.AtmosConfiguration {
 func writeReportTemplate(t *testing.T, dir, name, content string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+}
+
+// formatted renders an error the way the CLI prints it with all whitespace removed, because the
+// formatter wraps long lines. Compare against compact(want).
+func formatted(err error) string {
+	return compact(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+}
+
+// compact removes all whitespace from s.
+func compact(s string) string {
+	return strings.Join(strings.Fields(s), "")
 }
 
 func TestRenderReport(t *testing.T) {
@@ -136,7 +148,69 @@ func TestLoaderLoad_ContainerConfigOverride(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "custom y", got)
 
-	// Negative path: without the override the loader does not read custom-image.md.
+	// Negative path: without the override the loader does not read custom-image.md, so it falls
+	// through to the embedded filesystem, which has no container image template.
 	_, err = NewLoader(reportConfig(dir)).Load("container", "image", testEmbeddedFS())
-	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrFileNotFound)
+}
+
+func TestLoaderLoad_ContainerOverrideMissingFileIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	cfg := reportConfig(dir)
+	cfg.CI.Templates.Container = map[string]string{"image": "absent-image.md"}
+
+	_, err := NewLoader(cfg).Load("container", "image", ContainerDefaults())
+	require.ErrorIs(t, err, errUtils.ErrCITemplateNotFound)
+	assert.Contains(t, formatted(err), compact(filepath.Join(dir, "absent-image.md")))
+
+	// Recovery must not trigger: with the key unset the embedded default is used.
+	got, err := NewLoader(reportConfig(dir)).Load("container", "image", ContainerDefaults())
+	require.NoError(t, err)
+	assert.NotEmpty(t, got)
+}
+
+func TestLoaderLoad_NonContainerOverrideMissingFileFallsBack(t *testing.T) {
+	// Native plugin overrides keep their historical behavior: a missing file falls back to the
+	// embedded default.
+	cfg := reportConfig(t.TempDir())
+	cfg.CI.Templates.Terraform = map[string]string{"plan": "absent-plan.md"}
+
+	got, err := NewLoader(cfg).Load("terraform", "plan", testEmbeddedFS())
+	require.NoError(t, err)
+	assert.Contains(t, got, "Test Plan Template")
+}
+
+func TestRenderReport_MissingKeyNamesTheKey(t *testing.T) {
+	dir := t.TempDir()
+	writeReportTemplate(t, dir, "typo.md", "stack {{ .Stak }}")
+
+	got, err := RenderReport(reportConfig(dir), "typo.md", map[string]any{"Stack": "dev"})
+	require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	assert.Empty(t, got)
+	assert.Contains(t, formatted(err), "Stak")
+}
+
+func TestRenderReport_PresentKeyWithEmptyValueStillRenders(t *testing.T) {
+	dir := t.TempDir()
+	writeReportTemplate(t, dir, "empty.md", "[{{ .Name }}]")
+
+	got, err := RenderReport(reportConfig(dir), "empty.md", map[string]any{"Name": ""})
+	require.NoError(t, err)
+	assert.Equal(t, "[]", got)
+}
+
+func TestRenderReport_NotFoundReportsPathAndBasePath(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := RenderReport(reportConfig(dir), "nope.md", nil)
+	require.ErrorIs(t, err, errUtils.ErrCITemplateNotFound)
+	text := formatted(err)
+	assert.Contains(t, text, compact(filepath.Join(dir, "nope.md")), "the resolved path must be named")
+	assert.Contains(t, text, compact("ci.templates.base_path: "+dir), "the configured base_path must be named")
+}
+
+func TestRenderReport_NotFoundWithoutBasePathSaysItIsUnset(t *testing.T) {
+	_, err := RenderReport(&schema.AtmosConfiguration{}, "nope.md", nil)
+	require.ErrorIs(t, err, errUtils.ErrCITemplateNotFound)
+	assert.Contains(t, formatted(err), compact("ci.templates.base_path: (unset)"))
 }
