@@ -1,0 +1,188 @@
+.demo {
+  overflow: hidden;
+  border: 1px solid var(--atmos-terminal-border);
+  border-radius: 8px;
+  background: var(--atmos-terminal-bg);
+  color: var(--atmos-terminal-text);
+  position: relative;
+}
+.demoToolbar {
+  height: 42px;
+  padding: 0 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--atmos-terminal-border);
+  background: var(--atmos-terminal-header-bg);
+  font: 10px var(--ifm-font-family-monospace);
+  color: color-mix(in srgb, var(--atmos-terminal-text) 70%, transparent);
+}
+.demoToolbar span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.demoActions {
+  gap: 12px !important;
+  font-size: 14px;
+}
+.demoActions a,
+.demoActions button {
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  padding: 4px;
+}
+.player {
+  height: 300px !important;
+  aspect-ratio: auto !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  overflow: hidden !important;
+}
+.player pre {
+  padding: 19px 20px 55px !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  overflow: auto !important;
+  height: 100%;
+}
+.player :global([class*="controls_"]) {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  font-size: 12px;
+  bottom: 8px;
+  background: var(--atmos-terminal-header-bg);
+}
+.demoFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 15px;
+  border-top: 1px solid var(--atmos-terminal-border);
+  color: color-mix(in srgb, var(--atmos-terminal-text) 65%, transparent);
+  font-size: 11px;
+  background: var(--atmos-terminal-header-bg);
+}
+.watch {
+  color: var(--atmos-terminal-text);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px !important;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+.watch svg {
+  color: var(--ifm-color-primary-light);
+  font-size: 16px;
+}
+.resetDemo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  font-size: 12px !important;
+  padding: 8px;
+  border: 0;
+  border-top: 1px solid var(--atmos-terminal-border);
+  color: var(--atmos-terminal-text);
+  background: var(--atmos-terminal-header-bg);
+}
+.expanded {
+  position: fixed;
+  inset: 20px;
+  z-index: 2100;
+}
+.expanded:fullscreen {
+  inset: 0;
+}
+.expanded .player {
+  height: calc(100vh - 120px) !important;
+}
+.expanded .player pre {
+  font-size: 15px !important;
+}
+@media (min-width: 1500px) {
+  .player {
+    height: 300px !important;
+  }
+}
+@media (max-width: 1000px) {
+  .demoFooter > span {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .player {
+    height: 270px !important;
+  }
+  .player pre {
+    font-size: 12px !important;
+    padding: 16px 14px 45px !important;
+  }
+  .demoToolbar {
+    padding: 0 12px;
+    font-size: 11px;
+  }
+  .demoFooter {
+    padding: 11px 12px;
+  }
+}
+
+/* The content is the existing GitHub-style README, rendered by FileViewer. */
+.demoToolbar > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.demoActions {
+  flex-shrink: 0;
+}
+.recordingActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+.recordingActions > span {
+  font-size: 12px;
+  color: var(--subtle);
+}
+.recordingActions > div {
+  display: flex;
+  gap: 8px;
+}
+.recordingActions button {
+  font-size: 12px;
+}
+.expanded {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2100;
+  overflow: auto;
+}
+.expanded:fullscreen {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+.expanded .player {
+  height: calc(100vh - 90px) !important;
+}
+@media (max-width: 760px) {
+  .recordingActions {
+    flex-wrap: wrap;
+  }
+}

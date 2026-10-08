@@ -5,6 +5,7 @@ import React from 'react';
 import Layout from '@theme/Layout';
 import BreadcrumbNav from './BreadcrumbNav';
 import FileTree from './FileTree';
+import ExampleDetailPage from './ExampleDetailPage';
 import DirectoryListing from './DirectoryListing';
 import FileViewer from './FileViewer';
 import RelatedDocs from './RelatedDocs';
@@ -44,6 +45,11 @@ export default function DirectoryPage({
         </div>
       </Layout>
     );
+  }
+
+  // Only example landing pages use this layout; nested source URLs and other catalogs retain their views.
+  if (routeBasePath === '/examples' && dirData.path === exampleName) {
+    return <ExampleDetailPage key={example.name} example={example} options={optionsData} />;
   }
 
   const sectionName = optionsData.title || 'Examples';
