@@ -271,6 +271,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}
+      count: ${{ steps.affected.outputs.count }}
     steps:
       - uses: actions/checkout@v6
       - id: affected
@@ -278,7 +279,7 @@ jobs:
 
   plan:
     needs: affected
-    if: ${{ needs.affected.outputs.matrix != '' }}
+    if: ${{ needs.affected.outputs.count != '0' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
@@ -308,7 +309,7 @@ jobs:
     # same affected job as above
   deploy:
     needs: affected
-    if: ${{ needs.affected.outputs.matrix != '' }}
+    if: ${{ needs.affected.outputs.count != '0' }}
     strategy:
       matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
     runs-on: ubuntu-latest

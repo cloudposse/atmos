@@ -89,6 +89,117 @@ Run a workflow across every component instance in your stacks. Generate the job 
 
 [Read the Deploy All Components guide](/integrations/github-actions/deploy-all).
 
+<span id="keeping-privileged-components-out-of-ci" />
+
+### Choosing Which Components Run in CI
+
+Some components require privileged credentials or manual execution. Others need access to a private VPC, a peering
+connection, or an internal service that the CI runner cannot reach. Use [labels](/stacks/components/component-metadata#labels)
+to select the components this workflow can run. Native CI does not read the legacy Atmos GitHub Actions setting
+`settings.github.actions_enabled`.
+
+Set a default label, then override it on components excluded from the workflow:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+metadata:
+  labels:
+    ci: auto
+```
+</File>
+
+<File title="stacks/catalog/private-service.yaml">
+```yaml
+components:
+  terraform:
+    private-service:
+      metadata:
+        labels:
+          ci: manual
+```
+</File>
+
+Build the matrix with `--labels=ci:auto` (equivalent to `--labels=ci=auto`):
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix --labels=ci:auto
+```
+
+The labels are user-defined: `ci: manual` excludes a component from this workflow. Run excluded components manually or
+through a separate workflow with appropriate credentials and connectivity, selecting `--labels=ci:manual`. Labels do not
+detect network access or enforce permissions. Matching is positive only, so use defaults and overrides to express exclusions.
+
+To plan the selection directly, run `atmos terraform plan --affected --labels=ci:auto`. To include matching dependents
+as separate matrix entries, use:
+
+```shell
+atmos describe affected --format=matrix --include-dependents --flatten --labels=ci:auto
+```
+
+Matching dependents remain selected even when their parent is excluded. See the
+[selector reference](/cli/commands/describe/affected#filtering-by-tags-and-labels) for matching rules and dependent behavior,
+and [Deploy Affected](/integrations/github-actions/deploy-affected) for a workflow that skips empty matrices.
+
+:::caution Empty selectors disable filtering
+`--labels=` or an empty `ATMOS_LABELS` applies no label filter. When using a workflow variable, reject an empty value
+with `--labels="ci=${CI_LABEL:?}"` or validate it in an earlier step.
+:::
+
+Set selector environment variables on the steps that need them. See
+[environment variables and uploads](/cli/commands/describe/affected#selector-environment-and-uploads) for their scope and
+[template processing](/cli/commands/describe/affected#selector-matching-rules) for templated labels.
+
+### Keeping Privileged Components Out of CI with OPA
+
+For components prohibited from running in GitHub Actions, optionally attach an [OPA policy](/validation/opa) that rejects
+execution there. This policy also blocks manually triggered GitHub Actions workflows. A component that only needs a runner
+with different network access does not need this prohibition.
+
+<File title="stacks/schemas/opa/ci/privileged-component.rego">
+```rego
+package atmos
+
+errors[message] {
+  input.process_env.GITHUB_ACTIONS == "true"
+  input.metadata.labels.ci == "manual"
+  message := sprintf("%s is a privileged component and can't run in GitHub Actions", [input.atmos_component])
+}
+```
+</File>
+
+Attach the policy and label to the privileged component:
+
+<File title="stacks/catalog/iam.yaml">
+```yaml
+components:
+  terraform:
+    iam:
+      metadata:
+        labels:
+          ci: manual
+      settings:
+        validation:
+          ci-guard:
+            schema_type: opa
+            schema_path: "ci/privileged-component.rego"
+            description: Block privileged components from running in GitHub Actions
+```
+</File>
+
+Set `schemas.opa.base_path` so Atmos can resolve the relative `schema_path`:
+
+<File title="atmos.yaml">
+```yaml
+schemas:
+  opa:
+    base_path: "stacks/schemas/opa"
+```
+</File>
+
+The policy fails validation if the component runs in GitHub Actions; it does not skip the job. See
+[OPA validation](/validation/opa#configure-component-validation) for configuration details.
+
 ### Gating Production with Environments
 
 Require approval before deploying production infrastructure. GitHub environments provide approval gates and environment-specific credentials while Atmos selects and deploys the stack.
