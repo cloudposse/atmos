@@ -33,6 +33,10 @@ func TestDetectStandaloneFile(t *testing.T) {
 		{"deploy", "#!/usr/bin/env atmos\nprint('hello')", true},
 		{"absolute", "#!/usr/bin/atmos\nprint('hello')", true},
 		{"env-s", "#!/usr/bin/env -S atmos\nprint('hello')", true},
+		{"env-s-flags", "#!/usr/bin/env -S atmos --logs-level=Debug\nprint('hello')", true},
+		{"env-s-assignment", "#!/usr/bin/env -S ATMOS_LOGS_LEVEL=Debug atmos --no-color\nprint('hello')", true},
+		{"absolute-flags", "#!/usr/bin/atmos --logs-level=Debug\nprint('hello')", true},
+		{"env-s-other", "#!/usr/bin/env -S python3 atmos\nprint('hello')", false},
 		{"bash", "#!/bin/sh\necho hello", false},
 		{"not-atmos", "#!/usr/bin/env atmos-other\n", false},
 	} {
@@ -54,7 +58,8 @@ func TestDetectStandaloneFile(t *testing.T) {
 		})
 	}
 	_, err := script.DetectFile([]string{filepath.Join(t.TempDir(), "missing.star")})
-	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrScript)
+	require.ErrorIs(t, err, os.ErrNotExist)
 	file, err := script.DetectFile([]string{t.TempDir()})
 	require.NoError(t, err)
 	require.Nil(t, file)
@@ -143,7 +148,7 @@ func TestDetectStdinRejectsInvalidSelection(t *testing.T) {
 		t.Run(strings.Join(argv, " "), func(t *testing.T) {
 			t.Parallel()
 			file, err := script.DetectFile(argv)
-			require.Error(t, err)
+			require.ErrorIs(t, err, errUtils.ErrScript)
 			assert.Nil(t, file)
 		})
 	}
@@ -259,4 +264,24 @@ func TestMayBeFile(t *testing.T) {
 		assert.Equal(t, want, script.MayBeFile([]string{arg}), arg)
 	}
 	assert.False(t, script.MayBeFile(nil))
+}
+
+func TestDetectFileMatchesExtensionsCaseInsensitively(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"tool.STAR", "tool.Star", "tool.star"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), name)
+			require.NoError(t, os.WriteFile(path, []byte("print(1)"), 0o600))
+			assert.True(t, script.MayBeFile([]string{name}))
+			file, err := script.DetectFile([]string{path, "arg"})
+			require.NoError(t, err)
+			require.NotNil(t, file)
+			assert.Equal(t, "starlark", file.Interpreter)
+			assert.Equal(t, []string{"arg"}, file.Args)
+		})
+	}
+	// The registry itself stays exact; only standalone detection folds case.
+	_, ok := script.InterpreterForFile("tool.STAR")
+	assert.False(t, ok)
 }

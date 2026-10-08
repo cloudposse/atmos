@@ -150,7 +150,7 @@ func ciFail(name string, err error) error {
 	}
 	message := "ci." + name + ": " + err.Error()
 	hint := script.NewDiagnostic(message).With(func(b *errUtils.ErrorBuilder) {
-		b.WithHint("Pass the pull request number, for example pr=123, or run in a pull request context")
+		b.WithHint("Pass the pull request number, for example pr=123, run in a pull request context, or use target=\"auto\" or target=\"commit\" to comment on the commit instead")
 	}).Err()
 	return failWithAll(kind, []error{hint, err}, "%s", message)
 }
@@ -196,104 +196,17 @@ func oneOf[T ~string](b *starlark.Builtin, field, value string, allowed ...T) (T
 }
 
 func (s *session) ciSummary(t *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var markdown, data starlark.Value
-	var template string
+	var markdown, template, data starlark.Value
 	if err := unpackCI(b, args, kwargs, "markdown?", &markdown, "template?", &template, "data?", &data); err != nil {
 		return nil, err
 	}
 	reporter := s.reporter(t)
-	text, err := resolveCIText(b, &ciTextSource{field: "markdown", value: markdown, template: template, data: data, configKey: "ci.summary.template", render: reporter.RenderSummary})
+	text, err := resolveCIText(b, &ciTextSource{field: "markdown", value: markdown, template: template, data: data, render: reporter.RenderSummary})
 	if err != nil {
 		return nil, err
 	}
 	rc, err := reporter.Summary(text)
 	return s.ciDone(t, "summary", rc, err)
-}
-
-// ciTextSource describes the text arguments of ci.summary and ci.comment: the literal text, or a
-// template with data that renders it.
-type ciTextSource struct {
-	// field is the name of the literal text argument, markdown or body.
-	field string
-	// value is the literal text argument, or nil when absent.
-	value starlark.Value
-	// template is the explicit template name, or empty to use the configured default.
-	template string
-	// data is the template context argument, or nil when absent.
-	data starlark.Value
-	// configKey is the configuration key of the default template, for error messages.
-	configKey string
-	// render renders the named template, or the configured default when the name is empty.
-	render func(name string, data any) (string, error)
-}
-
-// resolveCIText returns the text to write. Literal text passes through unchanged. A template, or
-// data with a configured default template, is rendered instead. Literal text and a template are
-// mutually exclusive.
-func resolveCIText(b *starlark.Builtin, src *ciTextSource) (string, error) {
-	text, hasText, err := ciLiteralText(b, src.field, src.value)
-	if err != nil {
-		return "", err
-	}
-	data, hasData, err := ciTemplateData(b, src.data)
-	if err != nil {
-		return "", err
-	}
-	if src.template == "" && !hasData {
-		if !hasText {
-			return "", invalidArg("%s: %s is required unless template= or data= is given", b.Name(), src.field)
-		}
-		return text, nil
-	}
-	if text != "" {
-		other := "template"
-		if src.template == "" {
-			other = "data"
-		}
-		return "", invalidArg("%s: %s and %s are mutually exclusive", b.Name(), src.field, other)
-	}
-	return renderCIText(b, src, data)
-}
-
-// renderCIText renders the template and classifies a failure. A missing configured default means
-// the call passed data with nothing to render it, which is an argument error.
-func renderCIText(b *starlark.Builtin, src *ciTextSource, data any) (string, error) {
-	rendered, err := src.render(src.template, data)
-	if err == nil {
-		return rendered, nil
-	}
-	if src.template == "" && errors.Is(err, errUtils.ErrCITemplateNotFound) {
-		return "", invalidArg("%s: data requires template= or %s: %v", b.Name(), src.configKey, err)
-	}
-	return "", ciFail(strings.TrimPrefix(b.Name(), "ci."), err)
-}
-
-// ciLiteralText reads the literal text argument, which must be a string when present.
-func ciLiteralText(b *starlark.Builtin, field string, value starlark.Value) (text string, present bool, err error) {
-	if value == nil {
-		return "", false, nil
-	}
-	str, ok := value.(starlark.String)
-	if !ok {
-		return "", false, invalidArg("%s: for parameter %s: got %s, want string", b.Name(), field, value.Type())
-	}
-	return string(str), true, nil
-}
-
-// ciTemplateData converts the data argument to the template context. Absent and None mean no data.
-func ciTemplateData(b *starlark.Builtin, value starlark.Value) (data any, present bool, err error) {
-	if value == nil || value == starlark.None {
-		return nil, false, nil
-	}
-	dict, ok := value.(*starlark.Dict)
-	if !ok {
-		return nil, false, invalidArg("%s: for parameter data: got %s, want dict", b.Name(), value.Type())
-	}
-	converted, err := configurationResult(dict, make(map[starlark.Value]bool))
-	if err != nil {
-		return nil, false, invalidArg("%s: data: %v", b.Name(), err)
-	}
-	return converted, true, nil
 }
 
 func (s *session) ciOutput(t *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -354,8 +267,8 @@ func (s *session) ciAnnotate(t *starlark.Thread, b *starlark.Builtin, args starl
 	if err := requireText(b, "message", message); err != nil {
 		return nil, err
 	}
-	if line < 0 || endLine < 0 {
-		return nil, invalidArg("%s: line and end_line must not be negative", b.Name())
+	if err := checkAnnotationRange(b, file, line, endLine); err != nil {
+		return nil, err
 	}
 	rc, err := s.reporter(t).Annotate(ci.Annotation{
 		Path: file, StartLine: line, EndLine: endLine, Level: parsed, Title: title, Message: message,
@@ -363,16 +276,40 @@ func (s *session) ciAnnotate(t *starlark.Thread, b *starlark.Builtin, args starl
 	return s.ciDone(t, "annotate", rc, err)
 }
 
+// checkAnnotationRange validates the file and line arguments of ci.annotate. Lines are only
+// meaningful with a file, and a range must not end before it starts.
+func checkAnnotationRange(b *starlark.Builtin, file string, line, endLine int) error {
+	if line < 0 || endLine < 0 {
+		return invalidArg("%s: line and end_line must not be negative", b.Name())
+	}
+	if file == "" {
+		if line > 0 {
+			return invalidArg("%s: line requires file=", b.Name())
+		}
+		if endLine > 0 {
+			return invalidArg("%s: end_line requires file=", b.Name())
+		}
+		return nil
+	}
+	if endLine > 0 && line == 0 {
+		return invalidArg("%s: end_line requires line=", b.Name())
+	}
+	if endLine > 0 && endLine < line {
+		return invalidArg("%s: end_line (%d) must not be before line (%d)", b.Name(), endLine, line)
+	}
+	return nil
+}
+
 func (s *session) ciComment(t *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var bodyArg, data starlark.Value
-	var key, template string
-	behavior := string(ci.CommentBehaviorUpsert)
+	var bodyArg, template, data starlark.Value
+	var key string
+	behavior, target := string(ci.CommentBehaviorUpsert), string(ci.CommentTargetAuto)
 	var pr int
-	if err := unpackCI(b, args, kwargs, "body?", &bodyArg, "key?", &key, "behavior?", &behavior, "pr?", &pr, "template?", &template, "data?", &data); err != nil {
+	if err := unpackCI(b, args, kwargs, "body?", &bodyArg, "key?", &key, "behavior?", &behavior, "pr?", &pr, "target?", &target, "template?", &template, "data?", &data); err != nil {
 		return nil, err
 	}
 	reporter := s.reporter(t)
-	body, err := resolveCIText(b, &ciTextSource{field: "body", value: bodyArg, template: template, data: data, configKey: "ci.comments.template", render: reporter.RenderComment})
+	body, err := resolveCIText(b, &ciTextSource{field: "body", value: bodyArg, template: template, data: data, render: reporter.RenderComment})
 	if err != nil {
 		return nil, err
 	}
@@ -383,10 +320,14 @@ func (s *session) ciComment(t *starlark.Thread, b *starlark.Builtin, args starla
 	if err != nil {
 		return nil, err
 	}
+	parsedTarget, err := oneOf(b, "target", target, ci.CommentTargetAuto, ci.CommentTargetPR, ci.CommentTargetCommit)
+	if err != nil {
+		return nil, err
+	}
 	if pr < 0 {
 		return nil, invalidArg("%s: pr must not be negative", b.Name())
 	}
-	rc, err := reporter.Comment(threadContext(t), ci.CommentRequest{Body: body, Key: key, Behavior: parsed, PR: pr})
+	rc, err := reporter.Comment(threadContext(t), ci.CommentRequest{Body: body, Key: key, Behavior: parsed, PR: pr, Target: parsedTarget})
 	if err != nil {
 		return nil, ciFail("comment", err)
 	}

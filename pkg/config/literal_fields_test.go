@@ -237,7 +237,7 @@ commands:
       - name: s
         command: !literal echo "{{ y }}"
         with:
-          command: !literal "{{ nested }}"
+          command: "{{ nested }}"
 `)
 	command, ok := commands[0].(map[string]any)
 	require.True(t, ok)
@@ -246,7 +246,8 @@ commands:
 
 	envList, ok := command["env"].([]any)
 	require.True(t, ok)
-	assert.Equal(t, map[string]any{"key": "GREETING", "value": "{{ g }}"}, envList[0])
+	assert.Equal(t, map[string]any{"key": "GREETING", "value": "{{ g }}", schema.LiteralFieldsKey: []any{"value"}}, envList[0],
+		"a command-level env value written with !literal is marked")
 
 	flags, ok := command["flags"].([]any)
 	require.True(t, ok)
@@ -312,4 +313,190 @@ commands:
 	assert.Equal(t, []string{"script"}, found.Steps[1].Steps[0].LiteralFields)
 
 	assert.Empty(t, found.Steps[2].LiteralFields)
+}
+
+func TestCommandLiteralPlainStringStep(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "atmos.yaml")
+	writeTestFile(t, file, "")
+
+	commands := decodeTestCommands(t, file, "commands:\n  - name: c\n    steps:\n      - !literal \"echo {{ y }}\"\n      - echo \"{{ z }}\"\n")
+	command, ok := commands[0].(map[string]any)
+	require.True(t, ok)
+	steps, ok := command["steps"].([]any)
+	require.True(t, ok)
+	require.Len(t, steps, 2)
+	assert.Equal(t, map[string]any{"command": "echo {{ y }}", schema.LiteralFieldsKey: []any{"command"}}, steps[0],
+		"a literal plain-string step becomes a command step that is not rendered")
+	assert.Equal(t, `echo "{{ z }}"`, steps[1], "a plain string without the tag stays a plain string")
+}
+
+func TestCommandIncludeRawStepFieldsAreLiteral(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "atmos.yaml")
+	writeTestFile(t, file, "")
+	writeTestFile(t, filepath.Join(root, "braces.star"), "print(\"{{ not a template }}\")\n")
+
+	tests := []struct {
+		name string
+		step string
+		want []any
+	}{
+		{name: "include.raw script is used as written", step: "script: !include.raw ./braces.star", want: []any{"script"}},
+		{name: "include.raw command is used as written", step: "command: !include.raw ./braces.star", want: []any{"command"}},
+		{name: "plain include is still rendered", step: "script: !include ./braces.star", want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			commands := decodeTestCommands(t, file, "commands:\n  - name: c\n    steps:\n      - name: s\n        type: script\n        interpreter: starlark\n        "+tt.step+"\n")
+			step := firstStep(t, commands)
+			if tt.want == nil {
+				assert.NotContains(t, step, schema.LiteralFieldsKey)
+				return
+			}
+			assert.Equal(t, tt.want, step[schema.LiteralFieldsKey])
+		})
+	}
+}
+
+func TestCommandLiteralTimeoutAndGroupEnv(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "atmos.yaml")
+	writeTestFile(t, file, "")
+
+	commands := decodeTestCommands(t, file, `
+commands:
+  - name: c
+    steps:
+      - name: slow
+        type: script
+        interpreter: starlark
+        timeout: !literal "{{ 1 }}s"
+        script: print("x")
+      - name: fan
+        type: parallel
+        env:
+          KEPT: !literal "{{ k }}"
+          RENDERED: "{{ r }}"
+        steps:
+          - name: child
+            type: script
+            interpreter: starlark
+            script: print("y")
+`)
+	assert.Equal(t, []any{"timeout"}, stepAt(t, commands, []int{0})[schema.LiteralFieldsKey])
+	assert.Equal(t, []any{"env.KEPT"}, stepAt(t, commands, []int{1})[schema.LiteralFieldsKey],
+		"a parallel parent marks its own env values")
+}
+
+func TestCommandLiteralOnUnsupportedFieldFailsAtLoad(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "atmos.yaml")
+	writeTestFile(t, file, "")
+
+	for _, tt := range []struct{ name, field, yaml string }{
+		{"when", "when", "        when: !literal \"{{ a }}\"\n"},
+		{"output", "output", "        output: !literal raw\n"},
+		{"with", "with", "        with:\n          image: !literal \"{{ i }}\"\n"},
+		{"other scalar", "level", "        level: !literal info\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := extractCommandsWithYamlFunctionsForFile(
+				[]byte("commands:\n  - name: c\n    steps:\n      - name: s\n        command: echo hi\n"+tt.yaml), file,
+			)
+			require.ErrorIs(t, err, errUtils.ErrLiteralFieldUnsupported)
+			assert.ErrorContains(t, err, tt.field)
+			assert.ErrorContains(t, err, `step "s"`)
+		})
+	}
+}
+
+func TestCommandLevelEnvLiterals(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "atmos.yaml")
+	writeTestFile(t, file, "")
+
+	commands := decodeTestCommands(t, file, `
+commands:
+  - name: listed
+    env:
+      - key: KEPT
+        value: !literal "{{ k }}"
+      - key: RENDERED
+        value: "{{ r }}"
+    steps:
+      - command: echo hi
+  - name: mapped
+    env:
+      KEPT: !literal "{{ k }}"
+      RENDERED: "{{ r }}"
+    steps:
+      - command: echo hi
+`)
+	listed, ok := commands[0].(map[string]any)
+	require.True(t, ok)
+	items, ok := listed["env"].([]any)
+	require.True(t, ok)
+	assert.Equal(t, map[string]any{"key": "KEPT", "value": "{{ k }}", schema.LiteralFieldsKey: []any{"value"}}, items[0])
+	assert.Equal(t, map[string]any{"key": "RENDERED", "value": "{{ r }}"}, items[1])
+
+	mapped, ok := commands[1].(map[string]any)
+	require.True(t, ok)
+	envMap, ok := mapped["env"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, map[string]any{"value": "{{ k }}", schema.LiteralFieldsKey: []any{"value"}}, envMap["KEPT"])
+	assert.Equal(t, "{{ r }}", envMap["RENDERED"])
+}
+
+// The global env section of atmos.yaml is not a command's env: its values stay plain strings.
+func TestGlobalEnvIsNotRewritten(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "atmos.yaml")
+	writeTestFile(t, file, "")
+	got, err := decodeNodeWithYamlFunctionsForFile(parseTestNode(t, "env:\n  KEPT: !literal \"{{ k }}\"\n"), file)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"env": map[string]any{"KEPT": "{{ k }}"}}, got)
+}
+
+// An argument with neither `required:` nor `default:` is required: leaving both out used to
+// resolve to an empty string silently, hiding a missing value until a step misbehaved.
+func TestCommandArgumentsWithoutRequiredOrDefaultAreRequired(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "atmos.yaml")
+	writeTestFile(t, file, "")
+
+	commands := decodeTestCommands(t, file, `
+commands:
+  - name: c
+    arguments:
+      - name: bare
+      - name: explicit-optional
+        required: false
+      - name: explicit-required
+        required: true
+      - name: defaulted
+        default: x
+      - name: empty-default
+        default: ""
+    steps:
+      - command: echo hi
+`)
+	command, ok := commands[0].(map[string]any)
+	require.True(t, ok)
+	arguments, ok := command["arguments"].([]any)
+	require.True(t, ok)
+	require.Len(t, arguments, 5)
+	assert.Equal(t, map[string]any{"name": "bare", "required": true}, arguments[0])
+	assert.Equal(t, map[string]any{"name": "explicit-optional", "required": false}, arguments[1])
+	assert.Equal(t, map[string]any{"name": "explicit-required", "required": true}, arguments[2])
+	assert.Equal(t, map[string]any{"name": "defaulted", "default": "x"}, arguments[3])
+	assert.Equal(t, map[string]any{"name": "empty-default", "default": "", "required": true}, arguments[4],
+		"an empty default is no default")
+}
+
+// Only custom commands declare arguments this way; other sections keep their own shape.
+func TestArgumentsOutsideCommandsAreUntouched(t *testing.T) {
+	got, err := decodeNodeWithYamlFunctionsForFile(parseTestNode(t, "toolbox:\n  arguments:\n    - name: bare\n"), "")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"toolbox": map[string]any{"arguments": []any{map[string]any{"name": "bare"}}}}, got)
 }

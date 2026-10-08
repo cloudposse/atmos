@@ -23,7 +23,7 @@ ci.group(title, fn)
 
 <dl>
     <dt>`title`</dt>
-    <dd>Required. The title shown on the collapsed group, as a string.</dd>
+    <dd>Required. The title shown on the collapsed group, as a string. An empty string is accepted.</dd>
 
     <dt>`fn`</dt>
     <dd>Required. A function that takes no arguments. Define a small wrapper function to pass arguments through.</dd>
@@ -40,6 +40,8 @@ The value that `fn()` returns, so a group can wrap work whose result you need af
 - In CI the call is gated by [`ci.groups.mode`](/cli/configuration/ci/groups). When the mode is `off`, the call warns,
   renders a heading locally, and still runs the function. See [gating](/functions/automation/ci#gating).
 - The function always runs, whatever the gate says.
+- Groups do not nest. A `ci.group` call inside another group, or inside a group Atmos opened for a command, runs its
+  function and prints a plain heading instead of opening a second group.
 
 ## Examples
 
@@ -64,7 +66,8 @@ ui.info("Found " + str(total) + " stacks")
 
 ## Errors
 
-- A missing title or a `fn` that is not callable fails with an argument error that names `ci.group`.
+- A missing title (the argument is absent) or a `fn` that is not callable fails with an argument error that names
+  `ci.group`.
 - An error raised inside `fn` fails the script as usual.
 
 ## Related

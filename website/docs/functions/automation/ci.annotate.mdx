@@ -30,15 +30,18 @@ ci.annotate(level, message, file = "", line = 0, end_line = 0, title = "")
 
     <dt>`file`</dt>
     <dd>
-        (Optional) The path of the file the annotation belongs to, relative to the repository root. Pass it together
-        with `line` to place the annotation on a diff line.
+        (Optional) The path of the file the annotation belongs to, relative to the repository root. `line` and `end_line`
+        need it: passing either without `file` fails with an argument error.
     </dd>
 
     <dt>`line`</dt>
     <dd>(Optional) The first line the annotation covers, as an integer. The default of `0` means no line.</dd>
 
     <dt>`end_line`</dt>
-    <dd>(Optional) The last line the annotation covers, as an integer. Use it to highlight a range.</dd>
+    <dd>
+        (Optional) The last line the annotation covers, as an integer. Use it to highlight a range. It needs `line`, and
+        it cannot be smaller than `line`.
+    </dd>
 
     <dt>`title`</dt>
     <dd>(Optional) A short heading shown above the message.</dd>
@@ -51,7 +54,8 @@ The return value is `None`.
 ## Behavior
 
 - In CI, the annotation appears on the changed line in the pull request diff and in the run's annotation list.
-- Locally, the call prints `file:line: level: message` on stderr.
+- Locally, the call prints `path:line: level: message` on stderr, and appends the `title` in parentheses when one is
+  given. Without a line it prints `path: level: message`, and without a file it prints `level: message`.
 - In CI the call is gated by `ci.annotations.enabled`. When it is off, the call warns, renders locally, and the
   script continues. See [gating](/functions/automation/ci#gating) and the [CI configuration](/cli/configuration/ci).
 
@@ -63,7 +67,7 @@ The return value is `None`.
 ci.annotate("warning", "This image tag is not pinned", file = "stacks/prod.yaml", line = 14, title = "Unpinned image")
 ```
 
-Locally this prints `stacks/prod.yaml:14: warning: This image tag is not pinned`.
+Locally this prints `stacks/prod.yaml:14: warning: This image tag is not pinned (Unpinned image)`.
 
 ### Report each finding from a check
 
@@ -83,6 +87,8 @@ for issue in findings["issues"]:
 ## Errors
 
 - An unknown `level`, or a missing `message`, fails with an argument error that names `ci.annotate`.
+- A `line` or `end_line` without `file`, an `end_line` without `line`, or an `end_line` smaller than `line` fails with
+  an argument error that names `ci.annotate`.
 - A gated-off call never fails.
 
 ## Related

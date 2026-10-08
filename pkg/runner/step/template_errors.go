@@ -31,7 +31,11 @@ func TemplateFieldError(step *schema.WorkflowStep, field string, cause error) er
 	if field == "script" && step.ScriptSource != "" {
 		builder = builder.WithContext("source", step.ScriptSource)
 	}
-	if literalHintFields[field] && !step.IsLiteral(field) && fieldHasTemplateOpen(step, field) {
+	switch {
+	case field == "script" && step.ScriptSource != "" && !step.IsLiteral(field) && fieldHasTemplateOpen(step, field):
+		// The YAML tag cannot be written inside the included file, so name what works there.
+		builder = builder.WithHint("If the script contains `{{` that is not a template expression, move that text into a `load()`ed module, or include the file with `!include.raw` so it is used exactly as written.")
+	case literalHintFields[field] && !step.IsLiteral(field) && fieldHasTemplateOpen(step, field):
 		builder = builder.WithHintf("If the %s contains `{{` that is not a template expression, write the field with the `!literal` YAML tag so it is used exactly as written.", field)
 	}
 	return builder.Err()

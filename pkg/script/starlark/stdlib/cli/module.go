@@ -69,7 +69,8 @@ func (m *commandModule) command(t *starlark.Thread, b *starlark.Builtin, args st
 		return nil, err
 	}
 	if input.Help {
-		return starlark.None, nil
+		// The host printed the help. Nothing else the script does is wanted, so unwind it.
+		return nil, errUtils.ErrScriptHelpShown
 	}
 	return call(t, input, validate, run)
 }

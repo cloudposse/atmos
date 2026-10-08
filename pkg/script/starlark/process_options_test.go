@@ -94,3 +94,70 @@ func TestProcessOptionValidation(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrStarlark, source)
 	}
 }
+
+// output="viewport" shows the process output in the host's live viewport while the full output is
+// still captured for the result. Without a host viewport it streams like output="stream".
+func TestProcessViewportOutput(t *testing.T) {
+	t.Parallel()
+	type viewportCall struct{ title string }
+	for _, tc := range []struct {
+		name, source string
+		options      []Option
+	}{
+		{"exec.run", `r = exec.run(["tool", "arg"], output = "viewport")
+output = r.stdout`, nil},
+		{"atmos.run", `r = atmos.run(["version"], output = "viewport")
+output = r.stdout`, []Option{WithAtmosExecutable(func() (string, error) { return "tool", nil })}},
+	} {
+		t.Run(tc.name+" uses the host viewport", func(t *testing.T) {
+			t.Parallel()
+			runner := NewMockRunner(gomock.NewController(t))
+			var streamed bytes.Buffer
+			runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, spec process.TaskSpec) process.Result {
+				_, _ = io.WriteString(spec.Streams.Stdout, "child output")
+				return process.Result{Started: true}
+			})
+			var calls []viewportCall
+			var stdout, stderr bytes.Buffer
+			result, err := New(append([]Option{WithProcessRunner(runner), WithAtmosCommands(testAtmosCatalog())}, tc.options...)...).Execute(t.Context(), script.Spec{
+				Name: "test.star", Source: tc.source, Stdout: &stdout, Stderr: &stderr,
+				Viewport: func(title string, run func(stdout, stderr io.Writer) error) error {
+					calls = append(calls, viewportCall{title: title})
+					return run(&streamed, io.Discard)
+				},
+			})
+			require.NoError(t, err)
+			require.Len(t, calls, 1)
+			assert.Contains(t, calls[0].title, "tool")
+			assert.Equal(t, "child output", streamed.String(), "the viewport receives the live output")
+			assert.Empty(t, stdout.String(), "the session stream is not written twice")
+			assert.Equal(t, "child output", result.Value, "the full output is still captured")
+		})
+		t.Run(tc.name+" streams without a host viewport", func(t *testing.T) {
+			t.Parallel()
+			runner := NewMockRunner(gomock.NewController(t))
+			runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, spec process.TaskSpec) process.Result {
+				_, _ = io.WriteString(spec.Streams.Stdout, "child output")
+				return process.Result{Started: true}
+			})
+			var stdout bytes.Buffer
+			result, err := New(append([]Option{WithProcessRunner(runner), WithAtmosCommands(testAtmosCatalog())}, tc.options...)...).Execute(t.Context(), script.Spec{
+				Name: "test.star", Source: tc.source, Stdout: &stdout,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, "child output", stdout.String())
+			assert.Equal(t, "child output", result.Value)
+		})
+	}
+
+	t.Run("a failing process still fails the script", func(t *testing.T) {
+		t.Parallel()
+		runner := NewMockRunner(gomock.NewController(t))
+		runner.EXPECT().Run(gomock.Any(), gomock.Any()).Return(process.Result{Started: true, ExitCode: 3, Err: errUtils.ErrProcessWaitFailed})
+		_, err := New(WithProcessRunner(runner)).Execute(t.Context(), script.Spec{
+			Name: "test.star", Source: `exec.run(["tool"], output = "viewport")`,
+			Viewport: func(_ string, run func(stdout, stderr io.Writer) error) error { return run(io.Discard, io.Discard) },
+		})
+		require.ErrorIs(t, err, errUtils.ErrStarlarkProcessFailed)
+	})
+}

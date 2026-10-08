@@ -129,6 +129,8 @@ func TestInvalidDeclarationsNeverReachHost(t *testing.T) {
 		{"required boolean", `cli.flag("target", type="bool", required=True)`, "cannot be required"},
 		{"string list default", `cli.flag("target", type="string_list", default="a")`, "list or tuple"},
 		{"nonstring list default", `cli.flag("target", type="string_list", default=[1])`, "expected strings"},
+		{"string default outside choices", `cli.flag("stage", default="qa", choices=["dev", "prod"])`, `default "qa" for "stage" is not one of the choices`},
+		{"list default outside choices", `cli.flag("stage", type="string_list", default=["dev", "qa"], choices=["dev", "prod"])`, `default "qa" for "stage" is not one of the choices`},
 		{"invalid choices type", `cli.flag("target", choices="a")`, "list or tuple"},
 		{"invalid choices element", `cli.flag("target", choices=[1])`, "expected strings"},
 		{"integer choices", `cli.flag("target", type="int", choices=["1"])`, "choices require"},
@@ -166,6 +168,8 @@ func TestCommandCallbacksAndHostFailures(t *testing.T) {
 		input                           script.CommandInput
 		parseErr                        error
 		events                          []string
+		// ended means the script stops at cli.command, after the host printed help.
+		ended bool
 	}{
 		{name: "validation None", validation: "return None", main: `return "ok"`, events: []string{"parse", "validate", "run"}},
 		{name: "validation True", validation: "return True", main: `return "ok"`, events: []string{"parse", "validate", "run"}},
@@ -174,7 +178,7 @@ func TestCommandCallbacksAndHostFailures(t *testing.T) {
 		{name: "validation fails", validation: `fail("bad input")`, main: `return "ok"`, message: "bad input", events: []string{"parse", "validate"}},
 		{name: "main fails", validation: "return None", main: `fail("main failed")`, message: "main failed", events: []string{"parse", "validate", "run"}},
 		{name: "parse fails", parseErr: errUtils.ErrStarlarkInvalidArgument, validation: "return None", main: `return "ok"`, message: "invalid starlark argument", events: []string{"parse"}},
-		{name: "help bypasses all callbacks", input: script.CommandInput{Help: true, Flags: map[string]any{"unused": struct{}{}}}, validation: `fail("validation ran")`, main: `fail("main ran")`, events: []string{"parse"}},
+		{name: "help bypasses all callbacks and ends the script", input: script.CommandInput{Help: true, Flags: map[string]any{"unused": struct{}{}}}, validation: `fail("validation ran")`, main: `fail("main ran")`, events: []string{"parse"}, ended: true},
 		{name: "unsupported host argument", input: script.CommandInput{Args: map[string]any{"bad": struct{}{}}}, validation: "return None", main: `return "ok"`, message: "unsupported input type", events: []string{"parse"}},
 		{name: "unsupported host flag", input: script.CommandInput{Flags: map[string]any{"bad": float64(1)}}, validation: "return None", main: `return "ok"`, message: "unsupported input type", events: []string{"parse"}},
 	} {
@@ -186,15 +190,15 @@ func TestCommandCallbacksAndHostFailures(t *testing.T) {
 				events = append(events, "parse")
 				return tc.input, tc.parseErr
 			}, &events)
-			if tc.message != "" {
+			switch {
+			case tc.message != "":
 				require.ErrorContains(t, err, tc.message)
-			} else {
+			case tc.ended:
+				require.ErrorIs(t, err, errUtils.ErrScriptHelpShown)
+				assert.NotContains(t, globals, "result", "statements after cli.command must not run")
+			default:
 				require.NoError(t, err)
-				if tc.input.Help {
-					assert.Equal(t, starlark.None, globals["result"])
-				} else {
-					assert.Equal(t, starlark.String("ok"), globals["result"])
-				}
+				assert.Equal(t, starlark.String("ok"), globals["result"])
 			}
 			assert.Equal(t, tc.events, events)
 		})
@@ -284,7 +288,7 @@ func TestCommandRejectsCaseCollidingNames(t *testing.T) {
 		t.Parallel()
 		_, err := executeCLI(`cli.command(run=lambda a, f: None, flags=[cli.flag("stage"), cli.flag("region")], args=[cli.arg("service")])`,
 			func(*starlark.Thread, script.CommandSpec) (script.CommandInput, error) {
-				return script.CommandInput{Help: true}, nil
+				return script.CommandInput{}, nil
 			}, new([]string))
 		require.NoError(t, err)
 	})

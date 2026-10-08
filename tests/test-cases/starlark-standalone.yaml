@@ -85,3 +85,216 @@ tests:
       stderr:
         - 'out of range for a 64-bit'
         - !not 'invalid value for flag'
+
+  # Shebang, extension, and declaration handling (fixture: starlark-steps/scripts/standalone).
+  - name: starlark standalone extensionless shebang file runs
+    description: A file with an Atmos shebang runs by path even without an extension
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/greeter, World]
+    expect:
+      exit_code: 0
+      stderr:
+        - 'Hello, World!'
+
+  - name: starlark standalone shebang with global flags runs
+    description: '#!/usr/bin/env -S atmos --logs-level=Debug is recognized as an Atmos script'
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/greeter-flags, World]
+    expect:
+      exit_code: 0
+      stderr:
+        - 'Hello with flags, World!'
+
+  - name: starlark standalone upper-case extension runs
+    description: .STAR is matched like .star
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/UPPER.STAR, one]
+    expect:
+      exit_code: 0
+      stdout:
+        - 'UPPER ran \["one"\]'
+
+  - name: starlark standalone missing required argument names it
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/inputs.star, --token=x]
+    expect:
+      exit_code: 2
+      stderr:
+        - 'missing required argument <service>'
+        - 'Usage: inputs <service>'
+
+  - name: starlark standalone missing required flag names it
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/inputs.star, api]
+    expect:
+      exit_code: 2
+      stderr:
+        - 'required flag not provided: --token'
+
+  - name: starlark standalone choices violation is a usage error
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/inputs.star, api, --token=x, --stage=qa]
+    expect:
+      exit_code: 2
+      stderr:
+        - 'invalid value "qa" for flag --stage \(valid values: dev, prod\)'
+
+  - name: starlark standalone explicit empty value is checked against choices
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/inputs.star, api, --token=x, --stage=]
+    expect:
+      exit_code: 2
+      stderr:
+        - 'invalid value "" for flag --stage \(valid values: dev, prod\)'
+
+  - name: starlark standalone default outside choices is a declaration error
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/bad-default.star]
+    expect:
+      exit_code: 1
+      stderr:
+        - 'default "qa" for "stage" is not one of the choices: dev, prod'
+        - !not 'usage error'
+
+  - name: starlark standalone environment binding fills a flag
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/inputs.star, api, --token=x]
+    env:
+      FT_REGION: eu
+    expect:
+      exit_code: 0
+      stdout:
+        - '"region":"eu"'
+
+  - name: starlark standalone bool flag followed by false is a usage error
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/inputs.star, api, --token=x, --verbose, "false"]
+    expect:
+      exit_code: 2
+      stderr:
+        - '"false" after --verbose is read as a positional argument'
+
+  - name: starlark standalone validate returning false is a usage error
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/validate-false.star]
+    expect:
+      exit_code: 2
+      stderr:
+        - 'input validation failed'
+        - !not 'Traceback'
+        - !not 'main ran'
+
+  - name: starlark standalone relative path ignores chdir
+    description: The script path is resolved where the user stood; --chdir only moves the script's working directory
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [--chdir=wd, ./scripts/standalone/where.star]
+    expect:
+      exit_code: 0
+      stdout:
+        - '(?m)[/\\]wd$'
+
+  - name: starlark standalone integer flag leading zeros are decimal
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/inputs.star, api, --token=x, --count=010]
+    expect:
+      exit_code: 0
+      stdout:
+        - '"count":10'
+
+  - name: starlark standalone integer flag rejects hexadecimal
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/inputs.star, api, --token=x, --count=0x10]
+    expect:
+      exit_code: 2
+      stderr:
+        - 'not a base-10 integer'
+
+  - name: starlark standalone help ends the script
+    description: Code after cli.command must not run once --help printed usage
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/help-trailing.star, --help]
+    expect:
+      exit_code: 0
+      stdout:
+        - 'Usage:'
+        - !not 'TRAILING SIDE EFFECT'
+      stderr:
+        - !not 'TRAILING SIDE EFFECT'
+
+  - name: starlark standalone atmos.tf takes component and stack keywords
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/tf-alias.star]
+    expect:
+      exit_code: 0
+      stdout:
+        - 'tf alias accepted keywords'
+
+  - name: starlark standalone process output accepts viewport
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/viewport.star]
+    expect:
+      exit_code: 0
+      stdout:
+        - 'viewport accepted'
+
+  - name: starlark standalone invalid process output mode lists all modes
+    enabled: true
+    snapshot: false
+    workdir: fixtures/scenarios/starlark-steps
+    command: atmos
+    args: [./scripts/standalone/viewport-invalid.star]
+    expect:
+      exit_code: 1
+      stderr:
+        - 'output must be "stream", "capture", or "viewport", got "quiet"'

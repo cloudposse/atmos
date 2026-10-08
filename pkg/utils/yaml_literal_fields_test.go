@@ -2,6 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -460,4 +462,38 @@ func TestScanTagsAndLiteralFieldsKey(t *testing.T) {
 	tagged, hasKey := scanTagsAndLiteralFieldsKey(nil)
 	assert.False(t, tagged)
 	assert.False(t, hasKey)
+}
+
+func TestMarkLiteralStepFields_TimeoutIncludeRawAndGroupEnv(t *testing.T) {
+	included := filepath.Join(t.TempDir(), "braces.star")
+	require.NoError(t, os.WriteFile(included, []byte("print(\"{{ not a template }}\")\n"), 0o600))
+	doc := decodeStackSection(t, fmt.Sprintf(`
+workflows:
+  demo:
+    steps:
+      - name: slow
+        type: script
+        timeout: !literal "{{ t }}"
+        script: print("x")
+      - name: raw
+        type: script
+        script: !include.raw %s
+      - name: rendered
+        type: script
+        script: !include %s
+      - name: fan
+        type: parallel
+        env:
+          KEPT: !literal "{{ k }}"
+          RENDERED: "{{ r }}"
+        steps:
+          - name: child
+            command: echo hi
+`, included, included))
+	assert.Equal(t, []any{"timeout"}, pick(t, doc, "workflows", "demo", "steps", 0, schema.LiteralFieldsKey))
+	assert.Equal(t, []any{"script"}, pick(t, doc, "workflows", "demo", "steps", 1, schema.LiteralFieldsKey),
+		"an !include.raw script is used as written")
+	assert.NotContains(t, pick(t, doc, "workflows", "demo", "steps", 2), schema.LiteralFieldsKey,
+		"a plain !include script is still rendered")
+	assert.Equal(t, []any{"env.KEPT"}, pick(t, doc, "workflows", "demo", "steps", 3, schema.LiteralFieldsKey))
 }

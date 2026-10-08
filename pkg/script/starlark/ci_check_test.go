@@ -20,8 +20,8 @@ func TestCICheckCreatesAndUpdatesTheSameCheck(t *testing.T) {
 			Name: "build", State: ci.CheckRunStateInProgress, Description: "compiling", URL: "https://run/1",
 		}).Return(ci.Receipt{Check: &ci.CheckRun{ID: 7, Name: "build", DetailsURL: "https://checks/7"}}, nil),
 		m.EXPECT().UpdateCheck(gomock.Any(), ci.CheckRequest{
-			Name: "build", State: ci.CheckRunStateSuccess, Description: "done", URL: "",
-		}).Return(ci.Receipt{Check: &ci.CheckRun{ID: 7, Name: "build"}}, nil),
+			Name: "build", ID: 7, State: ci.CheckRunStateSuccess, Description: "done", URL: "",
+		}).Return(ci.Receipt{Check: &ci.CheckRun{ID: 7, Name: "build", DetailsURL: "https://checks/7/final"}}, nil),
 	)
 	stdout, _, err := runCI(t, m, `
 h = ci.check("build", state="in_progress", description="compiling", url="https://run/1")
@@ -33,9 +33,41 @@ print(h, type(h))
 	require.NoError(t, err)
 	assert.Equal(t, `build in_progress 7 https://checks/7
 None
-build success 7 https://checks/7
+build success 7 https://checks/7/final
 check(name = "build", state = "success") check
 `, stdout)
+}
+
+// TestCICheckUpdateSendsTheStoredIDEachTime proves two checks that share a name stay separate: the
+// update addresses the check by the id the create returned.
+func TestCICheckUpdateSendsTheStoredIDEachTime(t *testing.T) {
+	t.Parallel()
+	m := newCIMock(t)
+	m.EXPECT().Check(gomock.Any(), ci.CheckRequest{Name: "dup", State: ci.CheckRunStatePending}).
+		Return(ci.Receipt{Check: &ci.CheckRun{ID: 1}}, nil)
+	m.EXPECT().Check(gomock.Any(), ci.CheckRequest{Name: "dup", State: ci.CheckRunStatePending}).
+		Return(ci.Receipt{Check: &ci.CheckRun{ID: 2}}, nil)
+	m.EXPECT().UpdateCheck(gomock.Any(), ci.CheckRequest{Name: "dup", ID: 2, State: ci.CheckRunStateSuccess}).Return(ci.Receipt{}, nil)
+	m.EXPECT().UpdateCheck(gomock.Any(), ci.CheckRequest{Name: "dup", ID: 1, State: ci.CheckRunStateFailure}).Return(ci.Receipt{}, nil)
+	_, _, err := runCI(t, m, `a = ci.check("dup")
+b = ci.check("dup")
+b.update("success")
+a.update("failure")`)
+	require.NoError(t, err)
+}
+
+func TestCICheckUpdateReceiptWithoutIDKeepsTheStoredID(t *testing.T) {
+	t.Parallel()
+	m := newCIMock(t)
+	m.EXPECT().Check(gomock.Any(), gomock.Any()).Return(ci.Receipt{Check: &ci.CheckRun{ID: 9}}, nil)
+	m.EXPECT().UpdateCheck(gomock.Any(), ci.CheckRequest{Name: "n", ID: 9, State: ci.CheckRunStateInProgress}).Return(ci.Receipt{Check: &ci.CheckRun{}}, nil)
+	m.EXPECT().UpdateCheck(gomock.Any(), ci.CheckRequest{Name: "n", ID: 9, State: ci.CheckRunStateSuccess}).Return(ci.Receipt{}, nil)
+	stdout, _, err := runCI(t, m, `h = ci.check("n")
+h.update("in_progress")
+h.update("success")
+print(h.id)`)
+	require.NoError(t, err)
+	assert.Equal(t, "9\n", stdout)
 }
 
 func TestCICheckDefaultsToPendingAndZeroIDLocally(t *testing.T) {

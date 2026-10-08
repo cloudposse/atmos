@@ -9,6 +9,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
@@ -17,6 +18,9 @@ func testCatalog() *flags.CommandCatalog {
 	root := &cobra.Command{Use: "atmos"}
 	for _, name := range []string{"run", "terraform", "helm", "toolchain", "version", "vendor", "describe"} {
 		command := &cobra.Command{Use: name}
+		if name == "terraform" {
+			command.Aliases = []string{"tf"}
+		}
 		command.PersistentFlags().StringP("format", "f", "", "format")
 		if name == "describe" {
 			child := &cobra.Command{Use: "component"}
@@ -48,6 +52,8 @@ func TestModuleBuildsLiteralArguments(t *testing.T) {
 		{`atmos.vendor("pull",flags={"component":["api","worker"],"dry-run":False,"verbose":True,"count":2})`, []string{"vendor", "pull", "--component=api", "--component=worker", "--count=2", "--dry-run=false", "--verbose"}, false},
 		{`atmos.terraform("plan","api","dev",flags={"detailed-exitcode":True})`, []string{"terraform", "plan", "api", "--stack=dev", "-detailed-exitcode"}, true},
 		{`atmos.terraform("plan","api","dev",args=["-detailed-exitcode=true","-detailed-exitcode=false"])`, []string{"terraform", "plan", "api", "--stack=dev", "-detailed-exitcode=true", "-detailed-exitcode=false"}, false},
+		{`atmos.tf("plan",component="api",stack="dev")`, []string{"terraform", "plan", "api", "--stack=dev"}, false},
+		{`atmos.tf("plan","api","dev",flags={"detailed-exitcode":True})`, []string{"terraform", "plan", "api", "--stack=dev", "-detailed-exitcode"}, true},
 		{`atmos.helm("template","api","dev",flags={"--values":"two words;$HOME"})`, []string{"helm", "template", "api", "--stack=dev", "--values=two words;$HOME"}, false},
 		{`atmos.toolchain("install","helm",flags={"version":"3.1"},args=["--help"])`, []string{"toolchain", "install", "helm", "--version=3.1", "--help"}, false},
 		{`atmos.toolchain("list")`, []string{"toolchain", "list"}, false},
@@ -101,24 +107,47 @@ func TestModulePreservesInvocationPolicies(t *testing.T) {
 
 func TestModuleRejectsInvalidCallsBeforeRunning(t *testing.T) {
 	t.Parallel()
-	for _, source := range []string{
-		`atmos.run()`, `atmos.run("version")`, `atmos.run([])`, `atmos.run([""])`, `atmos.run([1])`,
-		`atmos.terraform("plan")`, `atmos.terraform("", "api", "dev")`, `atmos.terraform("plan", "-api", "dev")`,
-		`atmos.terraform("plan","api","dev",flags={"s":"other"})`, `atmos.helm("template","api","dev",args=1)`,
-		`atmos.toolchain()`, `atmos.toolchain("")`, `atmos.toolchain("install","--help")`,
+	// Calls the module rejects with its own argument error.
+	invalid := []string{
+		`atmos.run("version")`, `atmos.run([])`, `atmos.run([""])`, `atmos.run([1])`,
+		`atmos.terraform("", "api", "dev")`, `atmos.terraform("plan", "-api", "dev")`,
+		`atmos.tf("plan","api","dev",flags={"s":"other"})`, `atmos.terraform("plan","api","dev",flags={"s":"other"})`,
+		`atmos.helm("template","api","dev",args=1)`,
+		`atmos.toolchain("")`, `atmos.toolchain("install","--help")`,
 		`atmos.toolchain("list",flags={"":True})`, `atmos.toolchain("list",args=[1])`,
-		`atmos.version(unknown=True)`, `atmos.version(1)`, `atmos.version(args="invalid")`,
+		`atmos.version(1)`, `atmos.version(args="invalid")`,
 		`atmos.version(flags={1:True})`, `atmos.version(flags={"has space":True})`, `atmos.version(flags={"a=b":True})`,
 		`atmos.version(flags={"f":"json","format":"yaml"})`, `atmos.version(flags={"a":None})`, `atmos.version(flags={"a":[None]})`,
-	} {
+	}
+	// Calls Starlark rejects while unpacking the arguments, before the module sees them.
+	unpacking := map[string]string{
+		`atmos.run()`:                 "missing argument for argv",
+		`atmos.terraform("plan")`:     "missing argument for component",
+		`atmos.tf("plan")`:            "missing argument for component",
+		`atmos.toolchain()`:           "missing argument for command",
+		`atmos.version(unknown=True)`: "unexpected keyword argument",
+	}
+	run := func(source string) error {
+		module := New("project", testCatalog(), func(*starlark.Thread, []string, Options, bool) (starlark.Value, error) {
+			t.Error("invalid call must not reach the host runner")
+			return starlark.None, nil
+		})
+		_, err := starlark.EvalOptions(&syntax.FileOptions{}, &starlark.Thread{}, "atmos.star", source, starlark.StringDict{"atmos": module})
+		return err
+	}
+	for _, source := range invalid {
 		t.Run(source, func(t *testing.T) {
 			t.Parallel()
-			module := New("project", testCatalog(), func(*starlark.Thread, []string, Options, bool) (starlark.Value, error) {
-				t.Error("invalid call must not reach the host runner")
-				return starlark.None, nil
-			})
-			_, err := starlark.EvalOptions(&syntax.FileOptions{}, &starlark.Thread{}, "atmos.star", source, starlark.StringDict{"atmos": module})
+			require.ErrorIs(t, run(source), errUtils.ErrStarlarkInvalidArgument)
+		})
+	}
+	for source, message := range unpacking {
+		t.Run(source, func(t *testing.T) {
+			t.Parallel()
+			err := run(source)
 			require.Error(t, err)
+			assert.NotErrorIs(t, err, errUtils.ErrStarlarkInvalidArgument)
+			assert.Contains(t, err.Error(), message)
 		})
 	}
 }

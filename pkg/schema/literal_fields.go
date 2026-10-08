@@ -22,13 +22,13 @@ const (
 )
 
 // IsLiteral reports whether the named step field ("script", "command", "interpreter",
-// "working_directory") was written with the !literal tag and must be used exactly as written.
+// "working_directory", "timeout") was written with the !literal tag and must be used exactly as written.
 func (task *Task) IsLiteral(field string) bool {
 	return slices.Contains(task.LiteralFields, field)
 }
 
 // IsLiteral reports whether the named step field ("script", "command", "interpreter",
-// "working_directory") was written with the !literal tag and must be used exactly as written.
+// "working_directory", "timeout") was written with the !literal tag and must be used exactly as written.
 func (step *WorkflowStep) IsLiteral(field string) bool {
 	return slices.Contains(step.LiteralFields, field)
 }
@@ -92,7 +92,7 @@ func LiteralFieldsFromValue(value any) []string {
 // besides the individual env values (see LiteralFieldEnvPrefix). Each of them is a scalar string
 // field the step runner renders as a template unless it is marked literal.
 func LiteralStepFieldNames() []string {
-	return []string{"script", "command", "interpreter", "working_directory"}
+	return []string{"script", "command", "interpreter", "working_directory", "timeout"}
 }
 
 // StepKeyScript and StepKeyCommand are the keys that identify a mapping as a step when it appears

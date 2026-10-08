@@ -1,0 +1,31 @@
+# WP5 fixtures, outside stacks/deploy so they never appear in the curated stack listings.
+# Select them with ATMOS_STACKS_INCLUDED_PATHS='ft/selective.yaml'.
+#
+# vars.guard runs `exit 3`, so evaluating it fails the command. A selective command that reads
+# only settings must therefore succeed, while a full evaluation of vars fails: that is how the
+# cases prove which values were evaluated.
+vars:
+  stage: selective
+
+components:
+  terraform:
+    # Reads one named var through ctx: only that var is evaluated.
+    static-read:
+      metadata:
+        component: mock
+      vars:
+        guard: !exec exit 3
+        label: plain
+      settings:
+        note: !starlark |
+          return ctx.vars["label"] + "-" + ctx.stack
+        by_get: !starlark |
+          return ctx.vars.get("label", "none") + "-get"
+    # No Starlark: the guard is never evaluated by a settings-only command.
+    no-starlark:
+      metadata:
+        component: mock
+      vars:
+        guard: !exec exit 3
+      settings:
+        note: plain

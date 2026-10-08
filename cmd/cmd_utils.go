@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,10 +43,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/reexec"
-	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/runner/freshness"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script/standalone"
 	"github.com/cloudposse/atmos/pkg/taskgraph"
 	"github.com/cloudposse/atmos/pkg/taskgraph/adapters"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -773,10 +774,13 @@ func registerFlag(cmd *cobra.Command, flag *schema.CommandFlag) {
 // checked by customcommand.ValidateFlag, so an unparsable default cannot reach this point.
 func registerIntFlag(cmd *cobra.Command, flag *schema.CommandFlag, usage string) {
 	defaultVal, _ := customcommand.IntFlagDefault(flag)
+	// pflag's own integer flags read 010 as octal and 0x10 as hex. This value reads base-10 only,
+	// like integer flags of standalone scripts.
+	value := standalone.NewDecimalInt(defaultVal)
 	if flag.Shorthand != "" {
-		cmd.PersistentFlags().IntP(flag.Name, flag.Shorthand, defaultVal, usage)
+		cmd.PersistentFlags().VarP(value, flag.Name, flag.Shorthand, usage)
 	} else {
-		cmd.PersistentFlags().Int(flag.Name, defaultVal, usage)
+		cmd.PersistentFlags().Var(value, flag.Name, usage)
 	}
 }
 
@@ -1288,8 +1292,9 @@ func executeCustomCommand(
 					return
 				}
 				value = strings.TrimRight(res, "\r\n")
-			} else {
-				// Process Go templates in the values of the command's ENV vars
+			} else if !slices.Contains(v.LiteralFields, "value") {
+				// Process Go templates in the values of the command's ENV vars. A value written
+				// with !literal is kept exactly as written.
 				value, err = stepVars.Resolve(value)
 				if err != nil {
 					exitOrRecordDependencyErr(cmd, err, "", "")
@@ -1618,7 +1623,7 @@ func executeCustomCommand(
 				if step.Retry == nil {
 					return runStep(ctx)
 				}
-				return retry.Do(ctx, step.Retry, func() error { return runStep(ctx) })
+				return stepPkg.RetryWithConditions(ctx, step.Retry, func() error { return runStep(ctx) })
 			}
 			if !stepPkg.StepTimeoutBoundsRetries(stepType) {
 				return runRetrying(executionCtx)

@@ -53,13 +53,16 @@ func ValidateFlag(commandName string, flag *schema.CommandFlag) error {
 		}
 	}
 	if !supported {
-		return errUtils.Build(errUtils.ErrCustomCommandFlagType).
+		return errUtils.Build(fmt.Errorf("%w: flag --%s has type %q", errUtils.ErrCustomCommandFlagType, flag.Name, flag.Type)).
 			WithExplanationf("Custom command '%s' declares flag '--%s' with type '%s'.", commandName, flag.Name, flag.Type).
 			WithHintf("Supported flag types: %s.", strings.Join(SupportedFlagTypes(), ", ")).
 			WithContext("command", commandName).
 			WithContext("flag", flag.Name).
 			WithContext("type", flag.Type).
 			Err()
+	}
+	if err := validateScalarDefault(commandName, flag, flagType); err != nil {
+		return err
 	}
 	if flagType == FlagTypeInt {
 		if _, err := IntFlagDefault(flag); err != nil {
@@ -78,6 +81,43 @@ func ValidateFlag(commandName string, flag *schema.CommandFlag) error {
 		}
 	}
 	return nil
+}
+
+// validateScalarDefault rejects a string or bool flag whose YAML default has another type. An
+// unquoted `default: 2` on a string flag, or `default: "true"` on a bool flag, used to be dropped
+// without a word and the flag silently took its zero value.
+func validateScalarDefault(commandName string, flag *schema.CommandFlag, flagType string) error {
+	if flag.Default == nil {
+		return nil
+	}
+	var want string
+	switch flagType {
+	case FlagTypeString:
+		if _, ok := flag.Default.(string); ok {
+			return nil
+		}
+		want = "a string"
+	case FlagTypeBool:
+		if _, ok := flag.Default.(bool); ok {
+			return nil
+		}
+		want = "true or false"
+	default:
+		return nil
+	}
+	return errUtils.Build(fmt.Errorf("%w: flag --%s of %s type", errUtils.ErrCustomCommandFlagDefault, flag.Name, flagType)).
+		WithExplanationf("The default %#v of %s flag '--%s' in custom command '%s' is not %s.", flag.Default, flagType, flag.Name, commandName, want).
+		WithHintf("Write the default as %s, for example `default: %s`.", want, exampleDefault(flagType)).
+		WithContext("command", commandName).
+		WithContext("flag", flag.Name).
+		Err()
+}
+
+func exampleDefault(flagType string) string {
+	if flagType == FlagTypeBool {
+		return "true"
+	}
+	return `"2"`
 }
 
 // IntFlagDefault returns the default of an int flag. A flag with no default is 0. The YAML
